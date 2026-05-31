@@ -6,6 +6,14 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		8E1A10012FCD000100000001 /* idle-01.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10042FCD000100000001 /* idle-01.usdz */; };
+		8E1A10022FCD000100000001 /* idle-turn-right.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10052FCD000100000001 /* idle-turn-right.usdz */; };
+		8E1A10032FCD000100000001 /* unstable-walk.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10062FCD000100000001 /* unstable-walk.usdz */; };
+		8E1A10092FCD000100000001 /* ARKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E1A10072FCD000100000001 /* ARKit.framework */; };
+		8E1A100A2FCD000100000001 /* RealityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E1A10082FCD000100000001 /* RealityKit.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		2D78FE3E2FCCF44B0063708B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,6 +32,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		8E1A10042FCD000100000001 /* idle-01.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../idle-01.usdz"; sourceTree = SOURCE_ROOT; };
+		8E1A10052FCD000100000001 /* idle-turn-right.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../idle-turn-right.usdz"; sourceTree = SOURCE_ROOT; };
+		8E1A10062FCD000100000001 /* unstable-walk.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../unstable-walk.usdz"; sourceTree = SOURCE_ROOT; };
+		8E1A10072FCD000100000001 /* ARKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ARKit.framework; path = System/Library/Frameworks/ARKit.framework; sourceTree = SDKROOT; };
+		8E1A10082FCD000100000001 /* RealityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = RealityKit.framework; path = System/Library/Frameworks/RealityKit.framework; sourceTree = SDKROOT; };
 		2D78FE302FCCF44A0063708B /* Gravitas Plague.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Gravitas Plague.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2D78FE3D2FCCF44B0063708B /* Gravitas PlagueTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Gravitas PlagueTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2D78FE472FCCF44B0063708B /* Gravitas PlagueUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Gravitas PlagueUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -52,6 +65,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8E1A10092FCD000100000001 /* ARKit.framework in Frameworks */,
+				8E1A100A2FCD000100000001 /* RealityKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,8 +93,29 @@
 				2D78FE322FCCF44A0063708B /* Gravitas Plague */,
 				2D78FE402FCCF44B0063708B /* Gravitas PlagueTests */,
 				2D78FE4A2FCCF44B0063708B /* Gravitas PlagueUITests */,
+				8E1A100C2FCD000100000001 /* Phase One Assets */,
+				8E1A100B2FCD000100000001 /* Frameworks */,
 				2D78FE312FCCF44A0063708B /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		8E1A100B2FCD000100000001 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				8E1A10072FCD000100000001 /* ARKit.framework */,
+				8E1A10082FCD000100000001 /* RealityKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		8E1A100C2FCD000100000001 /* Phase One Assets */ = {
+			isa = PBXGroup;
+			children = (
+				8E1A10042FCD000100000001 /* idle-01.usdz */,
+				8E1A10052FCD000100000001 /* idle-turn-right.usdz */,
+				8E1A10062FCD000100000001 /* unstable-walk.usdz */,
+			);
+			name = "Phase One Assets";
 			sourceTree = "<group>";
 		};
 		2D78FE312FCCF44A0063708B /* Products */ = {
@@ -212,6 +248,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8E1A10012FCD000100000001 /* idle-01.usdz in Resources */,
+				8E1A10022FCD000100000001 /* idle-turn-right.usdz in Resources */,
+				8E1A10032FCD000100000001 /* unstable-walk.usdz in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -322,14 +361,15 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				SDKROOT = iphoneos;
+				SDKROOT = xros;
+				SUPPORTED_PLATFORMS = "xros xrsimulator";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				XROS_DEPLOYMENT_TARGET = 26.1;
 			};
 			name = Debug;
 		};
@@ -380,13 +420,14 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				SDKROOT = iphoneos;
+				SDKROOT = xros;
+				SUPPORTED_PLATFORMS = "xros xrsimulator";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
+				XROS_DEPLOYMENT_TARGET = 26.1;
 			};
 			name = Release;
 		};
@@ -418,7 +459,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 7;
 			};
 			name = Debug;
 		};
@@ -450,7 +491,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 7;
 			};
 			name = Release;
 		};
