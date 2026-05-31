@@ -42,6 +42,7 @@ final class BakedInfectedController {
     private var loadedSources: [ClipID: Entity] = [:]
 
     private var activeClipID: ClipID?
+    private var activeClipMountEntity: Entity?
     private var activeClipEntity: Entity?
     private var activeAnimationController: AnimationPlaybackController?
 
@@ -51,8 +52,8 @@ final class BakedInfectedController {
     private var hasLoadedClips = false
 
     private var rootYawRadians: Float = 0
-    private var farPoint = SIMD3<Float>(0, -1.45, -3.05)
-    private var nearPoint = SIMD3<Float>(0, -1.45, -1.55)
+    private var farPoint = SIMD3<Float>(0, 0, -3.05)
+    private var nearPoint = SIMD3<Float>(0, 0, -1.55)
 
     init(
         configuration: PhaseOneConfiguration,
@@ -97,23 +98,24 @@ final class BakedInfectedController {
         state = .stopped
     }
 
-    func configureSpawn(using spawnPose: PhaseOneSpawnPose) {
+    func configureSpawn(
+        using spawnPose: PhaseOneSpawnPose,
+        floorY: Float
+    ) {
         let headForward = PhaseOneMath.normalizedOrFallback(
             SIMD3<Float>(spawnPose.headForward.x, 0, spawnPose.headForward.z),
             fallback: SIMD3<Float>(0, 0, -1)
         )
 
-        let y = spawnPose.headPosition.y + configuration.characterHeightOffset
-
         farPoint = SIMD3<Float>(
             spawnPose.headPosition.x + headForward.x * configuration.farDistance,
-            y,
+            floorY,
             spawnPose.headPosition.z + headForward.z * configuration.farDistance
         )
 
         nearPoint = SIMD3<Float>(
             spawnPose.headPosition.x + headForward.x * configuration.nearDistance,
-            y,
+            floorY,
             spawnPose.headPosition.z + headForward.z * configuration.nearDistance
         )
 
@@ -165,7 +167,8 @@ final class BakedInfectedController {
         activeAnimationController?.stop()
         activeAnimationController = nil
 
-        activeClipEntity?.removeFromParent()
+        activeClipMountEntity?.removeFromParent()
+        activeClipMountEntity = nil
         activeClipEntity = nil
         activeClipID = nil
 
@@ -308,7 +311,7 @@ final class BakedInfectedController {
     private func applyRootTransform() {
         rootEntity.scale = configuration.rootScale
 
-        let yaw = rootYawRadians + configuration.assetYawOffsetRadians
+        let yaw = rootYawRadians + configuration.rootYawOffsetRadians
         rootEntity.orientation = simd_quatf(
             angle: yaw,
             axis: SIMD3<Float>(0, 1, 0)
@@ -321,7 +324,8 @@ final class BakedInfectedController {
         activeAnimationController?.stop()
         activeAnimationController = nil
 
-        activeClipEntity?.removeFromParent()
+        activeClipMountEntity?.removeFromParent()
+        activeClipMountEntity = nil
         activeClipEntity = nil
         activeClipID = nil
 
@@ -335,17 +339,25 @@ final class BakedInfectedController {
             return
         }
 
+        let clipMount = Entity()
+        clipMount.name = "ActiveClipMount_\(clip.fileBaseName)"
+        clipMount.position = .zero
+        clipMount.scale = SIMD3<Float>(1, 1, 1)
+        clipMount.orientation = configuration.visualCorrectionOrientation
+
         let clone = sourceEntity.clone(recursive: true)
         clone.name = "Active_\(clip.fileBaseName)"
-        clone.position = .zero
-        clone.orientation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
-        clone.scale = SIMD3<Float>(1, 1, 1)
 
-        rootEntity.addChild(clone)
+        clipMount.addChild(clone)
+        rootEntity.addChild(clipMount)
+
+        if configuration.autoAlignVisualBottomToGround {
+            snapVisualBottomToRootGround(clipMount)
+        }
 
         guard let animationTarget = firstAnimationEntityAndResource(in: clone) else {
             assertionFailure("No playable animation found in clone for \(clip.fullFileName)")
-            clone.removeFromParent()
+            clipMount.removeFromParent()
             return
         }
 
@@ -365,8 +377,25 @@ final class BakedInfectedController {
             startsPaused: false
         )
 
+        activeClipMountEntity = clipMount
         activeClipEntity = clone
         activeClipID = clipID
+    }
+
+    private func snapVisualBottomToRootGround(_ clipMount: Entity) {
+        let bounds = clipMount.visualBounds(
+            recursive: true,
+            relativeTo: rootEntity,
+            excludeInactive: false
+        )
+
+        let bottomY = bounds.min.y
+
+        guard bottomY.isFinite else {
+            return
+        }
+
+        clipMount.position.y -= bottomY
     }
 
     private func firstAnimationEntityAndResource(

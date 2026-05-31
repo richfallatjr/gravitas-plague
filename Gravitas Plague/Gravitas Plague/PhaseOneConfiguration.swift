@@ -4,7 +4,9 @@ import simd
 struct PhaseOneConfiguration: Equatable {
     let farDistance: Float
     let nearDistance: Float
-    let characterHeightOffset: Float
+
+    let fallbackHeadToFloorOffset: Float
+    let floorDetectionTimeoutSeconds: TimeInterval
 
     let idleFarDuration: TimeInterval
     let idleNearDuration: TimeInterval
@@ -14,7 +16,14 @@ struct PhaseOneConfiguration: Equatable {
     let walkStopEpsilon: Float
 
     let rootScale: SIMD3<Float>
-    let assetYawOffsetRadians: Float
+
+    let rootYawOffsetRadians: Float
+
+    let visualPitchCorrectionRadians: Float
+    let visualYawCorrectionRadians: Float
+    let visualRollCorrectionRadians: Float
+
+    let autoAlignVisualBottomToGround: Bool
 
     let clipTransitionDuration: TimeInterval
     let loopedAnimationRepeatDuration: TimeInterval
@@ -22,7 +31,9 @@ struct PhaseOneConfiguration: Equatable {
     static let phaseOneDefault = PhaseOneConfiguration(
         farDistance: 3.05,
         nearDistance: 1.55,
-        characterHeightOffset: -1.45,
+
+        fallbackHeadToFloorOffset: -1.45,
+        floorDetectionTimeoutSeconds: 1.75,
 
         idleFarDuration: 2.0,
         idleNearDuration: 2.0,
@@ -32,9 +43,35 @@ struct PhaseOneConfiguration: Equatable {
         walkStopEpsilon: 0.025,
 
         rootScale: SIMD3<Float>(1, 1, 1),
-        assetYawOffsetRadians: 0,
+
+        rootYawOffsetRadians: 0,
+
+        visualPitchCorrectionRadians: 0,
+        visualYawCorrectionRadians: 0,
+        visualRollCorrectionRadians: 0,
+
+        autoAlignVisualBottomToGround: true,
 
         clipTransitionDuration: 0.08,
         loopedAnimationRepeatDuration: 60.0 * 60.0
     )
+
+    var visualCorrectionOrientation: simd_quatf {
+        let pitch = simd_quatf(
+            angle: visualPitchCorrectionRadians,
+            axis: SIMD3<Float>(1, 0, 0)
+        )
+
+        let yaw = simd_quatf(
+            angle: visualYawCorrectionRadians,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
+
+        let roll = simd_quatf(
+            angle: visualRollCorrectionRadians,
+            axis: SIMD3<Float>(0, 0, 1)
+        )
+
+        return yaw * pitch * roll
+    }
 }

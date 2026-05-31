@@ -4,7 +4,7 @@ import RealityKit
 
 @MainActor
 final class PlagueImmersiveCoordinator: ObservableObject {
-    private let poseProvider = DevicePoseProvider()
+    private let spatialProvider = PhaseOneSpatialProvider()
 
     private var sceneRoot: Entity?
     private var infectedController: BakedInfectedController?
@@ -19,15 +19,27 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         let root = Entity()
         root.name = "GravitasPlague_PhaseOne_SceneRoot"
 
-        await poseProvider.start()
+        await spatialProvider.start()
 
         let controller = BakedInfectedController(configuration: .phaseOneDefault)
         root.addChild(controller.rootEntity)
 
         do {
             try await controller.loadClips()
-            let spawnPose = poseProvider.currentPoseOrFallback()
-            controller.configureSpawn(using: spawnPose)
+
+            let spawnPose = spatialProvider.currentPoseOrFallback()
+            let config = PhaseOneConfiguration.phaseOneDefault
+            let floorY = await spatialProvider.resolvedFloorY(
+                for: spawnPose,
+                fallbackHeadToFloorOffset: config.fallbackHeadToFloorOffset,
+                timeoutSeconds: config.floorDetectionTimeoutSeconds
+            )
+
+            controller.configureSpawn(
+                using: spawnPose,
+                floorY: floorY
+            )
+
             controller.prepareIdleAtSpawn()
         } catch {
             assertionFailure("Phase 1 failed to load baked USDZ clips: \(error)")
@@ -45,18 +57,18 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         switch envelope.command {
         case .startDemo:
-            let spawnPose = poseProvider.currentPoseOrFallback()
-            infectedController?.configureSpawn(using: spawnPose)
-            infectedController?.startLoop()
+            Task {
+                await configureAndStartLoop()
+            }
 
         case .resetDemo:
-            let spawnPose = poseProvider.currentPoseOrFallback()
-            infectedController?.configureSpawn(using: spawnPose)
-            infectedController?.resetLoopToIdleFar()
+            Task {
+                await configureAndResetLoop()
+            }
 
         case .closeDemo:
             infectedController?.stopLoopAndHide()
-            poseProvider.stop()
+            spatialProvider.stop()
         }
     }
 
@@ -71,16 +83,56 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         lastTickDate = date
 
-        let currentHeadPosition = poseProvider.currentPose()?.headPosition
+        let currentHeadPosition = spatialProvider.currentPose()?.headPosition
         infectedController?.update(deltaTime: deltaTime, currentHeadPosition: currentHeadPosition)
     }
 
     func shutdown() {
         infectedController?.stopLoopAndHide()
-        poseProvider.stop()
+        spatialProvider.stop()
         sceneRoot = nil
         infectedController = nil
         lastTickDate = nil
         handledCommandIDs.removeAll()
+    }
+
+    private func configureAndStartLoop() async {
+        guard let infectedController else { return }
+
+        let spawnPose = spatialProvider.currentPoseOrFallback()
+        let config = PhaseOneConfiguration.phaseOneDefault
+
+        let floorY = await spatialProvider.resolvedFloorY(
+            for: spawnPose,
+            fallbackHeadToFloorOffset: config.fallbackHeadToFloorOffset,
+            timeoutSeconds: config.floorDetectionTimeoutSeconds
+        )
+
+        infectedController.configureSpawn(
+            using: spawnPose,
+            floorY: floorY
+        )
+
+        infectedController.startLoop()
+    }
+
+    private func configureAndResetLoop() async {
+        guard let infectedController else { return }
+
+        let spawnPose = spatialProvider.currentPoseOrFallback()
+        let config = PhaseOneConfiguration.phaseOneDefault
+
+        let floorY = await spatialProvider.resolvedFloorY(
+            for: spawnPose,
+            fallbackHeadToFloorOffset: config.fallbackHeadToFloorOffset,
+            timeoutSeconds: config.floorDetectionTimeoutSeconds
+        )
+
+        infectedController.configureSpawn(
+            using: spawnPose,
+            floorY: floorY
+        )
+
+        infectedController.resetLoopToIdleFar()
     }
 }
