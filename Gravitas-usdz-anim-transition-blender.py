@@ -716,8 +716,13 @@ def _sample_source_pose(prefix, current_armature, source_armature, source_frame,
     source_rot_matrix = _source_rotation_matrix(prefix, current_armature, source_armature, settings)
 
     if rotate_source:
-        x, y, z, pivot = _source_rotation_values(prefix, settings)
-        log.append(f"{prefix} source virtual rotation: X={x}, Y={y}, Z={z}, pivot={pivot}")
+        x_degrees, y_degrees, z_degrees, pivot_mode = _source_rotation_values(prefix, settings)
+        log.append(f"{prefix} ROTATION ROUTE: GIT_V1_7_FULL_SOURCE_WORLD_MATRIX_SOLVE")
+        log.append(
+            f"{prefix} rotation values: "
+            f"x={x_degrees:g}, y={y_degrees:g}, z={z_degrees:g}, "
+            f"pivot={pivot_mode}"
+        )
 
     samples = {}
 
@@ -1139,6 +1144,11 @@ class GravitasExplicitStitcherSettingsV17(PropertyGroup):
         max=100000,
     )
 
+    enable_head_transition: BoolProperty(
+        name="Enable Head Transition",
+        default=True,
+    )
+
     head_source_path: StringProperty(
         name="Head / Previous Source File",
         subtype="FILE_PATH",
@@ -1204,6 +1214,11 @@ class GravitasExplicitStitcherSettingsV17(PropertyGroup):
         default=0,
         min=0,
         max=120,
+    )
+
+    enable_tail_transition: BoolProperty(
+        name="Enable Tail Transition",
+        default=True,
     )
 
     head_enable_source_rotation: BoolProperty(
@@ -1431,15 +1446,52 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
                 )
 
             output_start = int(settings.output_start_frame)
-            head_frames = int(settings.head_transition_frames)
-            tail_frames = int(settings.tail_transition_frames)
-            tail_hold_frames = int(settings.tail_hold_frames)
+            body_frame_count = body_end_in - body_start_in + 1
+
+            head_frames = (
+                int(settings.head_transition_frames)
+                if settings.enable_head_transition
+                else 0
+            )
+            tail_frames = (
+                int(settings.tail_transition_frames)
+                if settings.enable_tail_transition
+                else 0
+            )
+            tail_hold_frames = (
+                int(settings.tail_hold_frames)
+                if settings.enable_tail_transition
+                else 0
+            )
 
             body_start_out = output_start + head_frames
-            body_frame_count = body_end_in - body_start_in + 1
             body_end_out = body_start_out + body_frame_count - 1
-            tail_target_out = body_end_out + tail_frames
-            output_end = tail_target_out + tail_hold_frames
+
+            if settings.enable_tail_transition:
+                tail_target_out = body_end_out + tail_frames
+                output_end = tail_target_out + tail_hold_frames
+            else:
+                tail_target_out = None
+                output_end = body_end_out
+
+            expected_output_length = (
+                body_frame_count
+                + head_frames
+                + tail_frames
+                + tail_hold_frames
+            )
+            actual_output_length = output_end - output_start + 1
+
+            if actual_output_length != expected_output_length:
+                raise RuntimeError(
+                    f"Bad output frame math. Expected {expected_output_length}, "
+                    f"got {actual_output_length}. "
+                    f"output_start={output_start}, "
+                    f"body_start_out={body_start_out}, "
+                    f"body_end_out={body_end_out}, "
+                    f"tail_target_out={tail_target_out}, "
+                    f"output_end={output_end}"
+                )
 
             log.append("")
             log.append("EXPLICIT OUTPUT RANGE")
@@ -1448,7 +1500,16 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
             log.append(f"  head frames:        {head_frames}")
             log.append(f"  body output:        {body_start_out} -> {body_end_out}")
             log.append(f"  tail target:        {tail_target_out}")
+            log.append(f"  tail frames:        {tail_frames}")
+            log.append(f"  tail hold frames:   {tail_hold_frames}")
             log.append(f"  output end:         {output_end}")
+            log.append(f"  output length:      {actual_output_length}")
+            log.append(f"body_start_out = {body_start_out}")
+            log.append(f"body_end_out = {body_end_out}")
+            log.append(f"tail_target_out = {tail_target_out}")
+            log.append(f"output_end = {output_end}")
+            log.append(f"expected_output_length = {expected_output_length}")
+            log.append(f"actual_output_length = {actual_output_length}")
 
             # ------------------------------------------------
             # 1. Sample current body into memory.
@@ -1481,63 +1542,72 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
 
             temp_collection = _create_or_replace_temp_collection(context)
 
-            head_imported, head_armature, head_range, head_existing_actions = _import_source(
-                context=context,
-                filepath=settings.head_source_path,
-                collection=temp_collection,
-                label="HEAD/PREVIOUS",
-                log=log,
-            )
+            head_sample = None
+            tail_sample = None
 
-            imported_objects.extend(head_imported)
-            existing_action_names.update(head_existing_actions)
+            if settings.enable_head_transition:
+                head_imported, head_armature, head_range, head_existing_actions = _import_source(
+                    context=context,
+                    filepath=settings.head_source_path,
+                    collection=temp_collection,
+                    label="HEAD/PREVIOUS",
+                    log=log,
+                )
 
-            head_frame = _resolve_source_frame(
-                mode=settings.head_source_frame_mode,
-                custom_frame=settings.head_custom_frame,
-                detected_range=head_range,
-                label="HEAD/PREVIOUS",
-                log=log,
-            )
+                imported_objects.extend(head_imported)
+                existing_action_names.update(head_existing_actions)
 
-            head_sample = _sample_source_pose(
-                prefix="HEAD",
-                current_armature=current_armature,
-                source_armature=head_armature,
-                source_frame=head_frame,
-                settings=settings,
-                label="HEAD/PREVIOUS",
-                log=log,
-            )
+                head_frame = _resolve_source_frame(
+                    mode=settings.head_source_frame_mode,
+                    custom_frame=settings.head_custom_frame,
+                    detected_range=head_range,
+                    label="HEAD/PREVIOUS",
+                    log=log,
+                )
 
-            tail_imported, tail_armature, tail_range, tail_existing_actions = _import_source(
-                context=context,
-                filepath=settings.tail_source_path,
-                collection=temp_collection,
-                label="TAIL/NEXT",
-                log=log,
-            )
+                head_sample = _sample_source_pose(
+                    prefix="HEAD",
+                    current_armature=current_armature,
+                    source_armature=head_armature,
+                    source_frame=head_frame,
+                    settings=settings,
+                    label="HEAD/PREVIOUS",
+                    log=log,
+                )
+            else:
+                log.append("Head transition disabled.")
 
-            imported_objects.extend(tail_imported)
-            existing_action_names.update(tail_existing_actions)
+            if settings.enable_tail_transition:
+                tail_imported, tail_armature, tail_range, tail_existing_actions = _import_source(
+                    context=context,
+                    filepath=settings.tail_source_path,
+                    collection=temp_collection,
+                    label="TAIL/NEXT",
+                    log=log,
+                )
 
-            tail_frame = _resolve_source_frame(
-                mode=settings.tail_source_frame_mode,
-                custom_frame=settings.tail_custom_frame,
-                detected_range=tail_range,
-                label="TAIL/NEXT",
-                log=log,
-            )
+                imported_objects.extend(tail_imported)
+                existing_action_names.update(tail_existing_actions)
 
-            tail_sample = _sample_source_pose(
-                prefix="TAIL",
-                current_armature=current_armature,
-                source_armature=tail_armature,
-                source_frame=tail_frame,
-                settings=settings,
-                label="TAIL/NEXT",
-                log=log,
-            )
+                tail_frame = _resolve_source_frame(
+                    mode=settings.tail_source_frame_mode,
+                    custom_frame=settings.tail_custom_frame,
+                    detected_range=tail_range,
+                    label="TAIL/NEXT",
+                    log=log,
+                )
+
+                tail_sample = _sample_source_pose(
+                    prefix="TAIL",
+                    current_armature=current_armature,
+                    source_armature=tail_armature,
+                    source_frame=tail_frame,
+                    settings=settings,
+                    label="TAIL/NEXT",
+                    log=log,
+                )
+            else:
+                log.append("Tail transition disabled.")
 
             _delete_temp_objects(
                 imported_objects,
@@ -1571,7 +1641,7 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
             # 4. Key head/body/tail.
             # ------------------------------------------------
 
-            if head_frames > 0:
+            if settings.enable_head_transition and head_frames > 0:
                 _apply_pose_and_key(
                     current_armature=current_armature,
                     pose_sample=head_sample,
@@ -1613,7 +1683,7 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
                 log=log,
             )
 
-            if tail_frames > 0:
+            if settings.enable_tail_transition and tail_frames > 0:
                 _apply_pose_and_key(
                     current_armature=current_armature,
                     pose_sample=tail_sample,
@@ -1623,7 +1693,7 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
                     log=log,
                 )
 
-            if tail_hold_frames > 0:
+            if settings.enable_tail_transition and tail_hold_frames > 0:
                 _apply_pose_and_key(
                     current_armature=current_armature,
                     pose_sample=tail_sample,
@@ -1650,23 +1720,29 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
 
             head_key_count = _count_keys_at_frame(output_action, output_start)
             body_key_count = _count_keys_at_frame(output_action, body_start_out)
-            tail_key_count = _count_keys_at_frame(output_action, tail_target_out)
+            tail_key_count = (
+                _count_keys_at_frame(output_action, tail_target_out)
+                if settings.enable_tail_transition
+                else None
+            )
             end_key_count = _count_keys_at_frame(output_action, output_end)
 
             log.append("")
             log.append("KEY VERIFICATION")
             log.append(f"  keys at output_start {output_start}: {head_key_count}")
             log.append(f"  keys at body_start   {body_start_out}: {body_key_count}")
-            log.append(f"  keys at tail_target  {tail_target_out}: {tail_key_count}")
+            if settings.enable_tail_transition:
+                log.append(f"  keys at tail_target  {tail_target_out}: {tail_key_count}")
+
             log.append(f"  keys at output_end   {output_end}: {end_key_count}")
 
-            if head_frames > 0 and head_key_count == 0:
+            if settings.enable_head_transition and head_frames > 0 and head_key_count == 0:
                 raise RuntimeError("Verification failed: no head keys were written.")
 
             if body_key_count == 0:
                 raise RuntimeError("Verification failed: no body-start keys were written.")
 
-            if tail_frames > 0 and tail_key_count == 0:
+            if settings.enable_tail_transition and tail_frames > 0 and tail_key_count == 0:
                 raise RuntimeError("Verification failed: no tail keys were written.")
 
             if settings.export_after_stitch:
@@ -1792,6 +1868,7 @@ class GRAVITAS_PT_explicit_stitcher_panel_v17(Panel):
 
         head = layout.box()
         head.label(text="Head / Previous Source", icon="PREV_KEYFRAME")
+        head.prop(settings, "enable_head_transition")
         head.prop(settings, "head_source_path")
         head.prop(settings, "head_source_frame_mode")
         head.prop(settings, "head_custom_frame")
@@ -1807,6 +1884,7 @@ class GRAVITAS_PT_explicit_stitcher_panel_v17(Panel):
 
         tail = layout.box()
         tail.label(text="Tail / Next Source", icon="NEXT_KEYFRAME")
+        tail.prop(settings, "enable_tail_transition")
         tail.prop(settings, "tail_source_path")
         tail.prop(settings, "tail_source_frame_mode")
         tail.prop(settings, "tail_custom_frame")
