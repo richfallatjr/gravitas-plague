@@ -1,0 +1,5136 @@
+{
+  "source_usdz": "idle-01.usdz",
+  "source_skeleton_path": "/root/Armature_001/Armature/Armature",
+  "source_animation_path": "/root/Armature_001/Armature/Armature/Anim",
+  "metadata": {
+    "startTimeCode": 1,
+    "endTimeCode": 340,
+    "timeCodesPerSecond": 24,
+    "metersPerUnit": 1,
+    "upAxis": "Z"
+  },
+  "joint_count": 24,
+  "joint_paths": [
+    "Hips",
+    "Hips/LeftUpLeg",
+    "Hips/LeftUpLeg/LeftLeg",
+    "Hips/LeftUpLeg/LeftLeg/LeftFoot",
+    "Hips/LeftUpLeg/LeftLeg/LeftFoot/LeftToeBase",
+    "Hips/RightUpLeg",
+    "Hips/RightUpLeg/RightLeg",
+    "Hips/RightUpLeg/RightLeg/RightFoot",
+    "Hips/RightUpLeg/RightLeg/RightFoot/RightToeBase",
+    "Hips/Spine02",
+    "Hips/Spine02/Spine01",
+    "Hips/Spine02/Spine01/Spine",
+    "Hips/Spine02/Spine01/Spine/LeftShoulder",
+    "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm",
+    "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm",
+    "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm/LeftHand",
+    "Hips/Spine02/Spine01/Spine/RightShoulder",
+    "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm",
+    "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm",
+    "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm/RightHand",
+    "Hips/Spine02/Spine01/Spine/neck",
+    "Hips/Spine02/Spine01/Spine/neck/Head",
+    "Hips/Spine02/Spine01/Spine/neck/Head/head_end",
+    "Hips/Spine02/Spine01/Spine/neck/Head/headfront"
+  ],
+  "channels": {
+    "translation_xyz": "USD SkelAnimation translations, local joint translation, float3",
+    "rotation_quat_wxyz": "USD SkelAnimation rotations, quaternion order w,x,y,z, quatf",
+    "scale_xyz": "constant half3 scale; all joints are [1,1,1] in idle-01.usdz"
+  },
+  "frames": [
+    {
+      "frame": 1,
+      "joints": [
+        {
+          "index": 0,
+          "path": "Hips",
+          "name": "Hips",
+          "translation_xyz": [
+            -2.1224895,
+            -2.927174,
+            94.190834
+          ],
+          "rotation_quat_wxyz": [
+            0.52521,
+            0.73941094,
+            -0.3648768,
+            -0.21045387
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 1,
+          "path": "Hips/LeftUpLeg",
+          "name": "LeftUpLeg",
+          "translation_xyz": [
+            9.512987,
+            -9.300476,
+            2.4032116
+          ],
+          "rotation_quat_wxyz": [
+            0.4726297,
+            0.72790986,
+            0.08139271,
+            -0.49004447
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 2,
+          "path": "Hips/LeftUpLeg/LeftLeg",
+          "name": "LeftLeg",
+          "translation_xyz": [
+            5.2452087e-06,
+            38.195847,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9261906,
+            0.376855,
+            0.0019384191,
+            -0.012144037
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 3,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot",
+          "name": "LeftFoot",
+          "translation_xyz": [
+            -6.67572e-06,
+            43.440697,
+            1.5258789e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.89713883,
+            -0.43998808,
+            -0.005200795,
+            0.039055426
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 4,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot/LeftToeBase",
+          "name": "LeftToeBase",
+          "translation_xyz": [
+            7.6293945e-06,
+            11.75815,
+            -3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.93366486,
+            -0.35326183,
+            -0.017244713,
+            0.056379333
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 5,
+          "path": "Hips/RightUpLeg",
+          "name": "RightUpLeg",
+          "translation_xyz": [
+            -9.706606,
+            -8.989532,
+            2.1464195
+          ],
+          "rotation_quat_wxyz": [
+            0.39185214,
+            0.8870257,
+            -0.13177793,
+            0.20560135
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 6,
+          "path": "Hips/RightUpLeg/RightLeg",
+          "name": "RightLeg",
+          "translation_xyz": [
+            7.6293945e-06,
+            37.585533,
+            1.5258789e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.84698826,
+            0.53035647,
+            0.0061271144,
+            0.03599086
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 7,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot",
+          "name": "RightFoot",
+          "translation_xyz": [
+            1.335144e-05,
+            44.260975,
+            -1.9073486e-06
+          ],
+          "rotation_quat_wxyz": [
+            -0.69291437,
+            0.7100348,
+            -0.022679122,
+            0.123312086
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 8,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot/RightToeBase",
+          "name": "RightToeBase",
+          "translation_xyz": [
+            -1.9073486e-06,
+            11.753027,
+            -9.536743e-07
+          ],
+          "rotation_quat_wxyz": [
+            0.93689615,
+            -0.33369872,
+            0.09376917,
+            -0.045585874
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 9,
+          "path": "Hips/Spine02",
+          "name": "Spine02",
+          "translation_xyz": [
+            0.19362354,
+            11.8092575,
+            -4.549631
+          ],
+          "rotation_quat_wxyz": [
+            0.9977775,
+            -0.058895595,
+            0.015812084,
+            -0.026857032
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 10,
+          "path": "Hips/Spine02/Spine01",
+          "name": "Spine01",
+          "translation_xyz": [
+            -4.7683716e-07,
+            12.656845,
+            -3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.99787015,
+            -0.020381777,
+            0.055460107,
+            -0.027638676
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 11,
+          "path": "Hips/Spine02/Spine01/Spine",
+          "name": "Spine",
+          "translation_xyz": [
+            0.0,
+            12.656822,
+            -3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9995443,
+            -0.029640192,
+            -0.0052757533,
+            0.0021796215
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 12,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder",
+          "name": "LeftShoulder",
+          "translation_xyz": [
+            3.5602121,
+            3.8361816,
+            -0.37774563
+          ],
+          "rotation_quat_wxyz": [
+            0.58013237,
+            0.53934664,
+            0.5151898,
+            -0.3273088
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 13,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm",
+          "name": "LeftArm",
+          "translation_xyz": [
+            1.1444092e-05,
+            14.155334,
+            -3.0517578e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.719669,
+            0.5594131,
+            0.33070892,
+            0.24446924
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 14,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm",
+          "name": "LeftForeArm",
+          "translation_xyz": [
+            -7.6293945e-05,
+            25.845276,
+            4.386902e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.95383376,
+            -0.25792897,
+            -0.05828909,
+            0.14239448
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 15,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm/LeftHand",
+          "name": "LeftHand",
+          "translation_xyz": [
+            7.6293945e-06,
+            23.748917,
+            6.866455e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9754891,
+            0.032735273,
+            0.19604538,
+            0.094422564
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 16,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder",
+          "name": "RightShoulder",
+          "translation_xyz": [
+            -3.7040024,
+            3.899063,
+            -0.3027954
+          ],
+          "rotation_quat_wxyz": [
+            0.70140594,
+            0.55313224,
+            -0.4047171,
+            0.19564892
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 17,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm",
+          "name": "RightArm",
+          "translation_xyz": [
+            1.1444092e-05,
+            14.969032,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.6653854,
+            0.67862445,
+            -0.2858608,
+            -0.12253439
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 18,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm",
+          "name": "RightForeArm",
+          "translation_xyz": [
+            -0.00010681152,
+            25.8451,
+            -5.340576e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9511989,
+            -0.26397452,
+            0.057816245,
+            -0.14898145
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 19,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm/RightHand",
+          "name": "RightHand",
+          "translation_xyz": [
+            3.0517578e-05,
+            23.168098,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.99782073,
+            -0.011540808,
+            0.056391124,
+            0.032258376
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 20,
+          "path": "Hips/Spine02/Spine01/Spine/neck",
+          "name": "neck",
+          "translation_xyz": [
+            0.14379579,
+            8.287399,
+            0.68058014
+          ],
+          "rotation_quat_wxyz": [
+            0.9960005,
+            0.053425826,
+            0.06581563,
+            -0.02823088
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 21,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head",
+          "name": "Head",
+          "translation_xyz": [
+            -1.4305115e-06,
+            7.956955,
+            -3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9027602,
+            0.42248675,
+            0.07641551,
+            -0.026261253
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 22,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/head_end",
+          "name": "head_end",
+          "translation_xyz": [
+            0.08714038,
+            21.123596,
+            -11.762985
+          ],
+          "rotation_quat_wxyz": [
+            0.967901,
+            -0.2513249,
+            2.0733664e-08,
+            -0.0018617032
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 23,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/headfront",
+          "name": "headfront",
+          "translation_xyz": [
+            -0.087138355,
+            9.16349,
+            11.762894
+          ],
+          "rotation_quat_wxyz": [
+            0.89848137,
+            0.43899962,
+            7.423992e-08,
+            0.0032520648
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame": 2,
+      "joints": [
+        {
+          "index": 0,
+          "path": "Hips",
+          "name": "Hips",
+          "translation_xyz": [
+            -2.1295335,
+            -2.9250102,
+            94.119446
+          ],
+          "rotation_quat_wxyz": [
+            0.52478313,
+            0.7399598,
+            -0.36460635,
+            -0.21005802
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 1,
+          "path": "Hips/LeftUpLeg",
+          "name": "LeftUpLeg",
+          "translation_xyz": [
+            9.512985,
+            -9.300476,
+            2.4032078
+          ],
+          "rotation_quat_wxyz": [
+            0.47339225,
+            0.7275623,
+            0.08183146,
+            -0.48975146
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 2,
+          "path": "Hips/LeftUpLeg/LeftLeg",
+          "name": "LeftLeg",
+          "translation_xyz": [
+            2.6226044e-06,
+            38.195847,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.9261513,
+            0.37695152,
+            0.0019406646,
+            -0.012150679
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 3,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot",
+          "name": "LeftFoot",
+          "translation_xyz": [
+            -8.106232e-06,
+            43.440704,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.8970258,
+            -0.4402161,
+            -0.0053667594,
+            0.03905911
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 4,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot/LeftToeBase",
+          "name": "LeftToeBase",
+          "translation_xyz": [
+            7.6293945e-06,
+            11.758158,
+            -1.1444092e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9337146,
+            -0.35313654,
+            -0.017226556,
+            0.056345344
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 5,
+          "path": "Hips/RightUpLeg",
+          "name": "RightUpLeg",
+          "translation_xyz": [
+            -9.706604,
+            -8.989532,
+            2.1464138
+          ],
+          "rotation_quat_wxyz": [
+            0.39284205,
+            0.8866642,
+            -0.13170576,
+            0.20531757
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 6,
+          "path": "Hips/RightUpLeg/RightLeg",
+          "name": "RightLeg",
+          "translation_xyz": [
+            7.6293945e-06,
+            37.58553,
+            3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.8467011,
+            0.53081304,
+            0.0061550317,
+            0.036012396
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 7,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot",
+          "name": "RightFoot",
+          "translation_xyz": [
+            1.7166138e-05,
+            44.260983,
+            -5.722046e-06
+          ],
+          "rotation_quat_wxyz": [
+            -0.6923061,
+            0.71062994,
+            -0.022900557,
+            0.12325952
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 8,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot/RightToeBase",
+          "name": "RightToeBase",
+          "translation_xyz": [
+            1.9073486e-06,
+            11.753027,
+            -2.861023e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9369483,
+            -0.33356866,
+            0.09375187,
+            -0.045502212
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 9,
+          "path": "Hips/Spine02",
+          "name": "Spine02",
+          "translation_xyz": [
+            0.1936245,
+            11.809265,
+            -4.549629
+          ],
+          "rotation_quat_wxyz": [
+            0.9977787,
+            -0.058859248,
+            0.015806183,
+            -0.026895678
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 10,
+          "path": "Hips/Spine02/Spine01",
+          "name": "Spine01",
+          "translation_xyz": [
+            0.0,
+            12.656853,
+            -5.722046e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.99787325,
+            -0.020347167,
+            0.055395402,
+            -0.027682165
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 11,
+          "path": "Hips/Spine02/Spine01/Spine",
+          "name": "Spine",
+          "translation_xyz": [
+            -3.5762787e-07,
+            12.656868,
+            -9.536743e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9995452,
+            -0.029609982,
+            -0.0052774535,
+            0.0021692053
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 12,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder",
+          "name": "LeftShoulder",
+          "translation_xyz": [
+            3.5602105,
+            3.8361511,
+            -0.37774944
+          ],
+          "rotation_quat_wxyz": [
+            0.5803455,
+            0.53939223,
+            0.5151565,
+            -0.32690805
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 13,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm",
+          "name": "LeftArm",
+          "translation_xyz": [
+            3.8146973e-06,
+            14.155334,
+            -1.5258789e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.7200329,
+            0.55907995,
+            0.33052376,
+            0.24441008
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 14,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm",
+          "name": "LeftForeArm",
+          "translation_xyz": [
+            -7.6293945e-05,
+            25.845268,
+            4.196167e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.95382816,
+            -0.25796777,
+            -0.058276456,
+            0.14236684
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 15,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm/LeftHand",
+          "name": "LeftHand",
+          "translation_xyz": [
+            7.6293945e-06,
+            23.748894,
+            6.1035156e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9754746,
+            0.03277063,
+            0.19599272,
+            0.09466929
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 16,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder",
+          "name": "RightShoulder",
+          "translation_xyz": [
+            -3.7040026,
+            3.8991241,
+            -0.30280018
+          ],
+          "rotation_quat_wxyz": [
+            0.700943,
+            0.55330753,
+            -0.40501136,
+            0.19620274
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 17,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm",
+          "name": "RightArm",
+          "translation_xyz": [
+            -3.8146973e-06,
+            14.969032,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.66578054,
+            0.6783335,
+            -0.28568885,
+            -0.12240026
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 18,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm",
+          "name": "RightForeArm",
+          "translation_xyz": [
+            -0.00010681152,
+            25.845093,
+            -5.340576e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9511188,
+            -0.26416078,
+            0.057843797,
+            -0.14915128
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 19,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm/RightHand",
+          "name": "RightHand",
+          "translation_xyz": [
+            3.4332275e-05,
+            23.168095,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.99782073,
+            -0.011540827,
+            0.056391142,
+            0.03225838
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 20,
+          "path": "Hips/Spine02/Spine01/Spine/neck",
+          "name": "neck",
+          "translation_xyz": [
+            0.1437949,
+            8.287415,
+            0.68058014
+          ],
+          "rotation_quat_wxyz": [
+            0.9959977,
+            0.053459164,
+            0.06580985,
+            -0.028279614
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 21,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head",
+          "name": "Head",
+          "translation_xyz": [
+            3.8146973e-06,
+            7.95697,
+            1.9073486e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.90313053,
+            0.42173105,
+            0.07618763,
+            -0.02633566
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 22,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/head_end",
+          "name": "head_end",
+          "translation_xyz": [
+            0.08713758,
+            21.123596,
+            -11.7630005
+          ],
+          "rotation_quat_wxyz": [
+            0.967901,
+            -0.2513248,
+            2.3111863e-08,
+            -0.0018617309
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 23,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/headfront",
+          "name": "headfront",
+          "translation_xyz": [
+            -0.0871402,
+            9.163483,
+            11.762924
+          ],
+          "rotation_quat_wxyz": [
+            0.8984813,
+            0.43899965,
+            6.688898e-08,
+            0.0032520683
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame": 3,
+      "joints": [
+        {
+          "index": 0,
+          "path": "Hips",
+          "name": "Hips",
+          "translation_xyz": [
+            -2.1656606,
+            -2.9010305,
+            94.04805
+          ],
+          "rotation_quat_wxyz": [
+            0.5241716,
+            0.7406559,
+            -0.36405513,
+            -0.2100878
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 1,
+          "path": "Hips/LeftUpLeg",
+          "name": "LeftUpLeg",
+          "translation_xyz": [
+            9.512981,
+            -9.300476,
+            2.4032097
+          ],
+          "rotation_quat_wxyz": [
+            0.47525215,
+            0.7272351,
+            0.082607254,
+            -0.48830378
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 2,
+          "path": "Hips/LeftUpLeg/LeftLeg",
+          "name": "LeftLeg",
+          "translation_xyz": [
+            3.33786e-06,
+            38.19584,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9258011,
+            0.37780866,
+            0.001933907,
+            -0.01221281
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 3,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot",
+          "name": "LeftFoot",
+          "translation_xyz": [
+            -7.6293945e-06,
+            43.44071,
+            -7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.8969151,
+            -0.44042206,
+            -0.006333058,
+            0.039135613
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 4,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot/LeftToeBase",
+          "name": "LeftToeBase",
+          "translation_xyz": [
+            8.106232e-06,
+            11.758144,
+            -3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9337644,
+            -0.3530112,
+            -0.017208382,
+            0.056311443
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 5,
+          "path": "Hips/RightUpLeg",
+          "name": "RightUpLeg",
+          "translation_xyz": [
+            -9.706603,
+            -8.989555,
+            2.1464195
+          ],
+          "rotation_quat_wxyz": [
+            0.39358544,
+            0.88645875,
+            -0.13056996,
+            0.2055063
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 6,
+          "path": "Hips/RightUpLeg/RightLeg",
+          "name": "RightLeg",
+          "translation_xyz": [
+            5.722046e-06,
+            37.585537,
+            3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.8464114,
+            0.53127116,
+            0.006121732,
+            0.036072288
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 7,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot",
+          "name": "RightFoot",
+          "translation_xyz": [
+            1.5258789e-05,
+            44.260986,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            -0.6917542,
+            0.71121454,
+            -0.023446288,
+            0.122883
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 8,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot/RightToeBase",
+          "name": "RightToeBase",
+          "translation_xyz": [
+            1.9073486e-06,
+            11.753027,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.93700033,
+            -0.33343863,
+            0.093734525,
+            -0.045418568
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 9,
+          "path": "Hips/Spine02",
+          "name": "Spine02",
+          "translation_xyz": [
+            0.19362354,
+            11.80925,
+            -4.549629
+          ],
+          "rotation_quat_wxyz": [
+            0.9977959,
+            -0.058474086,
+            0.015755624,
+            -0.02712683
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 10,
+          "path": "Hips/Spine02/Spine01",
+          "name": "Spine01",
+          "translation_xyz": [
+            0.0,
+            12.656853,
+            -7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.99787724,
+            -0.020002231,
+            0.055326022,
+            -0.027927442
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 11,
+          "path": "Hips/Spine02/Spine01/Spine",
+          "name": "Spine",
+          "translation_xyz": [
+            -5.9604645e-07,
+            12.656815,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.9995462,
+            -0.029579973,
+            -0.0052904696,
+            0.0021233105
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 12,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder",
+          "name": "LeftShoulder",
+          "translation_xyz": [
+            3.560211,
+            3.8361664,
+            -0.37774754
+          ],
+          "rotation_quat_wxyz": [
+            0.5803054,
+            0.53983694,
+            0.5147042,
+            -0.32695755
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 13,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm",
+          "name": "LeftArm",
+          "translation_xyz": [
+            -3.8146973e-06,
+            14.155331,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.72197944,
+            0.5566999,
+            0.3296439,
+            0.24528721
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 14,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm",
+          "name": "LeftForeArm",
+          "translation_xyz": [
+            -8.392334e-05,
+            25.845276,
+            4.196167e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9538226,
+            -0.2580065,
+            -0.058263764,
+            0.14233916
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 15,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm/LeftHand",
+          "name": "LeftHand",
+          "translation_xyz": [
+            7.6293945e-06,
+            23.748901,
+            7.6293945e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9753189,
+            0.033149295,
+            0.19603981,
+            0.09603427
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 16,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder",
+          "name": "RightShoulder",
+          "translation_xyz": [
+            -3.7040029,
+            3.8990784,
+            -0.30280018
+          ],
+          "rotation_quat_wxyz": [
+            0.70052767,
+            0.5533838,
+            -0.40543923,
+            0.19658674
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 17,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm",
+          "name": "RightArm",
+          "translation_xyz": [
+            3.8146973e-06,
+            14.969028,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.66776085,
+            0.6764674,
+            -0.28529704,
+            -0.12285312
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 18,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm",
+          "name": "RightForeArm",
+          "translation_xyz": [
+            -0.00010681152,
+            25.845123,
+            -5.2452087e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.95068264,
+            -0.2651878,
+            0.057965353,
+            -0.15006003
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 19,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm/RightHand",
+          "name": "RightHand",
+          "translation_xyz": [
+            3.4332275e-05,
+            23.168076,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.99782073,
+            -0.0115407985,
+            0.056391146,
+            0.032258376
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 20,
+          "path": "Hips/Spine02/Spine01/Spine/neck",
+          "name": "neck",
+          "translation_xyz": [
+            0.14379478,
+            8.287415,
+            0.680583
+          ],
+          "rotation_quat_wxyz": [
+            0.99597335,
+            0.053794812,
+            0.06578464,
+            -0.028558005
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 21,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head",
+          "name": "Head",
+          "translation_xyz": [
+            9.536743e-07,
+            7.956955,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.90558535,
+            0.41656923,
+            0.07524728,
+            -0.026891498
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 22,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/head_end",
+          "name": "head_end",
+          "translation_xyz": [
+            0.08713387,
+            21.123604,
+            -11.76297
+          ],
+          "rotation_quat_wxyz": [
+            0.967901,
+            -0.25132486,
+            2.653494e-08,
+            -0.0018617342
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 23,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/headfront",
+          "name": "headfront",
+          "translation_xyz": [
+            -0.08714129,
+            9.163475,
+            11.762901
+          ],
+          "rotation_quat_wxyz": [
+            0.89848137,
+            0.43899962,
+            1.02823435e-07,
+            0.0032520795
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame": 4,
+      "joints": [
+        {
+          "index": 0,
+          "path": "Hips",
+          "name": "Hips",
+          "translation_xyz": [
+            -2.2043426,
+            -2.860385,
+            93.976654
+          ],
+          "rotation_quat_wxyz": [
+            0.5234845,
+            0.7414106,
+            -0.3633891,
+            -0.21029179
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 1,
+          "path": "Hips/LeftUpLeg",
+          "name": "LeftUpLeg",
+          "translation_xyz": [
+            9.512981,
+            -9.300484,
+            2.4032116
+          ],
+          "rotation_quat_wxyz": [
+            0.47749588,
+            0.7269306,
+            0.08338565,
+            -0.48643234
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 2,
+          "path": "Hips/LeftUpLeg/LeftLeg",
+          "name": "LeftLeg",
+          "translation_xyz": [
+            3.8146973e-06,
+            38.19584,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.9251384,
+            0.37942475,
+            0.0018935839,
+            -0.012335936
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 3,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot",
+          "name": "LeftFoot",
+          "translation_xyz": [
+            -7.6293945e-06,
+            43.440704,
+            3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.896805,
+            -0.44061953,
+            -0.0075438935,
+            0.039221648
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 4,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot/LeftToeBase",
+          "name": "LeftToeBase",
+          "translation_xyz": [
+            6.67572e-06,
+            11.758152,
+            -1.1444092e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.93381417,
+            -0.3528858,
+            -0.017190209,
+            0.056277465
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 5,
+          "path": "Hips/RightUpLeg",
+          "name": "RightUpLeg",
+          "translation_xyz": [
+            -9.706602,
+            -8.989525,
+            2.1464157
+          ],
+          "rotation_quat_wxyz": [
+            0.3942483,
+            0.88640773,
+            -0.12883677,
+            0.20554979
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 6,
+          "path": "Hips/RightUpLeg/RightLeg",
+          "name": "RightLeg",
+          "translation_xyz": [
+            7.6293945e-06,
+            37.58553,
+            3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.8454045,
+            0.53286237,
+            0.006113627,
+            0.036215033
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 7,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot",
+          "name": "RightFoot",
+          "translation_xyz": [
+            2.0980835e-05,
+            44.26098,
+            -2.861023e-06
+          ],
+          "rotation_quat_wxyz": [
+            -0.6912227,
+            0.7117946,
+            -0.024111344,
+            0.12238563
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 8,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot/RightToeBase",
+          "name": "RightToeBase",
+          "translation_xyz": [
+            3.8146973e-06,
+            11.753029,
+            -9.536743e-07
+          ],
+          "rotation_quat_wxyz": [
+            0.9370518,
+            -0.33330742,
+            0.093721636,
+            -0.045347355
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 9,
+          "path": "Hips/Spine02",
+          "name": "Spine02",
+          "translation_xyz": [
+            0.19362402,
+            11.809265,
+            -4.5496216
+          ],
+          "rotation_quat_wxyz": [
+            0.99783635,
+            -0.05766566,
+            0.015667384,
+            -0.027418984
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 10,
+          "path": "Hips/Spine02/Spine01",
+          "name": "Spine01",
+          "translation_xyz": [
+            9.536743e-07,
+            12.656845,
+            -7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9978852,
+            -0.01940854,
+            0.05523921,
+            -0.0282304
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 11,
+          "path": "Hips/Spine02/Spine01/Spine",
+          "name": "Spine",
+          "translation_xyz": [
+            2.3841858e-07,
+            12.656807,
+            -3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.999549,
+            -0.029483348,
+            -0.0053144107,
+            0.0020917093
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 12,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder",
+          "name": "LeftShoulder",
+          "translation_xyz": [
+            3.5602107,
+            3.8362122,
+            -0.37775993
+          ],
+          "rotation_quat_wxyz": [
+            0.57991457,
+            0.54083234,
+            0.5136715,
+            -0.32762942
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 13,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm",
+          "name": "LeftArm",
+          "translation_xyz": [
+            0.0,
+            14.155331,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.7247707,
+            0.5532006,
+            0.3283649,
+            0.24668409
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 14,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm",
+          "name": "LeftForeArm",
+          "translation_xyz": [
+            -8.392334e-05,
+            25.845276,
+            4.196167e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.953817,
+            -0.2580453,
+            -0.05825117,
+            0.1423115
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 15,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm/LeftHand",
+          "name": "LeftHand",
+          "translation_xyz": [
+            7.6293945e-06,
+            23.748917,
+            6.866455e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.97515243,
+            0.03418099,
+            0.19614626,
+            0.09713906
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 16,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder",
+          "name": "RightShoulder",
+          "translation_xyz": [
+            -3.7040038,
+            3.8990936,
+            -0.30280113
+          ],
+          "rotation_quat_wxyz": [
+            0.6994517,
+            0.55421484,
+            -0.4056918,
+            0.19755374
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 17,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm",
+          "name": "RightArm",
+          "translation_xyz": [
+            3.8146973e-06,
+            14.96904,
+            -2.2888184e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.6705514,
+            0.6738676,
+            -0.28434634,
+            -0.1241387
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 18,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm",
+          "name": "RightForeArm",
+          "translation_xyz": [
+            -0.00011444092,
+            25.8451,
+            -4.9591064e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9501985,
+            -0.2663427,
+            0.058055796,
+            -0.15104286
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 19,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm/RightHand",
+          "name": "RightHand",
+          "translation_xyz": [
+            2.670288e-05,
+            23.168076,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.99782073,
+            -0.01154082,
+            0.056391135,
+            0.03225838
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 20,
+          "path": "Hips/Spine02/Spine01/Spine/neck",
+          "name": "neck",
+          "translation_xyz": [
+            0.14379394,
+            8.28743,
+            0.68058014
+          ],
+          "rotation_quat_wxyz": [
+            0.9959342,
+            0.05438348,
+            0.065750025,
+            -0.028888026
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 21,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head",
+          "name": "Head",
+          "translation_xyz": [
+            0.0,
+            7.956955,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.90933055,
+            0.4085692,
+            0.07375554,
+            -0.027373618
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 22,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/head_end",
+          "name": "head_end",
+          "translation_xyz": [
+            0.08713412,
+            21.123596,
+            -11.762985
+          ],
+          "rotation_quat_wxyz": [
+            0.967901,
+            -0.2513249,
+            2.488645e-08,
+            -0.0018617292
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 23,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/headfront",
+          "name": "headfront",
+          "translation_xyz": [
+            -0.08713627,
+            9.163475,
+            11.762909
+          ],
+          "rotation_quat_wxyz": [
+            0.89848137,
+            0.4389996,
+            9.561198e-08,
+            0.0032520713
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame": 5,
+      "joints": [
+        {
+          "index": 0,
+          "path": "Hips",
+          "name": "Hips",
+          "translation_xyz": [
+            -2.2338269,
+            -2.8090448,
+            93.90526
+          ],
+          "rotation_quat_wxyz": [
+            0.5229104,
+            0.7422529,
+            -0.3624778,
+            -0.21032174
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 1,
+          "path": "Hips/LeftUpLeg",
+          "name": "LeftUpLeg",
+          "translation_xyz": [
+            9.512984,
+            -9.300476,
+            2.4032154
+          ],
+          "rotation_quat_wxyz": [
+            0.4805664,
+            0.72609556,
+            0.08466372,
+            -0.48443082
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 2,
+          "path": "Hips/LeftUpLeg/LeftLeg",
+          "name": "LeftLeg",
+          "translation_xyz": [
+            4.2915344e-06,
+            38.195843,
+            1.5258789e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.92424154,
+            0.381599,
+            0.0018166399,
+            -0.012507399
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 3,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot",
+          "name": "LeftFoot",
+          "translation_xyz": [
+            -9.536743e-06,
+            43.440704,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.89669436,
+            -0.44081718,
+            -0.008685828,
+            0.039294172
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 4,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot/LeftToeBase",
+          "name": "LeftToeBase",
+          "translation_xyz": [
+            8.583069e-06,
+            11.758162,
+            -7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.933864,
+            -0.35276037,
+            -0.017172858,
+            0.05624325
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 5,
+          "path": "Hips/RightUpLeg",
+          "name": "RightUpLeg",
+          "translation_xyz": [
+            -9.706603,
+            -8.989517,
+            2.14641
+          ],
+          "rotation_quat_wxyz": [
+            0.39601174,
+            0.8858743,
+            -0.12736715,
+            0.20537554
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 6,
+          "path": "Hips/RightUpLeg/RightLeg",
+          "name": "RightLeg",
+          "translation_xyz": [
+            3.8146973e-06,
+            37.585537,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.84404296,
+            0.53500324,
+            0.0061143697,
+            0.03640931
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 7,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot",
+          "name": "RightFoot",
+          "translation_xyz": [
+            1.9073486e-05,
+            44.260975,
+            -9.536743e-07
+          ],
+          "rotation_quat_wxyz": [
+            -0.690068,
+            0.7129758,
+            -0.024875205,
+            0.121872135
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 8,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot/RightToeBase",
+          "name": "RightToeBase",
+          "translation_xyz": [
+            0.0,
+            11.753023,
+            -2.861023e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9371033,
+            -0.333176,
+            0.093708776,
+            -0.04527618
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 9,
+          "path": "Hips/Spine02",
+          "name": "Spine02",
+          "translation_xyz": [
+            0.19362354,
+            11.80928,
+            -4.5496273
+          ],
+          "rotation_quat_wxyz": [
+            0.9979021,
+            -0.056424215,
+            0.015537727,
+            -0.02768225
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 10,
+          "path": "Hips/Spine02/Spine01",
+          "name": "Spine01",
+          "translation_xyz": [
+            9.536743e-07,
+            12.656837,
+            -7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9978995,
+            -0.018541267,
+            0.055143278,
+            -0.028497849
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 11,
+          "path": "Hips/Spine02/Spine01/Spine",
+          "name": "Spine",
+          "translation_xyz": [
+            -9.536743e-07,
+            12.65683,
+            -3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9995528,
+            -0.029347455,
+            -0.0053491434,
+            0.0020883123
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 12,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder",
+          "name": "LeftShoulder",
+          "translation_xyz": [
+            3.5602124,
+            3.836197,
+            -0.3777542
+          ],
+          "rotation_quat_wxyz": [
+            0.5801714,
+            0.54204255,
+            0.51223326,
+            -0.3274265
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 13,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm",
+          "name": "LeftArm",
+          "translation_xyz": [
+            0.0,
+            14.155331,
+            -1.5258789e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.7280481,
+            0.54902065,
+            0.32685274,
+            0.24837387
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 14,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm",
+          "name": "LeftForeArm",
+          "translation_xyz": [
+            -8.392334e-05,
+            25.845284,
+            4.386902e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.95381147,
+            -0.25808394,
+            -0.058238488,
+            0.14228383
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 15,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm/LeftHand",
+          "name": "LeftHand",
+          "translation_xyz": [
+            0.0,
+            23.748901,
+            5.340576e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.97501886,
+            0.03571439,
+            0.19627777,
+            0.097661614
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 16,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder",
+          "name": "RightShoulder",
+          "translation_xyz": [
+            -3.7040021,
+            3.899109,
+            -0.30279732
+          ],
+          "rotation_quat_wxyz": [
+            0.69795996,
+            0.55558014,
+            -0.40574566,
+            0.19887955
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 17,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm",
+          "name": "RightArm",
+          "translation_xyz": [
+            1.5258789e-05,
+            14.969032,
+            3.8146973e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.673901,
+            0.6705934,
+            -0.2832047,
+            -0.12632114
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 18,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm",
+          "name": "RightForeArm",
+          "translation_xyz": [
+            -0.00010681152,
+            25.8451,
+            -5.340576e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.94972354,
+            -0.26749188,
+            0.058106925,
+            -0.1519766
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 19,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm/RightHand",
+          "name": "RightHand",
+          "translation_xyz": [
+            3.8146973e-05,
+            23.16808,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.99782073,
+            -0.011540821,
+            0.056391153,
+            0.03225839
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 20,
+          "path": "Hips/Spine02/Spine01/Spine/neck",
+          "name": "neck",
+          "translation_xyz": [
+            0.14379537,
+            8.287415,
+            0.6805811
+          ],
+          "rotation_quat_wxyz": [
+            0.9958805,
+            0.05525742,
+            0.06571029,
+            -0.029168833
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 21,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head",
+          "name": "Head",
+          "translation_xyz": [
+            2.3841858e-06,
+            7.956955,
+            -1.1444092e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9137314,
+            0.39899397,
+            0.071660735,
+            -0.02763121
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 22,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/head_end",
+          "name": "head_end",
+          "translation_xyz": [
+            0.08713472,
+            21.123611,
+            -11.762993
+          ],
+          "rotation_quat_wxyz": [
+            0.967901,
+            -0.25132486,
+            4.2738982e-08,
+            -0.0018617453
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 23,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/headfront",
+          "name": "headfront",
+          "translation_xyz": [
+            -0.08714068,
+            9.163483,
+            11.762909
+          ],
+          "rotation_quat_wxyz": [
+            0.89848137,
+            0.43899965,
+            8.765235e-08,
+            0.003252086
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame": 6,
+      "joints": [
+        {
+          "index": 0,
+          "path": "Hips",
+          "name": "Hips",
+          "translation_xyz": [
+            -2.2575521,
+            -2.7540946,
+            93.77247
+          ],
+          "rotation_quat_wxyz": [
+            0.5224009,
+            0.7430415,
+            -0.3616649,
+            -0.21020254
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 1,
+          "path": "Hips/LeftUpLeg",
+          "name": "LeftUpLeg",
+          "translation_xyz": [
+            9.512985,
+            -9.300499,
+            2.4032173
+          ],
+          "rotation_quat_wxyz": [
+            0.48300332,
+            0.7256373,
+            0.08572333,
+            -0.48250368
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 2,
+          "path": "Hips/LeftUpLeg/LeftLeg",
+          "name": "LeftLeg",
+          "translation_xyz": [
+            4.053116e-06,
+            38.195843,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.92327356,
+            0.38392937,
+            0.0017249344,
+            -0.012696475
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 3,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot",
+          "name": "LeftFoot",
+          "translation_xyz": [
+            -9.059906e-06,
+            43.440712,
+            3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.8965817,
+            -0.44101796,
+            -0.0096898675,
+            0.039376378
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 4,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot/LeftToeBase",
+          "name": "LeftToeBase",
+          "translation_xyz": [
+            8.583069e-06,
+            11.758146,
+            -7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.93391615,
+            -0.3526358,
+            -0.017139874,
+            0.056167573
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 5,
+          "path": "Hips/RightUpLeg",
+          "name": "RightUpLeg",
+          "translation_xyz": [
+            -9.706605,
+            -8.98954,
+            2.1464157
+          ],
+          "rotation_quat_wxyz": [
+            0.39747396,
+            0.88543296,
+            -0.12622203,
+            0.20516068
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 6,
+          "path": "Hips/RightUpLeg/RightLeg",
+          "name": "RightLeg",
+          "translation_xyz": [
+            7.6293945e-06,
+            37.585533,
+            1.1444092e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.84258,
+            0.5372897,
+            0.0061431606,
+            0.036618657
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 7,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot",
+          "name": "RightFoot",
+          "translation_xyz": [
+            1.7166138e-05,
+            44.260983,
+            -9.536743e-07
+          ],
+          "rotation_quat_wxyz": [
+            -0.68877536,
+            0.71427345,
+            -0.025621729,
+            0.12143093
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 8,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot/RightToeBase",
+          "name": "RightToeBase",
+          "translation_xyz": [
+            1.9073486e-06,
+            11.753027,
+            -1.9073486e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9371546,
+            -0.33304477,
+            0.09369592,
+            -0.045204956
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 9,
+          "path": "Hips/Spine02",
+          "name": "Spine02",
+          "translation_xyz": [
+            0.19362307,
+            11.809273,
+            -4.5496254
+          ],
+          "rotation_quat_wxyz": [
+            0.99798995,
+            -0.054806456,
+            0.015351949,
+            -0.02786845
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 10,
+          "path": "Hips/Spine02/Spine01",
+          "name": "Spine01",
+          "translation_xyz": [
+            -4.7683716e-07,
+            12.656837,
+            -7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.99792236,
+            -0.017289853,
+            0.055036373,
+            -0.028688261
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 11,
+          "path": "Hips/Spine02/Spine01/Spine",
+          "name": "Spine",
+          "translation_xyz": [
+            -2.3841858e-07,
+            12.65683,
+            -3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.99955755,
+            -0.029175473,
+            -0.0053933794,
+            0.0020848094
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 12,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder",
+          "name": "LeftShoulder",
+          "translation_xyz": [
+            3.5602112,
+            3.8361816,
+            -0.37775707
+          ],
+          "rotation_quat_wxyz": [
+            0.58044356,
+            0.5439037,
+            0.51008755,
+            -0.32720745
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 13,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm",
+          "name": "LeftArm",
+          "translation_xyz": [
+            7.6293945e-06,
+            14.155338,
+            -1.5258789e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.7318861,
+            0.5439962,
+            0.32529944,
+            0.25018215
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 14,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm",
+          "name": "LeftForeArm",
+          "translation_xyz": [
+            -8.392334e-05,
+            25.845268,
+            5.1498413e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9538055,
+            -0.25812528,
+            -0.058209557,
+            0.14226067
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 15,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm/LeftHand",
+          "name": "LeftHand",
+          "translation_xyz": [
+            1.9073486e-05,
+            23.748894,
+            6.1035156e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9747764,
+            0.037077326,
+            0.19690645,
+            0.098306455
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 16,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder",
+          "name": "RightShoulder",
+          "translation_xyz": [
+            -3.7040029,
+            3.899109,
+            -0.30280304
+          ],
+          "rotation_quat_wxyz": [
+            0.6959509,
+            0.55734074,
+            -0.4059109,
+            0.20064878
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 17,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm",
+          "name": "RightArm",
+          "translation_xyz": [
+            1.1444092e-05,
+            14.969032,
+            1.5258789e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.67827296,
+            0.66618735,
+            -0.282144,
+            -0.12858817
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 18,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm",
+          "name": "RightForeArm",
+          "translation_xyz": [
+            -0.00011444092,
+            25.845108,
+            -5.340576e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9490583,
+            -0.2690788,
+            0.058229096,
+            -0.15327854
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 19,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm/RightHand",
+          "name": "RightHand",
+          "translation_xyz": [
+            2.2888184e-05,
+            23.168087,
+            -7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.99782073,
+            -0.011540836,
+            0.056391165,
+            0.032258384
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 20,
+          "path": "Hips/Spine02/Spine01/Spine/neck",
+          "name": "neck",
+          "translation_xyz": [
+            0.14379478,
+            8.287415,
+            0.6805773
+          ],
+          "rotation_quat_wxyz": [
+            0.99580604,
+            0.05652912,
+            0.0656639,
+            -0.029377079
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 21,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head",
+          "name": "Head",
+          "translation_xyz": [
+            1.4305115e-06,
+            7.95697,
+            -5.722046e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.91833156,
+            0.38880718,
+            0.0686812,
+            -0.02791159
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 22,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/head_end",
+          "name": "head_end",
+          "translation_xyz": [
+            0.08713627,
+            21.12358,
+            -11.76297
+          ],
+          "rotation_quat_wxyz": [
+            0.967901,
+            -0.25132486,
+            2.570184e-08,
+            -0.0018617471
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 23,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/headfront",
+          "name": "headfront",
+          "translation_xyz": [
+            -0.08713937,
+            9.163475,
+            11.762917
+          ],
+          "rotation_quat_wxyz": [
+            0.89848137,
+            0.43899965,
+            9.3710796e-08,
+            0.003252068
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame": 7,
+      "joints": [
+        {
+          "index": 0,
+          "path": "Hips",
+          "name": "Hips",
+          "translation_xyz": [
+            -2.2779186,
+            -2.6905267,
+            93.63968
+          ],
+          "rotation_quat_wxyz": [
+            0.52191746,
+            0.743373,
+            -0.36176878,
+            -0.2100528
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 1,
+          "path": "Hips/LeftUpLeg",
+          "name": "LeftUpLeg",
+          "translation_xyz": [
+            9.512981,
+            -9.300461,
+            2.4032135
+          ],
+          "rotation_quat_wxyz": [
+            0.4854472,
+            0.725145,
+            0.08696624,
+            -0.4805649
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 2,
+          "path": "Hips/LeftUpLeg/LeftLeg",
+          "name": "LeftLeg",
+          "translation_xyz": [
+            3.8146973e-06,
+            38.195847,
+            1.5258789e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9223239,
+            0.38619947,
+            0.0016309234,
+            -0.012880435
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 3,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot",
+          "name": "LeftFoot",
+          "translation_xyz": [
+            -7.6293945e-06,
+            43.440712,
+            3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.8962898,
+            -0.4415681,
+            -0.011140773,
+            0.039472215
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 4,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot/LeftToeBase",
+          "name": "LeftToeBase",
+          "translation_xyz": [
+            7.6293945e-06,
+            11.75816,
+            -1.1444092e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.93396837,
+            -0.35251117,
+            -0.017106889,
+            0.056091916
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 5,
+          "path": "Hips/RightUpLeg",
+          "name": "RightUpLeg",
+          "translation_xyz": [
+            -9.706604,
+            -8.989525,
+            2.1464157
+          ],
+          "rotation_quat_wxyz": [
+            0.39910528,
+            0.8848423,
+            -0.12590522,
+            0.20473647
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 6,
+          "path": "Hips/RightUpLeg/RightLeg",
+          "name": "RightLeg",
+          "translation_xyz": [
+            5.722046e-06,
+            37.58552,
+            1.1444092e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.8409529,
+            0.539816,
+            0.006218491,
+            0.036854677
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 7,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot",
+          "name": "RightFoot",
+          "translation_xyz": [
+            1.7166138e-05,
+            44.260975,
+            -3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            -0.6874221,
+            0.7155861,
+            -0.026086506,
+            0.12127179
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 8,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot/RightToeBase",
+          "name": "RightToeBase",
+          "translation_xyz": [
+            1.9073486e-06,
+            11.753027,
+            -2.861023e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.93724877,
+            -0.332793,
+            0.09367725,
+            -0.045145653
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 9,
+          "path": "Hips/Spine02",
+          "name": "Spine02",
+          "translation_xyz": [
+            0.19362354,
+            11.8092575,
+            -4.5496254
+          ],
+          "rotation_quat_wxyz": [
+            0.99808615,
+            -0.05300573,
+            0.01503357,
+            -0.02807907
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 10,
+          "path": "Hips/Spine02/Spine01",
+          "name": "Spine01",
+          "translation_xyz": [
+            2.3841858e-07,
+            12.656853,
+            -7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9979606,
+            -0.015778363,
+            0.054658428,
+            -0.028950665
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 11,
+          "path": "Hips/Spine02/Spine01/Spine",
+          "name": "Spine",
+          "translation_xyz": [
+            9.536743e-07,
+            12.65683,
+            -3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9995626,
+            -0.028998032,
+            -0.005427842,
+            0.0020653505
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 12,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder",
+          "name": "LeftShoulder",
+          "translation_xyz": [
+            3.5602107,
+            3.8362122,
+            -0.3777523
+          ],
+          "rotation_quat_wxyz": [
+            0.58087873,
+            0.54530835,
+            0.5083632,
+            -0.3267807
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 13,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm",
+          "name": "LeftArm",
+          "translation_xyz": [
+            0.0,
+            14.155323,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.73508924,
+            0.5397409,
+            0.323457,
+            0.2523868
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 14,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm",
+          "name": "LeftForeArm",
+          "translation_xyz": [
+            -9.1552734e-05,
+            25.845284,
+            4.386902e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9537991,
+            -0.2581693,
+            -0.058163386,
+            0.1422423
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 15,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm/LeftHand",
+          "name": "LeftHand",
+          "translation_xyz": [
+            3.8146973e-06,
+            23.748909,
+            9.1552734e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9745372,
+            0.03721597,
+            0.19704394,
+            0.1003293
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 16,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder",
+          "name": "RightShoulder",
+          "translation_xyz": [
+            -3.7040036,
+            3.899109,
+            -0.30279922
+          ],
+          "rotation_quat_wxyz": [
+            0.6946515,
+            0.5585129,
+            -0.40594375,
+            0.20182231
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 17,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm",
+          "name": "RightArm",
+          "translation_xyz": [
+            -7.6293945e-06,
+            14.969036,
+            -1.5258789e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.6825502,
+            0.6611847,
+            -0.28154162,
+            -0.13301986
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 18,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm",
+          "name": "RightForeArm",
+          "translation_xyz": [
+            -0.00010681152,
+            25.8451,
+            -5.1498413e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.94911516,
+            -0.26899034,
+            0.058159087,
+            -0.15310812
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 19,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm/RightHand",
+          "name": "RightHand",
+          "translation_xyz": [
+            3.0517578e-05,
+            23.16809,
+            -7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.99782073,
+            -0.011540822,
+            0.056391146,
+            0.03225838
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 20,
+          "path": "Hips/Spine02/Spine01/Spine/neck",
+          "name": "neck",
+          "translation_xyz": [
+            0.14379549,
+            8.28743,
+            0.6805811
+          ],
+          "rotation_quat_wxyz": [
+            0.995727,
+            0.058071457,
+            0.065368675,
+            -0.029704152
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 21,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head",
+          "name": "Head",
+          "translation_xyz": [
+            1.9073486e-06,
+            7.9569397,
+            -1.9073486e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.92164135,
+            0.3811798,
+            0.06684107,
+            -0.028485224
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 22,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/head_end",
+          "name": "head_end",
+          "translation_xyz": [
+            0.087132454,
+            21.123596,
+            -11.763016
+          ],
+          "rotation_quat_wxyz": [
+            0.967901,
+            -0.25132486,
+            2.2861144e-08,
+            -0.0018617379
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 23,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/headfront",
+          "name": "headfront",
+          "translation_xyz": [
+            -0.08714104,
+            9.163483,
+            11.762901
+          ],
+          "rotation_quat_wxyz": [
+            0.89848137,
+            0.43899962,
+            8.878095e-08,
+            0.0032520427
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame": 8,
+      "joints": [
+        {
+          "index": 0,
+          "path": "Hips",
+          "name": "Hips",
+          "translation_xyz": [
+            -2.3003564,
+            -2.631434,
+            93.51411
+          ],
+          "rotation_quat_wxyz": [
+            0.5214276,
+            0.7437089,
+            -0.36186332,
+            -0.20991722
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 1,
+          "path": "Hips/LeftUpLeg",
+          "name": "LeftUpLeg",
+          "translation_xyz": [
+            9.512983,
+            -9.300461,
+            2.4032078
+          ],
+          "rotation_quat_wxyz": [
+            0.48754692,
+            0.724934,
+            0.08775553,
+            -0.4786102
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 2,
+          "path": "Hips/LeftUpLeg/LeftLeg",
+          "name": "LeftLeg",
+          "translation_xyz": [
+            5.2452087e-06,
+            38.195847,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.92140883,
+            0.38837218,
+            0.0015413833,
+            -0.013054309
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 3,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot",
+          "name": "LeftFoot",
+          "translation_xyz": [
+            -1.001358e-05,
+            43.440704,
+            1.1444092e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.8959978,
+            -0.4421126,
+            -0.012670316,
+            0.03954496
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 4,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot/LeftToeBase",
+          "name": "LeftToeBase",
+          "translation_xyz": [
+            8.106232e-06,
+            11.75816,
+            -1.1444092e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9340303,
+            -0.3523599,
+            -0.017074628,
+            0.0560213
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 5,
+          "path": "Hips/RightUpLeg",
+          "name": "RightUpLeg",
+          "translation_xyz": [
+            -9.706604,
+            -8.989525,
+            2.1464138
+          ],
+          "rotation_quat_wxyz": [
+            0.40084085,
+            0.88422227,
+            -0.12548725,
+            0.20428047
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 6,
+          "path": "Hips/RightUpLeg/RightLeg",
+          "name": "RightLeg",
+          "translation_xyz": [
+            3.8146973e-06,
+            37.585533,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.8393654,
+            0.54226476,
+            0.006285719,
+            0.037082624
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 7,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot",
+          "name": "RightFoot",
+          "translation_xyz": [
+            1.5258789e-05,
+            44.26098,
+            -1.9073486e-06
+          ],
+          "rotation_quat_wxyz": [
+            -0.6861149,
+            0.716862,
+            -0.026637135,
+            0.12101916
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 8,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot/RightToeBase",
+          "name": "RightToeBase",
+          "translation_xyz": [
+            0.0,
+            11.753027,
+            -9.536743e-07
+          ],
+          "rotation_quat_wxyz": [
+            0.93734777,
+            -0.33255148,
+            0.093622245,
+            -0.044983797
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 9,
+          "path": "Hips/Spine02",
+          "name": "Spine02",
+          "translation_xyz": [
+            0.19362354,
+            11.8092575,
+            -4.5496216
+          ],
+          "rotation_quat_wxyz": [
+            0.99817485,
+            -0.051232938,
+            0.01479213,
+            -0.028344152
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 10,
+          "path": "Hips/Spine02/Spine01",
+          "name": "Spine01",
+          "translation_xyz": [
+            0.0,
+            12.65686,
+            -1.1444092e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.99798805,
+            -0.014394258,
+            0.054406386,
+            -0.029199494
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 11,
+          "path": "Hips/Spine02/Spine01/Spine",
+          "name": "Spine",
+          "translation_xyz": [
+            -4.7683716e-07,
+            12.656807,
+            -3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.99956745,
+            -0.028823372,
+            -0.005471773,
+            0.0020569593
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 12,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder",
+          "name": "LeftShoulder",
+          "translation_xyz": [
+            3.5602126,
+            3.8361511,
+            -0.37774944
+          ],
+          "rotation_quat_wxyz": [
+            0.582533,
+            0.54694206,
+            0.5057709,
+            -0.3251237
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 13,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm",
+          "name": "LeftArm",
+          "translation_xyz": [
+            1.1444092e-05,
+            14.155334,
+            -3.8146973e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.73778784,
+            0.53607976,
+            0.32211468,
+            0.25402716
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 14,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm",
+          "name": "LeftForeArm",
+          "translation_xyz": [
+            -7.6293945e-05,
+            25.845276,
+            4.7683716e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.95379275,
+            -0.25821334,
+            -0.05811748,
+            0.14222383
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 15,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm/LeftHand",
+          "name": "LeftHand",
+          "translation_xyz": [
+            1.5258789e-05,
+            23.748905,
+            7.6293945e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9746099,
+            0.036769856,
+            0.19661696,
+            0.10062457
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 16,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder",
+          "name": "RightShoulder",
+          "translation_xyz": [
+            -3.7040024,
+            3.8990936,
+            -0.30280018
+          ],
+          "rotation_quat_wxyz": [
+            0.6933139,
+            0.55970025,
+            -0.40604305,
+            0.2029298
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 17,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm",
+          "name": "RightArm",
+          "translation_xyz": [
+            0.0,
+            14.969028,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.68665785,
+            0.6563582,
+            -0.28077605,
+            -0.13733056
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 18,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm",
+          "name": "RightForeArm",
+          "translation_xyz": [
+            -0.00010681152,
+            25.8451,
+            -5.722046e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.94917315,
+            -0.26889598,
+            0.058124445,
+            -0.15292768
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 19,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm/RightHand",
+          "name": "RightHand",
+          "translation_xyz": [
+            2.670288e-05,
+            23.168098,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.99782073,
+            -0.011540813,
+            0.056391157,
+            0.03225838
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 20,
+          "path": "Hips/Spine02/Spine01/Spine/neck",
+          "name": "neck",
+          "translation_xyz": [
+            0.14379501,
+            8.287399,
+            0.6805792
+          ],
+          "rotation_quat_wxyz": [
+            0.99564564,
+            0.05947992,
+            0.06520802,
+            -0.029996127
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 21,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head",
+          "name": "Head",
+          "translation_xyz": [
+            9.536743e-07,
+            7.956955,
+            -7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9251148,
+            0.3730863,
+            0.0645656,
+            -0.02829299
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 22,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/head_end",
+          "name": "head_end",
+          "translation_xyz": [
+            0.087139845,
+            21.123596,
+            -11.76297
+          ],
+          "rotation_quat_wxyz": [
+            0.967901,
+            -0.25132486,
+            3.9109626e-08,
+            -0.001861754
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 23,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/headfront",
+          "name": "headfront",
+          "translation_xyz": [
+            -0.087136745,
+            9.163467,
+            11.762932
+          ],
+          "rotation_quat_wxyz": [
+            0.89848137,
+            0.43899965,
+            8.70978e-08,
+            0.0032520534
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame": 9,
+      "joints": [
+        {
+          "index": 0,
+          "path": "Hips",
+          "name": "Hips",
+          "translation_xyz": [
+            -2.3259063,
+            -2.5673623,
+            93.38854
+          ],
+          "rotation_quat_wxyz": [
+            0.5208133,
+            0.74413145,
+            -0.36199576,
+            -0.2097164
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 1,
+          "path": "Hips/LeftUpLeg",
+          "name": "LeftUpLeg",
+          "translation_xyz": [
+            9.512985,
+            -9.300468,
+            2.4032135
+          ],
+          "rotation_quat_wxyz": [
+            0.48964283,
+            0.72468424,
+            0.088766396,
+            -0.47665837
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 2,
+          "path": "Hips/LeftUpLeg/LeftLeg",
+          "name": "LeftLeg",
+          "translation_xyz": [
+            3.33786e-06,
+            38.19585,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.92059743,
+            0.39028692,
+            0.0014614371,
+            -0.01320449
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 3,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot",
+          "name": "LeftFoot",
+          "translation_xyz": [
+            -9.536743e-06,
+            43.440704,
+            1.1444092e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.8958451,
+            -0.44235206,
+            -0.014797851,
+            0.039588425
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 4,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot/LeftToeBase",
+          "name": "LeftToeBase",
+          "translation_xyz": [
+            9.059906e-06,
+            11.75815,
+            -3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9340922,
+            -0.35220852,
+            -0.017042372,
+            0.055950675
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 5,
+          "path": "Hips/RightUpLeg",
+          "name": "RightUpLeg",
+          "translation_xyz": [
+            -9.706606,
+            -8.989532,
+            2.1464195
+          ],
+          "rotation_quat_wxyz": [
+            0.40281847,
+            0.8835026,
+            -0.1250377,
+            0.2037793
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 6,
+          "path": "Hips/RightUpLeg/RightLeg",
+          "name": "RightLeg",
+          "translation_xyz": [
+            5.722046e-06,
+            37.585533,
+            3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.8378649,
+            0.5445654,
+            0.0063312533,
+            0.037294805
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 7,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot",
+          "name": "RightFoot",
+          "translation_xyz": [
+            1.7166138e-05,
+            44.260975,
+            1.9073486e-06
+          ],
+          "rotation_quat_wxyz": [
+            -0.6849956,
+            0.71796715,
+            -0.026707523,
+            0.12079271
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 8,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot/RightToeBase",
+          "name": "RightToeBase",
+          "translation_xyz": [
+            5.722046e-06,
+            11.753027,
+            -9.536743e-07
+          ],
+          "rotation_quat_wxyz": [
+            0.93744004,
+            -0.33229604,
+            0.09361646,
+            -0.044960484
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 9,
+          "path": "Hips/Spine02",
+          "name": "Spine02",
+          "translation_xyz": [
+            0.19362354,
+            11.8092575,
+            -4.5496216
+          ],
+          "rotation_quat_wxyz": [
+            0.99826956,
+            -0.049347214,
+            0.014479165,
+            -0.028513946
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 10,
+          "path": "Hips/Spine02/Spine01",
+          "name": "Spine01",
+          "translation_xyz": [
+            7.1525574e-07,
+            12.656853,
+            -1.335144e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.998021,
+            -0.013038461,
+            0.054045536,
+            -0.029379027
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 11,
+          "path": "Hips/Spine02/Spine01/Spine",
+          "name": "Spine",
+          "translation_xyz": [
+            2.3841858e-07,
+            12.656815,
+            -3.8146973e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9995723,
+            -0.028648654,
+            -0.0055067446,
+            0.0020503404
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 12,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder",
+          "name": "LeftShoulder",
+          "translation_xyz": [
+            3.5602105,
+            3.836197,
+            -0.37775517
+          ],
+          "rotation_quat_wxyz": [
+            0.58372843,
+            0.54881006,
+            0.50312954,
+            -0.32392788
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 13,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm",
+          "name": "LeftArm",
+          "translation_xyz": [
+            7.6293945e-06,
+            14.155331,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.74083424,
+            0.5318375,
+            0.3209343,
+            0.2555673
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 14,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm",
+          "name": "LeftForeArm",
+          "translation_xyz": [
+            -9.1552734e-05,
+            25.845284,
+            4.5776367e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9537867,
+            -0.25825545,
+            -0.05808415,
+            0.14220189
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 15,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm/LeftHand",
+          "name": "LeftHand",
+          "translation_xyz": [
+            3.8146973e-06,
+            23.748901,
+            6.1035156e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9748274,
+            0.035822883,
+            0.19595464,
+            0.10014993
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 16,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder",
+          "name": "RightShoulder",
+          "translation_xyz": [
+            -3.704005,
+            3.8990936,
+            -0.30280018
+          ],
+          "rotation_quat_wxyz": [
+            0.6931997,
+            0.5598485,
+            -0.40598914,
+            0.20301898
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 17,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm",
+          "name": "RightArm",
+          "translation_xyz": [
+            3.8146973e-06,
+            14.969036,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.6906304,
+            0.6513569,
+            -0.2799797,
+            -0.14274207
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 18,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm",
+          "name": "RightForeArm",
+          "translation_xyz": [
+            -9.918213e-05,
+            25.845108,
+            -5.340576e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9496888,
+            -0.26773742,
+            0.057943527,
+            -0.15182352
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 19,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm/RightHand",
+          "name": "RightHand",
+          "translation_xyz": [
+            2.670288e-05,
+            23.168083,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.99782073,
+            -0.011540821,
+            0.056391165,
+            0.032258403
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 20,
+          "path": "Hips/Spine02/Spine01/Spine/neck",
+          "name": "neck",
+          "translation_xyz": [
+            0.14379358,
+            8.287415,
+            0.68058014
+          ],
+          "rotation_quat_wxyz": [
+            0.99557513,
+            0.060852308,
+            0.06491208,
+            -0.030224739
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 21,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head",
+          "name": "Head",
+          "translation_xyz": [
+            9.536743e-07,
+            7.95697,
+            -1.9073486e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9289439,
+            0.3635774,
+            0.06283323,
+            -0.030441873
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 22,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/head_end",
+          "name": "head_end",
+          "translation_xyz": [
+            0.08713627,
+            21.123589,
+            -11.762993
+          ],
+          "rotation_quat_wxyz": [
+            0.967901,
+            -0.25132483,
+            2.8211925e-08,
+            -0.0018617588
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 23,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/headfront",
+          "name": "headfront",
+          "translation_xyz": [
+            -0.08713627,
+            9.16349,
+            11.762901
+          ],
+          "rotation_quat_wxyz": [
+            0.89848137,
+            0.4389996,
+            8.083268e-08,
+            0.0032520806
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    },
+    {
+      "frame": 10,
+      "joints": [
+        {
+          "index": 0,
+          "path": "Hips",
+          "name": "Hips",
+          "translation_xyz": [
+            -2.3580477,
+            -2.4875927,
+            93.273346
+          ],
+          "rotation_quat_wxyz": [
+            0.5201866,
+            0.74456286,
+            -0.36211002,
+            -0.20954314
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 1,
+          "path": "Hips/LeftUpLeg",
+          "name": "LeftUpLeg",
+          "translation_xyz": [
+            9.512983,
+            -9.300461,
+            2.4032097
+          ],
+          "rotation_quat_wxyz": [
+            0.49172673,
+            0.7243708,
+            0.09014245,
+            -0.47472742
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 2,
+          "path": "Hips/LeftUpLeg/LeftLeg",
+          "name": "LeftLeg",
+          "translation_xyz": [
+            6.198883e-06,
+            38.19585,
+            1.5258789e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9199008,
+            0.39192206,
+            0.0013945655,
+            -0.013331258
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 3,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot",
+          "name": "LeftFoot",
+          "translation_xyz": [
+            -7.1525574e-06,
+            43.440704,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.8956901,
+            -0.4425584,
+            -0.017595345,
+            0.03964459
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 4,
+          "path": "Hips/LeftUpLeg/LeftLeg/LeftFoot/LeftToeBase",
+          "name": "LeftToeBase",
+          "translation_xyz": [
+            9.059906e-06,
+            11.758156,
+            -1.5258789e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.93415403,
+            -0.35205707,
+            -0.017012032,
+            0.055881128
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 5,
+          "path": "Hips/RightUpLeg",
+          "name": "RightUpLeg",
+          "translation_xyz": [
+            -9.706604,
+            -8.989532,
+            2.1464157
+          ],
+          "rotation_quat_wxyz": [
+            0.40507314,
+            0.88267267,
+            -0.12447334,
+            0.20325126
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 6,
+          "path": "Hips/RightUpLeg/RightLeg",
+          "name": "RightLeg",
+          "translation_xyz": [
+            3.8146973e-06,
+            37.58552,
+            1.1444092e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.83640033,
+            0.54679775,
+            0.0063635577,
+            0.037498843
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 7,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot",
+          "name": "RightFoot",
+          "translation_xyz": [
+            1.9073486e-05,
+            44.26098,
+            -9.536743e-07
+          ],
+          "rotation_quat_wxyz": [
+            -0.6839902,
+            0.7189865,
+            -0.026175447,
+            0.12054325
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 8,
+          "path": "Hips/RightUpLeg/RightLeg/RightFoot/RightToeBase",
+          "name": "RightToeBase",
+          "translation_xyz": [
+            5.722046e-06,
+            11.75303,
+            9.536743e-07
+          ],
+          "rotation_quat_wxyz": [
+            0.9375265,
+            -0.33209747,
+            0.0935512,
+            -0.044759944
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 9,
+          "path": "Hips/Spine02",
+          "name": "Spine02",
+          "translation_xyz": [
+            0.19362259,
+            11.8092575,
+            -4.5496235
+          ],
+          "rotation_quat_wxyz": [
+            0.9983715,
+            -0.047351558,
+            0.014070368,
+            -0.028535409
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 10,
+          "path": "Hips/Spine02/Spine01",
+          "name": "Spine01",
+          "translation_xyz": [
+            1.1920929e-07,
+            12.656837,
+            -5.722046e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.9980629,
+            -0.011658311,
+            0.053538453,
+            -0.029463606
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 11,
+          "path": "Hips/Spine02/Spine01/Spine",
+          "name": "Spine",
+          "translation_xyz": [
+            -7.1525574e-07,
+            12.656822,
+            -5.722046e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.99957716,
+            -0.028475277,
+            -0.0055264398,
+            0.0020398977
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 12,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder",
+          "name": "LeftShoulder",
+          "translation_xyz": [
+            3.5602126,
+            3.8362274,
+            -0.3777542
+          ],
+          "rotation_quat_wxyz": [
+            0.5838721,
+            0.55088073,
+            0.5007857,
+            -0.3237862
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 13,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm",
+          "name": "LeftArm",
+          "translation_xyz": [
+            3.8146973e-06,
+            14.155338,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.7443803,
+            0.5268159,
+            0.3196232,
+            0.25730142
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 14,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm",
+          "name": "LeftForeArm",
+          "translation_xyz": [
+            -7.6293945e-05,
+            25.84526,
+            4.7683716e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9537806,
+            -0.25829747,
+            -0.058050834,
+            0.14217998
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 15,
+          "path": "Hips/Spine02/Spine01/Spine/LeftShoulder/LeftArm/LeftForeArm/LeftHand",
+          "name": "LeftHand",
+          "translation_xyz": [
+            7.6293945e-06,
+            23.748909,
+            7.6293945e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9750237,
+            0.035037547,
+            0.19534051,
+            0.099716
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 16,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder",
+          "name": "RightShoulder",
+          "translation_xyz": [
+            -3.704005,
+            3.899109,
+            -0.30280304
+          ],
+          "rotation_quat_wxyz": [
+            0.6930855,
+            0.55999655,
+            -0.4059353,
+            0.20310815
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 17,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm",
+          "name": "RightArm",
+          "translation_xyz": [
+            3.8146973e-06,
+            14.969032,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.6944592,
+            0.6461465,
+            -0.2790747,
+            -0.14946042
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 18,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm",
+          "name": "RightForeArm",
+          "translation_xyz": [
+            -0.00011444092,
+            25.845093,
+            -5.9127808e-05
+          ],
+          "rotation_quat_wxyz": [
+            0.9507224,
+            -0.26535657,
+            0.05760898,
+            -0.14964636
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 19,
+          "path": "Hips/Spine02/Spine01/Spine/RightShoulder/RightArm/RightForeArm/RightHand",
+          "name": "RightHand",
+          "translation_xyz": [
+            3.4332275e-05,
+            23.16809,
+            7.6293945e-06
+          ],
+          "rotation_quat_wxyz": [
+            0.99782073,
+            -0.0115408115,
+            0.056391146,
+            0.03225837
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 20,
+          "path": "Hips/Spine02/Spine01/Spine/neck",
+          "name": "neck",
+          "translation_xyz": [
+            0.14379573,
+            8.28743,
+            0.6805763
+          ],
+          "rotation_quat_wxyz": [
+            0.99551386,
+            0.062249586,
+            0.064436935,
+            -0.030414362
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 21,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head",
+          "name": "Head",
+          "translation_xyz": [
+            1.9073486e-06,
+            7.956955,
+            0.0
+          ],
+          "rotation_quat_wxyz": [
+            0.9327489,
+            0.35339525,
+            0.061914153,
+            -0.035466418
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 22,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/head_end",
+          "name": "head_end",
+          "translation_xyz": [
+            0.0871377,
+            21.123604,
+            -11.7630005
+          ],
+          "rotation_quat_wxyz": [
+            0.967901,
+            -0.25132486,
+            3.562743e-08,
+            -0.0018617394
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "index": 23,
+          "path": "Hips/Spine02/Spine01/Spine/neck/Head/headfront",
+          "name": "headfront",
+          "translation_xyz": [
+            -0.087136745,
+            9.163498,
+            11.762878
+          ],
+          "rotation_quat_wxyz": [
+            0.89848137,
+            0.43899962,
+            9.008986e-08,
+            0.0032520902
+          ],
+          "scale_xyz": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      ]
+    }
+  ]
+}

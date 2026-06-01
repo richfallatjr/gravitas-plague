@@ -12,17 +12,6 @@ struct BakedAnimationClip: Hashable {
     let fileBaseName: String
     let fileExtension: String
 
-    /// True for idle/walk. False for linear turn clips.
-    let looping: Bool
-
-    /// Only used if RealityKit fails to report a valid duration.
-    /// Do not use this as the primary duration.
-    let fallbackDuration: TimeInterval?
-
-    /// Small safety delay after a one-shot reaches its reported duration.
-    /// This helps make sure the final keyed frame/tail actually displays.
-    let completionHold: TimeInterval
-
     var fullFileName: String {
         "\(fileBaseName).\(fileExtension)"
     }
@@ -32,42 +21,76 @@ struct BakedAnimationClip: Hashable {
     }
 }
 
+struct PhaseOneSequenceStep: Hashable {
+    let clipID: ClipID
+
+    /// Number of times RealityKit should play the animation resource.
+    /// The USDZ animation range still owns the timing.
+    let repeatCount: Int
+
+    /// Move the persistent root in world space while this animation is playing.
+    let translatesRootWhilePlaying: Bool
+
+    /// Commit gameplay yaw after the clip fully completes.
+    let commitRightTurnYawOnCompletion: Bool
+}
+
 extension BakedAnimationClip {
     nonisolated static let phaseOneClips: [BakedAnimationClip] = [
         BakedAnimationClip(
             id: .idle,
             fileBaseName: "idle-01",
-            fileExtension: "usdz",
-            looping: true,
-            fallbackDuration: nil,
-            completionHold: 0
+            fileExtension: "usdz"
         ),
 
         BakedAnimationClip(
             id: .turnRight01,
             fileBaseName: "idle-turn-right-01",
-            fileExtension: "usdz",
-            looping: false,
-            fallbackDuration: 1.2,
-            completionHold: 0.05
+            fileExtension: "usdz"
         ),
 
         BakedAnimationClip(
             id: .turnRight02,
             fileBaseName: "idle-turn-right-02",
-            fileExtension: "usdz",
-            looping: false,
-            fallbackDuration: 1.2,
-            completionHold: 0.05
+            fileExtension: "usdz"
         ),
 
         BakedAnimationClip(
             id: .unstableWalk,
             fileBaseName: "unstable-walk",
-            fileExtension: "usdz",
-            looping: true,
-            fallbackDuration: nil,
-            completionHold: 0
+            fileExtension: "usdz"
+        )
+    ]
+}
+
+extension PhaseOneSequenceStep {
+    nonisolated static let phaseOneLoop: [PhaseOneSequenceStep] = [
+        PhaseOneSequenceStep(
+            clipID: .idle,
+            repeatCount: 1,
+            translatesRootWhilePlaying: false,
+            commitRightTurnYawOnCompletion: false
+        ),
+
+        PhaseOneSequenceStep(
+            clipID: .turnRight01,
+            repeatCount: 1,
+            translatesRootWhilePlaying: false,
+            commitRightTurnYawOnCompletion: true
+        ),
+
+        PhaseOneSequenceStep(
+            clipID: .turnRight02,
+            repeatCount: 1,
+            translatesRootWhilePlaying: false,
+            commitRightTurnYawOnCompletion: true
+        ),
+
+        PhaseOneSequenceStep(
+            clipID: .unstableWalk,
+            repeatCount: 1,
+            translatesRootWhilePlaying: true,
+            commitRightTurnYawOnCompletion: false
         )
     ]
 }

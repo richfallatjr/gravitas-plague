@@ -788,6 +788,7 @@ def _sample_source_pose(prefix, current_armature, source_armature, source_frame,
 
     rotate_source = _source_rotation_enabled(prefix, settings)
     source_rot_matrix = _source_rotation_matrix(prefix, current_armature, source_armature, settings)
+    use_world_target = rotate_source
 
     if rotate_source:
         x_degrees, y_degrees, z_degrees, pivot_mode = _source_rotation_values(prefix, settings)
@@ -797,6 +798,17 @@ def _sample_source_pose(prefix, current_armature, source_armature, source_frame,
             f"x={x_degrees:g}, y={y_degrees:g}, z={z_degrees:g}, "
             f"pivot={pivot_mode}"
         )
+    else:
+        log.append("Rotation disabled: forcing target extraction through LOCAL_BASIS.")
+
+    sample_space = "WORLD_VISUAL" if use_world_target else "LOCAL_BASIS"
+
+    log.append(
+        f"Sampling next pose. source_frame={source_frame}, "
+        f"rotation_enabled={rotate_source}, "
+        f"sample_space={sample_space}, "
+        f"use_world_target={use_world_target}"
+    )
 
     samples = {}
 
@@ -806,7 +818,7 @@ def _sample_source_pose(prefix, current_armature, source_armature, source_frame,
         if not _include_bone(bone_name, settings):
             continue
 
-        if rotate_source:
+        if use_world_target:
             target_world_matrix = (
                 source_rot_matrix
                 @ source_armature.matrix_world
@@ -835,7 +847,33 @@ def _sample_source_pose(prefix, current_armature, source_armature, source_frame,
                 "target_world_matrix": None,
             }
 
-    log.append(f"Sampled {len(samples)} bones from {label} at frame {source_frame}.")
+    local_samples = sum(
+        1
+        for sample in samples.values()
+        if sample["target_world_matrix"] is None
+    )
+
+    world_samples = sum(
+        1
+        for sample in samples.values()
+        if sample["target_world_matrix"] is not None
+    )
+
+    log.append(
+        f"Sampled {len(samples)} pose bones from next clip. "
+        f"local_samples={local_samples}, world_samples={world_samples}"
+    )
+
+    if len(samples) == 0:
+        raise RuntimeError(
+            f"Target pose extraction failed: sampled 0 bones from {label}."
+        )
+
+    if not rotate_source and local_samples == 0:
+        raise RuntimeError(
+            "Target pose extraction failed: rotation is OFF but no LOCAL_BASIS samples were created."
+        )
+
     return samples
 
 
@@ -871,6 +909,16 @@ def _manual_template_boundary_prefix(settings):
         return "TAIL"
 
     return None
+
+
+def _has_rotated_enabled_boundary(settings):
+    return (
+        settings.enable_head_transition
+        and _source_rotation_enabled("HEAD", settings)
+    ) or (
+        settings.enable_tail_transition
+        and _source_rotation_enabled("TAIL", settings)
+    )
 
 
 def _compute_enabled_transition_range(settings, log):
@@ -1114,6 +1162,8 @@ def _apply_sample_to_current_bone(current_armature, pose_bone, bone_name, sample
                 pose_bone.scale = scl
 
     else:
+        # Rotation disabled target extraction path:
+        # always apply the sampled local target pose through enabled channels.
         if _copy_location_for_bone(bone_name, settings):
             pose_bone.location = sample["location"]
 
@@ -1185,6 +1235,9 @@ def _apply_pose_and_key(current_armature, pose_sample, output_frame, settings, l
         keyed += 1
 
     log.append(f"Applied/keyed {label} at output frame {output_frame}. matched_bones={matched}, keyed_bones={keyed}")
+
+    if "source pose" in label:
+        log.append(f"Applied and keyed next-clip target pose at frame {output_frame}.")
 
 
 def _create_world_empty(name, matrix_world):
@@ -1899,7 +1952,8 @@ def _build_padding_and_template(
 
     if manual_prefix is None:
         raise RuntimeError(
-            "Manual template setup requires a rotated enabled Head or Tail source."
+            "Manual template setup only applies to a rotated enabled Head or Tail source. "
+            "Rotation is off, so use Build Explicit Head / Body / Tail Clip for LOCAL_BASIS target extraction."
         )
 
     timing = _compute_enabled_transition_range(settings, log)
@@ -2873,6 +2927,9 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
 
                 if head_solve_mode == "FULL_POSE_MATRIX":
                     log.append("HEAD using existing v1.2 full pose matrix path")
+                    if not _source_rotation_enabled("HEAD", settings):
+                        log.append("Rotation disabled before sample: sample_space forced to LOCAL_BASIS.")
+
                     head_sample = _sample_source_pose(
                         prefix="HEAD",
                         current_armature=current_armature,
@@ -2922,6 +2979,9 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
 
                 if tail_solve_mode == "FULL_POSE_MATRIX":
                     log.append("TAIL using existing v1.2 full pose matrix path")
+                    if not _source_rotation_enabled("TAIL", settings):
+                        log.append("Rotation disabled before sample: sample_space forced to LOCAL_BASIS.")
+
                     tail_sample = _sample_source_pose(
                         prefix="TAIL",
                         current_armature=current_armature,
@@ -3288,7 +3348,26 @@ class GRAVITAS_PT_explicit_stitcher_panel_v17(Panel):
         manual.prop(settings, "manual_template_target_frame")
         manual.prop(settings, "computed_output_start_frame")
         manual.prop(settings, "computed_output_end_frame")
-        manual.operator(
+
+        manual_available = (
+            settings.manual_template_mode_when_rotated
+            and _has_rotated_enabled_boundary(settings)
+        )
+
+        if not _has_rotated_enabled_boundary(settings):
+            manual.label(
+                text="Rotation is off; use Build Explicit below.",
+                icon="INFO",
+            )
+        elif not settings.manual_template_mode_when_rotated:
+            manual.label(
+                text="Enable manual mode to build a rotated template.",
+                icon="INFO",
+            )
+
+        manual_build_row = manual.row()
+        manual_build_row.enabled = manual_available
+        manual_build_row.operator(
             GRAVITAS_OT_build_padding_and_template_v17.bl_idname,
             text="Build Padding + Template",
             icon="MOD_BUILD",

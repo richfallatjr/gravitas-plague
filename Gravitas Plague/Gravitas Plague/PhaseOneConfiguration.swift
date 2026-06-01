@@ -28,8 +28,7 @@ struct PhaseOneConfiguration: Equatable {
     let clipTransitionDuration: TimeInterval
     let loopedAnimationRepeatDuration: TimeInterval
 
-    let oneShotCompletionTolerance: TimeInterval
-    let defaultOneShotFallbackDuration: TimeInterval
+    let animationCompletionTolerance: TimeInterval
     let logClipDurations: Bool
 
     static let phaseOneDefault = PhaseOneConfiguration(
@@ -56,11 +55,10 @@ struct PhaseOneConfiguration: Equatable {
 
         autoAlignVisualBottomToGround: true,
 
-        clipTransitionDuration: 0.08,
+        clipTransitionDuration: 0.0,
         loopedAnimationRepeatDuration: 60.0 * 60.0,
 
-        oneShotCompletionTolerance: 0.015,
-        defaultOneShotFallbackDuration: 1.2,
+        animationCompletionTolerance: 0.015,
         logClipDurations: true
     )
 

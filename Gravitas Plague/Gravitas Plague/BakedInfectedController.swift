@@ -4,19 +4,6 @@ import simd
 
 @MainActor
 final class BakedInfectedController {
-    enum PhaseOneState: Equatable {
-        case loading
-        case stopped
-        case idleFar
-        case turningTowardUserFirst90
-        case turningTowardUserSecond90
-        case walkingTowardUser
-        case idleNear
-        case turningAwayFirst90
-        case turningAwaySecond90
-        case walkingAway
-    }
-
     enum ControllerError: LocalizedError {
         case missingAsset(fileName: String)
         case failedToFindAnimation(fileName: String)
@@ -38,31 +25,34 @@ final class BakedInfectedController {
 
     private let configuration: PhaseOneConfiguration
     private let clips: [BakedAnimationClip]
+    private let sequence: [PhaseOneSequenceStep]
+
     private var clipsByID: [ClipID: BakedAnimationClip] = [:]
     private var loadedSources: [ClipID: Entity] = [:]
 
-    private var activeClipID: ClipID?
+    private var activeStep: PhaseOneSequenceStep?
     private var activeClip: BakedAnimationClip?
-    private var activeClipDuration: TimeInterval?
+
+    private var activeClipID: ClipID?
     private var activeClipMountEntity: Entity?
     private var activeClipEntity: Entity?
     private var activeAnimationController: AnimationPlaybackController?
 
-    private(set) var state: PhaseOneState = .loading
-    private var stateElapsed: TimeInterval = 0
-    private var isRunning = false
     private var hasLoadedClips = false
+    private var isRunning = false
+    private var sequenceIndex = 0
 
     private var rootYawRadians: Float = 0
-    private var farPoint = SIMD3<Float>(0, 0, -3.05)
-    private var nearPoint = SIMD3<Float>(0, 0, -1.55)
+    private var farPoint = SIMD3<Float>(0, -1.45, -3.05)
 
     init(
         configuration: PhaseOneConfiguration,
-        clips: [BakedAnimationClip] = BakedAnimationClip.phaseOneClips
+        clips: [BakedAnimationClip] = BakedAnimationClip.phaseOneClips,
+        sequence: [PhaseOneSequenceStep] = PhaseOneSequenceStep.phaseOneLoop
     ) {
         self.configuration = configuration
         self.clips = clips
+        self.sequence = sequence
 
         for clip in clips {
             clipsByID[clip.id] = clip
@@ -106,7 +96,6 @@ final class BakedInfectedController {
         }
 
         hasLoadedClips = true
-        state = .stopped
     }
 
     func configureSpawn(
@@ -124,12 +113,6 @@ final class BakedInfectedController {
             spawnPose.headPosition.z + headForward.z * configuration.farDistance
         )
 
-        nearPoint = SIMD3<Float>(
-            spawnPose.headPosition.x + headForward.x * configuration.nearDistance,
-            floorY,
-            spawnPose.headPosition.z + headForward.z * configuration.nearDistance
-        )
-
         rootYawRadians = PhaseOneMath.yawRadiansForNegativeZForward(
             worldForward: headForward
         )
@@ -142,13 +125,20 @@ final class BakedInfectedController {
         guard hasLoadedClips else { return }
 
         isRunning = false
+        sequenceIndex = 0
+
         rootEntity.isEnabled = true
         rootEntity.position = farPoint
         applyRootTransform()
-        switchToClip(.idle)
 
-        state = .idleFar
-        stateElapsed = 0
+        playSequenceStep(
+            PhaseOneSequenceStep(
+                clipID: .idle,
+                repeatCount: 1,
+                translatesRootWhilePlaying: false,
+                commitRightTurnYawOnCompletion: false
+            )
+        )
     }
 
     func startLoop() {
@@ -159,7 +149,9 @@ final class BakedInfectedController {
         applyRootTransform()
 
         isRunning = true
-        transition(to: .idleFar)
+        sequenceIndex = 0
+
+        playCurrentSequenceStep()
     }
 
     func resetLoopToIdleFar() {
@@ -170,236 +162,97 @@ final class BakedInfectedController {
         applyRootTransform()
 
         isRunning = true
-        transition(to: .idleFar)
+        sequenceIndex = 0
+
+        playCurrentSequenceStep()
     }
 
     func stopLoopAndHide() {
         isRunning = false
+        sequenceIndex = 0
+
         activeAnimationController?.stop()
         activeAnimationController = nil
 
         activeClipMountEntity?.removeFromParent()
         activeClipMountEntity = nil
+
         activeClipEntity = nil
         activeClipID = nil
+        activeStep = nil
         activeClip = nil
-        activeClipDuration = nil
 
         rootEntity.isEnabled = false
-        state = .stopped
-        stateElapsed = 0
     }
 
     func update(
         deltaTime: Float,
         currentHeadPosition: SIMD3<Float>?
     ) {
-        guard isRunning, hasLoadedClips else { return }
+        guard hasLoadedClips else { return }
+        _ = currentHeadPosition
 
         let clampedDelta = max(0, min(deltaTime, 0.1))
-        stateElapsed += TimeInterval(clampedDelta)
 
-        if enforceSafetyIfNeeded(currentHeadPosition: currentHeadPosition) {
-            return
+        if isRunning,
+           let activeStep,
+           activeStep.translatesRootWhilePlaying {
+            translateRootForward(deltaTime: clampedDelta)
         }
 
-        switch state {
-        case .loading, .stopped:
-            return
+        guard isRunning else { return }
 
-        case .idleFar:
-            if stateElapsed >= configuration.idleFarDuration {
-                transition(to: .turningTowardUserFirst90)
-            }
-
-        case .turningTowardUserFirst90:
-            completeRightTurnIfNeeded(nextState: .turningTowardUserSecond90)
-
-        case .turningTowardUserSecond90:
-            completeRightTurnIfNeeded(nextState: .walkingTowardUser)
-
-        case .walkingTowardUser:
-            if moveRootToward(target: nearPoint, deltaTime: clampedDelta) {
-                transition(to: .idleNear)
-            }
-
-        case .idleNear:
-            if stateElapsed >= configuration.idleNearDuration {
-                transition(to: .turningAwayFirst90)
-            }
-
-        case .turningAwayFirst90:
-            completeRightTurnIfNeeded(nextState: .turningAwaySecond90)
-
-        case .turningAwaySecond90:
-            completeRightTurnIfNeeded(nextState: .walkingAway)
-
-        case .walkingAway:
-            if moveRootToward(target: farPoint, deltaTime: clampedDelta) {
-                transition(to: .idleFar)
-            }
+        if activeAnimationHasCompleted() {
+            completeActiveStepAndAdvance()
         }
     }
 
-    private func transition(to newState: PhaseOneState) {
-        state = newState
-        stateElapsed = 0
+    private func playCurrentSequenceStep() {
+        guard !sequence.isEmpty else { return }
 
-        switch newState {
-        case .loading, .stopped:
-            break
-
-        case .idleFar, .idleNear:
-            switchToClip(.idle)
-
-        case .turningTowardUserFirst90,
-             .turningAwayFirst90:
-            switchToClip(.turnRight01)
-
-        case .turningTowardUserSecond90,
-             .turningAwaySecond90:
-            switchToClip(.turnRight02)
-
-        case .walkingTowardUser, .walkingAway:
-            switchToClip(.unstableWalk)
-        }
+        let safeIndex = sequenceIndex % sequence.count
+        playSequenceStep(sequence[safeIndex])
     }
 
-    private func completeRightTurnIfNeeded(nextState: PhaseOneState) {
-        guard activeOneShotClipHasReachedEnd() else { return }
-
-        commitRightTurnYaw()
-        transition(to: nextState)
-    }
-
-    private func activeOneShotClipHasReachedEnd() -> Bool {
-        guard let activeClip else {
-            return false
-        }
-
-        guard activeClip.looping == false else {
-            return false
-        }
-
-        let duration = resolvedActiveOneShotDuration(for: activeClip)
-
-        let playbackTime = activeAnimationController?.time ?? stateElapsed
-        let safePlaybackTime = max(playbackTime, stateElapsed)
-
-        return safePlaybackTime >= duration - configuration.oneShotCompletionTolerance
-    }
-
-    private func resolvedActiveOneShotDuration(
-        for activeClip: BakedAnimationClip
-    ) -> TimeInterval {
-        if let activeClipDuration,
-           activeClipDuration.isFinite,
-           activeClipDuration > 0.05 {
-            return activeClipDuration
-        }
-
-        if let fallback = activeClip.fallbackDuration,
-           fallback.isFinite,
-           fallback > 0.05 {
-            return fallback + activeClip.completionHold
-        }
-
-        return configuration.defaultOneShotFallbackDuration + activeClip.completionHold
-    }
-
-    private func commitRightTurnYaw() {
-        rootYawRadians -= Float.pi / 2.0
-        rootYawRadians = PhaseOneMath.normalizedAngleRadians(rootYawRadians)
-        applyRootTransform()
-    }
-
-    private func moveRootToward(
-        target: SIMD3<Float>,
-        deltaTime: Float
-    ) -> Bool {
-        let current = rootEntity.position
-        let toTarget = target - current
-        let distance = simd_length(toTarget)
-
-        if distance <= configuration.walkStopEpsilon {
-            rootEntity.position = target
-            return true
-        }
-
-        let step = configuration.walkSpeedMetersPerSecond * deltaTime
-
-        if step >= distance {
-            rootEntity.position = target
-            return true
-        }
-
-        let direction = simd_normalize(toTarget)
-        rootEntity.position = current + direction * step
-        return false
-    }
-
-    private func enforceSafetyIfNeeded(
-        currentHeadPosition: SIMD3<Float>?
-    ) -> Bool {
-        guard let currentHeadPosition else { return false }
-        guard state == .walkingTowardUser else { return false }
-
-        let distanceToUser = PhaseOneMath.horizontalDistance(
-            from: rootEntity.position,
-            to: currentHeadPosition
-        )
-
-        guard distanceToUser <= configuration.nearDistance else {
-            return false
-        }
-
-        rootEntity.position = nearPoint
-        transition(to: .idleNear)
-        return true
-    }
-
-    private func applyRootTransform() {
-        rootEntity.scale = configuration.rootScale
-
-        let yaw = rootYawRadians + configuration.rootYawOffsetRadians
-        rootEntity.orientation = simd_quatf(
-            angle: yaw,
-            axis: SIMD3<Float>(0, 1, 0)
-        )
-    }
-
-    private func switchToClip(_ clipID: ClipID) {
+    private func playSequenceStep(_ step: PhaseOneSequenceStep) {
         guard hasLoadedClips else { return }
+
+        guard step.repeatCount > 0 else {
+            assertionFailure("Invalid repeatCount for \(step.clipID): \(step.repeatCount)")
+            return
+        }
 
         activeAnimationController?.stop()
         activeAnimationController = nil
 
         activeClipMountEntity?.removeFromParent()
         activeClipMountEntity = nil
+
         activeClipEntity = nil
         activeClipID = nil
+        activeStep = nil
         activeClip = nil
-        activeClipDuration = nil
 
-        guard let sourceEntity = loadedSources[clipID] else {
-            assertionFailure(ControllerError.missingLoadedSource(clipID).localizedDescription)
+        guard let sourceEntity = loadedSources[step.clipID] else {
+            assertionFailure(ControllerError.missingLoadedSource(step.clipID).localizedDescription)
             return
         }
 
-        guard let clip = clipsByID[clipID] else {
-            assertionFailure("Missing clip metadata for \(clipID)")
+        guard let clip = clipsByID[step.clipID] else {
+            assertionFailure("Missing clip metadata for \(step.clipID)")
             return
         }
 
         let clipMount = Entity()
-        clipMount.name = "ActiveClipMount_\(clip.fileBaseName)_\(clipID)"
+        clipMount.name = "ActiveClipMount_\(clip.fileBaseName)_\(step.clipID)"
         clipMount.position = .zero
         clipMount.scale = SIMD3<Float>(1, 1, 1)
         clipMount.orientation = configuration.visualCorrectionOrientation
 
         let clone = sourceEntity.clone(recursive: true)
-        clone.name = "Active_\(clip.fileBaseName)_\(clipID)"
+        clone.name = "Active_\(clip.fileBaseName)_\(step.clipID)"
 
+        // Preserve the imported USDZ transform. Do not reset clone position/orientation/scale.
         clipMount.addChild(clone)
         rootEntity.addChild(clipMount)
 
@@ -413,18 +266,17 @@ final class BakedInfectedController {
             return
         }
 
-        let animationResource: AnimationResource
+        let baseAnimationResource = animationTarget.resource
+        let playbackResource: AnimationResource
 
-        if clip.looping {
-            animationResource = animationTarget.resource.repeat(
-                duration: configuration.loopedAnimationRepeatDuration
-            )
+        if step.repeatCount == 1 {
+            playbackResource = baseAnimationResource
         } else {
-            animationResource = animationTarget.resource
+            playbackResource = baseAnimationResource.repeat(count: step.repeatCount)
         }
 
         let controller = animationTarget.entity.playAnimation(
-            animationResource,
+            playbackResource,
             transitionDuration: configuration.clipTransitionDuration,
             startsPaused: false
         )
@@ -432,43 +284,81 @@ final class BakedInfectedController {
         activeAnimationController = controller
         activeClipMountEntity = clipMount
         activeClipEntity = clone
-        activeClipID = clipID
+        activeClipID = step.clipID
+        activeStep = step
         activeClip = clip
 
-        if clip.looping {
-            activeClipDuration = nil
-        } else {
-            let reportedDuration = controller.duration
-
-            if reportedDuration.isFinite, reportedDuration > 0.05 {
-                activeClipDuration = reportedDuration + clip.completionHold
-            } else if let fallback = clip.fallbackDuration {
-                activeClipDuration = fallback + clip.completionHold
-            } else {
-                activeClipDuration = configuration.defaultOneShotFallbackDuration + clip.completionHold
-            }
-        }
-
         if configuration.logClipDurations {
-            let durationText: String
-
-            if let activeClipDuration {
-                durationText = String(format: "%.3f", activeClipDuration)
-            } else {
-                durationText = "looping"
-            }
-
             print(
                 """
-                [Gravitas] Playing clip:
-                  id: \(clipID)
+                [Gravitas] Playing sequence step
+                  clipID: \(step.clipID)
                   file: \(clip.fullFileName)
-                  looping: \(clip.looping)
-                  resolvedDuration: \(durationText)
-                  reportedControllerDuration: \(String(format: "%.3f", controller.duration))
+                  repeatCount: \(step.repeatCount)
+                  translatesRootWhilePlaying: \(step.translatesRootWhilePlaying)
+                  commitRightTurnYawOnCompletion: \(step.commitRightTurnYawOnCompletion)
+                  controllerDuration: \(String(format: "%.3f", controller.duration))
+                  transitionDuration: \(String(format: "%.3f", configuration.clipTransitionDuration))
                 """
             )
         }
+    }
+
+    private func activeAnimationHasCompleted() -> Bool {
+        guard let controller = activeAnimationController else {
+            return false
+        }
+
+        let duration = controller.duration
+
+        guard duration.isFinite, duration > 0.001 else {
+            return false
+        }
+
+        let currentTime = controller.time
+        let threshold = max(0, duration - configuration.animationCompletionTolerance)
+
+        return currentTime >= threshold
+    }
+
+    private func completeActiveStepAndAdvance() {
+        guard let step = activeStep else { return }
+
+        if step.commitRightTurnYawOnCompletion {
+            commitRightTurnYaw()
+        }
+
+        sequenceIndex = (sequenceIndex + 1) % sequence.count
+        playCurrentSequenceStep()
+    }
+
+    private func commitRightTurnYaw() {
+        rootYawRadians -= Float.pi / 2.0
+        rootYawRadians = PhaseOneMath.normalizedAngleRadians(rootYawRadians)
+        applyRootTransform()
+    }
+
+    private func translateRootForward(deltaTime: Float) {
+        let localForward = SIMD3<Float>(0, 0, -1)
+        let worldForward = rootEntity.orientation.act(localForward)
+
+        let horizontalForward = PhaseOneMath.normalizedOrFallback(
+            SIMD3<Float>(worldForward.x, 0, worldForward.z),
+            fallback: SIMD3<Float>(0, 0, -1)
+        )
+
+        rootEntity.position += horizontalForward * configuration.walkSpeedMetersPerSecond * deltaTime
+    }
+
+    private func applyRootTransform() {
+        rootEntity.scale = configuration.rootScale
+
+        let yaw = rootYawRadians + configuration.rootYawOffsetRadians
+
+        rootEntity.orientation = simd_quatf(
+            angle: yaw,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
     }
 
     private func snapVisualBottomToRootGround(_ clipMount: Entity) {
