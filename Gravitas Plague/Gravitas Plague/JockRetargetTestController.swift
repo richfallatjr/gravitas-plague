@@ -139,8 +139,10 @@ final class JockRetargetTestController {
 
         let faceUserForward = -headForward
 
-        rootYawRadians = PhaseOneMath.yawRadiansForNegativeZForward(
-            worldForward: faceUserForward
+        rootYawRadians = PhaseOneMath.normalizedAngleRadians(
+            PhaseOneMath.yawRadiansForNegativeZForward(
+                worldForward: faceUserForward
+            ) + Float.pi
         )
 
         rootEntity.position = position
