@@ -110,7 +110,6 @@ struct PlagueDemoView: View {
 
         case .open:
             session.statusMessage = "Restarting presence demo."
-            session.send(.resetDemo)
             session.send(.startDemo)
         }
     }

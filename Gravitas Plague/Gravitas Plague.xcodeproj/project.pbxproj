@@ -8,8 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		8E1A10012FCD000100000001 /* ../idle-01.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10042FCD000100000001 /* ../idle-01.usdz */; };
-		8E1A10022FCD000100000001 /* ../idle-turn-right.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10052FCD000100000001 /* ../idle-turn-right.usdz */; };
+		8E1A10022FCD000100000001 /* ../idle-turn-right-01.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10052FCD000100000001 /* ../idle-turn-right-01.usdz */; };
 		8E1A10032FCD000100000001 /* ../unstable-walk.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10062FCD000100000001 /* ../unstable-walk.usdz */; };
+		8E1A100E2FCD000100000001 /* ../idle-turn-right-02.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */; };
 		8E1A10092FCD000100000001 /* ARKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E1A10072FCD000100000001 /* ARKit.framework */; };
 		8E1A100A2FCD000100000001 /* RealityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E1A10082FCD000100000001 /* RealityKit.framework */; };
 /* End PBXBuildFile section */
@@ -36,10 +37,11 @@
 		2D78FE3D2FCCF44B0063708B /* Gravitas PlagueTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Gravitas PlagueTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2D78FE472FCCF44B0063708B /* Gravitas PlagueUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Gravitas PlagueUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		8E1A10042FCD000100000001 /* ../idle-01.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../idle-01.usdz"; sourceTree = SOURCE_ROOT; };
-		8E1A10052FCD000100000001 /* ../idle-turn-right.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../idle-turn-right.usdz"; sourceTree = SOURCE_ROOT; };
+		8E1A10052FCD000100000001 /* ../idle-turn-right-01.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../idle-turn-right-01.usdz"; sourceTree = SOURCE_ROOT; };
 		8E1A10062FCD000100000001 /* ../unstable-walk.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../unstable-walk.usdz"; sourceTree = SOURCE_ROOT; };
 		8E1A10072FCD000100000001 /* ARKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ARKit.framework; path = System/Library/Frameworks/ARKit.framework; sourceTree = SDKROOT; };
 		8E1A10082FCD000100000001 /* RealityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = RealityKit.framework; path = System/Library/Frameworks/RealityKit.framework; sourceTree = SDKROOT; };
+		8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../idle-turn-right-02.usdz"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -122,7 +124,8 @@
 			isa = PBXGroup;
 			children = (
 				8E1A10042FCD000100000001 /* ../idle-01.usdz */,
-				8E1A10052FCD000100000001 /* ../idle-turn-right.usdz */,
+				8E1A10052FCD000100000001 /* ../idle-turn-right-01.usdz */,
+				8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */,
 				8E1A10062FCD000100000001 /* ../unstable-walk.usdz */,
 			);
 			name = "Phase One Assets";
@@ -249,7 +252,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				8E1A10012FCD000100000001 /* ../idle-01.usdz in Resources */,
-				8E1A10022FCD000100000001 /* ../idle-turn-right.usdz in Resources */,
+				8E1A10022FCD000100000001 /* ../idle-turn-right-01.usdz in Resources */,
+				8E1A100E2FCD000100000001 /* ../idle-turn-right-02.usdz in Resources */,
 				8E1A10032FCD000100000001 /* ../unstable-walk.usdz in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

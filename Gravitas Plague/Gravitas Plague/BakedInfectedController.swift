@@ -42,6 +42,8 @@ final class BakedInfectedController {
     private var loadedSources: [ClipID: Entity] = [:]
 
     private var activeClipID: ClipID?
+    private var activeClip: BakedAnimationClip?
+    private var activeClipDuration: TimeInterval?
     private var activeClipMountEntity: Entity?
     private var activeClipEntity: Entity?
     private var activeAnimationController: AnimationPlaybackController?
@@ -73,7 +75,14 @@ final class BakedInfectedController {
     func loadClips() async throws {
         guard !hasLoadedClips else { return }
 
+        var loadedSourcesByAssetKey: [String: Entity] = [:]
+
         for clip in clips {
+            if let existingSource = loadedSourcesByAssetKey[clip.assetKey] {
+                loadedSources[clip.id] = existingSource
+                continue
+            }
+
             guard let url = Bundle.main.url(
                 forResource: clip.fileBaseName,
                 withExtension: clip.fileExtension
@@ -91,6 +100,8 @@ final class BakedInfectedController {
             }
 
             sourceEntity.name = "Source_\(clip.fileBaseName)"
+
+            loadedSourcesByAssetKey[clip.assetKey] = sourceEntity
             loadedSources[clip.id] = sourceEntity
         }
 
@@ -171,6 +182,8 @@ final class BakedInfectedController {
         activeClipMountEntity = nil
         activeClipEntity = nil
         activeClipID = nil
+        activeClip = nil
+        activeClipDuration = nil
 
         rootEntity.isEnabled = false
         state = .stopped
@@ -240,10 +253,12 @@ final class BakedInfectedController {
             switchToClip(.idle)
 
         case .turningTowardUserFirst90,
-             .turningTowardUserSecond90,
-             .turningAwayFirst90,
+             .turningAwayFirst90:
+            switchToClip(.turnRight01)
+
+        case .turningTowardUserSecond90,
              .turningAwaySecond90:
-            switchToClip(.turnRight)
+            switchToClip(.turnRight02)
 
         case .walkingTowardUser, .walkingAway:
             switchToClip(.unstableWalk)
@@ -251,10 +266,45 @@ final class BakedInfectedController {
     }
 
     private func completeRightTurnIfNeeded(nextState: PhaseOneState) {
-        guard stateElapsed >= configuration.turnRightDuration else { return }
+        guard activeOneShotClipHasReachedEnd() else { return }
 
         commitRightTurnYaw()
         transition(to: nextState)
+    }
+
+    private func activeOneShotClipHasReachedEnd() -> Bool {
+        guard let activeClip else {
+            return false
+        }
+
+        guard activeClip.looping == false else {
+            return false
+        }
+
+        let duration = resolvedActiveOneShotDuration(for: activeClip)
+
+        let playbackTime = activeAnimationController?.time ?? stateElapsed
+        let safePlaybackTime = max(playbackTime, stateElapsed)
+
+        return safePlaybackTime >= duration - configuration.oneShotCompletionTolerance
+    }
+
+    private func resolvedActiveOneShotDuration(
+        for activeClip: BakedAnimationClip
+    ) -> TimeInterval {
+        if let activeClipDuration,
+           activeClipDuration.isFinite,
+           activeClipDuration > 0.05 {
+            return activeClipDuration
+        }
+
+        if let fallback = activeClip.fallbackDuration,
+           fallback.isFinite,
+           fallback > 0.05 {
+            return fallback + activeClip.completionHold
+        }
+
+        return configuration.defaultOneShotFallbackDuration + activeClip.completionHold
     }
 
     private func commitRightTurnYaw() {
@@ -328,6 +378,8 @@ final class BakedInfectedController {
         activeClipMountEntity = nil
         activeClipEntity = nil
         activeClipID = nil
+        activeClip = nil
+        activeClipDuration = nil
 
         guard let sourceEntity = loadedSources[clipID] else {
             assertionFailure(ControllerError.missingLoadedSource(clipID).localizedDescription)
@@ -340,13 +392,13 @@ final class BakedInfectedController {
         }
 
         let clipMount = Entity()
-        clipMount.name = "ActiveClipMount_\(clip.fileBaseName)"
+        clipMount.name = "ActiveClipMount_\(clip.fileBaseName)_\(clipID)"
         clipMount.position = .zero
         clipMount.scale = SIMD3<Float>(1, 1, 1)
         clipMount.orientation = configuration.visualCorrectionOrientation
 
         let clone = sourceEntity.clone(recursive: true)
-        clone.name = "Active_\(clip.fileBaseName)"
+        clone.name = "Active_\(clip.fileBaseName)_\(clipID)"
 
         clipMount.addChild(clone)
         rootEntity.addChild(clipMount)
@@ -371,15 +423,52 @@ final class BakedInfectedController {
             animationResource = animationTarget.resource
         }
 
-        activeAnimationController = animationTarget.entity.playAnimation(
+        let controller = animationTarget.entity.playAnimation(
             animationResource,
             transitionDuration: configuration.clipTransitionDuration,
             startsPaused: false
         )
 
+        activeAnimationController = controller
         activeClipMountEntity = clipMount
         activeClipEntity = clone
         activeClipID = clipID
+        activeClip = clip
+
+        if clip.looping {
+            activeClipDuration = nil
+        } else {
+            let reportedDuration = controller.duration
+
+            if reportedDuration.isFinite, reportedDuration > 0.05 {
+                activeClipDuration = reportedDuration + clip.completionHold
+            } else if let fallback = clip.fallbackDuration {
+                activeClipDuration = fallback + clip.completionHold
+            } else {
+                activeClipDuration = configuration.defaultOneShotFallbackDuration + clip.completionHold
+            }
+        }
+
+        if configuration.logClipDurations {
+            let durationText: String
+
+            if let activeClipDuration {
+                durationText = String(format: "%.3f", activeClipDuration)
+            } else {
+                durationText = "looping"
+            }
+
+            print(
+                """
+                [Gravitas] Playing clip:
+                  id: \(clipID)
+                  file: \(clip.fullFileName)
+                  looping: \(clip.looping)
+                  resolvedDuration: \(durationText)
+                  reportedControllerDuration: \(String(format: "%.3f", controller.duration))
+                """
+            )
+        }
     }
 
     private func snapVisualBottomToRootGround(_ clipMount: Entity) {

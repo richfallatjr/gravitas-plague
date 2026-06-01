@@ -17,12 +17,12 @@ struct PlagueImmersiveView: View {
             let sceneRoot = await coordinator.makeSceneRoot()
             content.add(sceneRoot)
         }
-        .onReceive(frameTimer) { date in
-            coordinator.tick(at: date)
-        }
-        .onChange(of: session.latestCommand?.id) { _, _ in
+        .task(id: session.latestCommand?.id) {
             guard let commandEnvelope = session.latestCommand else { return }
             coordinator.handle(commandEnvelope)
+        }
+        .onReceive(frameTimer) { date in
+            coordinator.tick(at: date)
         }
         .onDisappear {
             coordinator.shutdown()

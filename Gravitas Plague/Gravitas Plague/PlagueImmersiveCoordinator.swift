@@ -10,6 +10,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var infectedController: BakedInfectedController?
     private var lastTickDate: Date?
     private var handledCommandIDs = Set<UUID>()
+    private var pendingCommands: [PlagueDemoSession.CommandEnvelope] = []
 
     func makeSceneRoot() async -> Entity {
         if let sceneRoot {
@@ -48,14 +49,25 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         self.sceneRoot = root
         self.infectedController = controller
 
+        drainPendingCommands()
+
         return root
     }
 
     func handle(_ envelope: PlagueDemoSession.CommandEnvelope) {
         guard !handledCommandIDs.contains(envelope.id) else { return }
-        handledCommandIDs.insert(envelope.id)
 
-        switch envelope.command {
+        guard infectedController != nil else {
+            pendingCommands.append(envelope)
+            return
+        }
+
+        handledCommandIDs.insert(envelope.id)
+        perform(envelope.command)
+    }
+
+    private func perform(_ command: PlagueDemoSession.Command) {
+        switch command {
         case .startDemo:
             Task {
                 await configureAndStartLoop()
@@ -94,6 +106,16 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         infectedController = nil
         lastTickDate = nil
         handledCommandIDs.removeAll()
+        pendingCommands.removeAll()
+    }
+
+    private func drainPendingCommands() {
+        let commandsToDrain = pendingCommands
+        pendingCommands.removeAll()
+
+        for command in commandsToDrain {
+            handle(command)
+        }
     }
 
     private func configureAndStartLoop() async {

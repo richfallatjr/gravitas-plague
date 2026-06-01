@@ -28,6 +28,10 @@ struct PhaseOneConfiguration: Equatable {
     let clipTransitionDuration: TimeInterval
     let loopedAnimationRepeatDuration: TimeInterval
 
+    let oneShotCompletionTolerance: TimeInterval
+    let defaultOneShotFallbackDuration: TimeInterval
+    let logClipDurations: Bool
+
     static let phaseOneDefault = PhaseOneConfiguration(
         farDistance: 3.05,
         nearDistance: 1.55,
@@ -47,13 +51,17 @@ struct PhaseOneConfiguration: Equatable {
         rootYawOffsetRadians: 0,
 
         visualPitchCorrectionRadians: 0,
-        visualYawCorrectionRadians: 0,
+        visualYawCorrectionRadians: Float.pi,
         visualRollCorrectionRadians: 0,
 
         autoAlignVisualBottomToGround: true,
 
         clipTransitionDuration: 0.08,
-        loopedAnimationRepeatDuration: 60.0 * 60.0
+        loopedAnimationRepeatDuration: 60.0 * 60.0,
+
+        oneShotCompletionTolerance: 0.015,
+        defaultOneShotFallbackDuration: 1.2,
+        logClipDurations: true
     )
 
     var visualCorrectionOrientation: simd_quatf {
