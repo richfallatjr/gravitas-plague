@@ -12,9 +12,19 @@ final class PlagueDemoSession: ObservableObject {
         case open
     }
 
+    enum ActiveMode: Equatable {
+        case none
+        case bakedUSDZDemo
+        case jockRetargetTest
+    }
+
     enum Command: Equatable {
-        case startDemo
-        case resetDemo
+        case startBakedUSDZDemo
+        case startJockRetargetTest
+        case playJockDummy
+        case stopJockDummy
+        case resetJockPose
+        case setJockLoop(Bool)
         case closeDemo
     }
 
@@ -29,7 +39,9 @@ final class PlagueDemoSession: ObservableObject {
     }
 
     @Published var immersiveSpaceStatus: ImmersiveSpaceStatus = .closed
-    @Published var statusMessage: String = "Open the demo to begin."
+    @Published var activeMode: ActiveMode = .none
+    @Published var statusMessage: String = "Start the demo or open Retarget."
+    @Published var jockLoopEnabled: Bool = true
     @Published private(set) var latestCommand: CommandEnvelope?
 
     func send(_ command: Command) {

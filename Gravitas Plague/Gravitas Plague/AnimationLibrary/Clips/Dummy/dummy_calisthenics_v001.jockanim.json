@@ -1,0 +1,145 @@
+{
+  "schema": "com.gravitas.jockanim.v0",
+  "clip_id": "dummy_calisthenics_v001",
+  "display_name": "Dummy Calisthenics",
+  "rig_id": "GravitasMeshyBiped24",
+  "rig_version": "001",
+  "pose_mode": "additiveLocal",
+  "source": {
+    "type": "hand_authored_dummy",
+    "source_file": "none",
+    "notes": "Phase 1 runtime skeletal driver validation clip."
+  },
+  "timing": {
+    "fps": 24,
+    "duration_seconds": 1.0,
+    "looping": true
+  },
+  "joints": [
+    "Hips",
+    "Head",
+    "LeftArm",
+    "LeftForeArm",
+    "RightArm",
+    "RightForeArm",
+    "LeftUpLeg",
+    "LeftLeg",
+    "RightUpLeg",
+    "RightLeg"
+  ],
+  "tracks": [
+    {
+      "joint": "Hips",
+      "channel": "translation_xyz_additive",
+      "keys": [
+        { "t": 0.0, "value": [0.0, 0.0, 0.0] },
+        { "t": 0.5, "value": [0.0, 0.0, 0.025] },
+        { "t": 1.0, "value": [0.0, 0.0, 0.0] }
+      ]
+    },
+    {
+      "joint": "Head",
+      "channel": "rotation_euler_xyz_degrees_additive",
+      "keys": [
+        { "t": 0.0, "value": [0.0, 0.0, 0.0] },
+        { "t": 0.5, "value": [0.0, 18.0, 8.0] },
+        { "t": 1.0, "value": [0.0, 0.0, 0.0] }
+      ]
+    },
+    {
+      "joint": "LeftArm",
+      "channel": "rotation_euler_xyz_degrees_additive",
+      "keys": [
+        { "t": 0.0, "value": [0.0, 0.0, 0.0] },
+        { "t": 0.5, "value": [-25.0, 0.0, 55.0] },
+        { "t": 1.0, "value": [0.0, 0.0, 0.0] }
+      ]
+    },
+    {
+      "joint": "LeftForeArm",
+      "channel": "rotation_euler_xyz_degrees_additive",
+      "keys": [
+        { "t": 0.0, "value": [0.0, 0.0, 0.0] },
+        { "t": 0.5, "value": [-45.0, 0.0, 0.0] },
+        { "t": 1.0, "value": [0.0, 0.0, 0.0] }
+      ]
+    },
+    {
+      "joint": "RightArm",
+      "channel": "rotation_euler_xyz_degrees_additive",
+      "keys": [
+        { "t": 0.0, "value": [0.0, 0.0, 0.0] },
+        { "t": 0.5, "value": [-25.0, 0.0, -55.0] },
+        { "t": 1.0, "value": [0.0, 0.0, 0.0] }
+      ]
+    },
+    {
+      "joint": "RightForeArm",
+      "channel": "rotation_euler_xyz_degrees_additive",
+      "keys": [
+        { "t": 0.0, "value": [0.0, 0.0, 0.0] },
+        { "t": 0.5, "value": [-45.0, 0.0, 0.0] },
+        { "t": 1.0, "value": [0.0, 0.0, 0.0] }
+      ]
+    },
+    {
+      "joint": "LeftUpLeg",
+      "channel": "rotation_euler_xyz_degrees_additive",
+      "keys": [
+        { "t": 0.0, "value": [0.0, 0.0, 0.0] },
+        { "t": 0.5, "value": [28.0, 0.0, 8.0] },
+        { "t": 1.0, "value": [0.0, 0.0, 0.0] }
+      ]
+    },
+    {
+      "joint": "LeftLeg",
+      "channel": "rotation_euler_xyz_degrees_additive",
+      "keys": [
+        { "t": 0.0, "value": [0.0, 0.0, 0.0] },
+        { "t": 0.5, "value": [-35.0, 0.0, 0.0] },
+        { "t": 1.0, "value": [0.0, 0.0, 0.0] }
+      ]
+    },
+    {
+      "joint": "RightUpLeg",
+      "channel": "rotation_euler_xyz_degrees_additive",
+      "keys": [
+        { "t": 0.0, "value": [0.0, 0.0, 0.0] },
+        { "t": 0.5, "value": [-28.0, 0.0, -8.0] },
+        { "t": 1.0, "value": [0.0, 0.0, 0.0] }
+      ]
+    },
+    {
+      "joint": "RightLeg",
+      "channel": "rotation_euler_xyz_degrees_additive",
+      "keys": [
+        { "t": 0.0, "value": [0.0, 0.0, 0.0] },
+        { "t": 0.5, "value": [35.0, 0.0, 0.0] },
+        { "t": 1.0, "value": [0.0, 0.0, 0.0] }
+      ]
+    }
+  ],
+  "locomotion": {
+    "locomotion_type": "stationary",
+    "world_space_motion": "none",
+    "recommended_speed_mps": 0.0,
+    "root_rotation_degrees": 0.0
+  },
+  "transition": {
+    "default_transition_frames": 5,
+    "transition_fps": 24
+  },
+  "tags": {
+    "category": ["debug", "idle"],
+    "emotion": ["sick", "unstable"],
+    "threat": ["passive"],
+    "story": ["test", "dummy"],
+    "allowed_states": ["debug", "idle"]
+  },
+  "quality": {
+    "approved_for_runtime": true,
+    "approved_for_episode": false,
+    "debug_only": true
+  },
+  "notes": "Dummy calisthenics clip to validate Jock sidecar skeletal animation. Not production animation."
+}

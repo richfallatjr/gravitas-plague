@@ -13,14 +13,9 @@ struct PlagueDemoView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
 
-                Text("Presence Demo")
+                Text("Presence Demo / Jock Retarget Test")
                     .font(.title3)
                     .foregroundStyle(.secondary)
-
-                Text("The infected appears in your room, turns toward you, walks forward, stops, turns away, and walks back.")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Divider()
@@ -33,24 +28,25 @@ struct PlagueDemoView: View {
             HStack(spacing: 12) {
                 Button {
                     Task {
-                        await openAndStartDemo()
+                        await openIfNeededAndSend(.startBakedUSDZDemo)
                     }
                 } label: {
                     Text(startButtonTitle)
-                        .frame(minWidth: 120)
+                        .frame(minWidth: 130)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(session.immersiveSpaceStatus == .opening)
 
                 Button {
-                    session.send(.resetDemo)
-                    session.statusMessage = "Resetting infected loop."
+                    Task {
+                        await openIfNeededAndSend(.startJockRetargetTest)
+                    }
                 } label: {
-                    Text("Reset")
-                        .frame(minWidth: 80)
+                    Text("Retarget")
+                        .frame(minWidth: 100)
                 }
                 .buttonStyle(.bordered)
-                .disabled(session.immersiveSpaceStatus != .open)
+                .disabled(session.immersiveSpaceStatus == .opening)
 
                 Button {
                     Task {
@@ -62,6 +58,40 @@ struct PlagueDemoView: View {
                 }
                 .buttonStyle(.bordered)
                 .disabled(session.immersiveSpaceStatus != .open)
+            }
+
+            if session.activeMode == .jockRetargetTest {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Jock Test Controls")
+                        .font(.headline)
+
+                    Toggle("Loop Dummy", isOn: Binding(
+                        get: { session.jockLoopEnabled },
+                        set: { newValue in
+                            session.jockLoopEnabled = newValue
+                            session.send(.setJockLoop(newValue))
+                        }
+                    ))
+
+                    HStack(spacing: 12) {
+                        Button("Play Dummy") {
+                            session.send(.playJockDummy)
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        Button("Stop Dummy") {
+                            session.send(.stopJockDummy)
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button("Reset Pose") {
+                            session.send(.resetJockPose)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
             }
         }
         .padding(28)
@@ -78,19 +108,18 @@ struct PlagueDemoView: View {
         }
     }
 
-    private func openAndStartDemo() async {
+    private func openIfNeededAndSend(_ command: PlagueDemoSession.Command) async {
         switch session.immersiveSpaceStatus {
         case .closed:
             session.immersiveSpaceStatus = .opening
-            session.statusMessage = "Opening mixed-reality demo."
+            session.statusMessage = "Opening mixed-reality space."
 
             let result = await openImmersiveSpace(id: PlagueDemoSession.immersiveSpaceID)
 
             switch result {
             case .opened:
                 session.immersiveSpaceStatus = .open
-                session.statusMessage = "Presence demo running."
-                session.send(.startDemo)
+                sendAndUpdateStatus(command)
 
             case .userCancelled:
                 session.immersiveSpaceStatus = .closed
@@ -109,8 +138,24 @@ struct PlagueDemoView: View {
             return
 
         case .open:
-            session.statusMessage = "Restarting presence demo."
-            session.send(.startDemo)
+            sendAndUpdateStatus(command)
+        }
+    }
+
+    private func sendAndUpdateStatus(_ command: PlagueDemoSession.Command) {
+        switch command {
+        case .startBakedUSDZDemo:
+            session.activeMode = .bakedUSDZDemo
+            session.statusMessage = "Running baked USDZ switching demo."
+            session.send(.startBakedUSDZDemo)
+
+        case .startJockRetargetTest:
+            session.activeMode = .jockRetargetTest
+            session.statusMessage = "Running Jock Retarget skeletal-driver test."
+            session.send(.startJockRetargetTest)
+
+        default:
+            session.send(command)
         }
     }
 
@@ -121,6 +166,7 @@ struct PlagueDemoView: View {
         await dismissImmersiveSpace()
 
         session.immersiveSpaceStatus = .closed
+        session.activeMode = .none
         session.statusMessage = "Demo closed."
     }
 }

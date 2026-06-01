@@ -7,10 +7,14 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let spatialProvider = PhaseOneSpatialProvider()
 
     private var sceneRoot: Entity?
-    private var infectedController: BakedInfectedController?
+
+    private var bakedDemoController: BakedInfectedController?
+    private var jockRetargetController: JockRetargetTestController?
+
     private var lastTickDate: Date?
     private var handledCommandIDs = Set<UUID>()
     private var pendingCommands: [PlagueDemoSession.CommandEnvelope] = []
+    private var jockLoopEnabled = true
 
     func makeSceneRoot() async -> Entity {
         if let sceneRoot {
@@ -25,29 +29,12 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         let controller = BakedInfectedController(configuration: .phaseOneDefault)
         root.addChild(controller.rootEntity)
 
-        do {
-            try await controller.loadClips()
-
-            let spawnPose = spatialProvider.currentPoseOrFallback()
-            let config = PhaseOneConfiguration.phaseOneDefault
-            let floorY = await spatialProvider.resolvedFloorY(
-                for: spawnPose,
-                fallbackHeadToFloorOffset: config.fallbackHeadToFloorOffset,
-                timeoutSeconds: config.floorDetectionTimeoutSeconds
-            )
-
-            controller.configureSpawn(
-                using: spawnPose,
-                floorY: floorY
-            )
-
-            controller.prepareIdleAtSpawn()
-        } catch {
-            assertionFailure("Phase 1 failed to load baked USDZ clips: \(error)")
-        }
+        let jockController = JockRetargetTestController()
+        root.addChild(jockController.rootEntity)
 
         self.sceneRoot = root
-        self.infectedController = controller
+        self.bakedDemoController = controller
+        self.jockRetargetController = jockController
 
         drainPendingCommands()
 
@@ -57,7 +44,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     func handle(_ envelope: PlagueDemoSession.CommandEnvelope) {
         guard !handledCommandIDs.contains(envelope.id) else { return }
 
-        guard infectedController != nil else {
+        guard sceneRoot != nil else {
             pendingCommands.append(envelope)
             return
         }
@@ -68,18 +55,32 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
     private func perform(_ command: PlagueDemoSession.Command) {
         switch command {
-        case .startDemo:
+        case .startBakedUSDZDemo:
             Task {
-                await configureAndStartLoop()
+                await startBakedDemo()
             }
 
-        case .resetDemo:
+        case .startJockRetargetTest:
             Task {
-                await configureAndResetLoop()
+                await startJockRetargetTest()
             }
+
+        case .playJockDummy:
+            jockRetargetController?.playDummy(loop: jockLoopEnabled)
+
+        case .stopJockDummy:
+            jockRetargetController?.stopDummy()
+
+        case .resetJockPose:
+            jockRetargetController?.resetPose()
+
+        case .setJockLoop(let enabled):
+            jockLoopEnabled = enabled
+            jockRetargetController?.setLoopEnabled(enabled)
 
         case .closeDemo:
-            infectedController?.stopLoopAndHide()
+            bakedDemoController?.stopLoopAndHide()
+            jockRetargetController?.hide()
             spatialProvider.stop()
         }
     }
@@ -96,14 +97,23 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         lastTickDate = date
 
         let currentHeadPosition = spatialProvider.currentPose()?.headPosition
-        infectedController?.update(deltaTime: deltaTime, currentHeadPosition: currentHeadPosition)
+
+        bakedDemoController?.update(
+            deltaTime: deltaTime,
+            currentHeadPosition: currentHeadPosition
+        )
+
+        jockRetargetController?.update(deltaTime: deltaTime)
     }
 
     func shutdown() {
-        infectedController?.stopLoopAndHide()
+        bakedDemoController?.stopLoopAndHide()
+        jockRetargetController?.hide()
         spatialProvider.stop()
+
         sceneRoot = nil
-        infectedController = nil
+        bakedDemoController = nil
+        jockRetargetController = nil
         lastTickDate = nil
         handledCommandIDs.removeAll()
         pendingCommands.removeAll()
@@ -118,43 +128,60 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
     }
 
-    private func configureAndStartLoop() async {
-        guard let infectedController else { return }
+    private func startBakedDemo() async {
+        jockRetargetController?.hide()
 
-        let spawnPose = spatialProvider.currentPoseOrFallback()
-        let config = PhaseOneConfiguration.phaseOneDefault
+        guard let bakedDemoController else { return }
 
-        let floorY = await spatialProvider.resolvedFloorY(
-            for: spawnPose,
-            fallbackHeadToFloorOffset: config.fallbackHeadToFloorOffset,
-            timeoutSeconds: config.floorDetectionTimeoutSeconds
-        )
+        do {
+            try await bakedDemoController.loadClips()
 
-        infectedController.configureSpawn(
-            using: spawnPose,
-            floorY: floorY
-        )
+            let spawnPose = spatialProvider.currentPoseOrFallback()
+            let config = PhaseOneConfiguration.phaseOneDefault
 
-        infectedController.startLoop()
+            let floorY = await spatialProvider.resolvedFloorY(
+                for: spawnPose,
+                fallbackHeadToFloorOffset: config.fallbackHeadToFloorOffset,
+                timeoutSeconds: config.floorDetectionTimeoutSeconds
+            )
+
+            bakedDemoController.configureSpawn(
+                using: spawnPose,
+                floorY: floorY
+            )
+
+            bakedDemoController.startLoop()
+        } catch {
+            assertionFailure("Failed to start baked USDZ demo: \(error)")
+        }
     }
 
-    private func configureAndResetLoop() async {
-        guard let infectedController else { return }
+    private func startJockRetargetTest() async {
+        bakedDemoController?.stopLoopAndHide()
 
-        let spawnPose = spatialProvider.currentPoseOrFallback()
-        let config = PhaseOneConfiguration.phaseOneDefault
+        guard let jockRetargetController else { return }
 
-        let floorY = await spatialProvider.resolvedFloorY(
-            for: spawnPose,
-            fallbackHeadToFloorOffset: config.fallbackHeadToFloorOffset,
-            timeoutSeconds: config.floorDetectionTimeoutSeconds
-        )
+        do {
+            try await jockRetargetController.loadIfNeeded()
 
-        infectedController.configureSpawn(
-            using: spawnPose,
-            floorY: floorY
-        )
+            let spawnPose = spatialProvider.currentPoseOrFallback()
+            let config = PhaseOneConfiguration.phaseOneDefault
 
-        infectedController.resetLoopToIdleFar()
+            let floorY = await spatialProvider.resolvedFloorY(
+                for: spawnPose,
+                fallbackHeadToFloorOffset: config.fallbackHeadToFloorOffset,
+                timeoutSeconds: config.floorDetectionTimeoutSeconds
+            )
+
+            jockRetargetController.configureSpawn(
+                using: spawnPose,
+                floorY: floorY
+            )
+
+            jockRetargetController.show()
+            jockRetargetController.playDummy(loop: jockLoopEnabled)
+        } catch {
+            assertionFailure("Failed to start Jock Retarget Test: \(error)")
+        }
     }
 }
