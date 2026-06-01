@@ -45,6 +45,7 @@ from bpy.types import Operator, Panel, PropertyGroup
 
 LOG_TEXT_BLOCK_NAME = "Gravitas_Explicit_Stitcher_Log"
 TEMP_COLLECTION_NAME = "__GRAVITAS_EXPLICIT_STITCHER_TEMP__"
+TEMPLATE_COLLECTION_NAME = "__GRAVITAS_MANUAL_TEMPLATE__"
 
 
 # ============================================================
@@ -258,6 +259,79 @@ def _iter_action_fcurves(action):
                             pass
         except Exception:
             pass
+
+
+def _iter_action_fcurves_safe(action):
+    yield from _iter_action_fcurves(action)
+
+
+def _delete_action_keys_outside_range(action, start_frame, end_frame, log):
+    start_frame = float(start_frame)
+    end_frame = float(end_frame)
+    deleted = 0
+
+    for fcurve in _iter_action_fcurves_safe(action):
+        for key in list(reversed(fcurve.keyframe_points)):
+            frame = key.co.x
+
+            if frame < start_frame or frame > end_frame:
+                fcurve.keyframe_points.remove(key)
+                deleted += 1
+
+        fcurve.update()
+
+    log.append(
+        f"Deleted {deleted} keyframes outside range {int(start_frame)} -> {int(end_frame)}."
+    )
+    return deleted
+
+
+def _delete_action_keys_after_frame(action, frame, log):
+    frame = float(frame)
+    deleted = 0
+
+    for fcurve in _iter_action_fcurves_safe(action):
+        for key in list(reversed(fcurve.keyframe_points)):
+            if key.co.x > frame:
+                fcurve.keyframe_points.remove(key)
+                deleted += 1
+
+        fcurve.update()
+
+    log.append(f"Deleted {deleted} keyframes after frame {int(frame)}.")
+    return deleted
+
+
+def _shift_action_keys(action, delta, log):
+    if abs(delta) < 0.0001:
+        log.append("No action key shift needed.")
+        return 0
+
+    shifted = 0
+
+    for fcurve in _iter_action_fcurves_safe(action):
+        for key in fcurve.keyframe_points:
+            key.co.x += delta
+            key.handle_left.x += delta
+            key.handle_right.x += delta
+            shifted += 1
+
+        fcurve.update()
+
+    log.append(f"Shifted {shifted} keys by {delta} frames.")
+    return shifted
+
+
+def _count_keys_after_frame(action, frame):
+    frame = float(frame)
+    count = 0
+
+    for fcurve in _iter_action_fcurves_safe(action):
+        for key in fcurve.keyframe_points:
+            if key.co.x > frame:
+                count += 1
+
+    return count
 
 
 def _action_fcurve_count(action):
@@ -765,6 +839,250 @@ def _sample_source_pose(prefix, current_armature, source_armature, source_frame,
     return samples
 
 
+def _resolved_boundary_solve_mode(prefix, settings):
+    return "FULL_POSE_MATRIX"
+
+
+def _manual_template_boundary_prefix(settings):
+    head_is_manual = (
+        settings.enable_head_transition
+        and _source_rotation_enabled("HEAD", settings)
+    )
+    tail_is_manual = (
+        settings.enable_tail_transition
+        and _source_rotation_enabled("TAIL", settings)
+    )
+
+    if (head_is_manual or tail_is_manual) and not settings.manual_template_mode_when_rotated:
+        raise RuntimeError(
+            "Rotated source transitions require Manual Template Mode When Rotated."
+        )
+
+    if head_is_manual and tail_is_manual:
+        raise RuntimeError(
+            "Manual template mode supports one rotated boundary at a time. "
+            "Disable either Head or Tail rotation."
+        )
+
+    if head_is_manual:
+        return "HEAD"
+
+    if tail_is_manual:
+        return "TAIL"
+
+    return None
+
+
+def _compute_enabled_transition_range(settings, log):
+    body_start_in = int(settings.current_body_start)
+    body_end_in = int(settings.current_body_end)
+
+    if body_end_in < body_start_in:
+        raise RuntimeError(
+            f"Bad body range: {body_start_in} -> {body_end_in}"
+        )
+
+    output_start = int(settings.output_start_frame)
+
+    head_enabled = bool(settings.enable_head_transition)
+    tail_enabled = bool(settings.enable_tail_transition)
+
+    head_frames = int(settings.head_transition_frames) if head_enabled else 0
+    tail_frames = int(settings.tail_transition_frames) if tail_enabled else 0
+    tail_hold = int(settings.tail_hold_frames) if tail_enabled else 0
+
+    body_len = body_end_in - body_start_in + 1
+
+    body_start_out = output_start + head_frames
+    body_end_out = body_start_out + body_len - 1
+
+    if tail_enabled:
+        tail_target_out = body_end_out + tail_frames
+        output_end = tail_target_out + tail_hold
+    else:
+        tail_target_out = None
+        output_end = body_end_out
+
+    expected_length = body_len + head_frames + tail_frames + tail_hold
+    actual_length = output_end - output_start + 1
+
+    if actual_length != expected_length:
+        raise RuntimeError(
+            f"Frame math failed. expected={expected_length}, actual={actual_length}, "
+            f"body_in={body_start_in}->{body_end_in}, "
+            f"head_enabled={head_enabled}, head_frames={head_frames}, "
+            f"tail_enabled={tail_enabled}, tail_frames={tail_frames}, tail_hold={tail_hold}, "
+            f"body_out={body_start_out}->{body_end_out}, "
+            f"tail_target_out={tail_target_out}, "
+            f"output={output_start}->{output_end}"
+        )
+
+    if not head_enabled and body_start_out != output_start:
+        raise RuntimeError(
+            f"Head disabled but body_start_out moved. "
+            f"body_start_out={body_start_out}, output_start={output_start}"
+        )
+
+    if head_enabled and body_start_out != output_start + int(settings.head_transition_frames):
+        raise RuntimeError(
+            f"Head frame bug. body_start_out={body_start_out}, "
+            f"output_start={output_start}, head_transition_frames={settings.head_transition_frames}"
+        )
+
+    if tail_enabled and tail_target_out != body_end_out + int(settings.tail_transition_frames):
+        raise RuntimeError(
+            f"Tail frame bug. tail_target_out={tail_target_out}, "
+            f"body_end_out={body_end_out}, "
+            f"tail_transition_frames={settings.tail_transition_frames}"
+        )
+
+    log.append("ENABLED TRANSITION FRAME MATH")
+    log.append(f"  body_in:          {body_start_in} -> {body_end_in}")
+    log.append(f"  body_len:         {body_len}")
+    log.append(f"  output_start:     {output_start}")
+    log.append(f"  head_enabled:     {head_enabled}")
+    log.append(f"  head_frames:      {head_frames}")
+    log.append(f"  body_out:         {body_start_out} -> {body_end_out}")
+    log.append(f"  tail_enabled:     {tail_enabled}")
+    log.append(f"  tail_frames:      {tail_frames}")
+    log.append(f"  tail_hold:        {tail_hold}")
+    log.append(f"  tail_target_out:  {tail_target_out}")
+    log.append(f"  output_end:       {output_end}")
+    log.append(f"  expected_length:  {expected_length}")
+    log.append(f"  actual_length:    {actual_length}")
+
+    return {
+        "body_start_in": body_start_in,
+        "body_end_in": body_end_in,
+        "body_len": body_len,
+
+        "output_start": output_start,
+
+        "head_enabled": head_enabled,
+        "head_frames": head_frames,
+
+        "body_start_out": body_start_out,
+        "body_end_out": body_end_out,
+
+        "tail_enabled": tail_enabled,
+        "tail_frames": tail_frames,
+        "tail_hold": tail_hold,
+        "tail_target_out": tail_target_out,
+
+        "output_end": output_end,
+        "expected_length": expected_length,
+    }
+
+
+def _find_pose_bone_by_candidates(armature, candidates_string):
+    candidates = [
+        name.strip()
+        for name in candidates_string.split(",")
+        if name.strip()
+    ]
+
+    for name in candidates:
+        bone = armature.pose.bones.get(name)
+        if bone is not None:
+            return bone
+
+    lowered = {
+        bone.name.lower(): bone
+        for bone in armature.pose.bones
+    }
+
+    for name in candidates:
+        bone = lowered.get(name.lower())
+        if bone is not None:
+            return bone
+
+    return None
+
+
+def _required_landmark_bones(armature, settings, prefix, role):
+    landmark_specs = [
+        ("head", "head bone", settings.head_bone_candidates),
+        ("left_hand", "left hand bone", settings.left_hand_bone_candidates),
+        ("right_hand", "right hand bone", settings.right_hand_bone_candidates),
+        ("left_foot", "left foot bone", settings.left_foot_bone_candidates),
+        ("right_foot", "right foot bone", settings.right_foot_bone_candidates),
+    ]
+
+    bones = {}
+
+    for key, label, candidates in landmark_specs:
+        bone = _find_pose_bone_by_candidates(armature, candidates)
+
+        if bone is None:
+            raise RuntimeError(
+                f"{prefix} IK landmark solve failed: {role} {label} not found."
+            )
+
+        bones[key] = bone
+
+    return bones
+
+
+def _sample_source_landmark_targets(
+    prefix,
+    current_armature,
+    source_armature,
+    source_frame,
+    settings,
+    label,
+    log,
+):
+    bpy.context.scene.frame_set(int(source_frame))
+    bpy.context.view_layer.update()
+
+    rotate_source = _source_rotation_enabled(prefix, settings)
+    source_rot_matrix = _source_rotation_matrix(
+        prefix,
+        current_armature,
+        source_armature,
+        settings,
+    )
+
+    x_degrees, y_degrees, z_degrees, pivot_mode = _source_rotation_values(prefix, settings)
+
+    log.append(f"{prefix} source rotation: {'ON' if rotate_source else 'OFF'}")
+    log.append(f"{prefix} rotation pivot: {pivot_mode}")
+
+    if rotate_source:
+        log.append(f"{prefix} ROTATION ROUTE: IK_LANDMARK_TARGETS")
+        log.append(
+            f"{prefix} rotation values: "
+            f"x={x_degrees:g}, y={y_degrees:g}, z={z_degrees:g}, "
+            f"pivot={pivot_mode}"
+        )
+
+    source_bones = _required_landmark_bones(
+        armature=source_armature,
+        settings=settings,
+        prefix=prefix,
+        role="source",
+    )
+
+    log.append(f"{prefix} landmark bones:")
+    for key in ("head", "left_hand", "right_hand", "left_foot", "right_foot"):
+        log.append(f"  {key} = {source_bones[key].name}")
+
+    targets = {}
+
+    for key, source_pose_bone in source_bones.items():
+        targets[key] = (
+            source_rot_matrix
+            @ source_armature.matrix_world
+            @ source_pose_bone.matrix
+        ).copy()
+
+    log.append(
+        f"Sampled {len(targets)} IK landmark targets from {label} at frame {source_frame}."
+    )
+
+    return targets
+
+
 # ============================================================
 # Apply pose samples
 # ============================================================
@@ -867,6 +1185,216 @@ def _apply_pose_and_key(current_armature, pose_sample, output_frame, settings, l
         keyed += 1
 
     log.append(f"Applied/keyed {label} at output frame {output_frame}. matched_bones={matched}, keyed_bones={keyed}")
+
+
+def _create_world_empty(name, matrix_world):
+    empty = bpy.data.objects.new(name, None)
+    empty.empty_display_type = "SPHERE"
+    empty.empty_display_size = 0.06
+    bpy.context.scene.collection.objects.link(empty)
+    empty.matrix_world = matrix_world
+    return empty
+
+
+def _add_ik_constraint(pose_bone, target_empty, chain_count):
+    constraint = pose_bone.constraints.new(type="IK")
+    constraint.name = "GRAVITAS_TEMP_IK"
+    constraint.target = target_empty
+    constraint.chain_count = int(chain_count)
+    return constraint
+
+
+def _remove_temp_ik_constraints(constraints):
+    for pose_bone, constraint in constraints:
+        try:
+            pose_bone.constraints.remove(constraint)
+        except Exception:
+            pass
+
+
+def _remove_temp_empties(empties):
+    for empty in empties:
+        if empty is not None and empty.name in bpy.data.objects:
+            try:
+                bpy.data.objects.remove(empty, do_unlink=True)
+            except Exception:
+                pass
+
+
+def _apply_head_target(current_armature, current_head_bone, target_head_world_matrix):
+    target_armature_space = (
+        current_armature.matrix_world.inverted()
+        @ target_head_world_matrix
+    )
+
+    current_head_bone.matrix = target_armature_space
+
+
+def _apply_pose_sample_without_key(current_armature, pose_sample, settings):
+    for pose_bone in _pose_bones_parent_first(current_armature):
+        sample = pose_sample.get(pose_bone.name)
+
+        if sample is None:
+            continue
+
+        _apply_sample_to_current_bone(
+            current_armature=current_armature,
+            pose_bone=pose_bone,
+            bone_name=pose_bone.name,
+            sample=sample,
+            settings=settings,
+        )
+
+    bpy.context.view_layer.update()
+
+
+def _apply_solved_matrices_as_fk(current_armature, solved_matrices):
+    for pose_bone in _pose_bones_parent_first(current_armature):
+        solved_matrix = solved_matrices.get(pose_bone.name)
+
+        if solved_matrix is not None:
+            pose_bone.matrix = solved_matrix
+
+    bpy.context.view_layer.update()
+
+
+def _apply_ik_landmark_pose_and_key(
+    current_armature,
+    targets,
+    output_frame,
+    settings,
+    label,
+    log,
+    prefix,
+    base_pose_sample,
+):
+    scene = bpy.context.scene
+    scene.frame_set(int(output_frame))
+    bpy.context.view_layer.update()
+
+    if base_pose_sample is not None:
+        _apply_pose_sample_without_key(
+            current_armature=current_armature,
+            pose_sample=base_pose_sample,
+            settings=settings,
+        )
+
+    current_bones = _required_landmark_bones(
+        armature=current_armature,
+        settings=settings,
+        prefix=prefix,
+        role="current",
+    )
+
+    log.append(f"{prefix} current IK landmark bones:")
+    for key in ("head", "left_hand", "right_hand", "left_foot", "right_foot"):
+        log.append(f"  {key} = {current_bones[key].name}")
+
+    empties = []
+    constraints = []
+
+    try:
+        left_hand_empty = _create_world_empty(
+            f"GRAVITAS_TEMP_{prefix}_LEFT_HAND_TARGET",
+            targets["left_hand"],
+        )
+        right_hand_empty = _create_world_empty(
+            f"GRAVITAS_TEMP_{prefix}_RIGHT_HAND_TARGET",
+            targets["right_hand"],
+        )
+        left_foot_empty = _create_world_empty(
+            f"GRAVITAS_TEMP_{prefix}_LEFT_FOOT_TARGET",
+            targets["left_foot"],
+        )
+        right_foot_empty = _create_world_empty(
+            f"GRAVITAS_TEMP_{prefix}_RIGHT_FOOT_TARGET",
+            targets["right_foot"],
+        )
+
+        empties.extend([
+            left_hand_empty,
+            right_hand_empty,
+            left_foot_empty,
+            right_foot_empty,
+        ])
+
+        constraints.append((
+            current_bones["left_hand"],
+            _add_ik_constraint(
+                current_bones["left_hand"],
+                left_hand_empty,
+                settings.left_hand_ik_chain_count,
+            ),
+        ))
+        constraints.append((
+            current_bones["right_hand"],
+            _add_ik_constraint(
+                current_bones["right_hand"],
+                right_hand_empty,
+                settings.right_hand_ik_chain_count,
+            ),
+        ))
+        constraints.append((
+            current_bones["left_foot"],
+            _add_ik_constraint(
+                current_bones["left_foot"],
+                left_foot_empty,
+                settings.left_foot_ik_chain_count,
+            ),
+        ))
+        constraints.append((
+            current_bones["right_foot"],
+            _add_ik_constraint(
+                current_bones["right_foot"],
+                right_foot_empty,
+                settings.right_foot_ik_chain_count,
+            ),
+        ))
+
+        log.append(f"{prefix} IK constraints created: {len(constraints)}")
+
+        scene.frame_set(int(output_frame))
+        bpy.context.view_layer.update()
+
+        _apply_head_target(
+            current_armature=current_armature,
+            current_head_bone=current_bones["head"],
+            target_head_world_matrix=targets["head"],
+        )
+
+        bpy.context.view_layer.update()
+
+        solved_matrices = {
+            pose_bone.name: pose_bone.matrix.copy()
+            for pose_bone in current_armature.pose.bones
+        }
+
+    finally:
+        _remove_temp_ik_constraints(constraints)
+        _remove_temp_empties(empties)
+        bpy.context.view_layer.update()
+        log.append(f"{prefix} temporary IK constraints removed")
+
+    _apply_solved_matrices_as_fk(
+        current_armature=current_armature,
+        solved_matrices=solved_matrices,
+    )
+
+    keyed = 0
+
+    for pose_bone in current_armature.pose.bones:
+        bone_name = pose_bone.name
+
+        if not _include_bone(bone_name, settings):
+            continue
+
+        _key_enabled_channels(pose_bone, bone_name, settings, int(output_frame))
+        keyed += 1
+
+    log.append(
+        f"{prefix} IK solved and baked to FK keys at frame {output_frame}. keyed_bones={keyed}"
+    )
+    log.append(f"Applied/keyed {label} at output frame {output_frame}.")
 
 
 # ============================================================
@@ -1040,6 +1568,441 @@ def _delete_temp_objects(imported_objects, collection, existing_action_names, lo
 
 
 # ============================================================
+# Manual template setup
+# ============================================================
+
+def _source_settings_for_prefix(prefix, settings):
+    if prefix == "HEAD":
+        return (
+            settings.head_source_path,
+            settings.head_source_frame_mode,
+            settings.head_custom_frame,
+            "HEAD/PREVIOUS",
+        )
+
+    return (
+        settings.tail_source_path,
+        settings.tail_source_frame_mode,
+        settings.tail_custom_frame,
+        "TAIL/NEXT",
+    )
+
+
+def _manual_target_frame_for_prefix(prefix, timing):
+    if prefix == "HEAD":
+        return timing["output_start"]
+
+    return timing["tail_target_out"]
+
+
+def _imported_root_objects(imported_objects):
+    imported_set = set(imported_objects)
+
+    return [
+        obj
+        for obj in imported_objects
+        if obj.parent not in imported_set
+    ]
+
+
+def _remove_template_collection():
+    collection = bpy.data.collections.get(TEMPLATE_COLLECTION_NAME)
+
+    if collection is None:
+        return
+
+    for obj in list(collection.objects):
+        try:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        except Exception:
+            pass
+
+    try:
+        bpy.data.collections.remove(collection)
+    except Exception:
+        pass
+
+
+def _template_material(label, opacity):
+    material = bpy.data.materials.new(f"GRAVITAS_TEMPLATE_{label}_Material")
+    material.diffuse_color = (0.25, 0.8, 1.0, opacity)
+
+    if hasattr(material, "use_nodes"):
+        material.use_nodes = True
+
+        principled = material.node_tree.nodes.get("Principled BSDF")
+        if principled is not None:
+            alpha_input = principled.inputs.get("Alpha")
+            base_color_input = principled.inputs.get("Base Color")
+
+            if alpha_input is not None:
+                alpha_input.default_value = opacity
+
+            if base_color_input is not None:
+                base_color_input.default_value = (0.25, 0.8, 1.0, opacity)
+
+    if hasattr(material, "blend_method"):
+        material.blend_method = "BLEND"
+
+    if hasattr(material, "show_transparent_back"):
+        material.show_transparent_back = True
+
+    return material
+
+
+def _apply_template_display(template, display_mode, material):
+    if display_mode == "WIRE":
+        template.display_type = "WIRE"
+    elif display_mode == "SOLID":
+        template.display_type = "SOLID"
+    else:
+        template.display_type = "TEXTURED"
+
+        if material is not None:
+            template.data.materials.append(material)
+
+    template.show_in_front = True
+    template.hide_render = True
+
+
+def _create_static_template_from_imported_objects(
+    context,
+    imported_objects,
+    template_collection_name,
+    label,
+    opacity,
+    display_mode,
+    log,
+):
+    depsgraph = context.evaluated_depsgraph_get()
+
+    template_collection = bpy.data.collections.get(template_collection_name)
+    if template_collection is None:
+        template_collection = bpy.data.collections.new(template_collection_name)
+        context.scene.collection.children.link(template_collection)
+
+    material = None
+
+    if display_mode == "TEXTURED_TRANSPARENT":
+        material = _template_material(label, opacity)
+
+    template_objects = []
+
+    for obj in imported_objects:
+        if obj.type != "MESH":
+            continue
+
+        evaluated = obj.evaluated_get(depsgraph)
+
+        mesh = bpy.data.meshes.new_from_object(
+            evaluated,
+            depsgraph=depsgraph,
+        )
+
+        template = bpy.data.objects.new(
+            f"GRAVITAS_TEMPLATE_{label}_{obj.name}",
+            mesh,
+        )
+
+        template.matrix_world = evaluated.matrix_world.copy()
+        _apply_template_display(template, display_mode, material)
+
+        template_collection.objects.link(template)
+        template_objects.append(template)
+
+    log.append(
+        f"Created {len(template_objects)} static template mesh objects for {label}."
+    )
+
+    return template_objects
+
+
+def _hide_template_collection_for_export(log):
+    collection = bpy.data.collections.get(TEMPLATE_COLLECTION_NAME)
+
+    if collection is None:
+        return
+
+    collection.hide_render = True
+
+    for obj in collection.objects:
+        obj.hide_render = True
+        obj.hide_set(True)
+
+    log.append("Template collection hidden for export.")
+
+
+def _sample_current_body(current_armature, source_action, settings, timing, log):
+    current_armature.animation_data.action = source_action
+
+    body_samples = []
+
+    for source_frame in range(
+        timing["body_start_in"],
+        timing["body_end_in"] + 1,
+    ):
+        body_log = (
+            log
+            if source_frame in (
+                timing["body_start_in"],
+                timing["body_end_in"],
+            )
+            else []
+        )
+        sample = _sample_local_pose(
+            armature=current_armature,
+            frame=source_frame,
+            settings=settings,
+            label="CURRENT BODY",
+            log=body_log,
+        )
+
+        body_samples.append((source_frame, sample))
+
+    log.append(f"Sampled current body frames into memory: {len(body_samples)} frames.")
+    return body_samples
+
+
+def _create_padded_action_for_manual_template(
+    current_armature,
+    source_action,
+    settings,
+    timing,
+    manual_prefix,
+    log,
+):
+    body_samples = _sample_current_body(
+        current_armature=current_armature,
+        source_action=source_action,
+        settings=settings,
+        timing=timing,
+        log=log,
+    )
+
+    current_first_sample = body_samples[0][1]
+    current_last_sample = body_samples[-1][1]
+
+    output_action_name = settings.output_action_name.strip()
+
+    if not output_action_name:
+        output_action_name = f"{source_action.name}_manual_template"
+
+    output_action = source_action.copy()
+    output_action.name = output_action_name
+    output_action.use_fake_user = True
+
+    current_armature.animation_data_create()
+    current_armature.animation_data.action = output_action
+
+    log.append("")
+    log.append(f"Copied current action for manual-template padding: {output_action.name}")
+
+    _delete_action_keys_outside_range(
+        action=output_action,
+        start_frame=timing["body_start_in"],
+        end_frame=timing["body_end_in"],
+        log=log,
+    )
+
+    shift_delta = timing["body_start_out"] - timing["body_start_in"]
+
+    _shift_action_keys(
+        action=output_action,
+        delta=shift_delta,
+        log=log,
+    )
+
+    if manual_prefix == "HEAD" and timing["head_frames"] > 0:
+        _apply_pose_and_key(
+            current_armature=current_armature,
+            pose_sample=current_first_sample,
+            output_frame=timing["output_start"],
+            settings=settings,
+            label="HEAD manual placeholder pose",
+            log=log,
+        )
+
+    _apply_pose_and_key(
+        current_armature=current_armature,
+        pose_sample=current_first_sample,
+        output_frame=timing["body_start_out"],
+        settings=settings,
+        label="CURRENT first body pose",
+        log=log,
+    )
+
+    if manual_prefix == "TAIL":
+        _apply_pose_and_key(
+            current_armature=current_armature,
+            pose_sample=current_last_sample,
+            output_frame=timing["body_end_out"],
+            settings=settings,
+            label="CURRENT last body pose",
+            log=log,
+        )
+
+        _delete_action_keys_after_frame(
+            action=output_action,
+            frame=timing["body_end_out"],
+            log=log,
+        )
+
+    if manual_prefix == "TAIL":
+        _apply_pose_and_key(
+            current_armature=current_armature,
+            pose_sample=current_last_sample,
+            output_frame=timing["tail_target_out"],
+            settings=settings,
+            label="TAIL manual placeholder pose",
+            log=log,
+        )
+
+        if timing["tail_hold"] > 0:
+            _apply_pose_and_key(
+                current_armature=current_armature,
+                pose_sample=current_last_sample,
+                output_frame=timing["output_end"],
+                settings=settings,
+                label="TAIL manual hold placeholder pose",
+                log=log,
+            )
+
+    changed = _set_interpolation_for_all_keys(output_action, settings.interpolation)
+    log.append(f"Set interpolation {settings.interpolation} on {changed} keyframes.")
+
+    _hard_clamp_action_to_output_range(
+        action=output_action,
+        output_start=timing["output_start"],
+        output_end=timing["output_end"],
+        log=log,
+    )
+
+    _force_exact_export_range(
+        context=bpy.context,
+        action=output_action,
+        start_frame=timing["output_start"],
+        end_frame=timing["output_end"],
+        log=log,
+    )
+
+    return output_action
+
+
+def _build_padding_and_template(
+    context,
+    current_armature,
+    source_action,
+    settings,
+    log,
+):
+    manual_prefix = _manual_template_boundary_prefix(settings)
+
+    if manual_prefix is None:
+        raise RuntimeError(
+            "Manual template setup requires a rotated enabled Head or Tail source."
+        )
+
+    timing = _compute_enabled_transition_range(settings, log)
+
+    manual_target_frame = _manual_target_frame_for_prefix(manual_prefix, timing)
+
+    if manual_target_frame is None:
+        raise RuntimeError(f"{manual_prefix} manual target frame could not be computed.")
+
+    settings.manual_template_target_frame = int(manual_target_frame)
+    settings.computed_output_start_frame = int(timing["output_start"])
+    settings.computed_output_end_frame = int(timing["output_end"])
+
+    output_action = _create_padded_action_for_manual_template(
+        current_armature=current_armature,
+        source_action=source_action,
+        settings=settings,
+        timing=timing,
+        manual_prefix=manual_prefix,
+        log=log,
+    )
+
+    source_path, source_frame_mode, custom_frame, source_label = _source_settings_for_prefix(
+        manual_prefix,
+        settings,
+    )
+
+    temp_collection = _create_or_replace_temp_collection(context)
+    imported_objects = []
+    existing_action_names = set(bpy.data.actions.keys())
+
+    try:
+        imported_objects, source_armature, source_range, source_existing_actions = _import_source(
+            context=context,
+            filepath=source_path,
+            collection=temp_collection,
+            label=source_label,
+            log=log,
+        )
+        existing_action_names.update(source_existing_actions)
+
+        source_frame = _resolve_source_frame(
+            mode=source_frame_mode,
+            custom_frame=custom_frame,
+            detected_range=source_range,
+            label=source_label,
+            log=log,
+        )
+
+        context.scene.frame_set(int(source_frame))
+        context.view_layer.update()
+
+        rotation_matrix = _source_rotation_matrix(
+            manual_prefix,
+            current_armature,
+            source_armature,
+            settings,
+        )
+
+        root_objects = _imported_root_objects(imported_objects)
+
+        for root_object in root_objects:
+            root_object.matrix_world = rotation_matrix @ root_object.matrix_world
+
+        context.view_layer.update()
+
+        log.append(
+            f"{manual_prefix} manual template source rotated as object hierarchy. "
+            f"root_objects={len(root_objects)}"
+        )
+
+        _remove_template_collection()
+        _create_static_template_from_imported_objects(
+            context=context,
+            imported_objects=imported_objects,
+            template_collection_name=TEMPLATE_COLLECTION_NAME,
+            label=manual_prefix,
+            opacity=settings.template_opacity,
+            display_mode=settings.template_display,
+            log=log,
+        )
+
+    finally:
+        _delete_temp_objects(
+            imported_objects,
+            temp_collection,
+            existing_action_names,
+            log,
+        )
+
+    current_armature.animation_data.action = output_action
+    context.scene.frame_set(int(manual_target_frame))
+    context.view_layer.update()
+
+    log.append(
+        f"{manual_prefix} manual template ready at frame {manual_target_frame}. "
+        "Pose/key the current rig against the ghost, then run Finalize Manual Key + Export."
+    )
+
+    return timing
+
+
+# ============================================================
 # Frame range / export
 # ============================================================
 
@@ -1064,6 +2027,50 @@ def _force_frame_range(context, action, start_frame, end_frame, log):
     bpy.context.view_layer.update()
 
     log.append(f"FORCED SCENE/ACTION FRAME RANGE: {start_frame} -> {end_frame}")
+
+
+def _force_exact_export_range(context, action, start_frame, end_frame, log):
+    start_frame = int(start_frame)
+    end_frame = int(end_frame)
+
+    context.scene.frame_start = start_frame
+    context.scene.frame_end = end_frame
+    context.scene.frame_set(start_frame)
+
+    if action is not None:
+        if hasattr(action, "use_frame_range"):
+            action.use_frame_range = True
+
+        if hasattr(action, "frame_start"):
+            action.frame_start = float(start_frame)
+
+        if hasattr(action, "frame_end"):
+            action.frame_end = float(end_frame)
+
+    bpy.context.view_layer.update()
+
+    log.append(f"FORCED EXACT EXPORT RANGE: {start_frame} -> {end_frame}")
+
+
+def _hard_clamp_action_to_output_range(action, output_start, output_end, log):
+    _delete_action_keys_outside_range(
+        action=action,
+        start_frame=output_start,
+        end_frame=output_end,
+        log=log,
+    )
+    _delete_action_keys_after_frame(
+        action=action,
+        frame=output_end,
+        log=log,
+    )
+
+    extra_keys = _count_keys_after_frame(action, output_end)
+
+    if extra_keys > 0:
+        raise RuntimeError(
+            f"Export would still include extra frames: {extra_keys} keys exist after output_end={output_end}"
+        )
 
 
 def _export_usd(context, filepath, current_armature, selected_only, log):
@@ -1179,6 +2186,16 @@ class GravitasExplicitStitcherSettingsV17(PropertyGroup):
         max=240,
     )
 
+    head_solve_mode: EnumProperty(
+        name="Head Solve Mode",
+        items=[
+            ("AUTO", "Auto", "Use IK landmarks when source rotation is enabled, otherwise use full pose matrix."),
+            ("FULL_POSE_MATRIX", "Full Pose Matrix", "Use the existing v1.7 full source-pose matrix path."),
+            ("IK_LANDMARKS", "IK Landmarks", "Use landmark targets and bake the IK result to FK keys."),
+        ],
+        default="AUTO",
+    )
+
     tail_source_path: StringProperty(
         name="Tail / Next Source File",
         subtype="FILE_PATH",
@@ -1219,6 +2236,16 @@ class GravitasExplicitStitcherSettingsV17(PropertyGroup):
     enable_tail_transition: BoolProperty(
         name="Enable Tail Transition",
         default=True,
+    )
+
+    tail_solve_mode: EnumProperty(
+        name="Tail Solve Mode",
+        items=[
+            ("AUTO", "Auto", "Use IK landmarks when source rotation is enabled, otherwise use full pose matrix."),
+            ("FULL_POSE_MATRIX", "Full Pose Matrix", "Use the existing v1.7 full source-pose matrix path."),
+            ("IK_LANDMARKS", "IK Landmarks", "Use landmark targets and bake the IK result to FK keys."),
+        ],
+        default="AUTO",
     )
 
     head_enable_source_rotation: BoolProperty(
@@ -1306,6 +2333,59 @@ class GravitasExplicitStitcherSettingsV17(PropertyGroup):
         default="finger,thumb,index,middle,ring,pinky",
     )
 
+    head_bone_candidates: StringProperty(
+        name="Head Bone",
+        default="Head,head,mixamorig:Head",
+    )
+
+    left_hand_bone_candidates: StringProperty(
+        name="Left Hand Bone",
+        default="LeftHand,hand_L,Hand_L,mixamorig:LeftHand",
+    )
+
+    right_hand_bone_candidates: StringProperty(
+        name="Right Hand Bone",
+        default="RightHand,hand_R,Hand_R,mixamorig:RightHand",
+    )
+
+    left_foot_bone_candidates: StringProperty(
+        name="Left Foot Bone",
+        default="LeftFoot,foot_L,Foot_L,mixamorig:LeftFoot",
+    )
+
+    right_foot_bone_candidates: StringProperty(
+        name="Right Foot Bone",
+        default="RightFoot,foot_R,Foot_R,mixamorig:RightFoot",
+    )
+
+    left_hand_ik_chain_count: IntProperty(
+        name="Left Hand IK Chain Count",
+        default=2,
+        min=1,
+        max=16,
+    )
+
+    right_hand_ik_chain_count: IntProperty(
+        name="Right Hand IK Chain Count",
+        default=2,
+        min=1,
+        max=16,
+    )
+
+    left_foot_ik_chain_count: IntProperty(
+        name="Left Foot IK Chain Count",
+        default=2,
+        min=1,
+        max=16,
+    )
+
+    right_foot_ik_chain_count: IntProperty(
+        name="Right Foot IK Chain Count",
+        default=2,
+        min=1,
+        max=16,
+    )
+
     interpolation: EnumProperty(
         name="Interpolation",
         items=[
@@ -1340,6 +2420,49 @@ class GravitasExplicitStitcherSettingsV17(PropertyGroup):
     write_log_text: BoolProperty(
         name="Write Log Text Block",
         default=True,
+    )
+
+    manual_template_mode_when_rotated: BoolProperty(
+        name="Manual Template Mode When Rotated",
+        default=True,
+    )
+
+    template_display: EnumProperty(
+        name="Template Display",
+        items=[
+            ("SOLID", "Solid", "Display the template as solid viewport geometry."),
+            ("WIRE", "Wire", "Display the template as wire geometry."),
+            ("TEXTURED_TRANSPARENT", "Textured Transparent", "Display the template with transparent material."),
+        ],
+        default="TEXTURED_TRANSPARENT",
+    )
+
+    template_opacity: FloatProperty(
+        name="Template Opacity",
+        default=0.35,
+        min=0.0,
+        max=1.0,
+    )
+
+    manual_template_target_frame: IntProperty(
+        name="Manual Template Target Frame",
+        default=1,
+        min=-100000,
+        max=100000,
+    )
+
+    computed_output_start_frame: IntProperty(
+        name="Computed Output Start",
+        default=1,
+        min=-100000,
+        max=100000,
+    )
+
+    computed_output_end_frame: IntProperty(
+        name="Computed Output End",
+        default=1,
+        min=-100000,
+        max=100000,
     )
 
 
@@ -1382,6 +2505,192 @@ class GRAVITAS_OT_explicit_stitcher_capture_body_range_v17(Operator):
         )
 
         return {"FINISHED"}
+
+
+class GRAVITAS_OT_build_padding_and_template_v17(Operator):
+    bl_idname = "gravitas.build_padding_and_template_v17"
+    bl_label = "Build Padding + Template"
+    bl_description = "Builds padded placeholder keys and a rotated static source template for manual posing."
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.gravitas_explicit_stitcher_v17
+
+        log = []
+        success = False
+
+        active_name, selected_names = _stash_selection(context)
+
+        try:
+            _force_object_mode()
+
+            log.append("============================================================")
+            log.append("Gravitas Manual Template Setup v1.7")
+            log.append("============================================================")
+
+            current_armature = _find_armature_from_selection_or_parent(context)
+
+            if current_armature is None:
+                raise RuntimeError(
+                    "No Armature found under the current selection. "
+                    "Select the top imported parent/group/empty that contains the character."
+                )
+
+            source_action = _ensure_action(current_armature)
+
+            if source_action is None:
+                raise RuntimeError(
+                    f"Detected armature '{current_armature.name}' has no active animation action."
+                )
+
+            log.append(f"Detected current armature: {current_armature.name}")
+            log.append(f"Detected current action: {source_action.name}")
+
+            _build_padding_and_template(
+                context=context,
+                current_armature=current_armature,
+                source_action=source_action,
+                settings=settings,
+                log=log,
+            )
+
+            _safe_report(
+                self,
+                {"INFO"},
+                f"Manual template ready at frame {settings.manual_template_target_frame}.",
+            )
+
+            success = True
+
+        except Exception as error:
+            log.append("")
+            log.append("ERROR")
+            log.append(str(error))
+            log.append("")
+            log.append(traceback.format_exc())
+
+            _safe_report(self, {"ERROR"}, str(error))
+
+        finally:
+            _restore_selection(context, active_name, selected_names)
+
+            if settings.write_log_text:
+                _write_log(log)
+
+        return {"FINISHED"} if success else {"CANCELLED"}
+
+
+class GRAVITAS_OT_finalize_manual_key_and_export_v17(Operator):
+    bl_idname = "gravitas.finalize_manual_key_and_export_v17"
+    bl_label = "Finalize Manual Key + Export"
+    bl_description = "Keys the current manual pose, hides the template, forces the output range, and exports the current hierarchy."
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.gravitas_explicit_stitcher_v17
+
+        log = []
+        success = False
+
+        active_name, selected_names = _stash_selection(context)
+
+        try:
+            _force_object_mode()
+
+            log.append("============================================================")
+            log.append("Gravitas Finalize Manual Key + Export v1.7")
+            log.append("============================================================")
+
+            current_armature = _find_armature_from_selection_or_parent(context)
+
+            if current_armature is None:
+                raise RuntimeError(
+                    "No Armature found under the current selection. "
+                    "Select the top imported parent/group/empty that contains the character."
+                )
+
+            action = _ensure_action(current_armature)
+
+            if action is None:
+                raise RuntimeError(
+                    f"Detected armature '{current_armature.name}' has no active animation action."
+                )
+
+            manual_frame = int(settings.manual_template_target_frame)
+
+            context.scene.frame_set(manual_frame)
+            context.view_layer.update()
+
+            keyed = 0
+
+            for pose_bone in current_armature.pose.bones:
+                bone_name = pose_bone.name
+
+                if not _include_bone(bone_name, settings):
+                    continue
+
+                _key_enabled_channels(pose_bone, bone_name, settings, manual_frame)
+                keyed += 1
+
+            log.append(f"Finalized manual FK key at frame {manual_frame}. keyed_bones={keyed}")
+
+            output_start = int(settings.computed_output_start_frame)
+            output_end = int(settings.computed_output_end_frame)
+
+            if output_end < output_start:
+                raise RuntimeError(
+                    f"Computed output range is invalid: {output_start} -> {output_end}."
+                )
+
+            _hard_clamp_action_to_output_range(
+                action=action,
+                output_start=output_start,
+                output_end=output_end,
+                log=log,
+            )
+
+            _force_exact_export_range(
+                context=context,
+                action=action,
+                start_frame=output_start,
+                end_frame=output_end,
+                log=log,
+            )
+
+            _hide_template_collection_for_export(log)
+
+            _export_usd(
+                context=context,
+                filepath=settings.export_path,
+                current_armature=current_armature,
+                selected_only=True,
+                log=log,
+            )
+
+            _safe_report(
+                self,
+                {"INFO"},
+                f"Finalized frame {manual_frame} and exported {output_start}->{output_end}.",
+            )
+
+            success = True
+
+        except Exception as error:
+            log.append("")
+            log.append("ERROR")
+            log.append(str(error))
+            log.append("")
+            log.append(traceback.format_exc())
+
+            _safe_report(self, {"ERROR"}, str(error))
+
+        finally:
+            _restore_selection(context, active_name, selected_names)
+
+            if settings.write_log_text:
+                _write_log(log)
+
+        return {"FINISHED"} if success else {"CANCELLED"}
 
 
 class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
@@ -1436,116 +2745,110 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
             else:
                 log.append("Detected current action key range: none")
 
-            body_start_in = int(settings.current_body_start)
-            body_end_in = int(settings.current_body_end)
+            manual_prefix = _manual_template_boundary_prefix(settings)
 
-            if body_end_in <= body_start_in:
-                raise RuntimeError(
-                    f"Current Body End must be greater than Current Body Start. "
-                    f"Got {body_start_in} -> {body_end_in}."
+            if manual_prefix is not None:
+                log.append(
+                    f"{manual_prefix} source rotation is enabled; building manual template instead of auto-solving."
+                )
+                _build_padding_and_template(
+                    context=context,
+                    current_armature=current_armature,
+                    source_action=source_action,
+                    settings=settings,
+                    log=log,
                 )
 
-            output_start = int(settings.output_start_frame)
-            body_frame_count = body_end_in - body_start_in + 1
-
-            head_frames = (
-                int(settings.head_transition_frames)
-                if settings.enable_head_transition
-                else 0
-            )
-            tail_frames = (
-                int(settings.tail_transition_frames)
-                if settings.enable_tail_transition
-                else 0
-            )
-            tail_hold_frames = (
-                int(settings.tail_hold_frames)
-                if settings.enable_tail_transition
-                else 0
-            )
-
-            body_start_out = output_start + head_frames
-            body_end_out = body_start_out + body_frame_count - 1
-
-            if settings.enable_tail_transition:
-                tail_target_out = body_end_out + tail_frames
-                output_end = tail_target_out + tail_hold_frames
-            else:
-                tail_target_out = None
-                output_end = body_end_out
-
-            expected_output_length = (
-                body_frame_count
-                + head_frames
-                + tail_frames
-                + tail_hold_frames
-            )
-            actual_output_length = output_end - output_start + 1
-
-            if actual_output_length != expected_output_length:
-                raise RuntimeError(
-                    f"Bad output frame math. Expected {expected_output_length}, "
-                    f"got {actual_output_length}. "
-                    f"output_start={output_start}, "
-                    f"body_start_out={body_start_out}, "
-                    f"body_end_out={body_end_out}, "
-                    f"tail_target_out={tail_target_out}, "
-                    f"output_end={output_end}"
+                _safe_report(
+                    self,
+                    {"INFO"},
+                    f"Manual template ready at frame {settings.manual_template_target_frame}.",
                 )
 
-            log.append("")
-            log.append("EXPLICIT OUTPUT RANGE")
-            log.append(f"  current body input: {body_start_in} -> {body_end_in}")
-            log.append(f"  output start:       {output_start}")
-            log.append(f"  head frames:        {head_frames}")
-            log.append(f"  body output:        {body_start_out} -> {body_end_out}")
-            log.append(f"  tail target:        {tail_target_out}")
-            log.append(f"  tail frames:        {tail_frames}")
-            log.append(f"  tail hold frames:   {tail_hold_frames}")
-            log.append(f"  output end:         {output_end}")
-            log.append(f"  output length:      {actual_output_length}")
-            log.append(f"body_start_out = {body_start_out}")
-            log.append(f"body_end_out = {body_end_out}")
-            log.append(f"tail_target_out = {tail_target_out}")
-            log.append(f"output_end = {output_end}")
-            log.append(f"expected_output_length = {expected_output_length}")
-            log.append(f"actual_output_length = {actual_output_length}")
+                success = True
+                return {"FINISHED"}
+
+            ranges = _compute_enabled_transition_range(settings, log)
+
+            body_start_in = ranges["body_start_in"]
+            body_end_in = ranges["body_end_in"]
+            output_start = ranges["output_start"]
+            head_enabled = ranges["head_enabled"]
+            head_frames = ranges["head_frames"]
+            tail_enabled = ranges["tail_enabled"]
+            tail_frames = ranges["tail_frames"]
+            tail_hold = ranges["tail_hold"]
+            body_start_out = ranges["body_start_out"]
+            body_end_out = ranges["body_end_out"]
+            tail_target_out = ranges["tail_target_out"]
+            output_end = ranges["output_end"]
 
             # ------------------------------------------------
-            # 1. Sample current body into memory.
+            # 1. Sample current boundary poses.
             # ------------------------------------------------
-
             current_armature.animation_data.action = source_action
 
-            body_samples = []
-
-            for source_frame in range(body_start_in, body_end_in + 1):
-                body_log = log if source_frame in (body_start_in, body_end_in) else []
-                sample = _sample_local_pose(
-                    armature=current_armature,
-                    frame=source_frame,
-                    settings=settings,
-                    label="CURRENT BODY",
-                    log=body_log,
-                )
-
-                body_samples.append((source_frame, sample))
-
-            log.append(f"Sampled current body frames into memory: {len(body_samples)} frames.")
-
-            current_first_sample = body_samples[0][1]
-            current_last_sample = body_samples[-1][1]
+            current_first_sample = _sample_local_pose(
+                armature=current_armature,
+                frame=body_start_in,
+                settings=settings,
+                label="CURRENT BODY FIRST",
+                log=log,
+            )
+            current_last_sample = _sample_local_pose(
+                armature=current_armature,
+                frame=body_end_in,
+                settings=settings,
+                label="CURRENT BODY LAST",
+                log=log,
+            )
 
             # ------------------------------------------------
-            # 2. Import/sample head and tail sources.
+            # 2. Copy, trim, and shift the current body action.
+            # ------------------------------------------------
+
+            output_action_name = settings.output_action_name.strip()
+
+            if not output_action_name:
+                output_action_name = f"{source_action.name}_explicit_head_tail"
+
+            output_action = source_action.copy()
+            output_action.name = output_action_name
+            output_action.use_fake_user = True
+
+            current_armature.animation_data_create()
+            current_armature.animation_data.action = output_action
+
+            log.append("")
+            log.append(f"Copied current action for stitched output: {output_action.name}")
+
+            _delete_action_keys_outside_range(
+                action=output_action,
+                start_frame=body_start_in,
+                end_frame=body_end_in,
+                log=log,
+            )
+
+            _shift_action_keys(
+                action=output_action,
+                delta=body_start_out - body_start_in,
+                log=log,
+            )
+
+            # ------------------------------------------------
+            # 3. Import/sample enabled head and tail sources.
             # ------------------------------------------------
 
             temp_collection = _create_or_replace_temp_collection(context)
 
             head_sample = None
+            head_targets = None
+            head_solve_mode = None
             tail_sample = None
+            tail_targets = None
+            tail_solve_mode = None
 
-            if settings.enable_head_transition:
+            if head_enabled:
                 head_imported, head_armature, head_range, head_existing_actions = _import_source(
                     context=context,
                     filepath=settings.head_source_path,
@@ -1565,19 +2868,36 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
                     log=log,
                 )
 
-                head_sample = _sample_source_pose(
-                    prefix="HEAD",
-                    current_armature=current_armature,
-                    source_armature=head_armature,
-                    source_frame=head_frame,
-                    settings=settings,
-                    label="HEAD/PREVIOUS",
-                    log=log,
-                )
+                head_solve_mode = _resolved_boundary_solve_mode("HEAD", settings)
+                log.append(f"HEAD solve mode: {head_solve_mode}")
+
+                if head_solve_mode == "FULL_POSE_MATRIX":
+                    log.append("HEAD using existing v1.2 full pose matrix path")
+                    head_sample = _sample_source_pose(
+                        prefix="HEAD",
+                        current_armature=current_armature,
+                        source_armature=head_armature,
+                        source_frame=head_frame,
+                        settings=settings,
+                        label="HEAD/PREVIOUS",
+                        log=log,
+                    )
+                elif head_solve_mode == "IK_LANDMARKS":
+                    head_targets = _sample_source_landmark_targets(
+                        prefix="HEAD",
+                        current_armature=current_armature,
+                        source_armature=head_armature,
+                        source_frame=head_frame,
+                        settings=settings,
+                        label="HEAD/PREVIOUS",
+                        log=log,
+                    )
+                else:
+                    raise RuntimeError(f"Unknown HEAD solve mode: {head_solve_mode}")
             else:
                 log.append("Head transition disabled.")
 
-            if settings.enable_tail_transition:
+            if tail_enabled:
                 tail_imported, tail_armature, tail_range, tail_existing_actions = _import_source(
                     context=context,
                     filepath=settings.tail_source_path,
@@ -1597,15 +2917,32 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
                     log=log,
                 )
 
-                tail_sample = _sample_source_pose(
-                    prefix="TAIL",
-                    current_armature=current_armature,
-                    source_armature=tail_armature,
-                    source_frame=tail_frame,
-                    settings=settings,
-                    label="TAIL/NEXT",
-                    log=log,
-                )
+                tail_solve_mode = _resolved_boundary_solve_mode("TAIL", settings)
+                log.append(f"TAIL solve mode: {tail_solve_mode}")
+
+                if tail_solve_mode == "FULL_POSE_MATRIX":
+                    log.append("TAIL using existing v1.2 full pose matrix path")
+                    tail_sample = _sample_source_pose(
+                        prefix="TAIL",
+                        current_armature=current_armature,
+                        source_armature=tail_armature,
+                        source_frame=tail_frame,
+                        settings=settings,
+                        label="TAIL/NEXT",
+                        log=log,
+                    )
+                elif tail_solve_mode == "IK_LANDMARKS":
+                    tail_targets = _sample_source_landmark_targets(
+                        prefix="TAIL",
+                        current_armature=current_armature,
+                        source_armature=tail_armature,
+                        source_frame=tail_frame,
+                        settings=settings,
+                        label="TAIL/NEXT",
+                        log=log,
+                    )
+                else:
+                    raise RuntimeError(f"Unknown TAIL solve mode: {tail_solve_mode}")
             else:
                 log.append("Tail transition disabled.")
 
@@ -1620,88 +2957,108 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
             temp_collection = None
 
             # ------------------------------------------------
-            # 3. Create brand-new output action.
-            # ------------------------------------------------
-
-            output_action_name = settings.output_action_name.strip()
-
-            if not output_action_name:
-                output_action_name = f"{source_action.name}_explicit_head_tail"
-
-            output_action = bpy.data.actions.new(output_action_name)
-            output_action.use_fake_user = True
-
-            current_armature.animation_data_create()
-            current_armature.animation_data.action = output_action
-
-            log.append("")
-            log.append(f"Created clean output action: {output_action.name}")
-
-            # ------------------------------------------------
             # 4. Key head/body/tail.
             # ------------------------------------------------
 
-            if settings.enable_head_transition and head_frames > 0:
+            if head_enabled and head_frames > 0:
+                if head_solve_mode == "FULL_POSE_MATRIX":
+                    _apply_pose_and_key(
+                        current_armature=current_armature,
+                        pose_sample=head_sample,
+                        output_frame=output_start,
+                        settings=settings,
+                        label="HEAD source pose",
+                        log=log,
+                    )
+                elif head_solve_mode == "IK_LANDMARKS":
+                    _apply_ik_landmark_pose_and_key(
+                        current_armature=current_armature,
+                        targets=head_targets,
+                        output_frame=output_start,
+                        settings=settings,
+                        label="HEAD IK landmark pose",
+                        log=log,
+                        prefix="HEAD",
+                        base_pose_sample=current_first_sample,
+                    )
+                else:
+                    raise RuntimeError(f"Unknown HEAD solve mode: {head_solve_mode}")
+
                 _apply_pose_and_key(
                     current_armature=current_armature,
-                    pose_sample=head_sample,
-                    output_frame=output_start,
+                    pose_sample=current_first_sample,
+                    output_frame=body_start_out,
                     settings=settings,
-                    label="HEAD source pose",
+                    label="CURRENT first body pose",
                     log=log,
                 )
+            else:
+                log.append(
+                    "Head disabled; copied body action starts at "
+                    f"frame {body_start_out}."
+                )
 
-            _apply_pose_and_key(
-                current_armature=current_armature,
-                pose_sample=current_first_sample,
-                output_frame=body_start_out,
-                settings=settings,
-                label="CURRENT first body pose",
-                log=log,
+            log.append(
+                f"Copied body keys constrained to output frames {body_start_out} -> {body_end_out}."
             )
 
-            for source_frame, body_sample in body_samples:
-                output_frame = body_start_out + (source_frame - body_start_in)
-
+            if tail_enabled:
                 _apply_pose_and_key(
                     current_armature=current_armature,
-                    pose_sample=body_sample,
-                    output_frame=output_frame,
+                    pose_sample=current_last_sample,
+                    output_frame=body_end_out,
                     settings=settings,
-                    label=f"CURRENT body frame {source_frame}",
-                    log=[],
-                )
-
-            log.append(f"Keyed full current body to output frames {body_start_out} -> {body_end_out}.")
-
-            _apply_pose_and_key(
-                current_armature=current_armature,
-                pose_sample=current_last_sample,
-                output_frame=body_end_out,
-                settings=settings,
-                label="CURRENT last body pose",
-                log=log,
-            )
-
-            if settings.enable_tail_transition and tail_frames > 0:
-                _apply_pose_and_key(
-                    current_armature=current_armature,
-                    pose_sample=tail_sample,
-                    output_frame=tail_target_out,
-                    settings=settings,
-                    label="TAIL source pose",
+                    label="CURRENT last body pose",
                     log=log,
                 )
 
-            if settings.enable_tail_transition and tail_hold_frames > 0:
-                _apply_pose_and_key(
-                    current_armature=current_armature,
-                    pose_sample=tail_sample,
-                    output_frame=output_end,
-                    settings=settings,
-                    label="TAIL hold pose",
-                    log=log,
-                )
+            if tail_enabled and tail_frames > 0:
+                if tail_solve_mode == "FULL_POSE_MATRIX":
+                    _apply_pose_and_key(
+                        current_armature=current_armature,
+                        pose_sample=tail_sample,
+                        output_frame=tail_target_out,
+                        settings=settings,
+                        label="TAIL source pose",
+                        log=log,
+                    )
+                elif tail_solve_mode == "IK_LANDMARKS":
+                    _apply_ik_landmark_pose_and_key(
+                        current_armature=current_armature,
+                        targets=tail_targets,
+                        output_frame=tail_target_out,
+                        settings=settings,
+                        label="TAIL IK landmark pose",
+                        log=log,
+                        prefix="TAIL",
+                        base_pose_sample=current_last_sample,
+                    )
+                else:
+                    raise RuntimeError(f"Unknown TAIL solve mode: {tail_solve_mode}")
+
+            if tail_enabled and tail_hold > 0:
+                if tail_solve_mode == "FULL_POSE_MATRIX":
+                    _apply_pose_and_key(
+                        current_armature=current_armature,
+                        pose_sample=tail_sample,
+                        output_frame=output_end,
+                        settings=settings,
+                        label="TAIL hold pose",
+                        log=log,
+                    )
+                elif tail_solve_mode == "IK_LANDMARKS":
+                    _apply_ik_landmark_pose_and_key(
+                        current_armature=current_armature,
+                        targets=tail_targets,
+                        output_frame=output_end,
+                        settings=settings,
+                        label="TAIL IK landmark hold pose",
+                        log=log,
+                        prefix="TAIL",
+                        base_pose_sample=current_last_sample,
+                    )
+                else:
+                    raise RuntimeError(f"Unknown TAIL solve mode: {tail_solve_mode}")
 
             # ------------------------------------------------
             # 5. Interpolation, verification, frame range, export.
@@ -1710,7 +3067,14 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
             changed = _set_interpolation_for_all_keys(output_action, settings.interpolation)
             log.append(f"Set interpolation {settings.interpolation} on {changed} keyframes.")
 
-            _force_frame_range(
+            _hard_clamp_action_to_output_range(
+                action=output_action,
+                output_start=output_start,
+                output_end=output_end,
+                log=log,
+            )
+
+            _force_exact_export_range(
                 context=context,
                 action=output_action,
                 start_frame=output_start,
@@ -1722,7 +3086,7 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
             body_key_count = _count_keys_at_frame(output_action, body_start_out)
             tail_key_count = (
                 _count_keys_at_frame(output_action, tail_target_out)
-                if settings.enable_tail_transition
+                if tail_enabled
                 else None
             )
             end_key_count = _count_keys_at_frame(output_action, output_end)
@@ -1731,18 +3095,18 @@ class GRAVITAS_OT_explicit_stitcher_build_v17(Operator):
             log.append("KEY VERIFICATION")
             log.append(f"  keys at output_start {output_start}: {head_key_count}")
             log.append(f"  keys at body_start   {body_start_out}: {body_key_count}")
-            if settings.enable_tail_transition:
+            if tail_enabled:
                 log.append(f"  keys at tail_target  {tail_target_out}: {tail_key_count}")
 
             log.append(f"  keys at output_end   {output_end}: {end_key_count}")
 
-            if settings.enable_head_transition and head_frames > 0 and head_key_count == 0:
+            if head_enabled and head_frames > 0 and head_key_count == 0:
                 raise RuntimeError("Verification failed: no head keys were written.")
 
             if body_key_count == 0:
                 raise RuntimeError("Verification failed: no body-start keys were written.")
 
-            if settings.enable_tail_transition and tail_frames > 0 and tail_key_count == 0:
+            if tail_enabled and tail_frames > 0 and tail_key_count == 0:
                 raise RuntimeError("Verification failed: no tail keys were written.")
 
             if settings.export_after_stitch:
@@ -1916,6 +3280,25 @@ class GRAVITAS_PT_explicit_stitcher_panel_v17(Panel):
         filters.prop(settings, "finger_bone_tokens")
         filters.prop(settings, "update_after_each_bone_matrix_set")
 
+        manual = layout.box()
+        manual.label(text="Manual Template", icon="OUTLINER_OB_MESH")
+        manual.prop(settings, "manual_template_mode_when_rotated")
+        manual.prop(settings, "template_display")
+        manual.prop(settings, "template_opacity")
+        manual.prop(settings, "manual_template_target_frame")
+        manual.prop(settings, "computed_output_start_frame")
+        manual.prop(settings, "computed_output_end_frame")
+        manual.operator(
+            GRAVITAS_OT_build_padding_and_template_v17.bl_idname,
+            text="Build Padding + Template",
+            icon="MOD_BUILD",
+        )
+        manual.operator(
+            GRAVITAS_OT_finalize_manual_key_and_export_v17.bl_idname,
+            text="Finalize Manual Key + Export",
+            icon="EXPORT",
+        )
+
         output = layout.box()
         output.label(text="Output", icon="ACTION")
         output.prop(settings, "output_action_name")
@@ -1952,6 +3335,8 @@ class GRAVITAS_PT_explicit_stitcher_panel_v17(Panel):
 classes = (
     GravitasExplicitStitcherSettingsV17,
     GRAVITAS_OT_explicit_stitcher_capture_body_range_v17,
+    GRAVITAS_OT_build_padding_and_template_v17,
+    GRAVITAS_OT_finalize_manual_key_and_export_v17,
     GRAVITAS_OT_explicit_stitcher_build_v17,
     GRAVITAS_PT_explicit_stitcher_panel_v17,
 )
