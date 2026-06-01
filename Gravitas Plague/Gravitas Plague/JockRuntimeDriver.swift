@@ -14,49 +14,48 @@ final class JockRuntimeDriver {
     private weak var modelEntity: ModelEntity?
 
     private let adapter: JockSkeletonAdapter
-    private let clip: JockAnimClip
-
     private let baseJointTransforms: [Transform]
     private let jointNames: [String]
 
+    private var activeClip: JockAnimClip?
     private var playbackTime: TimeInterval = 0
     private var state: DriverState = .stopped
-
     private var loopEnabled = true
 
     private var transitionElapsed: TimeInterval = 0
-    private var transitionDuration: TimeInterval
+    private var transitionDuration: TimeInterval = 5.0 / 24.0
     private var transitionFromPose: [Transform] = []
     private var transitionToPose: [Transform] = []
     private var pendingPlayAfterTransition = false
 
     init(
         modelEntity: ModelEntity,
-        adapter: JockSkeletonAdapter,
-        clip: JockAnimClip
+        adapter: JockSkeletonAdapter
     ) {
         self.modelEntity = modelEntity
         self.adapter = adapter
-        self.clip = clip
         self.baseJointTransforms = modelEntity.jointTransforms
         self.jointNames = modelEntity.jointNames
-        self.transitionDuration = clip.transition.transitionDurationSeconds
     }
 
     func setLoopEnabled(_ enabled: Bool) {
         loopEnabled = enabled
     }
 
-    func playDummyWithTransition() {
+    func playClip(_ clip: JockAnimClip, loop: Bool) {
         guard let modelEntity else { return }
 
+        activeClip = clip
+        loopEnabled = loop
         playbackTime = 0
+
+        transitionDuration = clip.transition.transitionDurationSeconds
         pendingPlayAfterTransition = true
         state = .transitioningToClip
 
         transitionElapsed = 0
         transitionFromPose = modelEntity.jointTransforms
-        transitionToPose = sampleClipPose(at: 0)
+        transitionToPose = sampleClipPose(clip, at: 0)
     }
 
     func stop() {
@@ -69,7 +68,6 @@ final class JockRuntimeDriver {
 
         pendingPlayAfterTransition = false
         state = .transitioningToBase
-
         transitionElapsed = 0
         transitionFromPose = modelEntity.jointTransforms
         transitionToPose = baseJointTransforms
@@ -117,9 +115,14 @@ final class JockRuntimeDriver {
             }
 
         case .playing:
+            guard let activeClip else {
+                state = .stopped
+                return
+            }
+
             playbackTime += clampedDelta
 
-            let duration = max(clip.timing.durationSeconds, 0.001)
+            let duration = max(activeClip.timing.durationSeconds, 0.001)
 
             if loopEnabled {
                 playbackTime = playbackTime.truncatingRemainder(dividingBy: duration)
@@ -128,11 +131,11 @@ final class JockRuntimeDriver {
                 state = .stopped
             }
 
-            modelEntity.jointTransforms = sampleClipPose(at: playbackTime)
+            modelEntity.jointTransforms = sampleClipPose(activeClip, at: playbackTime)
         }
     }
 
-    private func sampleClipPose(at time: TimeInterval) -> [Transform] {
+    private func sampleClipPose(_ clip: JockAnimClip, at time: TimeInterval) -> [Transform] {
         var output = baseJointTransforms
 
         for track in clip.tracks {
@@ -191,6 +194,12 @@ final class JockRuntimeDriver {
 
             case "rotation_quat_wxyz_absolute":
                 transform.rotation = JockPoseMath.sampleQuaternionWXYZ(
+                    keys: track.keys,
+                    time: time
+                )
+
+            case "scale_xyz_absolute":
+                transform.scale = JockPoseMath.sampleVector3(
                     keys: track.keys,
                     time: time
                 )

@@ -1,0 +1,65 @@
+{
+  "schema": "com.gravitas.animation_library_manifest.v0",
+  "library_id": "GravitasPlagueAnimationLibrary",
+  "generated_at": "2026-06-01T23:23:25.173939+00:00",
+  "clips": [
+    {
+      "clip_id": "dummy_calisthenics_v001",
+      "display_name": "Dummy Calisthenics",
+      "relative_path": "Clips/Dummy/dummy_calisthenics_v001.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "additiveLocal",
+      "category": [
+        "debug",
+        "idle"
+      ],
+      "emotion": [
+        "sick",
+        "unstable"
+      ],
+      "threat": [
+        "passive"
+      ],
+      "story": [
+        "test",
+        "dummy"
+      ],
+      "looping": true,
+      "duration_seconds": 1.0,
+      "locomotion_type": "stationary",
+      "world_space_motion": "none",
+      "approved_for_runtime": true,
+      "debug_only": true,
+      "updated_at": "2026-06-01T00:00:00Z"
+    },
+    {
+      "clip_id": "idle_01",
+      "display_name": "Idle 01 Meshy",
+      "relative_path": "Clips/Idle/idle_01.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "category": [
+        "idle"
+      ],
+      "emotion": [
+        "intense",
+        "calm"
+      ],
+      "threat": [
+        "passive"
+      ],
+      "story": [
+        "waiting"
+      ],
+      "looping": true,
+      "duration_seconds": 14.125,
+      "locomotion_type": "stationary",
+      "world_space_motion": "none",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-01T23:23:25.173939+00:00"
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import Foundation
 enum JockLoaderError: LocalizedError {
     case missingResource(String)
     case decodeFailed(String, Error)
+    case invalidRelativePath(String)
 
     var errorDescription: String? {
         switch self {
@@ -10,6 +11,8 @@ enum JockLoaderError: LocalizedError {
             return "Missing Jock resource: \(path)"
         case .decodeFailed(let path, let error):
             return "Failed to decode \(path): \(error.localizedDescription)"
+        case .invalidRelativePath(let path):
+            return "Invalid animation library relative path: \(path)"
         }
     }
 }
@@ -33,13 +36,53 @@ enum JockAnimationLibraryLoader {
         )
     }
 
-    static func loadDummyClip() throws -> JockAnimClip {
+    static func loadManifest() throws -> JockAnimationManifest {
         try loadJSON(
-            fileName: "dummy_calisthenics_v001.jockanim",
+            fileName: "animation_library_manifest",
             extensionName: "json",
-            subdirectory: "AnimationLibrary/Clips/Dummy",
+            subdirectory: "AnimationLibrary/Manifests",
+            as: JockAnimationManifest.self
+        )
+    }
+
+    static func loadClip(summary: JockAnimationManifest.ClipSummary) throws -> JockAnimClip {
+        try loadClip(relativePath: summary.relativePath)
+    }
+
+    static func loadClip(relativePath: String) throws -> JockAnimClip {
+        let normalized = relativePath.replacingOccurrences(of: "\\", with: "/")
+        let pathParts = normalized.split(separator: "/").map(String.init)
+
+        guard let fileNameWithExtension = pathParts.last else {
+            throw JockLoaderError.invalidRelativePath(relativePath)
+        }
+
+        let subdirectoryParts = Array(pathParts.dropLast())
+        let subdirectory = (["AnimationLibrary"] + subdirectoryParts)
+            .joined(separator: "/")
+
+        let nsName = fileNameWithExtension as NSString
+        let baseName = nsName.deletingPathExtension
+        let extensionName = nsName.pathExtension
+
+        guard !baseName.isEmpty, !extensionName.isEmpty else {
+            throw JockLoaderError.invalidRelativePath(relativePath)
+        }
+
+        return try loadJSON(
+            fileName: baseName,
+            extensionName: extensionName,
+            subdirectory: subdirectory,
             as: JockAnimClip.self
         )
+    }
+
+    static func loadAllRuntimeApprovedClips() throws -> [JockAnimClip] {
+        let manifest = try loadManifest()
+
+        return try manifest.clips
+            .filter { $0.approvedForRuntime }
+            .map { try loadClip(summary: $0) }
     }
 
     private static func loadJSON<T: Decodable>(

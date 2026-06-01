@@ -65,11 +65,18 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 await startJockRetargetTest()
             }
 
-        case .playJockDummy:
-            jockRetargetController?.playDummy(loop: jockLoopEnabled)
+        case .playJockClip(let clipID):
+            do {
+                try jockRetargetController?.playClip(
+                    id: clipID,
+                    loop: jockLoopEnabled
+                )
+            } catch {
+                assertionFailure("Failed to play Jock clip \(clipID): \(error)")
+            }
 
-        case .stopJockDummy:
-            jockRetargetController?.stopDummy()
+        case .stopJockClip:
+            jockRetargetController?.stopClip()
 
         case .resetJockPose:
             jockRetargetController?.resetPose()
@@ -179,7 +186,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             )
 
             jockRetargetController.show()
-            jockRetargetController.playDummy(loop: jockLoopEnabled)
         } catch {
             assertionFailure("Failed to start Jock Retarget Test: \(error)")
         }

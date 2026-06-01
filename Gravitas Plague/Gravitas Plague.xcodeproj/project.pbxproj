@@ -10,11 +10,11 @@
 		8E1A10012FCD000100000001 /* ../idle-01.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10042FCD000100000001 /* ../idle-01.usdz */; };
 		8E1A10022FCD000100000001 /* ../idle-turn-right-01.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10052FCD000100000001 /* ../idle-turn-right-01.usdz */; };
 		8E1A10032FCD000100000001 /* ../unstable-walk.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10062FCD000100000001 /* ../unstable-walk.usdz */; };
-		8E1A10102FCD000100000001 /* AnimationLibrary in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A100F2FCD000100000001 /* AnimationLibrary */; };
-		8E1A10112FCD000100000001 /* ../dad_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10122FCD000100000001 /* ../dad_biped.usdz */; };
 		8E1A10092FCD000100000001 /* ARKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E1A10072FCD000100000001 /* ARKit.framework */; };
 		8E1A100A2FCD000100000001 /* RealityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E1A10082FCD000100000001 /* RealityKit.framework */; };
 		8E1A100E2FCD000100000001 /* ../idle-turn-right-02.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */; };
+		8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */; };
+		8E1A10112FCD000100000001 /* ../dad_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10122FCD000100000001 /* ../dad_biped.usdz */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -44,8 +44,8 @@
 		8E1A10072FCD000100000001 /* ARKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ARKit.framework; path = System/Library/Frameworks/ARKit.framework; sourceTree = SDKROOT; };
 		8E1A10082FCD000100000001 /* RealityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = RealityKit.framework; path = System/Library/Frameworks/RealityKit.framework; sourceTree = SDKROOT; };
 		8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../idle-turn-right-02.usdz"; sourceTree = SOURCE_ROOT; };
-		8E1A100F2FCD000100000001 /* AnimationLibrary */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Gravitas Plague/AnimationLibrary"; sourceTree = SOURCE_ROOT; };
-		8E1A10122FCD000100000001 /* ../dad_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../dad_biped.usdz"; sourceTree = SOURCE_ROOT; };
+		8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Gravitas Plague/AnimationLibrary"; sourceTree = SOURCE_ROOT; };
+		8E1A10122FCD000100000001 /* ../dad_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../dad_biped.usdz; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -132,7 +132,7 @@
 				8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */,
 				8E1A10062FCD000100000001 /* ../unstable-walk.usdz */,
 				8E1A10122FCD000100000001 /* ../dad_biped.usdz */,
-				8E1A100F2FCD000100000001 /* AnimationLibrary */,
+				8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */,
 			);
 			name = "Phase One Assets";
 			sourceTree = "<group>";
@@ -262,7 +262,7 @@
 				8E1A100E2FCD000100000001 /* ../idle-turn-right-02.usdz in Resources */,
 				8E1A10032FCD000100000001 /* ../unstable-walk.usdz in Resources */,
 				8E1A10112FCD000100000001 /* ../dad_biped.usdz in Resources */,
-				8E1A10102FCD000100000001 /* AnimationLibrary in Resources */,
+				8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

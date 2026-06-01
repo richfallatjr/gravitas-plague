@@ -1,7 +1,9 @@
+import Foundation
 import SwiftUI
 
 struct PlagueDemoView: View {
     @ObservedObject var session: PlagueDemoSession
+    @State private var manifestLoadError: String?
 
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
@@ -64,10 +66,56 @@ struct PlagueDemoView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Jock Test Controls")
+                    Text("Jock Animation Library")
                         .font(.headline)
 
-                    Toggle("Loop Dummy", isOn: Binding(
+                    if let manifestLoadError {
+                        Text(manifestLoadError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+
+                    if session.availableJockClips.isEmpty {
+                        Text("No runtime-approved Jock clips found.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Picker("Clip", selection: Binding(
+                            get: {
+                                session.selectedJockClipID
+                                    ?? session.availableJockClips.first?.clipID
+                                    ?? ""
+                            },
+                            set: { newValue in
+                                session.selectedJockClipID = newValue
+                            }
+                        )) {
+                            ForEach(session.availableJockClips) { clip in
+                                Text(clip.displayName)
+                                    .tag(clip.clipID)
+                            }
+                        }
+
+                        if let selected = session.availableJockClips.first(
+                            where: { $0.clipID == session.selectedJockClipID }
+                        ) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(selected.clipID)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                Text("Category: \(selected.category.joined(separator: ", "))")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+
+                                Text("Duration: \(String(format: "%.2f", selected.durationSeconds))s")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    Toggle("Loop Clip", isOn: Binding(
                         get: { session.jockLoopEnabled },
                         set: { newValue in
                             session.jockLoopEnabled = newValue
@@ -76,13 +124,16 @@ struct PlagueDemoView: View {
                     ))
 
                     HStack(spacing: 12) {
-                        Button("Play Dummy") {
-                            session.send(.playJockDummy)
+                        Button("Play Selected") {
+                            if let clipID = session.selectedJockClipID {
+                                session.send(.playJockClip(clipID))
+                            }
                         }
                         .buttonStyle(.borderedProminent)
+                        .disabled(session.selectedJockClipID == nil)
 
-                        Button("Stop Dummy") {
-                            session.send(.stopJockDummy)
+                        Button("Stop") {
+                            session.send(.stopJockClip)
                         }
                         .buttonStyle(.bordered)
 
@@ -95,6 +146,9 @@ struct PlagueDemoView: View {
             }
         }
         .padding(28)
+        .onAppear {
+            loadJockManifestForUI()
+        }
     }
 
     private var startButtonTitle: String {
@@ -150,8 +204,9 @@ struct PlagueDemoView: View {
             session.send(.startBakedUSDZDemo)
 
         case .startJockRetargetTest:
+            loadJockManifestForUI()
             session.activeMode = .jockRetargetTest
-            session.statusMessage = "Running Jock Retarget skeletal-driver test."
+            session.statusMessage = "Jock Retarget loaded. Choose a sidecar clip."
             session.send(.startJockRetargetTest)
 
         default:
@@ -168,5 +223,25 @@ struct PlagueDemoView: View {
         session.immersiveSpaceStatus = .closed
         session.activeMode = .none
         session.statusMessage = "Demo closed."
+    }
+
+    private func loadJockManifestForUI() {
+        do {
+            let manifest = try JockAnimationLibraryLoader.loadManifest()
+            let clips = manifest.clips.filter { $0.approvedForRuntime }
+
+            session.availableJockClips = clips
+
+            if session.selectedJockClipID == nil
+                || !clips.contains(where: { $0.clipID == session.selectedJockClipID }) {
+                session.selectedJockClipID = clips.first?.clipID
+            }
+
+            manifestLoadError = nil
+        } catch {
+            session.availableJockClips = []
+            session.selectedJockClipID = nil
+            manifestLoadError = error.localizedDescription
+        }
     }
 }

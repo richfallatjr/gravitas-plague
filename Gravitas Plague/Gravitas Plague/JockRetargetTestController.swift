@@ -8,6 +8,7 @@ final class JockRetargetTestController {
         case missingCharacterAsset
         case noSkinnedModelEntity
         case rigValidationFailed([String])
+        case clipNotFound(String)
 
         var errorDescription: String? {
             switch self {
@@ -17,6 +18,8 @@ final class JockRetargetTestController {
                 return "dad_biped.usdz loaded, but no ModelEntity with jointNames was found."
             case .rigValidationFailed(let missing):
                 return "Rig validation failed. Missing joints: \(missing.joined(separator: ", "))"
+            case .clipNotFound(let id):
+                return "Jock clip not found: \(id)"
             }
         }
     }
@@ -28,20 +31,25 @@ final class JockRetargetTestController {
 
     private var rigDefinition: JockRigDefinition?
     private var skeletonMap: JockSkeletonMap?
-    private var dummyClip: JockAnimClip?
+    private var manifest: JockAnimationManifest?
     private var adapter: JockSkeletonAdapter?
     private var driver: JockRuntimeDriver?
 
+    private var clipsByID: [String: JockAnimClip] = [:]
+
     private var hasLoaded = false
     private var isVisible = false
-
     private var rootYawRadians: Float = 0
 
-    var debugStatus: String = "Retarget test not loaded."
+    private(set) var debugStatus: String = "Retarget test not loaded."
 
     init() {
         rootEntity.name = "Gravitas_JockRetargetTestRoot"
         rootEntity.isEnabled = false
+    }
+
+    var availableClipSummaries: [JockAnimationManifest.ClipSummary] {
+        manifest?.clips.filter { $0.approvedForRuntime } ?? []
     }
 
     func loadIfNeeded() async throws {
@@ -63,7 +71,16 @@ final class JockRetargetTestController {
 
         let rig = try JockAnimationLibraryLoader.loadRigDefinition()
         let map = try JockAnimationLibraryLoader.loadSkeletonMap()
-        let clip = try JockAnimationLibraryLoader.loadDummyClip()
+        let manifest = try JockAnimationLibraryLoader.loadManifest()
+
+        let runtimeApprovedSummaries = manifest.clips.filter { $0.approvedForRuntime }
+
+        var loadedClips: [String: JockAnimClip] = [:]
+
+        for summary in runtimeApprovedSummaries {
+            let clip = try JockAnimationLibraryLoader.loadClip(summary: summary)
+            loadedClips[clip.clipID] = clip
+        }
 
         let adapter = JockSkeletonAdapter(
             rig: rig,
@@ -79,8 +96,7 @@ final class JockRetargetTestController {
 
         let driver = JockRuntimeDriver(
             modelEntity: skinnedModel,
-            adapter: adapter,
-            clip: clip
+            adapter: adapter
         )
 
         rootEntity.addChild(loadedEntity)
@@ -89,7 +105,8 @@ final class JockRetargetTestController {
         self.modelEntity = skinnedModel
         self.rigDefinition = rig
         self.skeletonMap = map
-        self.dummyClip = clip
+        self.manifest = manifest
+        self.clipsByID = loadedClips
         self.adapter = adapter
         self.driver = driver
         self.hasLoaded = true
@@ -99,7 +116,7 @@ final class JockRetargetTestController {
         Asset: dad_biped.usdz
         Runtime joints: \(skinnedModel.jointNames.count)
         Matched joints: \(adapter.validationReport.matchedJointCount)
-        Clip: \(clip.clipID)
+        Library clips: \(loadedClips.count)
         """
 
         print("[Gravitas] \(debugStatus)")
@@ -144,13 +161,17 @@ final class JockRetargetTestController {
         rootEntity.isEnabled = false
     }
 
-    func playDummy(loop: Bool) {
+    func playClip(id: String, loop: Bool) throws {
         show()
-        driver?.setLoopEnabled(loop)
-        driver?.playDummyWithTransition()
+
+        guard let clip = clipsByID[id] else {
+            throw RetargetError.clipNotFound(id)
+        }
+
+        driver?.playClip(clip, loop: loop)
     }
 
-    func stopDummy() {
+    func stopClip() {
         driver?.stop()
     }
 
