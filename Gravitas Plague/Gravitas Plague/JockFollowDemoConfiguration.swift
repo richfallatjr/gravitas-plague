@@ -16,6 +16,9 @@ struct JockFollowDemoConfiguration: Equatable {
     /// Use -1.0 if the donor/exported locomotion is inverted.
     let followForwardSign: Float
 
+    /// Visual-only correction for follow clips. Root steering still uses logical -Z forward.
+    let visualHeadingCorrectionDegrees: Float
+
     let maxStepMetersPerFrame: Float
 
     let idleBeforeFollowDelay: TimeInterval
@@ -32,6 +35,7 @@ struct JockFollowDemoConfiguration: Equatable {
 
         walkDistanceScale: 1.0,
         followForwardSign: -1.0,
+        visualHeadingCorrectionDegrees: 180.0,
         maxStepMetersPerFrame: 0.06,
 
         idleBeforeFollowDelay: 0.35

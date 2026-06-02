@@ -516,7 +516,8 @@ final class JockRetargetTestController {
         driver?.playClip(
             clip,
             loop: true,
-            transition: true
+            transition: true,
+            runtimeOverride: followVisualRuntimeOverride()
         )
 
         print("[Gravitas Follow] Playing idle")
@@ -531,10 +532,19 @@ final class JockRetargetTestController {
         driver?.playClip(
             clip,
             loop: true,
-            transition: true
+            transition: true,
+            runtimeOverride: followVisualRuntimeOverride()
         )
 
         print("[Gravitas Follow] Playing walk")
+    }
+
+    private func followVisualRuntimeOverride() -> JockRuntimeClipOverride {
+        JockRuntimeClipOverride(
+            entryHeadingDegrees: -followConfiguration.visualHeadingCorrectionDegrees,
+            exitHeadingDegrees: -followConfiguration.visualHeadingCorrectionDegrees,
+            commitRootYawOnCompletion: false
+        )
     }
 
     private func consumeFollowLocomotionDelta(
