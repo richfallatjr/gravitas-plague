@@ -20,8 +20,8 @@ final class JockHandHitDetector {
 
     private let configuration: JockHitReactionConfiguration
 
-    private let arkitSession = ARKitSession()
-    private let handTrackingProvider = HandTrackingProvider()
+    private var arkitSession = ARKitSession()
+    private var handTrackingProvider = HandTrackingProvider()
 
     private var isRunning = false
 
@@ -48,19 +48,26 @@ final class JockHandHitDetector {
             print("[Gravitas Hit] HandTrackingProvider started.")
         } catch {
             print("[Gravitas Hit] Failed to start hand tracking: \(error)")
+
+            refreshTrackingRuntime()
+
+            do {
+                try await arkitSession.run([handTrackingProvider])
+                isRunning = true
+                print("[Gravitas Hit] HandTrackingProvider restarted with a fresh provider.")
+            } catch {
+                print("[Gravitas Hit] Failed to start fresh hand tracking provider: \(error)")
+            }
         }
     }
 
     func stop() {
-        guard isRunning else { return }
+        if isRunning {
+            arkitSession.stop()
+            print("[Gravitas Hit] Hand tracking stopped.")
+        }
 
-        arkitSession.stop()
-        isRunning = false
-        previousSamples.removeAll()
-        perHandLastHitTime.removeAll()
-        globalLastHitTime = -999
-
-        print("[Gravitas Hit] Hand tracking stopped.")
+        refreshTrackingRuntime()
     }
 
     func update(
@@ -243,6 +250,15 @@ final class JockHandHitDetector {
         @unknown default:
             return nil
         }
+    }
+
+    private func refreshTrackingRuntime() {
+        isRunning = false
+        previousSamples.removeAll()
+        perHandLastHitTime.removeAll()
+        globalLastHitTime = -999
+        arkitSession = ARKitSession()
+        handTrackingProvider = HandTrackingProvider()
     }
 
     private func deterministicSideForHand(
