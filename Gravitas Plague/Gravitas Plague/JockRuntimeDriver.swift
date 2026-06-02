@@ -137,7 +137,12 @@ final class JockRuntimeDriver {
         resetFrozenLocomotionState()
     }
 
-    func resetPoseWithTransition() {
+    func resetPoseWithTransition(
+        visualOffset: simd_quatf = simd_quatf(
+            angle: 0,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
+    ) {
         guard let modelEntity else { return }
 
         state = .transitioningToBase
@@ -147,21 +152,20 @@ final class JockRuntimeDriver {
         transitionFromVisualOffset =
             visualOffsetEntity?.orientation ??
             simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
-        transitionToVisualOffset = simd_quatf(
-            angle: 0,
-            axis: SIMD3<Float>(0, 1, 0)
-        )
+        transitionToVisualOffset = visualOffset
         activeClip = nil
         activeRuntimeOverride = .identity
         resetFrozenLocomotionState()
     }
 
-    func resetPoseImmediate() {
-        modelEntity?.jointTransforms = baseJointTransforms
-        visualOffsetEntity?.orientation = simd_quatf(
+    func resetPoseImmediate(
+        visualOffset: simd_quatf = simd_quatf(
             angle: 0,
             axis: SIMD3<Float>(0, 1, 0)
         )
+    ) {
+        modelEntity?.jointTransforms = baseJointTransforms
+        visualOffsetEntity?.orientation = visualOffset
         playbackTime = 0
         state = .stopped
         activeClip = nil

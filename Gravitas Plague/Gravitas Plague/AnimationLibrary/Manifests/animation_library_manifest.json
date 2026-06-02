@@ -1,8 +1,39 @@
 {
   "schema": "com.gravitas.animation_library_manifest.v0",
   "library_id": "GravitasPlagueAnimationLibrary",
-  "generated_at": "2026-06-02T01:12:50.016487+00:00",
+  "generated_at": "2026-06-02T13:10:11.743464+00:00",
   "clips": [
+    {
+      "clip_id": "charged-slash",
+      "display_name": "Charged slash",
+      "relative_path": "Clips/HitReact/charged-slash.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "category": [
+        "hit"
+      ],
+      "emotion": [
+        "aggressive",
+        "attack"
+      ],
+      "threat": [
+        "hight threat"
+      ],
+      "story": [
+        "fight",
+        "survival"
+      ],
+      "looping": false,
+      "duration_seconds": 2.7916666666666665,
+      "locomotion_type": "hit_react",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T13:10:11.743237+00:00"
+    },
     {
       "clip_id": "dummy_calisthenics_v001",
       "display_name": "Dummy Calisthenics",

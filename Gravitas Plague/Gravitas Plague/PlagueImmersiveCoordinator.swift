@@ -8,7 +8,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
     private var sceneRoot: Entity?
 
-    private var bakedDemoController: BakedInfectedController?
     private var jockRetargetController: JockRetargetTestController?
 
     private var lastTickDate: Date?
@@ -25,14 +24,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         await spatialProvider.start()
 
-        let controller = BakedInfectedController(configuration: .phaseOneDefault)
-        root.addChild(controller.rootEntity)
-
         let jockController = JockRetargetTestController()
         root.addChild(jockController.rootEntity)
 
         self.sceneRoot = root
-        self.bakedDemoController = controller
         self.jockRetargetController = jockController
 
         drainPendingCommands()
@@ -54,14 +49,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
     private func perform(_ command: PlagueDemoSession.Command) {
         switch command {
-        case .startBakedUSDZDemo:
-            Task {
-                await startBakedDemo()
-            }
-
         case .startJockRetargetTest:
             Task {
-                await startJockRetargetTest(autoPlayLoop: true)
+                await startJockRetargetTest(autoPlayLoop: false)
             }
 
         case .playJockPacingLoop:
@@ -83,11 +73,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         case .stopJockFollowDemo:
             jockRetargetController?.stopFollowDemo()
 
-        case .playJockClip(let clipID):
+        case .playJockClip(let clipID, let loop):
             do {
                 try jockRetargetController?.playClip(
                     id: clipID,
-                    loop: false
+                    loop: loop
                 )
             } catch {
                 assertionFailure("Failed to play JockAsset clip \(clipID): \(error)")
@@ -101,7 +91,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             jockRetargetController?.resetPose()
 
         case .closeDemo:
-            bakedDemoController?.stopLoopAndHide()
             jockRetargetController?.hide()
             spatialProvider.stop()
         }
@@ -120,11 +109,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         let currentHeadPosition = spatialProvider.currentPose()?.headPosition
 
-        bakedDemoController?.update(
-            deltaTime: deltaTime,
-            currentHeadPosition: currentHeadPosition
-        )
-
         jockRetargetController?.update(
             deltaTime: deltaTime,
             currentHeadPosition: currentHeadPosition
@@ -132,12 +116,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     }
 
     func shutdown() {
-        bakedDemoController?.stopLoopAndHide()
         jockRetargetController?.hide()
         spatialProvider.stop()
 
         sceneRoot = nil
-        bakedDemoController = nil
         jockRetargetController = nil
         lastTickDate = nil
         handledCommandIDs.removeAll()
@@ -153,37 +135,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
     }
 
-    private func startBakedDemo() async {
-        jockRetargetController?.hide()
-
-        guard let bakedDemoController else { return }
-
-        do {
-            try await bakedDemoController.loadClips()
-
-            let spawnPose = spatialProvider.currentPoseOrFallback()
-            let config = PhaseOneConfiguration.phaseOneDefault
-
-            let floorY = await spatialProvider.resolvedFloorY(
-                for: spawnPose,
-                fallbackHeadToFloorOffset: config.fallbackHeadToFloorOffset,
-                timeoutSeconds: config.floorDetectionTimeoutSeconds
-            )
-
-            bakedDemoController.configureSpawn(
-                using: spawnPose,
-                floorY: floorY
-            )
-
-            bakedDemoController.startLoop()
-        } catch {
-            assertionFailure("Failed to start baked USDZ demo: \(error)")
-        }
-    }
-
     private func startJockRetargetTest(autoPlayLoop: Bool) async {
-        bakedDemoController?.stopLoopAndHide()
-
         guard let jockRetargetController else { return }
 
         do {

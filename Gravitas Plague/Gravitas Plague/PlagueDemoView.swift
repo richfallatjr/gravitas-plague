@@ -15,7 +15,7 @@ struct PlagueDemoView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
 
-                Text("Presence Demo / JockAsset Retarget Test")
+                Text("Presence Demo / JockAsset")
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
@@ -30,24 +30,13 @@ struct PlagueDemoView: View {
             HStack(spacing: 12) {
                 Button {
                     Task {
-                        await openIfNeededAndSend(.startBakedUSDZDemo)
-                    }
-                } label: {
-                    Text(startButtonTitle)
-                        .frame(minWidth: 130)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(session.immersiveSpaceStatus == .opening)
-
-                Button {
-                    Task {
                         await openIfNeededAndSend(.startJockRetargetTest)
                     }
                 } label: {
-                    Text("Retarget")
-                        .frame(minWidth: 100)
+                    Text(session.immersiveSpaceStatus == .opening ? "Opening..." : "Start Demo")
+                        .frame(minWidth: 130)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
                 .disabled(session.immersiveSpaceStatus == .opening)
 
                 Button {
@@ -135,11 +124,20 @@ struct PlagueDemoView: View {
                         }
                     }
 
+                    Toggle("Loop Selected Clip", isOn: $session.jockPickerLoopEnabled)
+
                     HStack(spacing: 12) {
-                        Button("Play Selected Once") {
+                        Button("Play") {
                             if let clipID = session.selectedJockClipID {
-                                session.statusMessage = "Playing selected JockAsset clip once."
-                                session.send(.playJockClip(clipID))
+                                session.statusMessage = session.jockPickerLoopEnabled
+                                    ? "Looping selected JockAsset clip."
+                                    : "Playing selected JockAsset clip."
+                                session.send(
+                                    .playJockClip(
+                                        clipID,
+                                        loop: session.jockPickerLoopEnabled
+                                    )
+                                )
                             }
                         }
                         .buttonStyle(.bordered)
@@ -163,17 +161,6 @@ struct PlagueDemoView: View {
         .padding(28)
         .onAppear {
             loadJockManifestForUI()
-        }
-    }
-
-    private var startButtonTitle: String {
-        switch session.immersiveSpaceStatus {
-        case .closed:
-            return "Start Demo"
-        case .opening:
-            return "Opening..."
-        case .open:
-            return "Restart Demo"
         }
     }
 
@@ -213,15 +200,10 @@ struct PlagueDemoView: View {
 
     private func sendAndUpdateStatus(_ command: PlagueDemoSession.Command) {
         switch command {
-        case .startBakedUSDZDemo:
-            session.activeMode = .bakedUSDZDemo
-            session.statusMessage = "Running baked USDZ switching demo."
-            session.send(.startBakedUSDZDemo)
-
         case .startJockRetargetTest:
             loadJockManifestForUI()
             session.activeMode = .jockRetargetTest
-            session.statusMessage = "Running JockAsset sidecar pacing loop."
+            session.statusMessage = "JockAsset demo ready."
             session.send(.startJockRetargetTest)
 
         default:

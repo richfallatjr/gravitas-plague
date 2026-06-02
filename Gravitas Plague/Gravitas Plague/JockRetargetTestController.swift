@@ -68,6 +68,14 @@ final class JockRetargetTestController {
 
     private var spawnPosition = SIMD3<Float>(0, 0, -3.05)
     private var spawnOrientation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
+    private var cameraFacingVisualOffset = simd_quatf(
+        angle: 0,
+        axis: SIMD3<Float>(0, 1, 0)
+    )
+    private var loopStartVisualOffset = simd_quatf(
+        angle: 0,
+        axis: SIMD3<Float>(0, 1, 0)
+    )
 
     private(set) var debugStatus: String = "Retarget test not loaded."
 
@@ -199,7 +207,17 @@ final class JockRetargetTestController {
             axis: SIMD3<Float>(0, 1, 0)
         )
 
-        resetRootToSpawn()
+        cameraFacingVisualOffset = simd_quatf(
+            angle: configuration.visualYawCorrectionRadians,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
+
+        loopStartVisualOffset = simd_quatf(
+            angle: 0,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
+
+        resetRootToDefaultSpawn()
     }
 
     func show() {
@@ -229,11 +247,17 @@ final class JockRetargetTestController {
             throw RetargetError.clipNotFound(id)
         }
 
+        driver?.resetPoseImmediate(
+            visualOffset: cameraFacingVisualOffset
+        )
+
+        resetRootToDefaultSpawn()
+
         driver?.playClip(
             clip,
             loop: loop,
             transition: true,
-            runtimeOverride: runtimeOverrides.clips[id] ?? .identity
+            runtimeOverride: cameraFacingRuntimeOverride()
         )
     }
 
@@ -253,8 +277,10 @@ final class JockRetargetTestController {
         isPlayingPacingLoop = true
         pacingLoopIndex = 0
 
-        driver?.resetPoseImmediate()
-        resetRootToSpawn()
+        driver?.resetPoseImmediate(
+            visualOffset: loopStartVisualOffset
+        )
+        resetRootToLoopSpawn()
 
         playCurrentPacingLoopStep()
     }
@@ -273,7 +299,10 @@ final class JockRetargetTestController {
         followDemoState = .inactive
         followDelayElapsed = 0
         driver?.locomotionDeltaHandler = nil
-        driver?.resetPoseWithTransition()
+        resetRootToDefaultSpawn()
+        driver?.resetPoseWithTransition(
+            visualOffset: cameraFacingVisualOffset
+        )
     }
 
     func playFollowDemo() throws {
@@ -547,6 +576,17 @@ final class JockRetargetTestController {
         )
     }
 
+    private func cameraFacingRuntimeOverride() -> JockRuntimeClipOverride {
+        let correctionDegrees =
+            cameraFacingVisualOffset.angle * 180.0 / Float.pi
+
+        return JockRuntimeClipOverride(
+            entryHeadingDegrees: -correctionDegrees,
+            exitHeadingDegrees: -correctionDegrees,
+            commitRootYawOnCompletion: false
+        )
+    }
+
     private func consumeFollowLocomotionDelta(
         _ delta: JockRuntimeLocomotionDelta
     ) -> Bool {
@@ -620,14 +660,25 @@ final class JockRetargetTestController {
         return true
     }
 
-    private func resetRootToSpawn() {
+    private func resetRootToDefaultSpawn() {
+        resetRootToSpawn(
+            visualOffset: cameraFacingVisualOffset
+        )
+    }
+
+    private func resetRootToLoopSpawn() {
+        resetRootToSpawn(
+            visualOffset: loopStartVisualOffset
+        )
+    }
+
+    private func resetRootToSpawn(
+        visualOffset: simd_quatf
+    ) {
         rootEntity.position = spawnPosition
         rootEntity.orientation = spawnOrientation
         visualOffsetEntity.position = .zero
-        visualOffsetEntity.orientation = simd_quatf(
-            angle: 0,
-            axis: SIMD3<Float>(0, 1, 0)
-        )
+        visualOffsetEntity.orientation = visualOffset
     }
 
     private func firstSkinnedModelEntity(in entity: Entity) -> ModelEntity? {
