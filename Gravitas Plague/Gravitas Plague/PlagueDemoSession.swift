@@ -22,6 +22,8 @@ final class PlagueDemoSession: ObservableObject {
         case startBakedUSDZDemo
         case startJockRetargetTest
         case playJockPacingLoop
+        case playJockFollowDemo
+        case stopJockFollowDemo
         case playJockClip(String)
         case stopJockClip
         case resetJockPose

@@ -15,7 +15,7 @@ struct PlagueDemoView: View {
                     .font(.largeTitle)
                     .fontWeight(.bold)
 
-                Text("Presence Demo / Jock Retarget Test")
+                Text("Presence Demo / JockAsset Retarget Test")
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
@@ -66,14 +66,22 @@ struct PlagueDemoView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Jock Animation Library")
+                    Text("JockAsset Animation Library")
                         .font(.headline)
 
-                    Button("Play Jock Loop") {
-                        session.statusMessage = "Running Jock sidecar pacing loop."
-                        session.send(.playJockPacingLoop)
+                    HStack(spacing: 12) {
+                        Button("Play JockAsset Loop") {
+                            session.statusMessage = "Running JockAsset sidecar pacing loop."
+                            session.send(.playJockPacingLoop)
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button("Play Follow Demo") {
+                            session.statusMessage = "Running JockAsset follow demo."
+                            session.send(.playJockFollowDemo)
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
 
                     if let manifestLoadError {
                         Text(manifestLoadError)
@@ -82,7 +90,7 @@ struct PlagueDemoView: View {
                     }
 
                     if session.availableJockClips.isEmpty {
-                        Text("No runtime-approved Jock clips found.")
+                        Text("No runtime-approved JockAsset clips found.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
@@ -130,7 +138,7 @@ struct PlagueDemoView: View {
                     HStack(spacing: 12) {
                         Button("Play Selected Once") {
                             if let clipID = session.selectedJockClipID {
-                                session.statusMessage = "Playing selected Jock clip once."
+                                session.statusMessage = "Playing selected JockAsset clip once."
                                 session.send(.playJockClip(clipID))
                             }
                         }
@@ -138,13 +146,13 @@ struct PlagueDemoView: View {
                         .disabled(session.selectedJockClipID == nil)
 
                         Button("Stop") {
-                            session.statusMessage = "Jock playback stopped."
+                            session.statusMessage = "JockAsset playback stopped."
                             session.send(.stopJockClip)
                         }
                         .buttonStyle(.bordered)
 
                         Button("Reset Pose") {
-                            session.statusMessage = "Resetting Jock pose."
+                            session.statusMessage = "Resetting JockAsset pose."
                             session.send(.resetJockPose)
                         }
                         .buttonStyle(.bordered)
@@ -213,7 +221,7 @@ struct PlagueDemoView: View {
         case .startJockRetargetTest:
             loadJockManifestForUI()
             session.activeMode = .jockRetargetTest
-            session.statusMessage = "Running Jock sidecar pacing loop."
+            session.statusMessage = "Running JockAsset sidecar pacing loop."
             session.send(.startJockRetargetTest)
 
         default:

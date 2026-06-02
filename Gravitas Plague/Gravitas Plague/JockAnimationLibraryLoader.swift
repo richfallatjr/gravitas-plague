@@ -8,7 +8,7 @@ enum JockLoaderError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingResource(let path):
-            return "Missing Jock resource: \(path)"
+            return "Missing JockAsset resource: \(path)"
         case .decodeFailed(let path, let error):
             return "Failed to decode \(path): \(error.localizedDescription)"
         case .invalidRelativePath(let path):
@@ -58,7 +58,7 @@ enum JockAnimationLibraryLoader {
         do {
             return try loadRuntimeClipOverrides()
         } catch {
-            print("[Gravitas Jock Overrides] Runtime clip overrides unavailable: \(error)")
+            print("[Gravitas JockAsset Overrides] Runtime clip overrides unavailable: \(error)")
 
             return JockRuntimeClipOverrides(
                 schema: "com.gravitas.jock_runtime_clip_overrides.v0",

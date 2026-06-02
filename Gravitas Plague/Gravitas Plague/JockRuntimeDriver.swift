@@ -63,9 +63,11 @@ final class JockRuntimeDriver {
         angle: 0,
         axis: SIMD3<Float>(0, 1, 0)
     )
+    private var previousRelativeLocomotionSample = LocomotionSample.zero
     private var activeRuntimeOverride = JockRuntimeClipOverride.identity
 
     var onClipCompleted: ((JockAnimClip) -> Void)?
+    var locomotionDeltaHandler: ((JockRuntimeLocomotionDelta) -> Bool)?
 
     init(
         modelEntity: ModelEntity,
@@ -409,6 +411,7 @@ final class JockRuntimeDriver {
             angle: 0,
             axis: SIMD3<Float>(0, 1, 0)
         )
+        previousRelativeLocomotionSample = .zero
 
         guard clip.locomotion.isEnabled else {
             return
@@ -458,6 +461,14 @@ final class JockRuntimeDriver {
         at time: TimeInterval,
         didWrap: Bool
     ) {
+        if tryEmitLocomotionDeltaToHandler(
+            clip,
+            at: time,
+            didWrap: didWrap
+        ) {
+            return
+        }
+
         guard clip.locomotion.isEnabled else {
             return
         }
@@ -532,6 +543,72 @@ final class JockRuntimeDriver {
         )
     }
 
+    private func tryEmitLocomotionDeltaToHandler(
+        _ clip: JockAnimClip,
+        at time: TimeInterval,
+        didWrap: Bool
+    ) -> Bool {
+        guard clip.locomotion.isEnabled else {
+            return false
+        }
+
+        guard let locomotionDeltaHandler else {
+            return false
+        }
+
+        var wasConsumed = false
+
+        func emitDelta(
+            from previous: LocomotionSample,
+            to current: LocomotionSample,
+            time: TimeInterval,
+            didWrap: Bool
+        ) {
+            let delta = JockRuntimeLocomotionDelta(
+                clipID: clip.clipID,
+                time: time,
+                didWrap: didWrap,
+                forwardMeters: current.forward - previous.forward,
+                sideMeters: current.side - previous.side,
+                verticalMeters: current.vertical - previous.vertical,
+                yawDegrees: current.yawDegrees - previous.yawDegrees
+            )
+
+            wasConsumed = locomotionDeltaHandler(delta) || wasConsumed
+        }
+
+        if didWrap {
+            let endTime = max(clip.timing.durationSeconds, 0.001)
+            let endSample = relativeLocomotionSample(
+                sampleLocomotion(clip, at: endTime)
+            )
+
+            emitDelta(
+                from: previousRelativeLocomotionSample,
+                to: endSample,
+                time: endTime,
+                didWrap: true
+            )
+
+            previousRelativeLocomotionSample = .zero
+        }
+
+        let currentSample = relativeLocomotionSample(
+            sampleLocomotion(clip, at: time)
+        )
+
+        emitDelta(
+            from: previousRelativeLocomotionSample,
+            to: currentSample,
+            time: time,
+            didWrap: didWrap
+        )
+
+        previousRelativeLocomotionSample = currentSample
+
+        return wasConsumed
+    }
+
     private func commitRuntimeOverrideAtClipCompletion() {
         guard activeRuntimeOverride.commitRootYawOnCompletion else {
             return
@@ -571,5 +648,6 @@ final class JockRuntimeDriver {
             angle: 0,
             axis: SIMD3<Float>(0, 1, 0)
         )
+        previousRelativeLocomotionSample = .zero
     }
 }

@@ -69,6 +69,20 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 await startJockRetargetTest(autoPlayLoop: true)
             }
 
+        case .playJockFollowDemo:
+            Task {
+                await startJockRetargetTest(autoPlayLoop: false)
+
+                do {
+                    try jockRetargetController?.playFollowDemo()
+                } catch {
+                    assertionFailure("Failed to play JockAsset follow demo: \(error)")
+                }
+            }
+
+        case .stopJockFollowDemo:
+            jockRetargetController?.stopFollowDemo()
+
         case .playJockClip(let clipID):
             do {
                 try jockRetargetController?.playClip(
@@ -76,10 +90,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     loop: false
                 )
             } catch {
-                assertionFailure("Failed to play Jock clip \(clipID): \(error)")
+                assertionFailure("Failed to play JockAsset clip \(clipID): \(error)")
             }
 
         case .stopJockClip:
+            jockRetargetController?.stopFollowDemo()
             jockRetargetController?.stopClip()
 
         case .resetJockPose:
@@ -110,7 +125,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             currentHeadPosition: currentHeadPosition
         )
 
-        jockRetargetController?.update(deltaTime: deltaTime)
+        jockRetargetController?.update(
+            deltaTime: deltaTime,
+            currentHeadPosition: currentHeadPosition
+        )
     }
 
     func shutdown() {
@@ -191,7 +209,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 try jockRetargetController.playPacingLoopFromStart()
             }
         } catch {
-            assertionFailure("Failed to start Jock Retarget Test: \(error)")
+            assertionFailure("Failed to start JockAsset Retarget Test: \(error)")
         }
     }
 }
