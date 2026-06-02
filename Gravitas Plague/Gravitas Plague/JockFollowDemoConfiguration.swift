@@ -27,8 +27,8 @@ struct JockFollowDemoConfiguration: Equatable {
         idleClipID: "idle_01",
         walkClipID: "unstable_walk_01",
 
-        stopDistanceMeters: 1.35,
-        resumeDistanceMeters: 1.75,
+        stopDistanceMeters: 0.675,
+        resumeDistanceMeters: 0.875,
 
         maxTurnDegreesPerSecond: 55.0,
         facingDeadZoneDegrees: 4.0,
