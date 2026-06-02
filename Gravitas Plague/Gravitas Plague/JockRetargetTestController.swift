@@ -562,13 +562,28 @@ final class JockRetargetTestController {
             return true
         }
 
-        let authoredForward = max(delta.forwardMeters, 0)
-        let scaledForward = authoredForward * followConfiguration.walkDistanceScale
+        let signedAuthoredForward =
+            delta.forwardMeters * followConfiguration.followForwardSign
+
+        let authoredForward = max(signedAuthoredForward, 0)
+
+        let scaledForward =
+            authoredForward * followConfiguration.walkDistanceScale
 
         let clampedStep = min(
             scaledForward,
             followConfiguration.maxStepMetersPerFrame,
             remainingSafeTravel
+        )
+
+        print(
+            """
+            [Gravitas Follow] locomotion
+              rawForward: \(delta.forwardMeters)
+              signedForward: \(signedAuthoredForward)
+              distance: \(distance)
+              step: \(clampedStep)
+            """
         )
 
         guard clampedStep > 0.00001 else {
