@@ -219,4 +219,8 @@ struct JockAnimClip: Codable, Equatable {
     var resolvedBlendOutFrames: Int {
         blendOutFrames ?? 0
     }
+
+    var resolvedBaseAnimationContinues: Bool {
+        baseAnimationContinues ?? false
+    }
 }

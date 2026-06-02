@@ -25,6 +25,50 @@ final class JockRuntimeDriver {
         )
     }
 
+    private struct ActiveSubAnimation {
+        let id: UUID
+        let clip: JockAnimClip
+        let affectedRuntimeIndices: [Int]
+        let blendInDuration: TimeInterval
+        let blendOutDuration: TimeInterval
+        let duration: TimeInterval
+
+        var playbackTime: TimeInterval = 0
+
+        var isComplete: Bool {
+            playbackTime >= duration + blendOutDuration
+        }
+
+        func weight() -> Float {
+            guard duration > 0 else {
+                return 0
+            }
+
+            if blendInDuration > 0,
+               playbackTime < blendInDuration {
+                return Float(
+                    min(max(playbackTime / blendInDuration, 0), 1)
+                )
+            }
+
+            if playbackTime <= duration {
+                return 1
+            }
+
+            if blendOutDuration > 0 {
+                let outTime = playbackTime - duration
+                let alpha = Float(min(max(outTime / blendOutDuration, 0), 1))
+                return 1.0 - alpha
+            }
+
+            return 0
+        }
+
+        func subClipSampleTime() -> TimeInterval {
+            min(max(playbackTime, 0), duration)
+        }
+    }
+
     private weak var modelEntity: ModelEntity?
     private weak var locomotionRootEntity: Entity?
     private weak var visualOffsetEntity: Entity?
@@ -65,6 +109,7 @@ final class JockRuntimeDriver {
     )
     private var previousRelativeLocomotionSample = LocomotionSample.zero
     private var activeRuntimeOverride = JockRuntimeClipOverride.identity
+    private var activeSubAnimations: [ActiveSubAnimation] = []
 
     var onClipCompleted: ((JockAnimClip) -> Void)?
     var locomotionDeltaHandler: ((JockRuntimeLocomotionDelta) -> Bool)?
@@ -115,7 +160,11 @@ final class JockRuntimeDriver {
         } else {
             state = .playing
             visualOffsetEntity?.orientation = targetVisualOffset
-            modelEntity.jointTransforms = sampleClipPose(clip, at: 0)
+            let basePose = sampleClipPose(clip, at: 0)
+            modelEntity.jointTransforms = applyActiveSubAnimations(
+                to: basePose,
+                deltaTime: 0
+            )
             applyLocomotionFromFrozenOrigin(clip, at: 0, didWrap: false)
         }
 
@@ -130,10 +179,82 @@ final class JockRuntimeDriver {
         )
     }
 
+    func triggerSubAnimation(
+        _ clip: JockAnimClip,
+        transitionFPS fallbackFPS: Double = 24.0
+    ) {
+        guard clip.isSubAnimationOverride else {
+            print("[Gravitas SubAnim] Ignored non-sub-animation clip: \(clip.clipID)")
+            return
+        }
+
+        let affectedJoints = clip.resolvedAffectedJoints
+
+        guard !affectedJoints.isEmpty else {
+            print("[Gravitas SubAnim] Clip has no affected joints: \(clip.clipID)")
+            return
+        }
+
+        var seenRuntimeIndices = Set<Int>()
+        let affectedRuntimeIndices = affectedJoints.compactMap { jointName in
+            adapter.runtimeIndex(for: jointName)
+        }.filter { runtimeIndex in
+            seenRuntimeIndices.insert(runtimeIndex).inserted
+        }
+
+        guard !affectedRuntimeIndices.isEmpty else {
+            print(
+                """
+                [Gravitas SubAnim] No affected joints mapped
+                  clipID: \(clip.clipID)
+                  affectedJoints: \(affectedJoints.joined(separator: ", "))
+                """
+            )
+            return
+        }
+
+        let fps = clip.timing.fps > 0
+            ? clip.timing.fps
+            : fallbackFPS
+        let blendInDuration = Double(clip.resolvedBlendInFrames) / fps
+        let blendOutDuration = Double(clip.resolvedBlendOutFrames) / fps
+        let duration = max(clip.timing.durationSeconds, 0.001)
+
+        activeSubAnimations.removeAll { existing in
+            existing.clip.clipID == clip.clipID
+        }
+
+        let instance = ActiveSubAnimation(
+            id: UUID(),
+            clip: clip,
+            affectedRuntimeIndices: affectedRuntimeIndices,
+            blendInDuration: blendInDuration,
+            blendOutDuration: blendOutDuration,
+            duration: duration,
+            playbackTime: 0
+        )
+
+        activeSubAnimations.append(instance)
+
+        print(
+            """
+            [Gravitas SubAnim] Triggered
+              clipID: \(clip.clipID)
+              affectedJoints: \(affectedJoints.joined(separator: ", "))
+              mappedIndices: \(affectedRuntimeIndices.count)
+              blendInFrames: \(clip.resolvedBlendInFrames)
+              blendOutFrames: \(clip.resolvedBlendOutFrames)
+              baseAnimationContinues: \(clip.resolvedBaseAnimationContinues)
+              duration: \(String(format: "%.3f", duration))
+            """
+        )
+    }
+
     func stop() {
         state = .stopped
         activeClip = nil
         activeRuntimeOverride = .identity
+        activeSubAnimations.removeAll()
         resetFrozenLocomotionState()
     }
 
@@ -155,6 +276,7 @@ final class JockRuntimeDriver {
         transitionToVisualOffset = visualOffset
         activeClip = nil
         activeRuntimeOverride = .identity
+        activeSubAnimations.removeAll()
         resetFrozenLocomotionState()
     }
 
@@ -170,6 +292,7 @@ final class JockRuntimeDriver {
         state = .stopped
         activeClip = nil
         activeRuntimeOverride = .identity
+        activeSubAnimations.removeAll()
         resetFrozenLocomotionState()
     }
 
@@ -195,7 +318,10 @@ final class JockRuntimeDriver {
                 alpha: alpha
             )
 
-            modelEntity.jointTransforms = blendedPose
+            modelEntity.jointTransforms = applyActiveSubAnimations(
+                to: blendedPose,
+                deltaTime: clampedDelta
+            )
 
             let visualOffset = simd_slerp(
                 transitionFromVisualOffset,
@@ -241,7 +367,10 @@ final class JockRuntimeDriver {
                 alpha: alpha
             )
 
-            modelEntity.jointTransforms = blendedPose
+            modelEntity.jointTransforms = applyActiveSubAnimations(
+                to: blendedPose,
+                deltaTime: clampedDelta
+            )
 
             let visualOffset = simd_slerp(
                 transitionFromVisualOffset,
@@ -277,14 +406,22 @@ final class JockRuntimeDriver {
                     didWrap = playbackTime < previousTime
                 }
 
-                modelEntity.jointTransforms = sampleClipPose(activeClip, at: playbackTime)
+                let basePose = sampleClipPose(activeClip, at: playbackTime)
+                modelEntity.jointTransforms = applyActiveSubAnimations(
+                    to: basePose,
+                    deltaTime: clampedDelta
+                )
                 applyLocomotionFromFrozenOrigin(activeClip, at: playbackTime, didWrap: didWrap)
 
             } else {
                 if playbackTime >= duration {
                     playbackTime = duration
 
-                    modelEntity.jointTransforms = sampleClipPose(activeClip, at: playbackTime)
+                    let basePose = sampleClipPose(activeClip, at: playbackTime)
+                    modelEntity.jointTransforms = applyActiveSubAnimations(
+                        to: basePose,
+                        deltaTime: clampedDelta
+                    )
                     applyLocomotionFromFrozenOrigin(activeClip, at: playbackTime, didWrap: false)
 
                     commitRuntimeOverrideAtClipCompletion()
@@ -297,7 +434,11 @@ final class JockRuntimeDriver {
                     return
                 }
 
-                modelEntity.jointTransforms = sampleClipPose(activeClip, at: playbackTime)
+                let basePose = sampleClipPose(activeClip, at: playbackTime)
+                modelEntity.jointTransforms = applyActiveSubAnimations(
+                    to: basePose,
+                    deltaTime: clampedDelta
+                )
                 applyLocomotionFromFrozenOrigin(activeClip, at: playbackTime, didWrap: false)
             }
         }
@@ -363,6 +504,69 @@ final class JockRuntimeDriver {
 
             output[runtimeIndex] = transform
         }
+
+        return output
+    }
+
+    private func applyActiveSubAnimations(
+        to basePose: [Transform],
+        deltaTime: TimeInterval
+    ) -> [Transform] {
+        guard !activeSubAnimations.isEmpty else {
+            return basePose
+        }
+
+        var output = basePose
+        var updatedSubAnimations: [ActiveSubAnimation] = []
+
+        for var subAnimation in activeSubAnimations {
+            subAnimation.playbackTime += deltaTime
+
+            if subAnimation.isComplete {
+                continue
+            }
+
+            let weight = subAnimation.weight()
+
+            guard weight > 0.0001 else {
+                updatedSubAnimations.append(subAnimation)
+                continue
+            }
+
+            let subPose = sampleClipPose(
+                subAnimation.clip,
+                at: subAnimation.subClipSampleTime()
+            )
+
+            for runtimeIndex in subAnimation.affectedRuntimeIndices {
+                guard output.indices.contains(runtimeIndex),
+                      subPose.indices.contains(runtimeIndex) else {
+                    continue
+                }
+
+                output[runtimeIndex].translation = JockPoseMath.lerp(
+                    output[runtimeIndex].translation,
+                    subPose[runtimeIndex].translation,
+                    weight
+                )
+
+                output[runtimeIndex].scale = JockPoseMath.lerp(
+                    output[runtimeIndex].scale,
+                    subPose[runtimeIndex].scale,
+                    weight
+                )
+
+                output[runtimeIndex].rotation = JockPoseMath.slerp(
+                    output[runtimeIndex].rotation,
+                    subPose[runtimeIndex].rotation,
+                    weight
+                )
+            }
+
+            updatedSubAnimations.append(subAnimation)
+        }
+
+        activeSubAnimations = updatedSubAnimations
 
         return output
     }

@@ -77,6 +77,9 @@ struct JockHitReactionConfiguration: Equatable {
     let deathHitCount: Int
     let deathClipIDs: [String]
 
+    /// Side-specific sub-animation overlays triggered by detected face side.
+    let headSnapSubAnimationBySide: [JockHitSide: [String]]
+
     /// Allows hard hits to vary across hard, medium, and light same-side clips.
     let includeLowerDamageClipsForHigherDamage: Bool
 
@@ -118,6 +121,17 @@ struct JockHitReactionConfiguration: Equatable {
 
         deathClipIDs: [
             "dead_fall_forward"
+        ],
+
+        headSnapSubAnimationBySide: [
+            .right: [
+                "head_snap_right",
+                "head_snap_right_v001"
+            ],
+            .left: [
+                "head_snap_left",
+                "head_snap_left_v001"
+            ]
         ],
 
         includeLowerDamageClipsForHigherDamage: true,

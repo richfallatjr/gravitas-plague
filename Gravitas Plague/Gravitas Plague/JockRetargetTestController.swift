@@ -198,6 +198,25 @@ final class JockRetargetTestController {
             print("[Gravitas Hit] Missing phase-1 hit clips: \(missingHitClips.joined(separator: ", "))")
         }
 
+        let missingHeadSnapSides = hitConfiguration.headSnapSubAnimationBySide
+            .compactMap { side, candidateIDs -> String? in
+                let hasAvailableSubAnimation = candidateIDs.contains { clipID in
+                    loadedClips[clipID]?.isSubAnimationOverride == true
+                }
+
+                guard !hasAvailableSubAnimation else {
+                    return nil
+                }
+
+                return "\(side.rawValue): \(candidateIDs.joined(separator: ", "))"
+            }
+
+        if missingHeadSnapSides.isEmpty {
+            print("[Gravitas SubAnim] All phase-1 head snap sub-animations loaded.")
+        } else {
+            print("[Gravitas SubAnim] Missing or invalid head snap sub-animations: \(missingHeadSnapSides.joined(separator: " | "))")
+        }
+
         let adapter = JockSkeletonAdapter(
             rig: rig,
             skeletonMap: map,
@@ -561,6 +580,8 @@ final class JockRetargetTestController {
         )
         let selectedClipID: String?
 
+        triggerHeadSnapSubAnimation(for: event.side)
+
         if shouldDie {
             selectedClipID = randomAvailableClipID(
                 from: hitConfiguration.deathClipIDs,
@@ -631,6 +652,52 @@ final class JockRetargetTestController {
                 runtimeOverride: followVisualRuntimeOverride()
             )
         }
+    }
+
+    private func selectHeadSnapSubAnimationClipID(
+        for side: JockHitSide
+    ) -> String? {
+        let candidateIDs = hitConfiguration.headSnapSubAnimationBySide[side] ?? []
+
+        let available = candidateIDs.filter { clipID in
+            guard let clip = clipsByID[clipID] else {
+                return false
+            }
+
+            return clip.isSubAnimationOverride
+        }
+
+        guard !available.isEmpty else {
+            print(
+                """
+                [Gravitas SubAnim] No head snap sub-animation available
+                  detectedFaceSide: \(side.rawValue)
+                  candidates: \(candidateIDs.joined(separator: ", "))
+                """
+            )
+            return nil
+        }
+
+        return available.randomElement()
+    }
+
+    private func triggerHeadSnapSubAnimation(
+        for side: JockHitSide
+    ) {
+        guard let clipID = selectHeadSnapSubAnimationClipID(for: side),
+              let clip = clipsByID[clipID] else {
+            return
+        }
+
+        driver?.triggerSubAnimation(clip)
+
+        print(
+            """
+            [Gravitas Hit] Triggered head snap sub-animation
+              detectedFaceSide: \(side.rawValue)
+              clipID: \(clipID)
+            """
+        )
     }
 
     private func authoredHitClipSide(
