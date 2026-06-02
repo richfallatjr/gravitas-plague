@@ -12,6 +12,7 @@ final class JockRuntimeDriver {
     }
 
     private weak var modelEntity: ModelEntity?
+    private weak var locomotionRootEntity: Entity?
 
     private let adapter: JockSkeletonAdapter
     private let baseJointTransforms: [Transform]
@@ -28,12 +29,30 @@ final class JockRuntimeDriver {
     private var transitionToPose: [Transform] = []
     private var pendingPlayAfterTransition = false
 
+    private var previousLocomotionSample = LocomotionSample.zero
+
+    private struct LocomotionSample: Equatable {
+        var forward: Float
+        var side: Float
+        var vertical: Float
+        var yawDegrees: Float
+
+        static let zero = LocomotionSample(
+            forward: 0,
+            side: 0,
+            vertical: 0,
+            yawDegrees: 0
+        )
+    }
+
     init(
         modelEntity: ModelEntity,
-        adapter: JockSkeletonAdapter
+        adapter: JockSkeletonAdapter,
+        locomotionRootEntity: Entity? = nil
     ) {
         self.modelEntity = modelEntity
         self.adapter = adapter
+        self.locomotionRootEntity = locomotionRootEntity
         self.baseJointTransforms = modelEntity.jointTransforms
         self.jointNames = modelEntity.jointNames
     }
@@ -48,6 +67,7 @@ final class JockRuntimeDriver {
         activeClip = clip
         loopEnabled = loop
         playbackTime = 0
+        previousLocomotionSample = sampleLocomotion(clip, at: 0)
 
         transitionDuration = clip.transition.transitionDurationSeconds
         pendingPlayAfterTransition = true
@@ -120,18 +140,102 @@ final class JockRuntimeDriver {
                 return
             }
 
+            let previousTime = playbackTime
             playbackTime += clampedDelta
 
             let duration = max(activeClip.timing.durationSeconds, 0.001)
+            var didWrap = false
 
             if loopEnabled {
-                playbackTime = playbackTime.truncatingRemainder(dividingBy: duration)
+                if playbackTime >= duration {
+                    playbackTime = playbackTime.truncatingRemainder(dividingBy: duration)
+                    didWrap = playbackTime < previousTime
+                }
             } else if playbackTime > duration {
                 playbackTime = duration
                 state = .stopped
             }
 
             modelEntity.jointTransforms = sampleClipPose(activeClip, at: playbackTime)
+            applyLocomotionIfNeeded(activeClip, at: playbackTime, didWrap: didWrap)
+        }
+    }
+
+    private func sampleLocomotion(
+        _ clip: JockAnimClip,
+        at time: TimeInterval
+    ) -> LocomotionSample {
+        guard clip.locomotion.isEnabled else {
+            return .zero
+        }
+
+        let tracks = clip.locomotion.resolvedTracks
+
+        return LocomotionSample(
+            forward: JockPoseMath.sampleScalar(
+                keys: tracks.forwardMeters,
+                time: time
+            ),
+            side: JockPoseMath.sampleScalar(
+                keys: tracks.sideMeters,
+                time: time
+            ),
+            vertical: JockPoseMath.sampleScalar(
+                keys: tracks.verticalMeters,
+                time: time
+            ),
+            yawDegrees: JockPoseMath.sampleScalar(
+                keys: tracks.yawDegrees,
+                time: time
+            )
+        )
+    }
+
+    private func applyLocomotionIfNeeded(
+        _ clip: JockAnimClip,
+        at time: TimeInterval,
+        didWrap: Bool
+    ) {
+        guard clip.locomotion.isEnabled else {
+            return
+        }
+
+        guard let locomotionRootEntity else {
+            return
+        }
+
+        if didWrap {
+            previousLocomotionSample = sampleLocomotion(clip, at: 0)
+        }
+
+        let current = sampleLocomotion(clip, at: time)
+
+        let deltaForward = current.forward - previousLocomotionSample.forward
+        let deltaSide = current.side - previousLocomotionSample.side
+        let deltaVertical = current.vertical - previousLocomotionSample.vertical
+        let deltaYawDegrees = current.yawDegrees - previousLocomotionSample.yawDegrees
+
+        previousLocomotionSample = current
+
+        let localDelta = SIMD3<Float>(
+            deltaSide,
+            deltaVertical,
+            -deltaForward
+        )
+
+        let worldDelta = locomotionRootEntity.orientation.act(localDelta)
+        locomotionRootEntity.position += worldDelta
+
+        if abs(deltaYawDegrees) > 0.0001 {
+            let yawRadians = JockPoseMath.radians(deltaYawDegrees)
+
+            let deltaRotation = simd_quatf(
+                angle: yawRadians,
+                axis: SIMD3<Float>(0, 1, 0)
+            )
+
+            locomotionRootEntity.orientation =
+                deltaRotation * locomotionRootEntity.orientation
         }
     }
 

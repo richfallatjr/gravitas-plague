@@ -111,6 +111,12 @@ struct PlagueDemoView: View {
                                 Text("Duration: \(String(format: "%.2f", selected.durationSeconds))s")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
+
+                                if selected.locomotionEnabled == true {
+                                    Text("Locomotion")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }

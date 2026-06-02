@@ -1,7 +1,7 @@
 {
   "schema": "com.gravitas.animation_library_manifest.v0",
   "library_id": "GravitasPlagueAnimationLibrary",
-  "generated_at": "2026-06-01T23:23:25.173939+00:00",
+  "generated_at": "2026-06-02T00:14:18.524787+00:00",
   "clips": [
     {
       "clip_id": "dummy_calisthenics_v001",
@@ -29,6 +29,8 @@
       "duration_seconds": 1.0,
       "locomotion_type": "stationary",
       "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": true,
       "updated_at": "2026-06-01T00:00:00Z"
@@ -57,9 +59,43 @@
       "duration_seconds": 14.125,
       "locomotion_type": "stationary",
       "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
       "updated_at": "2026-06-01T23:23:25.173939+00:00"
+    },
+    {
+      "clip_id": "unstable_walk_01",
+      "display_name": "Infected Unstable Walk 01",
+      "relative_path": "Clips/Walk/unstable_walk_01.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "category": [
+        "walk"
+      ],
+      "emotion": [
+        "vacant",
+        "sick",
+        "unstable"
+      ],
+      "threat": [
+        "aggressive"
+      ],
+      "story": [
+        "hunting",
+        "approaching"
+      ],
+      "looping": true,
+      "duration_seconds": 3.7083333333333335,
+      "locomotion_type": "root_motion_walk",
+      "world_space_motion": "none",
+      "locomotion_enabled": true,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T00:14:18.524775+00:00"
     }
   ]
 }

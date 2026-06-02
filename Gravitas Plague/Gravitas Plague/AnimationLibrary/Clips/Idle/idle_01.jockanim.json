@@ -139057,11 +139057,25 @@
     }
   ],
   "locomotion": {
+    "enabled": false,
     "locomotion_type": "stationary",
     "world_space_motion": "none",
+    "space": "characterLocal",
+    "translation_units": "meters",
+    "rotation_units": "degrees",
+    "runtime_forward_axis": "-z",
+    "runtime_up_axis": "y",
+    "authoring_up_axis": "z",
+    "locomotion_start_mode": "after_transition",
     "recommended_speed_mps": 0.0,
     "root_rotation_degrees": 0.0,
-    "root_translation_policy": "ignore"
+    "root_translation_policy": "ignore",
+    "tracks": {
+      "forward_meters": [],
+      "side_meters": [],
+      "vertical_meters": [],
+      "yaw_degrees": []
+    }
   },
   "transition": {
     "default_transition_frames": 5,

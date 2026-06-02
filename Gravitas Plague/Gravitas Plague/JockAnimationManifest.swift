@@ -16,6 +16,8 @@ struct JockAnimationManifest: Codable, Equatable {
         let durationSeconds: Double
         let locomotionType: String
         let worldSpaceMotion: String
+        let locomotionEnabled: Bool?
+        let locomotionStartMode: String?
         let approvedForRuntime: Bool
         let debugOnly: Bool
         let updatedAt: String?
@@ -37,6 +39,8 @@ struct JockAnimationManifest: Codable, Equatable {
             case durationSeconds = "duration_seconds"
             case locomotionType = "locomotion_type"
             case worldSpaceMotion = "world_space_motion"
+            case locomotionEnabled = "locomotion_enabled"
+            case locomotionStartMode = "locomotion_start_mode"
             case approvedForRuntime = "approved_for_runtime"
             case debugOnly = "debug_only"
             case updatedAt = "updated_at"

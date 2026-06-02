@@ -178,6 +178,38 @@ enum JockPoseMath {
     }
 }
 
+extension JockPoseMath {
+    static func sampleScalar(
+        keys: [JockAnimClip.Locomotion.ScalarKey],
+        time: Double
+    ) -> Float {
+        guard !keys.isEmpty else { return 0 }
+
+        let sorted = keys.sorted { $0.t < $1.t }
+
+        if time <= sorted[0].t {
+            return sorted[0].value
+        }
+
+        if time >= sorted[sorted.count - 1].t {
+            return sorted[sorted.count - 1].value
+        }
+
+        for index in 0..<(sorted.count - 1) {
+            let lhs = sorted[index]
+            let rhs = sorted[index + 1]
+
+            if time >= lhs.t && time <= rhs.t {
+                let span = max(rhs.t - lhs.t, 0.0001)
+                let alpha = Float((time - lhs.t) / span)
+                return lhs.value + (rhs.value - lhs.value) * alpha
+            }
+        }
+
+        return sorted[0].value
+    }
+}
+
 private extension Array {
     subscript(safe index: Int) -> Element? {
         guard indices.contains(index) else { return nil }

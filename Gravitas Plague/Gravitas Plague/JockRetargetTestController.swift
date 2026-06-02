@@ -96,7 +96,8 @@ final class JockRetargetTestController {
 
         let driver = JockRuntimeDriver(
             modelEntity: skinnedModel,
-            adapter: adapter
+            adapter: adapter,
+            locomotionRootEntity: rootEntity
         )
 
         rootEntity.addChild(loadedEntity)

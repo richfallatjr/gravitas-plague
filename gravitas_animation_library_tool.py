@@ -47,6 +47,26 @@ from bpy.types import Operator, Panel, PropertyGroup
 TEMP_COLLECTION_NAME = "__GRAVITAS_ANIMATION_DONOR_TEMP__"
 LOG_TEXT_BLOCK_NAME = "Gravitas_Animation_Library_Log"
 
+DEFAULT_PROJECT_ROOT = os.path.expanduser(
+    "/Users/richardfallat/Projects/dev/gravitas-plague"
+)
+DEFAULT_ANIMATION_LIBRARY_ROOT = os.path.join(
+    DEFAULT_PROJECT_ROOT,
+    "Gravitas Plague",
+    "Gravitas Plague",
+    "AnimationLibrary",
+)
+DEFAULT_RIG_JSON_PATH = os.path.join(
+    DEFAULT_ANIMATION_LIBRARY_ROOT,
+    "Rigs",
+    "GravitasMeshyBiped24_v001.rig.json",
+)
+DEFAULT_SKELETON_MAP_PATH = os.path.join(
+    DEFAULT_ANIMATION_LIBRARY_ROOT,
+    "SkeletonMaps",
+    "MeshyBiped24_identity.map.json",
+)
+
 
 # ============================================================
 # Logging
@@ -137,6 +157,234 @@ def _now_iso():
 def _current_scene_fps():
     scene = bpy.context.scene
     return float(scene.render.fps / max(scene.render.fps_base, 0.0001))
+
+
+# ============================================================
+# Locomotion Authoring
+# ============================================================
+
+LOCOMOTION_ROOT_NAME = "JOCK_LOCOMOTION_ROOT"
+LOCOMOTION_PATH_NAME = "JOCK_LOCOMOTION_PREVIEW_PATH"
+
+LOCOMOTION_PROPS = [
+    "forward_meters",
+    "side_meters",
+    "vertical_meters",
+    "yaw_degrees",
+]
+
+
+def _get_locomotion_root():
+    obj = bpy.data.objects.get(LOCOMOTION_ROOT_NAME)
+    if obj is not None:
+        return obj
+
+    root = bpy.data.objects.new(LOCOMOTION_ROOT_NAME, None)
+    root.empty_display_type = "ARROWS"
+    root.empty_display_size = 0.35
+    bpy.context.scene.collection.objects.link(root)
+
+    for prop in LOCOMOTION_PROPS:
+        root[prop] = 0.0
+
+    root["gravitas_type"] = "jock_locomotion_root"
+    return root
+
+
+def _ensure_locomotion_root_defaults(root):
+    for prop in LOCOMOTION_PROPS:
+        if prop not in root:
+            root[prop] = 0.0
+
+    root["gravitas_type"] = "jock_locomotion_root"
+
+
+def _apply_locomotion_root_preview_transform(root):
+    """
+    Blender authoring preview:
+      forward_meters -> +Y
+      side_meters    -> +X
+      vertical       -> +Z
+      yaw_degrees    -> rotation around +Z
+
+    Runtime convention is encoded in JSON:
+      forward -> local -Z
+      up      -> +Y
+    """
+    forward = float(root.get("forward_meters", 0.0))
+    side = float(root.get("side_meters", 0.0))
+    vertical = float(root.get("vertical_meters", 0.0))
+    yaw = math.radians(float(root.get("yaw_degrees", 0.0)))
+
+    root.location = (side, forward, vertical)
+    root.rotation_euler = (0.0, 0.0, yaw)
+
+
+def _key_locomotion_root(root, frame, log):
+    _ensure_locomotion_root_defaults(root)
+    _apply_locomotion_root_preview_transform(root)
+
+    for prop in LOCOMOTION_PROPS:
+        root.keyframe_insert(data_path=f'["{prop}"]', frame=int(frame))
+
+    root.keyframe_insert(data_path="location", frame=int(frame))
+    root.keyframe_insert(data_path="rotation_euler", frame=int(frame))
+
+    log.append(
+        f"Keyed locomotion root at frame {frame}: "
+        f"forward={root['forward_meters']}, "
+        f"side={root['side_meters']}, "
+        f"vertical={root['vertical_meters']}, "
+        f"yaw={root['yaw_degrees']}"
+    )
+
+
+def _clear_locomotion_keys(root, log):
+    if root.animation_data is not None:
+        root.animation_data_clear()
+
+    log.append("Cleared locomotion root animation keys.")
+
+
+def _read_locomotion_prop(root, prop):
+    try:
+        return float(root.get(prop, 0.0))
+    except Exception:
+        return 0.0
+
+
+def _empty_locomotion_tracks():
+    return {
+        "forward_meters": [],
+        "side_meters": [],
+        "vertical_meters": [],
+        "yaw_degrees": [],
+    }
+
+
+def _sample_locomotion_tracks(
+    start_frame,
+    end_frame,
+    source_fps,
+    sample_every_n,
+    enabled,
+    log,
+):
+    """
+    Locomotion tracks are authored as absolute values from clip start.
+    Runtime applies deltas between samples.
+    """
+    root = bpy.data.objects.get(LOCOMOTION_ROOT_NAME)
+
+    if not enabled or root is None:
+        log.append(
+            "Locomotion export disabled or no locomotion root found. "
+            "Exporting disabled locomotion."
+        )
+        return {
+            "enabled": False,
+            "space": "characterLocal",
+            "translation_units": "meters",
+            "rotation_units": "degrees",
+            "runtime_forward_axis": "-z",
+            "runtime_up_axis": "y",
+            "authoring_up_axis": "z",
+            "locomotion_start_mode": "after_transition",
+            "tracks": _empty_locomotion_tracks(),
+        }
+
+    sample_every_n = max(int(sample_every_n), 1)
+    frames = list(range(int(start_frame), int(end_frame) + 1, sample_every_n))
+
+    if not frames:
+        frames = [int(start_frame)]
+
+    if frames[-1] != int(end_frame):
+        frames.append(int(end_frame))
+
+    tracks = _empty_locomotion_tracks()
+
+    for frame in frames:
+        bpy.context.scene.frame_set(int(frame))
+        bpy.context.view_layer.update()
+
+        t = float(frame - start_frame) / float(source_fps)
+
+        for prop in LOCOMOTION_PROPS:
+            tracks[prop].append({
+                "frame": int(frame),
+                "t": t,
+                "value": _read_locomotion_prop(root, prop),
+            })
+
+    log.append(
+        f"Sampled locomotion tracks from frame {start_frame} to {end_frame}; "
+        f"{len(frames)} samples."
+    )
+
+    return {
+        "enabled": True,
+        "space": "characterLocal",
+        "translation_units": "meters",
+        "rotation_units": "degrees",
+        "runtime_forward_axis": "-z",
+        "runtime_up_axis": "y",
+        "authoring_up_axis": "z",
+        "locomotion_start_mode": "after_transition",
+        "tracks": tracks,
+    }
+
+
+def _delete_existing_locomotion_preview_path():
+    obj = bpy.data.objects.get(LOCOMOTION_PATH_NAME)
+    if obj is not None:
+        bpy.data.objects.remove(obj, do_unlink=True)
+
+
+def _refresh_locomotion_preview_path(start_frame, end_frame, sample_every_n, log):
+    root = bpy.data.objects.get(LOCOMOTION_ROOT_NAME)
+    if root is None:
+        raise RuntimeError("No JOCK_LOCOMOTION_ROOT exists. Create it first.")
+
+    _delete_existing_locomotion_preview_path()
+
+    sample_every_n = max(int(sample_every_n), 1)
+    frames = list(range(int(start_frame), int(end_frame) + 1, sample_every_n))
+
+    if not frames:
+        frames = [int(start_frame)]
+
+    if frames[-1] != int(end_frame):
+        frames.append(int(end_frame))
+
+    points = []
+
+    for frame in frames:
+        bpy.context.scene.frame_set(int(frame))
+        bpy.context.view_layer.update()
+
+        forward = _read_locomotion_prop(root, "forward_meters")
+        side = _read_locomotion_prop(root, "side_meters")
+        vertical = _read_locomotion_prop(root, "vertical_meters")
+
+        points.append((side, forward, vertical, 1.0))
+
+    curve_data = bpy.data.curves.new(LOCOMOTION_PATH_NAME, type="CURVE")
+    curve_data.dimensions = "3D"
+    curve_data.resolution_u = 1
+    curve_data.bevel_depth = 0.01
+
+    polyline = curve_data.splines.new("POLY")
+    polyline.points.add(len(points) - 1)
+
+    for point, value in zip(polyline.points, points):
+        point.co = value
+
+    curve_obj = bpy.data.objects.new(LOCOMOTION_PATH_NAME, curve_data)
+    bpy.context.scene.collection.objects.link(curve_obj)
+
+    log.append(f"Refreshed locomotion preview path with {len(points)} points.")
+    return curve_obj
 
 
 # ============================================================
@@ -565,6 +813,11 @@ def _update_manifest(library_root, clip_payload, output_path):
         "duration_seconds": clip_payload["timing"]["duration_seconds"],
         "locomotion_type": clip_payload["locomotion"]["locomotion_type"],
         "world_space_motion": clip_payload["locomotion"]["world_space_motion"],
+        "locomotion_enabled": clip_payload["locomotion"].get("enabled", False),
+        "locomotion_start_mode": clip_payload["locomotion"].get(
+            "locomotion_start_mode",
+            "after_transition",
+        ),
         "approved_for_runtime": clip_payload["quality"]["approved_for_runtime"],
         "debug_only": clip_payload["quality"]["debug_only"],
         "updated_at": _now_iso(),
@@ -591,19 +844,19 @@ class GravitasAnimationLibrarySettings(PropertyGroup):
     animation_library_root: StringProperty(
         name="Animation Library Root",
         subtype="DIR_PATH",
-        default="",
+        default=DEFAULT_ANIMATION_LIBRARY_ROOT,
     )
 
     rig_json_path: StringProperty(
         name="Rig Definition JSON",
         subtype="FILE_PATH",
-        default="",
+        default=DEFAULT_RIG_JSON_PATH,
     )
 
     skeleton_map_path: StringProperty(
         name="Skeleton Map JSON",
         subtype="FILE_PATH",
-        default="",
+        default=DEFAULT_SKELETON_MAP_PATH,
     )
 
     donor_file_path: StringProperty(
@@ -769,6 +1022,56 @@ class GravitasAnimationLibrarySettings(PropertyGroup):
             ("extract_as_metadata", "extract_as_metadata", ""),
         ],
         default="ignore",
+    )
+
+    locomotion_enabled: BoolProperty(
+        name="Enable Locomotion Track",
+        default=False,
+    )
+
+    locomotion_forward_meters: FloatProperty(
+        name="Forward Meters",
+        default=0.0,
+        min=-100.0,
+        max=100.0,
+    )
+
+    locomotion_side_meters: FloatProperty(
+        name="Side Meters",
+        default=0.0,
+        min=-100.0,
+        max=100.0,
+    )
+
+    locomotion_vertical_meters: FloatProperty(
+        name="Vertical Meters",
+        default=0.0,
+        min=-10.0,
+        max=10.0,
+    )
+
+    locomotion_yaw_degrees: FloatProperty(
+        name="Yaw Degrees",
+        default=0.0,
+        min=-1080.0,
+        max=1080.0,
+    )
+
+    locomotion_preview_sample_every_n: IntProperty(
+        name="Preview Sample Every N Frames",
+        default=4,
+        min=1,
+        max=120,
+    )
+
+    locomotion_start_mode: EnumProperty(
+        name="Locomotion Start Mode",
+        items=[
+            ("after_transition", "after_transition", "Start root motion after pose transition."),
+            ("during_transition", "during_transition", "Start root motion during pose transition."),
+            ("immediate", "immediate", "Start root motion immediately."),
+        ],
+        default="after_transition",
     )
 
     default_transition_frames: IntProperty(
@@ -972,6 +1275,15 @@ class GRAVITAS_OT_export_jock_clip(Operator):
                 log=log,
             )
 
+            locomotion_track_payload = _sample_locomotion_tracks(
+                start_frame=start_frame,
+                end_frame=end_frame,
+                source_fps=fps,
+                sample_every_n=int(settings.sample_every_n_frames),
+                enabled=bool(settings.locomotion_enabled),
+                log=log,
+            )
+
             clip_id = settings.clip_id.strip()
             if not clip_id:
                 raise RuntimeError("Clip ID is empty.")
@@ -1001,11 +1313,24 @@ class GRAVITAS_OT_export_jock_clip(Operator):
                 "joints": _rig_leaf_names(rig),
                 "tracks": tracks,
                 "locomotion": {
+                    "enabled": bool(locomotion_track_payload["enabled"]),
                     "locomotion_type": settings.locomotion_type,
                     "world_space_motion": settings.world_space_motion,
+                    "space": locomotion_track_payload["space"],
+                    "translation_units": locomotion_track_payload["translation_units"],
+                    "rotation_units": locomotion_track_payload["rotation_units"],
+                    "runtime_forward_axis": locomotion_track_payload["runtime_forward_axis"],
+                    "runtime_up_axis": locomotion_track_payload["runtime_up_axis"],
+                    "authoring_up_axis": locomotion_track_payload["authoring_up_axis"],
+                    "locomotion_start_mode": settings.locomotion_start_mode,
                     "recommended_speed_mps": float(settings.recommended_speed_mps),
                     "root_rotation_degrees": float(settings.turn_degrees),
-                    "root_translation_policy": settings.root_translation_policy,
+                    "root_translation_policy": (
+                        "manual_curve"
+                        if locomotion_track_payload["enabled"]
+                        else settings.root_translation_policy
+                    ),
+                    "tracks": locomotion_track_payload["tracks"],
                 },
                 "transition": {
                     "default_transition_frames": int(settings.default_transition_frames),
@@ -1079,6 +1404,148 @@ class GRAVITAS_OT_cleanup_donor_import(Operator):
         return {"FINISHED"}
 
 
+class GRAVITAS_OT_create_locomotion_root(Operator):
+    bl_idname = "gravitas.create_locomotion_root"
+    bl_label = "Create / Update Locomotion Root"
+    bl_description = "Creates the Jock locomotion authoring root and applies current UI values."
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.gravitas_animation_library
+        log = []
+
+        try:
+            root = _get_locomotion_root()
+            _ensure_locomotion_root_defaults(root)
+
+            root["forward_meters"] = float(settings.locomotion_forward_meters)
+            root["side_meters"] = float(settings.locomotion_side_meters)
+            root["vertical_meters"] = float(settings.locomotion_vertical_meters)
+            root["yaw_degrees"] = float(settings.locomotion_yaw_degrees)
+
+            _apply_locomotion_root_preview_transform(root)
+
+            bpy.ops.object.select_all(action="DESELECT")
+            root.select_set(True)
+            context.view_layer.objects.active = root
+
+            _log_append(log, "Created / updated JOCK_LOCOMOTION_ROOT.")
+            _safe_report(self, {"INFO"}, "Created / updated JOCK_LOCOMOTION_ROOT.")
+
+        except Exception as error:
+            _log_append(log, "ERROR")
+            _log_append(log, str(error))
+            _log_append(log, traceback.format_exc())
+            _safe_report(self, {"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+        finally:
+            if settings.log_text:
+                _write_log(log)
+
+        return {"FINISHED"}
+
+
+class GRAVITAS_OT_key_locomotion_current_frame(Operator):
+    bl_idname = "gravitas.key_locomotion_current_frame"
+    bl_label = "Key Locomotion At Current Frame"
+    bl_description = "Sets locomotion values on JOCK_LOCOMOTION_ROOT and keys them at the current frame."
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.gravitas_animation_library
+        log = []
+
+        try:
+            root = _get_locomotion_root()
+            _ensure_locomotion_root_defaults(root)
+
+            root["forward_meters"] = float(settings.locomotion_forward_meters)
+            root["side_meters"] = float(settings.locomotion_side_meters)
+            root["vertical_meters"] = float(settings.locomotion_vertical_meters)
+            root["yaw_degrees"] = float(settings.locomotion_yaw_degrees)
+
+            frame = context.scene.frame_current
+            _key_locomotion_root(root, frame, log)
+
+            _safe_report(self, {"INFO"}, f"Keyed locomotion at frame {frame}.")
+
+        except Exception as error:
+            _log_append(log, "ERROR")
+            _log_append(log, str(error))
+            _log_append(log, traceback.format_exc())
+            _safe_report(self, {"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+        finally:
+            if settings.log_text:
+                _write_log(log)
+
+        return {"FINISHED"}
+
+
+class GRAVITAS_OT_clear_locomotion_keys(Operator):
+    bl_idname = "gravitas.clear_locomotion_keys"
+    bl_label = "Clear Locomotion Keys"
+    bl_description = "Clears all locomotion root keyframes."
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.gravitas_animation_library
+        log = []
+
+        try:
+            root = _get_locomotion_root()
+            _clear_locomotion_keys(root, log)
+            _safe_report(self, {"INFO"}, "Cleared locomotion keys.")
+
+        except Exception as error:
+            _log_append(log, "ERROR")
+            _log_append(log, str(error))
+            _safe_report(self, {"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+        finally:
+            if settings.log_text:
+                _write_log(log)
+
+        return {"FINISHED"}
+
+
+class GRAVITAS_OT_refresh_locomotion_preview_path(Operator):
+    bl_idname = "gravitas.refresh_locomotion_preview_path"
+    bl_label = "Refresh Locomotion Preview Path"
+    bl_description = "Draws a curve showing the authored locomotion path."
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.gravitas_animation_library
+        log = []
+
+        try:
+            _refresh_locomotion_preview_path(
+                start_frame=int(settings.source_start_frame),
+                end_frame=int(settings.source_end_frame),
+                sample_every_n=int(settings.locomotion_preview_sample_every_n),
+                log=log,
+            )
+
+            _safe_report(self, {"INFO"}, "Refreshed locomotion preview path.")
+
+        except Exception as error:
+            _log_append(log, "ERROR")
+            _log_append(log, str(error))
+            _log_append(log, traceback.format_exc())
+            _safe_report(self, {"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+        finally:
+            if settings.log_text:
+                _write_log(log)
+
+        return {"FINISHED"}
+
+
 # ============================================================
 # UI Panel
 # ============================================================
@@ -1148,6 +1615,40 @@ class GRAVITAS_PT_animation_library_panel(Panel):
         locomotion_box.prop(settings, "root_translation_policy")
         locomotion_box.prop(settings, "default_transition_frames")
 
+        locomotion_author_box = layout.box()
+        locomotion_author_box.label(text="Locomotion Authoring", icon="EMPTY_ARROWS")
+        locomotion_author_box.prop(settings, "locomotion_enabled")
+        locomotion_author_box.prop(settings, "locomotion_forward_meters")
+        locomotion_author_box.prop(settings, "locomotion_side_meters")
+        locomotion_author_box.prop(settings, "locomotion_vertical_meters")
+        locomotion_author_box.prop(settings, "locomotion_yaw_degrees")
+        locomotion_author_box.prop(settings, "locomotion_start_mode")
+        locomotion_author_box.prop(settings, "locomotion_preview_sample_every_n")
+
+        locomotion_author_box.operator(
+            GRAVITAS_OT_create_locomotion_root.bl_idname,
+            text="Create / Update Locomotion Root",
+            icon="EMPTY_ARROWS",
+        )
+
+        locomotion_author_box.operator(
+            GRAVITAS_OT_key_locomotion_current_frame.bl_idname,
+            text="Key Locomotion At Current Frame",
+            icon="KEY_HLT",
+        )
+
+        locomotion_author_box.operator(
+            GRAVITAS_OT_refresh_locomotion_preview_path.bl_idname,
+            text="Refresh Locomotion Preview Path",
+            icon="CURVE_PATH",
+        )
+
+        locomotion_author_box.operator(
+            GRAVITAS_OT_clear_locomotion_keys.bl_idname,
+            text="Clear Locomotion Keys",
+            icon="TRASH",
+        )
+
         tags_box = layout.box()
         tags_box.label(text="Tags", icon="BOOKMARKS")
         tags_box.prop(settings, "category_tags")
@@ -1182,8 +1683,28 @@ classes = (
     GRAVITAS_OT_validate_donor_rig,
     GRAVITAS_OT_export_jock_clip,
     GRAVITAS_OT_cleanup_donor_import,
+    GRAVITAS_OT_create_locomotion_root,
+    GRAVITAS_OT_key_locomotion_current_frame,
+    GRAVITAS_OT_clear_locomotion_keys,
+    GRAVITAS_OT_refresh_locomotion_preview_path,
     GRAVITAS_PT_animation_library_panel,
 )
+
+
+def _apply_default_library_paths_if_empty():
+    try:
+        settings = bpy.context.scene.gravitas_animation_library
+    except Exception:
+        return
+
+    if not settings.animation_library_root:
+        settings.animation_library_root = DEFAULT_ANIMATION_LIBRARY_ROOT
+
+    if not settings.rig_json_path:
+        settings.rig_json_path = DEFAULT_RIG_JSON_PATH
+
+    if not settings.skeleton_map_path:
+        settings.skeleton_map_path = DEFAULT_SKELETON_MAP_PATH
 
 
 def register():
@@ -1196,6 +1717,7 @@ def register():
     bpy.types.Scene.gravitas_animation_library = PointerProperty(
         type=GravitasAnimationLibrarySettings
     )
+    _apply_default_library_paths_if_empty()
 
 
 def unregister():

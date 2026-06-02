@@ -26,16 +26,75 @@ struct JockAnimClip: Codable, Equatable {
     }
 
     struct Locomotion: Codable, Equatable {
+        struct ScalarKey: Codable, Equatable {
+            let frame: Int?
+            let t: Double
+            let value: Float
+        }
+
+        struct Tracks: Codable, Equatable {
+            let forwardMeters: [ScalarKey]
+            let sideMeters: [ScalarKey]
+            let verticalMeters: [ScalarKey]
+            let yawDegrees: [ScalarKey]
+
+            enum CodingKeys: String, CodingKey {
+                case forwardMeters = "forward_meters"
+                case sideMeters = "side_meters"
+                case verticalMeters = "vertical_meters"
+                case yawDegrees = "yaw_degrees"
+            }
+
+            static let empty = Tracks(
+                forwardMeters: [],
+                sideMeters: [],
+                verticalMeters: [],
+                yawDegrees: []
+            )
+        }
+
+        let enabled: Bool?
         let locomotionType: String
         let worldSpaceMotion: String
+        let space: String?
+        let translationUnits: String?
+        let rotationUnits: String?
+        let runtimeForwardAxis: String?
+        let runtimeUpAxis: String?
+        let authoringUpAxis: String?
+        let locomotionStartMode: String?
         let recommendedSpeedMPS: Double
         let rootRotationDegrees: Double
+        let rootTranslationPolicy: String?
+        let tracks: Tracks?
 
         enum CodingKeys: String, CodingKey {
+            case enabled
             case locomotionType = "locomotion_type"
             case worldSpaceMotion = "world_space_motion"
+            case space
+            case translationUnits = "translation_units"
+            case rotationUnits = "rotation_units"
+            case runtimeForwardAxis = "runtime_forward_axis"
+            case runtimeUpAxis = "runtime_up_axis"
+            case authoringUpAxis = "authoring_up_axis"
+            case locomotionStartMode = "locomotion_start_mode"
             case recommendedSpeedMPS = "recommended_speed_mps"
             case rootRotationDegrees = "root_rotation_degrees"
+            case rootTranslationPolicy = "root_translation_policy"
+            case tracks
+        }
+
+        var isEnabled: Bool {
+            enabled ?? false
+        }
+
+        var resolvedTracks: Tracks {
+            tracks ?? .empty
+        }
+
+        var startsAfterTransition: Bool {
+            (locomotionStartMode ?? "after_transition") == "after_transition"
         }
     }
 
