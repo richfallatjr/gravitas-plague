@@ -67,7 +67,7 @@ final class JockRuntimeDriver {
         activeClip = clip
         loopEnabled = loop
         playbackTime = 0
-        previousLocomotionSample = sampleLocomotion(clip, at: 0)
+        previousLocomotionSample = .zero
 
         transitionDuration = clip.transition.transitionDurationSeconds
         pendingPlayAfterTransition = true
@@ -128,6 +128,7 @@ final class JockRuntimeDriver {
                 if pendingPlayAfterTransition {
                     pendingPlayAfterTransition = false
                     playbackTime = 0
+                    applyInitialLocomotionIfNeeded()
                     state = .playing
                 } else {
                     state = .stopped
@@ -200,22 +201,53 @@ final class JockRuntimeDriver {
             return
         }
 
-        guard let locomotionRootEntity else {
-            return
-        }
-
         if didWrap {
             previousLocomotionSample = sampleLocomotion(clip, at: 0)
         }
 
         let current = sampleLocomotion(clip, at: time)
 
-        let deltaForward = current.forward - previousLocomotionSample.forward
-        let deltaSide = current.side - previousLocomotionSample.side
-        let deltaVertical = current.vertical - previousLocomotionSample.vertical
-        let deltaYawDegrees = current.yawDegrees - previousLocomotionSample.yawDegrees
+        applyLocomotionDelta(
+            from: previousLocomotionSample,
+            to: current
+        )
 
         previousLocomotionSample = current
+    }
+
+    private func applyInitialLocomotionIfNeeded() {
+        guard let activeClip else {
+            previousLocomotionSample = .zero
+            return
+        }
+
+        guard activeClip.locomotion.isEnabled else {
+            previousLocomotionSample = .zero
+            return
+        }
+
+        let initial = sampleLocomotion(activeClip, at: 0)
+
+        applyLocomotionDelta(
+            from: .zero,
+            to: initial
+        )
+
+        previousLocomotionSample = initial
+    }
+
+    private func applyLocomotionDelta(
+        from previous: LocomotionSample,
+        to current: LocomotionSample
+    ) {
+        guard let locomotionRootEntity else {
+            return
+        }
+
+        let deltaForward = current.forward - previous.forward
+        let deltaSide = current.side - previous.side
+        let deltaVertical = current.vertical - previous.vertical
+        let deltaYawDegrees = current.yawDegrees - previous.yawDegrees
 
         let localDelta = SIMD3<Float>(
             deltaSide,

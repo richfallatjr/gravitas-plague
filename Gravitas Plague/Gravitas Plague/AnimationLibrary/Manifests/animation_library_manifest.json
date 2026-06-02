@@ -1,7 +1,7 @@
 {
   "schema": "com.gravitas.animation_library_manifest.v0",
   "library_id": "GravitasPlagueAnimationLibrary",
-  "generated_at": "2026-06-02T00:14:18.524787+00:00",
+  "generated_at": "2026-06-02T00:41:03.805027+00:00",
   "clips": [
     {
       "clip_id": "dummy_calisthenics_v001",
@@ -66,6 +66,66 @@
       "updated_at": "2026-06-01T23:23:25.173939+00:00"
     },
     {
+      "clip_id": "turn_right_90",
+      "display_name": "Turn right upgright composed",
+      "relative_path": "Clips/Turn/turn_right_90.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "category": [
+        "Turn"
+      ],
+      "emotion": [
+        "composed",
+        "upright"
+      ],
+      "threat": [
+        "passive"
+      ],
+      "story": [
+        "turn body 90 degrees"
+      ],
+      "looping": false,
+      "duration_seconds": 1.375,
+      "locomotion_type": "turn",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T00:25:05.741531+00:00"
+    },
+    {
+      "clip_id": "turn_right_90_180",
+      "display_name": "Turn right upgright composed 90 to 180",
+      "relative_path": "Clips/Turn/turn_right_90_180.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "category": [
+        "Turn"
+      ],
+      "emotion": [
+        "composed",
+        "upright"
+      ],
+      "threat": [
+        "passive"
+      ],
+      "story": [
+        "turn body from 90 to 180 degrees"
+      ],
+      "looping": false,
+      "duration_seconds": 1.375,
+      "locomotion_type": "turn",
+      "world_space_motion": "none",
+      "locomotion_enabled": true,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T00:41:03.804853+00:00"
+    },
+    {
       "clip_id": "unstable_walk_01",
       "display_name": "Infected Unstable Walk 01",
       "relative_path": "Clips/Walk/unstable_walk_01.jockanim.json",
@@ -95,7 +155,7 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T00:14:18.524775+00:00"
+      "updated_at": "2026-06-02T00:17:55.198440+00:00"
     }
   ]
 }
