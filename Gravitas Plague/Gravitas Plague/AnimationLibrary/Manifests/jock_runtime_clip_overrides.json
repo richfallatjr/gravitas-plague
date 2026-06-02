@@ -1,0 +1,25 @@
+{
+  "schema": "com.gravitas.jock_runtime_clip_overrides.v0",
+  "clips": {
+    "idle_01": {
+      "entry_heading_degrees": 0.0,
+      "exit_heading_degrees": 0.0,
+      "commit_root_yaw_on_completion": false
+    },
+    "turn_right_90": {
+      "entry_heading_degrees": 0.0,
+      "exit_heading_degrees": -90.0,
+      "commit_root_yaw_on_completion": true
+    },
+    "turn_right_90_180": {
+      "entry_heading_degrees": -90.0,
+      "exit_heading_degrees": -180.0,
+      "commit_root_yaw_on_completion": true
+    },
+    "unstable_walk_01": {
+      "entry_heading_degrees": 0.0,
+      "exit_heading_degrees": 0.0,
+      "commit_root_yaw_on_completion": false
+    }
+  }
+}

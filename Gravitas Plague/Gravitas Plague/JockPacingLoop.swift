@@ -14,11 +14,30 @@ struct JockPacingLoopStep: Equatable {
             loopClip: false
         ),
         JockPacingLoopStep(
-            clipID: "turn_right_90_180",
+            clipID: "turn_right_90",
             loopClip: false
         ),
         JockPacingLoopStep(
             clipID: "unstable_walk_01",
+            loopClip: false
+        )
+    ]
+
+    static let turn360Test: [JockPacingLoopStep] = [
+        JockPacingLoopStep(
+            clipID: "turn_right_90",
+            loopClip: false
+        ),
+        JockPacingLoopStep(
+            clipID: "turn_right_90",
+            loopClip: false
+        ),
+        JockPacingLoopStep(
+            clipID: "turn_right_90",
+            loopClip: false
+        ),
+        JockPacingLoopStep(
+            clipID: "turn_right_90",
             loopClip: false
         )
     ]

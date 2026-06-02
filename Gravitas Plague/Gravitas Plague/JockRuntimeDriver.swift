@@ -27,6 +27,7 @@ final class JockRuntimeDriver {
 
     private weak var modelEntity: ModelEntity?
     private weak var locomotionRootEntity: Entity?
+    private weak var visualOffsetEntity: Entity?
 
     private let adapter: JockSkeletonAdapter
     private let baseJointTransforms: [Transform]
@@ -42,19 +43,40 @@ final class JockRuntimeDriver {
     private var transitionDuration: TimeInterval = 5.0 / 24.0
     private var transitionFromPose: [Transform] = []
     private var transitionToPose: [Transform] = []
+    private var transitionFromVisualOffset = simd_quatf(
+        angle: 0,
+        axis: SIMD3<Float>(0, 1, 0)
+    )
+    private var transitionToVisualOffset = simd_quatf(
+        angle: 0,
+        axis: SIMD3<Float>(0, 1, 0)
+    )
 
-    private var previousLocomotionSample = LocomotionSample.zero
+    private var frozenClipRootPosition = SIMD3<Float>(0, 0, 0)
+    private var frozenClipRootOrientation = simd_quatf(
+        angle: 0,
+        axis: SIMD3<Float>(0, 1, 0)
+    )
+    private var clipLocomotionZero = LocomotionSample.zero
+    private var locomotionLoopCarryPosition = SIMD3<Float>(0, 0, 0)
+    private var locomotionLoopCarryOrientation = simd_quatf(
+        angle: 0,
+        axis: SIMD3<Float>(0, 1, 0)
+    )
+    private var activeRuntimeOverride = JockRuntimeClipOverride.identity
 
     var onClipCompleted: ((JockAnimClip) -> Void)?
 
     init(
         modelEntity: ModelEntity,
         adapter: JockSkeletonAdapter,
-        locomotionRootEntity: Entity? = nil
+        locomotionRootEntity: Entity? = nil,
+        visualOffsetEntity: Entity? = nil
     ) {
         self.modelEntity = modelEntity
         self.adapter = adapter
         self.locomotionRootEntity = locomotionRootEntity
+        self.visualOffsetEntity = visualOffsetEntity
         self.baseJointTransforms = modelEntity.jointTransforms
         self.jointNames = modelEntity.jointNames
     }
@@ -62,33 +84,55 @@ final class JockRuntimeDriver {
     func playClip(
         _ clip: JockAnimClip,
         loop: Bool,
-        transition: Bool = true
+        transition: Bool = true,
+        runtimeOverride: JockRuntimeClipOverride = .identity
     ) {
         guard let modelEntity else { return }
 
         activeClip = clip
+        activeRuntimeOverride = runtimeOverride
         loopCurrentClip = loop
         playbackTime = 0
-        previousLocomotionSample = .zero
+
+        captureRootOriginForNewClip(clip)
 
         transitionDuration = clip.transition.transitionDurationSeconds
+        let targetVisualOffset = runtimeOverride.entryVisualOffsetOrientation
 
         if transition {
             state = .transitioningToClip
             transitionElapsed = 0
+
+            // Transition from the current visible skeleton pose.
             transitionFromPose = modelEntity.jointTransforms
             transitionToPose = sampleClipPose(clip, at: 0)
+            transitionFromVisualOffset =
+                visualOffsetEntity?.orientation ??
+                simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
+            transitionToVisualOffset = targetVisualOffset
         } else {
             state = .playing
+            visualOffsetEntity?.orientation = targetVisualOffset
             modelEntity.jointTransforms = sampleClipPose(clip, at: 0)
-            applyInitialLocomotionIfNeeded()
+            applyLocomotionFromFrozenOrigin(clip, at: 0, didWrap: false)
         }
+
+        print(
+            """
+            [Gravitas Virtual Root] Starting clip
+              clipID: \(clip.clipID)
+              entryHeading: \(runtimeOverride.entryHeadingDegrees)
+              exitHeading: \(runtimeOverride.exitHeadingDegrees)
+              commitRootYaw: \(runtimeOverride.commitRootYawOnCompletion)
+            """
+        )
     }
 
     func stop() {
         state = .stopped
         activeClip = nil
-        previousLocomotionSample = .zero
+        activeRuntimeOverride = .identity
+        resetFrozenLocomotionState()
     }
 
     func resetPoseWithTransition() {
@@ -98,16 +142,29 @@ final class JockRuntimeDriver {
         transitionElapsed = 0
         transitionFromPose = modelEntity.jointTransforms
         transitionToPose = baseJointTransforms
+        transitionFromVisualOffset =
+            visualOffsetEntity?.orientation ??
+            simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
+        transitionToVisualOffset = simd_quatf(
+            angle: 0,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
         activeClip = nil
-        previousLocomotionSample = .zero
+        activeRuntimeOverride = .identity
+        resetFrozenLocomotionState()
     }
 
     func resetPoseImmediate() {
         modelEntity?.jointTransforms = baseJointTransforms
+        visualOffsetEntity?.orientation = simd_quatf(
+            angle: 0,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
         playbackTime = 0
         state = .stopped
         activeClip = nil
-        previousLocomotionSample = .zero
+        activeRuntimeOverride = .identity
+        resetFrozenLocomotionState()
     }
 
     func update(deltaTime: TimeInterval) {
@@ -134,9 +191,34 @@ final class JockRuntimeDriver {
 
             modelEntity.jointTransforms = blendedPose
 
+            let visualOffset = simd_slerp(
+                transitionFromVisualOffset,
+                transitionToVisualOffset,
+                alpha
+            )
+
+            visualOffsetEntity?.orientation = visualOffset
+
+            if let activeClip,
+               activeClip.locomotion.isEnabled,
+               shouldApplyLocomotionDuringTransition(activeClip) {
+                let transitionClipTime = min(
+                    transitionElapsed,
+                    activeClip.timing.durationSeconds
+                )
+
+                applyLocomotionFromFrozenOrigin(
+                    activeClip,
+                    at: transitionClipTime,
+                    didWrap: false
+                )
+            } else {
+                locomotionRootEntity?.position = frozenClipRootPosition
+                locomotionRootEntity?.orientation = frozenClipRootOrientation
+            }
+
             if alpha >= 1.0 {
                 playbackTime = 0
-                applyInitialLocomotionIfNeeded()
                 state = .playing
             }
 
@@ -155,10 +237,19 @@ final class JockRuntimeDriver {
 
             modelEntity.jointTransforms = blendedPose
 
+            let visualOffset = simd_slerp(
+                transitionFromVisualOffset,
+                transitionToVisualOffset,
+                alpha
+            )
+
+            visualOffsetEntity?.orientation = visualOffset
+
             if alpha >= 1.0 {
                 state = .stopped
                 activeClip = nil
-                previousLocomotionSample = .zero
+                activeRuntimeOverride = .identity
+                resetFrozenLocomotionState()
             }
 
         case .playing:
@@ -181,14 +272,16 @@ final class JockRuntimeDriver {
                 }
 
                 modelEntity.jointTransforms = sampleClipPose(activeClip, at: playbackTime)
-                applyLocomotionIfNeeded(activeClip, at: playbackTime, didWrap: didWrap)
+                applyLocomotionFromFrozenOrigin(activeClip, at: playbackTime, didWrap: didWrap)
 
             } else {
                 if playbackTime >= duration {
                     playbackTime = duration
 
                     modelEntity.jointTransforms = sampleClipPose(activeClip, at: playbackTime)
-                    applyLocomotionIfNeeded(activeClip, at: playbackTime, didWrap: false)
+                    applyLocomotionFromFrozenOrigin(activeClip, at: playbackTime, didWrap: false)
+
+                    commitRuntimeOverrideAtClipCompletion()
 
                     state = .stopped
                     let completedClip = activeClip
@@ -199,7 +292,7 @@ final class JockRuntimeDriver {
                 }
 
                 modelEntity.jointTransforms = sampleClipPose(activeClip, at: playbackTime)
-                applyLocomotionIfNeeded(activeClip, at: playbackTime, didWrap: false)
+                applyLocomotionFromFrozenOrigin(activeClip, at: playbackTime, didWrap: false)
             }
         }
     }
@@ -298,7 +391,69 @@ final class JockRuntimeDriver {
         )
     }
 
-    private func applyLocomotionIfNeeded(
+    private func captureRootOriginForNewClip(_ clip: JockAnimClip) {
+        guard let root = locomotionRootEntity else {
+            resetFrozenLocomotionState()
+            return
+        }
+
+        frozenClipRootPosition = root.position
+        frozenClipRootOrientation = root.orientation
+
+        // Treat whatever the clip says at t=0 as local zero. Carried heading
+        // belongs to the root entity, not the next clip's first key.
+        clipLocomotionZero = sampleLocomotion(clip, at: 0)
+
+        locomotionLoopCarryPosition = .zero
+        locomotionLoopCarryOrientation = simd_quatf(
+            angle: 0,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
+
+        guard clip.locomotion.isEnabled else {
+            return
+        }
+
+        let start = clipLocomotionZero
+
+        print(
+            """
+            [Gravitas Locomotion] New clip root origin captured
+              clipID: \(clip.clipID)
+              rootPosition: \(root.position)
+              startForward: \(start.forward)
+              startSide: \(start.side)
+              startVertical: \(start.vertical)
+              startYawDegrees: \(start.yawDegrees)
+              note: start locomotion is normalized to local zero.
+            """
+        )
+
+        if abs(start.forward) > 0.0001 ||
+            abs(start.side) > 0.0001 ||
+            abs(start.vertical) > 0.0001 ||
+            abs(start.yawDegrees) > 0.0001 {
+            print(
+                """
+                [Gravitas Locomotion] Normalizing non-zero clip start locomotion
+                  clipID: \(clip.clipID)
+                  startForward: \(start.forward)
+                  startSide: \(start.side)
+                  startVertical: \(start.vertical)
+                  startYawDegrees: \(start.yawDegrees)
+                  note: clip start is treated as local zero.
+                """
+            )
+        }
+    }
+
+    private func shouldApplyLocomotionDuringTransition(_ clip: JockAnimClip) -> Bool {
+        let mode = clip.locomotion.locomotionStartMode ?? "after_transition"
+
+        return mode == "during_transition" || mode == "immediate"
+    }
+
+    private func applyLocomotionFromFrozenOrigin(
         _ clip: JockAnimClip,
         at time: TimeInterval,
         didWrap: Bool
@@ -307,73 +462,114 @@ final class JockRuntimeDriver {
             return
         }
 
+        guard let root = locomotionRootEntity else {
+            return
+        }
+
         if didWrap {
-            previousLocomotionSample = sampleLocomotion(clip, at: 0)
-        }
+            let endSample = sampleLocomotion(
+                clip,
+                at: max(clip.timing.durationSeconds, 0.001)
+            )
 
-        let current = sampleLocomotion(clip, at: time)
+            let endRelative = relativeLocomotionSample(endSample)
 
-        applyLocomotionDelta(
-            from: previousLocomotionSample,
-            to: current
-        )
+            let endLocalDelta = SIMD3<Float>(
+                endRelative.side,
+                endRelative.vertical,
+                -endRelative.forward
+            )
 
-        previousLocomotionSample = current
-    }
-
-    private func applyInitialLocomotionIfNeeded() {
-        guard let activeClip else {
-            previousLocomotionSample = .zero
-            return
-        }
-
-        guard activeClip.locomotion.isEnabled else {
-            previousLocomotionSample = .zero
-            return
-        }
-
-        let initial = sampleLocomotion(activeClip, at: 0)
-
-        applyLocomotionDelta(
-            from: .zero,
-            to: initial
-        )
-
-        previousLocomotionSample = initial
-    }
-
-    private func applyLocomotionDelta(
-        from previous: LocomotionSample,
-        to current: LocomotionSample
-    ) {
-        guard let locomotionRootEntity else {
-            return
-        }
-
-        let deltaForward = current.forward - previous.forward
-        let deltaSide = current.side - previous.side
-        let deltaVertical = current.vertical - previous.vertical
-        let deltaYawDegrees = current.yawDegrees - previous.yawDegrees
-
-        let localDelta = SIMD3<Float>(
-            deltaSide,
-            deltaVertical,
-            -deltaForward
-        )
-
-        let worldDelta = locomotionRootEntity.orientation.act(localDelta)
-        locomotionRootEntity.position += worldDelta
-
-        if abs(deltaYawDegrees) > 0.0001 {
-            let yawRadians = JockPoseMath.radians(deltaYawDegrees)
-
-            let deltaRotation = simd_quatf(
-                angle: yawRadians,
+            let endYaw = simd_quatf(
+                angle: JockPoseMath.radians(endRelative.yawDegrees),
                 axis: SIMD3<Float>(0, 1, 0)
             )
 
-            locomotionRootEntity.orientation =
-                deltaRotation * locomotionRootEntity.orientation
+            locomotionLoopCarryPosition +=
+                locomotionLoopCarryOrientation.act(endLocalDelta)
+
+            locomotionLoopCarryOrientation =
+                endYaw * locomotionLoopCarryOrientation
         }
+
+        let current = sampleLocomotion(clip, at: time)
+        let relative = relativeLocomotionSample(current)
+
+        let localDelta = SIMD3<Float>(
+            relative.side,
+            relative.vertical,
+            -relative.forward
+        )
+
+        let carriedOriginPosition =
+            frozenClipRootPosition +
+            frozenClipRootOrientation.act(locomotionLoopCarryPosition)
+
+        let carriedOriginOrientation =
+            locomotionLoopCarryOrientation * frozenClipRootOrientation
+
+        let localYaw = simd_quatf(
+            angle: JockPoseMath.radians(relative.yawDegrees),
+            axis: SIMD3<Float>(0, 1, 0)
+        )
+
+        root.position =
+            carriedOriginPosition +
+            carriedOriginOrientation.act(localDelta)
+
+        root.orientation =
+            localYaw * carriedOriginOrientation
+    }
+
+    private func relativeLocomotionSample(
+        _ sample: LocomotionSample
+    ) -> LocomotionSample {
+        LocomotionSample(
+            forward: sample.forward - clipLocomotionZero.forward,
+            side: sample.side - clipLocomotionZero.side,
+            vertical: sample.vertical - clipLocomotionZero.vertical,
+            yawDegrees: sample.yawDegrees - clipLocomotionZero.yawDegrees
+        )
+    }
+
+    private func commitRuntimeOverrideAtClipCompletion() {
+        guard activeRuntimeOverride.commitRootYawOnCompletion else {
+            return
+        }
+
+        guard let root = locomotionRootEntity else {
+            return
+        }
+
+        let delta = activeRuntimeOverride.rootYawDeltaOrientation
+
+        // Same conceptual layer as locomotion yaw: the root owns accumulated heading.
+        root.orientation = delta * root.orientation
+
+        visualOffsetEntity?.orientation =
+            activeRuntimeOverride.exitVisualOffsetOrientation
+
+        print(
+            """
+            [Gravitas Virtual Root] Clip completion committed root yaw
+              entryHeading: \(activeRuntimeOverride.entryHeadingDegrees)
+              exitHeading: \(activeRuntimeOverride.exitHeadingDegrees)
+              yawDelta: \(activeRuntimeOverride.yawDeltaDegrees)
+            """
+        )
+    }
+
+    private func resetFrozenLocomotionState() {
+        frozenClipRootPosition = .zero
+        frozenClipRootOrientation = simd_quatf(
+            angle: 0,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
+        clipLocomotionZero = .zero
+        locomotionLoopCarryPosition = .zero
+        locomotionLoopCarryOrientation = simd_quatf(
+            angle: 0,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
     }
 }

@@ -65,10 +65,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             }
 
         case .playJockPacingLoop:
-            do {
-                try jockRetargetController?.playPacingLoopFromStart()
-            } catch {
-                assertionFailure("Failed to play Jock pacing loop: \(error)")
+            Task {
+                await startJockRetargetTest(autoPlayLoop: true)
             }
 
         case .playJockClip(let clipID):

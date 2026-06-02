@@ -29,6 +29,8 @@ final class JockRetargetTestController {
 
     let rootEntity = Entity()
 
+    private let visualOffsetEntity = Entity()
+
     private var characterEntity: Entity?
     private var modelEntity: ModelEntity?
 
@@ -39,6 +41,10 @@ final class JockRetargetTestController {
     private var driver: JockRuntimeDriver?
 
     private var clipsByID: [String: JockAnimClip] = [:]
+    private var runtimeOverrides = JockRuntimeClipOverrides(
+        schema: "com.gravitas.jock_runtime_clip_overrides.v0",
+        clips: [:]
+    )
 
     private var hasLoaded = false
     private var isVisible = false
@@ -56,6 +62,9 @@ final class JockRetargetTestController {
     init() {
         rootEntity.name = "Gravitas_JockRetargetTestRoot"
         rootEntity.isEnabled = false
+
+        visualOffsetEntity.name = "Gravitas_JockVisualOffsetEntity"
+        rootEntity.addChild(visualOffsetEntity)
     }
 
     var availableClipSummaries: [JockAnimationManifest.ClipSummary] {
@@ -82,6 +91,7 @@ final class JockRetargetTestController {
         let rig = try JockAnimationLibraryLoader.loadRigDefinition()
         let map = try JockAnimationLibraryLoader.loadSkeletonMap()
         let manifest = try JockAnimationLibraryLoader.loadManifest()
+        let overrides = JockAnimationLibraryLoader.loadRuntimeClipOverridesIfAvailable()
 
         let runtimeApprovedSummaries = manifest.clips.filter { $0.approvedForRuntime }
 
@@ -116,7 +126,8 @@ final class JockRetargetTestController {
         let driver = JockRuntimeDriver(
             modelEntity: skinnedModel,
             adapter: adapter,
-            locomotionRootEntity: rootEntity
+            locomotionRootEntity: rootEntity,
+            visualOffsetEntity: visualOffsetEntity
         )
 
         driver.onClipCompleted = { [weak self] completedClip in
@@ -125,7 +136,7 @@ final class JockRetargetTestController {
             }
         }
 
-        rootEntity.addChild(loadedEntity)
+        visualOffsetEntity.addChild(loadedEntity)
 
         self.characterEntity = loadedEntity
         self.modelEntity = skinnedModel
@@ -133,6 +144,7 @@ final class JockRetargetTestController {
         self.skeletonMap = map
         self.manifest = manifest
         self.clipsByID = loadedClips
+        self.runtimeOverrides = overrides
         self.adapter = adapter
         self.driver = driver
         self.hasLoaded = true
@@ -202,7 +214,8 @@ final class JockRetargetTestController {
         driver?.playClip(
             clip,
             loop: loop,
-            transition: true
+            transition: true,
+            runtimeOverride: runtimeOverrides.clips[id] ?? .identity
         )
     }
 
@@ -275,13 +288,19 @@ final class JockRetargetTestController {
         driver?.playClip(
             clip,
             loop: step.loopClip,
-            transition: true
+            transition: true,
+            runtimeOverride: runtimeOverrides.clips[step.clipID] ?? .identity
         )
     }
 
     private func resetRootToSpawn() {
         rootEntity.position = spawnPosition
         rootEntity.orientation = spawnOrientation
+        visualOffsetEntity.position = .zero
+        visualOffsetEntity.orientation = simd_quatf(
+            angle: 0,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
     }
 
     private func firstSkinnedModelEntity(in entity: Entity) -> ModelEntity? {

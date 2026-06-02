@@ -45,6 +45,28 @@ enum JockAnimationLibraryLoader {
         )
     }
 
+    static func loadRuntimeClipOverrides() throws -> JockRuntimeClipOverrides {
+        try loadJSON(
+            fileName: "jock_runtime_clip_overrides",
+            extensionName: "json",
+            subdirectory: "AnimationLibrary/Manifests",
+            as: JockRuntimeClipOverrides.self
+        )
+    }
+
+    static func loadRuntimeClipOverridesIfAvailable() -> JockRuntimeClipOverrides {
+        do {
+            return try loadRuntimeClipOverrides()
+        } catch {
+            print("[Gravitas Jock Overrides] Runtime clip overrides unavailable: \(error)")
+
+            return JockRuntimeClipOverrides(
+                schema: "com.gravitas.jock_runtime_clip_overrides.v0",
+                clips: [:]
+            )
+        }
+    }
+
     static func loadClip(summary: JockAnimationManifest.ClipSummary) throws -> JockAnimClip {
         try loadClip(relativePath: summary.relativePath)
     }
