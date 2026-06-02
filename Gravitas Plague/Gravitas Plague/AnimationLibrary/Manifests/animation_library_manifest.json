@@ -1,7 +1,7 @@
 {
   "schema": "com.gravitas.animation_library_manifest.v0",
   "library_id": "GravitasPlagueAnimationLibrary",
-  "generated_at": "2026-06-02T00:41:03.805027+00:00",
+  "generated_at": "2026-06-02T01:12:50.016487+00:00",
   "clips": [
     {
       "clip_id": "dummy_calisthenics_v001",
@@ -120,10 +120,10 @@
       "locomotion_type": "turn",
       "world_space_motion": "none",
       "locomotion_enabled": true,
-      "locomotion_start_mode": "after_transition",
+      "locomotion_start_mode": "immediate",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T00:41:03.804853+00:00"
+      "updated_at": "2026-06-02T01:12:50.016329+00:00"
     },
     {
       "clip_id": "unstable_walk_01",

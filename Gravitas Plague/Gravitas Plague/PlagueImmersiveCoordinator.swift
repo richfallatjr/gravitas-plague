@@ -14,7 +14,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var lastTickDate: Date?
     private var handledCommandIDs = Set<UUID>()
     private var pendingCommands: [PlagueDemoSession.CommandEnvelope] = []
-    private var jockLoopEnabled = true
 
     func makeSceneRoot() async -> Entity {
         if let sceneRoot {
@@ -62,14 +61,21 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         case .startJockRetargetTest:
             Task {
-                await startJockRetargetTest()
+                await startJockRetargetTest(autoPlayLoop: true)
+            }
+
+        case .playJockPacingLoop:
+            do {
+                try jockRetargetController?.playPacingLoopFromStart()
+            } catch {
+                assertionFailure("Failed to play Jock pacing loop: \(error)")
             }
 
         case .playJockClip(let clipID):
             do {
                 try jockRetargetController?.playClip(
                     id: clipID,
-                    loop: jockLoopEnabled
+                    loop: false
                 )
             } catch {
                 assertionFailure("Failed to play Jock clip \(clipID): \(error)")
@@ -80,10 +86,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         case .resetJockPose:
             jockRetargetController?.resetPose()
-
-        case .setJockLoop(let enabled):
-            jockLoopEnabled = enabled
-            jockRetargetController?.setLoopEnabled(enabled)
 
         case .closeDemo:
             bakedDemoController?.stopLoopAndHide()
@@ -163,7 +165,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
     }
 
-    private func startJockRetargetTest() async {
+    private func startJockRetargetTest(autoPlayLoop: Bool) async {
         bakedDemoController?.stopLoopAndHide()
 
         guard let jockRetargetController else { return }
@@ -186,6 +188,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             )
 
             jockRetargetController.show()
+
+            if autoPlayLoop {
+                try jockRetargetController.playPacingLoopFromStart()
+            }
         } catch {
             assertionFailure("Failed to start Jock Retarget Test: \(error)")
         }

@@ -21,10 +21,10 @@ final class PlagueDemoSession: ObservableObject {
     enum Command: Equatable {
         case startBakedUSDZDemo
         case startJockRetargetTest
+        case playJockPacingLoop
         case playJockClip(String)
         case stopJockClip
         case resetJockPose
-        case setJockLoop(Bool)
         case closeDemo
     }
 
@@ -41,7 +41,6 @@ final class PlagueDemoSession: ObservableObject {
     @Published var immersiveSpaceStatus: ImmersiveSpaceStatus = .closed
     @Published var activeMode: ActiveMode = .none
     @Published var statusMessage: String = "Start the demo or open Retarget."
-    @Published var jockLoopEnabled: Bool = true
     @Published var selectedJockClipID: String?
     @Published var availableJockClips: [JockAnimationManifest.ClipSummary] = []
     @Published private(set) var latestCommand: CommandEnvelope?

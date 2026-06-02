@@ -14218,7 +14218,7 @@
     "runtime_forward_axis": "-z",
     "runtime_up_axis": "y",
     "authoring_up_axis": "z",
-    "locomotion_start_mode": "after_transition",
+    "locomotion_start_mode": "immediate",
     "recommended_speed_mps": 0.0,
     "root_rotation_degrees": 0.0,
     "root_translation_policy": "manual_curve",

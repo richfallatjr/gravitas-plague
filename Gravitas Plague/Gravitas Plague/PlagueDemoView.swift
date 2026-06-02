@@ -69,6 +69,12 @@ struct PlagueDemoView: View {
                     Text("Jock Animation Library")
                         .font(.headline)
 
+                    Button("Play Jock Loop") {
+                        session.statusMessage = "Running Jock sidecar pacing loop."
+                        session.send(.playJockPacingLoop)
+                    }
+                    .buttonStyle(.borderedProminent)
+
                     if let manifestLoadError {
                         Text(manifestLoadError)
                             .font(.caption)
@@ -80,7 +86,7 @@ struct PlagueDemoView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Picker("Clip", selection: Binding(
+                        Picker("Preview Clip", selection: Binding(
                             get: {
                                 session.selectedJockClipID
                                     ?? session.availableJockClips.first?.clipID
@@ -121,29 +127,24 @@ struct PlagueDemoView: View {
                         }
                     }
 
-                    Toggle("Loop Clip", isOn: Binding(
-                        get: { session.jockLoopEnabled },
-                        set: { newValue in
-                            session.jockLoopEnabled = newValue
-                            session.send(.setJockLoop(newValue))
-                        }
-                    ))
-
                     HStack(spacing: 12) {
-                        Button("Play Selected") {
+                        Button("Play Selected Once") {
                             if let clipID = session.selectedJockClipID {
+                                session.statusMessage = "Playing selected Jock clip once."
                                 session.send(.playJockClip(clipID))
                             }
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.bordered)
                         .disabled(session.selectedJockClipID == nil)
 
                         Button("Stop") {
+                            session.statusMessage = "Jock playback stopped."
                             session.send(.stopJockClip)
                         }
                         .buttonStyle(.bordered)
 
                         Button("Reset Pose") {
+                            session.statusMessage = "Resetting Jock pose."
                             session.send(.resetJockPose)
                         }
                         .buttonStyle(.bordered)
@@ -212,7 +213,7 @@ struct PlagueDemoView: View {
         case .startJockRetargetTest:
             loadJockManifestForUI()
             session.activeMode = .jockRetargetTest
-            session.statusMessage = "Jock Retarget loaded. Choose a sidecar clip."
+            session.statusMessage = "Running Jock sidecar pacing loop."
             session.send(.startJockRetargetTest)
 
         default:
