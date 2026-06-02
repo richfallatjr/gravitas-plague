@@ -1639,6 +1639,74 @@ class GRAVITAS_OT_load_selected_clip_metadata(Operator):
         return {"FINISHED"}
 
 
+class GRAVITAS_OT_delete_selected_clip_from_manifest(Operator):
+    bl_idname = "gravitas.delete_selected_clip_from_manifest"
+    bl_label = "Delete From Manifest"
+    bl_description = "Removes the selected clip entry from animation_library_manifest.json without deleting the clip file."
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.gravitas_animation_library
+        log = []
+
+        try:
+            if not MANIFEST_CLIP_SUMMARY_BY_ID:
+                _refresh_manifest_clip_cache(settings, log)
+
+            clip_id = settings.selected_manifest_clip_id
+            if clip_id == "__NONE__" or not clip_id:
+                raise RuntimeError("No manifest clip selected.")
+
+            library_root = bpy.path.abspath(settings.animation_library_root)
+            manifest_path = _manifest_file_path_from_library_root(library_root)
+
+            if not os.path.isfile(manifest_path):
+                raise FileNotFoundError(f"Manifest not found: {manifest_path}")
+
+            manifest = _json_load(manifest_path)
+            clips = manifest.get("clips", [])
+            filtered_clips = [
+                clip for clip in clips
+                if clip.get("clip_id") != clip_id
+            ]
+
+            if len(filtered_clips) == len(clips):
+                raise RuntimeError(f"Clip not found in manifest: {clip_id}")
+
+            manifest["clips"] = filtered_clips
+            manifest["generated_at"] = _now_iso()
+            _json_write(manifest_path, manifest)
+
+            settings.loaded_manifest_clip_relative_path = ""
+
+            _refresh_manifest_clip_cache(settings, log)
+
+            first_valid = None
+            for item in MANIFEST_CLIP_ENUM_CACHE:
+                if item[0] != "__NONE__":
+                    first_valid = item[0]
+                    break
+
+            settings.selected_manifest_clip_id = first_valid or "__NONE__"
+
+            log.append(f"Deleted manifest entry for clip_id: {clip_id}")
+            log.append("Clip file was not deleted.")
+            _safe_report(self, {"INFO"}, f"Deleted {clip_id} from manifest.")
+
+        except Exception as error:
+            _log_append(log, "ERROR")
+            _log_append(log, str(error))
+            _log_append(log, traceback.format_exc())
+            _safe_report(self, {"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+        finally:
+            if settings.log_text:
+                _write_log(log)
+
+        return {"FINISHED"}
+
+
 class GRAVITAS_OT_import_donor_animation(Operator):
     bl_idname = "gravitas.import_donor_animation"
     bl_label = "Import Donor Animation"
@@ -2119,6 +2187,11 @@ class GRAVITAS_PT_animation_library_panel(Panel):
             text="Load Selected Clip Metadata",
             icon="IMPORT",
         )
+        browser_box.operator(
+            GRAVITAS_OT_delete_selected_clip_from_manifest.bl_idname,
+            text="Delete From Manifest",
+            icon="TRASH",
+        )
         browser_box.prop(settings, "overwrite_existing_clip")
         browser_box.label(
             text=f"Path: {settings.loaded_manifest_clip_relative_path or 'none'}"
@@ -2239,6 +2312,7 @@ classes = (
     GravitasAnimationLibrarySettings,
     GRAVITAS_OT_load_animation_manifest,
     GRAVITAS_OT_load_selected_clip_metadata,
+    GRAVITAS_OT_delete_selected_clip_from_manifest,
     GRAVITAS_OT_import_donor_animation,
     GRAVITAS_OT_validate_donor_rig,
     GRAVITAS_OT_export_jock_clip,

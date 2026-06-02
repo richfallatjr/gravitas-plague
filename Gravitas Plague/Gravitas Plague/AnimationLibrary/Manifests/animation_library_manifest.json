@@ -1,11 +1,42 @@
 {
   "schema": "com.gravitas.animation_library_manifest.v0",
   "library_id": "GravitasPlagueAnimationLibrary",
-  "generated_at": "2026-06-02T14:12:42.862381+00:00",
+  "generated_at": "2026-06-02T15:03:01.180841+00:00",
   "clips": [
     {
-      "clip_id": "charged-slash",
-      "display_name": "Charged slash",
+      "clip_id": "charged-slash-left",
+      "display_name": "Charged slash left",
+      "relative_path": "Clips/HitReact/charged-slash-left.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "category": [
+        "hit"
+      ],
+      "emotion": [
+        "aggressive",
+        "attack"
+      ],
+      "threat": [
+        "hight threat"
+      ],
+      "story": [
+        "fight",
+        "survival"
+      ],
+      "looping": false,
+      "duration_seconds": 2.7916666666666665,
+      "locomotion_type": "hit_react",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T14:18:24.073791+00:00"
+    },
+    {
+      "clip_id": "charged-slash-right",
+      "display_name": "Charged slash right",
       "relative_path": "Clips/HitReact/charged-slash.jockanim.json",
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
@@ -32,12 +63,43 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T13:10:11.743237+00:00"
+      "updated_at": "2026-06-02T14:17:44.423710+00:00"
     },
     {
-      "clip_id": "charged-slash-right",
-      "display_name": "Charged slash right",
-      "relative_path": "Clips/HitReact/charged-slash-right.jockanim.json",
+      "clip_id": "dead_fall_forward_01",
+      "display_name": "Dead fallat forward 01",
+      "relative_path": "Clips/HitReact/dead_fall_forward_01.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "category": [
+        "hitReact"
+      ],
+      "emotion": [
+        "death"
+      ],
+      "threat": [
+        "high"
+      ],
+      "story": [
+        "death",
+        "kill",
+        "fall"
+      ],
+      "looping": true,
+      "duration_seconds": 3.7083333333333335,
+      "locomotion_type": "stationary",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T15:03:01.180692+00:00"
+    },
+    {
+      "clip_id": "hit_hard_left_01",
+      "display_name": "Hit hard left 01",
+      "relative_path": "Clips/HitReact/hit_medium_left_02.jockanim.json",
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
@@ -45,57 +107,228 @@
         "hit"
       ],
       "emotion": [
-        "aggressive",
-        "attack"
+        "fight"
       ],
       "threat": [
-        "hight threat"
+        "medium"
       ],
       "story": [
-        "fight",
-        "survival"
+        "combat"
       ],
-      "looping": false,
-      "duration_seconds": 2.7916666666666665,
+      "looping": true,
+      "duration_seconds": 3.5416666666666665,
+      "locomotion_type": "stationary",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T14:54:00.128479+00:00"
+    },
+    {
+      "clip_id": "hit_hard_right_01",
+      "display_name": "Hit hard right 01",
+      "relative_path": "Clips/Idle/hit_hard_right_01.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "category": [
+        "hit"
+      ],
+      "emotion": [
+        "fight"
+      ],
+      "threat": [
+        "medium"
+      ],
+      "story": [
+        "combat"
+      ],
+      "looping": true,
+      "duration_seconds": 3.5416666666666665,
+      "locomotion_type": "stationary",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T14:54:03.502716+00:00"
+    },
+    {
+      "clip_id": "hit_light_left_01",
+      "display_name": "Hit light left 01",
+      "relative_path": "Clips/HitReact/hit_light_left_01.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "category": [
+        "hit"
+      ],
+      "emotion": [
+        "damage"
+      ],
+      "threat": [
+        "high",
+        "close"
+      ],
+      "story": [
+        "punch"
+      ],
+      "looping": true,
+      "duration_seconds": 1.5416666666666667,
       "locomotion_type": "hit_react",
       "world_space_motion": "none",
       "locomotion_enabled": false,
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T14:12:42.862033+00:00"
+      "updated_at": "2026-06-02T14:37:35.651823+00:00"
     },
     {
-      "clip_id": "dummy_calisthenics_v001",
-      "display_name": "Dummy Calisthenics",
-      "relative_path": "Clips/Dummy/dummy_calisthenics_v001.jockanim.json",
+      "clip_id": "hit_light_right_01",
+      "display_name": "Hit light right 01",
+      "relative_path": "Clips/HitReact/hit_light_right_01.jockanim.json",
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
-      "pose_mode": "additiveLocal",
+      "pose_mode": "absoluteLocal",
       "category": [
-        "debug",
-        "idle"
+        "hit"
       ],
       "emotion": [
-        "sick",
-        "unstable"
+        "damage"
       ],
       "threat": [
-        "passive"
+        "high",
+        "close"
       ],
       "story": [
-        "test",
-        "dummy"
+        "punch"
       ],
       "looping": true,
-      "duration_seconds": 1.0,
+      "duration_seconds": 1.5416666666666667,
+      "locomotion_type": "hit_react",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T14:37:39.646434+00:00"
+    },
+    {
+      "clip_id": "hit_medium_left_01",
+      "display_name": "Hit medium left 01",
+      "relative_path": "Clips/HitReact/hit_medium_left_01.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "category": [
+        "hit"
+      ],
+      "emotion": [
+        "fight"
+      ],
+      "threat": [
+        "medium"
+      ],
+      "story": [
+        "combat"
+      ],
+      "looping": true,
+      "duration_seconds": 3.5416666666666665,
       "locomotion_type": "stationary",
       "world_space_motion": "none",
       "locomotion_enabled": false,
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
-      "debug_only": true,
-      "updated_at": "2026-06-01T00:00:00Z"
+      "debug_only": false,
+      "updated_at": "2026-06-02T14:43:44.615106+00:00"
+    },
+    {
+      "clip_id": "hit_medium_left_02",
+      "display_name": "Hit medium left 02",
+      "relative_path": "Clips/HitReact/hit_medium_left_02.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "category": [
+        "hit"
+      ],
+      "emotion": [
+        "fight"
+      ],
+      "threat": [
+        "medium"
+      ],
+      "story": [
+        "combat"
+      ],
+      "looping": true,
+      "duration_seconds": 3.5416666666666665,
+      "locomotion_type": "stationary",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T14:50:30.988827+00:00"
+    },
+    {
+      "clip_id": "hit_medium_right_01",
+      "display_name": "Hit medium right 01",
+      "relative_path": "Clips/HitReact/hit_medium_right_01.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "category": [
+        "hit"
+      ],
+      "emotion": [
+        "fight"
+      ],
+      "threat": [
+        "medium"
+      ],
+      "story": [
+        "combat"
+      ],
+      "looping": true,
+      "duration_seconds": 3.5416666666666665,
+      "locomotion_type": "stationary",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T14:43:49.090625+00:00"
+    },
+    {
+      "clip_id": "hit_medium_right_02",
+      "display_name": "Hit medium right 02",
+      "relative_path": "Clips/HitReact/hit_medium_right_02.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "category": [
+        "hit"
+      ],
+      "emotion": [
+        "fight"
+      ],
+      "threat": [
+        "medium"
+      ],
+      "story": [
+        "combat"
+      ],
+      "looping": true,
+      "duration_seconds": 3.5416666666666665,
+      "locomotion_type": "stationary",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T14:50:35.317103+00:00"
     },
     {
       "clip_id": "idle_01",
@@ -128,6 +361,36 @@
       "updated_at": "2026-06-01T23:23:25.173939+00:00"
     },
     {
+      "clip_id": "turn_left_90",
+      "display_name": "Turn left upgright composed",
+      "relative_path": "Clips/Turn/turn_left_90.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "category": [
+        "Turn"
+      ],
+      "emotion": [
+        "composed",
+        "upright"
+      ],
+      "threat": [
+        "passive"
+      ],
+      "story": [
+        "turn body 90 degrees"
+      ],
+      "looping": false,
+      "duration_seconds": 1.375,
+      "locomotion_type": "turn",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T14:32:37.785600+00:00"
+    },
+    {
       "clip_id": "turn_right_90",
       "display_name": "Turn right upgright composed",
       "relative_path": "Clips/Turn/turn_right_90.jockanim.json",
@@ -155,37 +418,7 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T00:25:05.741531+00:00"
-    },
-    {
-      "clip_id": "turn_right_90_180",
-      "display_name": "Turn right upgright composed 90 to 180",
-      "relative_path": "Clips/Turn/turn_right_90_180.jockanim.json",
-      "rig_id": "GravitasMeshyBiped24",
-      "rig_version": "001",
-      "pose_mode": "absoluteLocal",
-      "category": [
-        "Turn"
-      ],
-      "emotion": [
-        "composed",
-        "upright"
-      ],
-      "threat": [
-        "passive"
-      ],
-      "story": [
-        "turn body from 90 to 180 degrees"
-      ],
-      "looping": false,
-      "duration_seconds": 1.375,
-      "locomotion_type": "turn",
-      "world_space_motion": "none",
-      "locomotion_enabled": true,
-      "locomotion_start_mode": "immediate",
-      "approved_for_runtime": true,
-      "debug_only": false,
-      "updated_at": "2026-06-02T01:12:50.016329+00:00"
+      "updated_at": "2026-06-02T14:32:29.214567+00:00"
     },
     {
       "clip_id": "unstable_walk_01",
