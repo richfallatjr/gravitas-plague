@@ -15,6 +15,11 @@ enum JockHitSide: String, Equatable, Hashable, Codable {
     }
 }
 
+enum JockHitSideSelectionMode: String, Equatable, Codable {
+    case nearestFaceZone
+    case handChirality
+}
+
 enum JockHitDamageLevel: String, Equatable, Hashable, CaseIterable, Codable, Comparable {
     case light
     case medium
@@ -49,6 +54,8 @@ struct JockHitBucketKey: Equatable, Hashable {
 
 struct JockHitReactionConfiguration: Equatable {
     let enabled: Bool
+
+    let sideSelectionMode: JockHitSideSelectionMode
 
     let faceCenterHeightMeters: Float
     let faceZoneRadiusMeters: Float
@@ -94,6 +101,8 @@ struct JockHitReactionConfiguration: Equatable {
     static let phaseOne = JockHitReactionConfiguration(
         enabled: true,
 
+        sideSelectionMode: .handChirality,
+
         faceCenterHeightMeters: 1.45,
         faceZoneRadiusMeters: 0.18,
         faceSideOffsetMeters: 0.13,
@@ -120,7 +129,9 @@ struct JockHitReactionConfiguration: Equatable {
         deathHitCount: 10,
 
         deathClipIDs: [
-            "dead_fall_forward"
+            "dead_fall_forward",
+            "dead_fall_backward_01",
+            "dead_fall_backward_02"
         ],
 
         headSnapSubAnimationBySide: [
@@ -136,7 +147,7 @@ struct JockHitReactionConfiguration: Equatable {
 
         includeLowerDamageClipsForHigherDamage: true,
         avoidImmediateRepeat: true,
-        invertHitClipSide: true,
+        invertHitClipSide: false,
 
         clipBuckets: [
             JockHitBucketKey(side: .left, damageLevel: .medium): [
@@ -158,10 +169,14 @@ struct JockHitReactionConfiguration: Equatable {
                 "hit_hard_right_01"
             ],
             JockHitBucketKey(side: .left, damageLevel: .death): [
-                "dead_fall_forward"
+                "dead_fall_forward",
+                "dead_fall_backward_01",
+                "dead_fall_backward_02"
             ],
             JockHitBucketKey(side: .right, damageLevel: .death): [
-                "dead_fall_forward"
+                "dead_fall_forward",
+                "dead_fall_backward_01",
+                "dead_fall_backward_02"
             ]
         ]
     )

@@ -1,7 +1,7 @@
 {
   "schema": "com.gravitas.animation_library_manifest.v0",
   "library_id": "GravitasPlagueAnimationLibrary",
-  "generated_at": "2026-06-02T20:50:41.762239+00:00",
+  "generated_at": "2026-06-02T21:45:32.536536+00:00",
   "clips": [
     {
       "clip_id": "charged-slash-left",
@@ -64,6 +64,78 @@
       "approved_for_runtime": true,
       "debug_only": false,
       "updated_at": "2026-06-02T14:17:44.423710+00:00"
+    },
+    {
+      "clip_id": "dead_fall_backward_01",
+      "display_name": "Dead fall backward 01",
+      "relative_path": "Clips/HitReact/dead_fall_backward_01.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
+      "category": [
+        "hitReact"
+      ],
+      "emotion": [
+        "death"
+      ],
+      "threat": [
+        "high"
+      ],
+      "story": [
+        "death",
+        "kill",
+        "fall"
+      ],
+      "looping": true,
+      "duration_seconds": 5.541666666666667,
+      "locomotion_type": "stationary",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T21:45:32.536487+00:00"
+    },
+    {
+      "clip_id": "dead_fall_backward_02",
+      "display_name": "Dead fall backward 02",
+      "relative_path": "Clips/HitReact/dead_fall_backward_02.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
+      "category": [
+        "hitReact"
+      ],
+      "emotion": [
+        "death"
+      ],
+      "threat": [
+        "high"
+      ],
+      "story": [
+        "death",
+        "kill",
+        "fall"
+      ],
+      "looping": true,
+      "duration_seconds": 2.7916666666666665,
+      "locomotion_type": "stationary",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T21:41:27.408348+00:00"
     },
     {
       "clip_id": "dead_fall_forward_01",

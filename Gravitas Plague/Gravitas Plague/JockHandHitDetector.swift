@@ -149,21 +149,29 @@ final class JockHandHitDetector {
             faceCenterWorld: faceCenterWorld
         )
 
-        let leftDistance = simd_distance(handPosition, zones.left)
-        let rightDistance = simd_distance(handPosition, zones.right)
-
         let side: JockHitSide
         let target: SIMD3<Float>
         let distance: Float
 
-        if leftDistance <= rightDistance {
-            side = .left
-            target = zones.left
-            distance = leftDistance
-        } else {
-            side = .right
-            target = zones.right
-            distance = rightDistance
+        switch configuration.sideSelectionMode {
+        case .handChirality:
+            side = deterministicSideForHand(chirality: chirality)
+            target = side == .left ? zones.left : zones.right
+            distance = simd_distance(handPosition, faceCenterWorld)
+
+        case .nearestFaceZone:
+            let leftDistance = simd_distance(handPosition, zones.left)
+            let rightDistance = simd_distance(handPosition, zones.right)
+
+            if leftDistance <= rightDistance {
+                side = .left
+                target = zones.left
+                distance = leftDistance
+            } else {
+                side = .right
+                target = zones.right
+                distance = rightDistance
+            }
         }
 
         guard distance <= configuration.maxHitDistanceMeters else {
@@ -171,7 +179,9 @@ final class JockHandHitDetector {
         }
 
         let towardFace = PhaseOneMath.normalizedOrFallback(
-            target - previous.position,
+            configuration.sideSelectionMode == .handChirality
+                ? faceCenterWorld - previous.position
+                : target - previous.position,
             fallback: SIMD3<Float>(0, 0, 0)
         )
 
@@ -180,13 +190,34 @@ final class JockHandHitDetector {
             : SIMD3<Float>(0, 0, 0)
 
         let approachDot = simd_dot(velocityDirection, towardFace)
+        let requiredApproachDot: Float
 
-        guard approachDot > 0.12 else {
+        switch configuration.sideSelectionMode {
+        case .handChirality:
+            requiredApproachDot = -0.15
+
+        case .nearestFaceZone:
+            requiredApproachDot = 0.12
+        }
+
+        guard approachDot > requiredApproachDot else {
             return nil
         }
 
         globalLastHitTime = currentTime
         perHandLastHitTime[chirality] = currentTime
+
+        print(
+            """
+            [Gravitas HitDetector] Valid hand hit
+              hand: \(chirality)
+              sideSelectionMode: \(configuration.sideSelectionMode.rawValue)
+              selectedSide: \(side.rawValue)
+              speed: \(String(format: "%.2f", speed))
+              distance: \(String(format: "%.3f", distance))
+              approachDot: \(String(format: "%.2f", approachDot))
+            """
+        )
 
         return HitEvent(
             side: side,
@@ -211,6 +242,21 @@ final class JockHandHitDetector {
 
         @unknown default:
             return nil
+        }
+    }
+
+    private func deterministicSideForHand(
+        chirality: HandAnchor.Chirality
+    ) -> JockHitSide {
+        switch chirality {
+        case .left:
+            return .right
+
+        case .right:
+            return .left
+
+        @unknown default:
+            return .right
         }
     }
 

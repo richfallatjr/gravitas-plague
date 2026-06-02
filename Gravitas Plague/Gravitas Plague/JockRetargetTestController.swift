@@ -187,7 +187,9 @@ final class JockRetargetTestController {
             "hit_medium_right_02",
             "hit_hard_left_01",
             "hit_hard_right_01",
-            "dead_fall_forward"
+            "dead_fall_forward",
+            "dead_fall_backward_01",
+            "dead_fall_backward_02"
         ]
 
         let missingHitClips = requiredHitClips.filter { loadedClips[$0] == nil }
@@ -603,11 +605,11 @@ final class JockRetargetTestController {
             """
             [Gravitas Hit] Registered face hit
               hitCount: \(acceptedHitCount)
-              detectedFaceSide: \(event.side.rawValue)
+              hand: \(event.hand)
+              deterministicSide: \(event.side.rawValue)
               authoredClipSide: \(authoredClipSide.rawValue)
               classifiedDamage: \(event.damageLevel.rawValue)
               finalDamage: \(finalDamage.rawValue)
-              hand: \(event.hand)
               velocity: \(String(format: "%.2f", event.velocityMetersPerSecond)) m/s
               selectedClip: \(selectedClipID ?? "none")
               shouldDie: \(shouldDie)
@@ -671,7 +673,7 @@ final class JockRetargetTestController {
             print(
                 """
                 [Gravitas SubAnim] No head snap sub-animation available
-                  detectedFaceSide: \(side.rawValue)
+                  deterministicSide: \(side.rawValue)
                   candidates: \(candidateIDs.joined(separator: ", "))
                 """
             )
@@ -694,7 +696,7 @@ final class JockRetargetTestController {
         print(
             """
             [Gravitas Hit] Triggered head snap sub-animation
-              detectedFaceSide: \(side.rawValue)
+              deterministicSide: \(side.rawValue)
               clipID: \(clipID)
             """
         )
