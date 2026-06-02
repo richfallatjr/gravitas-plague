@@ -30,6 +30,7 @@ import bpy
 import json
 import math
 import os
+import re
 import traceback
 from datetime import datetime, timezone
 
@@ -66,6 +67,20 @@ DEFAULT_SKELETON_MAP_PATH = os.path.join(
     "SkeletonMaps",
     "MeshyBiped24_identity.map.json",
 )
+
+MANIFEST_CLIP_ENUM_CACHE = []
+MANIFEST_CLIP_SUMMARY_BY_ID = {}
+
+MESHY_BIPED24_MIRROR_PAIRS = {
+    "LeftUpLeg": "RightUpLeg",
+    "LeftLeg": "RightLeg",
+    "LeftFoot": "RightFoot",
+    "LeftToeBase": "RightToeBase",
+    "LeftShoulder": "RightShoulder",
+    "LeftArm": "RightArm",
+    "LeftForeArm": "RightForeArm",
+    "LeftHand": "RightHand",
+}
 
 
 # ============================================================
@@ -157,6 +172,359 @@ def _now_iso():
 def _current_scene_fps():
     scene = bpy.context.scene
     return float(scene.render.fps / max(scene.render.fps_base, 0.0001))
+
+
+# ============================================================
+# Manifest browser helpers
+# ============================================================
+
+def _manifest_file_path_from_library_root(library_root):
+    return os.path.join(
+        bpy.path.abspath(library_root),
+        "Manifests",
+        "animation_library_manifest.json",
+    )
+
+
+def _clip_display_label(summary):
+    clip_id = summary.get("clip_id", "")
+    display_name = summary.get("display_name", clip_id)
+    category = ",".join(summary.get("category", []))
+    return f"{display_name}  [{clip_id}]  {category}"
+
+
+def _refresh_manifest_clip_cache(settings, log):
+    global MANIFEST_CLIP_ENUM_CACHE
+    global MANIFEST_CLIP_SUMMARY_BY_ID
+
+    MANIFEST_CLIP_ENUM_CACHE = []
+    MANIFEST_CLIP_SUMMARY_BY_ID = {}
+
+    library_root = bpy.path.abspath(settings.animation_library_root)
+    if not library_root:
+        raise RuntimeError("Animation Library Root is empty.")
+
+    manifest_path = _manifest_file_path_from_library_root(library_root)
+    if not os.path.isfile(manifest_path):
+        raise FileNotFoundError(f"Manifest not found: {manifest_path}")
+
+    manifest = _json_load(manifest_path)
+
+    for index, summary in enumerate(manifest.get("clips", [])):
+        clip_id = summary.get("clip_id", "")
+        if not clip_id:
+            continue
+
+        MANIFEST_CLIP_SUMMARY_BY_ID[clip_id] = summary
+        MANIFEST_CLIP_ENUM_CACHE.append((
+            clip_id,
+            _clip_display_label(summary),
+            summary.get("relative_path", ""),
+            index,
+        ))
+
+    if not MANIFEST_CLIP_ENUM_CACHE:
+        MANIFEST_CLIP_ENUM_CACHE.append((
+            "__NONE__",
+            "No clips found",
+            "",
+            0,
+        ))
+
+    log.append(f"Loaded manifest clips: {len(MANIFEST_CLIP_SUMMARY_BY_ID)}")
+    return manifest
+
+
+def _manifest_clip_enum_items(self, context):
+    if MANIFEST_CLIP_ENUM_CACHE:
+        return MANIFEST_CLIP_ENUM_CACHE
+
+    return [
+        ("__NONE__", "Load Manifest first", "", 0),
+    ]
+
+
+def _clip_json_path_from_summary(library_root, summary):
+    relative_path = summary.get("relative_path", "")
+    if not relative_path:
+        raise RuntimeError("Selected manifest clip has no relative_path.")
+
+    return os.path.join(
+        bpy.path.abspath(library_root),
+        relative_path.replace("/", os.sep),
+    )
+
+
+def _category_folder_from_clip_payload(clip_payload, fallback="Idle"):
+    tags = clip_payload.get("tags", {})
+    categories = tags.get("category", [])
+
+    category_to_folder = {
+        "dummy": "Dummy",
+        "idle": "Idle",
+        "turn": "Turn",
+        "walk": "Walk",
+        "hit_react": "HitReact",
+        "storygesture": "StoryGesture",
+        "story_gesture": "StoryGesture",
+        "gesture": "StoryGesture",
+    }
+
+    for category in categories:
+        key = str(category).strip().lower()
+        if key in category_to_folder:
+            return category_to_folder[key]
+
+    return fallback
+
+
+def _csv_from_list(values):
+    if not values:
+        return ""
+    return ",".join(str(value) for value in values)
+
+
+def _populate_settings_from_clip_payload(settings, clip_payload, summary=None):
+    settings.clip_id = clip_payload.get("clip_id", settings.clip_id)
+    settings.display_name = clip_payload.get("display_name", settings.display_name)
+    settings.description = clip_payload.get("notes", settings.description)
+
+    settings.output_category_folder = _category_folder_from_clip_payload(
+        clip_payload,
+        fallback=settings.output_category_folder,
+    )
+
+    timing = clip_payload.get("timing", {})
+    fps = timing.get("fps")
+    duration_seconds = timing.get("duration_seconds")
+    looping = timing.get("looping")
+
+    if fps is not None:
+        settings.source_fps = float(fps)
+
+    if looping is not None:
+        settings.looping = bool(looping)
+
+    source = clip_payload.get("source", {})
+    start_frame = source.get("start_frame")
+    end_frame = source.get("end_frame")
+    sample_every_n = source.get("sample_every_n_frames")
+
+    if start_frame is not None:
+        settings.source_start_frame = int(start_frame)
+
+    if end_frame is not None:
+        settings.source_end_frame = int(end_frame)
+    elif duration_seconds is not None and fps is not None:
+        settings.source_end_frame = (
+            int(round(float(duration_seconds) * float(fps)))
+            + int(settings.source_start_frame)
+        )
+
+    if sample_every_n is not None:
+        settings.sample_every_n_frames = int(sample_every_n)
+
+    source_path = source.get("source_path")
+    if source_path:
+        settings.donor_file_path = source_path
+
+    locomotion = clip_payload.get("locomotion", {})
+    settings.locomotion_enabled = bool(locomotion.get("enabled", False))
+    settings.locomotion_type = locomotion.get(
+        "locomotion_type",
+        settings.locomotion_type,
+    )
+    settings.world_space_motion = locomotion.get(
+        "world_space_motion",
+        settings.world_space_motion,
+    )
+    settings.recommended_speed_mps = float(
+        locomotion.get("recommended_speed_mps", settings.recommended_speed_mps)
+    )
+    settings.turn_degrees = float(
+        locomotion.get("root_rotation_degrees", settings.turn_degrees)
+    )
+    settings.root_translation_policy = locomotion.get(
+        "root_translation_policy",
+        settings.root_translation_policy,
+    )
+    settings.locomotion_start_mode = locomotion.get(
+        "locomotion_start_mode",
+        settings.locomotion_start_mode,
+    )
+
+    transition = clip_payload.get("transition", {})
+    if "default_transition_frames" in transition:
+        settings.default_transition_frames = int(
+            transition["default_transition_frames"]
+        )
+
+    tags = clip_payload.get("tags", {})
+    settings.category_tags = _csv_from_list(tags.get("category", []))
+    settings.emotion_tags = _csv_from_list(tags.get("emotion", []))
+    settings.threat_tags = _csv_from_list(tags.get("threat", []))
+    settings.story_tags = _csv_from_list(tags.get("story", []))
+    settings.allowed_states = _csv_from_list(tags.get("allowed_states", []))
+
+    quality = clip_payload.get("quality", {})
+    settings.approved_for_runtime = bool(
+        quality.get("approved_for_runtime", settings.approved_for_runtime)
+    )
+    settings.approved_for_episode = bool(
+        quality.get("approved_for_episode", settings.approved_for_episode)
+    )
+    settings.debug_only = bool(
+        quality.get("debug_only", settings.debug_only)
+    )
+
+    if summary is not None:
+        settings.loaded_manifest_clip_relative_path = summary.get(
+            "relative_path",
+            "",
+        )
+
+
+# ============================================================
+# Mirror export helpers
+# ============================================================
+
+def _mirrored_joint_name(joint_name):
+    if joint_name in MESHY_BIPED24_MIRROR_PAIRS:
+        return MESHY_BIPED24_MIRROR_PAIRS[joint_name]
+
+    for left, right in MESHY_BIPED24_MIRROR_PAIRS.items():
+        if joint_name == right:
+            return left
+
+    return joint_name
+
+
+def _mirror_translation_value(value):
+    result = list(value)
+    if len(result) >= 3:
+        result[0] *= -1
+    return result
+
+
+def _mirror_quat_wxyz_value(value):
+    result = list(value)
+    if len(result) < 4:
+        return result
+
+    w, x, y, z = result[0], result[1], result[2], result[3]
+    return [w, x, -y, -z]
+
+
+def _mirror_track(track):
+    mirrored = dict(track)
+    channel = track.get("channel", "")
+    mirrored["joint"] = _mirrored_joint_name(track.get("joint", ""))
+
+    new_keys = []
+    for key in track.get("keys", []):
+        new_key = dict(key)
+        value = list(key.get("value", []))
+
+        if channel.startswith("translation_xyz"):
+            new_key["value"] = _mirror_translation_value(value)
+        elif channel.startswith("rotation_quat_wxyz"):
+            new_key["value"] = _mirror_quat_wxyz_value(value)
+        elif channel.startswith("scale_xyz"):
+            new_key["value"] = value
+        else:
+            new_key["value"] = value
+
+        new_keys.append(new_key)
+
+    mirrored["keys"] = new_keys
+    return mirrored
+
+
+def _mirror_locomotion_tracks(locomotion):
+    mirrored = json.loads(json.dumps(locomotion))
+    tracks = mirrored.get("tracks", {})
+
+    for key in tracks.get("side_meters", []):
+        key["value"] = -float(key.get("value", 0.0))
+
+    for key in tracks.get("yaw_degrees", []):
+        key["value"] = -float(key.get("value", 0.0))
+
+    return mirrored
+
+
+def _replace_direction_word(value):
+    replacements = [
+        ("right", "left"),
+        ("Right", "Left"),
+        ("RIGHT", "LEFT"),
+        ("left", "right"),
+        ("Left", "Right"),
+        ("LEFT", "RIGHT"),
+        ("r", "l"),
+        ("R", "L"),
+        ("l", "r"),
+        ("L", "R"),
+    ]
+
+    for old, new in replacements:
+        pattern = rf"(^|[_\-\s]){re.escape(old)}($|[_\-\s])"
+        replaced, count = re.subn(
+            pattern,
+            lambda match: f"{match.group(1)}{new}{match.group(2)}",
+            value,
+            count=1,
+        )
+
+        if count:
+            return replaced
+
+    return None
+
+
+def _mirrored_clip_id_from(source_clip_id):
+    replaced = _replace_direction_word(source_clip_id)
+    if replaced:
+        return replaced
+
+    return f"{source_clip_id}_mirrored"
+
+
+def _mirrored_display_name_from(display_name):
+    replaced = _replace_direction_word(display_name)
+    if replaced:
+        return replaced
+
+    return f"{display_name} Mirrored"
+
+
+def _mirror_clip_payload(clip_payload):
+    mirrored = json.loads(json.dumps(clip_payload))
+
+    source_clip_id = clip_payload.get("clip_id", "clip")
+    source_display_name = clip_payload.get("display_name", source_clip_id)
+
+    mirrored["clip_id"] = _mirrored_clip_id_from(source_clip_id)
+    mirrored["display_name"] = _mirrored_display_name_from(source_display_name)
+    mirrored["tracks"] = [
+        _mirror_track(track)
+        for track in clip_payload.get("tracks", [])
+    ]
+    mirrored["locomotion"] = _mirror_locomotion_tracks(
+        clip_payload.get("locomotion", {})
+    )
+
+    source = mirrored.get("source", {})
+    source["mirrored_from_clip_id"] = source_clip_id
+    source["mirror_plane"] = "X"
+    mirrored["source"] = source
+
+    notes = mirrored.get("notes", "")
+    mirrored["notes"] = (
+        f"{notes}\nMirrored export generated from {source_clip_id}."
+    ).strip()
+
+    return mirrored
 
 
 # ============================================================
@@ -836,6 +1204,46 @@ def _update_manifest(library_root, clip_payload, output_path):
     return path
 
 
+def _write_clip_and_update_manifest(
+    settings,
+    library_root,
+    clip_payload,
+    explicit_existing_relative_path=None,
+):
+    clip_id = clip_payload["clip_id"]
+
+    if (
+        settings.overwrite_existing_clip
+        and explicit_existing_relative_path
+    ):
+        output_path = os.path.join(
+            library_root,
+            explicit_existing_relative_path.replace("/", os.sep),
+        )
+    else:
+        folder = _category_folder_from_clip_payload(
+            clip_payload,
+            fallback=settings.output_category_folder,
+        )
+
+        output_dir = os.path.join(
+            library_root,
+            "Clips",
+            folder,
+        )
+        output_path = os.path.join(output_dir, f"{clip_id}.jockanim.json")
+
+    _json_write(output_path, clip_payload)
+
+    manifest_path = _update_manifest(
+        library_root=library_root,
+        clip_payload=clip_payload,
+        output_path=output_path,
+    )
+
+    return output_path, manifest_path
+
+
 # ============================================================
 # Settings
 # ============================================================
@@ -857,6 +1265,23 @@ class GravitasAnimationLibrarySettings(PropertyGroup):
         name="Skeleton Map JSON",
         subtype="FILE_PATH",
         default=DEFAULT_SKELETON_MAP_PATH,
+    )
+
+    selected_manifest_clip_id: EnumProperty(
+        name="Existing Clip",
+        description="Clip loaded from animation_library_manifest.json.",
+        items=_manifest_clip_enum_items,
+    )
+
+    loaded_manifest_clip_relative_path: StringProperty(
+        name="Loaded Clip Relative Path",
+        default="",
+    )
+
+    overwrite_existing_clip: BoolProperty(
+        name="Overwrite Existing Clip",
+        description="Export back to the selected clip's existing manifest path.",
+        default=True,
     )
 
     donor_file_path: StringProperty(
@@ -1020,6 +1445,8 @@ class GravitasAnimationLibrarySettings(PropertyGroup):
             ("ignore", "ignore", ""),
             ("preserve", "preserve", ""),
             ("extract_as_metadata", "extract_as_metadata", ""),
+            ("manual_curve", "manual_curve", ""),
+            ("virtual_root_extracted", "virtual_root_extracted", ""),
         ],
         default="ignore",
     )
@@ -1101,10 +1528,116 @@ class GravitasAnimationLibrarySettings(PropertyGroup):
         default=True,
     )
 
+    mirror_animation: BoolProperty(
+        name="Mirror Animation",
+        description=(
+            "Export a whole-rig mirrored sidecar. Left/right tracks swap, "
+            "X translation mirrors, and locomotion side/yaw invert."
+        ),
+        default=False,
+    )
+
 
 # ============================================================
 # Operators
 # ============================================================
+
+class GRAVITAS_OT_load_animation_manifest(Operator):
+    bl_idname = "gravitas.load_animation_manifest"
+    bl_label = "Load Manifest"
+    bl_description = "Loads animation_library_manifest.json and populates Existing Clip dropdown."
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.gravitas_animation_library
+        log = []
+
+        try:
+            _refresh_manifest_clip_cache(settings, log)
+
+            first_valid = None
+            for item in MANIFEST_CLIP_ENUM_CACHE:
+                if item[0] != "__NONE__":
+                    first_valid = item[0]
+                    break
+
+            if first_valid is not None:
+                settings.selected_manifest_clip_id = first_valid
+
+            settings.loaded_manifest_clip_relative_path = ""
+
+            _safe_report(self, {"INFO"}, "Loaded animation manifest.")
+
+        except Exception as error:
+            _log_append(log, "ERROR")
+            _log_append(log, str(error))
+            _log_append(log, traceback.format_exc())
+            _safe_report(self, {"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+        finally:
+            if settings.log_text:
+                _write_log(log)
+
+        return {"FINISHED"}
+
+
+class GRAVITAS_OT_load_selected_clip_metadata(Operator):
+    bl_idname = "gravitas.load_selected_clip_metadata"
+    bl_label = "Load Selected Clip Metadata"
+    bl_description = "Loads selected .jockanim.json and populates metadata fields."
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.gravitas_animation_library
+        log = []
+
+        try:
+            if not MANIFEST_CLIP_SUMMARY_BY_ID:
+                _refresh_manifest_clip_cache(settings, log)
+
+            clip_id = settings.selected_manifest_clip_id
+            if clip_id == "__NONE__" or not clip_id:
+                raise RuntimeError("No manifest clip selected.")
+
+            summary = MANIFEST_CLIP_SUMMARY_BY_ID.get(clip_id)
+            if summary is None:
+                raise RuntimeError(
+                    f"Selected clip not found in manifest cache: {clip_id}"
+                )
+
+            clip_path = _clip_json_path_from_summary(
+                settings.animation_library_root,
+                summary,
+            )
+
+            if not os.path.isfile(clip_path):
+                raise FileNotFoundError(f"Clip file not found: {clip_path}")
+
+            clip_payload = _json_load(clip_path)
+
+            _populate_settings_from_clip_payload(
+                settings=settings,
+                clip_payload=clip_payload,
+                summary=summary,
+            )
+
+            log.append(f"Loaded metadata from: {clip_path}")
+            _safe_report(self, {"INFO"}, f"Loaded metadata for {clip_id}")
+
+        except Exception as error:
+            _log_append(log, "ERROR")
+            _log_append(log, str(error))
+            _log_append(log, traceback.format_exc())
+            _safe_report(self, {"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+        finally:
+            if settings.log_text:
+                _write_log(log)
+
+        return {"FINISHED"}
+
 
 class GRAVITAS_OT_import_donor_animation(Operator):
     bl_idname = "gravitas.import_donor_animation"
@@ -1351,19 +1884,25 @@ class GRAVITAS_OT_export_jock_clip(Operator):
                 "notes": settings.description,
             }
 
-            output_dir = os.path.join(
-                library_root,
-                "Clips",
-                settings.output_category_folder,
-            )
-            output_path = os.path.join(output_dir, f"{clip_id}.jockanim.json")
+            payload_to_write = clip_payload
+            existing_relative_path = settings.loaded_manifest_clip_relative_path
 
-            _json_write(output_path, clip_payload)
+            if settings.mirror_animation:
+                payload_to_write = _mirror_clip_payload(clip_payload)
+                existing_relative_path = None
+                _log_append(
+                    log,
+                    (
+                        "Mirror Animation enabled: "
+                        f"{clip_payload['clip_id']} -> {payload_to_write['clip_id']}"
+                    ),
+                )
 
-            manifest_path = _update_manifest(
+            output_path, manifest_path = _write_clip_and_update_manifest(
+                settings=settings,
                 library_root=library_root,
-                clip_payload=clip_payload,
-                output_path=output_path,
+                clip_payload=payload_to_write,
+                explicit_existing_relative_path=existing_relative_path,
             )
 
             _log_append(log, f"Exported clip: {output_path}")
@@ -1374,7 +1913,7 @@ class GRAVITAS_OT_export_jock_clip(Operator):
             _safe_report(
                 self,
                 {"INFO"},
-                f"Exported JockAnim clip: {clip_id}",
+                f"Exported JockAnim clip: {payload_to_write['clip_id']}",
             )
 
         except Exception as error:
@@ -1567,6 +2106,24 @@ class GRAVITAS_PT_animation_library_panel(Panel):
         root_box.prop(settings, "rig_json_path")
         root_box.prop(settings, "skeleton_map_path")
 
+        browser_box = layout.box()
+        browser_box.label(text="Library Browser", icon="FILE_FOLDER")
+        browser_box.operator(
+            GRAVITAS_OT_load_animation_manifest.bl_idname,
+            text="Load Manifest",
+            icon="FILE_FOLDER",
+        )
+        browser_box.prop(settings, "selected_manifest_clip_id")
+        browser_box.operator(
+            GRAVITAS_OT_load_selected_clip_metadata.bl_idname,
+            text="Load Selected Clip Metadata",
+            icon="IMPORT",
+        )
+        browser_box.prop(settings, "overwrite_existing_clip")
+        browser_box.label(
+            text=f"Path: {settings.loaded_manifest_clip_relative_path or 'none'}"
+        )
+
         donor_box = layout.box()
         donor_box.label(text="Donor Animation", icon="ARMATURE_DATA")
         donor_box.prop(settings, "donor_file_path")
@@ -1666,6 +2223,7 @@ class GRAVITAS_PT_animation_library_panel(Panel):
 
         layout.separator()
 
+        layout.prop(settings, "mirror_animation")
         layout.operator(
             GRAVITAS_OT_export_jock_clip.bl_idname,
             text="Export JockAnim Clip + Update Manifest",
@@ -1679,6 +2237,8 @@ class GRAVITAS_PT_animation_library_panel(Panel):
 
 classes = (
     GravitasAnimationLibrarySettings,
+    GRAVITAS_OT_load_animation_manifest,
+    GRAVITAS_OT_load_selected_clip_metadata,
     GRAVITAS_OT_import_donor_animation,
     GRAVITAS_OT_validate_donor_rig,
     GRAVITAS_OT_export_jock_clip,
