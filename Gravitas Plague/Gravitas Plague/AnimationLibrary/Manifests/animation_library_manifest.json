@@ -1,7 +1,7 @@
 {
   "schema": "com.gravitas.animation_library_manifest.v0",
   "library_id": "GravitasPlagueAnimationLibrary",
-  "generated_at": "2026-06-02T15:03:01.180841+00:00",
+  "generated_at": "2026-06-02T15:45:32.526507+00:00",
   "clips": [
     {
       "clip_id": "charged-slash-left",
@@ -99,7 +99,7 @@
     {
       "clip_id": "hit_hard_left_01",
       "display_name": "Hit hard left 01",
-      "relative_path": "Clips/HitReact/hit_medium_left_02.jockanim.json",
+      "relative_path": "Clips/HitReact/hit_hard_left_01.jockanim.json",
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
@@ -116,19 +116,19 @@
         "combat"
       ],
       "looping": true,
-      "duration_seconds": 3.5416666666666665,
+      "duration_seconds": 7.0,
       "locomotion_type": "stationary",
       "world_space_motion": "none",
       "locomotion_enabled": false,
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T14:54:00.128479+00:00"
+      "updated_at": "2026-06-02T15:45:32.526496+00:00"
     },
     {
       "clip_id": "hit_hard_right_01",
       "display_name": "Hit hard right 01",
-      "relative_path": "Clips/Idle/hit_hard_right_01.jockanim.json",
+      "relative_path": "Clips/HitReact/hit_hard_right_01.jockanim.json",
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
@@ -145,44 +145,14 @@
         "combat"
       ],
       "looping": true,
-      "duration_seconds": 3.5416666666666665,
+      "duration_seconds": 7.0,
       "locomotion_type": "stationary",
       "world_space_motion": "none",
       "locomotion_enabled": false,
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T14:54:03.502716+00:00"
-    },
-    {
-      "clip_id": "hit_light_left_01",
-      "display_name": "Hit light left 01",
-      "relative_path": "Clips/HitReact/hit_light_left_01.jockanim.json",
-      "rig_id": "GravitasMeshyBiped24",
-      "rig_version": "001",
-      "pose_mode": "absoluteLocal",
-      "category": [
-        "hit"
-      ],
-      "emotion": [
-        "damage"
-      ],
-      "threat": [
-        "high",
-        "close"
-      ],
-      "story": [
-        "punch"
-      ],
-      "looping": true,
-      "duration_seconds": 1.5416666666666667,
-      "locomotion_type": "hit_react",
-      "world_space_motion": "none",
-      "locomotion_enabled": false,
-      "locomotion_start_mode": "after_transition",
-      "approved_for_runtime": true,
-      "debug_only": false,
-      "updated_at": "2026-06-02T14:37:35.651823+00:00"
+      "updated_at": "2026-06-02T15:44:38.053075+00:00"
     },
     {
       "clip_id": "hit_light_right_01",

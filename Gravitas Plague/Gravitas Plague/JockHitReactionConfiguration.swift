@@ -44,6 +44,10 @@ struct JockHitReactionConfiguration: Equatable {
     let stunSecondsHard: TimeInterval
     let stunSecondsDeath: TimeInterval
 
+    /// After this many accepted hits, play a terminal death clip.
+    let deathHitCount: Int
+    let deathClipIDs: [String]
+
     let clipBuckets: [JockHitBucketKey: [String]]
 
     static let phaseOne = JockHitReactionConfiguration(
@@ -68,25 +72,29 @@ struct JockHitReactionConfiguration: Equatable {
         knockbackMetersDeath: 0.7,
 
         stunSecondsLight: 0.35,
-        stunSecondsMedium: 0.75,
-        stunSecondsHard: 1.15,
-        stunSecondsDeath: 2.0,
+        stunSecondsMedium: 0.85,
+        stunSecondsHard: 1.25,
+        stunSecondsDeath: 999.0,
+
+        deathHitCount: 10,
+
+        deathClipIDs: [
+            "dead_fall_forward"
+        ],
 
         clipBuckets: [
             JockHitBucketKey(side: .left, damageLevel: .medium): [
                 "hit_medium_left_01",
-                "hit_medium_left_02"
+                "hit_medium_left_02",
+                "hit_medium_left"
             ],
             JockHitBucketKey(side: .right, damageLevel: .medium): [
                 "hit_medium_right_01",
-                "hit_medium_right_02"
+                "hit_medium_right_02",
+                "hit_medium_right"
             ],
-            JockHitBucketKey(side: .left, damageLevel: .light): [
-                "hit_light_left_01"
-            ],
-            JockHitBucketKey(side: .right, damageLevel: .light): [
-                "hit_light_right_01"
-            ],
+            JockHitBucketKey(side: .left, damageLevel: .light): [],
+            JockHitBucketKey(side: .right, damageLevel: .light): [],
             JockHitBucketKey(side: .left, damageLevel: .hard): [
                 "hit_hard_left_01"
             ],

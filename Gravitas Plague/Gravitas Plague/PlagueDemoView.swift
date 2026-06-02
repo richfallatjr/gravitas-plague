@@ -72,7 +72,7 @@ struct PlagueDemoView: View {
                         .buttonStyle(.borderedProminent)
                     }
 
-                    Text("Follow Demo includes phase-1 hand-tracked face hits. Slap the left or right side of the infected's face to trigger hit reactions.")
+                    Text("Follow Demo includes prioritized hit reactions. Fast hand hits on the left/right face trigger medium hit animations. After 10 hits, the infected plays dead_fall_forward.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
