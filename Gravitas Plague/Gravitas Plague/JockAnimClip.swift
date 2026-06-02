@@ -158,6 +158,11 @@ struct JockAnimClip: Codable, Equatable {
     let rigID: String
     let rigVersion: String
     let poseMode: String
+    let clipType: String?
+    let affectedJoints: [String]?
+    let blendInFrames: Int?
+    let blendOutFrames: Int?
+    let baseAnimationContinues: Bool?
     let source: Source
     let timing: Timing
     let joints: [String]
@@ -175,6 +180,11 @@ struct JockAnimClip: Codable, Equatable {
         case rigID = "rig_id"
         case rigVersion = "rig_version"
         case poseMode = "pose_mode"
+        case clipType = "clip_type"
+        case affectedJoints = "affected_joints"
+        case blendInFrames = "blend_in_frames"
+        case blendOutFrames = "blend_out_frames"
+        case baseAnimationContinues = "base_animation_continues"
         case source
         case timing
         case joints
@@ -192,5 +202,21 @@ struct JockAnimClip: Codable, Equatable {
 
     var isAbsoluteLocal: Bool {
         poseMode == "absoluteLocal"
+    }
+
+    var isSubAnimationOverride: Bool {
+        clipType == "sub_animation_override"
+    }
+
+    var resolvedAffectedJoints: [String] {
+        affectedJoints ?? []
+    }
+
+    var resolvedBlendInFrames: Int {
+        blendInFrames ?? 0
+    }
+
+    var resolvedBlendOutFrames: Int {
+        blendOutFrames ?? 0
     }
 }

@@ -1,7 +1,7 @@
 {
   "schema": "com.gravitas.animation_library_manifest.v0",
   "library_id": "GravitasPlagueAnimationLibrary",
-  "generated_at": "2026-06-02T15:45:32.526507+00:00",
+  "generated_at": "2026-06-02T20:50:41.762239+00:00",
   "clips": [
     {
       "clip_id": "charged-slash-left",
@@ -95,6 +95,78 @@
       "approved_for_runtime": true,
       "debug_only": false,
       "updated_at": "2026-06-02T15:03:01.180692+00:00"
+    },
+    {
+      "clip_id": "head_snap_left",
+      "display_name": "Head snap left",
+      "relative_path": "Clips/HitReact/head_snap_left.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "clip_type": "sub_animation_override",
+      "affected_joints": [
+        "Head"
+      ],
+      "blend_in_frames": 2,
+      "blend_out_frames": 2,
+      "base_animation_continues": true,
+      "category": [
+        "hitReact"
+      ],
+      "emotion": [
+        "damaged"
+      ],
+      "threat": [
+        "high"
+      ],
+      "story": [
+        "fight"
+      ],
+      "looping": true,
+      "duration_seconds": 0.25,
+      "locomotion_type": "stationary",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T20:50:41.762042+00:00"
+    },
+    {
+      "clip_id": "head_snap_right",
+      "display_name": "Head snap right",
+      "relative_path": "Clips/HitReact/head_snap_right.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "clip_type": "sub_animation_override",
+      "affected_joints": [
+        "Head"
+      ],
+      "blend_in_frames": 2,
+      "blend_out_frames": 2,
+      "base_animation_continues": true,
+      "category": [
+        "hitReact"
+      ],
+      "emotion": [
+        "damaged"
+      ],
+      "threat": [
+        "high"
+      ],
+      "story": [
+        "fight"
+      ],
+      "looping": true,
+      "duration_seconds": 0.25,
+      "locomotion_type": "stationary",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-02T20:49:26.952136+00:00"
     },
     {
       "clip_id": "hit_hard_left_01",

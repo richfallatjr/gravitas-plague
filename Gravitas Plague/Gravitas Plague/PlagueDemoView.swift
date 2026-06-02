@@ -111,6 +111,14 @@ struct PlagueDemoView: View {
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
 
+                                Text(
+                                    selected.clipType == "sub_animation_override"
+                                        ? "Type: Sub Override"
+                                        : "Type: Full Body"
+                                )
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+
                                 Text("Category: \(selected.category.joined(separator: ", "))")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)

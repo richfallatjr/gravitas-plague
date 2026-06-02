@@ -8,6 +8,11 @@ struct JockAnimationManifest: Codable, Equatable {
         let rigID: String
         let rigVersion: String
         let poseMode: String
+        let clipType: String?
+        let affectedJoints: [String]?
+        let blendInFrames: Int?
+        let blendOutFrames: Int?
+        let baseAnimationContinues: Bool?
         let category: [String]
         let emotion: [String]
         let threat: [String]
@@ -31,6 +36,11 @@ struct JockAnimationManifest: Codable, Equatable {
             case rigID = "rig_id"
             case rigVersion = "rig_version"
             case poseMode = "pose_mode"
+            case clipType = "clip_type"
+            case affectedJoints = "affected_joints"
+            case blendInFrames = "blend_in_frames"
+            case blendOutFrames = "blend_out_frames"
+            case baseAnimationContinues = "base_animation_continues"
             case category
             case emotion
             case threat

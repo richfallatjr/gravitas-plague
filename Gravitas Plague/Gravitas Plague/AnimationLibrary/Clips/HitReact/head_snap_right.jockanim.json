@@ -1,0 +1,214 @@
+{
+  "schema": "com.gravitas.jockanim.v0",
+  "clip_id": "head_snap_right",
+  "display_name": "Head snap right",
+  "rig_id": "GravitasMeshyBiped24",
+  "rig_version": "001",
+  "pose_mode": "absoluteLocal",
+  "clip_type": "sub_animation_override",
+  "affected_joints": [
+    "Head"
+  ],
+  "blend_in_frames": 2,
+  "blend_out_frames": 2,
+  "base_animation_continues": true,
+  "source": {
+    "type": "blender_donor_extract",
+    "source_file": "dad_biped.usdz",
+    "source_path": "/Users/richardfallat/Projects/dev/gravitas-plague/dad_biped.usdz",
+    "author": "Gravitas Pipeline",
+    "start_frame": 1,
+    "end_frame": 7,
+    "sample_every_n_frames": 1,
+    "notes": "Extracted by Gravitas Animation Library Tool v2.0."
+  },
+  "timing": {
+    "fps": 24.0,
+    "duration_seconds": 0.25,
+    "looping": true
+  },
+  "joints": [
+    "Head"
+  ],
+  "tracks": [
+    {
+      "joint": "Head",
+      "channel": "translation_xyz_absolute",
+      "keys": [
+        {
+          "t": 0.0,
+          "value": [
+            -4.470348358154297e-08,
+            7.956950664520264,
+            -1.8472783267498016e-06
+          ]
+        },
+        {
+          "t": 0.041666666666666664,
+          "value": [
+            -4.470348358154297e-08,
+            7.956950664520264,
+            -1.8472783267498016e-06
+          ]
+        },
+        {
+          "t": 0.08333333333333333,
+          "value": [
+            -4.470348358154297e-08,
+            7.956950664520264,
+            -1.8472783267498016e-06
+          ]
+        },
+        {
+          "t": 0.125,
+          "value": [
+            -4.470348358154297e-08,
+            7.956950664520264,
+            -1.8472783267498016e-06
+          ]
+        },
+        {
+          "t": 0.16666666666666666,
+          "value": [
+            -4.470348358154297e-08,
+            7.956950664520264,
+            -1.8472783267498016e-06
+          ]
+        },
+        {
+          "t": 0.20833333333333334,
+          "value": [
+            -4.470348358154297e-08,
+            7.956950664520264,
+            -1.8472783267498016e-06
+          ]
+        },
+        {
+          "t": 0.25,
+          "value": [
+            -4.470348358154297e-08,
+            7.956950664520264,
+            -1.8472783267498016e-06
+          ]
+        }
+      ]
+    },
+    {
+      "joint": "Head",
+      "channel": "rotation_quat_wxyz_absolute",
+      "keys": [
+        {
+          "t": 0.0,
+          "value": [
+            0.8969418406486511,
+            0.3494377136230469,
+            0.24913154542446136,
+            -0.10640528798103333
+          ]
+        },
+        {
+          "t": 0.041666666666666664,
+          "value": [
+            0.9016742706298828,
+            0.3513394892215729,
+            0.23189593851566315,
+            -0.09883468598127365
+          ]
+        },
+        {
+          "t": 0.08333333333333333,
+          "value": [
+            0.9121626615524292,
+            0.3555733263492584,
+            0.1876707673072815,
+            -0.07941431552171707
+          ]
+        },
+        {
+          "t": 0.125,
+          "value": [
+            0.922636866569519,
+            0.35984960198402405,
+            0.12810832262039185,
+            -0.05327039584517479
+          ]
+        },
+        {
+          "t": 0.16666666666666666,
+          "value": [
+            0.9291725754737854,
+            0.36259356141090393,
+            0.06684113293886185,
+            -0.02639148384332657
+          ]
+        },
+        {
+          "t": 0.20833333333333334,
+          "value": [
+            0.9313476085662842,
+            0.36359238624572754,
+            0.019045332446694374,
+            -0.0054318467155098915
+          ]
+        },
+        {
+          "t": 0.25,
+          "value": [
+            0.9315057992935181,
+            0.3637142479419708,
+            -0.0001389277313137427,
+            0.002978684613481164
+          ]
+        }
+      ]
+    }
+  ],
+  "locomotion": {
+    "enabled": false,
+    "locomotion_type": "stationary",
+    "world_space_motion": "none",
+    "space": "characterLocal",
+    "translation_units": "meters",
+    "rotation_units": "degrees",
+    "runtime_forward_axis": "-z",
+    "runtime_up_axis": "y",
+    "authoring_up_axis": "z",
+    "locomotion_start_mode": "after_transition",
+    "recommended_speed_mps": 0.0,
+    "root_rotation_degrees": 0.0,
+    "root_translation_policy": "ignore",
+    "tracks": {
+      "forward_meters": [],
+      "side_meters": [],
+      "vertical_meters": [],
+      "yaw_degrees": []
+    }
+  },
+  "transition": {
+    "default_transition_frames": 5,
+    "transition_fps": 24.0
+  },
+  "tags": {
+    "category": [
+      "hitReact"
+    ],
+    "emotion": [
+      "damaged"
+    ],
+    "threat": [
+      "high"
+    ],
+    "story": [
+      "fight"
+    ],
+    "allowed_states": [
+      "all"
+    ]
+  },
+  "quality": {
+    "approved_for_runtime": true,
+    "approved_for_episode": false,
+    "debug_only": false
+  },
+  "notes": "Quick head snap upon impact to "
+}

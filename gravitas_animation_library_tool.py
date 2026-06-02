@@ -36,6 +36,7 @@ from datetime import datetime, timezone
 
 from bpy.props import (
     BoolProperty,
+    CollectionProperty,
     EnumProperty,
     FloatProperty,
     IntProperty,
@@ -81,6 +82,40 @@ MESHY_BIPED24_MIRROR_PAIRS = {
     "LeftForeArm": "RightForeArm",
     "LeftHand": "RightHand",
 }
+
+# ============================================================
+# Sub Animation Override Support
+# ============================================================
+
+GRAVITAS_MESHY_BIPED24_CANONICAL_JOINTS = [
+    "Hips",
+    "LeftUpLeg",
+    "LeftLeg",
+    "LeftFoot",
+    "LeftToeBase",
+    "RightUpLeg",
+    "RightLeg",
+    "RightFoot",
+    "RightToeBase",
+    "Spine02",
+    "Spine01",
+    "Spine",
+    "LeftShoulder",
+    "LeftArm",
+    "LeftForeArm",
+    "LeftHand",
+    "RightShoulder",
+    "RightArm",
+    "RightForeArm",
+    "RightHand",
+    "neck",
+    "Head",
+    "head_end",
+    "headfront",
+]
+
+CLIP_TYPE_FULL_BODY = "full_body_animation"
+CLIP_TYPE_SUB_ANIMATION_OVERRIDE = "sub_animation_override"
 
 
 # ============================================================
@@ -289,6 +324,23 @@ def _populate_settings_from_clip_payload(settings, clip_payload, summary=None):
     settings.display_name = clip_payload.get("display_name", settings.display_name)
     settings.description = clip_payload.get("notes", settings.description)
 
+    clip_type = clip_payload.get("clip_type", CLIP_TYPE_FULL_BODY)
+    if clip_type == CLIP_TYPE_SUB_ANIMATION_OVERRIDE:
+        settings.export_type = "SUB_ANIMATION_OVERRIDE"
+    else:
+        settings.export_type = "FULL_BODY"
+
+    if "blend_in_frames" in clip_payload:
+        settings.blend_in_frames = int(clip_payload.get("blend_in_frames", 2))
+
+    if "blend_out_frames" in clip_payload:
+        settings.blend_out_frames = int(clip_payload.get("blend_out_frames", 2))
+
+    _set_selected_sub_animation_joints(
+        settings,
+        clip_payload.get("affected_joints", []),
+    )
+
     settings.output_category_folder = _category_folder_from_clip_payload(
         clip_payload,
         fallback=settings.output_category_folder,
@@ -382,6 +434,55 @@ def _populate_settings_from_clip_payload(settings, clip_payload, summary=None):
             "relative_path",
             "",
         )
+
+
+# ============================================================
+# Sub Animation Override helpers
+# ============================================================
+
+def _ensure_sub_animation_joint_list(settings, rig_json=None):
+    if (
+        settings.sub_animation_joint_list_initialized
+        and len(settings.sub_animation_joints) > 0
+    ):
+        return
+
+    settings.sub_animation_joints.clear()
+
+    if rig_json is not None and "joint_paths" in rig_json:
+        joints = [_leaf_name(path) for path in rig_json["joint_paths"]]
+    else:
+        joints = GRAVITAS_MESHY_BIPED24_CANONICAL_JOINTS
+
+    for joint_name in joints:
+        item = settings.sub_animation_joints.add()
+        item.joint_name = joint_name
+        item.selected = False
+
+    settings.sub_animation_joint_list_initialized = True
+
+
+def _selected_sub_animation_joints(settings):
+    _ensure_sub_animation_joint_list(settings)
+    return [
+        item.joint_name
+        for item in settings.sub_animation_joints
+        if item.selected and item.joint_name
+    ]
+
+
+def _set_selected_sub_animation_joints(settings, selected_joint_names):
+    selected = set(selected_joint_names)
+
+    _ensure_sub_animation_joint_list(settings)
+
+    for item in settings.sub_animation_joints:
+        item.selected = item.joint_name in selected
+
+
+def _all_sub_animation_joint_names(settings):
+    _ensure_sub_animation_joint_list(settings)
+    return [item.joint_name for item in settings.sub_animation_joints]
 
 
 # ============================================================
@@ -509,6 +610,10 @@ def _mirror_clip_payload(clip_payload):
     mirrored["tracks"] = [
         _mirror_track(track)
         for track in clip_payload.get("tracks", [])
+    ]
+    mirrored["affected_joints"] = [
+        _mirrored_joint_name(joint_name)
+        for joint_name in clip_payload.get("affected_joints", [])
     ]
     mirrored["locomotion"] = _mirror_locomotion_tracks(
         clip_payload.get("locomotion", {})
@@ -1045,13 +1150,26 @@ def _sample_clip_tracks(
     include_rotations,
     include_scales,
     log,
+    export_joint_names=None,
 ):
     if end_frame < start_frame:
         raise RuntimeError(f"Bad frame range: {start_frame} -> {end_frame}")
 
     sample_every_n = max(int(sample_every_n), 1)
 
-    canonical_leafs = _rig_leaf_names(rig_json)
+    rig_leafs = set(_rig_leaf_names(rig_json))
+
+    if export_joint_names is None:
+        canonical_leafs = _rig_leaf_names(rig_json)
+    else:
+        canonical_leafs = list(export_joint_names)
+
+    for joint_name in canonical_leafs:
+        if joint_name not in rig_leafs:
+            raise RuntimeError(
+                f"Export joint '{joint_name}' is not part of active rig definition."
+            )
+
     pose_bones = armature.pose.bones
 
     translation_keys_by_joint = {joint: [] for joint in canonical_leafs}
@@ -1173,6 +1291,14 @@ def _update_manifest(library_root, clip_payload, output_path):
         "rig_id": clip_payload["rig_id"],
         "rig_version": clip_payload["rig_version"],
         "pose_mode": clip_payload["pose_mode"],
+        "clip_type": clip_payload.get("clip_type", CLIP_TYPE_FULL_BODY),
+        "affected_joints": clip_payload.get("affected_joints", []),
+        "blend_in_frames": clip_payload.get("blend_in_frames", 0),
+        "blend_out_frames": clip_payload.get("blend_out_frames", 0),
+        "base_animation_continues": clip_payload.get(
+            "base_animation_continues",
+            False,
+        ),
         "category": clip_payload["tags"]["category"],
         "emotion": clip_payload["tags"]["emotion"],
         "threat": clip_payload["tags"]["threat"],
@@ -1248,6 +1374,18 @@ def _write_clip_and_update_manifest(
 # Settings
 # ============================================================
 
+class GravitasSubAnimationJointItem(PropertyGroup):
+    joint_name: StringProperty(
+        name="Joint",
+        default="",
+    )
+
+    selected: BoolProperty(
+        name="Selected",
+        default=False,
+    )
+
+
 class GravitasAnimationLibrarySettings(PropertyGroup):
     animation_library_root: StringProperty(
         name="Animation Library Root",
@@ -1282,6 +1420,52 @@ class GravitasAnimationLibrarySettings(PropertyGroup):
         name="Overwrite Existing Clip",
         description="Export back to the selected clip's existing manifest path.",
         default=True,
+    )
+
+    export_type: EnumProperty(
+        name="Export Type",
+        description=(
+            "Choose whether this clip exports as a full-body animation "
+            "or a masked sub-animation override."
+        ),
+        items=[
+            (
+                "FULL_BODY",
+                "Full Body Animation",
+                "Export all mapped rig joints as a normal full-body clip.",
+            ),
+            (
+                "SUB_ANIMATION_OVERRIDE",
+                "Sub Animation Override",
+                "Export only selected joints as a temporary override layer.",
+            ),
+        ],
+        default="FULL_BODY",
+    )
+
+    sub_animation_joints: CollectionProperty(
+        type=GravitasSubAnimationJointItem,
+    )
+
+    sub_animation_joint_list_initialized: BoolProperty(
+        name="Sub Animation Joint List Initialized",
+        default=False,
+    )
+
+    blend_in_frames: IntProperty(
+        name="Blend In Frames",
+        description="Frames used by runtime to blend into this sub-animation override.",
+        default=2,
+        min=0,
+        max=120,
+    )
+
+    blend_out_frames: IntProperty(
+        name="Blend Out Frames",
+        description="Frames used by runtime to blend back to the live base animation.",
+        default=2,
+        min=0,
+        max=120,
     )
 
     donor_file_path: StringProperty(
@@ -1541,6 +1725,66 @@ class GravitasAnimationLibrarySettings(PropertyGroup):
 # ============================================================
 # Operators
 # ============================================================
+
+class GRAVITAS_OT_refresh_sub_animation_joint_list(Operator):
+    bl_idname = "gravitas.refresh_sub_animation_joint_list"
+    bl_label = "Refresh Joint List"
+    bl_description = "Refreshes the sub-animation joint list from the active rig definition."
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.gravitas_animation_library
+        log = []
+
+        try:
+            rig_json = None
+            rig_path = bpy.path.abspath(settings.rig_json_path)
+
+            if rig_path and os.path.isfile(rig_path):
+                rig_json = _json_load(rig_path)
+
+            settings.sub_animation_joint_list_initialized = False
+            _ensure_sub_animation_joint_list(settings, rig_json=rig_json)
+
+            _log_append(
+                log,
+                (
+                    "Refreshed sub-animation joint list: "
+                    f"{len(settings.sub_animation_joints)} joints."
+                ),
+            )
+            _safe_report(self, {"INFO"}, "Refreshed sub-animation joint list.")
+
+        except Exception as error:
+            _log_append(log, "ERROR")
+            _log_append(log, str(error))
+            _log_append(log, traceback.format_exc())
+            _safe_report(self, {"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+        finally:
+            if settings.log_text:
+                _write_log(log)
+
+        return {"FINISHED"}
+
+
+class GRAVITAS_OT_clear_sub_animation_joint_selection(Operator):
+    bl_idname = "gravitas.clear_sub_animation_joint_selection"
+    bl_label = "Clear Joint Selection"
+    bl_description = "Clears selected joints for sub-animation export."
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.gravitas_animation_library
+        _ensure_sub_animation_joint_list(settings)
+
+        for item in settings.sub_animation_joints:
+            item.selected = False
+
+        self.report({"INFO"}, "Cleared sub-animation joint selection.")
+        return {"FINISHED"}
+
 
 class GRAVITAS_OT_load_animation_manifest(Operator):
     bl_idname = "gravitas.load_animation_manifest"
@@ -1862,6 +2106,32 @@ class GRAVITAS_OT_export_jock_clip(Operator):
 
             duration_seconds = float(end_frame - start_frame) / max(fps, 0.0001)
 
+            export_type = settings.export_type
+
+            if export_type == "SUB_ANIMATION_OVERRIDE":
+                clip_type = CLIP_TYPE_SUB_ANIMATION_OVERRIDE
+                affected_joints = _selected_sub_animation_joints(settings)
+
+                if not affected_joints:
+                    raise RuntimeError(
+                        "Sub Animation Override export requires at least one selected joint."
+                    )
+
+                export_joint_names = affected_joints
+
+                if settings.looping:
+                    _log_append(
+                        log,
+                        (
+                            "Warning: Sub Animation Override is usually non-looping. "
+                            "Export will preserve current Looping setting."
+                        ),
+                    )
+            else:
+                clip_type = CLIP_TYPE_FULL_BODY
+                affected_joints = []
+                export_joint_names = None
+
             tracks, sampled_frames = _sample_clip_tracks(
                 armature=armature,
                 rig_json=rig,
@@ -1874,6 +2144,7 @@ class GRAVITAS_OT_export_jock_clip(Operator):
                 include_rotations=bool(settings.include_rotations),
                 include_scales=bool(settings.include_scales),
                 log=log,
+                export_joint_names=export_joint_names,
             )
 
             locomotion_track_payload = _sample_locomotion_tracks(
@@ -1896,6 +2167,21 @@ class GRAVITAS_OT_export_jock_clip(Operator):
                 "rig_id": rig["rig_id"],
                 "rig_version": rig["version"],
                 "pose_mode": "absoluteLocal",
+                "clip_type": clip_type,
+                "affected_joints": affected_joints,
+                "blend_in_frames": (
+                    int(settings.blend_in_frames)
+                    if clip_type == CLIP_TYPE_SUB_ANIMATION_OVERRIDE
+                    else 0
+                ),
+                "blend_out_frames": (
+                    int(settings.blend_out_frames)
+                    if clip_type == CLIP_TYPE_SUB_ANIMATION_OVERRIDE
+                    else 0
+                ),
+                "base_animation_continues": (
+                    clip_type == CLIP_TYPE_SUB_ANIMATION_OVERRIDE
+                ),
                 "source": {
                     "type": "blender_donor_extract",
                     "source_file": os.path.basename(bpy.path.abspath(settings.donor_file_path)),
@@ -1911,7 +2197,11 @@ class GRAVITAS_OT_export_jock_clip(Operator):
                     "duration_seconds": duration_seconds,
                     "looping": bool(settings.looping),
                 },
-                "joints": _rig_leaf_names(rig),
+                "joints": (
+                    affected_joints
+                    if clip_type == CLIP_TYPE_SUB_ANIMATION_OVERRIDE
+                    else _rig_leaf_names(rig)
+                ),
                 "tracks": tracks,
                 "locomotion": {
                     "enabled": bool(locomotion_track_payload["enabled"]),
@@ -1951,6 +2241,18 @@ class GRAVITAS_OT_export_jock_clip(Operator):
                 },
                 "notes": settings.description,
             }
+
+            _log_append(log, f"Clip type: {clip_type}")
+
+            if clip_type == CLIP_TYPE_SUB_ANIMATION_OVERRIDE:
+                _log_append(log, f"Affected joints: {', '.join(affected_joints)}")
+                _log_append(
+                    log,
+                    (
+                        "Blend in/out: "
+                        f"{settings.blend_in_frames}/{settings.blend_out_frames}"
+                    ),
+                )
 
             payload_to_write = clip_payload
             existing_relative_path = settings.loaded_manifest_clip_relative_path
@@ -2296,6 +2598,37 @@ class GRAVITAS_PT_animation_library_panel(Panel):
 
         layout.separator()
 
+        export_type_box = layout.box()
+        export_type_box.label(text="Export Type", icon="ACTION")
+        export_type_box.prop(settings, "export_type")
+
+        if settings.export_type == "SUB_ANIMATION_OVERRIDE":
+            export_type_box.label(text="Sub Animation Override", icon="CONSTRAINT_BONE")
+            export_type_box.prop(settings, "blend_in_frames")
+            export_type_box.prop(settings, "blend_out_frames")
+
+            row = export_type_box.row(align=True)
+            row.operator(
+                GRAVITAS_OT_refresh_sub_animation_joint_list.bl_idname,
+                text="Refresh Joint List",
+                icon="FILE_REFRESH",
+            )
+            row.operator(
+                GRAVITAS_OT_clear_sub_animation_joint_selection.bl_idname,
+                text="Clear",
+                icon="X",
+            )
+
+            _ensure_sub_animation_joint_list(settings)
+
+            joint_box = export_type_box.box()
+            joint_box.label(text="Affected Joints")
+
+            for item in settings.sub_animation_joints:
+                row = joint_box.row(align=True)
+                row.prop(item, "selected", text="")
+                row.label(text=item.joint_name)
+
         layout.prop(settings, "mirror_animation")
         layout.operator(
             GRAVITAS_OT_export_jock_clip.bl_idname,
@@ -2309,7 +2642,10 @@ class GRAVITAS_PT_animation_library_panel(Panel):
 # ============================================================
 
 classes = (
+    GravitasSubAnimationJointItem,
     GravitasAnimationLibrarySettings,
+    GRAVITAS_OT_refresh_sub_animation_joint_list,
+    GRAVITAS_OT_clear_sub_animation_joint_selection,
     GRAVITAS_OT_load_animation_manifest,
     GRAVITAS_OT_load_selected_clip_metadata,
     GRAVITAS_OT_delete_selected_clip_from_manifest,
