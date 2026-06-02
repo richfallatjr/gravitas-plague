@@ -72,6 +72,10 @@ struct PlagueDemoView: View {
                         .buttonStyle(.borderedProminent)
                     }
 
+                    Text("Follow Demo includes phase-1 hand-tracked face hits. Slap the left or right side of the infected's face to trigger hit reactions.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
                     if let manifestLoadError {
                         Text(manifestLoadError)
                             .font(.caption)
