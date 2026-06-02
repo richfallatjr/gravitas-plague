@@ -79,6 +79,8 @@ final class JockRetargetTestController {
 
     private var combatState: FollowCombatState = .normal
     private var acceptedHitCount: Int = 0
+    private var lastHitClipIDBySide: [JockHitSide: String] = [:]
+    private var lastHitClipIDByBucket: [String: String] = [:]
 
     private var spawnPosition = SIMD3<Float>(0, 0, -3.05)
     private var spawnOrientation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
@@ -113,6 +115,11 @@ final class JockRetargetTestController {
         case .hitReaction, .dead:
             return true
         }
+    }
+
+    private func resetHitSelectionMemory() {
+        lastHitClipIDBySide.removeAll()
+        lastHitClipIDByBucket.removeAll()
     }
 
     init() {
@@ -291,6 +298,7 @@ final class JockRetargetTestController {
         followDemoState = .inactive
         combatState = .normal
         acceptedHitCount = 0
+        resetHitSelectionMemory()
         followDelayElapsed = 0
         latestHeadPosition = nil
         driver?.locomotionDeltaHandler = nil
@@ -305,6 +313,7 @@ final class JockRetargetTestController {
         followDemoState = .inactive
         combatState = .normal
         acceptedHitCount = 0
+        resetHitSelectionMemory()
         followDelayElapsed = 0
         driver?.locomotionDeltaHandler = nil
         hitDetector.stop()
@@ -332,6 +341,7 @@ final class JockRetargetTestController {
         followDemoState = .inactive
         combatState = .normal
         acceptedHitCount = 0
+        resetHitSelectionMemory()
         followDelayElapsed = 0
         driver?.locomotionDeltaHandler = nil
         hitDetector.stop()
@@ -359,6 +369,7 @@ final class JockRetargetTestController {
         followDemoState = .inactive
         combatState = .normal
         acceptedHitCount = 0
+        resetHitSelectionMemory()
         followDelayElapsed = 0
         latestHeadPosition = nil
         driver?.locomotionDeltaHandler = nil
@@ -371,6 +382,7 @@ final class JockRetargetTestController {
         followDemoState = .inactive
         combatState = .normal
         acceptedHitCount = 0
+        resetHitSelectionMemory()
         followDelayElapsed = 0
         driver?.locomotionDeltaHandler = nil
         hitDetector.stop()
@@ -388,6 +400,7 @@ final class JockRetargetTestController {
         followDelayElapsed = 0
         combatState = .normal
         acceptedHitCount = 0
+        resetHitSelectionMemory()
 
         guard clipsByID[followConfiguration.idleClipID] != nil else {
             throw RetargetError.clipNotFound(followConfiguration.idleClipID)
@@ -425,6 +438,7 @@ final class JockRetargetTestController {
         latestHeadPosition = nil
         combatState = .normal
         acceptedHitCount = 0
+        resetHitSelectionMemory()
 
         driver?.locomotionDeltaHandler = nil
         driver?.stop()
@@ -541,16 +555,20 @@ final class JockRetargetTestController {
         let shouldDie = acceptedHitCount >= hitConfiguration.deathHitCount
         let finalDamage: JockHitDamageLevel = shouldDie
             ? .death
-            : nonTerminalDamageLevel(event.damageLevel)
+            : event.damageLevel
+        let authoredClipSide = authoredHitClipSide(
+            forDetectedFaceSide: event.side
+        )
         let selectedClipID: String?
 
         if shouldDie {
             selectedClipID = randomAvailableClipID(
-                from: hitConfiguration.deathClipIDs
+                from: hitConfiguration.deathClipIDs,
+                avoidRepeatKey: "death"
             )
         } else {
             selectedClipID = selectHitClipID(
-                side: event.side,
+                side: authoredClipSide,
                 damage: finalDamage
             )
         }
@@ -564,8 +582,10 @@ final class JockRetargetTestController {
             """
             [Gravitas Hit] Registered face hit
               hitCount: \(acceptedHitCount)
-              side: \(event.side.rawValue)
-              damage: \(finalDamage.rawValue)
+              detectedFaceSide: \(event.side.rawValue)
+              authoredClipSide: \(authoredClipSide.rawValue)
+              classifiedDamage: \(event.damageLevel.rawValue)
+              finalDamage: \(finalDamage.rawValue)
               hand: \(event.hand)
               velocity: \(String(format: "%.2f", event.velocityMetersPerSecond)) m/s
               selectedClip: \(selectedClipID ?? "none")
@@ -579,7 +599,7 @@ final class JockRetargetTestController {
 
         guard let selectedClipID,
               let clip = clipsByID[selectedClipID] else {
-            print("[Gravitas Hit] No hit clip found. Falling back to idle.")
+            print("[Gravitas Hit] No valid hit clip found. Falling back to idle.")
             combatState = .normal
             playFollowIdle()
             return
@@ -613,56 +633,121 @@ final class JockRetargetTestController {
         }
     }
 
-    private func nonTerminalDamageLevel(
-        _ damageLevel: JockHitDamageLevel
-    ) -> JockHitDamageLevel {
-        switch damageLevel {
-        case .death:
-            return .hard
-        case .light, .medium, .hard:
-            return damageLevel
-        }
+    private func authoredHitClipSide(
+        forDetectedFaceSide detectedSide: JockHitSide
+    ) -> JockHitSide {
+        hitConfiguration.invertHitClipSide
+            ? detectedSide.opposite
+            : detectedSide
     }
 
     private func selectHitClipID(
         side: JockHitSide,
         damage: JockHitDamageLevel
     ) -> String? {
-        let exactKey = JockHitBucketKey(
+        let candidateIDs = hitClipCandidates(
             side: side,
-            damageLevel: damage
+            damage: damage
         )
 
-        if let exact = randomAvailableClipID(
-            from: hitConfiguration.clipBuckets[exactKey] ?? []
-        ) {
-            return exact
+        let bucketKey = "\(side.rawValue)_\(damage.rawValue)"
+
+        let selected = randomAvailableClipID(
+            from: candidateIDs,
+            avoidRepeatKey: bucketKey
+        )
+
+        print(
+            """
+            [Gravitas Hit] Clip selection
+              side: \(side.rawValue)
+              damage: \(damage.rawValue)
+              candidates: \(candidateIDs.joined(separator: ", "))
+              available: \(candidateIDs.filter { clipsByID[$0] != nil }.joined(separator: ", "))
+              selected: \(selected ?? "none")
+            """
+        )
+
+        if let selected {
+            lastHitClipIDBySide[side] = selected
         }
 
-        let mediumSameSide = JockHitBucketKey(
-            side: side,
-            damageLevel: .medium
-        )
+        return selected
+    }
 
-        if let medium = randomAvailableClipID(
-            from: hitConfiguration.clipBuckets[mediumSameSide] ?? []
-        ) {
-            return medium
+    private func hitClipCandidates(
+        side: JockHitSide,
+        damage: JockHitDamageLevel
+    ) -> [String] {
+        if damage == .death {
+            return hitConfiguration.deathClipIDs
         }
 
-        let oppositeSide: JockHitSide = side == .left ? .right : .left
-        let mediumOppositeSide = JockHitBucketKey(
-            side: oppositeSide,
-            damageLevel: .medium
-        )
+        let damageLevels: [JockHitDamageLevel]
 
-        return randomAvailableClipID(
-            from: hitConfiguration.clipBuckets[mediumOppositeSide] ?? []
-        )
+        if hitConfiguration.includeLowerDamageClipsForHigherDamage {
+            damageLevels = JockHitDamageLevel.allCases
+                .filter { $0 != .death && $0.rank <= damage.rank }
+                .sorted { $0.rank > $1.rank }
+        } else {
+            damageLevels = [damage]
+        }
+
+        var candidates: [String] = []
+
+        for level in damageLevels {
+            let key = JockHitBucketKey(
+                side: side,
+                damageLevel: level
+            )
+
+            candidates.append(
+                contentsOf: hitConfiguration.clipBuckets[key] ?? []
+            )
+        }
+
+        if candidates.isEmpty {
+            let mediumKey = JockHitBucketKey(
+                side: side,
+                damageLevel: .medium
+            )
+
+            candidates.append(
+                contentsOf: hitConfiguration.clipBuckets[mediumKey] ?? []
+            )
+        }
+
+        if candidates.isEmpty {
+            let oppositeSide: JockHitSide = side == .left ? .right : .left
+            let oppositeMediumKey = JockHitBucketKey(
+                side: oppositeSide,
+                damageLevel: .medium
+            )
+
+            candidates.append(
+                contentsOf: hitConfiguration.clipBuckets[oppositeMediumKey] ?? []
+            )
+        }
+
+        return deduplicated(candidates)
+    }
+
+    private func deduplicated(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+
+        for value in values {
+            guard !seen.contains(value) else { continue }
+            seen.insert(value)
+            result.append(value)
+        }
+
+        return result
     }
 
     private func randomAvailableClipID(
-        from candidateIDs: [String]
+        from candidateIDs: [String],
+        avoidRepeatKey: String
     ) -> String? {
         let available = candidateIDs.filter { clipsByID[$0] != nil }
 
@@ -678,7 +763,24 @@ final class JockRetargetTestController {
             return nil
         }
 
-        return available.randomElement()
+        if hitConfiguration.avoidImmediateRepeat,
+           let last = lastHitClipIDByBucket[avoidRepeatKey],
+           available.count > 1 {
+            let nonRepeats = available.filter { $0 != last }
+
+            if let selected = nonRepeats.randomElement() {
+                lastHitClipIDByBucket[avoidRepeatKey] = selected
+                return selected
+            }
+        }
+
+        let selected = available.randomElement()
+
+        if let selected {
+            lastHitClipIDByBucket[avoidRepeatKey] = selected
+        }
+
+        return selected
     }
 
     private func applyHitKnockback(

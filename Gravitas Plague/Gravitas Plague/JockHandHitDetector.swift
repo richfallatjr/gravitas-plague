@@ -269,8 +269,8 @@ final class JockHandHitDetector {
         let offset = horizontalRight * configuration.faceSideOffsetMeters
 
         return (
-            left: faceCenterWorld - offset,
-            right: faceCenterWorld + offset
+            left: faceCenterWorld + offset,
+            right: faceCenterWorld - offset
         )
     }
 }

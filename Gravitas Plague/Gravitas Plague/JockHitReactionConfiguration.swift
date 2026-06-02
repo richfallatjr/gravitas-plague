@@ -4,13 +4,42 @@ import simd
 enum JockHitSide: String, Equatable, Hashable, Codable {
     case left
     case right
+
+    var opposite: JockHitSide {
+        switch self {
+        case .left:
+            return .right
+        case .right:
+            return .left
+        }
+    }
 }
 
-enum JockHitDamageLevel: String, Equatable, Hashable, CaseIterable, Codable {
+enum JockHitDamageLevel: String, Equatable, Hashable, CaseIterable, Codable, Comparable {
     case light
     case medium
     case hard
     case death
+
+    var rank: Int {
+        switch self {
+        case .light:
+            return 0
+        case .medium:
+            return 1
+        case .hard:
+            return 2
+        case .death:
+            return 3
+        }
+    }
+
+    static func < (
+        lhs: JockHitDamageLevel,
+        rhs: JockHitDamageLevel
+    ) -> Bool {
+        lhs.rank < rhs.rank
+    }
 }
 
 struct JockHitBucketKey: Equatable, Hashable {
@@ -48,6 +77,15 @@ struct JockHitReactionConfiguration: Equatable {
     let deathHitCount: Int
     let deathClipIDs: [String]
 
+    /// Allows hard hits to vary across hard, medium, and light same-side clips.
+    let includeLowerDamageClipsForHigherDamage: Bool
+
+    /// Avoids picking the same clip twice in a row when a bucket has alternatives.
+    let avoidImmediateRepeat: Bool
+
+    /// Maps detected face-side hits to the opposite authored clip-side bucket.
+    let invertHitClipSide: Bool
+
     let clipBuckets: [JockHitBucketKey: [String]]
 
     static let phaseOne = JockHitReactionConfiguration(
@@ -60,8 +98,8 @@ struct JockHitReactionConfiguration: Equatable {
 
         lightVelocityThreshold: 0.55,
         mediumVelocityThreshold: 1.05,
-        hardVelocityThreshold: 1.75,
-        deathVelocityThreshold: 3.0,
+        hardVelocityThreshold: 2.25,
+        deathVelocityThreshold: 999.0,
 
         perHandCooldownSeconds: 0.45,
         globalHitCooldownSeconds: 0.65,
@@ -82,6 +120,10 @@ struct JockHitReactionConfiguration: Equatable {
             "dead_fall_forward"
         ],
 
+        includeLowerDamageClipsForHigherDamage: true,
+        avoidImmediateRepeat: true,
+        invertHitClipSide: true,
+
         clipBuckets: [
             JockHitBucketKey(side: .left, damageLevel: .medium): [
                 "hit_medium_left_01",
@@ -101,16 +143,16 @@ struct JockHitReactionConfiguration: Equatable {
             JockHitBucketKey(side: .right, damageLevel: .hard): [
                 "hit_hard_right_01"
             ],
-            JockHitBucketKey(side: .left, damageLevel: .death): [],
-            JockHitBucketKey(side: .right, damageLevel: .death): []
+            JockHitBucketKey(side: .left, damageLevel: .death): [
+                "dead_fall_forward"
+            ],
+            JockHitBucketKey(side: .right, damageLevel: .death): [
+                "dead_fall_forward"
+            ]
         ]
     )
 
     func damageLevel(for velocity: Float) -> JockHitDamageLevel? {
-        if velocity >= deathVelocityThreshold {
-            return .death
-        }
-
         if velocity >= hardVelocityThreshold {
             return .hard
         }
