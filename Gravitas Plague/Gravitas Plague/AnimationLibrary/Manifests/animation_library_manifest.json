@@ -37,7 +37,7 @@
     {
       "clip_id": "charged-slash-right",
       "display_name": "Charged slash right",
-      "relative_path": "Clips/HitReact/charged-slash.jockanim.json",
+      "relative_path": "Clips/HitReact/charged-slash-right.jockanim.json",
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",

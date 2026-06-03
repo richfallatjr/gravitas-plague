@@ -112,6 +112,10 @@ final class JockRuntimeDriver {
     private var activeSubAnimations: [ActiveSubAnimation] = []
     private var preparedClipsByID: [String: JockPreparedClip] = [:]
 
+    private(set) var currentJointTransforms: [Transform]
+    private(set) var currentActiveClipID: String?
+    private(set) var currentPlaybackTime: TimeInterval = 0
+
     var onClipCompleted: ((JockAnimClip) -> Void)?
     var locomotionDeltaHandler: ((JockRuntimeLocomotionDelta) -> Bool)?
 
@@ -127,6 +131,7 @@ final class JockRuntimeDriver {
         self.visualOffsetEntity = visualOffsetEntity
         self.baseJointTransforms = modelEntity.jointTransforms
         self.jointNames = modelEntity.jointNames
+        self.currentJointTransforms = modelEntity.jointTransforms
     }
 
     func prewarmClips(_ clips: [JockAnimClip]) {
@@ -154,6 +159,8 @@ final class JockRuntimeDriver {
         activeRuntimeOverride = runtimeOverride
         loopCurrentClip = loop
         playbackTime = 0
+        currentActiveClipID = clip.clipID
+        currentPlaybackTime = 0
 
         captureRootOriginForNewClip(clip)
 
@@ -175,10 +182,11 @@ final class JockRuntimeDriver {
             state = .playing
             visualOffsetEntity?.orientation = targetVisualOffset
             let basePose = sampleClipPose(clip, at: 0)
-            modelEntity.jointTransforms = applyActiveSubAnimations(
+            let finalPose = applyActiveSubAnimations(
                 to: basePose,
                 deltaTime: 0
             )
+            setJointTransforms(finalPose, on: modelEntity)
             applyLocomotionFromFrozenOrigin(clip, at: 0, didWrap: false)
         }
 
@@ -262,6 +270,9 @@ final class JockRuntimeDriver {
     func stop() {
         state = .stopped
         activeClip = nil
+        currentActiveClipID = nil
+        currentPlaybackTime = 0
+        currentJointTransforms = modelEntity?.jointTransforms ?? baseJointTransforms
         activeRuntimeOverride = .identity
         activeSubAnimations.removeAll()
         resetFrozenLocomotionState()
@@ -284,6 +295,8 @@ final class JockRuntimeDriver {
             simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
         transitionToVisualOffset = visualOffset
         activeClip = nil
+        currentActiveClipID = nil
+        currentPlaybackTime = 0
         activeRuntimeOverride = .identity
         activeSubAnimations.removeAll()
         resetFrozenLocomotionState()
@@ -295,11 +308,17 @@ final class JockRuntimeDriver {
             axis: SIMD3<Float>(0, 1, 0)
         )
     ) {
-        modelEntity?.jointTransforms = baseJointTransforms
+        if let modelEntity {
+            setJointTransforms(baseJointTransforms, on: modelEntity)
+        } else {
+            currentJointTransforms = baseJointTransforms
+        }
         visualOffsetEntity?.orientation = visualOffset
         playbackTime = 0
         state = .stopped
         activeClip = nil
+        currentActiveClipID = nil
+        currentPlaybackTime = 0
         activeRuntimeOverride = .identity
         activeSubAnimations.removeAll()
         resetFrozenLocomotionState()
@@ -327,10 +346,11 @@ final class JockRuntimeDriver {
                 alpha: alpha
             )
 
-            modelEntity.jointTransforms = applyActiveSubAnimations(
+            let finalPose = applyActiveSubAnimations(
                 to: blendedPose,
                 deltaTime: clampedDelta
             )
+            setJointTransforms(finalPose, on: modelEntity)
 
             let visualOffset = simd_slerp(
                 transitionFromVisualOffset,
@@ -360,6 +380,7 @@ final class JockRuntimeDriver {
 
             if alpha >= 1.0 {
                 playbackTime = 0
+                currentPlaybackTime = 0
                 state = .playing
             }
 
@@ -376,10 +397,11 @@ final class JockRuntimeDriver {
                 alpha: alpha
             )
 
-            modelEntity.jointTransforms = applyActiveSubAnimations(
+            let finalPose = applyActiveSubAnimations(
                 to: blendedPose,
                 deltaTime: clampedDelta
             )
+            setJointTransforms(finalPose, on: modelEntity)
 
             let visualOffset = simd_slerp(
                 transitionFromVisualOffset,
@@ -392,6 +414,8 @@ final class JockRuntimeDriver {
             if alpha >= 1.0 {
                 state = .stopped
                 activeClip = nil
+                currentActiveClipID = nil
+                currentPlaybackTime = 0
                 activeRuntimeOverride = .identity
                 resetFrozenLocomotionState()
             }
@@ -399,11 +423,14 @@ final class JockRuntimeDriver {
         case .playing:
             guard let activeClip else {
                 state = .stopped
+                currentActiveClipID = nil
+                currentPlaybackTime = 0
                 return
             }
 
             let previousTime = playbackTime
             playbackTime += clampedDelta
+            currentPlaybackTime = playbackTime
 
             let duration = max(activeClip.timing.durationSeconds, 0.001)
 
@@ -412,25 +439,29 @@ final class JockRuntimeDriver {
 
                 if playbackTime >= duration {
                     playbackTime = playbackTime.truncatingRemainder(dividingBy: duration)
+                    currentPlaybackTime = playbackTime
                     didWrap = playbackTime < previousTime
                 }
 
                 let basePose = sampleClipPose(activeClip, at: playbackTime)
-                modelEntity.jointTransforms = applyActiveSubAnimations(
+                let finalPose = applyActiveSubAnimations(
                     to: basePose,
                     deltaTime: clampedDelta
                 )
+                setJointTransforms(finalPose, on: modelEntity)
                 applyLocomotionFromFrozenOrigin(activeClip, at: playbackTime, didWrap: didWrap)
 
             } else {
                 if playbackTime >= duration {
                     playbackTime = duration
+                    currentPlaybackTime = playbackTime
 
                     let basePose = sampleClipPose(activeClip, at: playbackTime)
-                    modelEntity.jointTransforms = applyActiveSubAnimations(
+                    let finalPose = applyActiveSubAnimations(
                         to: basePose,
                         deltaTime: clampedDelta
                     )
+                    setJointTransforms(finalPose, on: modelEntity)
                     applyLocomotionFromFrozenOrigin(activeClip, at: playbackTime, didWrap: false)
 
                     commitRuntimeOverrideAtClipCompletion()
@@ -438,19 +469,30 @@ final class JockRuntimeDriver {
                     state = .stopped
                     let completedClip = activeClip
                     self.activeClip = nil
+                    currentActiveClipID = nil
+                    currentPlaybackTime = 0
 
                     onClipCompleted?(completedClip)
                     return
                 }
 
                 let basePose = sampleClipPose(activeClip, at: playbackTime)
-                modelEntity.jointTransforms = applyActiveSubAnimations(
+                let finalPose = applyActiveSubAnimations(
                     to: basePose,
                     deltaTime: clampedDelta
                 )
+                setJointTransforms(finalPose, on: modelEntity)
                 applyLocomotionFromFrozenOrigin(activeClip, at: playbackTime, didWrap: false)
             }
         }
+    }
+
+    private func setJointTransforms(
+        _ transforms: [Transform],
+        on modelEntity: ModelEntity
+    ) {
+        modelEntity.jointTransforms = transforms
+        currentJointTransforms = transforms
     }
 
     private func sampleClipPose(

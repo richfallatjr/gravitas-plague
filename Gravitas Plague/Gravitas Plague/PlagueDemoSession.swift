@@ -44,9 +44,16 @@ final class PlagueDemoSession: ObservableObject {
     @Published var selectedJockClipID: String?
     @Published var jockPickerLoopEnabled = false
     @Published var availableJockClips: [JockAnimationManifest.ClipSummary] = []
+    @Published var damageFlashToken = UUID()
+    @Published var damageFlashIntensity: Float = 0
     @Published private(set) var latestCommand: CommandEnvelope?
 
     func send(_ command: Command) {
         latestCommand = CommandEnvelope(command)
+    }
+
+    func triggerDamageFlash(intensity: Float) {
+        damageFlashIntensity = max(0, min(intensity, 1))
+        damageFlashToken = UUID()
     }
 }

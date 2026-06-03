@@ -37,6 +37,8 @@ final class JockRetargetTestController {
     let rootEntity = Entity()
 
     var onPunchHit: (() -> Void)?
+    var onPlayerDamaged: ((Int) -> Void)?
+    var onAttackStarted: (() -> Void)?
 
     private let visualOffsetEntity = Entity()
 
@@ -48,6 +50,7 @@ final class JockRetargetTestController {
     private var manifest: JockAnimationManifest?
     private var adapter: JockSkeletonAdapter?
     private var driver: JockRuntimeDriver?
+    private var skeletonWorldPoseResolver: JockSkeletonWorldPoseResolver?
 
     private var clipsByID: [String: JockAnimClip] = [:]
     private var runtimeOverrides = JockRuntimeClipOverrides(
@@ -75,11 +78,17 @@ final class JockRetargetTestController {
 
     private enum FollowCombatState: Equatable {
         case normal
+        case closeRangeReady(delayRemaining: TimeInterval)
+        case attacking
         case hitReaction(clipID: String, damage: JockHitDamageLevel)
         case dead
     }
 
     private var combatState: FollowCombatState = .normal
+    private var activeAttack: JockActiveAttackState?
+    private let attackConfiguration = JockAttackConfiguration.phaseOne
+    private var playerExposure: Int = 0
+    private var escalateAfterHitReact = false
     private var acceptedHitCount: Int = 0
     private var lastHitClipIDBySide: [JockHitSide: String] = [:]
     private var lastHitClipIDByBucket: [String: String] = [:]
@@ -102,6 +111,12 @@ final class JockRetargetTestController {
         case .normal:
             return "Hits: \(acceptedHitCount)/\(hitConfiguration.deathHitCount)"
 
+        case .closeRangeReady(let delayRemaining):
+            return "Close range: \(String(format: "%.2f", delayRemaining))s | Hits: \(acceptedHitCount)/\(hitConfiguration.deathHitCount) | Exposure: \(playerExposure)/\(attackConfiguration.exposureMax)"
+
+        case .attacking:
+            return "Attacking: \(activeAttack?.clipID ?? "none") | Hits: \(acceptedHitCount)/\(hitConfiguration.deathHitCount) | Exposure: \(playerExposure)/\(attackConfiguration.exposureMax)"
+
         case .hitReaction(let clipID, let damage):
             return "Hit reaction: \(clipID) \(damage.rawValue) | Hits: \(acceptedHitCount)/\(hitConfiguration.deathHitCount)"
 
@@ -114,14 +129,43 @@ final class JockRetargetTestController {
         switch combatState {
         case .normal:
             return false
+        case .closeRangeReady, .attacking, .hitReaction, .dead:
+            return true
+        }
+    }
+
+    private var isInNonInterruptibleCombatState: Bool {
+        switch combatState {
         case .hitReaction, .dead:
             return true
+        case .normal, .closeRangeReady, .attacking:
+            return false
+        }
+    }
+
+    private var canUpdateFollowMovement: Bool {
+        switch combatState {
+        case .normal:
+            return true
+        case .closeRangeReady, .attacking, .hitReaction, .dead:
+            return false
         }
     }
 
     private func resetHitSelectionMemory() {
         lastHitClipIDBySide.removeAll()
         lastHitClipIDByBucket.removeAll()
+    }
+
+    private func resetCombatRuntime(resetHitCount: Bool = true) {
+        combatState = .normal
+        activeAttack = nil
+        escalateAfterHitReact = false
+        playerExposure = 0
+
+        if resetHitCount {
+            acceptedHitCount = 0
+        }
     }
 
     init() {
@@ -221,6 +265,15 @@ final class JockRetargetTestController {
             print("[Gravitas SubAnim] Missing or invalid head snap sub-animations: \(missingHeadSnapSides.joined(separator: " | "))")
         }
 
+        let missingAttackClips = attackConfiguration.attackClipIDs
+            .filter { loadedClips[$0] == nil }
+
+        if missingAttackClips.isEmpty {
+            print("[Gravitas Attack] All phase-1 attack clips loaded.")
+        } else {
+            print("[Gravitas Attack] Missing phase-1 attack clips: \(missingAttackClips.joined(separator: ", "))")
+        }
+
         let adapter = JockSkeletonAdapter(
             rig: rig,
             skeletonMap: map,
@@ -259,6 +312,10 @@ final class JockRetargetTestController {
         self.runtimeOverrides = overrides
         self.adapter = adapter
         self.driver = driver
+        self.skeletonWorldPoseResolver = JockSkeletonWorldPoseResolver(
+            rig: rig,
+            adapter: adapter
+        )
         self.hasLoaded = true
 
         validateHitClipsArePrewarmed()
@@ -278,7 +335,8 @@ final class JockRetargetTestController {
         let expectedHitClipIDs = Set(
             hitConfiguration.clipBuckets.values.flatMap { $0 } +
             hitConfiguration.deathClipIDs +
-            hitConfiguration.headSnapSubAnimationBySide.values.flatMap { $0 }
+            hitConfiguration.headSnapSubAnimationBySide.values.flatMap { $0 } +
+            attackConfiguration.attackClipIDs
         )
 
         let loadedClipIDs = Set(clipsByID.keys)
@@ -340,8 +398,7 @@ final class JockRetargetTestController {
         isVisible = false
         isPlayingPacingLoop = false
         followDemoState = .inactive
-        combatState = .normal
-        acceptedHitCount = 0
+        resetCombatRuntime()
         resetHitSelectionMemory()
         followDelayElapsed = 0
         latestHeadPosition = nil
@@ -355,8 +412,7 @@ final class JockRetargetTestController {
         show()
         isPlayingPacingLoop = false
         followDemoState = .inactive
-        combatState = .normal
-        acceptedHitCount = 0
+        resetCombatRuntime()
         resetHitSelectionMemory()
         followDelayElapsed = 0
         driver?.locomotionDeltaHandler = nil
@@ -383,8 +439,7 @@ final class JockRetargetTestController {
     func playPacingLoopFromStart() throws {
         show()
         followDemoState = .inactive
-        combatState = .normal
-        acceptedHitCount = 0
+        resetCombatRuntime()
         resetHitSelectionMemory()
         followDelayElapsed = 0
         driver?.locomotionDeltaHandler = nil
@@ -411,8 +466,7 @@ final class JockRetargetTestController {
     func stopClip() {
         isPlayingPacingLoop = false
         followDemoState = .inactive
-        combatState = .normal
-        acceptedHitCount = 0
+        resetCombatRuntime()
         resetHitSelectionMemory()
         followDelayElapsed = 0
         latestHeadPosition = nil
@@ -424,8 +478,7 @@ final class JockRetargetTestController {
     func resetPose() {
         isPlayingPacingLoop = false
         followDemoState = .inactive
-        combatState = .normal
-        acceptedHitCount = 0
+        resetCombatRuntime()
         resetHitSelectionMemory()
         followDelayElapsed = 0
         driver?.locomotionDeltaHandler = nil
@@ -442,8 +495,7 @@ final class JockRetargetTestController {
         isPlayingPacingLoop = false
         followDemoState = .idleStopped
         followDelayElapsed = 0
-        combatState = .normal
-        acceptedHitCount = 0
+        resetCombatRuntime()
         resetHitSelectionMemory()
 
         guard clipsByID[followConfiguration.idleClipID] != nil else {
@@ -480,8 +532,7 @@ final class JockRetargetTestController {
         followDemoState = .inactive
         followDelayElapsed = 0
         latestHeadPosition = nil
-        combatState = .normal
-        acceptedHitCount = 0
+        resetCombatRuntime()
         resetHitSelectionMemory()
 
         driver?.locomotionDeltaHandler = nil
@@ -501,14 +552,21 @@ final class JockRetargetTestController {
         let dt = TimeInterval(deltaTime)
 
         if followDemoState != .inactive,
-           !isActionLocked,
+           !isInNonInterruptibleCombatState,
            currentHeadPosition != nil {
             updateHitDetectionIfNeeded(
                 currentTime: Date().timeIntervalSinceReferenceDate
             )
         }
 
-        if !isActionLocked {
+        if followDemoState != .inactive {
+            updateAttackMode(
+                deltaTime: dt,
+                currentHeadPosition: currentHeadPosition
+            )
+        }
+
+        if canUpdateFollowMovement {
             updateFollowDemoIfNeeded(
                 deltaTime: dt,
                 currentHeadPosition: currentHeadPosition
@@ -516,41 +574,86 @@ final class JockRetargetTestController {
         }
 
         driver?.update(deltaTime: dt)
+
+        updateAttackDamageDetectionIfNeeded(
+            deltaTime: dt,
+            currentHeadPosition: currentHeadPosition
+        )
     }
 
     private func handleJockClipCompleted(_ completedClip: JockAnimClip) {
+        if case .attacking = combatState,
+           completedClip.clipID == activeAttack?.clipID {
+            handleAttackCompleted(completedClip)
+            return
+        }
+
         switch combatState {
         case .hitReaction(let clipID, let damage):
             guard completedClip.clipID == clipID else {
                 return
             }
 
-            print(
-                """
-                [Gravitas Hit] Hit reaction completed
-                  clipID: \(clipID)
-                  damage: \(damage.rawValue)
-                """
+            handleHitReactionCompleted(
+                clipID: clipID,
+                damage: damage
             )
-
-            combatState = .normal
-
-            if followDemoState != .inactive {
-                driver?.locomotionDeltaHandler = { [weak self] delta in
-                    self?.consumeFollowLocomotionDelta(delta) ?? true
-                }
-
-                followDemoState = .idleStopped
-                followDelayElapsed = 0
-                playFollowIdle()
-            }
 
         case .dead:
             return
 
-        case .normal:
+        case .normal, .closeRangeReady, .attacking:
             handleClipCompleted(completedClip)
         }
+    }
+
+    private func handleHitReactionCompleted(
+        clipID: String,
+        damage: JockHitDamageLevel
+    ) {
+        print(
+            """
+            [Gravitas Hit] Hit reaction completed
+              clipID: \(clipID)
+              damage: \(damage.rawValue)
+              escalateAfterHitReact: \(escalateAfterHitReact)
+            """
+        )
+
+        guard followDemoState != .inactive else {
+            combatState = .normal
+            escalateAfterHitReact = false
+            return
+        }
+
+        let shouldEscalate = escalateAfterHitReact
+        escalateAfterHitReact = false
+
+        if shouldEscalate,
+           let latestHeadPosition {
+            let distance = horizontalDistanceToUser(
+                headPosition: latestHeadPosition
+            )
+
+            if distance <= attackConfiguration.attackProximityMeters {
+                let delay = attackConfiguration.randomAggressiveDelay()
+                playFollowIdle(allowDuringCombat: true)
+                combatState = .closeRangeReady(delayRemaining: delay)
+
+                print("[Gravitas Attack] Escalating after hit reaction at close range.")
+                return
+            }
+        }
+
+        combatState = .normal
+
+        driver?.locomotionDeltaHandler = { [weak self] delta in
+            self?.consumeFollowLocomotionDelta(delta) ?? true
+        }
+
+        followDemoState = .idleStopped
+        followDelayElapsed = 0
+        playFollowIdle()
     }
 
     private func handleClipCompleted(_ completedClip: JockAnimClip) {
@@ -592,7 +695,14 @@ final class JockRetargetTestController {
         _ event: JockHandHitDetector.HitEvent
     ) {
         guard followDemoState != .inactive else { return }
-        guard !isActionLocked else { return }
+
+        if case .hitReaction = combatState {
+            return
+        }
+
+        if case .dead = combatState {
+            return
+        }
 
         acceptedHitCount += 1
         onPunchHit?()
@@ -601,10 +711,21 @@ final class JockRetargetTestController {
         let finalDamage: JockHitDamageLevel = shouldDie
             ? .death
             : event.damageLevel
+        let isStrongHit = attackConfiguration.escalationDamageLevels.contains(finalDamage)
         let authoredClipSide = authoredHitClipSide(
             forDetectedFaceSide: event.side
         )
         let selectedClipID: String?
+
+        if isStrongHit {
+            escalateAfterHitReact = true
+        }
+
+        if case .attacking = combatState {
+            cancelActiveAttackForPlayerHit(
+                isStrongHit: isStrongHit
+            )
+        }
 
         triggerHeadSnapSubAnimation(for: event.side)
 
@@ -634,6 +755,7 @@ final class JockRetargetTestController {
               authoredClipSide: \(authoredClipSide.rawValue)
               classifiedDamage: \(event.damageLevel.rawValue)
               finalDamage: \(finalDamage.rawValue)
+              isStrongHit: \(isStrongHit)
               velocity: \(String(format: "%.2f", event.velocityMetersPerSecond)) m/s
               selectedClip: \(selectedClipID ?? "none")
               shouldDie: \(shouldDie)
@@ -648,12 +770,14 @@ final class JockRetargetTestController {
               let clip = clipsByID[selectedClipID] else {
             print("[Gravitas Hit] No valid hit clip found. Falling back to idle.")
             combatState = .normal
+            activeAttack = nil
             playFollowIdle()
             return
         }
 
         if shouldDie {
             combatState = .dead
+            activeAttack = nil
             followDemoState = .inactive
             hitDetector.stop()
 
@@ -666,6 +790,7 @@ final class JockRetargetTestController {
 
             print("[Gravitas Hit] Death triggered. Follow disabled.")
         } else {
+            activeAttack = nil
             combatState = .hitReaction(
                 clipID: selectedClipID,
                 damage: finalDamage
@@ -678,6 +803,23 @@ final class JockRetargetTestController {
                 runtimeOverride: followVisualRuntimeOverride()
             )
         }
+    }
+
+    private func cancelActiveAttackForPlayerHit(
+        isStrongHit: Bool
+    ) {
+        guard var attack = activeAttack else { return }
+
+        attack.wasCanceled = true
+        activeAttack = attack
+
+        print(
+            """
+            [Gravitas Attack] Active attack canceled by player hit
+              strongHit: \(isStrongHit)
+              clipID: \(attack.clipID)
+            """
+        )
     }
 
     private func selectHeadSnapSubAnimationClipID(
@@ -903,6 +1045,335 @@ final class JockRetargetTestController {
         rootEntity.position += awayFromUser * knockback
     }
 
+    private func updateAttackMode(
+        deltaTime: TimeInterval,
+        currentHeadPosition: SIMD3<Float>?
+    ) {
+        guard attackConfiguration.enabled else { return }
+        guard let currentHeadPosition else { return }
+
+        switch combatState {
+        case .dead, .hitReaction:
+            return
+
+        case .attacking:
+            if var attack = activeAttack {
+                attack.elapsedSeconds += deltaTime
+                activeAttack = attack
+            }
+            return
+
+        case .closeRangeReady(let delayRemaining):
+            let distance = horizontalDistanceToUser(
+                headPosition: currentHeadPosition
+            )
+
+            if distance > attackConfiguration.resumeFollowDistanceMeters {
+                exitCloseRangeToFollow()
+                return
+            }
+
+            let nextDelay = delayRemaining - deltaTime
+
+            if nextDelay <= 0 {
+                startAttackIfPossible()
+            } else {
+                combatState = .closeRangeReady(delayRemaining: nextDelay)
+            }
+
+        case .normal:
+            let distance = horizontalDistanceToUser(
+                headPosition: currentHeadPosition
+            )
+
+            if distance <= attackConfiguration.attackProximityMeters {
+                enterCloseRangeReady()
+            }
+        }
+    }
+
+    private func enterCloseRangeReady() {
+        guard followDemoState != .inactive else { return }
+
+        driver?.locomotionDeltaHandler = nil
+
+        followDemoState = .idleStopped
+        followDelayElapsed = 0
+
+        playFollowIdle(allowDuringCombat: true)
+
+        let delay = attackConfiguration.randomAggressiveDelay()
+
+        combatState = .closeRangeReady(
+            delayRemaining: delay
+        )
+
+        print(
+            """
+            [Gravitas Attack] Entered CloseRangeReady
+              delay: \(String(format: "%.3f", delay))
+              proximity: \(attackConfiguration.attackProximityMeters)
+            """
+        )
+    }
+
+    private func exitCloseRangeToFollow() {
+        activeAttack = nil
+        combatState = .normal
+        followDemoState = .waitingToFollow
+        followDelayElapsed = 0
+
+        driver?.locomotionDeltaHandler = { [weak self] delta in
+            self?.consumeFollowLocomotionDelta(delta) ?? true
+        }
+
+        print("[Gravitas Attack] Player moved out of close range. Returning to follow.")
+    }
+
+    private func startAttackIfPossible() {
+        guard followDemoState != .inactive else { return }
+
+        guard let attackClip = randomAvailableAttackClip() else {
+            print("[Gravitas Attack] No available attack clips. Staying idle.")
+            playFollowIdle(allowDuringCombat: true)
+            combatState = .closeRangeReady(
+                delayRemaining: attackConfiguration.randomAggressiveDelay()
+            )
+            return
+        }
+
+        let metadata = attackClip.resolvedAttackMetadata(
+            fallbackJoint: fallbackAttackJointName(for: attackClip)
+        )
+
+        if attackClip.attack == nil {
+            print(
+                """
+                [Gravitas Attack] Attack clip has no metadata; using fallback window.
+                  clipID: \(attackClip.clipID)
+                  fallbackJoint: \(metadata.attackingJoint)
+                """
+            )
+        }
+
+        activeAttack = JockActiveAttackState(
+            clipID: attackClip.clipID,
+            metadata: metadata,
+            elapsedSeconds: 0,
+            hasDealtDamage: false,
+            wasCanceled: false
+        )
+
+        combatState = .attacking
+
+        driver?.locomotionDeltaHandler = nil
+
+        onAttackStarted?()
+
+        driver?.playClip(
+            attackClip,
+            loop: false,
+            transition: true,
+            runtimeOverride: followVisualRuntimeOverride()
+        )
+
+        print(
+            """
+            [Gravitas Attack] Started attack
+              clipID: \(attackClip.clipID)
+              joint: \(metadata.attackingJoint)
+              window: \(metadata.attackWindowStartFrame)-\(metadata.attackWindowEndFrame)
+              radius: \(metadata.damageRadiusMeters)
+              damage: \(metadata.damageAmount)
+            """
+        )
+    }
+
+    private func randomAvailableAttackClip() -> JockAnimClip? {
+        let available = attackConfiguration.attackClipIDs.compactMap { clipID in
+            clipsByID[clipID]
+        }
+
+        let missing = attackConfiguration.attackClipIDs.filter { clipsByID[$0] == nil }
+
+        if !missing.isEmpty {
+            print("[Gravitas Attack] Missing configured attack clips: \(missing.joined(separator: ", "))")
+        }
+
+        guard !available.isEmpty else {
+            return nil
+        }
+
+        return available.randomElement()
+    }
+
+    private func fallbackAttackJointName(
+        for clip: JockAnimClip
+    ) -> String {
+        let normalizedClipID = clip.clipID.lowercased()
+
+        if normalizedClipID.contains("left") {
+            return "LeftHand"
+        }
+
+        if normalizedClipID.contains("right") {
+            return "RightHand"
+        }
+
+        return "RightHand"
+    }
+
+    private func handleAttackCompleted(_ completedClip: JockAnimClip) {
+        print("[Gravitas Attack] Attack completed: \(completedClip.clipID)")
+
+        activeAttack = nil
+
+        guard followDemoState != .inactive else {
+            combatState = .normal
+            return
+        }
+
+        guard let latestHeadPosition else {
+            combatState = .normal
+            return
+        }
+
+        let distance = horizontalDistanceToUser(
+            headPosition: latestHeadPosition
+        )
+
+        if distance <= attackConfiguration.attackProximityMeters {
+            let delay = attackConfiguration.randomAggressiveDelay()
+            playFollowIdle(allowDuringCombat: true)
+            combatState = .closeRangeReady(delayRemaining: delay)
+
+            print("[Gravitas Attack] Player still close. Returning to CloseRangeReady.")
+        } else if distance >= attackConfiguration.resumeFollowDistanceMeters {
+            exitCloseRangeToFollow()
+        } else {
+            combatState = .normal
+            followDemoState = .idleStopped
+            followDelayElapsed = 0
+            playFollowIdle()
+
+            print("[Gravitas Attack] Player near edge. Returning to idle stop.")
+        }
+    }
+
+    private func updateAttackDamageDetectionIfNeeded(
+        deltaTime: TimeInterval,
+        currentHeadPosition: SIMD3<Float>?
+    ) {
+        guard case .attacking = combatState else { return }
+        guard var attack = activeAttack else { return }
+        guard !attack.wasCanceled else { return }
+
+        if attack.hasDealtDamage && attack.metadata.canDamageOncePerPlayback {
+            return
+        }
+
+        guard let clip = clipsByID[attack.clipID] else { return }
+        guard let driver else { return }
+
+        if driver.currentActiveClipID == attack.clipID {
+            attack.elapsedSeconds = driver.currentPlaybackTime
+            activeAttack = attack
+        }
+
+        let fps = clip.timing.fps > 0
+            ? clip.timing.fps
+            : 24.0
+
+        guard attack.isInsideDamageWindow(fps: fps) else {
+            activeAttack = attack
+            return
+        }
+
+        guard let currentHeadPosition else {
+            activeAttack = attack
+            return
+        }
+
+        guard let handWorldPosition = attackHandWorldPosition(
+            jointName: attack.metadata.attackingJoint
+        ) else {
+            activeAttack = attack
+            return
+        }
+
+        let radius = attack.metadata.damageRadiusMeters > 0
+            ? attack.metadata.damageRadiusMeters
+            : attackConfiguration.playerDangerSphereRadiusMeters
+
+        let distance = simd_distance(
+            handWorldPosition,
+            currentHeadPosition
+        )
+
+        guard distance <= radius else {
+            activeAttack = attack
+            return
+        }
+
+        attack.hasDealtDamage = true
+        activeAttack = attack
+
+        applyPlayerDamage(
+            amount: attack.metadata.damageAmount,
+            handWorldPosition: handWorldPosition,
+            distance: distance
+        )
+    }
+
+    private func attackHandWorldPosition(
+        jointName: String
+    ) -> SIMD3<Float>? {
+        guard let driver else { return nil }
+        guard let modelEntity else { return nil }
+        guard let skeletonWorldPoseResolver else { return nil }
+
+        return skeletonWorldPoseResolver.worldPosition(
+            for: jointName,
+            jointTransforms: driver.currentJointTransforms,
+            modelEntity: modelEntity
+        )
+    }
+
+    private func applyPlayerDamage(
+        amount: Int,
+        handWorldPosition: SIMD3<Float>,
+        distance: Float
+    ) {
+        playerExposure = min(
+            attackConfiguration.exposureMax,
+            playerExposure + amount
+        )
+
+        onPlayerDamaged?(amount)
+
+        print(
+            """
+            [Gravitas Damage] Player damaged
+              amount: \(amount)
+              exposure: \(playerExposure)/\(attackConfiguration.exposureMax)
+              handDistance: \(String(format: "%.3f", distance))
+              handWorldPosition: \(handWorldPosition)
+            """
+        )
+
+        if playerExposure >= attackConfiguration.exposureMax {
+            handlePlayerExposureMaxed()
+        }
+    }
+
+    private func handlePlayerExposureMaxed() {
+        print("[Gravitas Damage] Player exposure maxed.")
+
+        if attackConfiguration.failOnExposureMax {
+            stopFollowDemo()
+        }
+    }
+
     private func playCurrentPacingLoopStep() {
         guard isPlayingPacingLoop else { return }
         guard !pacingLoopSteps.isEmpty else { return }
@@ -1066,8 +1537,10 @@ final class JockRetargetTestController {
         )
     }
 
-    private func playFollowIdle() {
-        guard !isActionLocked else {
+    private func playFollowIdle(
+        allowDuringCombat: Bool = false
+    ) {
+        guard !isActionLocked || allowDuringCombat else {
             print("[Gravitas Follow] Ignored idle request because action is locked.")
             return
         }

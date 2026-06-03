@@ -152,6 +152,26 @@ struct JockAnimClip: Codable, Equatable {
         let value: [Float]
     }
 
+    struct AttackMetadata: Codable, Equatable {
+        let attackingJoint: String
+        let attackWindowStartFrame: Int
+        let attackWindowEndFrame: Int
+        let damageRadiusMeters: Float
+        let damageAmount: Int
+        let canDamageOncePerPlayback: Bool
+        let postAttackState: String?
+
+        enum CodingKeys: String, CodingKey {
+            case attackingJoint = "attacking_joint"
+            case attackWindowStartFrame = "attack_window_start_frame"
+            case attackWindowEndFrame = "attack_window_end_frame"
+            case damageRadiusMeters = "damage_radius_meters"
+            case damageAmount = "damage_amount"
+            case canDamageOncePerPlayback = "can_damage_once_per_playback"
+            case postAttackState = "post_attack_state"
+        }
+    }
+
     let schema: String
     let clipID: String
     let displayName: String
@@ -163,6 +183,7 @@ struct JockAnimClip: Codable, Equatable {
     let blendInFrames: Int?
     let blendOutFrames: Int?
     let baseAnimationContinues: Bool?
+    let attack: AttackMetadata?
     let source: Source
     let timing: Timing
     let joints: [String]
@@ -185,6 +206,7 @@ struct JockAnimClip: Codable, Equatable {
         case blendInFrames = "blend_in_frames"
         case blendOutFrames = "blend_out_frames"
         case baseAnimationContinues = "base_animation_continues"
+        case attack
         case source
         case timing
         case joints
@@ -222,5 +244,36 @@ struct JockAnimClip: Codable, Equatable {
 
     var resolvedBaseAnimationContinues: Bool {
         baseAnimationContinues ?? false
+    }
+
+    var isAttackClip: Bool {
+        clipType == "attack" || attack != nil
+    }
+
+    func resolvedAttackMetadata(
+        fallbackJoint: String = "RightHand",
+        fallbackFPS: Double = 24.0
+    ) -> AttackMetadata {
+        if let attack {
+            return attack
+        }
+
+        let fps = timing.fps > 0
+            ? timing.fps
+            : fallbackFPS
+
+        let totalFrames = max(Int(round(timing.durationSeconds * fps)), 1)
+        let start = max(1, Int(Float(totalFrames) * 0.35))
+        let end = max(start + 1, Int(Float(totalFrames) * 0.65))
+
+        return AttackMetadata(
+            attackingJoint: fallbackJoint,
+            attackWindowStartFrame: start,
+            attackWindowEndFrame: end,
+            damageRadiusMeters: 0.30,
+            damageAmount: 50,
+            canDamageOncePerPlayback: true,
+            postAttackState: "CloseRangeReady"
+        )
     }
 }

@@ -7,6 +7,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let spatialProvider = PhaseOneSpatialProvider()
     private let audioController = GravitasDemoAudioController()
 
+    var onPlayerDamaged: ((Int) -> Void)?
+
     private var sceneRoot: Entity?
 
     private var jockRetargetController: JockRetargetTestController?
@@ -32,6 +34,15 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             Task { @MainActor in
                 self?.audioController.playPunchHitAtHostHead()
             }
+        }
+        jockController.onPlayerDamaged = { [weak self] amount in
+            Task { @MainActor in
+                self?.audioController.playRandomPlayerDamageHit()
+                self?.onPlayerDamaged?(amount)
+            }
+        }
+        jockController.onAttackStarted = {
+            print("[Gravitas Attack] Attack animation started.")
         }
         root.addChild(jockController.rootEntity)
 

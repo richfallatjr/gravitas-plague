@@ -21,6 +21,10 @@
 		8E1A10162FCD000100000001 /* ../EmergencyBroadcast.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A101B2FCD000100000001 /* ../EmergencyBroadcast.mp3 */; };
 		8E1A10172FCD000100000001 /* ../face-punch_mixdown.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A101C2FCD000100000001 /* ../face-punch_mixdown.wav */; };
 		8E1A101D2FCD000100000001 /* ../dad_breathing.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A101E2FCD000100000001 /* ../dad_breathing.wav */; };
+		8E1A10202FCD000100000001 /* ../damaged-01.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10242FCD000100000001 /* ../damaged-01.wav */; };
+		8E1A10212FCD000100000001 /* ../damaged-02.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10252FCD000100000001 /* ../damaged-02.wav */; };
+		8E1A10222FCD000100000001 /* ../damaged-03.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10262FCD000100000001 /* ../damaged-03.wav */; };
+		8E1A10232FCD000100000001 /* ../damaged-04.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10272FCD000100000001 /* ../damaged-04.wav */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,6 +62,10 @@
 		8E1A101B2FCD000100000001 /* ../EmergencyBroadcast.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = ../EmergencyBroadcast.mp3; sourceTree = SOURCE_ROOT; };
 		8E1A101C2FCD000100000001 /* ../face-punch_mixdown.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../face-punch_mixdown.wav"; sourceTree = SOURCE_ROOT; };
 		8E1A101E2FCD000100000001 /* ../dad_breathing.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = ../dad_breathing.wav; sourceTree = SOURCE_ROOT; };
+		8E1A10242FCD000100000001 /* ../damaged-01.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../damaged-01.wav"; sourceTree = SOURCE_ROOT; };
+		8E1A10252FCD000100000001 /* ../damaged-02.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../damaged-02.wav"; sourceTree = SOURCE_ROOT; };
+		8E1A10262FCD000100000001 /* ../damaged-03.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../damaged-03.wav"; sourceTree = SOURCE_ROOT; };
+		8E1A10272FCD000100000001 /* ../damaged-04.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../damaged-04.wav"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -151,6 +159,10 @@
 				8E1A101B2FCD000100000001 /* ../EmergencyBroadcast.mp3 */,
 				8E1A101C2FCD000100000001 /* ../face-punch_mixdown.wav */,
 				8E1A101E2FCD000100000001 /* ../dad_breathing.wav */,
+				8E1A10242FCD000100000001 /* ../damaged-01.wav */,
+				8E1A10252FCD000100000001 /* ../damaged-02.wav */,
+				8E1A10262FCD000100000001 /* ../damaged-03.wav */,
+				8E1A10272FCD000100000001 /* ../damaged-04.wav */,
 			);
 			name = "Phase One Assets";
 			sourceTree = "<group>";
@@ -287,6 +299,10 @@
 				8E1A10162FCD000100000001 /* ../EmergencyBroadcast.mp3 in Resources */,
 				8E1A10172FCD000100000001 /* ../face-punch_mixdown.wav in Resources */,
 				8E1A101D2FCD000100000001 /* ../dad_breathing.wav in Resources */,
+				8E1A10202FCD000100000001 /* ../damaged-01.wav in Resources */,
+				8E1A10212FCD000100000001 /* ../damaged-02.wav in Resources */,
+				8E1A10222FCD000100000001 /* ../damaged-03.wav in Resources */,
+				8E1A10232FCD000100000001 /* ../damaged-04.wav in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -473,7 +489,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -489,7 +505,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3;
+				MARKETING_VERSION = 1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = "GravitasDiscover.Gravitas-Plague";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -508,7 +524,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -524,7 +540,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3;
+				MARKETING_VERSION = 1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = "GravitasDiscover.Gravitas-Plague";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
