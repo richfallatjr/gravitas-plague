@@ -110,6 +110,7 @@ final class JockRuntimeDriver {
     private var previousRelativeLocomotionSample = LocomotionSample.zero
     private var activeRuntimeOverride = JockRuntimeClipOverride.identity
     private var activeSubAnimations: [ActiveSubAnimation] = []
+    private var preparedClipsByID: [String: JockPreparedClip] = [:]
 
     var onClipCompleted: ((JockAnimClip) -> Void)?
     var locomotionDeltaHandler: ((JockRuntimeLocomotionDelta) -> Bool)?
@@ -126,6 +127,19 @@ final class JockRuntimeDriver {
         self.visualOffsetEntity = visualOffsetEntity
         self.baseJointTransforms = modelEntity.jointTransforms
         self.jointNames = modelEntity.jointNames
+    }
+
+    func prewarmClips(_ clips: [JockAnimClip]) {
+        var prepared: [String: JockPreparedClip] = [:]
+
+        for clip in clips {
+            let preparedClip = prepareClip(clip)
+            prepared[clip.clipID] = preparedClip
+        }
+
+        preparedClipsByID = prepared
+
+        print("[Gravitas Jock] Prewarmed \(preparedClipsByID.count) clips.")
     }
 
     func playClip(
@@ -188,37 +202,32 @@ final class JockRuntimeDriver {
             return
         }
 
-        let affectedJoints = clip.resolvedAffectedJoints
+        let preparedClip: JockPreparedClip
 
-        guard !affectedJoints.isEmpty else {
-            print("[Gravitas SubAnim] Clip has no affected joints: \(clip.clipID)")
+        if let cached = preparedClipsByID[clip.clipID] {
+            preparedClip = cached
+        } else {
+            print("[Gravitas SubAnim] WARNING: triggering unprepared sub-animation \(clip.clipID). Prewarming missed it.")
+            let prepared = prepareClip(clip)
+            preparedClipsByID[clip.clipID] = prepared
+            preparedClip = prepared
+        }
+
+        guard let preparedSubAnimation = preparedClip.subAnimation else {
+            print("[Gravitas SubAnim] Prepared clip has no sub-animation metadata: \(clip.clipID)")
             return
         }
 
-        var seenRuntimeIndices = Set<Int>()
-        let affectedRuntimeIndices = affectedJoints.compactMap { jointName in
-            adapter.runtimeIndex(for: jointName)
-        }.filter { runtimeIndex in
-            seenRuntimeIndices.insert(runtimeIndex).inserted
-        }
-
-        guard !affectedRuntimeIndices.isEmpty else {
+        guard !preparedSubAnimation.affectedRuntimeIndices.isEmpty else {
             print(
                 """
                 [Gravitas SubAnim] No affected joints mapped
                   clipID: \(clip.clipID)
-                  affectedJoints: \(affectedJoints.joined(separator: ", "))
+                  affectedJoints: \(preparedSubAnimation.affectedJoints.joined(separator: ", "))
                 """
             )
             return
         }
-
-        let fps = clip.timing.fps > 0
-            ? clip.timing.fps
-            : fallbackFPS
-        let blendInDuration = Double(clip.resolvedBlendInFrames) / fps
-        let blendOutDuration = Double(clip.resolvedBlendOutFrames) / fps
-        let duration = max(clip.timing.durationSeconds, 0.001)
 
         activeSubAnimations.removeAll { existing in
             existing.clip.clipID == clip.clipID
@@ -227,10 +236,10 @@ final class JockRuntimeDriver {
         let instance = ActiveSubAnimation(
             id: UUID(),
             clip: clip,
-            affectedRuntimeIndices: affectedRuntimeIndices,
-            blendInDuration: blendInDuration,
-            blendOutDuration: blendOutDuration,
-            duration: duration,
+            affectedRuntimeIndices: preparedSubAnimation.affectedRuntimeIndices,
+            blendInDuration: preparedSubAnimation.blendInDuration,
+            blendOutDuration: preparedSubAnimation.blendOutDuration,
+            duration: preparedClip.duration,
             playbackTime: 0
         )
 
@@ -238,14 +247,14 @@ final class JockRuntimeDriver {
 
         print(
             """
-            [Gravitas SubAnim] Triggered
+            [Gravitas SubAnim] Triggered prepared sub-animation
               clipID: \(clip.clipID)
-              affectedJoints: \(affectedJoints.joined(separator: ", "))
-              mappedIndices: \(affectedRuntimeIndices.count)
-              blendInFrames: \(clip.resolvedBlendInFrames)
-              blendOutFrames: \(clip.resolvedBlendOutFrames)
+              affectedJoints: \(preparedSubAnimation.affectedJoints.joined(separator: ", "))
+              mappedIndices: \(preparedSubAnimation.affectedRuntimeIndices.count)
+              blendInDuration: \(String(format: "%.3f", preparedSubAnimation.blendInDuration))
+              blendOutDuration: \(String(format: "%.3f", preparedSubAnimation.blendOutDuration))
               baseAnimationContinues: \(clip.resolvedBaseAnimationContinues)
-              duration: \(String(format: "%.3f", duration))
+              duration: \(String(format: "%.3f", preparedClip.duration))
             """
         )
     }
@@ -448,61 +457,162 @@ final class JockRuntimeDriver {
         _ clip: JockAnimClip,
         at time: TimeInterval
     ) -> [Transform] {
+        if let preparedClip = preparedClipsByID[clip.clipID] {
+            return samplePreparedClipPose(
+                preparedClip,
+                at: time
+            )
+        }
+
+        print("[Gravitas Jock] WARNING: sampling unprepared clip \(clip.clipID). This can hitch.")
+
+        let preparedClip = prepareClip(clip)
+        preparedClipsByID[clip.clipID] = preparedClip
+
+        return samplePreparedClipPose(
+            preparedClip,
+            at: time
+        )
+    }
+
+    private func prepareClip(_ clip: JockAnimClip) -> JockPreparedClip {
+        let preparedTracks: [JockPreparedTrack] = clip.tracks.compactMap { track in
+            guard let runtimeIndex = adapter.runtimeIndex(for: track.joint) else {
+                return nil
+            }
+
+            let sortedKeys = track.keys.sorted { $0.t < $1.t }
+
+            return JockPreparedTrack(
+                joint: track.joint,
+                runtimeIndex: runtimeIndex,
+                channel: track.channel,
+                keys: sortedKeys
+            )
+        }
+
+        let preparedSubAnimation: JockPreparedSubAnimation?
+
+        if clip.isSubAnimationOverride {
+            let affectedJoints = clip.resolvedAffectedJoints
+
+            var seenRuntimeIndices = Set<Int>()
+            let affectedRuntimeIndices = affectedJoints.compactMap { jointName in
+                adapter.runtimeIndex(for: jointName)
+            }.filter { runtimeIndex in
+                seenRuntimeIndices.insert(runtimeIndex).inserted
+            }
+
+            let fps = clip.timing.fps > 0
+                ? clip.timing.fps
+                : 24.0
+
+            preparedSubAnimation = JockPreparedSubAnimation(
+                affectedJoints: affectedJoints,
+                affectedRuntimeIndices: affectedRuntimeIndices,
+                blendInDuration: Double(clip.resolvedBlendInFrames) / fps,
+                blendOutDuration: Double(clip.resolvedBlendOutFrames) / fps
+            )
+        } else {
+            preparedSubAnimation = nil
+        }
+
+        let firstPose = sampleClipPoseUncached(
+            clip,
+            preparedTracks: preparedTracks,
+            at: 0
+        )
+
+        let lastPose = sampleClipPoseUncached(
+            clip,
+            preparedTracks: preparedTracks,
+            at: max(clip.timing.durationSeconds, 0.001)
+        )
+
+        return JockPreparedClip(
+            clip: clip,
+            tracks: preparedTracks,
+            subAnimation: preparedSubAnimation,
+            firstPose: firstPose,
+            lastPose: lastPose
+        )
+    }
+
+    private func samplePreparedClipPose(
+        _ preparedClip: JockPreparedClip,
+        at time: TimeInterval
+    ) -> [Transform] {
+        if time <= 0 {
+            return preparedClip.firstPose
+        }
+
+        if time >= preparedClip.duration {
+            return preparedClip.lastPose
+        }
+
+        return sampleClipPoseUncached(
+            preparedClip.clip,
+            preparedTracks: preparedClip.tracks,
+            at: time
+        )
+    }
+
+    private func sampleClipPoseUncached(
+        _ clip: JockAnimClip,
+        preparedTracks: [JockPreparedTrack],
+        at time: TimeInterval
+    ) -> [Transform] {
         var output = baseJointTransforms
 
-        for track in clip.tracks {
-            guard let runtimeIndex = adapter.runtimeIndex(for: track.joint) else {
+        for track in preparedTracks {
+            guard output.indices.contains(track.runtimeIndex) else {
                 continue
             }
 
-            guard output.indices.contains(runtimeIndex) else {
-                continue
-            }
-
-            var transform = output[runtimeIndex]
+            var transform = output[track.runtimeIndex]
 
             switch track.channel {
             case "translation_xyz_additive":
-                let offset = JockPoseMath.sampleVector3(keys: track.keys, time: time)
+                let offset = JockPoseMath.sampleVector3Sorted(keys: track.keys, time: time)
 
                 if clip.isAdditiveLocal {
-                    transform.translation = baseJointTransforms[runtimeIndex].translation + offset
+                    transform.translation = baseJointTransforms[track.runtimeIndex].translation + offset
                 } else {
                     transform.translation = offset
                 }
 
             case "rotation_quat_wxyz_additive":
-                let delta = JockPoseMath.sampleQuaternionWXYZ(keys: track.keys, time: time)
+                let delta = JockPoseMath.sampleQuaternionWXYZSorted(keys: track.keys, time: time)
 
                 if clip.isAdditiveLocal {
-                    transform.rotation = baseJointTransforms[runtimeIndex].rotation * delta
+                    transform.rotation = baseJointTransforms[track.runtimeIndex].rotation * delta
                 } else {
                     transform.rotation = delta
                 }
 
             case "rotation_euler_xyz_degrees_additive":
-                let delta = JockPoseMath.sampleEulerXYZDegreesAsQuaternion(keys: track.keys, time: time)
+                let delta = JockPoseMath.sampleEulerXYZDegreesAsQuaternionSorted(keys: track.keys, time: time)
 
                 if clip.isAdditiveLocal {
-                    transform.rotation = baseJointTransforms[runtimeIndex].rotation * delta
+                    transform.rotation = baseJointTransforms[track.runtimeIndex].rotation * delta
                 } else {
                     transform.rotation = delta
                 }
 
             case "translation_xyz_absolute":
-                transform.translation = JockPoseMath.sampleVector3(keys: track.keys, time: time)
+                transform.translation = JockPoseMath.sampleVector3Sorted(keys: track.keys, time: time)
 
             case "rotation_quat_wxyz_absolute":
-                transform.rotation = JockPoseMath.sampleQuaternionWXYZ(keys: track.keys, time: time)
+                transform.rotation = JockPoseMath.sampleQuaternionWXYZSorted(keys: track.keys, time: time)
 
             case "scale_xyz_absolute":
-                transform.scale = JockPoseMath.sampleVector3(keys: track.keys, time: time)
+                transform.scale = JockPoseMath.sampleVector3Sorted(keys: track.keys, time: time)
 
             default:
                 continue
             }
 
-            output[runtimeIndex] = transform
+            output[track.runtimeIndex] = transform
         }
 
         return output

@@ -57,6 +57,16 @@ enum JockPoseMath {
         )
     }
 
+    static func sampleVector3Sorted(keys: [JockAnimClip.Key], time: Double) -> SIMD3<Float> {
+        let values = sampleValueArraySorted(keys: keys, time: time, expectedCount: 3)
+
+        return SIMD3<Float>(
+            values[safe: 0] ?? 0,
+            values[safe: 1] ?? 0,
+            values[safe: 2] ?? 0
+        )
+    }
+
     static func sampleQuaternionWXYZ(keys: [JockAnimClip.Key], time: Double) -> simd_quatf {
         guard !keys.isEmpty else {
             return simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
@@ -91,11 +101,53 @@ enum JockPoseMath {
         return quatFromWXYZ(sorted[0].value)
     }
 
+    static func sampleQuaternionWXYZSorted(
+        keys: [JockAnimClip.Key],
+        time: Double
+    ) -> simd_quatf {
+        guard !keys.isEmpty else {
+            return simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
+        }
+
+        if time <= keys[0].t {
+            return quatFromWXYZ(keys[0].value)
+        }
+
+        if time >= keys[keys.count - 1].t {
+            return quatFromWXYZ(keys[keys.count - 1].value)
+        }
+
+        for index in 0..<(keys.count - 1) {
+            let lhs = keys[index]
+            let rhs = keys[index + 1]
+
+            if time >= lhs.t && time <= rhs.t {
+                let span = max(rhs.t - lhs.t, 0.0001)
+                let alpha = Float((time - lhs.t) / span)
+
+                return slerp(
+                    quatFromWXYZ(lhs.value),
+                    quatFromWXYZ(rhs.value),
+                    alpha
+                )
+            }
+        }
+
+        return quatFromWXYZ(keys[0].value)
+    }
+
     static func sampleEulerXYZDegreesAsQuaternion(
         keys: [JockAnimClip.Key],
         time: Double
     ) -> simd_quatf {
         quatFromEulerXYZDegrees(sampleVector3(keys: keys, time: time))
+    }
+
+    static func sampleEulerXYZDegreesAsQuaternionSorted(
+        keys: [JockAnimClip.Key],
+        time: Double
+    ) -> simd_quatf {
+        quatFromEulerXYZDegrees(sampleVector3Sorted(keys: keys, time: time))
     }
 
     static func blendTransforms(
@@ -167,6 +219,43 @@ enum JockPoseMath {
         }
 
         return padded(sorted[0].value, count: expectedCount)
+    }
+
+    private static func sampleValueArraySorted(
+        keys: [JockAnimClip.Key],
+        time: Double,
+        expectedCount: Int
+    ) -> [Float] {
+        guard !keys.isEmpty else {
+            return Array(repeating: 0, count: expectedCount)
+        }
+
+        if time <= keys[0].t {
+            return padded(keys[0].value, count: expectedCount)
+        }
+
+        if time >= keys[keys.count - 1].t {
+            return padded(keys[keys.count - 1].value, count: expectedCount)
+        }
+
+        for index in 0..<(keys.count - 1) {
+            let lhs = keys[index]
+            let rhs = keys[index + 1]
+
+            if time >= lhs.t && time <= rhs.t {
+                let span = max(rhs.t - lhs.t, 0.0001)
+                let alpha = Float((time - lhs.t) / span)
+
+                let lhsValues = padded(lhs.value, count: expectedCount)
+                let rhsValues = padded(rhs.value, count: expectedCount)
+
+                return zip(lhsValues, rhsValues).map { left, right in
+                    left + (right - left) * alpha
+                }
+            }
+        }
+
+        return padded(keys[0].value, count: expectedCount)
     }
 
     private static func padded(_ values: [Float], count: Int) -> [Float] {

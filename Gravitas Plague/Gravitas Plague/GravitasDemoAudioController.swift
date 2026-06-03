@@ -247,6 +247,14 @@ final class GravitasDemoAudioController {
         emergencyBeepPlayer?.currentTime = 0
         emergencyBeepPlayer?.play()
 
+        let beepDuration = emergencyBeepPlayer?.duration ?? 0
+
+        if beepDuration > 0 {
+            try? await Task.sleep(
+                nanoseconds: UInt64(beepDuration * 1_000_000_000)
+            )
+        }
+
         try? await Task.sleep(
             nanoseconds: UInt64(emergencyBeatDelaySeconds * 1_000_000_000)
         )
@@ -257,15 +265,15 @@ final class GravitasDemoAudioController {
         emergencyBroadcastPlayer?.currentTime = 0
         emergencyBroadcastPlayer?.play()
 
-        let duration = emergencyBroadcastPlayer?.duration ?? 0
+        let broadcastDuration = emergencyBroadcastPlayer?.duration ?? 0
 
-        if duration > 0 {
+        if broadcastDuration > 0 {
             try? await Task.sleep(
-                nanoseconds: UInt64(duration * 1_000_000_000)
+                nanoseconds: UInt64(broadcastDuration * 1_000_000_000)
             )
         }
 
-        print("[Gravitas Audio] Emergency broadcast finished. Waiting 30 seconds before next beep.")
+        print("[Gravitas Audio] Emergency sequence finished: beep completed -> beat -> broadcast completed.")
     }
 
     private func linearVolume(decibels: Float) -> Float {

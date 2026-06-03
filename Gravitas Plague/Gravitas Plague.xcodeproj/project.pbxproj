@@ -52,12 +52,12 @@
 		8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../idle-turn-right-02.usdz"; sourceTree = SOURCE_ROOT; };
 		8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Gravitas Plague/AnimationLibrary"; sourceTree = SOURCE_ROOT; };
 		8E1A10122FCD000100000001 /* ../dad_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../dad_biped.usdz; sourceTree = SOURCE_ROOT; };
-		8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../GravitasPlagueBackgroundLoop.wav"; sourceTree = SOURCE_ROOT; };
+		8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = ../GravitasPlagueBackgroundLoop.wav; sourceTree = SOURCE_ROOT; };
 		8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../Narrow-band-analog.wav"; sourceTree = SOURCE_ROOT; };
-		8E1A101A2FCD000100000001 /* ../Create_a_short_emerg_beeping.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../Create_a_short_emerg_beeping.wav"; sourceTree = SOURCE_ROOT; };
-		8E1A101B2FCD000100000001 /* ../EmergencyBroadcast.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "../EmergencyBroadcast.mp3"; sourceTree = SOURCE_ROOT; };
+		8E1A101A2FCD000100000001 /* ../Create_a_short_emerg_beeping.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = ../Create_a_short_emerg_beeping.wav; sourceTree = SOURCE_ROOT; };
+		8E1A101B2FCD000100000001 /* ../EmergencyBroadcast.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = ../EmergencyBroadcast.mp3; sourceTree = SOURCE_ROOT; };
 		8E1A101C2FCD000100000001 /* ../face-punch_mixdown.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../face-punch_mixdown.wav"; sourceTree = SOURCE_ROOT; };
-		8E1A101E2FCD000100000001 /* ../dad_breathing.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../dad_breathing.wav"; sourceTree = SOURCE_ROOT; };
+		8E1A101E2FCD000100000001 /* ../dad_breathing.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = ../dad_breathing.wav; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */

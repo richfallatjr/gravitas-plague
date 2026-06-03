@@ -240,6 +240,8 @@ final class JockRetargetTestController {
             visualOffsetEntity: visualOffsetEntity
         )
 
+        driver.prewarmClips(Array(loadedClips.values))
+
         driver.onClipCompleted = { [weak self] completedClip in
             Task { @MainActor in
                 self?.handleJockClipCompleted(completedClip)
@@ -259,6 +261,8 @@ final class JockRetargetTestController {
         self.driver = driver
         self.hasLoaded = true
 
+        validateHitClipsArePrewarmed()
+
         debugStatus = """
         JockAsset Retarget Test loaded.
         Asset: dad_biped.usdz
@@ -268,6 +272,23 @@ final class JockRetargetTestController {
         """
 
         print("[Gravitas] \(debugStatus)")
+    }
+
+    private func validateHitClipsArePrewarmed() {
+        let expectedHitClipIDs = Set(
+            hitConfiguration.clipBuckets.values.flatMap { $0 } +
+            hitConfiguration.deathClipIDs +
+            hitConfiguration.headSnapSubAnimationBySide.values.flatMap { $0 }
+        )
+
+        let loadedClipIDs = Set(clipsByID.keys)
+        let missingClipIDs = expectedHitClipIDs.filter { !loadedClipIDs.contains($0) }
+
+        if missingClipIDs.isEmpty {
+            print("[Gravitas Prewarm] All hit/sub-animation clips loaded.")
+        } else {
+            print("[Gravitas Prewarm] Missing hit/sub-animation clips: \(missingClipIDs.sorted().joined(separator: ", "))")
+        }
     }
 
     func configureSpawn(
