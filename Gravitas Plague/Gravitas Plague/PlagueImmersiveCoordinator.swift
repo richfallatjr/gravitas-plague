@@ -5,6 +5,7 @@ import RealityKit
 @MainActor
 final class PlagueImmersiveCoordinator: ObservableObject {
     private let spatialProvider = PhaseOneSpatialProvider()
+    private let audioController = GravitasDemoAudioController()
 
     private var sceneRoot: Entity?
 
@@ -22,9 +23,16 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         let root = Entity()
         root.name = "GravitasPlague_PhaseOne_SceneRoot"
 
+        audioController.startImmersiveAudio()
+
         await spatialProvider.start()
 
         let jockController = JockRetargetTestController()
+        jockController.onPunchHit = { [weak self] in
+            Task { @MainActor in
+                self?.audioController.playPunchHit()
+            }
+        }
         root.addChild(jockController.rootEntity)
 
         self.sceneRoot = root
@@ -74,6 +82,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             jockRetargetController?.stopFollowDemo()
 
         case .playJockClip(let clipID, let loop):
+            audioController.startDemoAudio()
+
             do {
                 try jockRetargetController?.playClip(
                     id: clipID,
@@ -93,6 +103,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         case .closeDemo:
             jockRetargetController?.hide()
             spatialProvider.stop()
+            audioController.stopAllAudio()
         }
     }
 
@@ -118,6 +129,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     func shutdown() {
         jockRetargetController?.hide()
         spatialProvider.stop()
+        audioController.stopAllAudio()
 
         sceneRoot = nil
         jockRetargetController = nil
@@ -137,6 +149,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
     private func startJockRetargetTest(autoPlayLoop: Bool) async {
         guard let jockRetargetController else { return }
+
+        audioController.startDemoAudio()
 
         do {
             try await jockRetargetController.loadIfNeeded()

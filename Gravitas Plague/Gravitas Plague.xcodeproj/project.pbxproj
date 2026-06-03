@@ -15,6 +15,12 @@
 		8E1A100E2FCD000100000001 /* ../idle-turn-right-02.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */; };
 		8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */; };
 		8E1A10112FCD000100000001 /* ../dad_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10122FCD000100000001 /* ../dad_biped.usdz */; };
+		8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */; };
+		8E1A10142FCD000100000001 /* ../Narrow-band-analog.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */; };
+		8E1A10152FCD000100000001 /* ../Create_a_short_emerg_beeping.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A101A2FCD000100000001 /* ../Create_a_short_emerg_beeping.wav */; };
+		8E1A10162FCD000100000001 /* ../EmergencyBroadcast.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A101B2FCD000100000001 /* ../EmergencyBroadcast.mp3 */; };
+		8E1A10172FCD000100000001 /* ../face-punch_mixdown.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A101C2FCD000100000001 /* ../face-punch_mixdown.wav */; };
+		8E1A101D2FCD000100000001 /* ../dad_breathing.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A101E2FCD000100000001 /* ../dad_breathing.wav */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -46,6 +52,12 @@
 		8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../idle-turn-right-02.usdz"; sourceTree = SOURCE_ROOT; };
 		8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Gravitas Plague/AnimationLibrary"; sourceTree = SOURCE_ROOT; };
 		8E1A10122FCD000100000001 /* ../dad_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../dad_biped.usdz; sourceTree = SOURCE_ROOT; };
+		8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../GravitasPlagueBackgroundLoop.wav"; sourceTree = SOURCE_ROOT; };
+		8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../Narrow-band-analog.wav"; sourceTree = SOURCE_ROOT; };
+		8E1A101A2FCD000100000001 /* ../Create_a_short_emerg_beeping.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../Create_a_short_emerg_beeping.wav"; sourceTree = SOURCE_ROOT; };
+		8E1A101B2FCD000100000001 /* ../EmergencyBroadcast.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "../EmergencyBroadcast.mp3"; sourceTree = SOURCE_ROOT; };
+		8E1A101C2FCD000100000001 /* ../face-punch_mixdown.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../face-punch_mixdown.wav"; sourceTree = SOURCE_ROOT; };
+		8E1A101E2FCD000100000001 /* ../dad_breathing.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../dad_breathing.wav"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -133,6 +145,12 @@
 				8E1A10062FCD000100000001 /* ../unstable-walk.usdz */,
 				8E1A10122FCD000100000001 /* ../dad_biped.usdz */,
 				8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */,
+				8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */,
+				8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */,
+				8E1A101A2FCD000100000001 /* ../Create_a_short_emerg_beeping.wav */,
+				8E1A101B2FCD000100000001 /* ../EmergencyBroadcast.mp3 */,
+				8E1A101C2FCD000100000001 /* ../face-punch_mixdown.wav */,
+				8E1A101E2FCD000100000001 /* ../dad_breathing.wav */,
 			);
 			name = "Phase One Assets";
 			sourceTree = "<group>";
@@ -263,6 +281,12 @@
 				8E1A10032FCD000100000001 /* ../unstable-walk.usdz in Resources */,
 				8E1A10112FCD000100000001 /* ../dad_biped.usdz in Resources */,
 				8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */,
+				8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav in Resources */,
+				8E1A10142FCD000100000001 /* ../Narrow-band-analog.wav in Resources */,
+				8E1A10152FCD000100000001 /* ../Create_a_short_emerg_beeping.wav in Resources */,
+				8E1A10162FCD000100000001 /* ../EmergencyBroadcast.mp3 in Resources */,
+				8E1A10172FCD000100000001 /* ../face-punch_mixdown.wav in Resources */,
+				8E1A101D2FCD000100000001 /* ../dad_breathing.wav in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -449,10 +473,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Gravitas Plague";
 				INFOPLIST_KEY_NSHandsTrackingUsageDescription = "Gravitas Plague uses hand tracking to detect player interactions with nearby infected characters.";
 				INFOPLIST_KEY_NSWorldSensingUsageDescription = "Gravitas Plague uses detected floor planes to place the infected safely on the room floor.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -464,7 +489,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "GravitasDiscover.Gravitas-Plague";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -483,10 +508,11 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Gravitas Plague";
 				INFOPLIST_KEY_NSHandsTrackingUsageDescription = "Gravitas Plague uses hand tracking to detect player interactions with nearby infected characters.";
 				INFOPLIST_KEY_NSWorldSensingUsageDescription = "Gravitas Plague uses detected floor planes to place the infected safely on the room floor.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -498,7 +524,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "GravitasDiscover.Gravitas-Plague";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

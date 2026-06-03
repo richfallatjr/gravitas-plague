@@ -36,6 +36,8 @@ final class JockRetargetTestController {
 
     let rootEntity = Entity()
 
+    var onPunchHit: (() -> Void)?
+
     private let visualOffsetEntity = Entity()
 
     private var characterEntity: Entity?
@@ -572,6 +574,7 @@ final class JockRetargetTestController {
         guard !isActionLocked else { return }
 
         acceptedHitCount += 1
+        onPunchHit?()
 
         let shouldDie = acceptedHitCount >= hitConfiguration.deathHitCount
         let finalDamage: JockHitDamageLevel = shouldDie
