@@ -1,11 +1,14 @@
 import AVFoundation
 import Foundation
+import RealityKit
+import simd
 
 @MainActor
 final class GravitasDemoAudioController {
     enum AudioError: LocalizedError {
         case missingResource(String)
         case playerCreationFailed(String, Error)
+        case resourceLoadFailed(String, Error)
 
         var errorDescription: String? {
             switch self {
@@ -13,11 +16,13 @@ final class GravitasDemoAudioController {
                 return "Missing audio resource: \(name)"
             case .playerCreationFailed(let name, let error):
                 return "Failed to create audio player for \(name): \(error.localizedDescription)"
+            case .resourceLoadFailed(let name, let error):
+                return "Failed to load RealityKit audio resource \(name): \(error.localizedDescription)"
             }
         }
     }
 
-    private struct AudioResource {
+    private struct BundleAudioFile {
         let fileName: String
         let fileExtension: String
 
@@ -26,53 +31,94 @@ final class GravitasDemoAudioController {
         }
     }
 
-    private let backgroundMusicResource = AudioResource(
+    private let backgroundMusicFile = BundleAudioFile(
         fileName: "GravitasPlagueBackgroundLoop",
         fileExtension: "wav"
     )
 
-    private let radioStaticResource = AudioResource(
+    private let radioStaticFile = BundleAudioFile(
         fileName: "Narrow-band-analog",
         fileExtension: "wav"
     )
 
-    private let dadBreathingResource = AudioResource(
+    private let dadBreathingFile = BundleAudioFile(
         fileName: "dad_breathing",
         fileExtension: "wav"
     )
 
-    private let emergencyBeepResource = AudioResource(
+    private let emergencyBeepFile = BundleAudioFile(
         fileName: "Create_a_short_emerg_beeping",
         fileExtension: "wav"
     )
 
-    private let emergencyBroadcastResource = AudioResource(
+    private let emergencyBroadcastFile = BundleAudioFile(
         fileName: "EmergencyBroadcast",
         fileExtension: "mp3"
     )
 
-    private let punchResource = AudioResource(
+    private let punchFile = BundleAudioFile(
         fileName: "face-punch_mixdown",
         fileExtension: "wav"
     )
 
     private var backgroundMusicPlayer: AVAudioPlayer?
-    private var radioStaticPlayer: AVAudioPlayer?
-    private var dadBreathingPlayer: AVAudioPlayer?
-    private var emergencyBeepPlayer: AVAudioPlayer?
-    private var emergencyBroadcastPlayer: AVAudioPlayer?
-    private var punchPlayers: [AVAudioPlayer] = []
+
+    private let radioAudioEntity = Entity()
+    private let hostHeadAudioEntity = Entity()
+
+    private weak var sceneRoot: Entity?
+    private weak var hostRootEntity: Entity?
+
+    private var radioStaticResource: AudioFileResource?
+    private var dadBreathingResource: AudioFileResource?
+    private var emergencyBeepResource: AudioFileResource?
+    private var emergencyBroadcastResource: AudioFileResource?
+    private var punchResource: AudioFileResource?
+
+    private var radioStaticController: AudioPlaybackController?
+    private var dadBreathingController: AudioPlaybackController?
+    private var emergencyBeepController: AudioPlaybackController?
+    private var emergencyBroadcastController: AudioPlaybackController?
+    private var punchControllers: [AudioPlaybackController] = []
 
     private var emergencyBroadcastTask: Task<Void, Never>?
 
     private var hasPrepared = false
+    private var hasAttachedEntities = false
     private var isImmersiveAudioActive = false
     private var isDemoAudioActive = false
+
+    private let feetToMeters: Float = 0.3048
+    private let radioDistanceBehindUserFeet: Float = 5.0
 
     private let emergencyInitialDelaySeconds: TimeInterval = 30.0
     private let emergencyBreakAfterBroadcastSeconds: TimeInterval = 30.0
     private let emergencyBeatDelaySeconds: TimeInterval = 0.85
     private let emergencyBeepDecibels: Float = -23.0
+
+    func attachToSceneIfNeeded(
+        sceneRoot: Entity,
+        hostRootEntity: Entity
+    ) {
+        self.sceneRoot = sceneRoot
+        self.hostRootEntity = hostRootEntity
+
+        guard !hasAttachedEntities else { return }
+
+        radioAudioEntity.name = "Gravitas_SpatialRadioAudioSource"
+        hostHeadAudioEntity.name = "Gravitas_HostHeadAudioSource"
+        radioAudioEntity.components.set(SpatialAudioComponent())
+        hostHeadAudioEntity.components.set(SpatialAudioComponent())
+
+        sceneRoot.addChild(radioAudioEntity)
+        hostRootEntity.addChild(hostHeadAudioEntity)
+
+        hostHeadAudioEntity.position = SIMD3<Float>(0, 1.45, -0.04)
+
+        hasAttachedEntities = true
+
+        print("[Gravitas Audio] Spatial audio entities attached.")
+    }
 
     func prepareIfNeeded() {
         guard !hasPrepared else { return }
@@ -83,41 +129,80 @@ final class GravitasDemoAudioController {
             print("[Gravitas Audio] Audio session configuration failed: \(error)")
         }
 
-        backgroundMusicPlayer = makeOptionalPlayer(
-            resource: backgroundMusicResource,
-            volume: 0.32,
+        backgroundMusicPlayer = makeOptionalAVAudioPlayer(
+            file: backgroundMusicFile,
+            volume: 0.30,
             loopsForever: true
         )
 
-        radioStaticPlayer = makeOptionalPlayer(
-            resource: radioStaticResource,
-            volume: 0.20,
-            loopsForever: true
+        radioStaticResource = makeOptionalSpatialResource(
+            file: radioStaticFile,
+            shouldLoop: true
         )
 
-        dadBreathingPlayer = makeOptionalPlayer(
-            resource: dadBreathingResource,
-            volume: 0.42,
-            loopsForever: true
+        dadBreathingResource = makeOptionalSpatialResource(
+            file: dadBreathingFile,
+            shouldLoop: true
         )
 
-        emergencyBeepPlayer = makeOptionalPlayer(
-            resource: emergencyBeepResource,
-            volume: linearVolume(decibels: emergencyBeepDecibels),
-            loopsForever: false
+        emergencyBeepResource = makeOptionalSpatialResource(
+            file: emergencyBeepFile,
+            shouldLoop: false
         )
 
-        emergencyBroadcastPlayer = makeOptionalPlayer(
-            resource: emergencyBroadcastResource,
-            volume: 0.78,
-            loopsForever: false
+        emergencyBroadcastResource = makeOptionalSpatialResource(
+            file: emergencyBroadcastFile,
+            shouldLoop: false
         )
 
-        punchPlayers = makePunchPool(count: 4)
+        punchResource = makeOptionalSpatialResource(
+            file: punchFile,
+            shouldLoop: false
+        )
+
         hasPrepared = true
 
-        print("[Gravitas Audio] Prepared audio resources.")
-        print("[Gravitas Audio] Emergency beep volume set to \(emergencyBeepDecibels) dB / \(linearVolume(decibels: emergencyBeepDecibels)) linear.")
+        print("[Gravitas Audio] Prepared global and spatial audio resources.")
+        print("[Gravitas Audio] Emergency beep gain set to \(emergencyBeepDecibels) dB.")
+    }
+
+    func configureRadioSourceBehindOriginalUserSpawn(
+        spawnPose: PhaseOneSpawnPose,
+        floorY: Float
+    ) {
+        let forward = PhaseOneMath.normalizedOrFallback(
+            SIMD3<Float>(
+                spawnPose.headForward.x,
+                0,
+                spawnPose.headForward.z
+            ),
+            fallback: SIMD3<Float>(0, 0, -1)
+        )
+
+        let behind = -forward
+        let distanceMeters = radioDistanceBehindUserFeet * feetToMeters
+
+        let position = SIMD3<Float>(
+            spawnPose.headPosition.x + behind.x * distanceMeters,
+            floorY + 1.10,
+            spawnPose.headPosition.z + behind.z * distanceMeters
+        )
+
+        radioAudioEntity.position = position
+
+        print(
+            """
+            [Gravitas Audio] Radio spatial source placed
+              position: \(position)
+              distanceBehindFeet: \(radioDistanceBehindUserFeet)
+            """
+        )
+    }
+
+    func updateHostHeadAudioLocalPosition(
+        _ localPosition: SIMD3<Float> = SIMD3<Float>(0, 1.45, -0.04)
+    ) {
+        hostHeadAudioEntity.position = localPosition
     }
 
     func startImmersiveAudio() {
@@ -130,26 +215,30 @@ final class GravitasDemoAudioController {
         backgroundMusicPlayer?.currentTime = 0
         backgroundMusicPlayer?.play()
 
-        print("[Gravitas Audio] Started immersive background music.")
+        print("[Gravitas Audio] Started global background music.")
     }
 
-    func startDemoAudio() {
+    func startDemoAudio(
+        spawnPose: PhaseOneSpawnPose,
+        floorY: Float
+    ) {
         prepareIfNeeded()
         startImmersiveAudio()
+
+        configureRadioSourceBehindOriginalUserSpawn(
+            spawnPose: spawnPose,
+            floorY: floorY
+        )
 
         guard !isDemoAudioActive else { return }
 
         isDemoAudioActive = true
 
-        radioStaticPlayer?.currentTime = 0
-        radioStaticPlayer?.play()
-
-        dadBreathingPlayer?.currentTime = 0
-        dadBreathingPlayer?.play()
-
+        startRadioStatic()
+        startDadBreathing()
         startEmergencyBroadcastLoop()
 
-        print("[Gravitas Audio] Started demo radio static, Dad breathing, and emergency broadcast loop.")
+        print("[Gravitas Audio] Started spatial demo audio.")
     }
 
     func stopDemoAudio() {
@@ -157,21 +246,10 @@ final class GravitasDemoAudioController {
 
         isDemoAudioActive = false
 
-        radioStaticPlayer?.stop()
-        radioStaticPlayer?.currentTime = 0
-
-        dadBreathingPlayer?.stop()
-        dadBreathingPlayer?.currentTime = 0
-
         stopEmergencyBroadcastLoop()
+        stopSpatialDemoControllers()
 
-        emergencyBeepPlayer?.stop()
-        emergencyBeepPlayer?.currentTime = 0
-
-        emergencyBroadcastPlayer?.stop()
-        emergencyBroadcastPlayer?.currentTime = 0
-
-        print("[Gravitas Audio] Stopped demo radio/static/breathing/emergency audio.")
+        print("[Gravitas Audio] Stopped spatial demo audio.")
     }
 
     func stopAllAudio() {
@@ -183,36 +261,48 @@ final class GravitasDemoAudioController {
         backgroundMusicPlayer?.stop()
         backgroundMusicPlayer?.currentTime = 0
 
-        radioStaticPlayer?.stop()
-        radioStaticPlayer?.currentTime = 0
-
-        dadBreathingPlayer?.stop()
-        dadBreathingPlayer?.currentTime = 0
-
-        emergencyBeepPlayer?.stop()
-        emergencyBeepPlayer?.currentTime = 0
-
-        emergencyBroadcastPlayer?.stop()
-        emergencyBroadcastPlayer?.currentTime = 0
-
-        for player in punchPlayers {
-            player.stop()
-            player.currentTime = 0
-        }
+        stopSpatialDemoControllers()
 
         print("[Gravitas Audio] Stopped all audio.")
     }
 
-    func playPunchHit() {
+    func playPunchHitAtHostHead() {
         prepareIfNeeded()
 
-        guard let player = nextAvailablePunchPlayer() else {
-            print("[Gravitas Audio] No punch player available.")
+        guard let punchResource else {
+            print("[Gravitas Audio] Punch resource missing.")
             return
         }
 
-        player.currentTime = 0
-        player.play()
+        let controller = hostHeadAudioEntity.playAudio(punchResource)
+        controller.gain = decibels(linearVolume: 0.95)
+        punchControllers.append(controller)
+
+        if punchControllers.count > 12 {
+            punchControllers.removeFirst(max(0, punchControllers.count - 8))
+        }
+    }
+
+    private func startRadioStatic() {
+        guard let radioStaticResource else {
+            print("[Gravitas Audio] Radio static resource missing.")
+            return
+        }
+
+        radioStaticController?.stop()
+        radioStaticController = radioAudioEntity.playAudio(radioStaticResource)
+        radioStaticController?.gain = decibels(linearVolume: 0.20)
+    }
+
+    private func startDadBreathing() {
+        guard let dadBreathingResource else {
+            print("[Gravitas Audio] Dad breathing resource missing.")
+            return
+        }
+
+        dadBreathingController?.stop()
+        dadBreathingController = hostHeadAudioEntity.playAudio(dadBreathingResource)
+        dadBreathingController?.gain = decibels(linearVolume: 0.42)
     }
 
     private func startEmergencyBroadcastLoop() {
@@ -243,11 +333,17 @@ final class GravitasDemoAudioController {
     private func playEmergencyBroadcastSequence() async {
         guard isDemoAudioActive else { return }
 
-        emergencyBeepPlayer?.stop()
-        emergencyBeepPlayer?.currentTime = 0
-        emergencyBeepPlayer?.play()
+        guard let emergencyBeepResource,
+              let emergencyBroadcastResource else {
+            print("[Gravitas Audio] Emergency resources missing.")
+            return
+        }
 
-        let beepDuration = emergencyBeepPlayer?.duration ?? 0
+        emergencyBeepController?.stop()
+        emergencyBeepController = radioAudioEntity.playAudio(emergencyBeepResource)
+        emergencyBeepController?.gain = Double(emergencyBeepDecibels)
+
+        let beepDuration = durationSeconds(for: emergencyBeepFile)
 
         if beepDuration > 0 {
             try? await Task.sleep(
@@ -261,11 +357,11 @@ final class GravitasDemoAudioController {
 
         guard isDemoAudioActive else { return }
 
-        emergencyBroadcastPlayer?.stop()
-        emergencyBroadcastPlayer?.currentTime = 0
-        emergencyBroadcastPlayer?.play()
+        emergencyBroadcastController?.stop()
+        emergencyBroadcastController = radioAudioEntity.playAudio(emergencyBroadcastResource)
+        emergencyBroadcastController?.gain = decibels(linearVolume: 0.78)
 
-        let broadcastDuration = emergencyBroadcastPlayer?.duration ?? 0
+        let broadcastDuration = durationSeconds(for: emergencyBroadcastFile)
 
         if broadcastDuration > 0 {
             try? await Task.sleep(
@@ -273,11 +369,26 @@ final class GravitasDemoAudioController {
             )
         }
 
-        print("[Gravitas Audio] Emergency sequence finished: beep completed -> beat -> broadcast completed.")
+        print("[Gravitas Audio] Spatial emergency sequence finished: beep completed -> beat -> broadcast completed.")
     }
 
-    private func linearVolume(decibels: Float) -> Float {
-        pow(10.0 as Float, decibels / 20.0)
+    private func stopSpatialDemoControllers() {
+        radioStaticController?.stop()
+        radioStaticController = nil
+
+        dadBreathingController?.stop()
+        dadBreathingController = nil
+
+        emergencyBeepController?.stop()
+        emergencyBeepController = nil
+
+        emergencyBroadcastController?.stop()
+        emergencyBroadcastController = nil
+
+        for controller in punchControllers {
+            controller.stop()
+        }
+        punchControllers.removeAll()
     }
 
     private func configureAudioSession() throws {
@@ -294,14 +405,49 @@ final class GravitasDemoAudioController {
         try session.setActive(true)
     }
 
-    private func makeOptionalPlayer(
-        resource: AudioResource,
+    private func makeOptionalSpatialResource(
+        file: BundleAudioFile,
+        shouldLoop: Bool
+    ) -> AudioFileResource? {
+        do {
+            return try loadSpatialResource(
+                file: file,
+                shouldLoop: shouldLoop
+            )
+        } catch {
+            print("[Gravitas Audio] \(error)")
+            return nil
+        }
+    }
+
+    private func loadSpatialResource(
+        file: BundleAudioFile,
+        shouldLoop: Bool
+    ) throws -> AudioFileResource {
+        do {
+            let configuration = AudioFileResource.Configuration(
+                loadingStrategy: .preload,
+                shouldLoop: shouldLoop
+            )
+
+            return try AudioFileResource.load(
+                named: file.fullName,
+                in: nil,
+                configuration: configuration
+            )
+        } catch {
+            throw AudioError.resourceLoadFailed(file.fullName, error)
+        }
+    }
+
+    private func makeOptionalAVAudioPlayer(
+        file: BundleAudioFile,
         volume: Float,
         loopsForever: Bool
     ) -> AVAudioPlayer? {
         do {
-            return try makePlayer(
-                resource: resource,
+            return try makeAVAudioPlayer(
+                file: file,
                 volume: volume,
                 loopsForever: loopsForever
             )
@@ -311,16 +457,16 @@ final class GravitasDemoAudioController {
         }
     }
 
-    private func makePlayer(
-        resource: AudioResource,
+    private func makeAVAudioPlayer(
+        file: BundleAudioFile,
         volume: Float,
         loopsForever: Bool
     ) throws -> AVAudioPlayer {
         guard let url = Bundle.main.url(
-            forResource: resource.fileName,
-            withExtension: resource.fileExtension
+            forResource: file.fileName,
+            withExtension: file.fileExtension
         ) else {
-            throw AudioError.missingResource(resource.fullName)
+            throw AudioError.missingResource(file.fullName)
         }
 
         do {
@@ -330,31 +476,31 @@ final class GravitasDemoAudioController {
             player.prepareToPlay()
             return player
         } catch {
-            throw AudioError.playerCreationFailed(resource.fullName, error)
+            throw AudioError.playerCreationFailed(file.fullName, error)
         }
     }
 
-    private func makePunchPool(count: Int) -> [AVAudioPlayer] {
-        var players: [AVAudioPlayer] = []
-
-        for _ in 0..<count {
-            if let player = makeOptionalPlayer(
-                resource: punchResource,
-                volume: 0.95,
-                loopsForever: false
-            ) {
-                players.append(player)
-            }
+    private func durationSeconds(for file: BundleAudioFile) -> TimeInterval {
+        guard let url = Bundle.main.url(
+            forResource: file.fileName,
+            withExtension: file.fileExtension
+        ) else {
+            return 0
         }
 
-        return players
+        do {
+            let player = try AVAudioPlayer(contentsOf: url)
+            return player.duration
+        } catch {
+            return 0
+        }
     }
 
-    private func nextAvailablePunchPlayer() -> AVAudioPlayer? {
-        if let idle = punchPlayers.first(where: { !$0.isPlaying }) {
-            return idle
+    private func decibels(linearVolume: Float) -> Double {
+        guard linearVolume > 0 else {
+            return -96.0
         }
 
-        return punchPlayers.first
+        return Double(20.0 * log10(linearVolume))
     }
 }

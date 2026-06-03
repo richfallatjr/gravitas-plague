@@ -30,10 +30,15 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         let jockController = JockRetargetTestController()
         jockController.onPunchHit = { [weak self] in
             Task { @MainActor in
-                self?.audioController.playPunchHit()
+                self?.audioController.playPunchHitAtHostHead()
             }
         }
         root.addChild(jockController.rootEntity)
+
+        audioController.attachToSceneIfNeeded(
+            sceneRoot: root,
+            hostRootEntity: jockController.rootEntity
+        )
 
         self.sceneRoot = root
         self.jockRetargetController = jockController
@@ -82,8 +87,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             jockRetargetController?.stopFollowDemo()
 
         case .playJockClip(let clipID, let loop):
-            audioController.startDemoAudio()
-
             do {
                 try jockRetargetController?.playClip(
                     id: clipID,
@@ -150,8 +153,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private func startJockRetargetTest(autoPlayLoop: Bool) async {
         guard let jockRetargetController else { return }
 
-        audioController.startDemoAudio()
-
         do {
             try await jockRetargetController.loadIfNeeded()
 
@@ -162,6 +163,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 for: spawnPose,
                 fallbackHeadToFloorOffset: config.fallbackHeadToFloorOffset,
                 timeoutSeconds: config.floorDetectionTimeoutSeconds
+            )
+
+            audioController.startDemoAudio(
+                spawnPose: spawnPose,
+                floorY: floorY
             )
 
             jockRetargetController.configureSpawn(
