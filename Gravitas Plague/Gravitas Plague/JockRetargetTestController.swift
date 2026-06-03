@@ -89,6 +89,7 @@ final class JockRetargetTestController {
     private let attackConfiguration = JockAttackConfiguration.phaseOne
     private var playerExposure: Int = 0
     private var escalateAfterHitReact = false
+    private var lastAttackClipID: String?
     private var acceptedHitCount: Int = 0
     private var lastHitClipIDBySide: [JockHitSide: String] = [:]
     private var lastHitClipIDByBucket: [String: String] = [:]
@@ -162,6 +163,7 @@ final class JockRetargetTestController {
         activeAttack = nil
         escalateAfterHitReact = false
         playerExposure = 0
+        lastAttackClipID = nil
 
         if resetHitCount {
             acceptedHitCount = 0
@@ -1183,7 +1185,7 @@ final class JockRetargetTestController {
               clipID: \(attackClip.clipID)
               joint: \(metadata.attackingJoint)
               window: \(metadata.attackWindowStartFrame)-\(metadata.attackWindowEndFrame)
-              radius: \(metadata.damageRadiusMeters)
+              bodyBox: \(String(format: "%.2f", attackConfiguration.playerDangerBoxWidthMeters))m x \(String(format: "%.2f", attackConfiguration.playerDangerBoxDepthMeters))m x \(String(format: "%.2f", attackConfiguration.playerDangerBoxHeightMeters))m
               damage: \(metadata.damageAmount)
             """
         )
@@ -1204,7 +1206,29 @@ final class JockRetargetTestController {
             return nil
         }
 
-        return available.randomElement()
+        var candidates = available
+
+        if let lastAttackClipID,
+           candidates.count > 1 {
+            candidates.removeAll { $0.clipID == lastAttackClipID }
+        }
+
+        let previousAttackClipID = lastAttackClipID
+        let selected = candidates.randomElement()
+
+        lastAttackClipID = selected?.clipID
+
+        print(
+            """
+            [Gravitas Attack] Clip selection
+              configured: \(attackConfiguration.attackClipIDs.joined(separator: ", "))
+              available: \(available.map(\.clipID).joined(separator: ", "))
+              previous: \(previousAttackClipID ?? "none")
+              selected: \(selected?.clipID ?? "none")
+            """
+        )
+
+        return selected
     }
 
     private func fallbackAttackJointName(
@@ -1242,21 +1266,20 @@ final class JockRetargetTestController {
             headPosition: latestHeadPosition
         )
 
-        if distance <= attackConfiguration.attackProximityMeters {
+        if distance <= attackConfiguration.resumeFollowDistanceMeters {
             let delay = attackConfiguration.randomAggressiveDelay()
             playFollowIdle(allowDuringCombat: true)
             combatState = .closeRangeReady(delayRemaining: delay)
 
-            print("[Gravitas Attack] Player still close. Returning to CloseRangeReady.")
-        } else if distance >= attackConfiguration.resumeFollowDistanceMeters {
-            exitCloseRangeToFollow()
+            print(
+                """
+                [Gravitas Attack] Player still in attack band. Returning to CloseRangeReady.
+                  distance: \(String(format: "%.3f", distance))
+                  resumeFollowDistance: \(attackConfiguration.resumeFollowDistanceMeters)
+                """
+            )
         } else {
-            combatState = .normal
-            followDemoState = .idleStopped
-            followDelayElapsed = 0
-            playFollowIdle()
-
-            print("[Gravitas Attack] Player near edge. Returning to idle stop.")
+            exitCloseRangeToFollow()
         }
     }
 
@@ -1301,16 +1324,12 @@ final class JockRetargetTestController {
             return
         }
 
-        let radius = attack.metadata.damageRadiusMeters > 0
-            ? attack.metadata.damageRadiusMeters
-            : attackConfiguration.playerDangerSphereRadiusMeters
-
-        let distance = simd_distance(
-            handWorldPosition,
-            currentHeadPosition
+        let dangerBoxCheck = playerDangerBoxCheck(
+            handWorldPosition: handWorldPosition,
+            headPosition: currentHeadPosition
         )
 
-        guard distance <= radius else {
+        guard dangerBoxCheck.isInside else {
             activeAttack = attack
             return
         }
@@ -1321,7 +1340,49 @@ final class JockRetargetTestController {
         applyPlayerDamage(
             amount: attack.metadata.damageAmount,
             handWorldPosition: handWorldPosition,
-            distance: distance
+            distance: dangerBoxCheck.distanceToBox
+        )
+    }
+
+    private func playerDangerBoxCheck(
+        handWorldPosition: SIMD3<Float>,
+        headPosition: SIMD3<Float>
+    ) -> (isInside: Bool, distanceToBox: Float) {
+        let halfWidth = attackConfiguration.playerDangerBoxWidthMeters * 0.5
+        let halfDepth = attackConfiguration.playerDangerBoxDepthMeters * 0.5
+
+        let topY = headPosition.y + attackConfiguration.playerDangerBoxTopOffsetMeters
+        let bottomY = topY - attackConfiguration.playerDangerBoxHeightMeters
+
+        let minPoint = SIMD3<Float>(
+            headPosition.x - halfWidth,
+            bottomY,
+            headPosition.z - halfDepth
+        )
+
+        let maxPoint = SIMD3<Float>(
+            headPosition.x + halfWidth,
+            topY,
+            headPosition.z + halfDepth
+        )
+
+        let isInside =
+            handWorldPosition.x >= minPoint.x &&
+            handWorldPosition.x <= maxPoint.x &&
+            handWorldPosition.y >= minPoint.y &&
+            handWorldPosition.y <= maxPoint.y &&
+            handWorldPosition.z >= minPoint.z &&
+            handWorldPosition.z <= maxPoint.z
+
+        let closestPoint = SIMD3<Float>(
+            min(max(handWorldPosition.x, minPoint.x), maxPoint.x),
+            min(max(handWorldPosition.y, minPoint.y), maxPoint.y),
+            min(max(handWorldPosition.z, minPoint.z), maxPoint.z)
+        )
+
+        return (
+            isInside: isInside,
+            distanceToBox: simd_distance(handWorldPosition, closestPoint)
         )
     }
 
@@ -1356,7 +1417,7 @@ final class JockRetargetTestController {
             [Gravitas Damage] Player damaged
               amount: \(amount)
               exposure: \(playerExposure)/\(attackConfiguration.exposureMax)
-              handDistance: \(String(format: "%.3f", distance))
+              bodyBoxDistance: \(String(format: "%.3f", distance))
               handWorldPosition: \(handWorldPosition)
             """
         )

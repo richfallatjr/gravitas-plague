@@ -76,6 +76,11 @@ struct PlagueDemoView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
+                    Button("Debug Damage Tint") {
+                        session.triggerDamageTint(intensity: 1.0)
+                    }
+                    .buttonStyle(.bordered)
+
                     if let manifestLoadError {
                         Text(manifestLoadError)
                             .font(.caption)

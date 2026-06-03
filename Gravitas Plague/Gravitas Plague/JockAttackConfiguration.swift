@@ -9,7 +9,10 @@ struct JockAttackConfiguration: Equatable {
     let aggressiveDelayMinSeconds: TimeInterval
     let aggressiveDelayMaxSeconds: TimeInterval
 
-    let playerDangerSphereRadiusMeters: Float
+    let playerDangerBoxWidthMeters: Float
+    let playerDangerBoxDepthMeters: Float
+    let playerDangerBoxHeightMeters: Float
+    let playerDangerBoxTopOffsetMeters: Float
 
     let exposureMax: Int
     let failOnExposureMax: Bool
@@ -27,7 +30,10 @@ struct JockAttackConfiguration: Equatable {
         aggressiveDelayMinSeconds: 0.0,
         aggressiveDelayMaxSeconds: 0.4,
 
-        playerDangerSphereRadiusMeters: 0.30,
+        playerDangerBoxWidthMeters: 2.0 * 0.3048,
+        playerDangerBoxDepthMeters: 2.0 * 0.3048,
+        playerDangerBoxHeightMeters: 5.0 * 0.3048,
+        playerDangerBoxTopOffsetMeters: 0.12,
 
         exposureMax: 100,
         failOnExposureMax: false,
