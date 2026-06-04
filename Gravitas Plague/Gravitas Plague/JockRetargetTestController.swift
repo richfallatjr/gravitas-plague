@@ -89,7 +89,6 @@ final class JockRetargetTestController {
     private let attackConfiguration = JockAttackConfiguration.phaseOne
     private var playerExposure: Int = 0
     private var escalateAfterHitReact = false
-    private var lastAttackClipID: String?
     private var acceptedHitCount: Int = 0
     private var lastHitClipIDBySide: [JockHitSide: String] = [:]
     private var lastHitClipIDByBucket: [String: String] = [:]
@@ -163,7 +162,6 @@ final class JockRetargetTestController {
         activeAttack = nil
         escalateAfterHitReact = false
         playerExposure = 0
-        lastAttackClipID = nil
 
         if resetHitCount {
             acceptedHitCount = 0
@@ -267,13 +265,19 @@ final class JockRetargetTestController {
             print("[Gravitas SubAnim] Missing or invalid head snap sub-animations: \(missingHeadSnapSides.joined(separator: " | "))")
         }
 
-        let missingAttackClips = attackConfiguration.attackClipIDs
-            .filter { loadedClips[$0] == nil }
+        let requiredAttackClipIDs = [
+            "charged-slash-left",
+            "charged-slash-right"
+        ]
+
+        let missingAttackClips = requiredAttackClipIDs.filter { clipID in
+            loadedClips[clipID] == nil
+        }
 
         if missingAttackClips.isEmpty {
-            print("[Gravitas Attack] All phase-1 attack clips loaded.")
+            print("[Gravitas Attack] All phase-one attack clips loaded.")
         } else {
-            print("[Gravitas Attack] Missing phase-1 attack clips: \(missingAttackClips.joined(separator: ", "))")
+            print("[Gravitas Attack] Missing attack clips: \(missingAttackClips.joined(separator: ", "))")
         }
 
         let adapter = JockSkeletonAdapter(
@@ -322,6 +326,24 @@ final class JockRetargetTestController {
 
         validateHitClipsArePrewarmed()
 
+        let strictAttackClipIDs = [
+            "charged-slash-left",
+            "charged-slash-right"
+        ]
+
+        let loadedAttackIDs = strictAttackClipIDs.filter { clipID in
+            clipsByID[clipID] != nil
+        }
+
+        print(
+            """
+            [Gravitas Attack] Strict attack clip load check
+              required: \(strictAttackClipIDs.joined(separator: ", "))
+              loaded: \(loadedAttackIDs.joined(separator: ", "))
+              allClipIDsCount: \(clipsByID.keys.count)
+            """
+        )
+
         debugStatus = """
         JockAsset Retarget Test loaded.
         Asset: dad_biped.usdz
@@ -338,7 +360,10 @@ final class JockRetargetTestController {
             hitConfiguration.clipBuckets.values.flatMap { $0 } +
             hitConfiguration.deathClipIDs +
             hitConfiguration.headSnapSubAnimationBySide.values.flatMap { $0 } +
-            attackConfiguration.attackClipIDs
+            [
+                "charged-slash-left",
+                "charged-slash-right"
+            ]
         )
 
         let loadedClipIDs = Set(clipsByID.keys)
@@ -787,6 +812,7 @@ final class JockRetargetTestController {
                 clip,
                 loop: false,
                 transition: true,
+                locomotionPolicy: .ignoreClipLocomotion,
                 runtimeOverride: followVisualRuntimeOverride()
             )
 
@@ -802,6 +828,7 @@ final class JockRetargetTestController {
                 clip,
                 loop: false,
                 transition: true,
+                locomotionPolicy: .ignoreClipLocomotion,
                 runtimeOverride: followVisualRuntimeOverride()
             )
         }
@@ -1135,28 +1162,35 @@ final class JockRetargetTestController {
     private func startAttackIfPossible() {
         guard followDemoState != .inactive else { return }
 
-        guard let attackClip = randomAvailableAttackClip() else {
-            print("[Gravitas Attack] No available attack clips. Staying idle.")
-            playFollowIdle(allowDuringCombat: true)
-            combatState = .closeRangeReady(
-                delayRemaining: attackConfiguration.randomAggressiveDelay()
-            )
+        // HARD STOP: attack selection is ONLY these two IDs.
+        let attackIDs = [
+            "charged-slash-left",
+            "charged-slash-right"
+        ]
+
+        guard let leftClip = clipsByID["charged-slash-left"] else {
+            assertionFailure("[Gravitas Attack] Missing REQUIRED clip: charged-slash-left")
+            print("[Gravitas Attack] ERROR missing REQUIRED clip: charged-slash-left")
             return
         }
 
-        let metadata = attackClip.resolvedAttackMetadata(
-            fallbackJoint: fallbackAttackJointName(for: attackClip)
+        guard let rightClip = clipsByID["charged-slash-right"] else {
+            assertionFailure("[Gravitas Attack] Missing REQUIRED clip: charged-slash-right")
+            print("[Gravitas Attack] ERROR missing REQUIRED clip: charged-slash-right")
+            return
+        }
+
+        let attackClip: JockAnimClip = Bool.random() ? leftClip : rightClip
+
+        print(
+            """
+            [Gravitas Attack] TWO-CLIP ONLY RANDOM SELECT
+              candidates: \(attackIDs.joined(separator: ", "))
+              selected: \(attackClip.clipID)
+            """
         )
 
-        if attackClip.attack == nil {
-            print(
-                """
-                [Gravitas Attack] Attack clip has no metadata; using fallback window.
-                  clipID: \(attackClip.clipID)
-                  fallbackJoint: \(metadata.attackingJoint)
-                """
-            )
-        }
+        let metadata = attackClip.resolvedAttackMetadata()
 
         activeAttack = JockActiveAttackState(
             clipID: attackClip.clipID,
@@ -1176,6 +1210,7 @@ final class JockRetargetTestController {
             attackClip,
             loop: false,
             transition: true,
+            locomotionPolicy: .ignoreClipLocomotion,
             runtimeOverride: followVisualRuntimeOverride()
         )
 
@@ -1185,66 +1220,10 @@ final class JockRetargetTestController {
               clipID: \(attackClip.clipID)
               joint: \(metadata.attackingJoint)
               window: \(metadata.attackWindowStartFrame)-\(metadata.attackWindowEndFrame)
-              bodyBox: \(String(format: "%.2f", attackConfiguration.playerDangerBoxWidthMeters))m x \(String(format: "%.2f", attackConfiguration.playerDangerBoxDepthMeters))m x \(String(format: "%.2f", attackConfiguration.playerDangerBoxHeightMeters))m
+              radius: \(metadata.damageRadiusMeters)
               damage: \(metadata.damageAmount)
             """
         )
-    }
-
-    private func randomAvailableAttackClip() -> JockAnimClip? {
-        let available = attackConfiguration.attackClipIDs.compactMap { clipID in
-            clipsByID[clipID]
-        }
-
-        let missing = attackConfiguration.attackClipIDs.filter { clipsByID[$0] == nil }
-
-        if !missing.isEmpty {
-            print("[Gravitas Attack] Missing configured attack clips: \(missing.joined(separator: ", "))")
-        }
-
-        guard !available.isEmpty else {
-            return nil
-        }
-
-        var candidates = available
-
-        if let lastAttackClipID,
-           candidates.count > 1 {
-            candidates.removeAll { $0.clipID == lastAttackClipID }
-        }
-
-        let previousAttackClipID = lastAttackClipID
-        let selected = candidates.randomElement()
-
-        lastAttackClipID = selected?.clipID
-
-        print(
-            """
-            [Gravitas Attack] Clip selection
-              configured: \(attackConfiguration.attackClipIDs.joined(separator: ", "))
-              available: \(available.map(\.clipID).joined(separator: ", "))
-              previous: \(previousAttackClipID ?? "none")
-              selected: \(selected?.clipID ?? "none")
-            """
-        )
-
-        return selected
-    }
-
-    private func fallbackAttackJointName(
-        for clip: JockAnimClip
-    ) -> String {
-        let normalizedClipID = clip.clipID.lowercased()
-
-        if normalizedClipID.contains("left") {
-            return "LeftHand"
-        }
-
-        if normalizedClipID.contains("right") {
-            return "RightHand"
-        }
-
-        return "RightHand"
     }
 
     private func handleAttackCompleted(_ completedClip: JockAnimClip) {
@@ -1462,6 +1441,7 @@ final class JockRetargetTestController {
             clip,
             loop: step.loopClip,
             transition: true,
+            locomotionPolicy: .useClipLocomotion,
             runtimeOverride: runtimeOverrides.clips[step.clipID] ?? .identity
         )
     }
@@ -1615,6 +1595,7 @@ final class JockRetargetTestController {
             clip,
             loop: true,
             transition: true,
+            locomotionPolicy: .useClipLocomotion,
             runtimeOverride: followVisualRuntimeOverride()
         )
 
@@ -1636,6 +1617,7 @@ final class JockRetargetTestController {
             clip,
             loop: true,
             transition: true,
+            locomotionPolicy: .useClipLocomotion,
             runtimeOverride: followVisualRuntimeOverride()
         )
 

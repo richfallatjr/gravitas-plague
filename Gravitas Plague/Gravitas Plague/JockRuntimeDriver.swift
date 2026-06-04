@@ -2,6 +2,11 @@ import Foundation
 import RealityKit
 import simd
 
+enum JockClipLocomotionPolicy: Equatable {
+    case useClipLocomotion
+    case ignoreClipLocomotion
+}
+
 @MainActor
 final class JockRuntimeDriver {
     enum DriverState: Equatable {
@@ -109,6 +114,7 @@ final class JockRuntimeDriver {
     )
     private var previousRelativeLocomotionSample = LocomotionSample.zero
     private var activeRuntimeOverride = JockRuntimeClipOverride.identity
+    private var activeLocomotionPolicy: JockClipLocomotionPolicy = .useClipLocomotion
     private var activeSubAnimations: [ActiveSubAnimation] = []
     private var preparedClipsByID: [String: JockPreparedClip] = [:]
 
@@ -151,12 +157,14 @@ final class JockRuntimeDriver {
         _ clip: JockAnimClip,
         loop: Bool,
         transition: Bool = true,
+        locomotionPolicy: JockClipLocomotionPolicy = .useClipLocomotion,
         runtimeOverride: JockRuntimeClipOverride = .identity
     ) {
         guard let modelEntity else { return }
 
         activeClip = clip
         activeRuntimeOverride = runtimeOverride
+        activeLocomotionPolicy = locomotionPolicy
         loopCurrentClip = loop
         playbackTime = 0
         currentActiveClipID = clip.clipID
@@ -192,11 +200,13 @@ final class JockRuntimeDriver {
 
         print(
             """
-            [Gravitas Virtual Root] Starting clip
+            [Gravitas Jock] playClip
               clipID: \(clip.clipID)
-              entryHeading: \(runtimeOverride.entryHeadingDegrees)
-              exitHeading: \(runtimeOverride.exitHeadingDegrees)
-              commitRootYaw: \(runtimeOverride.commitRootYawOnCompletion)
+              loop: \(loop)
+              locomotionPolicy: \(locomotionPolicy)
+              runtimeOverrideEntry: \(runtimeOverride.entryHeadingDegrees)
+              runtimeOverrideExit: \(runtimeOverride.exitHeadingDegrees)
+              commitYaw: \(runtimeOverride.commitRootYawOnCompletion)
             """
         )
     }
@@ -274,6 +284,7 @@ final class JockRuntimeDriver {
         currentPlaybackTime = 0
         currentJointTransforms = modelEntity?.jointTransforms ?? baseJointTransforms
         activeRuntimeOverride = .identity
+        activeLocomotionPolicy = .useClipLocomotion
         activeSubAnimations.removeAll()
         resetFrozenLocomotionState()
     }
@@ -298,6 +309,7 @@ final class JockRuntimeDriver {
         currentActiveClipID = nil
         currentPlaybackTime = 0
         activeRuntimeOverride = .identity
+        activeLocomotionPolicy = .useClipLocomotion
         activeSubAnimations.removeAll()
         resetFrozenLocomotionState()
     }
@@ -320,6 +332,7 @@ final class JockRuntimeDriver {
         currentActiveClipID = nil
         currentPlaybackTime = 0
         activeRuntimeOverride = .identity
+        activeLocomotionPolicy = .useClipLocomotion
         activeSubAnimations.removeAll()
         resetFrozenLocomotionState()
     }
@@ -417,6 +430,7 @@ final class JockRuntimeDriver {
                 currentActiveClipID = nil
                 currentPlaybackTime = 0
                 activeRuntimeOverride = .identity
+                activeLocomotionPolicy = .useClipLocomotion
                 resetFrozenLocomotionState()
             }
 
@@ -471,6 +485,8 @@ final class JockRuntimeDriver {
                     self.activeClip = nil
                     currentActiveClipID = nil
                     currentPlaybackTime = 0
+                    activeRuntimeOverride = .identity
+                    activeLocomotionPolicy = .useClipLocomotion
 
                     onClipCompleted?(completedClip)
                     return
@@ -821,6 +837,10 @@ final class JockRuntimeDriver {
         at time: TimeInterval,
         didWrap: Bool
     ) {
+        guard activeLocomotionPolicy == .useClipLocomotion else {
+            return
+        }
+
         if tryEmitLocomotionDeltaToHandler(
             clip,
             at: time,
