@@ -27,6 +27,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var jockRetargetController: JockRetargetTestController?
     private var hordeEnemyControllersByID: [UUID: JockRetargetTestController] = [:]
     private var activeHordeEnemyIDs = Set<UUID>()
+    private var dyingHordeEnemyIDs = Set<UUID>()
+    private var corpseHordeEnemyIDs = Set<UUID>()
     private var hordeBenchmarkRunning = false
     private var hordeCurrentWave = 0
     private var hordePlayerHitsThisWave = 0
@@ -117,6 +119,15 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         jockController.onBenchmarkEnemyKilled = { [weak self] id, wave in
             Task { @MainActor in
                 self?.handleBenchmarkEnemyKilled(
+                    id: id,
+                    wave: wave
+                )
+            }
+        }
+
+        jockController.onBenchmarkEnemyDeathAnimationFinished = { [weak self] id, wave in
+            Task { @MainActor in
+                self?.handleBenchmarkEnemyDeathAnimationFinished(
                     id: id,
                     wave: wave
                 )
@@ -303,6 +314,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeBenchmarkRunning = false
         clearHordeEnemyControllers()
         activeHordeEnemyIDs.removeAll()
+        dyingHordeEnemyIDs.removeAll()
+        corpseHordeEnemyIDs.removeAll()
         hordePlayerHitsThisWave = 0
     }
 
@@ -350,6 +363,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         clearHordeEnemyControllers()
         activeHordeEnemyIDs.removeAll()
+        dyingHordeEnemyIDs.removeAll()
+        corpseHordeEnemyIDs.removeAll()
 
         hordeCurrentWave = nextWave
         hordePlayerHitsThisWave = 0
@@ -600,10 +615,18 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
             if let sceneRoot = self.sceneRoot,
                let deathHeadPose = self.deathHeadPose {
+                let deathHeadEntity = self.makeDeathHeadPoseEntity(
+                    from: deathHeadPose
+                )
+
+                sceneRoot.addChild(deathHeadEntity)
+
                 self.playYouDiedRoomAnchored(
                     world: sceneRoot,
-                    headPose: deathHeadPose
+                    head: deathHeadEntity
                 )
+
+                deathHeadEntity.removeFromParent()
             } else {
                 print("[PlagueDeath] Cannot show you_died.png; missing world or head pose.")
             }
@@ -652,10 +675,12 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         hordeEnemyControllersByID.removeAll()
         activeHordeEnemyIDs.removeAll()
+        dyingHordeEnemyIDs.removeAll()
+        corpseHordeEnemyIDs.removeAll()
         hordeBenchmarkRunning = false
         audioController.stopDemoAudio()
 
-        print("[PlagueDeath] horde enemies cleared after blackout; death billboard preserved.")
+        print("[PlagueDeath] active enemies and corpses cleared after final dark; death billboard preserved.")
     }
 
     private func handleBenchmarkEnemyKilled(
@@ -680,29 +705,86 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
 
         activeHordeEnemyIDs.remove(id)
-        audioController.stopHostAudioSource(id: id)
-
-        if let controller = hordeEnemyControllersByID.removeValue(forKey: id) {
-            controller.hide()
-            controller.rootEntity.removeFromParent()
-        }
+        dyingHordeEnemyIDs.insert(id)
+        audioController.stopHostDadBreathing(id: id)
 
         hordeTotalKilled += 1
 
         print(
             """
-            [HordeBenchmark] enemy killed
+            [HordeBenchmark] kill shot confirmed
               id: \(id)
               wave: \(wave)
               aliveRemaining: \(activeHordeEnemyIDs.count)
-              activeEnemyIDs: \(activeHordeEnemyIDs.count)
+              active: \(activeHordeEnemyIDs.count)
+              dying: \(dyingHordeEnemyIDs.count)
+              corpses: \(corpseHordeEnemyIDs.count)
               totalKilled: \(hordeTotalKilled)
             """
         )
 
-        guard activeHordeEnemyIDs.isEmpty else { return }
+        checkWaveCanEnd(
+            wave: wave
+        )
+    }
+
+    private func handleBenchmarkEnemyDeathAnimationFinished(
+        id: UUID,
+        wave: Int
+    ) {
+        if dyingHordeEnemyIDs.contains(id) {
+            dyingHordeEnemyIDs.remove(id)
+            corpseHordeEnemyIDs.insert(id)
+        } else if !corpseHordeEnemyIDs.contains(id) {
+            print(
+                """
+                [HordeBenchmark] WARNING death animation finished for unknown id
+                  id: \(id)
+                  active: \(activeHordeEnemyIDs.count)
+                  dying: \(dyingHordeEnemyIDs.count)
+                  corpses: \(corpseHordeEnemyIDs.count)
+                """
+            )
+            corpseHordeEnemyIDs.insert(id)
+        }
+
+        print(
+            """
+            [HordeBenchmark] corpse registered
+              id: \(id)
+              wave: \(wave)
+              active: \(activeHordeEnemyIDs.count)
+              dying: \(dyingHordeEnemyIDs.count)
+              corpses: \(corpseHordeEnemyIDs.count)
+            """
+        )
+
+        checkWaveCanEnd(
+            wave: wave
+        )
+    }
+
+    private func checkWaveCanEnd(
+        wave: Int
+    ) {
+        guard hordeBenchmarkRunning else { return }
+        guard !isPlayerDeathSequenceActive else { return }
         guard pendingNextBenchmarkWaveTask == nil else {
             print("[HordeBenchmark] wave clear ignored: next wave already pending")
+            return
+        }
+
+        guard activeHordeEnemyIDs.isEmpty,
+              dyingHordeEnemyIDs.isEmpty else {
+            print(
+                """
+                [HordeBenchmark] wave not clear yet
+                  wave: \(wave)
+                  active: \(activeHordeEnemyIDs.count)
+                  dying: \(dyingHordeEnemyIDs.count)
+                  corpses: \(corpseHordeEnemyIDs.count)
+                """
+            )
             return
         }
 
@@ -710,6 +792,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             """
             [HordeBenchmark] wave cleared
               wave: \(wave)
+              corpsesToClear: \(corpseHordeEnemyIDs.count)
               nextWave: \(wave + 1)
             """
         )
@@ -724,33 +807,81 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             guard hordeBenchmarkRunning,
                   !isPlayerDeathSequenceActive else { return }
 
+            clearWaveCorpses()
+
             await spawnNextHordeWave()
         }
     }
 
+    private func clearWaveCorpses() {
+        let ids = corpseHordeEnemyIDs
+
+        print(
+            """
+            [HordeBenchmark] clearing wave corpses
+              count: \(ids.count)
+              ids: \(ids.map { $0.uuidString }.joined(separator: ", "))
+            """
+        )
+
+        for id in ids {
+            audioController.stopHostAudioSource(id: id)
+
+            if let controller = hordeEnemyControllersByID.removeValue(forKey: id) {
+                controller.hide()
+                controller.rootEntity.removeFromParent()
+            }
+        }
+
+        corpseHordeEnemyIDs.removeAll()
+    }
+
+    private func makeDeathHeadPoseEntity(
+        from pose: PhaseOneSpawnPose
+    ) -> Entity {
+        let head = Entity()
+        head.name = "DeathTimeHeadPose"
+        head.position = pose.headPosition
+
+        let yaw = PhaseOneMath.yawRadiansForNegativeZForward(
+            worldForward: pose.headForward
+        )
+
+        head.orientation = simd_quatf(
+            angle: yaw,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
+
+        return head
+    }
+
     private func playYouDiedRoomAnchored(
         world: Entity,
-        headPose: PhaseOneSpawnPose
+        head: Entity
     ) {
         guard !deathRunning else {
             print("[PlagueDeath] you_died already running.")
             return
         }
 
-        let root = ensureDeathPresentationRoot(world: world)
-
-        guard let texture = loadYouDiedTexture() else {
-            return
-        }
-
         cleanupYouDiedBillboard()
+        let root = ensureDeathPresentationRoot(world: world)
         deathRunning = true
 
-        let headPosition = headPose.headPosition
-        let forward = PhaseOneMath.normalizedOrFallback(
-            headPose.headForward,
-            fallback: SIMD3<Float>(0, 0, -1)
+        let headMatrix = head.transformMatrix(relativeTo: world)
+        let headPosition = head.position(relativeTo: world)
+
+        var forward = -SIMD3<Float>(
+            headMatrix.columns.2.x,
+            headMatrix.columns.2.y,
+            headMatrix.columns.2.z
         )
+
+        if simd_length(forward) < 0.0001 {
+            forward = SIMD3<Float>(0, 0, -1)
+        } else {
+            forward = simd_normalize(forward)
+        }
 
         let targetPosition = headPosition +
             forward * deathCardForwardMeters -
@@ -766,48 +897,63 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             relativeTo: world
         )
 
-        root.addChild(rig)
+        do {
+            let texture = try loadYouDiedTexture()
+            let material = makeTransparentYouDiedMaterial(
+                texture: texture,
+                alpha: 0.0
+            )
 
-        var material = UnlitMaterial()
-        material.color = .init(
-            tint: UIColor.white.withAlphaComponent(0.0),
-            texture: .init(texture)
-        )
-        material.blending = .transparent(opacity: 0.001)
+            let imageEntity = ModelEntity(
+                mesh: .generatePlane(
+                    width: deathCardWidthMeters,
+                    height: deathCardHeightMeters
+                ),
+                materials: [material]
+            )
 
-        let imageEntity = ModelEntity(
-            mesh: .generatePlane(
-                width: deathCardWidthMeters,
-                height: deathCardHeightMeters
-            ),
-            materials: [material]
-        )
+            imageEntity.name = "you_died.png_billboard"
+            imageEntity.position = .zero
 
-        imageEntity.name = "you_died.png"
-        imageEntity.position = .zero
+            rig.addChild(imageEntity)
+            root.addChild(rig)
 
-        rig.addChild(imageEntity)
+            deathRig = rig
+            deathImageEntity = imageEntity
+            deathBillboardOpacity = 0.0
 
-        deathRig = rig
-        deathImageEntity = imageEntity
-        deathBillboardOpacity = 0.0
+            print(
+                """
+                [PlagueDeath] you_died billboard shown
+                  root: \(root.name)
+                  rootParent: \(root.parent?.name ?? "nil")
+                  rigParent: \(rig.parent?.name ?? "nil")
+                  entityParent: \(imageEntity.parent?.name ?? "nil")
+                  headPosition: \(headPosition)
+                  targetPosition: \(targetPosition)
+                  forward: \(forward)
+                  distanceFromHead: \(simd_length(targetPosition - headPosition))
+                  width: \(deathCardWidthMeters)
+                  height: \(deathCardHeightMeters)
+                """
+            )
 
-        print(
-            """
-            [PlagueDeath] you_died room anchored
-              position: \(targetPosition)
-              forward: \(forward)
-              width: \(deathCardWidthMeters)
-              height: \(deathCardHeightMeters)
-              root: \(root.name)
-              rigParent: \(rig.parent?.name ?? "nil")
-            """
-        )
+            Task { @MainActor in
+                await fadeYouDiedAlpha(
+                    to: 1.0,
+                    duration: 0.20
+                )
+            }
+        } catch {
+            deathRunning = false
 
-        Task { @MainActor in
-            await fadeYouDiedAlpha(
-                to: 1.0,
-                duration: 0.20
+            print(
+                """
+                [PlagueDeath] ERROR showing you_died.png: \(error.localizedDescription)
+                  deathPresentationRoot exists: \(deathPresentationRoot != nil)
+                  youDiedRig exists: \(deathRig != nil)
+                  youDiedEntity exists: \(deathImageEntity != nil)
+                """
             )
         }
     }
@@ -825,7 +971,12 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         deathPresentationRoot = root
 
-        print("[PlagueDeath] death presentation root created")
+        print(
+            """
+            [PlagueDeath] death presentation root created
+              parent: \(root.parent?.name ?? "nil")
+            """
+        )
 
         return root
     }
@@ -839,19 +990,50 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
     }
 
-    private func loadYouDiedTexture() -> TextureResource? {
+    private func loadYouDiedTexture() throws -> TextureResource {
+        if let url = Bundle.main.url(
+            forResource: "you_died",
+            withExtension: "png"
+        ) {
+            print("[PlagueDeath] you_died.png found at \(url.path)")
+        } else {
+            print("[PlagueDeath] WARNING Bundle lookup did not find you_died.png")
+        }
+
         if let texture = try? TextureResource.load(named: "you_died") {
-            print("[PlagueDeath] loaded texture named you_died")
+            print("[PlagueDeath] loaded TextureResource named you_died")
             return texture
         }
 
         if let texture = try? TextureResource.load(named: "you_died.png") {
-            print("[PlagueDeath] loaded texture named you_died.png")
+            print("[PlagueDeath] loaded TextureResource named you_died.png")
             return texture
         }
 
-        print("[PlagueDeath] ERROR: failed to load you_died.png")
-        return nil
+        throw NSError(
+            domain: "PlagueDeath",
+            code: 404,
+            userInfo: [
+                NSLocalizedDescriptionKey:
+                    "Could not load you_died.png. Confirm it is in the app target resources."
+            ]
+        )
+    }
+
+    private func makeTransparentYouDiedMaterial(
+        texture: TextureResource,
+        alpha: Float
+    ) -> UnlitMaterial {
+        let clampedAlpha = max(0.001, min(1.0, alpha))
+
+        var material = UnlitMaterial()
+        material.color = .init(
+            tint: UIColor.white.withAlphaComponent(CGFloat(alpha)),
+            texture: .init(texture)
+        )
+        material.blending = .transparent(opacity: .init(floatLiteral: clampedAlpha))
+
+        return material
     }
 
     private func setYouDiedAlpha(

@@ -301,6 +301,24 @@ final class GravitasDemoAudioController {
         print("[Gravitas Audio] Stopped horde host audio source: \(id)")
     }
 
+    func stopHostDadBreathing(
+        id: UUID
+    ) {
+        guard var source = hostAudioSourcesByID[id] else {
+            return
+        }
+
+        source.breathingStartTask?.cancel()
+        source.breathingStartTask = nil
+
+        source.dadBreathingController?.stop()
+        source.dadBreathingController = nil
+
+        hostAudioSourcesByID[id] = source
+
+        print("[Gravitas Audio] Stopped horde Dad breathing: \(id)")
+    }
+
     func startImmersiveAudio() {
         prepareIfNeeded()
 

@@ -11,6 +11,13 @@ final class JockRetargetTestController {
         case following
     }
 
+    enum InfectedLifecycleState: String {
+        case alive
+        case dying
+        case corpse
+        case despawned
+    }
+
     enum RetargetError: LocalizedError {
         case missingCharacterAsset
         case noSkinnedModelEntity
@@ -41,6 +48,7 @@ final class JockRetargetTestController {
     var onBenchmarkPlayerHit: ((Int, UUID?) -> Bool)?
     var onBenchmarkPlayerDeath: ((Int, Int) -> Void)?
     var onBenchmarkEnemyKilled: ((UUID, Int) -> Void)?
+    var onBenchmarkEnemyDeathAnimationFinished: ((UUID, Int) -> Void)?
     var onAttackStarted: (() -> Void)?
 
     private let visualOffsetEntity = Entity()
@@ -101,6 +109,8 @@ final class JockRetargetTestController {
     private var hordeWave = 1
     private var hordeSpawnIndex = 0
     private var hitsToKill = Int.random(in: 3...5)
+    private var lifecycleState: InfectedLifecycleState = .alive
+    private var activeDeathClipID: String?
     private var acceptedHitCount: Int = 0
     private var lastHitClipIDBySide: [JockHitSide: String] = [:]
     private var lastHitClipIDByBucket: [String: String] = [:]
@@ -479,6 +489,8 @@ final class JockRetargetTestController {
         hordeWave = wave
         hordeSpawnIndex = spawnIndex
         self.hitsToKill = max(1, hitsToKill)
+        lifecycleState = .alive
+        activeDeathClipID = nil
         acceptedHitCount = 0
 
         rootEntity.name = "HordeInfected_wave\(wave)_index\(spawnIndex)_\(id.uuidString.prefix(6))"
@@ -504,6 +516,8 @@ final class JockRetargetTestController {
         isVisible = false
         isPlayingPacingLoop = false
         followDemoState = .inactive
+        lifecycleState = .despawned
+        activeDeathClipID = nil
         resetCombatRuntime()
         resetHitSelectionMemory()
         followDelayElapsed = 0
@@ -600,6 +614,8 @@ final class JockRetargetTestController {
     ) throws {
         show()
 
+        lifecycleState = .alive
+        activeDeathClipID = nil
         isPlayingPacingLoop = false
         followDemoState = .idleStopped
         followDelayElapsed = 0
@@ -663,6 +679,8 @@ final class JockRetargetTestController {
         isVisible = false
         rootEntity.isEnabled = false
         playerAttackEnabled = false
+        lifecycleState = .despawned
+        activeDeathClipID = nil
         followDemoState = .inactive
         followDelayElapsed = 0
         activeAttack = nil
@@ -743,6 +761,12 @@ final class JockRetargetTestController {
         }
 
         switch combatState {
+        case .dead where lifecycleState == .dying &&
+            completedClip.clipID == activeDeathClipID:
+            finishBenchmarkEnemyDeathAnimation(
+                completedClip: completedClip
+            )
+
         case .hitReaction(let clipID, let damage):
             guard completedClip.clipID == clipID else {
                 return
@@ -849,6 +873,17 @@ final class JockRetargetTestController {
         _ event: JockHandHitDetector.HitEvent
     ) {
         guard followDemoState != .inactive else { return }
+
+        guard lifecycleState == .alive else {
+            print(
+                """
+                [InfectedDamage] ignored hit
+                  id: \(hordeID)
+                  state: \(lifecycleState.rawValue)
+                """
+            )
+            return
+        }
 
         if case .hitReaction = combatState {
             return
@@ -961,42 +996,106 @@ final class JockRetargetTestController {
         let killedID = hordeID
         let killedWave = hordeWave
 
+        guard lifecycleState == .alive else {
+            print(
+                """
+                [InfectedDeath] duplicate begin ignored
+                  id: \(killedID)
+                  state: \(lifecycleState.rawValue)
+                """
+            )
+            return
+        }
+
+        lifecycleState = .dying
+        activeDeathClipID = selectedClipID
         combatState = .dead
         activeAttack = nil
         followDemoState = .inactive
         followDelayElapsed = 0
         isPlayingPacingLoop = false
+        playerAttackEnabled = false
 
         driver?.locomotionDeltaHandler = nil
-        driver?.stop()
         hitDetector.stop()
-
-        rootEntity.isEnabled = false
-        isVisible = false
 
         print(
             """
-            [EnemyDeath] killed
-              id: \(killedID)
+            [InfectedDeath] death animation started
+              enemyID: \(killedID)
+              hordeID: \(killedID)
               wave: \(killedWave)
               index: \(hordeSpawnIndex)
               hits: \(acceptedHitCount)/\(hitsToKill)
               selectedClip: \(selectedClipID ?? "none")
-              hordeMode: true
-            """
-        )
-
-        print(
-            """
-            [EnemyDeath] despawned
-              id: \(killedID)
-              wave: \(killedWave)
+              corpseWillRemainUntilWaveEnd: true
             """
         )
 
         onBenchmarkEnemyKilled?(
             killedID,
             killedWave
+        )
+
+        guard let selectedClipID,
+              let clip = clipsByID[selectedClipID] else {
+            print("[InfectedDeath] No death clip available. Settling corpse immediately.")
+            finishBenchmarkEnemyDeathAnimation(
+                completedClip: nil
+            )
+            return
+        }
+
+        activeDeathClipID = clip.clipID
+
+        driver?.playClip(
+            clip,
+            loop: false,
+            transition: true,
+            locomotionPolicy: .ignoreClipLocomotion,
+            runtimeOverride: followVisualRuntimeOverride()
+        )
+    }
+
+    private func finishBenchmarkEnemyDeathAnimation(
+        completedClip: JockAnimClip?
+    ) {
+        guard lifecycleState == .dying else {
+            print(
+                """
+                [InfectedDeath] finish ignored
+                  id: \(hordeID)
+                  state: \(lifecycleState.rawValue)
+                """
+            )
+            return
+        }
+
+        lifecycleState = .corpse
+        activeDeathClipID = nil
+        combatState = .dead
+        followDemoState = .inactive
+        followDelayElapsed = 0
+        activeAttack = nil
+        isPlayingPacingLoop = false
+        playerAttackEnabled = false
+        driver?.locomotionDeltaHandler = nil
+        hitDetector.stop()
+
+        onBenchmarkEnemyDeathAnimationFinished?(
+            hordeID,
+            hordeWave
+        )
+
+        print(
+            """
+            [InfectedDeath] corpse settled
+              enemyID: \(hordeID)
+              hordeID: \(hordeID)
+              wave: \(hordeWave)
+              deathClip: \(completedClip?.clipID ?? "none")
+              entityStillInScene: \(rootEntity.parent != nil)
+            """
         )
     }
 
