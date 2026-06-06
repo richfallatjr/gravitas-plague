@@ -78,11 +78,14 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     }
 
     private func wireJockCallbacks(
-        _ jockController: JockRetargetTestController
+        _ jockController: JockRetargetTestController,
+        hostAudioSourceID: UUID? = nil
     ) {
         jockController.onPunchHit = { [weak self] in
             Task { @MainActor in
-                self?.audioController.playPunchHitAtHostHead()
+                self?.audioController.playPunchHitAtHostHead(
+                    sourceID: hostAudioSourceID
+                )
             }
         }
 
@@ -258,6 +261,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 spawnPose: spawnPose,
                 floorY: floorY
             )
+            audioController.startPrimaryHostDadBreathing()
 
             jockRetargetController.configureSpawn(
                 using: spawnPose,
@@ -287,6 +291,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeTotalKilled = 0
 
         jockRetargetController?.hide()
+        audioController.stopPrimaryHostDadBreathing()
 
         await spawnNextHordeWave()
     }
@@ -357,7 +362,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             let hitsToKill = Int.random(in: 3...5)
             let controller = JockRetargetTestController()
 
-            wireJockCallbacks(controller)
+            wireJockCallbacks(
+                controller,
+                hostAudioSourceID: id
+            )
             sceneRoot.addChild(controller.rootEntity)
 
             do {
@@ -375,6 +383,13 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     playerHeadPosition: spawnPose.headPosition
                 )
 
+                let audioStartDelay = TimeInterval.random(in: 0...1)
+                audioController.attachHostAudioSource(
+                    id: id,
+                    hostRootEntity: controller.rootEntity,
+                    breathingStartDelay: audioStartDelay
+                )
+
                 try controller.playFollowDemo(
                     resetBenchmarkState: false
                 )
@@ -390,12 +405,14 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                       index: \(index)
                       id: \(id)
                       hitsToKill: \(hitsToKill)
+                      audioStartDelay: \(String(format: "%.3f", audioStartDelay))
                       position: \(positions[index])
                       entityName: \(controller.rootEntity.name)
                       entityObject: \(Unmanaged.passUnretained(controller.rootEntity).toOpaque())
                     """
                 )
             } catch {
+                audioController.stopHostAudioSource(id: id)
                 controller.rootEntity.removeFromParent()
 
                 print(
@@ -508,7 +525,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     }
 
     private func clearHordeEnemyControllers() {
-        for controller in hordeEnemyControllersByID.values {
+        for (id, controller) in hordeEnemyControllersByID {
+            audioController.stopHostAudioSource(id: id)
             controller.hide()
             controller.rootEntity.removeFromParent()
         }
@@ -626,7 +644,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     }
 
     private func clearHordeEnemiesAfterDeathBlackout() {
-        for controller in hordeEnemyControllersByID.values {
+        for (id, controller) in hordeEnemyControllersByID {
+            audioController.stopHostAudioSource(id: id)
             controller.stopForBenchmarkPlayerDeath()
             controller.rootEntity.removeFromParent()
         }
@@ -661,6 +680,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
 
         activeHordeEnemyIDs.remove(id)
+        audioController.stopHostAudioSource(id: id)
 
         if let controller = hordeEnemyControllersByID.removeValue(forKey: id) {
             controller.hide()

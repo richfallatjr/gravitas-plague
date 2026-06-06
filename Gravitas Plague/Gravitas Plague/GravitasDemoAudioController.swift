@@ -31,6 +31,13 @@ final class GravitasDemoAudioController {
         }
     }
 
+    private struct HostAudioSource {
+        let headEntity: Entity
+        var dadBreathingController: AudioPlaybackController?
+        var breathingStartTask: Task<Void, Never>?
+        var punchControllers: [AudioPlaybackController]
+    }
+
     private let backgroundMusicFile = BundleAudioFile(
         fileName: "GravitasPlagueBackgroundLoop",
         fileExtension: "wav"
@@ -96,6 +103,7 @@ final class GravitasDemoAudioController {
     private var emergencyBeepController: AudioPlaybackController?
     private var emergencyBroadcastController: AudioPlaybackController?
     private var punchControllers: [AudioPlaybackController] = []
+    private var hostAudioSourcesByID: [UUID: HostAudioSource] = [:]
 
     private var emergencyBroadcastTask: Task<Void, Never>?
 
@@ -106,6 +114,7 @@ final class GravitasDemoAudioController {
 
     private let feetToMeters: Float = 0.3048
     private let radioDistanceBehindUserFeet: Float = 5.0
+    private let hostHeadAudioLocalPosition = SIMD3<Float>(0, 1.45, -0.04)
 
     private let emergencyInitialDelaySeconds: TimeInterval = 30.0
     private let emergencyBreakAfterBroadcastSeconds: TimeInterval = 30.0
@@ -129,7 +138,7 @@ final class GravitasDemoAudioController {
         sceneRoot.addChild(radioAudioEntity)
         hostRootEntity.addChild(hostHeadAudioEntity)
 
-        hostHeadAudioEntity.position = SIMD3<Float>(0, 1.45, -0.04)
+        hostHeadAudioEntity.position = hostHeadAudioLocalPosition
 
         hasAttachedEntities = true
 
@@ -224,6 +233,74 @@ final class GravitasDemoAudioController {
         hostHeadAudioEntity.position = localPosition
     }
 
+    func startPrimaryHostDadBreathing() {
+        prepareIfNeeded()
+        startDadBreathing()
+    }
+
+    func stopPrimaryHostDadBreathing() {
+        dadBreathingController?.stop()
+        dadBreathingController = nil
+    }
+
+    func attachHostAudioSource(
+        id: UUID,
+        hostRootEntity: Entity,
+        breathingStartDelay: TimeInterval = TimeInterval.random(in: 0...1)
+    ) {
+        prepareIfNeeded()
+        stopHostAudioSource(id: id)
+
+        let headEntity = Entity()
+        headEntity.name = "Gravitas_HordeHostHeadAudioSource_\(id.uuidString.prefix(6))"
+        headEntity.components.set(SpatialAudioComponent())
+        headEntity.position = hostHeadAudioLocalPosition
+        hostRootEntity.addChild(headEntity)
+
+        hostAudioSourcesByID[id] = HostAudioSource(
+            headEntity: headEntity,
+            dadBreathingController: nil,
+            breathingStartTask: nil,
+            punchControllers: []
+        )
+
+        startDadBreathing(
+            sourceID: id,
+            delay: breathingStartDelay
+        )
+
+        print(
+            """
+            [Gravitas Audio] Attached horde host audio source
+              id: \(id)
+              breathingStartDelay: \(String(format: "%.3f", breathingStartDelay))
+            """
+        )
+    }
+
+    func stopHostAudioSource(
+        id: UUID
+    ) {
+        guard var source = hostAudioSourcesByID.removeValue(forKey: id) else {
+            return
+        }
+
+        source.breathingStartTask?.cancel()
+        source.breathingStartTask = nil
+
+        source.dadBreathingController?.stop()
+        source.dadBreathingController = nil
+
+        for controller in source.punchControllers {
+            controller.stop()
+        }
+        source.punchControllers.removeAll()
+
+        source.headEntity.removeFromParent()
+
+        print("[Gravitas Audio] Stopped horde host audio source: \(id)")
+    }
+
     func startImmersiveAudio() {
         prepareIfNeeded()
 
@@ -287,11 +364,27 @@ final class GravitasDemoAudioController {
         print("[Gravitas Audio] Stopped all audio.")
     }
 
-    func playPunchHitAtHostHead() {
+    func playPunchHitAtHostHead(
+        sourceID: UUID? = nil
+    ) {
         prepareIfNeeded()
 
         guard let punchResource else {
             print("[Gravitas Audio] Punch resource missing.")
+            return
+        }
+
+        if let sourceID,
+           var source = hostAudioSourcesByID[sourceID] {
+            let controller = source.headEntity.playAudio(punchResource)
+            controller.gain = decibels(linearVolume: 0.95)
+            source.punchControllers.append(controller)
+
+            if source.punchControllers.count > 12 {
+                source.punchControllers.removeFirst(max(0, source.punchControllers.count - 8))
+            }
+
+            hostAudioSourcesByID[sourceID] = source
             return
         }
 
@@ -393,6 +486,57 @@ final class GravitasDemoAudioController {
         dadBreathingController?.gain = decibels(linearVolume: 0.42)
     }
 
+    private func startDadBreathing(
+        sourceID: UUID,
+        delay: TimeInterval
+    ) {
+        guard dadBreathingResource != nil else {
+            print("[Gravitas Audio] Dad breathing resource missing.")
+            return
+        }
+
+        guard var source = hostAudioSourcesByID[sourceID] else {
+            print("[Gravitas Audio] Missing horde host audio source for Dad breathing: \(sourceID)")
+            return
+        }
+
+        source.breathingStartTask?.cancel()
+        source.dadBreathingController?.stop()
+
+        let task = Task { @MainActor [weak self] in
+            if delay > 0 {
+                try? await Task.sleep(
+                    nanoseconds: UInt64(delay * 1_000_000_000)
+                )
+            }
+
+            guard !Task.isCancelled,
+                  let self,
+                  self.isDemoAudioActive,
+                  let dadBreathingResource = self.dadBreathingResource,
+                  var source = self.hostAudioSourcesByID[sourceID] else {
+                return
+            }
+
+            source.dadBreathingController?.stop()
+            source.dadBreathingController = source.headEntity.playAudio(dadBreathingResource)
+            source.dadBreathingController?.gain = self.decibels(linearVolume: 0.42)
+            source.breathingStartTask = nil
+            self.hostAudioSourcesByID[sourceID] = source
+
+            print(
+                """
+                [Gravitas Audio] Started horde Dad breathing
+                  id: \(sourceID)
+                  delayedBy: \(String(format: "%.3f", delay))
+                """
+            )
+        }
+
+        source.breathingStartTask = task
+        hostAudioSourcesByID[sourceID] = source
+    }
+
     private func startEmergencyBroadcastLoop() {
         stopEmergencyBroadcastLoop()
 
@@ -477,6 +621,10 @@ final class GravitasDemoAudioController {
             controller.stop()
         }
         punchControllers.removeAll()
+
+        for id in Array(hostAudioSourcesByID.keys) {
+            stopHostAudioSource(id: id)
+        }
     }
 
     private func makePlayerDamagePlayers() -> [String: AVAudioPlayer] {
