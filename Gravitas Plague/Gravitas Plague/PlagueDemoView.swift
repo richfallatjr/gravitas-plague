@@ -59,36 +59,20 @@ struct PlagueDemoView: View {
                         .font(.headline)
 
                     HStack(spacing: 12) {
-                        Button("Play JockAsset Loop") {
-                            session.statusMessage = "Running JockAsset sidecar pacing loop."
+                        Button("Play Walk Loop") {
+                            session.statusMessage = "Running walk loop."
                             session.send(.playJockPacingLoop)
                         }
                         .buttonStyle(.bordered)
 
-                        Button("Play Follow Demo") {
-                            session.statusMessage = "Running JockAsset follow demo."
+                        Button("Hoard Mode") {
+                            session.statusMessage = "Running Hoard Mode."
                             session.send(.playJockFollowDemo)
                         }
                         .buttonStyle(.borderedProminent)
                     }
 
-                    HStack(spacing: 12) {
-                        Button("Test You Died PNG") {
-                            session.statusMessage = "Testing room-anchored you_died.png."
-                            session.send(.testYouDiedPNG)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(session.immersiveSpaceStatus != .open)
-
-                        Button("Clear You Died PNG") {
-                            session.statusMessage = "Clearing room-anchored you_died.png."
-                            session.send(.clearYouDiedPNG)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(session.immersiveSpaceStatus != .open)
-                    }
-
-                    Text("Follow Demo includes prioritized hit reactions. Fast hand hits on the left/right face trigger medium hit animations. After 10 hits, the infected plays dead_fall_forward.")
+                    Text("Hoard Mode includes prioritized hit reactions, close-range attacks, player damage, and wave progression.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 

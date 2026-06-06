@@ -25,8 +25,6 @@ final class PlagueDemoSession: ObservableObject {
         case playJockClip(String, loop: Bool)
         case stopJockClip
         case resetJockPose
-        case testYouDiedPNG
-        case clearYouDiedPNG
         case closeDemo
     }
 

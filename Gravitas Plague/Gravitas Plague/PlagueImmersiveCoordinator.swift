@@ -43,9 +43,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let hordePlayerHitLimitPerWave = 3
     private let hordeSpawnRadiusMeters: Float = 2.45
     private let YOU_DIED_FORWARD_M: Float = 1.25
-    private let YOU_DIED_Y_DROP_M: Float = 0.10
-    private let YOU_DIED_WIDTH_M: Float = 0.85
-    private let YOU_DIED_HEIGHT_M: Float = 0.42
+    private let YOU_DIED_Y_OFFSET_M: Float = 7.0 * 0.3048
+    private let YOU_DIED_WIDTH_M: Float = 1.70
+    private let YOU_DIED_HEIGHT_M: Float = 0.84
 
     func makeSceneRoot() async -> AnchorEntity {
         if let sceneRoot {
@@ -201,12 +201,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         case .resetJockPose:
             jockRetargetController?.resetPose()
-
-        case .testYouDiedPNG:
-            testYouDiedPNG()
-
-        case .clearYouDiedPNG:
-            cleanupYouDied()
 
         case .closeDemo:
             stopHordeBenchmark()
@@ -845,19 +839,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         corpseHordeEnemyIDs.removeAll()
     }
 
-    private func testYouDiedPNG() {
-        guard let sceneRoot,
-              let headAnchor else {
-            print("[PlagueDeath] Test ignored: missing scene root or head anchor.")
-            return
-        }
-
-        playYouDiedRoomAnchored(
-            world: sceneRoot,
-            head: headAnchor
-        )
-    }
-
     private func playYouDiedRoomAnchored(
         world: AnchorEntity,
         head: AnchorEntity
@@ -886,8 +867,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
 
         let targetPosition = headPosition +
-            forward * YOU_DIED_FORWARD_M -
-            SIMD3<Float>(0, YOU_DIED_Y_DROP_M, 0)
+            forward * YOU_DIED_FORWARD_M +
+            SIMD3<Float>(0, YOU_DIED_Y_OFFSET_M, 0)
 
         let rig = Entity()
         rig.name = "YouDiedRig"
