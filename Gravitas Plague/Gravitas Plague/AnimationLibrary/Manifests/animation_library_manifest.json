@@ -1,7 +1,7 @@
 {
   "schema": "com.gravitas.animation_library_manifest.v0",
   "library_id": "GravitasPlagueAnimationLibrary",
-  "generated_at": "2026-06-02T21:45:32.536536+00:00",
+  "generated_at": "2026-06-06T13:39:19.535890+00:00",
   "clips": [
     {
       "clip_id": "charged-slash-left",
@@ -473,6 +473,38 @@
       "approved_for_runtime": true,
       "debug_only": false,
       "updated_at": "2026-06-01T23:23:25.173939+00:00"
+    },
+    {
+      "clip_id": "mocap_test_01",
+      "display_name": "Mocap test 01",
+      "relative_path": "Clips/Idle/mocap_test_01.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "category": [
+        "idle"
+      ],
+      "emotion": [
+        "vacant",
+        "sick",
+        "unstable"
+      ],
+      "threat": [
+        "passive"
+      ],
+      "story": [
+        "test",
+        "meshy"
+      ],
+      "looping": true,
+      "duration_seconds": 8.375,
+      "locomotion_type": "stationary",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "updated_at": "2026-06-06T13:39:19.535876+00:00"
     },
     {
       "clip_id": "turn_left_90",

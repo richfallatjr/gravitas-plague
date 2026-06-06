@@ -68,9 +68,16 @@ final class GravitasDemoAudioController {
         BundleAudioFile(fileName: "damaged-04", fileExtension: "wav")
     ]
 
+    private let playerDeathFiles: [BundleAudioFile] = [
+        BundleAudioFile(fileName: "die_01", fileExtension: "wav"),
+        BundleAudioFile(fileName: "die_02", fileExtension: "wav")
+    ]
+
     private var backgroundMusicPlayer: AVAudioPlayer?
     private var playerDamagePlayersByFileName: [String: AVAudioPlayer] = [:]
     private var lastPlayerDamageFileName: String?
+    private var playerDeathPlayersByFileName: [String: AVAudioPlayer] = [:]
+    private var lastPlayerDeathFileName: String?
 
     private let radioAudioEntity = Entity()
     private let hostHeadAudioEntity = Entity()
@@ -170,6 +177,7 @@ final class GravitasDemoAudioController {
         )
 
         playerDamagePlayersByFileName = makePlayerDamagePlayers()
+        playerDeathPlayersByFileName = makePlayerDeathPlayers()
 
         hasPrepared = true
 
@@ -274,6 +282,7 @@ final class GravitasDemoAudioController {
 
         stopSpatialDemoControllers()
         stopPlayerDamagePlayers()
+        stopPlayerDeathPlayers()
 
         print("[Gravitas Audio] Stopped all audio.")
     }
@@ -323,6 +332,43 @@ final class GravitasDemoAudioController {
         player.play()
 
         print("[Gravitas Audio] Played player damage sound: \(selectedFileName)")
+    }
+
+    func playRandomPlayerDeath() {
+        _ = playRandomPlayerDeathAndReturnDuration()
+    }
+
+    @discardableResult
+    func playRandomPlayerDeathAndReturnDuration() -> TimeInterval {
+        prepareIfNeeded()
+
+        guard !playerDeathPlayersByFileName.isEmpty else {
+            print("[Gravitas Audio] No player death sounds available.")
+            return 0.0
+        }
+
+        var candidateFileNames = Array(playerDeathPlayersByFileName.keys)
+
+        if let lastPlayerDeathFileName,
+           candidateFileNames.count > 1 {
+            candidateFileNames.removeAll { $0 == lastPlayerDeathFileName }
+        }
+
+        guard let selectedFileName = candidateFileNames.randomElement(),
+              let player = playerDeathPlayersByFileName[selectedFileName] else {
+            print("[PlayerDeath] ERROR failed to select player death sound.")
+            return 0.0
+        }
+
+        player.stop()
+        player.currentTime = 0
+        player.play()
+
+        lastPlayerDeathFileName = selectedFileName
+
+        print("[PlayerDeath] playing \(selectedFileName).wav")
+
+        return player.duration
     }
 
     private func startRadioStatic() {
@@ -459,6 +505,32 @@ final class GravitasDemoAudioController {
         return players
     }
 
+    private func makePlayerDeathPlayers() -> [String: AVAudioPlayer] {
+        var players: [String: AVAudioPlayer] = [:]
+
+        for file in playerDeathFiles {
+            do {
+                let player = try makeAVAudioPlayer(
+                    file: file,
+                    volume: 0.95,
+                    loopsForever: false
+                )
+
+                players[file.fileName] = player
+            } catch {
+                print("[Gravitas Audio] Warning: failed to load player death sound \(file.fullName): \(error)")
+            }
+        }
+
+        if players.isEmpty {
+            print("[Gravitas Audio] Warning: no player death sounds were loaded.")
+        } else {
+            print("[Gravitas Audio] Loaded \(players.count) player death sounds.")
+        }
+
+        return players
+    }
+
     private func stopPlayerDamagePlayers() {
         for player in playerDamagePlayersByFileName.values {
             player.stop()
@@ -466,6 +538,15 @@ final class GravitasDemoAudioController {
         }
 
         lastPlayerDamageFileName = nil
+    }
+
+    private func stopPlayerDeathPlayers() {
+        for player in playerDeathPlayersByFileName.values {
+            player.stop()
+            player.currentTime = 0
+        }
+
+        lastPlayerDeathFileName = nil
     }
 
     private func configureAudioSession() throws {

@@ -25,6 +25,9 @@
 		8E1A10212FCD000100000001 /* ../damaged-02.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10252FCD000100000001 /* ../damaged-02.wav */; };
 		8E1A10222FCD000100000001 /* ../damaged-03.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10262FCD000100000001 /* ../damaged-03.wav */; };
 		8E1A10232FCD000100000001 /* ../damaged-04.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10272FCD000100000001 /* ../damaged-04.wav */; };
+		8E1A10282FCD000100000001 /* ../die_01.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A102B2FCD000100000001 /* ../die_01.wav */; };
+		8E1A10292FCD000100000001 /* ../die_02.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A102C2FCD000100000001 /* ../die_02.wav */; };
+		8E1A102A2FCD000100000001 /* ../you_died.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A102D2FCD000100000001 /* ../you_died.png */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -66,6 +69,9 @@
 		8E1A10252FCD000100000001 /* ../damaged-02.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../damaged-02.wav"; sourceTree = SOURCE_ROOT; };
 		8E1A10262FCD000100000001 /* ../damaged-03.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../damaged-03.wav"; sourceTree = SOURCE_ROOT; };
 		8E1A10272FCD000100000001 /* ../damaged-04.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../damaged-04.wav"; sourceTree = SOURCE_ROOT; };
+		8E1A102B2FCD000100000001 /* ../die_01.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../die_01.wav"; sourceTree = SOURCE_ROOT; };
+		8E1A102C2FCD000100000001 /* ../die_02.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../die_02.wav"; sourceTree = SOURCE_ROOT; };
+		8E1A102D2FCD000100000001 /* ../you_died.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../you_died.png"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -163,6 +169,9 @@
 				8E1A10252FCD000100000001 /* ../damaged-02.wav */,
 				8E1A10262FCD000100000001 /* ../damaged-03.wav */,
 				8E1A10272FCD000100000001 /* ../damaged-04.wav */,
+				8E1A102B2FCD000100000001 /* ../die_01.wav */,
+				8E1A102C2FCD000100000001 /* ../die_02.wav */,
+				8E1A102D2FCD000100000001 /* ../you_died.png */,
 			);
 			name = "Phase One Assets";
 			sourceTree = "<group>";
@@ -303,6 +312,9 @@
 				8E1A10212FCD000100000001 /* ../damaged-02.wav in Resources */,
 				8E1A10222FCD000100000001 /* ../damaged-03.wav in Resources */,
 				8E1A10232FCD000100000001 /* ../damaged-04.wav in Resources */,
+				8E1A10282FCD000100000001 /* ../die_01.wav in Resources */,
+				8E1A10292FCD000100000001 /* ../die_02.wav in Resources */,
+				8E1A102A2FCD000100000001 /* ../you_died.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

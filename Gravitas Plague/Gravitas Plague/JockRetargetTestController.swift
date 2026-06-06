@@ -38,6 +38,9 @@ final class JockRetargetTestController {
 
     var onPunchHit: (() -> Void)?
     var onPlayerDamaged: ((Int) -> Void)?
+    var onBenchmarkPlayerHit: ((Int, UUID?) -> Bool)?
+    var onBenchmarkPlayerDeath: ((Int, Int) -> Void)?
+    var onBenchmarkEnemyKilled: ((UUID, Int) -> Void)?
     var onAttackStarted: (() -> Void)?
 
     private let visualOffsetEntity = Entity()
@@ -89,6 +92,15 @@ final class JockRetargetTestController {
     private let attackConfiguration = JockAttackConfiguration.phaseOne
     private var playerExposure: Int = 0
     private var escalateAfterHitReact = false
+    private let benchmarkPlayerHitLimitPerWave = 3
+    private var benchmarkCurrentWave = 0
+    private var benchmarkPlayerHitsThisWave = 0
+    private var isBenchmarkPlayerDead = false
+    private var playerAttackEnabled = true
+    private var hordeID = UUID()
+    private var hordeWave = 1
+    private var hordeSpawnIndex = 0
+    private var hitsToKill = Int.random(in: 3...5)
     private var acceptedHitCount: Int = 0
     private var lastHitClipIDBySide: [JockHitSide: String] = [:]
     private var lastHitClipIDByBucket: [String: String] = [:]
@@ -109,19 +121,19 @@ final class JockRetargetTestController {
     var debugHitStatus: String {
         switch combatState {
         case .normal:
-            return "Hits: \(acceptedHitCount)/\(hitConfiguration.deathHitCount)"
+            return "Hits: \(acceptedHitCount)/\(hitsToKill)"
 
         case .closeRangeReady(let delayRemaining):
-            return "Close range: \(String(format: "%.2f", delayRemaining))s | Hits: \(acceptedHitCount)/\(hitConfiguration.deathHitCount) | Exposure: \(playerExposure)/\(attackConfiguration.exposureMax)"
+            return "Close range: \(String(format: "%.2f", delayRemaining))s | Hits: \(acceptedHitCount)/\(hitsToKill) | Exposure: \(playerExposure)/\(attackConfiguration.exposureMax)"
 
         case .attacking:
-            return "Attacking: \(activeAttack?.clipID ?? "none") | Hits: \(acceptedHitCount)/\(hitConfiguration.deathHitCount) | Exposure: \(playerExposure)/\(attackConfiguration.exposureMax)"
+            return "Attacking: \(activeAttack?.clipID ?? "none") | Hits: \(acceptedHitCount)/\(hitsToKill) | Exposure: \(playerExposure)/\(attackConfiguration.exposureMax)"
 
         case .hitReaction(let clipID, let damage):
-            return "Hit reaction: \(clipID) \(damage.rawValue) | Hits: \(acceptedHitCount)/\(hitConfiguration.deathHitCount)"
+            return "Hit reaction: \(clipID) \(damage.rawValue) | Hits: \(acceptedHitCount)/\(hitsToKill)"
 
         case .dead:
-            return "Dead | Hits: \(acceptedHitCount)/\(hitConfiguration.deathHitCount)"
+            return "Dead | Hits: \(acceptedHitCount)/\(hitsToKill)"
         }
     }
 
@@ -416,6 +428,73 @@ final class JockRetargetTestController {
         resetRootToDefaultSpawn()
     }
 
+    func configureHordeSpawn(
+        position: SIMD3<Float>,
+        playerHeadPosition: SIMD3<Float>
+    ) {
+        let configuration = PhaseOneConfiguration.phaseOneDefault
+
+        spawnPosition = position
+
+        let enemyDirectionFromPlayer = PhaseOneMath.normalizedOrFallback(
+            SIMD3<Float>(
+                position.x - playerHeadPosition.x,
+                0,
+                position.z - playerHeadPosition.z
+            ),
+            fallback: SIMD3<Float>(0, 0, -1)
+        )
+
+        rootYawRadians = PhaseOneMath.normalizedAngleRadians(
+            PhaseOneMath.yawRadiansForNegativeZForward(
+                worldForward: enemyDirectionFromPlayer
+            ) + configuration.visualYawCorrectionRadians
+        )
+
+        spawnOrientation = simd_quatf(
+            angle: rootYawRadians,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
+
+        cameraFacingVisualOffset = simd_quatf(
+            angle: configuration.visualYawCorrectionRadians,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
+
+        loopStartVisualOffset = simd_quatf(
+            angle: 0,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
+
+        resetRootToDefaultSpawn()
+    }
+
+    func configureHordeIdentity(
+        id: UUID,
+        wave: Int,
+        spawnIndex: Int,
+        hitsToKill: Int
+    ) {
+        hordeID = id
+        hordeWave = wave
+        hordeSpawnIndex = spawnIndex
+        self.hitsToKill = max(1, hitsToKill)
+        acceptedHitCount = 0
+
+        rootEntity.name = "HordeInfected_wave\(wave)_index\(spawnIndex)_\(id.uuidString.prefix(6))"
+
+        print(
+            """
+            [EnemySpawner] configured horde enemy instance
+              id: \(id)
+              wave: \(wave)
+              index: \(spawnIndex)
+              hitsToKill: \(self.hitsToKill)
+              entityName: \(rootEntity.name)
+            """
+        )
+    }
+
     func show() {
         isVisible = true
         rootEntity.isEnabled = true
@@ -516,14 +595,25 @@ final class JockRetargetTestController {
         )
     }
 
-    func playFollowDemo() throws {
+    func playFollowDemo(
+        resetBenchmarkState: Bool = true
+    ) throws {
         show()
 
         isPlayingPacingLoop = false
         followDemoState = .idleStopped
         followDelayElapsed = 0
+        playerAttackEnabled = true
         resetCombatRuntime()
         resetHitSelectionMemory()
+
+        if resetBenchmarkState {
+            resetBenchmarkPlayerStateForNewRun()
+        } else {
+            benchmarkCurrentWave = hordeWave
+            benchmarkPlayerHitsThisWave = 0
+            isBenchmarkPlayerDead = false
+        }
 
         guard clipsByID[followConfiguration.idleClipID] != nil else {
             throw RetargetError.clipNotFound(followConfiguration.idleClipID)
@@ -569,6 +659,42 @@ final class JockRetargetTestController {
         print("[Gravitas Follow] Follow demo stopped")
     }
 
+    func stopForBenchmarkPlayerDeath() {
+        isVisible = false
+        rootEntity.isEnabled = false
+        playerAttackEnabled = false
+        followDemoState = .inactive
+        followDelayElapsed = 0
+        activeAttack = nil
+        combatState = .normal
+        isPlayingPacingLoop = false
+
+        driver?.locomotionDeltaHandler = nil
+        driver?.stop()
+        hitDetector.stop()
+
+        print("[HordeBenchmark] Enemy gameplay suspended for player death.")
+    }
+
+    func setPlayerAttackEnabled(_ enabled: Bool) {
+        playerAttackEnabled = enabled
+
+        print(
+            """
+            [PlayerAttack] enabled changed
+              enabled: \(enabled)
+            """
+        )
+    }
+
+    func setBenchmarkPlayerDead(_ isDead: Bool) {
+        isBenchmarkPlayerDead = isDead
+
+        if isDead {
+            playerAttackEnabled = false
+        }
+    }
+
     func update(
         deltaTime: Float,
         currentHeadPosition: SIMD3<Float>?
@@ -579,6 +705,7 @@ final class JockRetargetTestController {
         let dt = TimeInterval(deltaTime)
 
         if followDemoState != .inactive,
+           playerAttackEnabled,
            !isInNonInterruptibleCombatState,
            currentHeadPosition != nil {
             updateHitDetectionIfNeeded(
@@ -734,7 +861,7 @@ final class JockRetargetTestController {
         acceptedHitCount += 1
         onPunchHit?()
 
-        let shouldDie = acceptedHitCount >= hitConfiguration.deathHitCount
+        let shouldDie = acceptedHitCount >= hitsToKill
         let finalDamage: JockHitDamageLevel = shouldDie
             ? .death
             : event.damageLevel
@@ -786,12 +913,23 @@ final class JockRetargetTestController {
               velocity: \(String(format: "%.2f", event.velocityMetersPerSecond)) m/s
               selectedClip: \(selectedClipID ?? "none")
               shouldDie: \(shouldDie)
+              hordeID: \(hordeID)
+              hordeWave: \(hordeWave)
+              hordeSpawnIndex: \(hordeSpawnIndex)
+              infectedHitsToKill: \(hitsToKill)
             """
         )
 
         applyHitKnockback(
             damage: finalDamage
         )
+
+        if shouldDie {
+            completeBenchmarkEnemyKill(
+                selectedClipID: selectedClipID
+            )
+            return
+        }
 
         guard let selectedClipID,
               let clip = clipsByID[selectedClipID] else {
@@ -802,36 +940,64 @@ final class JockRetargetTestController {
             return
         }
 
-        if shouldDie {
-            combatState = .dead
-            activeAttack = nil
-            followDemoState = .inactive
-            hitDetector.stop()
+        activeAttack = nil
+        combatState = .hitReaction(
+            clipID: selectedClipID,
+            damage: finalDamage
+        )
 
-            driver?.playClip(
-                clip,
-                loop: false,
-                transition: true,
-                locomotionPolicy: .ignoreClipLocomotion,
-                runtimeOverride: followVisualRuntimeOverride()
-            )
+        driver?.playClip(
+            clip,
+            loop: false,
+            transition: true,
+            locomotionPolicy: .ignoreClipLocomotion,
+            runtimeOverride: followVisualRuntimeOverride()
+        )
+    }
 
-            print("[Gravitas Hit] Death triggered. Follow disabled.")
-        } else {
-            activeAttack = nil
-            combatState = .hitReaction(
-                clipID: selectedClipID,
-                damage: finalDamage
-            )
+    private func completeBenchmarkEnemyKill(
+        selectedClipID: String?
+    ) {
+        let killedID = hordeID
+        let killedWave = hordeWave
 
-            driver?.playClip(
-                clip,
-                loop: false,
-                transition: true,
-                locomotionPolicy: .ignoreClipLocomotion,
-                runtimeOverride: followVisualRuntimeOverride()
-            )
-        }
+        combatState = .dead
+        activeAttack = nil
+        followDemoState = .inactive
+        followDelayElapsed = 0
+        isPlayingPacingLoop = false
+
+        driver?.locomotionDeltaHandler = nil
+        driver?.stop()
+        hitDetector.stop()
+
+        rootEntity.isEnabled = false
+        isVisible = false
+
+        print(
+            """
+            [EnemyDeath] killed
+              id: \(killedID)
+              wave: \(killedWave)
+              index: \(hordeSpawnIndex)
+              hits: \(acceptedHitCount)/\(hitsToKill)
+              selectedClip: \(selectedClipID ?? "none")
+              hordeMode: true
+            """
+        )
+
+        print(
+            """
+            [EnemyDeath] despawned
+              id: \(killedID)
+              wave: \(killedWave)
+            """
+        )
+
+        onBenchmarkEnemyKilled?(
+            killedID,
+            killedWave
+        )
     }
 
     private func cancelActiveAttackForPlayerHit(
@@ -1384,10 +1550,43 @@ final class JockRetargetTestController {
         handWorldPosition: SIMD3<Float>,
         distance: Float
     ) {
+        guard !isBenchmarkPlayerDead else { return }
+
         playerExposure = min(
             attackConfiguration.exposureMax,
             playerExposure + amount
         )
+
+        if let onBenchmarkPlayerHit,
+           onBenchmarkPlayerHit(amount, hordeID) {
+            isBenchmarkPlayerDead = true
+            playerAttackEnabled = false
+
+            print(
+                """
+                [Gravitas Damage] Player death hit accepted
+                  amount: \(amount)
+                  bodyBoxDistance: \(String(format: "%.3f", distance))
+                  handWorldPosition: \(handWorldPosition)
+                  attackerHordeID: \(hordeID)
+                """
+            )
+            return
+        }
+
+        if onBenchmarkPlayerHit == nil,
+           registerConfirmedBenchmarkPlayerHit() {
+            print(
+                """
+                [Gravitas Damage] Player death hit accepted
+                  amount: \(amount)
+                  bodyBoxDistance: \(String(format: "%.3f", distance))
+                  handWorldPosition: \(handWorldPosition)
+                  attackerHordeID: \(hordeID)
+                """
+            )
+            return
+        }
 
         onPlayerDamaged?(amount)
 
@@ -1412,6 +1611,61 @@ final class JockRetargetTestController {
         if attackConfiguration.failOnExposureMax {
             stopFollowDemo()
         }
+    }
+
+    private func resetBenchmarkPlayerStateForNewRun() {
+        benchmarkCurrentWave = max(hordeWave, 1)
+        benchmarkPlayerHitsThisWave = 0
+        isBenchmarkPlayerDead = false
+        playerAttackEnabled = true
+    }
+
+    @discardableResult
+    private func registerConfirmedBenchmarkPlayerHit() -> Bool {
+        guard !isBenchmarkPlayerDead else { return true }
+
+        if benchmarkCurrentWave <= 0 {
+            benchmarkCurrentWave = max(hordeWave, 1)
+            benchmarkPlayerHitsThisWave = 0
+        }
+
+        benchmarkPlayerHitsThisWave += 1
+
+        print(
+            """
+            [HordeBenchmark] Player hit confirmed
+              wave: \(benchmarkCurrentWave)
+              hitsThisWave: \(benchmarkPlayerHitsThisWave)
+              hitLimit: \(benchmarkPlayerHitLimitPerWave)
+            """
+        )
+
+        guard benchmarkPlayerHitsThisWave >= benchmarkPlayerHitLimitPerWave else {
+            return false
+        }
+
+        triggerBenchmarkPlayerDeath()
+        return true
+    }
+
+    private func triggerBenchmarkPlayerDeath() {
+        guard !isBenchmarkPlayerDead else { return }
+
+        isBenchmarkPlayerDead = true
+        playerAttackEnabled = false
+
+        print(
+            """
+            [HordeBenchmark] Player death triggered
+              wave: \(benchmarkCurrentWave)
+              hitsThisWave: \(benchmarkPlayerHitsThisWave)
+            """
+        )
+
+        onBenchmarkPlayerDeath?(
+            benchmarkCurrentWave,
+            benchmarkPlayerHitsThisWave
+        )
     }
 
     private func playCurrentPacingLoopStep() {
