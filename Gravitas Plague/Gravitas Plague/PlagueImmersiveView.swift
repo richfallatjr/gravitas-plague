@@ -15,21 +15,14 @@ struct PlagueImmersiveView: View {
     ).autoconnect()
 
     var body: some View {
-        ZStack {
-            RealityView { content in
-                let sceneRoot = await coordinator.makeSceneRoot()
-                content.add(sceneRoot)
-            }
-            .preferredSurroundingsEffect(
-                deathPresentationController.surroundingsEffect
-                    ?? damageTintController.surroundingsEffect
-            )
-
-            Color.black
-                .opacity(deathPresentationController.blackoutOpacity)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
+        RealityView { content in
+            let sceneRoot = await coordinator.makeSceneRoot()
+            content.add(sceneRoot)
         }
+        .preferredSurroundingsEffect(
+            deathPresentationController.surroundingsEffect
+                ?? damageTintController.surroundingsEffect
+        )
         .task(id: session.latestCommand?.id) {
             guard let commandEnvelope = session.latestCommand else { return }
             coordinator.handle(commandEnvelope)

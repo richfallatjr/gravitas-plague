@@ -72,6 +72,22 @@ struct PlagueDemoView: View {
                         .buttonStyle(.borderedProminent)
                     }
 
+                    HStack(spacing: 12) {
+                        Button("Test You Died PNG") {
+                            session.statusMessage = "Testing room-anchored you_died.png."
+                            session.send(.testYouDiedPNG)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(session.immersiveSpaceStatus != .open)
+
+                        Button("Clear You Died PNG") {
+                            session.statusMessage = "Clearing room-anchored you_died.png."
+                            session.send(.clearYouDiedPNG)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(session.immersiveSpaceStatus != .open)
+                    }
+
                     Text("Follow Demo includes prioritized hit reactions. Fast hand hits on the left/right face trigger medium hit animations. After 10 hits, the infected plays dead_fall_forward.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
