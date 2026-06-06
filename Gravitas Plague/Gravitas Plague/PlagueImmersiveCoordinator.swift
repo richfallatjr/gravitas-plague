@@ -16,8 +16,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     var onPlayerDeathStarted: (() -> Void)?
     weak var deathPresentationController: DeathPresentationController?
 
-    private var sceneRoot: Entity?
-    private var deathHeadPose: PhaseOneSpawnPose?
+    private var sceneRoot: AnchorEntity?
+    private var headAnchor: AnchorEntity?
     private var youDiedRunning = false
     private var youDiedRig: Entity?
     private var youDiedLogo: ModelEntity?
@@ -42,18 +42,20 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let benchmarkNextWaveDelaySeconds: TimeInterval = 1.20
     private let hordePlayerHitLimitPerWave = 3
     private let hordeSpawnRadiusMeters: Float = 2.45
-    private let deathCardForwardMeters: Float = 1.25
-    private let deathCardYDropMeters: Float = 0.10
-    private let deathCardWidthMeters: Float = 0.85
-    private let deathCardHeightMeters: Float = 0.42
+    private let YOU_DIED_FORWARD_M: Float = 1.25
+    private let YOU_DIED_Y_DROP_M: Float = 0.10
+    private let YOU_DIED_WIDTH_M: Float = 0.85
+    private let YOU_DIED_HEIGHT_M: Float = 0.42
 
-    func makeSceneRoot() async -> Entity {
+    func makeSceneRoot() async -> AnchorEntity {
         if let sceneRoot {
             return sceneRoot
         }
 
-        let root = Entity()
+        let root = AnchorEntity(world: SIMD3<Float>(0, 0, 0))
         root.name = "GravitasPlague_PhaseOne_SceneRoot"
+
+        _ = makeHeadAnchor()
 
         audioController.startImmersiveAudio()
 
@@ -75,6 +77,18 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         drainPendingCommands()
 
         return root
+    }
+
+    func makeHeadAnchor() -> AnchorEntity {
+        if let headAnchor {
+            return headAnchor
+        }
+
+        let head = AnchorEntity(.head)
+        head.name = "GravitasPlague_HeadAnchor"
+        headAnchor = head
+
+        return head
     }
 
     private func wireJockCallbacks(
@@ -239,6 +253,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         resetHordeBenchmarkDeathPresentation()
 
         sceneRoot = nil
+        headAnchor = nil
         jockRetargetController = nil
         lastTickDate = nil
         handledCommandIDs.removeAll()
@@ -595,7 +610,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         isPlayerDeathSequenceActive = true
         pendingNextBenchmarkWaveTask?.cancel()
         pendingNextBenchmarkWaveTask = nil
-        deathHeadPose = spatialProvider.currentPoseOrFallback()
         jockRetargetController?.setPlayerAttackEnabled(false)
 
         for controller in hordeEnemyControllersByID.values {
@@ -620,21 +634,13 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             self.clearHordeEnemiesAfterDeathBlackout()
 
             if let sceneRoot = self.sceneRoot,
-               let deathHeadPose = self.deathHeadPose {
-                let deathHeadEntity = self.makeDeathHeadPoseEntity(
-                    from: deathHeadPose
-                )
-
-                sceneRoot.addChild(deathHeadEntity)
-
+               let headAnchor = self.headAnchor {
                 self.playYouDiedRoomAnchored(
                     world: sceneRoot,
-                    head: deathHeadEntity
+                    head: headAnchor
                 )
-
-                deathHeadEntity.removeFromParent()
             } else {
-                print("[PlagueDeath] Cannot show you_died.png; missing world or head pose.")
+                print("[PlagueDeath] Cannot show you_died.png; missing world or head anchor.")
             }
 
             print("[PlagueDeath] final dark reached; horde cleared; you_died shown after cleanup.")
@@ -666,7 +672,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         isPlayerDeathSequenceActive = false
         jockRetargetController?.setPlayerAttackEnabled(true)
         deathPresentationController?.reset()
-        deathHeadPose = nil
         cleanupYouDied()
     }
 
@@ -840,49 +845,22 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         corpseHordeEnemyIDs.removeAll()
     }
 
-    private func makeDeathHeadPoseEntity(
-        from pose: PhaseOneSpawnPose
-    ) -> Entity {
-        let head = Entity()
-        head.name = "DeathTimeHeadPose"
-        head.position = pose.headPosition
-
-        let yaw = PhaseOneMath.yawRadiansForNegativeZForward(
-            worldForward: pose.headForward
-        )
-
-        head.orientation = simd_quatf(
-            angle: yaw,
-            axis: SIMD3<Float>(0, 1, 0)
-        )
-
-        return head
-    }
-
     private func testYouDiedPNG() {
-        guard let sceneRoot else {
-            print("[PlagueDeath] Test ignored: missing scene root.")
+        guard let sceneRoot,
+              let headAnchor else {
+            print("[PlagueDeath] Test ignored: missing scene root or head anchor.")
             return
         }
 
-        let headPose = spatialProvider.currentPoseOrFallback()
-        let headEntity = makeDeathHeadPoseEntity(
-            from: headPose
-        )
-
-        sceneRoot.addChild(headEntity)
-
         playYouDiedRoomAnchored(
             world: sceneRoot,
-            head: headEntity
+            head: headAnchor
         )
-
-        headEntity.removeFromParent()
     }
 
     private func playYouDiedRoomAnchored(
-        world: Entity,
-        head: Entity
+        world: AnchorEntity,
+        head: AnchorEntity
     ) {
         guard !youDiedRunning else {
             print("[PlagueDeath] you_died already running.")
@@ -908,8 +886,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
 
         let targetPosition = headPosition +
-            forward * deathCardForwardMeters -
-            SIMD3<Float>(0, deathCardYDropMeters, 0)
+            forward * YOU_DIED_FORWARD_M -
+            SIMD3<Float>(0, YOU_DIED_Y_DROP_M, 0)
 
         let rig = Entity()
         rig.name = "YouDiedRig"
@@ -951,9 +929,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             0.01,
             (imageSize?.width ?? 1672) / max(1, imageSize?.height ?? 941)
         )
-        let heightMeters = deathCardHeightMeters
+        let heightMeters = YOU_DIED_HEIGHT_M
         let widthMeters = min(
-            deathCardWidthMeters,
+            YOU_DIED_WIDTH_M,
             heightMeters * Float(aspect)
         )
 

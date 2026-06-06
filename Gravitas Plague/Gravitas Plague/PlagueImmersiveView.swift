@@ -18,6 +18,7 @@ struct PlagueImmersiveView: View {
         RealityView { content in
             let sceneRoot = await coordinator.makeSceneRoot()
             content.add(sceneRoot)
+            content.add(coordinator.makeHeadAnchor())
         }
         .preferredSurroundingsEffect(
             deathPresentationController.surroundingsEffect
