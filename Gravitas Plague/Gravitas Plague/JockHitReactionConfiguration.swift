@@ -47,6 +47,13 @@ enum JockHitDamageLevel: String, Equatable, Hashable, CaseIterable, Codable, Com
     }
 }
 
+enum InfectedHitRegion: String, Equatable, Hashable, Codable {
+    case head
+    case torso
+    case limb
+    case unknown
+}
+
 struct JockHitBucketKey: Equatable, Hashable {
     let side: JockHitSide
     let damageLevel: JockHitDamageLevel

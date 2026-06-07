@@ -81,6 +81,17 @@ struct JockSkeletonAdapter {
         canonicalToRuntimeIndex[canonicalJointName]
     }
 
+    func runtimeJointName(
+        for canonicalJointName: String
+    ) -> String? {
+        guard let runtimeIndex = runtimeIndex(for: canonicalJointName),
+              runtimeJointNames.indices.contains(runtimeIndex) else {
+            return nil
+        }
+
+        return runtimeJointNames[runtimeIndex]
+    }
+
     static func buildMapping(
         canonicalJointPaths: [String],
         runtimeJointNames: [String]

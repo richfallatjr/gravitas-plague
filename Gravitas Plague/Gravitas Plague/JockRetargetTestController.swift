@@ -41,6 +41,15 @@ final class JockRetargetTestController {
         }
     }
 
+    private struct InfectedHeadHitZone {
+        let centerWorld: SIMD3<Float>
+        let radiusMeters: Float
+        let jointDescription: String
+        let headWorld: SIMD3<Float>?
+        let headEndWorld: SIMD3<Float>?
+        let headFrontWorld: SIMD3<Float>?
+    }
+
     let rootEntity = Entity()
 
     var onPunchHit: (() -> Void)?
@@ -115,6 +124,8 @@ final class JockRetargetTestController {
     private var acceptedHitCount: Int = 0
     private var lastHitClipIDBySide: [JockHitSide: String] = [:]
     private var lastHitClipIDByBucket: [String: String] = [:]
+    private var hasLoggedHeadHitZoneBuild = false
+    private var hasLoggedMissingHeadHitZone = false
 
     private var spawnPosition = SIMD3<Float>(0, 0, -3.05)
     private var spawnOrientation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
@@ -456,6 +467,8 @@ final class JockRetargetTestController {
         )
 
         resetRootToDefaultSpawn()
+
+        logHeadHitZoneBuildIfNeeded()
     }
 
     func configureHordeSpawn(
@@ -514,6 +527,8 @@ final class JockRetargetTestController {
         lifecycleState = .alive
         activeDeathClipID = nil
         acceptedHitCount = 0
+        hasLoggedHeadHitZoneBuild = false
+        hasLoggedMissingHeadHitZone = false
 
         rootEntity.name = "Horde_\(archetype.rawValue)_wave\(wave)_index\(spawnIndex)_\(id.uuidString.prefix(6))"
 
@@ -745,15 +760,6 @@ final class JockRetargetTestController {
         latestHeadPosition = currentHeadPosition
         let dt = TimeInterval(deltaTime)
 
-        if followDemoState != .inactive,
-           playerAttackEnabled,
-           !isInNonInterruptibleCombatState,
-           currentHeadPosition != nil {
-            updateHitDetectionIfNeeded(
-                currentTime: Date().timeIntervalSinceReferenceDate
-            )
-        }
-
         if followDemoState != .inactive {
             updateAttackMode(
                 deltaTime: dt,
@@ -769,6 +775,15 @@ final class JockRetargetTestController {
         }
 
         driver?.update(deltaTime: dt)
+
+        if followDemoState != .inactive,
+           playerAttackEnabled,
+           !isInNonInterruptibleCombatState,
+           currentHeadPosition != nil {
+            updateHitDetectionIfNeeded(
+                currentTime: Date().timeIntervalSinceReferenceDate
+            )
+        }
 
         updateAttackDamageDetectionIfNeeded(
             deltaTime: dt,
@@ -869,12 +884,20 @@ final class JockRetargetTestController {
     private func updateHitDetectionIfNeeded(
         currentTime: TimeInterval
     ) {
-        let faceCenter = estimatedCharacterFaceCenterWorldPosition()
+        guard let headHitZone = currentHeadHitZone() else {
+            logMissingHeadHitZoneIfNeeded()
+            return
+        }
+
+        logHeadHitZoneBuildIfNeeded(
+            headHitZone
+        )
 
         guard let event = hitDetector.update(
             currentTime: currentTime,
             characterRoot: rootEntity,
-            faceCenterWorld: faceCenter
+            faceCenterWorld: headHitZone.centerWorld,
+            headHitRadiusMeters: headHitZone.radiusMeters
         ) else {
             return
         }
@@ -882,14 +905,147 @@ final class JockRetargetTestController {
         handleHitEvent(event)
     }
 
-    private func estimatedCharacterFaceCenterWorldPosition() -> SIMD3<Float> {
-        let localFaceCenter = SIMD3<Float>(
-            0,
-            hitConfiguration.faceCenterHeightMeters,
-            -0.04
+    private func currentHeadHitZone() -> InfectedHeadHitZone? {
+        guard let driver,
+              let modelEntity,
+              let skeletonWorldPoseResolver else {
+            return nil
+        }
+
+        let headWorld = skeletonWorldPoseResolver.worldPosition(
+            for: "Head",
+            jointTransforms: driver.currentJointTransforms,
+            modelEntity: modelEntity
         )
 
-        return rootEntity.position + rootEntity.orientation.act(localFaceCenter)
+        let headEndWorld = skeletonWorldPoseResolver.worldPosition(
+            for: "head_end",
+            jointTransforms: driver.currentJointTransforms,
+            modelEntity: modelEntity
+        )
+
+        let headFrontWorld = skeletonWorldPoseResolver.worldPosition(
+            for: "headfront",
+            jointTransforms: driver.currentJointTransforms,
+            modelEntity: modelEntity
+        )
+
+        guard let headWorld else {
+            return nil
+        }
+
+        let centerWorld: SIMD3<Float>
+        let jointDescription: String
+
+        if let headFrontWorld {
+            centerWorld = headFrontWorld
+            jointDescription = "Head/headfront"
+        } else if let headEndWorld {
+            centerWorld = (headWorld + headEndWorld) * 0.5
+            jointDescription = "Head/head_end"
+        } else {
+            centerWorld = headWorld
+            jointDescription = "Head"
+        }
+
+        return InfectedHeadHitZone(
+            centerWorld: centerWorld,
+            radiusMeters: estimatedHeadHitRadius(
+                headWorld: headWorld,
+                headEndWorld: headEndWorld,
+                headFrontWorld: headFrontWorld
+            ),
+            jointDescription: jointDescription,
+            headWorld: headWorld,
+            headEndWorld: headEndWorld,
+            headFrontWorld: headFrontWorld
+        )
+    }
+
+    private func estimatedHeadHitRadius(
+        headWorld: SIMD3<Float>,
+        headEndWorld: SIMD3<Float>?,
+        headFrontWorld: SIMD3<Float>?
+    ) -> Float {
+        if let headEndWorld {
+            let distance = simd_distance(headWorld, headEndWorld)
+
+            if distance.isFinite, distance > 0.01 {
+                return min(
+                    max(distance * 1.05, 0.12),
+                    0.30
+                )
+            }
+        }
+
+        if let headFrontWorld {
+            let distance = simd_distance(headWorld, headFrontWorld)
+
+            if distance.isFinite, distance > 0.01 {
+                return min(
+                    max(distance * 2.0, 0.12),
+                    0.30
+                )
+            }
+        }
+
+        switch characterArchetype {
+        case .dad:
+            return 0.18
+
+        case .neighbor:
+            return 0.22
+
+        case .spouse:
+            return 0.18
+        }
+    }
+
+    private func logHeadHitZoneBuildIfNeeded(
+        _ zone: InfectedHeadHitZone? = nil
+    ) {
+        guard !hasLoggedHeadHitZoneBuild else {
+            return
+        }
+
+        guard let zone = zone ?? currentHeadHitZone() else {
+            logMissingHeadHitZoneIfNeeded()
+            return
+        }
+
+        hasLoggedHeadHitZoneBuild = true
+
+        print(
+            """
+            [InfectedHitZone] built head hit zone
+              enemyID: \(hordeID)
+              archetype: \(characterArchetype.rawValue)
+              joint: \(zone.jointDescription)
+              radius: \(zone.radiusMeters)
+              centerWorld: \(zone.centerWorld)
+              headWorld: \(zone.headWorld.map { String(describing: $0) } ?? "nil")
+              headEndWorld: \(zone.headEndWorld.map { String(describing: $0) } ?? "nil")
+              headFrontWorld: \(zone.headFrontWorld.map { String(describing: $0) } ?? "nil")
+              parent: \(rootEntity.name)
+            """
+        )
+    }
+
+    private func logMissingHeadHitZoneIfNeeded() {
+        guard !hasLoggedMissingHeadHitZone else {
+            return
+        }
+
+        hasLoggedMissingHeadHitZone = true
+
+        print(
+            """
+            [InfectedHitZone] ERROR no head joint found
+              enemyID: \(hordeID)
+              archetype: \(characterArchetype.rawValue)
+              availableJoints: \(adapter?.runtimeJointNames.joined(separator: ", ") ?? "nil")
+            """
+        )
     }
 
     private func handleHitEvent(
@@ -914,6 +1070,18 @@ final class JockRetargetTestController {
 
         if case .dead = combatState {
             return
+        }
+
+        if event.region == .head {
+            print(
+                """
+                [PlayerAttack] HEAD HIT
+                  enemyID: \(hordeID)
+                  archetype: \(characterArchetype.rawValue)
+                  wave: \(hordeWave)
+                  spawnIndex: \(hordeSpawnIndex)
+                """
+            )
         }
 
         acceptedHitCount += 1
@@ -963,6 +1131,7 @@ final class JockRetargetTestController {
             [Gravitas Hit] Registered face hit
               hitCount: \(acceptedHitCount)
               hand: \(event.hand)
+              region: \(event.region.rawValue)
               deterministicSide: \(event.side.rawValue)
               authoredClipSide: \(authoredClipSide.rawValue)
               classifiedDamage: \(event.damageLevel.rawValue)

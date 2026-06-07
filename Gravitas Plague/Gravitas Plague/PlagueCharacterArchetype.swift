@@ -4,8 +4,8 @@ import RealityKit
 enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
     case dad
     case neighbor
+    case spouse
     // Future:
-    // case spouse
     // case convict
     // case grandma
 
@@ -17,6 +17,8 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
             return "Dad"
         case .neighbor:
             return "Neighbor"
+        case .spouse:
+            return "Spouse"
         }
     }
 
@@ -26,6 +28,8 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
             return "dad_biped"
         case .neighbor:
             return "neighbor_biped"
+        case .spouse:
+            return "spouse_biped"
         }
     }
 
@@ -37,7 +41,7 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .dad:
             return .authorAbsoluteLocal
-        case .neighbor:
+        case .neighbor, .spouse:
             return .sourceRestDeltaToTargetRest
         }
     }
@@ -46,7 +50,8 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
 enum CharacterAssetRegistry {
     static let requiredHordeAssets: [PlagueCharacterArchetype] = [
         .dad,
-        .neighbor
+        .neighbor,
+        .spouse
     ]
 
     static func url(
@@ -83,10 +88,16 @@ enum CharacterAssetRegistry {
 }
 
 enum HordeCharacterWaveLineup {
+    static let deterministicRoster: [PlagueCharacterArchetype] = [
+        .dad,
+        .neighbor,
+        .spouse
+    ]
+
     static func archetypeForSpawnIndex(
         _ index: Int
     ) -> PlagueCharacterArchetype {
-        index.isMultiple(of: 2) ? .dad : .neighbor
+        deterministicRoster[index % deterministicRoster.count]
     }
 
     static func lineup(

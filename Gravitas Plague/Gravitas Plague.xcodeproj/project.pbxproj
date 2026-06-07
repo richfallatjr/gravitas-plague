@@ -16,6 +16,7 @@
 		8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */; };
 		8E1A10112FCD000100000001 /* ../dad_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10122FCD000100000001 /* ../dad_biped.usdz */; };
 		8E1A102E2FCD000100000001 /* ../neighbor_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A102F2FCD000100000001 /* ../neighbor_biped.usdz */; };
+		8E1A10302FCD000100000001 /* ../spouse_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10312FCD000100000001 /* ../spouse_biped.usdz */; };
 		8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */; };
 		8E1A10142FCD000100000001 /* ../Narrow-band-analog.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */; };
 		8E1A10152FCD000100000001 /* ../Create_a_short_emerg_beeping.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A101A2FCD000100000001 /* ../Create_a_short_emerg_beeping.wav */; };
@@ -61,6 +62,7 @@
 		8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Gravitas Plague/AnimationLibrary"; sourceTree = SOURCE_ROOT; };
 		8E1A10122FCD000100000001 /* ../dad_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../dad_biped.usdz; sourceTree = SOURCE_ROOT; };
 		8E1A102F2FCD000100000001 /* ../neighbor_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../neighbor_biped.usdz; sourceTree = SOURCE_ROOT; };
+		8E1A10312FCD000100000001 /* ../spouse_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../spouse_biped.usdz; sourceTree = SOURCE_ROOT; };
 		8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = ../GravitasPlagueBackgroundLoop.wav; sourceTree = SOURCE_ROOT; };
 		8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../Narrow-band-analog.wav"; sourceTree = SOURCE_ROOT; };
 		8E1A101A2FCD000100000001 /* ../Create_a_short_emerg_beeping.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = ../Create_a_short_emerg_beeping.wav; sourceTree = SOURCE_ROOT; };
@@ -161,6 +163,7 @@
 				8E1A10062FCD000100000001 /* ../unstable-walk.usdz */,
 				8E1A10122FCD000100000001 /* ../dad_biped.usdz */,
 				8E1A102F2FCD000100000001 /* ../neighbor_biped.usdz */,
+				8E1A10312FCD000100000001 /* ../spouse_biped.usdz */,
 				8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */,
 				8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */,
 				8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */,
@@ -305,6 +308,7 @@
 				8E1A10032FCD000100000001 /* ../unstable-walk.usdz in Resources */,
 				8E1A10112FCD000100000001 /* ../dad_biped.usdz in Resources */,
 				8E1A102E2FCD000100000001 /* ../neighbor_biped.usdz in Resources */,
+				8E1A10302FCD000100000001 /* ../spouse_biped.usdz in Resources */,
 				8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */,
 				8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav in Resources */,
 				8E1A10142FCD000100000001 /* ../Narrow-band-analog.wav in Resources */,

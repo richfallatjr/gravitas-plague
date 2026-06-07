@@ -467,6 +467,17 @@ final class JockRuntimeDriver {
             """
         )
 
+        print(
+            """
+            [JockRuntimeDriver] canonical joint entity map
+              archetype: \(characterArchetype.rawValue)
+              Head: \(adapter.runtimeJointName(for: "Head") ?? "nil")
+              head_end: \(adapter.runtimeJointName(for: "head_end") ?? "nil")
+              headfront: \(adapter.runtimeJointName(for: "headfront") ?? "nil")
+              Hips: \(adapter.runtimeJointName(for: "Hips") ?? "nil")
+            """
+        )
+
         if poseApplicationPolicy == .preserveTargetSkeleton,
            preserveTargetJointRotationCorrections.isEmpty {
             print("[JockRuntimeDriver] preserve target correction table empty; no hard axis swaps active.")

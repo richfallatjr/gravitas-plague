@@ -13,6 +13,7 @@ final class JockHandHitDetector {
     struct HitEvent: Equatable {
         let side: JockHitSide
         let damageLevel: JockHitDamageLevel
+        let region: InfectedHitRegion
         let hand: HandAnchor.Chirality
         let position: SIMD3<Float>
         let velocityMetersPerSecond: Float
@@ -73,7 +74,8 @@ final class JockHandHitDetector {
     func update(
         currentTime: TimeInterval,
         characterRoot: Entity,
-        faceCenterWorld: SIMD3<Float>
+        faceCenterWorld: SIMD3<Float>,
+        headHitRadiusMeters: Float? = nil
     ) -> HitEvent? {
         guard configuration.enabled else { return nil }
         guard isRunning else { return nil }
@@ -82,14 +84,16 @@ final class JockHandHitDetector {
             chirality: .left,
             currentTime: currentTime,
             characterRoot: characterRoot,
-            faceCenterWorld: faceCenterWorld
+            faceCenterWorld: faceCenterWorld,
+            headHitRadiusMeters: headHitRadiusMeters
         )
 
         let right = evaluateHand(
             chirality: .right,
             currentTime: currentTime,
             characterRoot: characterRoot,
-            faceCenterWorld: faceCenterWorld
+            faceCenterWorld: faceCenterWorld,
+            headHitRadiusMeters: headHitRadiusMeters
         )
 
         switch (left, right) {
@@ -113,7 +117,8 @@ final class JockHandHitDetector {
         chirality: HandAnchor.Chirality,
         currentTime: TimeInterval,
         characterRoot: Entity,
-        faceCenterWorld: SIMD3<Float>
+        faceCenterWorld: SIMD3<Float>,
+        headHitRadiusMeters: Float?
     ) -> HitEvent? {
         guard let handAnchor = latestHandAnchor(chirality: chirality) else {
             return nil
@@ -181,7 +186,12 @@ final class JockHandHitDetector {
             }
         }
 
-        guard distance <= configuration.maxHitDistanceMeters else {
+        let acceptedHitRadius = max(
+            configuration.maxHitDistanceMeters,
+            headHitRadiusMeters ?? configuration.faceZoneRadiusMeters
+        )
+
+        guard distance <= acceptedHitRadius else {
             return nil
         }
 
@@ -222,6 +232,7 @@ final class JockHandHitDetector {
               selectedSide: \(side.rawValue)
               speed: \(String(format: "%.2f", speed))
               distance: \(String(format: "%.3f", distance))
+              acceptedHeadRadius: \(String(format: "%.3f", acceptedHitRadius))
               approachDot: \(String(format: "%.2f", approachDot))
             """
         )
@@ -229,6 +240,7 @@ final class JockHandHitDetector {
         return HitEvent(
             side: side,
             damageLevel: damage,
+            region: .head,
             hand: chirality,
             position: handPosition,
             velocityMetersPerSecond: speed
