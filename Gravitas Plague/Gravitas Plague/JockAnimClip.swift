@@ -4,12 +4,46 @@ struct JockAnimClip: Codable, Equatable {
     struct Source: Codable, Equatable {
         let type: String
         let sourceFile: String
+        let sourcePath: String?
         let notes: String?
 
         enum CodingKeys: String, CodingKey {
             case type
             case sourceFile = "source_file"
+            case sourcePath = "source_path"
             case notes
+        }
+    }
+
+    struct SourceRig: Codable, Equatable {
+        struct RestLocalTransform: Codable, Equatable {
+            let translationXYZ: [Float]
+            let rotationQuatWXYZ: [Float]
+            let scaleXYZ: [Float]
+
+            enum CodingKeys: String, CodingKey {
+                case translationXYZ = "translation_xyz"
+                case rotationQuatWXYZ = "rotation_quat_wxyz"
+                case scaleXYZ = "scale_xyz"
+            }
+        }
+
+        let schema: String?
+        let characterID: String?
+        let sourceUSDZ: String?
+        let sourceUSDZPath: String?
+        let skeletonHash: String?
+        let jointPaths: [String]
+        let restLocalTransforms: [String: RestLocalTransform]
+
+        enum CodingKeys: String, CodingKey {
+            case schema
+            case characterID = "character_id"
+            case sourceUSDZ = "source_usdz"
+            case sourceUSDZPath = "source_usdz_path"
+            case skeletonHash = "skeleton_hash"
+            case jointPaths = "joint_paths"
+            case restLocalTransforms = "rest_local_transforms"
         }
     }
 
@@ -185,6 +219,7 @@ struct JockAnimClip: Codable, Equatable {
     let baseAnimationContinues: Bool?
     let attack: AttackMetadata?
     let source: Source
+    let sourceRig: SourceRig?
     let timing: Timing
     let joints: [String]
     let tracks: [Track]
@@ -208,6 +243,7 @@ struct JockAnimClip: Codable, Equatable {
         case baseAnimationContinues = "base_animation_continues"
         case attack
         case source
+        case sourceRig = "source_rig"
         case timing
         case joints
         case tracks

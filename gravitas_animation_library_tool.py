@@ -27,8 +27,10 @@ bl_info = {
 }
 
 import bpy
+import hashlib
 import json
 import math
+import mathutils
 import os
 import re
 import traceback
@@ -47,6 +49,7 @@ from bpy.types import Operator, Panel, PropertyGroup
 
 
 TEMP_COLLECTION_NAME = "__GRAVITAS_ANIMATION_DONOR_TEMP__"
+TARGET_COLLECTION_NAME = "__GRAVITAS_TARGET_CHARACTER_TEMP__"
 LOG_TEXT_BLOCK_NAME = "Gravitas_Animation_Library_Log"
 
 DEFAULT_PROJECT_ROOT = os.path.expanduser(
@@ -1107,6 +1110,801 @@ def _validate_armature_against_rig(armature, rig_json, skeleton_map):
 
 
 # ============================================================
+# Target character clip application
+# ============================================================
+
+CRITICAL_TARGET_RETARGET_JOINTS = {
+    "Hips",
+    "Spine02",
+    "Spine01",
+    "Spine",
+    "neck",
+    "Head",
+    "LeftUpLeg",
+    "RightUpLeg",
+    "LeftLeg",
+    "RightLeg",
+    "LeftFoot",
+    "RightFoot",
+}
+
+
+def _delete_target_collection():
+    old = bpy.data.collections.get(TARGET_COLLECTION_NAME)
+    if old is None:
+        return
+
+    for obj in list(old.objects):
+        bpy.data.objects.remove(obj, do_unlink=True)
+
+    try:
+        bpy.data.collections.remove(old)
+    except Exception:
+        pass
+
+
+def _create_target_collection():
+    _delete_target_collection()
+    collection = bpy.data.collections.new(TARGET_COLLECTION_NAME)
+    bpy.context.scene.collection.children.link(collection)
+    return collection
+
+
+def _import_target_character(filepath, log):
+    filepath = bpy.path.abspath(filepath)
+
+    if not filepath or not os.path.isfile(filepath):
+        raise FileNotFoundError(f"Target character file does not exist: {filepath}")
+
+    _force_object_mode()
+
+    saved_start = bpy.context.scene.frame_start
+    saved_end = bpy.context.scene.frame_end
+    saved_current = bpy.context.scene.frame_current
+
+    existing = set(bpy.data.objects.keys())
+    collection = _create_target_collection()
+    ext = os.path.splitext(filepath)[1].lower()
+
+    _log_append(log, f"Importing target character: {filepath}")
+
+    if ext in [".usd", ".usda", ".usdc", ".usdz"]:
+        _call_operator_with_supported_kwargs(
+            bpy.ops.wm.usd_import,
+            filepath=filepath,
+            set_frame_range=False,
+            import_cameras=False,
+            import_lights=False,
+            import_materials=True,
+            import_meshes=True,
+            import_skeletons=True,
+            import_blendshapes=True,
+            read_meshes=True,
+            read_animation=True,
+        )
+    elif ext == ".fbx":
+        _call_operator_with_supported_kwargs(
+            bpy.ops.import_scene.fbx,
+            filepath=filepath,
+            use_anim=True,
+        )
+    else:
+        raise RuntimeError(f"Unsupported target extension: {ext}")
+
+    bpy.context.scene.frame_start = saved_start
+    bpy.context.scene.frame_end = saved_end
+    bpy.context.scene.frame_set(saved_current)
+    bpy.context.view_layer.update()
+
+    imported = [
+        obj for obj in bpy.data.objects
+        if obj.name not in existing
+    ]
+
+    _link_to_collection(imported, collection)
+
+    armature = _find_animated_armature(imported)
+    if armature is None:
+        armatures = [obj for obj in imported if obj.type == "ARMATURE"]
+        if not armatures:
+            raise RuntimeError("No armature found in target character.")
+        armatures.sort(
+            key=lambda obj: len(obj.pose.bones) if obj.pose else 0,
+            reverse=True,
+        )
+        armature = armatures[0]
+
+    _log_append(log, f"Imported target object count: {len(imported)}")
+    _log_append(log, f"Detected target armature: {armature.name}")
+
+    return imported, collection, armature
+
+
+def _load_selected_manifest_clip_payload(settings, log):
+    if not MANIFEST_CLIP_SUMMARY_BY_ID:
+        _refresh_manifest_clip_cache(settings, log)
+
+    clip_id = settings.selected_manifest_clip_id
+
+    if clip_id == "__NONE__" or not clip_id:
+        raise RuntimeError("No manifest clip selected.")
+
+    summary = MANIFEST_CLIP_SUMMARY_BY_ID.get(clip_id)
+    if summary is None:
+        raise RuntimeError(f"Selected clip not found in manifest cache: {clip_id}")
+
+    clip_path = _clip_json_path_from_summary(
+        settings.animation_library_root,
+        summary,
+    )
+
+    if not os.path.isfile(clip_path):
+        raise FileNotFoundError(f"Selected clip file not found: {clip_path}")
+
+    payload = _json_load(clip_path)
+
+    _log_append(log, f"Loaded manifest clip: {clip_id}")
+    _log_append(log, f"Clip path: {clip_path}")
+
+    return payload, summary, clip_path
+
+
+def _tracks_by_joint_and_channel(clip_payload):
+    result = {}
+
+    for track in clip_payload.get("tracks", []):
+        joint = track.get("joint", "")
+        channel = track.get("channel", "")
+
+        if not joint or not channel:
+            continue
+
+        result.setdefault(joint, {})[channel] = sorted(
+            track.get("keys", []),
+            key=lambda key: float(key.get("t", 0.0)),
+        )
+
+    return result
+
+
+def _sample_vector_keyframe(keys, t, default=None):
+    if not keys:
+        return default
+
+    if t <= float(keys[0].get("t", 0.0)):
+        return keys[0].get("value", default)
+
+    if t >= float(keys[-1].get("t", 0.0)):
+        return keys[-1].get("value", default)
+
+    for index in range(len(keys) - 1):
+        a = keys[index]
+        b = keys[index + 1]
+
+        ta = float(a.get("t", 0.0))
+        tb = float(b.get("t", 0.0))
+
+        if ta <= t <= tb:
+            denom = max(tb - ta, 0.000001)
+            f = (t - ta) / denom
+
+            av = a.get("value", default)
+            bv = b.get("value", default)
+
+            if av is None or bv is None:
+                return default
+
+            return [
+                float(av[i]) + (float(bv[i]) - float(av[i])) * f
+                for i in range(min(len(av), len(bv)))
+            ]
+
+    return default
+
+
+def _quat_from_wxyz(value):
+    if value is None or len(value) < 4:
+        return None
+
+    quat = mathutils.Quaternion((
+        float(value[0]),
+        float(value[1]),
+        float(value[2]),
+        float(value[3]),
+    ))
+    quat.normalize()
+    return quat
+
+
+def _vec3_from_value(value, default=(0.0, 0.0, 0.0)):
+    if value is None or len(value) < 3:
+        return mathutils.Vector(default)
+
+    return mathutils.Vector((
+        float(value[0]),
+        float(value[1]),
+        float(value[2]),
+    ))
+
+
+def _sample_quat_keyframe(keys, t, default=None):
+    if not keys:
+        return default
+
+    if t <= float(keys[0].get("t", 0.0)):
+        return _quat_from_wxyz(keys[0].get("value", None)) or default
+
+    if t >= float(keys[-1].get("t", 0.0)):
+        return _quat_from_wxyz(keys[-1].get("value", None)) or default
+
+    for index in range(len(keys) - 1):
+        a = keys[index]
+        b = keys[index + 1]
+
+        ta = float(a.get("t", 0.0))
+        tb = float(b.get("t", 0.0))
+
+        if ta <= t <= tb:
+            qa = _quat_from_wxyz(a.get("value", None))
+            qb = _quat_from_wxyz(b.get("value", None))
+
+            if qa is None or qb is None:
+                return default
+
+            denom = max(tb - ta, 0.000001)
+            f = (t - ta) / denom
+            quat = qa.slerp(qb, f)
+            if quat is None:
+                quat = qa.copy()
+                quat.slerp(qb, f)
+            quat.normalize()
+            return quat
+
+    return default
+
+
+def _target_rest_local_transform_by_bone(armature):
+    result = {}
+
+    for pose_bone in armature.pose.bones:
+        bone = pose_bone.bone
+
+        if bone.parent is None:
+            local_matrix = bone.matrix_local.copy()
+        else:
+            local_matrix = bone.parent.matrix_local.inverted() @ bone.matrix_local
+
+        loc, rot, scale = local_matrix.decompose()
+
+        result[pose_bone.name] = {
+            "translation": loc.copy(),
+            "rotation": rot.copy(),
+            "scale": scale.copy(),
+            "matrix": local_matrix.copy(),
+        }
+
+    return result
+
+
+def _first_track_value(track_keys):
+    if not track_keys:
+        return None
+
+    sorted_keys = sorted(track_keys, key=lambda key: float(key.get("t", 0.0)))
+    return sorted_keys[0].get("value", None)
+
+
+def _source_reference_by_joint(tracks_by_joint):
+    result = {}
+
+    for joint, channels in tracks_by_joint.items():
+        translation = _first_track_value(
+            channels.get("translation_xyz_absolute", [])
+        )
+        rotation = _first_track_value(
+            channels.get("rotation_quat_wxyz_absolute", [])
+        )
+        scale = _first_track_value(
+            channels.get("scale_xyz_absolute", [])
+        )
+
+        result[joint] = {
+            "translation": (
+                _vec3_from_value(translation)
+                if translation is not None
+                else None
+            ),
+            "rotation": _quat_from_wxyz(rotation) if rotation is not None else None,
+            "scale": (
+                _vec3_from_value(scale, default=(1.0, 1.0, 1.0))
+                if scale is not None
+                else None
+            ),
+        }
+
+    return result
+
+
+def _build_target_bone_mapping(armature, rig_json, skeleton_map, log):
+    pose_bone_names = {bone.name for bone in armature.pose.bones}
+    runtime_indices_by_leaf = {}
+
+    for index, bone_name in enumerate(sorted(pose_bone_names)):
+        runtime_indices_by_leaf.setdefault(_leaf_name(bone_name), []).append(
+            (index, bone_name)
+        )
+
+    result = {}
+    missing = []
+    ambiguous = []
+    critical_mismatches = []
+
+    for canonical_leaf in _rig_leaf_names(rig_json):
+        target_name = _resolve_source_bone_name(canonical_leaf, skeleton_map)
+        match_kind = "missing"
+        mapped_name = None
+
+        if target_name in pose_bone_names:
+            mapped_name = target_name
+            match_kind = "exactTargetName"
+        elif canonical_leaf in pose_bone_names:
+            mapped_name = canonical_leaf
+            match_kind = "exactCanonicalLeaf"
+        else:
+            matches = runtime_indices_by_leaf.get(canonical_leaf, [])
+
+            if len(matches) == 1:
+                mapped_name = matches[0][1]
+                match_kind = "uniqueLeafName"
+            elif len(matches) > 1:
+                ambiguous.append({
+                    "canonical": canonical_leaf,
+                    "target": target_name,
+                    "matches": [match[1] for match in matches],
+                })
+                match_kind = "ambiguousLeafName"
+            else:
+                missing.append({
+                    "canonical": canonical_leaf,
+                    "target": target_name,
+                    "matches": [],
+                })
+
+        if mapped_name is not None:
+            result[canonical_leaf] = mapped_name
+
+            if (
+                canonical_leaf in CRITICAL_TARGET_RETARGET_JOINTS
+                and _leaf_name(mapped_name) != canonical_leaf
+            ):
+                critical_mismatches.append(
+                    f"{canonical_leaf} -> {mapped_name}"
+                )
+
+        _log_append(
+            log,
+            (
+                "[TargetRetarget] joint map\n"
+                f"  canonicalPath: {canonical_leaf}\n"
+                f"  canonicalLeaf: {canonical_leaf}\n"
+                f"  sourcePath: {target_name}\n"
+                f"  targetPath: {mapped_name or 'nil'}\n"
+                f"  matchKind: {match_kind}"
+            ),
+        )
+
+    _log_append(
+        log,
+        (
+            f"Target bone mappings: {len(result)} / "
+            f"{len(_rig_leaf_names(rig_json))}"
+        ),
+    )
+
+    if missing:
+        _log_append(log, "[TargetRetarget] ERROR missing target bone mappings:")
+        for item in missing:
+            _log_append(
+                log,
+                (
+                    f"  canonical={item['canonical']} "
+                    f"target={item['target']} matches={item['matches']}"
+                ),
+            )
+
+    if ambiguous:
+        _log_append(log, "[TargetRetarget] ERROR ambiguous target bone mappings:")
+        for item in ambiguous:
+            _log_append(
+                log,
+                (
+                    f"  canonical={item['canonical']} "
+                    f"target={item['target']} matches={item['matches']}"
+                ),
+            )
+
+    if critical_mismatches:
+        _log_append(log, "[TargetRetarget] ERROR critical identity mismatches:")
+        for mismatch in critical_mismatches:
+            _log_append(log, f"  {mismatch}")
+
+    return result, missing, ambiguous, critical_mismatches
+
+
+def _is_root_joint(canonical_joint):
+    lower = canonical_joint.lower()
+    return lower in {"hips", "root", "pelvis", "armature"}
+
+
+def _compose_matrix(translation, rotation, scale):
+    loc_matrix = mathutils.Matrix.Translation(translation)
+    rot_matrix = rotation.to_matrix().to_4x4()
+    scale_matrix = mathutils.Matrix.Diagonal((
+        float(scale.x),
+        float(scale.y),
+        float(scale.z),
+        1.0,
+    ))
+    return loc_matrix @ rot_matrix @ scale_matrix
+
+
+def _sample_manifest_local_transform_for_joint(
+    canonical_joint,
+    target_bone_name,
+    channels,
+    source_reference,
+    target_rest,
+    settings,
+    t,
+):
+    rest = target_rest[target_bone_name]
+
+    rest_t = rest["translation"].copy()
+    rest_r = rest["rotation"].copy()
+    rest_s = rest["scale"].copy()
+
+    abs_t = _sample_vector_keyframe(
+        channels.get("translation_xyz_absolute", []),
+        t,
+        default=None,
+    )
+    abs_r = _sample_quat_keyframe(
+        channels.get("rotation_quat_wxyz_absolute", []),
+        t,
+        default=None,
+    )
+    abs_s = _sample_vector_keyframe(
+        channels.get("scale_xyz_absolute", []),
+        t,
+        default=None,
+    )
+
+    policy = settings.target_pose_policy
+
+    if policy == "AUTHOR_ABSOLUTE_LOCAL":
+        final_t = (
+            _vec3_from_value(abs_t, default=tuple(rest_t))
+            if abs_t is not None
+            else rest_t
+        )
+        final_r = abs_r.copy() if abs_r is not None else rest_r
+        final_s = (
+            _vec3_from_value(abs_s, default=tuple(rest_s))
+            if abs_s is not None
+            else rest_s
+        )
+
+        return _compose_matrix(final_t, final_r, final_s)
+
+    # Industry retargeting does not copy source joint translations onto a
+    # different body. This test path preserves the target rest skeleton, layers
+    # source rotation deltas, and applies only optional root translation delta.
+    final_t = rest_t.copy()
+    final_r = rest_r.copy()
+    final_s = rest_s.copy()
+
+    source_ref = source_reference.get(canonical_joint, {})
+
+    if abs_r is not None:
+        ref_r = source_ref.get("rotation") or abs_r
+
+        if settings.target_rotation_delta_order == "PARENT_SPACE":
+            delta = abs_r @ ref_r.inverted()
+            final_r = delta @ rest_r
+        else:
+            delta = ref_r.inverted() @ abs_r
+            final_r = rest_r @ delta
+
+        final_r.normalize()
+
+    if settings.target_apply_root_translation and _is_root_joint(canonical_joint):
+        if abs_t is not None:
+            ref_t = source_ref.get("translation") or _vec3_from_value(abs_t)
+            delta_t = _vec3_from_value(abs_t) - ref_t
+            if settings.target_ignore_root_vertical:
+                delta_t.z = 0.0
+            final_t = rest_t + delta_t
+    elif (
+        abs_t is not None
+        and not settings.target_ignore_non_root_translations
+    ):
+        ref_t = source_ref.get("translation") or _vec3_from_value(abs_t)
+        final_t = rest_t + (_vec3_from_value(abs_t) - ref_t)
+
+    if not settings.target_ignore_scales and abs_s is not None:
+        final_s = _vec3_from_value(abs_s, default=tuple(rest_s))
+
+    return _compose_matrix(final_t, final_r, final_s)
+
+
+def _topological_pose_bone_order(armature):
+    result = []
+    visited = set()
+
+    def visit(name):
+        if name in visited:
+            return
+
+        bone = armature.pose.bones.get(name)
+        if bone is None:
+            return
+
+        if bone.parent is not None:
+            visit(bone.parent.name)
+
+        visited.add(name)
+        result.append(name)
+
+    for bone in armature.pose.bones:
+        visit(bone.name)
+
+    return result
+
+
+def _apply_local_pose_matrices(armature, local_matrix_by_bone):
+    order = _topological_pose_bone_order(armature)
+    object_pose_by_bone = {}
+
+    for bone_name in order:
+        pose_bone = armature.pose.bones.get(bone_name)
+        if pose_bone is None:
+            continue
+
+        local = local_matrix_by_bone.get(bone_name)
+        if local is None:
+            continue
+
+        if pose_bone.parent is not None:
+            parent_object = object_pose_by_bone.get(pose_bone.parent.name)
+            if parent_object is None:
+                parent_object = pose_bone.parent.matrix.copy()
+            object_pose = parent_object @ local
+        else:
+            object_pose = local
+
+        pose_bone.matrix = object_pose
+        object_pose_by_bone[bone_name] = object_pose
+
+    bpy.context.view_layer.update()
+
+
+def _key_target_armature_pose(armature, frame, bone_names):
+    for bone_name in bone_names:
+        pose_bone = armature.pose.bones.get(bone_name)
+        if pose_bone is None:
+            continue
+
+        pose_bone.rotation_mode = "QUATERNION"
+        pose_bone.keyframe_insert(data_path="location", frame=frame)
+        pose_bone.keyframe_insert(data_path="rotation_quaternion", frame=frame)
+        pose_bone.keyframe_insert(data_path="scale", frame=frame)
+
+
+def _apply_jockanim_clip_to_target_armature(
+    settings,
+    armature,
+    clip_payload,
+    rig_json,
+    skeleton_map,
+    log,
+):
+    tracks_by_joint = _tracks_by_joint_and_channel(clip_payload)
+    source_reference = _source_reference_by_joint(tracks_by_joint)
+    target_rest = _target_rest_local_transform_by_bone(armature)
+
+    bone_mapping, missing, ambiguous, critical_mismatches = _build_target_bone_mapping(
+        armature=armature,
+        rig_json=rig_json,
+        skeleton_map=skeleton_map,
+        log=log,
+    )
+
+    if missing or ambiguous or critical_mismatches:
+        raise RuntimeError(
+            (
+                "Target mapping failed: "
+                f"missing={len(missing)} "
+                f"ambiguous={len(ambiguous)} "
+                f"criticalMismatches={len(critical_mismatches)}"
+            )
+        )
+
+    timing = clip_payload.get("timing", {})
+    fps = float(timing.get("fps", settings.source_fps))
+    duration = float(timing.get("duration_seconds", 0.0))
+
+    if duration <= 0.0:
+        max_t = 0.0
+        for joint_channels in tracks_by_joint.values():
+            for keys in joint_channels.values():
+                for key in keys:
+                    max_t = max(max_t, float(key.get("t", 0.0)))
+        duration = max_t
+
+    start_frame = int(settings.source_start_frame)
+    end_frame = start_frame + int(round(duration * fps))
+
+    if end_frame <= start_frame:
+        end_frame = start_frame + 1
+
+    sample_every = max(int(settings.sample_every_n_frames), 1)
+
+    if settings.target_clear_existing_animation and armature.animation_data is not None:
+        armature.animation_data_clear()
+
+    armature.rotation_mode = "QUATERNION"
+
+    scene = bpy.context.scene
+    scene.frame_start = start_frame
+    scene.frame_end = end_frame
+    scene.render.fps = int(round(fps))
+    scene.render.fps_base = 1.0
+
+    frames = list(range(start_frame, end_frame + 1, sample_every))
+    if not frames:
+        frames = [start_frame]
+    if frames[-1] != end_frame:
+        frames.append(end_frame)
+
+    applied_rotations = 0
+    applied_root_translations = 0
+    ignored_non_root_translations = 0
+    ignored_scales = 0
+
+    for frame in frames:
+        t = float(frame - start_frame) / max(fps, 0.0001)
+        scene.frame_set(frame)
+        bpy.context.view_layer.update()
+
+        local_matrix_by_bone = {}
+
+        for canonical_joint, target_bone_name in bone_mapping.items():
+            channels = tracks_by_joint.get(canonical_joint, {})
+
+            if not channels:
+                continue
+
+            if channels.get("rotation_quat_wxyz_absolute"):
+                applied_rotations += 1
+
+            if channels.get("translation_xyz_absolute"):
+                if _is_root_joint(canonical_joint):
+                    applied_root_translations += 1
+                elif settings.target_ignore_non_root_translations:
+                    ignored_non_root_translations += 1
+
+            if channels.get("scale_xyz_absolute") and settings.target_ignore_scales:
+                ignored_scales += 1
+
+            local_matrix_by_bone[target_bone_name] = (
+                _sample_manifest_local_transform_for_joint(
+                    canonical_joint=canonical_joint,
+                    target_bone_name=target_bone_name,
+                    channels=channels,
+                    source_reference=source_reference,
+                    target_rest=target_rest,
+                    settings=settings,
+                    t=t,
+                )
+            )
+
+        _apply_local_pose_matrices(
+            armature=armature,
+            local_matrix_by_bone=local_matrix_by_bone,
+        )
+
+        _key_target_armature_pose(
+            armature=armature,
+            frame=frame,
+            bone_names=list(local_matrix_by_bone.keys()),
+        )
+
+    _log_append(log, "Applied JockAnim clip to target armature.")
+    _log_append(log, f"Clip ID: {clip_payload.get('clip_id', 'unknown')}")
+    _log_append(log, f"Pose policy: {settings.target_pose_policy}")
+    _log_append(log, f"Rotation delta order: {settings.target_rotation_delta_order}")
+    _log_append(log, f"Ignore root vertical delta: {settings.target_ignore_root_vertical}")
+    _log_append(
+        log,
+        f"Frames keyed: {frames[0]} -> {frames[-1]} ({len(frames)} samples)",
+    )
+    _log_append(log, f"Matched joints: {len(bone_mapping)}")
+    _log_append(log, f"Applied rotation tracks count events: {applied_rotations}")
+    _log_append(
+        log,
+        f"Applied root translation count events: {applied_root_translations}",
+    )
+    _log_append(
+        log,
+        (
+            "Ignored non-root translation count events: "
+            f"{ignored_non_root_translations}"
+        ),
+    )
+    _log_append(log, f"Ignored scale count events: {ignored_scales}")
+
+    return {
+        "start_frame": start_frame,
+        "end_frame": end_frame,
+        "frames": frames,
+        "matched_joints": len(bone_mapping),
+    }
+
+
+def _export_animated_target(settings, armature, log):
+    export_format = settings.target_export_format
+
+    if export_format == "NONE" or not settings.target_export_after_apply:
+        _log_append(
+            log,
+            "Target export skipped. Animated target left in Blender scene.",
+        )
+        return None
+
+    output_path = bpy.path.abspath(settings.target_output_file_path)
+
+    if not output_path:
+        raise RuntimeError("Output Animated Target path is empty.")
+
+    _ensure_directory(os.path.dirname(output_path))
+
+    _force_object_mode()
+    bpy.ops.object.select_all(action="DESELECT")
+
+    collection = bpy.data.collections.get(TARGET_COLLECTION_NAME)
+    if collection is not None:
+        for obj in collection.objects:
+            obj.select_set(True)
+
+    armature.select_set(True)
+    bpy.context.view_layer.objects.active = armature
+
+    if export_format == "FBX":
+        _call_operator_with_supported_kwargs(
+            bpy.ops.export_scene.fbx,
+            filepath=output_path,
+            use_selection=True,
+            bake_anim=True,
+            add_leaf_bones=False,
+        )
+    elif export_format == "USD":
+        _call_operator_with_supported_kwargs(
+            bpy.ops.wm.usd_export,
+            filepath=output_path,
+            selected_objects_only=True,
+            export_animation=True,
+            export_armatures=True,
+            export_meshes=True,
+            export_materials=True,
+        )
+    else:
+        raise RuntimeError(f"Unsupported target export format: {export_format}")
+
+    _log_append(log, f"Exported animated target: {output_path}")
+    return output_path
+
+
+# ============================================================
 # Pose sampling
 # ============================================================
 
@@ -1135,6 +1933,76 @@ def _sample_pose_bone_local(pose_bone):
             float(scale.y),
             float(scale.z),
         ],
+    }
+
+
+def _sample_rest_bone_local(_armature, pose_bone):
+    bone = pose_bone.bone
+
+    if bone.parent is None:
+        local_matrix = bone.matrix_local.copy()
+    else:
+        local_matrix = bone.parent.matrix_local.inverted() @ bone.matrix_local
+
+    location, rotation, scale = local_matrix.decompose()
+
+    return {
+        "translation_xyz": [
+            float(location.x),
+            float(location.y),
+            float(location.z),
+        ],
+        "rotation_quat_wxyz": [
+            float(rotation.w),
+            float(rotation.x),
+            float(rotation.y),
+            float(rotation.z),
+        ],
+        "scale_xyz": [
+            float(scale.x),
+            float(scale.y),
+            float(scale.z),
+        ],
+    }
+
+
+def _extract_source_rig_rest_payload(
+    armature,
+    rig_json,
+    skeleton_map,
+    donor_file_path,
+):
+    rest_transforms = {}
+
+    for canonical_leaf in _rig_leaf_names(rig_json):
+        source_name = _resolve_source_bone_name(canonical_leaf, skeleton_map)
+        pose_bone = armature.pose.bones.get(source_name)
+
+        if pose_bone is None:
+            continue
+
+        rest_transforms[canonical_leaf] = _sample_rest_bone_local(
+            armature,
+            pose_bone,
+        )
+
+    skeleton_hash_source = json.dumps(
+        rest_transforms,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    skeleton_hash = hashlib.sha256(
+        skeleton_hash_source.encode("utf-8")
+    ).hexdigest()
+
+    return {
+        "schema": "com.gravitas.source_rig_rest.v0",
+        "character_id": "dad_biped",
+        "source_usdz": os.path.basename(bpy.path.abspath(donor_file_path)),
+        "source_usdz_path": bpy.path.abspath(donor_file_path),
+        "skeleton_hash": skeleton_hash,
+        "joint_paths": _rig_leaf_names(rig_json),
+        "rest_local_transforms": rest_transforms,
     }
 
 
@@ -1721,6 +2589,121 @@ class GravitasAnimationLibrarySettings(PropertyGroup):
         default=False,
     )
 
+    target_character_file_path: StringProperty(
+        name="Target Character USDZ",
+        subtype="FILE_PATH",
+        default="",
+    )
+
+    target_detected_armature_name: StringProperty(
+        name="Target Armature",
+        default="",
+    )
+
+    target_output_file_path: StringProperty(
+        name="Output Animated Target",
+        subtype="FILE_PATH",
+        default="",
+    )
+
+    target_export_format: EnumProperty(
+        name="Export Format",
+        items=[
+            (
+                "NONE",
+                "Leave In Blender",
+                "Apply animation and leave target in the Blender scene.",
+            ),
+            (
+                "USD",
+                "USD / USDC",
+                "Export animated USD/USDC if Blender supports it.",
+            ),
+            (
+                "FBX",
+                "FBX",
+                "Export animated FBX for Blender/runtime inspection.",
+            ),
+        ],
+        default="NONE",
+    )
+
+    target_pose_policy: EnumProperty(
+        name="Pose Policy",
+        items=[
+            (
+                "AUTHOR_ABSOLUTE_LOCAL",
+                "Author Absolute Local",
+                (
+                    "Apply manifest absolute local transforms directly. "
+                    "Use for Dad/source-compatible rigs."
+                ),
+            ),
+            (
+                "PRESERVE_TARGET_SKELETON",
+                "Preserve Target Skeleton",
+                (
+                    "Use target rest translations/proportions. Apply manifest "
+                    "rotations as deltas. Use for Neighbor/future characters."
+                ),
+            ),
+        ],
+        default="PRESERVE_TARGET_SKELETON",
+    )
+
+    target_rotation_delta_order: EnumProperty(
+        name="Rotation Delta Order",
+        items=[
+            (
+                "PARENT_SPACE",
+                "Parent Space",
+                (
+                    "delta = sampled * inverse(reference), "
+                    "final = delta * targetRest. Recommended for Neighbor."
+                ),
+            ),
+            (
+                "LOCAL_SPACE",
+                "Local Space",
+                (
+                    "delta = inverse(reference) * sampled, "
+                    "final = targetRest * delta. Kept for comparison."
+                ),
+            ),
+        ],
+        default="PARENT_SPACE",
+    )
+
+    target_apply_root_translation: BoolProperty(
+        name="Apply Root Translation Delta",
+        default=True,
+    )
+
+    target_ignore_non_root_translations: BoolProperty(
+        name="Ignore Non-Root Translations",
+        default=True,
+    )
+
+    target_ignore_root_vertical: BoolProperty(
+        name="Ignore Root Vertical Delta",
+        default=True,
+    )
+
+    target_ignore_scales: BoolProperty(
+        name="Ignore Scale Tracks",
+        default=True,
+    )
+
+    target_clear_existing_animation: BoolProperty(
+        name="Clear Target Existing Animation",
+        default=True,
+    )
+
+    target_export_after_apply: BoolProperty(
+        name="Export After Apply",
+        default=False,
+    )
+
 
 # ============================================================
 # Operators
@@ -2192,6 +3175,12 @@ class GRAVITAS_OT_export_jock_clip(Operator):
                     "sample_every_n_frames": int(settings.sample_every_n_frames),
                     "notes": "Extracted by Gravitas Animation Library Tool v2.0.",
                 },
+                "source_rig": _extract_source_rig_rest_payload(
+                    armature=armature,
+                    rig_json=rig,
+                    skeleton_map=skeleton_map,
+                    donor_file_path=settings.donor_file_path,
+                ),
                 "timing": {
                     "fps": fps,
                     "duration_seconds": duration_seconds,
@@ -2243,6 +3232,17 @@ class GRAVITAS_OT_export_jock_clip(Operator):
             }
 
             _log_append(log, f"Clip type: {clip_type}")
+            _log_append(
+                log,
+                (
+                    "Source rest transforms exported: "
+                    f"{len(clip_payload['source_rig']['rest_local_transforms'])}"
+                ),
+            )
+            _log_append(
+                log,
+                f"Source skeleton hash: {clip_payload['source_rig']['skeleton_hash']}",
+            )
 
             if clip_type == CLIP_TYPE_SUB_ANIMATION_OVERRIDE:
                 _log_append(log, f"Affected joints: {', '.join(affected_joints)}")
@@ -2284,6 +3284,85 @@ class GRAVITAS_OT_export_jock_clip(Operator):
                 self,
                 {"INFO"},
                 f"Exported JockAnim clip: {payload_to_write['clip_id']}",
+            )
+
+        except Exception as error:
+            _log_append(log, "ERROR")
+            _log_append(log, str(error))
+            _log_append(log, traceback.format_exc())
+            _safe_report(self, {"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+        finally:
+            if settings.log_text:
+                _write_log(log)
+
+        return {"FINISHED"}
+
+
+class GRAVITAS_OT_build_animated_target_from_selected_clip(Operator):
+    bl_idname = "gravitas.build_animated_target_from_selected_clip"
+    bl_label = "Build Animated Target From Selected Clip"
+    bl_description = (
+        "Imports a target character USDZ, applies the selected manifest JockAnim "
+        "clip to its actual skeleton, and optionally exports the animated target."
+    )
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.gravitas_animation_library
+        log = []
+
+        try:
+            clip_payload, _summary, _clip_path = _load_selected_manifest_clip_payload(
+                settings,
+                log,
+            )
+
+            rig = _json_load(bpy.path.abspath(settings.rig_json_path))
+
+            skeleton_map = _load_skeleton_map_or_identity(
+                bpy.path.abspath(settings.skeleton_map_path),
+                rig,
+            )
+
+            _imported, _collection, armature = _import_target_character(
+                settings.target_character_file_path,
+                log,
+            )
+
+            settings.target_detected_armature_name = armature.name
+
+            result = _apply_jockanim_clip_to_target_armature(
+                settings=settings,
+                armature=armature,
+                clip_payload=clip_payload,
+                rig_json=rig,
+                skeleton_map=skeleton_map,
+                log=log,
+            )
+
+            export_path = _export_animated_target(
+                settings=settings,
+                armature=armature,
+                log=log,
+            )
+
+            _log_append(log, "")
+            _log_append(log, "Animated target build complete.")
+            _log_append(log, f"Target armature: {armature.name}")
+            _log_append(
+                log,
+                f"Selected clip: {clip_payload.get('clip_id', 'unknown')}",
+            )
+            _log_append(log, f"Pose policy: {settings.target_pose_policy}")
+            _log_append(log, f"Matched joints: {result['matched_joints']}")
+            _log_append(log, f"Export: {export_path or 'left in Blender scene'}")
+
+            _safe_report(
+                self,
+                {"INFO"},
+                "Built animated target from selected clip.",
             )
 
         except Exception as error:
@@ -2499,6 +3578,38 @@ class GRAVITAS_PT_animation_library_panel(Panel):
             text=f"Path: {settings.loaded_manifest_clip_relative_path or 'none'}"
         )
 
+        target_box = layout.box()
+        target_box.label(
+            text="Apply Clip To Target Character",
+            icon="OUTLINER_OB_ARMATURE",
+        )
+        target_box.prop(settings, "target_character_file_path")
+        target_box.label(
+            text=f"Target: {settings.target_detected_armature_name or 'none'}"
+        )
+        target_box.prop(settings, "target_pose_policy")
+
+        if settings.target_pose_policy == "PRESERVE_TARGET_SKELETON":
+            target_box.prop(settings, "target_rotation_delta_order")
+            target_box.prop(settings, "target_apply_root_translation")
+            target_box.prop(settings, "target_ignore_root_vertical")
+            target_box.prop(settings, "target_ignore_non_root_translations")
+            target_box.prop(settings, "target_ignore_scales")
+
+        target_box.prop(settings, "target_clear_existing_animation")
+        target_box.prop(settings, "target_export_after_apply")
+
+        if settings.target_export_after_apply:
+            target_box.prop(settings, "target_export_format")
+            if settings.target_export_format != "NONE":
+                target_box.prop(settings, "target_output_file_path")
+
+        target_box.operator(
+            GRAVITAS_OT_build_animated_target_from_selected_clip.bl_idname,
+            text="Build Animated Target From Selected Clip",
+            icon="ARMATURE_DATA",
+        )
+
         donor_box = layout.box()
         donor_box.label(text="Donor Animation", icon="ARMATURE_DATA")
         donor_box.prop(settings, "donor_file_path")
@@ -2652,6 +3763,7 @@ classes = (
     GRAVITAS_OT_import_donor_animation,
     GRAVITAS_OT_validate_donor_rig,
     GRAVITAS_OT_export_jock_clip,
+    GRAVITAS_OT_build_animated_target_from_selected_clip,
     GRAVITAS_OT_cleanup_donor_import,
     GRAVITAS_OT_create_locomotion_root,
     GRAVITAS_OT_key_locomotion_current_frame,

@@ -38,7 +38,7 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
         case .dad:
             return .authorAbsoluteLocal
         case .neighbor:
-            return .preserveTargetSkeleton
+            return .sourceRestDeltaToTargetRest
         }
     }
 }
