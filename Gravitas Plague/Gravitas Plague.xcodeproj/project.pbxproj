@@ -31,6 +31,7 @@
 		8E1A102E2FCD000100000001 /* ../neighbor_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A102F2FCD000100000001 /* ../neighbor_biped.usdz */; };
 		8E1A10302FCD000100000001 /* ../spouse_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10312FCD000100000001 /* ../spouse_biped.usdz */; };
 		8E1A10322FCD000100000001 /* ../biker_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10332FCD000100000001 /* ../biker_biped.usdz */; };
+		8E1A10342FCD000100000001 /* ../grandma_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10352FCD000100000001 /* ../grandma_biped.usdz */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -78,6 +79,7 @@
 		8E1A102F2FCD000100000001 /* ../neighbor_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../neighbor_biped.usdz; sourceTree = SOURCE_ROOT; };
 		8E1A10312FCD000100000001 /* ../spouse_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../spouse_biped.usdz; sourceTree = SOURCE_ROOT; };
 		8E1A10332FCD000100000001 /* ../biker_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../biker_biped.usdz; sourceTree = SOURCE_ROOT; };
+		8E1A10352FCD000100000001 /* ../grandma_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../grandma_biped.usdz; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -166,6 +168,7 @@
 				8E1A10122FCD000100000001 /* ../dad_biped.usdz */,
 				8E1A10312FCD000100000001 /* ../spouse_biped.usdz */,
 				8E1A10332FCD000100000001 /* ../biker_biped.usdz */,
+				8E1A10352FCD000100000001 /* ../grandma_biped.usdz */,
 				8E1A102F2FCD000100000001 /* ../neighbor_biped.usdz */,
 				8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */,
 				8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */,
@@ -312,6 +315,7 @@
 				8E1A10112FCD000100000001 /* ../dad_biped.usdz in Resources */,
 				8E1A10302FCD000100000001 /* ../spouse_biped.usdz in Resources */,
 				8E1A10322FCD000100000001 /* ../biker_biped.usdz in Resources */,
+				8E1A10342FCD000100000001 /* ../grandma_biped.usdz in Resources */,
 				8E1A102E2FCD000100000001 /* ../neighbor_biped.usdz in Resources */,
 				8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */,
 				8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav in Resources */,

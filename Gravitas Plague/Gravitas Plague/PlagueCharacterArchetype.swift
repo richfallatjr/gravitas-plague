@@ -5,10 +5,10 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
     case dad
     case spouse
     case biker
+    case grandma
     case neighbor
     // Future:
     // case convict
-    // case grandma
 
     nonisolated var id: String { rawValue }
 
@@ -20,6 +20,8 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
             return "Spouse"
         case .biker:
             return "Biker"
+        case .grandma:
+            return "Grandma"
         case .neighbor:
             return "Neighbor"
         }
@@ -33,6 +35,8 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
             return "spouse_biped"
         case .biker:
             return "biker_biped"
+        case .grandma:
+            return "grandma_biped"
         case .neighbor:
             return "neighbor_biped"
         }
@@ -46,7 +50,7 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .dad:
             return .authorAbsoluteLocal
-        case .spouse, .biker, .neighbor:
+        case .spouse, .biker, .grandma, .neighbor:
             return .sourceRestDeltaToTargetRest
         }
     }
@@ -57,6 +61,7 @@ enum CharacterAssetRegistry {
         .dad,
         .spouse,
         .biker,
+        .grandma,
         .neighbor
     ]
 
@@ -98,6 +103,7 @@ enum HordeCharacterWaveLineup {
         .dad,
         .spouse,
         .biker,
+        .grandma,
         .neighbor
     ]
 

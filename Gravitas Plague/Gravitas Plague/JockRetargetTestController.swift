@@ -1055,6 +1055,9 @@ final class JockRetargetTestController {
 
         case .biker:
             return 0.20
+
+        case .grandma:
+            return 0.12
         }
     }
 
