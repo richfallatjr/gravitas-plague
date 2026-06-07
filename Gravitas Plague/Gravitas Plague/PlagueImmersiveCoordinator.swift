@@ -454,6 +454,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     [HordeBenchmark] ERROR failed to spawn infected
                       wave: \(nextWave)
                       index: \(index)
+                      archetype: \(archetype.rawValue)
+                      file: \(archetype.usdzFileName)
+                      policy: \(archetype.poseApplicationPolicy.rawValue)
                       id: \(id)
                       error: \(error)
                     """

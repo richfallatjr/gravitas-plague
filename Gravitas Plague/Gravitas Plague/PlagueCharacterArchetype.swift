@@ -3,8 +3,9 @@ import RealityKit
 
 enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
     case dad
-    case neighbor
     case spouse
+    case biker
+    case neighbor
     // Future:
     // case convict
     // case grandma
@@ -15,10 +16,12 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .dad:
             return "Dad"
-        case .neighbor:
-            return "Neighbor"
         case .spouse:
             return "Spouse"
+        case .biker:
+            return "Biker"
+        case .neighbor:
+            return "Neighbor"
         }
     }
 
@@ -26,10 +29,12 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .dad:
             return "dad_biped"
-        case .neighbor:
-            return "neighbor_biped"
         case .spouse:
             return "spouse_biped"
+        case .biker:
+            return "biker_biped"
+        case .neighbor:
+            return "neighbor_biped"
         }
     }
 
@@ -41,7 +46,7 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .dad:
             return .authorAbsoluteLocal
-        case .neighbor, .spouse:
+        case .spouse, .biker, .neighbor:
             return .sourceRestDeltaToTargetRest
         }
     }
@@ -50,8 +55,9 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
 enum CharacterAssetRegistry {
     static let requiredHordeAssets: [PlagueCharacterArchetype] = [
         .dad,
-        .neighbor,
-        .spouse
+        .spouse,
+        .biker,
+        .neighbor
     ]
 
     static func url(
@@ -91,6 +97,7 @@ enum HordeCharacterWaveLineup {
     static let deterministicRoster: [PlagueCharacterArchetype] = [
         .dad,
         .spouse,
+        .biker,
         .neighbor
     ]
 
@@ -146,6 +153,54 @@ enum CharacterRigValidator {
 }
 
 extension Entity {
+    func debugTreeSummary(
+        limit: Int
+    ) -> String {
+        var lines: [String] = []
+        var didTruncate = false
+
+        func visit(
+            _ entity: Entity,
+            depth: Int
+        ) {
+            guard lines.count < limit else {
+                didTruncate = true
+                return
+            }
+
+            let indentation = String(
+                repeating: "  ",
+                count: depth
+            )
+
+            let displayName = entity.name.isEmpty
+                ? "(unnamed)"
+                : entity.name
+
+            lines.append(
+                "\(indentation)- \(displayName) [\(type(of: entity))]"
+            )
+
+            for child in entity.children {
+                visit(
+                    child,
+                    depth: depth + 1
+                )
+            }
+        }
+
+        visit(
+            self,
+            depth: 0
+        )
+
+        if didTruncate {
+            lines.append("...")
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
     func visitRecursively(
         _ block: (Entity) -> Void
     ) {

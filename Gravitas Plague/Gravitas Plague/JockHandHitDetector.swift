@@ -230,8 +230,8 @@ final class JockHandHitDetector {
               selectedSide: \(side.rawValue)
               speed: \(String(format: "%.2f", speed))
               distance: \(String(format: "%.3f", distance))
-              acceptedHeadRadius: \(String(format: "%.3f", acceptedHitRadius))
-              diagnosticHeadRadius: \(String(format: "%.3f", diagnosticHeadRadius))
+              acceptedHitDistance: \(String(format: "%.3f", acceptedHitRadius))
+              diagnosticSkeletonHeadRadius: \(String(format: "%.3f", diagnosticHeadRadius))
               approachDot: \(String(format: "%.2f", approachDot))
             """
         )

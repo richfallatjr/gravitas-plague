@@ -230,7 +230,33 @@ final class JockRetargetTestController {
             throw RetargetError.missingCharacterAsset(characterArchetype)
         }
 
-        let loadedEntity = try await Entity(contentsOf: url)
+        print(
+            """
+            [CharacterAssetRegistry] loading character asset
+              archetype: \(characterArchetype.rawValue)
+              file: \(characterArchetype.usdzFileName)
+              url: \(url.path)
+            """
+        )
+
+        let loadedEntity: Entity
+
+        do {
+            loadedEntity = try await Entity(contentsOf: url)
+        } catch {
+            print(
+                """
+                [CharacterAssetRegistry] ERROR RealityKit failed to load character asset
+                  archetype: \(characterArchetype.rawValue)
+                  file: \(characterArchetype.usdzFileName)
+                  url: \(url.path)
+                  error: \(error)
+                """
+            )
+
+            throw error
+        }
+
         loadedEntity.name = "\(characterArchetype.usdzResourceName)_loaded_character"
 
         CharacterRigValidator.validate(
@@ -239,6 +265,18 @@ final class JockRetargetTestController {
         )
 
         guard let skinnedModel = firstSkinnedModelEntity(in: loadedEntity) else {
+            print(
+                """
+                [CharacterAssetRegistry] ERROR character asset has no skinned ModelEntity joints
+                  archetype: \(characterArchetype.rawValue)
+                  file: \(characterArchetype.usdzFileName)
+                  url: \(url.path)
+                  reason: Runtime requires a skinned ModelEntity with non-empty jointNames. Check the USDZ for a valid UsdSkel Skeleton under a SkelRoot.
+                  entityTreeSample:
+                \(loadedEntity.debugTreeSummary(limit: 48))
+                """
+            )
+
             throw RetargetError.noSkinnedModelEntity(characterArchetype)
         }
 
@@ -884,25 +922,44 @@ final class JockRetargetTestController {
     private func updateHitDetectionIfNeeded(
         currentTime: TimeInterval
     ) {
-        guard let headHitZone = currentHeadHitZone() else {
+        let faceCenter: SIMD3<Float>
+        let diagnosticHeadRadius: Float?
+
+        if characterArchetype == .dad {
+            faceCenter = estimatedCharacterFaceCenterWorldPosition()
+            diagnosticHeadRadius = nil
+        } else if let headHitZone = currentHeadHitZone() {
+            faceCenter = headHitZone.centerWorld
+            diagnosticHeadRadius = headHitZone.radiusMeters
+
+            logHeadHitZoneBuildIfNeeded(
+                headHitZone
+            )
+        } else {
             logMissingHeadHitZoneIfNeeded()
             return
         }
 
-        logHeadHitZoneBuildIfNeeded(
-            headHitZone
-        )
-
         guard let event = hitDetector.update(
             currentTime: currentTime,
             characterRoot: rootEntity,
-            faceCenterWorld: headHitZone.centerWorld,
-            headHitRadiusMeters: headHitZone.radiusMeters
+            faceCenterWorld: faceCenter,
+            headHitRadiusMeters: diagnosticHeadRadius
         ) else {
             return
         }
 
         handleHitEvent(event)
+    }
+
+    private func estimatedCharacterFaceCenterWorldPosition() -> SIMD3<Float> {
+        let localFaceCenter = SIMD3<Float>(
+            0,
+            hitConfiguration.faceCenterHeightMeters,
+            -0.04
+        )
+
+        return rootEntity.position + rootEntity.orientation.act(localFaceCenter)
     }
 
     private func currentHeadHitZone() -> InfectedHeadHitZone? {
@@ -937,10 +994,7 @@ final class JockRetargetTestController {
         let centerWorld: SIMD3<Float>
         let jointDescription: String
 
-        if let headFrontWorld {
-            centerWorld = headFrontWorld
-            jointDescription = "Head/headfront"
-        } else if let headEndWorld {
+        if let headEndWorld {
             centerWorld = (headWorld + headEndWorld) * 0.5
             jointDescription = "Head/head_end"
         } else {
@@ -998,6 +1052,9 @@ final class JockRetargetTestController {
 
         case .spouse:
             return 0.18
+
+        case .biker:
+            return 0.20
         }
     }
 
