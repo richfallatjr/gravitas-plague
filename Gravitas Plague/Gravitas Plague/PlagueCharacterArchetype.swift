@@ -90,8 +90,8 @@ enum CharacterAssetRegistry {
 enum HordeCharacterWaveLineup {
     static let deterministicRoster: [PlagueCharacterArchetype] = [
         .dad,
-        .neighbor,
-        .spouse
+        .spouse,
+        .neighbor
     ]
 
     static func archetypeForSpawnIndex(

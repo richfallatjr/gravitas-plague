@@ -186,10 +186,8 @@ final class JockHandHitDetector {
             }
         }
 
-        let acceptedHitRadius = max(
-            configuration.maxHitDistanceMeters,
-            headHitRadiusMeters ?? configuration.faceZoneRadiusMeters
-        )
+        let diagnosticHeadRadius = headHitRadiusMeters ?? configuration.faceZoneRadiusMeters
+        let acceptedHitRadius = configuration.maxHitDistanceMeters
 
         guard distance <= acceptedHitRadius else {
             return nil
@@ -233,6 +231,7 @@ final class JockHandHitDetector {
               speed: \(String(format: "%.2f", speed))
               distance: \(String(format: "%.3f", distance))
               acceptedHeadRadius: \(String(format: "%.3f", acceptedHitRadius))
+              diagnosticHeadRadius: \(String(format: "%.3f", diagnosticHeadRadius))
               approachDot: \(String(format: "%.2f", approachDot))
             """
         )

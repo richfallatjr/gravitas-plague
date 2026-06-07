@@ -72,7 +72,7 @@ struct PlagueDemoView: View {
                         .buttonStyle(.borderedProminent)
                     }
 
-                    Text("Horde Mode includes prioritized hit reactions, close-range attacks, player damage, and wave progression.")
+                    Text("Character assets are not final. Only placeholders to simulate game mechanics.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
