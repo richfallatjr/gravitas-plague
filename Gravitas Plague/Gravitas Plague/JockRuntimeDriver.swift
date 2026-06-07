@@ -7,6 +7,21 @@ enum JockClipLocomotionPolicy: Equatable {
     case ignoreClipLocomotion
 }
 
+enum JockPoseApplicationPolicy: String, Codable, Equatable {
+    case authorAbsoluteLocal
+    case preserveTargetSkeleton
+}
+
+struct JockJointRotationCorrection {
+    let pre: simd_quatf
+    let post: simd_quatf
+
+    static let identity = JockJointRotationCorrection(
+        pre: simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0)),
+        post: simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
+    )
+}
+
 @MainActor
 final class JockRuntimeDriver {
     enum DriverState: Equatable {
@@ -81,6 +96,7 @@ final class JockRuntimeDriver {
     private let adapter: JockSkeletonAdapter
     private let baseJointTransforms: [Transform]
     private let jointNames: [String]
+    private let skeletonMappingRecords: [JockJointMappingRecord]
 
     private var activeClip: JockAnimClip?
     private var playbackTime: TimeInterval = 0
@@ -117,10 +133,28 @@ final class JockRuntimeDriver {
     private var activeLocomotionPolicy: JockClipLocomotionPolicy = .useClipLocomotion
     private var activeSubAnimations: [ActiveSubAnimation] = []
     private var preparedClipsByID: [String: JockPreparedClip] = [:]
+    private var loggedPreservePolicyClipIDs = Set<String>()
+    private var loggedPreserveRotationBasisDiagnostics = Set<String>()
+    private var preserveTargetJointRotationCorrections: [String: JockJointRotationCorrection] = [:]
+    private let preserveRotationDiagnosticJoints: Set<String> = [
+        "Hips",
+        "Spine02",
+        "Spine01",
+        "Spine"
+    ]
 
     private(set) var currentJointTransforms: [Transform]
     private(set) var currentActiveClipID: String?
     private(set) var currentPlaybackTime: TimeInterval = 0
+    private(set) var poseApplicationPolicy: JockPoseApplicationPolicy
+    private(set) var characterArchetype: PlagueCharacterArchetype
+
+    var matchedJointCount: Int {
+        skeletonMappingRecords.filter { record in
+            record.matchKind == .exactFullPath ||
+                record.matchKind == .uniqueLeafName
+        }.count
+    }
 
     var onClipCompleted: ((JockAnimClip) -> Void)?
     var locomotionDeltaHandler: ((JockRuntimeLocomotionDelta) -> Bool)?
@@ -128,16 +162,38 @@ final class JockRuntimeDriver {
     init(
         modelEntity: ModelEntity,
         adapter: JockSkeletonAdapter,
+        characterArchetype: PlagueCharacterArchetype = .dad,
+        poseApplicationPolicy: JockPoseApplicationPolicy = .authorAbsoluteLocal,
         locomotionRootEntity: Entity? = nil,
         visualOffsetEntity: Entity? = nil
     ) {
         self.modelEntity = modelEntity
         self.adapter = adapter
+        self.characterArchetype = characterArchetype
+        self.poseApplicationPolicy = poseApplicationPolicy
         self.locomotionRootEntity = locomotionRootEntity
         self.visualOffsetEntity = visualOffsetEntity
         self.baseJointTransforms = modelEntity.jointTransforms
         self.jointNames = modelEntity.jointNames
+        self.skeletonMappingRecords = adapter.mappingRecords
         self.currentJointTransforms = modelEntity.jointTransforms
+
+        print(
+            """
+            [JockRuntimeDriver] character loaded
+              archetype: \(characterArchetype.rawValue)
+              asset: \(characterArchetype.usdzFileName)
+              poseApplicationPolicy: \(poseApplicationPolicy.rawValue)
+              runtimeJointCount: \(jointNames.count)
+              baseJointTransforms: \(baseJointTransforms.count)
+              matchedJointCount: \(matchedJointCount)
+            """
+        )
+
+        if poseApplicationPolicy == .preserveTargetSkeleton,
+           preserveTargetJointRotationCorrections.isEmpty {
+            print("[JockRuntimeDriver] preserve target correction table empty; no hard axis swaps active.")
+        }
     }
 
     func prewarmClips(_ clips: [JockAnimClip]) {
@@ -545,7 +601,19 @@ final class JockRuntimeDriver {
                 joint: track.joint,
                 runtimeIndex: runtimeIndex,
                 channel: track.channel,
-                keys: sortedKeys
+                keys: sortedKeys,
+                sourceReferenceTranslation: Self.sourceReferenceTranslation(
+                    channel: track.channel,
+                    keys: sortedKeys
+                ),
+                sourceReferenceRotation: Self.sourceReferenceRotation(
+                    channel: track.channel,
+                    keys: sortedKeys
+                ),
+                sourceReferenceScale: Self.sourceReferenceScale(
+                    channel: track.channel,
+                    keys: sortedKeys
+                )
             )
         }
 
@@ -620,6 +688,28 @@ final class JockRuntimeDriver {
         preparedTracks: [JockPreparedTrack],
         at time: TimeInterval
     ) -> [Transform] {
+        switch poseApplicationPolicy {
+        case .authorAbsoluteLocal:
+            return sampleClipPoseAuthorAbsoluteLocal(
+                clip,
+                preparedTracks: preparedTracks,
+                at: time
+            )
+
+        case .preserveTargetSkeleton:
+            return sampleClipPosePreservingTargetSkeleton(
+                clip,
+                preparedTracks: preparedTracks,
+                at: time
+            )
+        }
+    }
+
+    private func sampleClipPoseAuthorAbsoluteLocal(
+        _ clip: JockAnimClip,
+        preparedTracks: [JockPreparedTrack],
+        at time: TimeInterval
+    ) -> [Transform] {
         var output = baseJointTransforms
 
         for track in preparedTracks {
@@ -674,6 +764,291 @@ final class JockRuntimeDriver {
         }
 
         return output
+    }
+
+    private func sampleClipPosePreservingTargetSkeleton(
+        _ clip: JockAnimClip,
+        preparedTracks: [JockPreparedTrack],
+        at time: TimeInterval
+    ) -> [Transform] {
+        logPreserveTargetSkeletonDiagnosticsIfNeeded(
+            clip: clip,
+            preparedTracks: preparedTracks
+        )
+
+        var output = baseJointTransforms
+
+        for track in preparedTracks {
+            guard output.indices.contains(track.runtimeIndex) else {
+                continue
+            }
+
+            var transform = output[track.runtimeIndex]
+            let isRoot = isRootTranslationJoint(track.joint)
+
+            switch track.channel {
+            case "translation_xyz_additive":
+                guard isRoot else {
+                    continue
+                }
+
+                let offset = JockPoseMath.sampleVector3Sorted(keys: track.keys, time: time)
+                transform.translation = baseJointTransforms[track.runtimeIndex].translation + offset
+
+            case "rotation_quat_wxyz_additive":
+                let delta = JockPoseMath.sampleQuaternionWXYZSorted(keys: track.keys, time: time)
+                transform.rotation = simd_normalize(transform.rotation * simd_normalize(delta))
+
+            case "rotation_euler_xyz_degrees_additive":
+                let delta = JockPoseMath.sampleEulerXYZDegreesAsQuaternionSorted(keys: track.keys, time: time)
+                transform.rotation = simd_normalize(transform.rotation * simd_normalize(delta))
+
+            case "translation_xyz_absolute":
+                guard isRoot else {
+                    continue
+                }
+
+                let sampled = JockPoseMath.sampleVector3Sorted(keys: track.keys, time: time)
+                let reference = track.sourceReferenceTranslation ?? sampled
+                transform.translation = baseJointTransforms[track.runtimeIndex].translation + (sampled - reference)
+
+            case "rotation_quat_wxyz_absolute":
+                let sampled = simd_normalize(
+                    JockPoseMath.sampleQuaternionWXYZSorted(keys: track.keys, time: time)
+                )
+                let reference = simd_normalize(track.sourceReferenceRotation ?? sampled)
+                let parentSpaceDelta = simd_normalize(sampled * simd_inverse(reference))
+
+                transform.rotation = simd_normalize(
+                    parentSpaceDelta * baseJointTransforms[track.runtimeIndex].rotation
+                )
+
+                if let correction = preserveTargetJointRotationCorrections[track.joint] {
+                    transform.rotation = simd_normalize(
+                        correction.post * transform.rotation * correction.pre
+                    )
+                }
+
+                logPreserveRotationBasisDiagnosticsIfNeeded(
+                    clip: clip,
+                    jointName: track.joint,
+                    targetBase: baseJointTransforms[track.runtimeIndex],
+                    sampledRotation: sampled,
+                    referenceRotation: reference,
+                    parentSpaceDelta: parentSpaceDelta,
+                    finalRotation: transform.rotation
+                )
+
+            case "scale_xyz_absolute":
+                continue
+
+            default:
+                continue
+            }
+
+            output[track.runtimeIndex] = transform
+        }
+
+        return output
+    }
+
+    private static func sourceReferenceTranslation(
+        channel: String,
+        keys: [JockAnimClip.Key]
+    ) -> SIMD3<Float>? {
+        guard channel.contains("translation"),
+              let first = keys.first else {
+            return nil
+        }
+
+        return SIMD3<Float>(
+            value(first.value, at: 0, fallback: 0),
+            value(first.value, at: 1, fallback: 0),
+            value(first.value, at: 2, fallback: 0)
+        )
+    }
+
+    private static func sourceReferenceRotation(
+        channel: String,
+        keys: [JockAnimClip.Key]
+    ) -> simd_quatf? {
+        guard channel.contains("rotation"),
+              let first = keys.first else {
+            return nil
+        }
+
+        if channel.contains("quat_wxyz") {
+            return simd_normalize(JockPoseMath.quatFromWXYZ(first.value))
+        }
+
+        if channel.contains("euler_xyz_degrees") {
+            return simd_normalize(
+                JockPoseMath.quatFromEulerXYZDegrees(
+                    SIMD3<Float>(
+                        value(first.value, at: 0, fallback: 0),
+                        value(first.value, at: 1, fallback: 0),
+                        value(first.value, at: 2, fallback: 0)
+                    )
+                )
+            )
+        }
+
+        return nil
+    }
+
+    private static func sourceReferenceScale(
+        channel: String,
+        keys: [JockAnimClip.Key]
+    ) -> SIMD3<Float>? {
+        guard channel.contains("scale"),
+              let first = keys.first else {
+            return nil
+        }
+
+        return SIMD3<Float>(
+            value(first.value, at: 0, fallback: 1),
+            value(first.value, at: 1, fallback: 1),
+            value(first.value, at: 2, fallback: 1)
+        )
+    }
+
+    private static func value(
+        _ values: [Float],
+        at index: Int,
+        fallback: Float
+    ) -> Float {
+        guard values.indices.contains(index) else {
+            return fallback
+        }
+
+        return values[index]
+    }
+
+    private func isRootTranslationJoint(_ jointName: String) -> Bool {
+        let lower = jointName.lowercased()
+
+        return lower == "hips" ||
+            lower == "root" ||
+            lower == "armature" ||
+            lower == "pelvis"
+    }
+
+    private func logPreserveRotationBasisDiagnosticsIfNeeded(
+        clip: JockAnimClip,
+        jointName: String,
+        targetBase: Transform,
+        sampledRotation: simd_quatf,
+        referenceRotation: simd_quatf,
+        parentSpaceDelta: simd_quatf,
+        finalRotation: simd_quatf
+    ) {
+        guard poseApplicationPolicy == .preserveTargetSkeleton else {
+            return
+        }
+
+        guard preserveRotationDiagnosticJoints.contains(jointName) else {
+            return
+        }
+
+        let key = "\(characterArchetype.rawValue)|\(clip.clipID)|\(jointName)"
+
+        guard !loggedPreserveRotationBasisDiagnostics.contains(key) else {
+            return
+        }
+
+        loggedPreserveRotationBasisDiagnostics.insert(key)
+
+        print(
+            """
+            [JockRuntimeDriver] preserve-target rotation basis diagnostic
+              archetype: \(characterArchetype.rawValue)
+              clip: \(clip.clipID)
+              joint: \(jointName)
+              policy: \(poseApplicationPolicy.rawValue)
+              usedBasisConvertedRotation: true
+
+              sourceReferenceRotation_xyzw: \(referenceRotation.vector)
+              sampledRotation_xyzw: \(sampledRotation.vector)
+              targetBaseRotation_xyzw: \(targetBase.rotation.vector)
+              parentSpaceDelta_xyzw: \(parentSpaceDelta.vector)
+              finalRotation_xyzw: \(finalRotation.vector)
+
+              formula: final = (sampled * inverse(sourceReference)) * targetBase
+            """
+        )
+    }
+
+    private func logPreserveTargetSkeletonDiagnosticsIfNeeded(
+        clip: JockAnimClip,
+        preparedTracks: [JockPreparedTrack]
+    ) {
+        guard !loggedPreservePolicyClipIDs.contains(clip.clipID) else {
+            return
+        }
+
+        loggedPreservePolicyClipIDs.insert(clip.clipID)
+
+        let absoluteRotationTracksApplied = preparedTracks.filter { track in
+            track.channel == "rotation_quat_wxyz_absolute"
+        }.count
+
+        let rootTranslationTracksApplied = preparedTracks.filter { track in
+            track.channel == "translation_xyz_absolute" &&
+                isRootTranslationJoint(track.joint)
+        }.count
+
+        let nonRootTranslationTracksIgnored = preparedTracks.filter { track in
+            track.channel == "translation_xyz_absolute" &&
+                !isRootTranslationJoint(track.joint)
+        }.count
+
+        let absoluteScaleTracksIgnored = preparedTracks.filter { track in
+            track.channel == "scale_xyz_absolute"
+        }.count
+
+        let additiveRotationTracksApplied = preparedTracks.filter { track in
+            track.channel == "rotation_quat_wxyz_additive" ||
+                track.channel == "rotation_euler_xyz_degrees_additive"
+        }.count
+
+        let rootAdditiveTranslationTracksApplied = preparedTracks.filter { track in
+            track.channel == "translation_xyz_additive" &&
+                isRootTranslationJoint(track.joint)
+        }.count
+
+        let nonRootAdditiveTranslationTracksIgnored = preparedTracks.filter { track in
+            track.channel == "translation_xyz_additive" &&
+                !isRootTranslationJoint(track.joint)
+        }.count
+
+        let mappedRuntimeIndices = Set(preparedTracks.map(\.runtimeIndex))
+        let targetOnlyJointNames = jointNames.enumerated()
+            .filter { index, _ in !mappedRuntimeIndices.contains(index) }
+            .map(\.element)
+
+        print(
+            """
+            [JockRuntimeDriver] preserve target skeleton sampling
+              characterArchetype: \(characterArchetype.rawValue)
+              clipID: \(clip.clipID)
+              poseApplicationPolicy: \(poseApplicationPolicy.rawValue)
+              runtimeJointCount: \(jointNames.count)
+              animationTrackJoints: \(Set(preparedTracks.map(\.joint)).count)
+              matchedJointCount: \(matchedJointCount)
+              matchedRuntimeIndices: \(mappedRuntimeIndices.count)
+              absoluteRotationTracksApplied: \(absoluteRotationTracksApplied)
+              rootTranslationTracksApplied: \(rootTranslationTracksApplied)
+              nonRootTranslationTracksIgnored: \(nonRootTranslationTracksIgnored)
+              absoluteScaleTracksIgnored: \(absoluteScaleTracksIgnored)
+              additiveRotationTracksApplied: \(additiveRotationTracksApplied)
+              rootAdditiveTranslationTracksApplied: \(rootAdditiveTranslationTracksApplied)
+              nonRootAdditiveTranslationTracksIgnored: \(nonRootAdditiveTranslationTracksIgnored)
+              basisConvertedAbsoluteRotations: true
+              hardAxisSwapsActive: \(!preserveTargetJointRotationCorrections.isEmpty)
+              targetJointsWithoutAnimationTracks: \(targetOnlyJointNames.count)
+              targetJointsWithoutAnimationSample: \(targetOnlyJointNames.prefix(20).joined(separator: ", "))
+            """
+        )
     }
 
     private func applyActiveSubAnimations(

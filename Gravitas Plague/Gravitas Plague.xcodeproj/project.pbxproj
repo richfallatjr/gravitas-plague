@@ -15,6 +15,7 @@
 		8E1A100E2FCD000100000001 /* ../idle-turn-right-02.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */; };
 		8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */; };
 		8E1A10112FCD000100000001 /* ../dad_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10122FCD000100000001 /* ../dad_biped.usdz */; };
+		8E1A102E2FCD000100000001 /* ../neighbor_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A102F2FCD000100000001 /* ../neighbor_biped.usdz */; };
 		8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */; };
 		8E1A10142FCD000100000001 /* ../Narrow-band-analog.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */; };
 		8E1A10152FCD000100000001 /* ../Create_a_short_emerg_beeping.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A101A2FCD000100000001 /* ../Create_a_short_emerg_beeping.wav */; };
@@ -59,6 +60,7 @@
 		8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../idle-turn-right-02.usdz"; sourceTree = SOURCE_ROOT; };
 		8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Gravitas Plague/AnimationLibrary"; sourceTree = SOURCE_ROOT; };
 		8E1A10122FCD000100000001 /* ../dad_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../dad_biped.usdz; sourceTree = SOURCE_ROOT; };
+		8E1A102F2FCD000100000001 /* ../neighbor_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../neighbor_biped.usdz; sourceTree = SOURCE_ROOT; };
 		8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = ../GravitasPlagueBackgroundLoop.wav; sourceTree = SOURCE_ROOT; };
 		8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../Narrow-band-analog.wav"; sourceTree = SOURCE_ROOT; };
 		8E1A101A2FCD000100000001 /* ../Create_a_short_emerg_beeping.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = ../Create_a_short_emerg_beeping.wav; sourceTree = SOURCE_ROOT; };
@@ -69,9 +71,9 @@
 		8E1A10252FCD000100000001 /* ../damaged-02.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../damaged-02.wav"; sourceTree = SOURCE_ROOT; };
 		8E1A10262FCD000100000001 /* ../damaged-03.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../damaged-03.wav"; sourceTree = SOURCE_ROOT; };
 		8E1A10272FCD000100000001 /* ../damaged-04.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../damaged-04.wav"; sourceTree = SOURCE_ROOT; };
-		8E1A102B2FCD000100000001 /* ../die_01.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../die_01.wav"; sourceTree = SOURCE_ROOT; };
-		8E1A102C2FCD000100000001 /* ../die_02.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../die_02.wav"; sourceTree = SOURCE_ROOT; };
-		8E1A102D2FCD000100000001 /* ../you_died.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../you_died.png"; sourceTree = SOURCE_ROOT; };
+		8E1A102B2FCD000100000001 /* ../die_01.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = ../die_01.wav; sourceTree = SOURCE_ROOT; };
+		8E1A102C2FCD000100000001 /* ../die_02.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = ../die_02.wav; sourceTree = SOURCE_ROOT; };
+		8E1A102D2FCD000100000001 /* ../you_died.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../you_died.png; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -158,6 +160,7 @@
 				8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */,
 				8E1A10062FCD000100000001 /* ../unstable-walk.usdz */,
 				8E1A10122FCD000100000001 /* ../dad_biped.usdz */,
+				8E1A102F2FCD000100000001 /* ../neighbor_biped.usdz */,
 				8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */,
 				8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */,
 				8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */,
@@ -301,6 +304,7 @@
 				8E1A100E2FCD000100000001 /* ../idle-turn-right-02.usdz in Resources */,
 				8E1A10032FCD000100000001 /* ../unstable-walk.usdz in Resources */,
 				8E1A10112FCD000100000001 /* ../dad_biped.usdz in Resources */,
+				8E1A102E2FCD000100000001 /* ../neighbor_biped.usdz in Resources */,
 				8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */,
 				8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav in Resources */,
 				8E1A10142FCD000100000001 /* ../Narrow-band-analog.wav in Resources */,
@@ -501,7 +505,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -517,7 +521,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "GravitasDiscover.Gravitas-Plague";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -536,7 +540,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -552,7 +556,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "GravitasDiscover.Gravitas-Plague";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

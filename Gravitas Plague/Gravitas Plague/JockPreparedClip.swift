@@ -1,11 +1,15 @@
 import Foundation
 import RealityKit
+import simd
 
 struct JockPreparedTrack {
     let joint: String
     let runtimeIndex: Int
     let channel: String
     let keys: [JockAnimClip.Key]
+    let sourceReferenceTranslation: SIMD3<Float>?
+    let sourceReferenceRotation: simd_quatf?
+    let sourceReferenceScale: SIMD3<Float>?
 }
 
 struct JockPreparedSubAnimation {

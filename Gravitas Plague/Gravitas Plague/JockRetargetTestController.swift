@@ -19,18 +19,18 @@ final class JockRetargetTestController {
     }
 
     enum RetargetError: LocalizedError {
-        case missingCharacterAsset
-        case noSkinnedModelEntity
+        case missingCharacterAsset(PlagueCharacterArchetype)
+        case noSkinnedModelEntity(PlagueCharacterArchetype)
         case rigValidationFailed([String])
         case clipNotFound(String)
         case pacingLoopMissingClips([String])
 
         var errorDescription: String? {
             switch self {
-            case .missingCharacterAsset:
-                return "Missing dad_biped.usdz."
-            case .noSkinnedModelEntity:
-                return "dad_biped.usdz loaded, but no ModelEntity with jointNames was found."
+            case .missingCharacterAsset(let archetype):
+                return "Missing \(archetype.usdzFileName)."
+            case .noSkinnedModelEntity(let archetype):
+                return "\(archetype.usdzFileName) loaded, but no ModelEntity with jointNames was found."
             case .rigValidationFailed(let missing):
                 return "Rig validation failed. Missing joints: \(missing.joined(separator: ", "))"
             case .clipNotFound(let id):
@@ -105,6 +105,7 @@ final class JockRetargetTestController {
     private var benchmarkPlayerHitsThisWave = 0
     private var isBenchmarkPlayerDead = false
     private var playerAttackEnabled = true
+    private var characterArchetype: PlagueCharacterArchetype = .dad
     private var hordeID = UUID()
     private var hordeWave = 1
     private var hordeSpawnIndex = 0
@@ -205,18 +206,29 @@ final class JockRetargetTestController {
     func loadIfNeeded() async throws {
         guard !hasLoaded else { return }
 
-        guard let url = Bundle.main.url(
-            forResource: "dad_biped",
-            withExtension: "usdz"
+        guard let url = CharacterAssetRegistry.url(
+            for: characterArchetype
         ) else {
-            throw RetargetError.missingCharacterAsset
+            print(
+                """
+                [CharacterAssetRegistry] ERROR missing required character asset at load
+                  archetype: \(characterArchetype.rawValue)
+                  file: \(characterArchetype.usdzFileName)
+                """
+            )
+            throw RetargetError.missingCharacterAsset(characterArchetype)
         }
 
         let loadedEntity = try await Entity(contentsOf: url)
-        loadedEntity.name = "dad_biped_loaded_character"
+        loadedEntity.name = "\(characterArchetype.usdzResourceName)_loaded_character"
+
+        CharacterRigValidator.validate(
+            archetype: characterArchetype,
+            root: loadedEntity
+        )
 
         guard let skinnedModel = firstSkinnedModelEntity(in: loadedEntity) else {
-            throw RetargetError.noSkinnedModelEntity
+            throw RetargetError.noSkinnedModelEntity(characterArchetype)
         }
 
         let rig = try JockAnimationLibraryLoader.loadRigDefinition()
@@ -308,6 +320,11 @@ final class JockRetargetTestController {
             runtimeJointNames: skinnedModel.jointNames
         )
 
+        JockSkeletonAdapter.validateMappingRecords(
+            adapter.mappingRecords,
+            archetype: characterArchetype
+        )
+
         if !adapter.validationReport.missingCanonicalJoints.isEmpty {
             throw RetargetError.rigValidationFailed(
                 adapter.validationReport.missingCanonicalJoints
@@ -317,6 +334,8 @@ final class JockRetargetTestController {
         let driver = JockRuntimeDriver(
             modelEntity: skinnedModel,
             adapter: adapter,
+            characterArchetype: characterArchetype,
+            poseApplicationPolicy: characterArchetype.poseApplicationPolicy,
             locomotionRootEntity: rootEntity,
             visualOffsetEntity: visualOffsetEntity
         )
@@ -368,7 +387,8 @@ final class JockRetargetTestController {
 
         debugStatus = """
         JockAsset Retarget Test loaded.
-        Asset: dad_biped.usdz
+        Character: \(characterArchetype.displayName)
+        Asset: \(characterArchetype.usdzFileName)
         Runtime joints: \(skinnedModel.jointNames.count)
         Matched joints: \(adapter.validationReport.matchedJointCount)
         Library clips: \(loadedClips.count)
@@ -481,10 +501,12 @@ final class JockRetargetTestController {
 
     func configureHordeIdentity(
         id: UUID,
+        archetype: PlagueCharacterArchetype,
         wave: Int,
         spawnIndex: Int,
         hitsToKill: Int
     ) {
+        characterArchetype = archetype
         hordeID = id
         hordeWave = wave
         hordeSpawnIndex = spawnIndex
@@ -493,12 +515,13 @@ final class JockRetargetTestController {
         activeDeathClipID = nil
         acceptedHitCount = 0
 
-        rootEntity.name = "HordeInfected_wave\(wave)_index\(spawnIndex)_\(id.uuidString.prefix(6))"
+        rootEntity.name = "Horde_\(archetype.rawValue)_wave\(wave)_index\(spawnIndex)_\(id.uuidString.prefix(6))"
 
         print(
             """
             [EnemySpawner] configured horde enemy instance
               id: \(id)
+              archetype: \(archetype.rawValue)
               wave: \(wave)
               index: \(spawnIndex)
               hitsToKill: \(self.hitsToKill)

@@ -65,14 +65,14 @@ struct PlagueDemoView: View {
                         }
                         .buttonStyle(.bordered)
 
-                        Button("Hoard Mode") {
-                            session.statusMessage = "Running Hoard Mode."
+                        Button("Horde Mode") {
+                            session.statusMessage = "Running Horde Mode."
                             session.send(.playJockFollowDemo)
                         }
                         .buttonStyle(.borderedProminent)
                     }
 
-                    Text("Hoard Mode includes prioritized hit reactions, close-range attacks, player damage, and wave progression.")
+                    Text("Horde Mode includes prioritized hit reactions, close-range attacks, player damage, and wave progression.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 

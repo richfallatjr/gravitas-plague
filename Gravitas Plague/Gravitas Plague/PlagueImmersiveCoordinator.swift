@@ -55,6 +55,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         let root = AnchorEntity(world: SIMD3<Float>(0, 0, 0))
         root.name = "GravitasPlague_PhaseOne_SceneRoot"
 
+        CharacterAssetRegistry.validateRequiredCharacterAssets()
+
         _ = makeHeadAnchor()
 
         audioController.startImmersiveAudio()
@@ -355,7 +357,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
 
         let nextWave = hordeCurrentWave + 1
-        let spawnCount = nextWave
+        let lineup = HordeCharacterWaveLineup.lineup(wave: nextWave)
+        let spawnCount = lineup.count
         let positions = hordeSpawnPositions(
             count: spawnCount,
             spawnPose: spawnPose,
@@ -367,7 +370,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 """
                 [HordeBenchmark] ERROR spawn position count mismatch
                   wave: \(nextWave)
-                  spawnCount: \(spawnCount)
+                  lineupCount: \(spawnCount)
                   positions: \(positions.count)
                 """
             )
@@ -386,9 +389,18 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         var spawnedIDs: [UUID] = []
 
         for index in 0..<spawnCount {
+            let archetype = lineup[index]
             let id = UUID()
             let hitsToKill = Int.random(in: 3...5)
             let controller = JockRetargetTestController()
+
+            controller.configureHordeIdentity(
+                id: id,
+                archetype: archetype,
+                wave: nextWave,
+                spawnIndex: index,
+                hitsToKill: hitsToKill
+            )
 
             wireJockCallbacks(
                 controller,
@@ -398,13 +410,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
             do {
                 try await controller.loadIfNeeded()
-
-                controller.configureHordeIdentity(
-                    id: id,
-                    wave: nextWave,
-                    spawnIndex: index,
-                    hitsToKill: hitsToKill
-                )
 
                 controller.configureHordeSpawn(
                     position: positions[index],
@@ -431,6 +436,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     [HordeBenchmark] spawned infected
                       wave: \(nextWave)
                       index: \(index)
+                      archetype: \(archetype.rawValue)
                       id: \(id)
                       hitsToKill: \(hitsToKill)
                       audioStartDelay: \(String(format: "%.3f", audioStartDelay))
@@ -467,6 +473,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               activeEnemyIDs: \(activeHordeEnemyIDs.count)
               aliveEnemies: \(aliveEnemies)
               totalSpawned: \(hordeTotalSpawned)
+              lineup: \(lineup.map { $0.rawValue }.joined(separator: ", "))
             """
         )
 
