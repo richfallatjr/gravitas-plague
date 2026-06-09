@@ -8,9 +8,9 @@ struct GravitasPlagueApp: App {
     var body: some Scene {
         WindowGroup {
             PlagueDemoView(session: demoSession)
-                .frame(minWidth: 805, minHeight: 630)
+                .frame(minWidth: 543, minHeight: 724)
         }
-        .defaultSize(width: 805, height: 630)
+        .defaultSize(width: 815, height: 1086)
 
         ImmersiveSpace(id: PlagueDemoSession.immersiveSpaceID) {
             PlagueImmersiveView(session: demoSession)

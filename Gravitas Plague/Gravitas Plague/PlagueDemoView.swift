@@ -9,13 +9,27 @@ struct PlagueDemoView: View {
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
 
     var body: some View {
+        Group {
+            if session.isShowingOperationModeMenu {
+                PlagueOperationModePosterMenu(session: session)
+            } else {
+                gameplayControlPanel
+            }
+        }
+        .onAppear {
+            PlagueMenuAssetValidator.validate()
+            loadJockManifestForUI()
+        }
+    }
+
+    private var gameplayControlPanel: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Gravitas Plague")
                     .font(.largeTitle)
                     .fontWeight(.bold)
 
-                Text("Presence Demo / JockAsset")
+                Text("Character assets are not final. Only placeholders to simulate game mechanics.")
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
@@ -28,15 +42,12 @@ struct PlagueDemoView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 12) {
-                Button {
+                Button("Operation Menu") {
                     Task {
-                        await openIfNeededAndSend(.startJockRetargetTest)
+                        await returnToOperationMenu()
                     }
-                } label: {
-                    Text(session.immersiveSpaceStatus == .opening ? "Opening..." : "Start Demo")
-                        .frame(minWidth: 130)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .disabled(session.immersiveSpaceStatus == .opening)
 
                 Button {
@@ -55,24 +66,10 @@ struct PlagueDemoView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("JockAsset Animation Library")
+                    Text(session.selectedOperationMode?.displayName ?? "Operation Mode")
                         .font(.headline)
 
-                    HStack(spacing: 12) {
-                        Button("Play Walk Loop") {
-                            session.statusMessage = "Running walk loop."
-                            session.send(.playJockPacingLoop)
-                        }
-                        .buttonStyle(.bordered)
-
-                        Button("Horde Mode") {
-                            session.statusMessage = "Running Horde Mode."
-                            session.send(.playJockFollowDemo)
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-
-                    Text("Character assets are not final. Only placeholders to simulate game mechanics.")
+                    Text("JockAsset Animation Library")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -171,9 +168,6 @@ struct PlagueDemoView: View {
             }
         }
         .padding(28)
-        .onAppear {
-            loadJockManifestForUI()
-        }
     }
 
     private func openIfNeededAndSend(_ command: PlagueDemoSession.Command) async {
@@ -231,7 +225,18 @@ struct PlagueDemoView: View {
 
         session.immersiveSpaceStatus = .closed
         session.activeMode = .none
+        session.selectedOperationMode = nil
+        session.isShowingOperationModeMenu = true
         session.statusMessage = "Demo closed."
+    }
+
+    private func returnToOperationMenu() async {
+        session.returnToOperationMenu()
+
+        if session.immersiveSpaceStatus == .open {
+            await dismissImmersiveSpace()
+            session.immersiveSpaceStatus = .closed
+        }
     }
 
     private func loadJockManifestForUI() {

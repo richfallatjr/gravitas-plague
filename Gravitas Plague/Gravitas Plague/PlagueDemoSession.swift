@@ -6,6 +6,23 @@ import SwiftUI
 final class PlagueDemoSession: ObservableObject {
     static let immersiveSpaceID = "GravitasPlaguePresenceDemoSpace"
 
+    enum PlagueOperationMode: String, Codable, CaseIterable, Identifiable {
+        case horde
+        case walkLoop
+
+        nonisolated var id: String { rawValue }
+
+        nonisolated var displayName: String {
+            switch self {
+            case .horde:
+                return "Horde Mode"
+
+            case .walkLoop:
+                return "Walk Loop"
+            }
+        }
+    }
+
     enum ImmersiveSpaceStatus: Equatable {
         case closed
         case opening
@@ -40,6 +57,8 @@ final class PlagueDemoSession: ObservableObject {
 
     @Published var immersiveSpaceStatus: ImmersiveSpaceStatus = .closed
     @Published var activeMode: ActiveMode = .none
+    @Published var selectedOperationMode: PlagueOperationMode?
+    @Published var isShowingOperationModeMenu = true
     @Published var statusMessage: String = "Start the demo."
     @Published var selectedJockClipID: String?
     @Published var jockPickerLoopEnabled = false
@@ -50,6 +69,59 @@ final class PlagueDemoSession: ObservableObject {
 
     func send(_ command: Command) {
         latestCommand = CommandEnvelope(command)
+    }
+
+    func selectOperationMode(_ mode: PlagueOperationMode) {
+        switch mode {
+        case .horde:
+            startHordeBenchmarkFromMenu()
+
+        case .walkLoop:
+            startWalkLoopFromMenu()
+        }
+    }
+
+    func startHordeBenchmarkFromMenu() {
+        selectedOperationMode = .horde
+        isShowingOperationModeMenu = false
+        activeMode = .jockRetargetTest
+        statusMessage = "Running Horde Mode."
+        send(.playJockFollowDemo)
+
+        print("[PlagueMenu] selected operation mode: horde")
+        print("[PlagueMenu] Horde Mode started from poster menu")
+    }
+
+    func startWalkLoopFromMenu() {
+        selectedOperationMode = .walkLoop
+        isShowingOperationModeMenu = false
+        activeMode = .jockRetargetTest
+        statusMessage = "Running walk loop."
+        startWalkLoopMode()
+        send(.playJockPacingLoop)
+
+        print("[PlagueMenu] selected operation mode: walkLoop")
+        print("[PlagueMenu] Walk Loop started from poster menu")
+    }
+
+    func startWalkLoopMode() {
+        print("[PlagueMenu] Walk Loop selected. Starting existing JockAsset pacing loop.")
+    }
+
+    func returnToOperationMenu() {
+        stopWalkLoopMode()
+        send(.closeDemo)
+
+        selectedOperationMode = nil
+        isShowingOperationModeMenu = true
+        activeMode = .none
+        statusMessage = "Select operation mode."
+
+        print("[PlagueMenu] returned to operation menu")
+    }
+
+    func stopWalkLoopMode() {
+        print("[PlagueMenu] Walk Loop stopped.")
     }
 
     func triggerDamageTint(intensity: Double) {
