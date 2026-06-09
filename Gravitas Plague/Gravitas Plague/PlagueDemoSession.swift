@@ -42,6 +42,7 @@ final class PlagueDemoSession: ObservableObject {
         case playJockClip(String, loop: Bool)
         case stopJockClip
         case resetJockPose
+        case prepareForUserQuitOrClose
         case closeDemo
     }
 
@@ -58,7 +59,8 @@ final class PlagueDemoSession: ObservableObject {
     @Published var immersiveSpaceStatus: ImmersiveSpaceStatus = .closed
     @Published var activeMode: ActiveMode = .none
     @Published var selectedOperationMode: PlagueOperationMode?
-    @Published var isShowingOperationModeMenu = true
+    @Published var isPosterUIVisible = true
+    @Published var isQuitting = false
     @Published var statusMessage: String = "Start the demo."
     @Published var selectedJockClipID: String?
     @Published var jockPickerLoopEnabled = false
@@ -72,36 +74,48 @@ final class PlagueDemoSession: ObservableObject {
     }
 
     func selectOperationMode(_ mode: PlagueOperationMode) {
+        selectedOperationMode = mode
+        isPosterUIVisible = true
+
+        print(
+            """
+            [PlagueMenu] selected operation mode
+              mode: \(mode.rawValue)
+              posterRemainsVisible: true
+              legacyUIShown: false
+            """
+        )
+
         switch mode {
         case .horde:
-            startHordeBenchmarkFromMenu()
+            startHordeBenchmarkFromPoster()
 
         case .walkLoop:
-            startWalkLoopFromMenu()
+            startWalkLoopFromPoster()
         }
     }
 
-    func startHordeBenchmarkFromMenu() {
+    func startHordeBenchmarkFromPoster() {
         selectedOperationMode = .horde
-        isShowingOperationModeMenu = false
+        isPosterUIVisible = true
         activeMode = .jockRetargetTest
         statusMessage = "Running Horde Mode."
+        resetPlayerDeathState()
         send(.playJockFollowDemo)
 
-        print("[PlagueMenu] selected operation mode: horde")
-        print("[PlagueMenu] Horde Mode started from poster menu")
+        print("[PlagueMenu] Horde Mode started from poster UI; poster remains mounted.")
     }
 
-    func startWalkLoopFromMenu() {
+    func startWalkLoopFromPoster() {
         selectedOperationMode = .walkLoop
-        isShowingOperationModeMenu = false
+        isPosterUIVisible = true
         activeMode = .jockRetargetTest
         statusMessage = "Running walk loop."
+        resetPlayerDeathState()
         startWalkLoopMode()
         send(.playJockPacingLoop)
 
-        print("[PlagueMenu] selected operation mode: walkLoop")
-        print("[PlagueMenu] Walk Loop started from poster menu")
+        print("[PlagueMenu] Walk Loop started from poster UI; poster remains mounted.")
     }
 
     func startWalkLoopMode() {
@@ -113,11 +127,85 @@ final class PlagueDemoSession: ObservableObject {
         send(.closeDemo)
 
         selectedOperationMode = nil
-        isShowingOperationModeMenu = true
+        isPosterUIVisible = true
         activeMode = .none
         statusMessage = "Select operation mode."
 
         print("[PlagueMenu] returned to operation menu")
+    }
+
+    func notePosterUIMounted() {
+        isPosterUIVisible = true
+
+        print(
+            """
+            [PlagueMenu] poster UI mounted
+              selectedOperationMode: \(selectedOperationMode?.rawValue ?? "none")
+              posterRemainsVisible: true
+            """
+        )
+    }
+
+    func prepareForUserQuitOrClose() {
+        shutdownForQuit(
+            reason: "explicit_prepare_for_user_quit_or_close"
+        )
+    }
+
+    func shutdownForQuit(
+        reason: String
+    ) {
+        if isQuitting {
+            return
+        }
+
+        isQuitting = true
+
+        print(
+            """
+            [PlagueQuit] shutdown requested
+              reason: \(reason)
+              selectedOperationMode: \(selectedOperationMode?.rawValue ?? "none")
+            """
+        )
+
+        stopHordeBenchmarkForQuit()
+        stopWalkLoopForQuit()
+        statusMessage = "Closing."
+        activeMode = .none
+        send(.prepareForUserQuitOrClose)
+        cancelRuntimeTasksForQuit()
+        stopAudioForQuit()
+
+        UserDefaults.standard.set(
+            Date(),
+            forKey: "lastExitDate"
+        )
+
+        print("[PlagueQuit] shutdown complete")
+    }
+
+    func resetPlayerDeathState() {
+        damageTintIntensity = 0.0
+        damageTintEventID = UUID()
+    }
+
+    func stopHordeBenchmarkForQuit() {
+        send(.stopJockFollowDemo)
+
+        print("[PlagueQuit] Horde stopped")
+    }
+
+    func stopWalkLoopForQuit() {
+        print("[PlagueQuit] Walk Loop stopped")
+    }
+
+    func cancelRuntimeTasksForQuit() {
+        print("[PlagueQuit] runtime tasks cancelled")
+    }
+
+    func stopAudioForQuit() {
+        print("[PlagueQuit] audio stopped")
     }
 
     func stopWalkLoopMode() {

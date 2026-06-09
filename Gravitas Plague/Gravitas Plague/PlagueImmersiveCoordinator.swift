@@ -204,12 +204,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         case .resetJockPose:
             jockRetargetController?.resetPose()
 
+        case .prepareForUserQuitOrClose:
+            prepareForUserQuitOrClose()
+
         case .closeDemo:
-            stopHordeBenchmark()
-            jockRetargetController?.hide()
-            spatialProvider.stop()
-            audioController.stopAllAudio()
-            resetHordeBenchmarkDeathPresentation()
+            prepareForUserQuitOrClose()
         }
     }
 
@@ -254,6 +253,39 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         lastTickDate = nil
         handledCommandIDs.removeAll()
         pendingCommands.removeAll()
+    }
+
+    private func prepareForUserQuitOrClose() {
+        print(
+            """
+            [PlagueApp] immersive cleanup starting
+              hordeRunning: \(hordeBenchmarkRunning)
+              activeEnemies: \(activeHordeEnemyIDs.count)
+              dyingEnemies: \(dyingHordeEnemyIDs.count)
+              corpses: \(corpseHordeEnemyIDs.count)
+              playerDeathActive: \(isPlayerDeathSequenceActive)
+            """
+        )
+
+        stopHordeBenchmark()
+        jockRetargetController?.stopFollowDemo()
+        jockRetargetController?.stopClip()
+        jockRetargetController?.hide()
+        spatialProvider.stop()
+        audioController.stopAllAudio()
+        resetHordeBenchmarkDeathPresentation()
+
+        hordeCurrentWave = 0
+        hordePlayerHitsThisWave = 0
+        hordeTotalSpawned = 0
+        hordeTotalKilled = 0
+
+        UserDefaults.standard.set(
+            Date(),
+            forKey: "lastExitDate"
+        )
+
+        print("[PlagueApp] cleanup complete; closing app/window.")
     }
 
     private func drainPendingCommands() {

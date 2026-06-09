@@ -1,3 +1,4 @@
+import Darwin
 import SwiftUI
 
 #if os(macOS)
@@ -115,6 +116,159 @@ enum PlagueMenuImageLoader {
     }
 }
 
+struct PlagueOperationModePosterRoot: View {
+    @ObservedObject var session: PlagueDemoSession
+
+    @Environment(\.scenePhase) private var scenePhase
+
+    #if os(visionOS)
+    @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
+    #endif
+
+    var body: some View {
+        PlagueOperationModePosterMenu(session: session)
+            .background {
+                PlagueWindowAttachmentObserver(
+                    onAttach: { window in
+                        #if canImport(UIKit)
+                        PlagueControlWindowKillSwitch.shared.registerControlWindow(
+                            window: window
+                        )
+                        #else
+                        print(
+                            """
+                            [PlagueQuit] registered control window
+                              window: \(String(describing: window))
+                            """
+                        )
+                        #endif
+                    },
+                    onDetach: {
+                        guard !session.isQuitting else {
+                            return
+                        }
+
+                        performImmediateQuit(
+                            reason: "control_window_detached"
+                        )
+                    },
+                    onMidXChange: { _ in
+                        // Reserved for future menu alignment if needed.
+                    }
+                )
+            }
+            .onDisappear {
+                guard !session.isQuitting else {
+                    return
+                }
+
+                performImmediateQuit(
+                    reason: "control_window_closed"
+                )
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard !session.isQuitting else {
+                    return
+                }
+
+                guard newPhase == .background else {
+                    return
+                }
+
+                performImmediateQuit(
+                    reason: "control_window_scene_backgrounded"
+                )
+            }
+            .onAppear {
+                session.notePosterUIMounted()
+
+                print(
+                    """
+                    [PlagueQuit] poster root mounted
+                      scenePhase: \(String(describing: scenePhase))
+                    """
+                )
+            }
+    }
+
+    @MainActor
+    private func performImmediateQuit(
+        reason: String
+    ) {
+        if session.isQuitting {
+            print(
+                """
+                [PlagueQuit] immediate quit requested while already quitting; forcing exit
+                  reason: \(reason)
+                """
+            )
+
+            exit(0)
+        }
+
+        print(
+            """
+            [PlagueQuit] immediate quit requested
+              reason: \(reason)
+            """
+        )
+
+        session.shutdownForQuit(
+            reason: reason
+        )
+
+        dismissSecondaryWindowsForQuit()
+
+        Task { @MainActor in
+            let outcome = await dismissImmersiveSpaceForQuit(
+                timeoutNanoseconds: 750_000_000
+            )
+
+            print(
+                """
+                [PlagueQuit] dismissImmersiveSpace outcome
+                  outcome: \(outcome)
+                """
+            )
+
+            exit(0)
+        }
+    }
+
+    @MainActor
+    private func dismissSecondaryWindowsForQuit() {
+        print("[PlagueQuit] no secondary SwiftUI windows registered for dismissal.")
+    }
+
+    @MainActor
+    private func dismissImmersiveSpaceForQuit(
+        timeoutNanoseconds: UInt64
+    ) async -> String {
+        #if os(visionOS)
+        return await withTaskGroup(of: String.self) { group in
+            group.addTask { @MainActor in
+                await dismissImmersiveSpace()
+                return "completed"
+            }
+
+            group.addTask {
+                try? await Task.sleep(
+                    nanoseconds: timeoutNanoseconds
+                )
+
+                return "timeout"
+            }
+
+            let first = await group.next() ?? "unknown"
+            group.cancelAll()
+            return first
+        }
+        #else
+        return "not_visionOS"
+        #endif
+    }
+}
+
 extension CGRect {
     static func aspectFitRect(
         sourceSize: CGSize,
@@ -167,6 +321,8 @@ struct PlagueOperationModePosterMenu: View {
 
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
 
+    private let showDebugHitRects = false
+
     var body: some View {
         GeometryReader { proxy in
             let containerSize = proxy.size
@@ -202,6 +358,7 @@ struct PlagueOperationModePosterMenu: View {
                     label: "Horde Mode",
                     rect: hordeRect,
                     debugColor: .red,
+                    showDebug: showDebugHitRects,
                     action: {
                         Task {
                             await selectOperationMode(.horde)
@@ -213,6 +370,7 @@ struct PlagueOperationModePosterMenu: View {
                     label: "Walk Loop",
                     rect: walkRect,
                     debugColor: .black,
+                    showDebug: showDebugHitRects,
                     action: {
                         Task {
                             await selectOperationMode(.walkLoop)
@@ -337,9 +495,8 @@ struct PlaguePixelHitButton: View {
     let label: String
     let rect: CGRect
     let debugColor: Color
+    let showDebug: Bool
     let action: () -> Void
-
-    private let showDebugHitRects = false
 
     var body: some View {
         Button {
@@ -348,15 +505,15 @@ struct PlaguePixelHitButton: View {
         } label: {
             Rectangle()
                 .fill(
-                    showDebugHitRects
+                    showDebug
                         ? debugColor.opacity(0.25)
                         : Color.clear
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
                         .stroke(
-                            showDebugHitRects ? debugColor : Color.clear,
-                            lineWidth: showDebugHitRects ? 2 : 0
+                            showDebug ? debugColor : Color.clear,
+                            lineWidth: showDebug ? 2 : 0
                         )
                 )
         }
