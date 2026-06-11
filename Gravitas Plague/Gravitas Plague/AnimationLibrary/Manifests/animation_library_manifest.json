@@ -1,7 +1,7 @@
 {
   "schema": "com.gravitas.animation_library_manifest.v0",
   "library_id": "GravitasPlagueAnimationLibrary",
-  "generated_at": "2026-06-06T13:39:19.535890+00:00",
+  "generated_at": "2026-06-11T16:02:26.361719+00:00",
   "clips": [
     {
       "clip_id": "charged-slash-left",
@@ -10,6 +10,11 @@
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
       "category": [
         "hit"
       ],
@@ -32,7 +37,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T14:18:24.073791+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:25.843970+00:00"
     },
     {
       "clip_id": "charged-slash-right",
@@ -41,6 +50,11 @@
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
       "category": [
         "hit"
       ],
@@ -63,7 +77,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T14:17:44.423710+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:25.863632+00:00"
     },
     {
       "clip_id": "dead_fall_backward_01",
@@ -99,7 +117,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T21:45:32.536487+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:25.899688+00:00"
     },
     {
       "clip_id": "dead_fall_backward_02",
@@ -135,7 +157,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T21:41:27.408348+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:25.920072+00:00"
     },
     {
       "clip_id": "dead_fall_forward_01",
@@ -144,6 +170,11 @@
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
       "category": [
         "hitReact"
       ],
@@ -166,7 +197,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T15:03:01.180692+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:25.944896+00:00"
     },
     {
       "clip_id": "head_snap_left",
@@ -202,7 +237,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T20:50:41.762042+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:25.945976+00:00"
     },
     {
       "clip_id": "head_snap_right",
@@ -238,7 +277,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T20:49:26.952136+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:25.946864+00:00"
     },
     {
       "clip_id": "hit_hard_left_01",
@@ -247,6 +290,11 @@
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
       "category": [
         "hit"
       ],
@@ -260,14 +308,18 @@
         "combat"
       ],
       "looping": true,
-      "duration_seconds": 7.0,
+      "duration_seconds": 3.5416666666666665,
       "locomotion_type": "stationary",
       "world_space_motion": "none",
       "locomotion_enabled": false,
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T15:45:32.526496+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:26.114855+00:00"
     },
     {
       "clip_id": "hit_hard_right_01",
@@ -276,6 +328,11 @@
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
       "category": [
         "hit"
       ],
@@ -296,7 +353,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T15:44:38.053075+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:26.044416+00:00"
     },
     {
       "clip_id": "hit_light_right_01",
@@ -305,6 +366,11 @@
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
       "category": [
         "hit"
       ],
@@ -326,7 +392,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T14:37:39.646434+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:26.056278+00:00"
     },
     {
       "clip_id": "hit_medium_left_01",
@@ -335,6 +405,11 @@
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
       "category": [
         "hit"
       ],
@@ -355,7 +430,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T14:43:44.615106+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:26.081381+00:00"
     },
     {
       "clip_id": "hit_medium_left_02",
@@ -384,7 +463,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T14:50:30.988827+00:00"
+      "updated_at": "2026-06-02T14:50:30.988827+00:00",
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json"
     },
     {
       "clip_id": "hit_medium_right_01",
@@ -393,6 +476,11 @@
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
       "category": [
         "hit"
       ],
@@ -413,7 +501,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T14:43:49.090625+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:26.139937+00:00"
     },
     {
       "clip_id": "hit_medium_right_02",
@@ -422,6 +514,11 @@
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
       "category": [
         "hit"
       ],
@@ -442,7 +539,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T14:50:35.317103+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:26.170620+00:00"
     },
     {
       "clip_id": "idle_01",
@@ -451,6 +552,11 @@
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
       "category": [
         "idle"
       ],
@@ -472,7 +578,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-01T23:23:25.173939+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:26.249669+00:00"
     },
     {
       "clip_id": "mocap_test_01",
@@ -481,6 +591,11 @@
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
       "category": [
         "idle"
       ],
@@ -504,7 +619,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-06T13:39:19.535876+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:26.306717+00:00"
     },
     {
       "clip_id": "turn_left_90",
@@ -513,6 +632,11 @@
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
       "category": [
         "Turn"
       ],
@@ -534,7 +658,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T14:32:37.785600+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:26.320855+00:00"
     },
     {
       "clip_id": "turn_right_90",
@@ -543,6 +671,11 @@
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
       "category": [
         "Turn"
       ],
@@ -564,7 +697,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T14:32:29.214567+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:26.333234+00:00"
     },
     {
       "clip_id": "unstable_walk_01",
@@ -573,6 +710,11 @@
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
       "category": [
         "walk"
       ],
@@ -596,7 +738,11 @@
       "locomotion_start_mode": "after_transition",
       "approved_for_runtime": true,
       "debug_only": false,
-      "updated_at": "2026-06-02T00:17:55.198440+00:00"
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "source_character_id": "dad_biped",
+      "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "updated_at": "2026-06-11T16:02:26.361712+00:00"
     }
   ]
 }

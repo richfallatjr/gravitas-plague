@@ -67,6 +67,15 @@ final class SourceRigRestPoseCache {
         rig: JockRigDefinition,
         defaultDadUSDZURL: URL?
     ) throws -> SourceRigRestPose {
+        _ = defaultDadUSDZURL
+
+        if let reference = clip.sourceRig?.registryReference {
+            return try sourceRestPoseFromRegistryReference(
+                reference,
+                rig: rig
+            )
+        }
+
         if let embedded = sourceRestPoseFromEmbeddedClipMetadata(
             clip: clip,
             rig: rig
@@ -74,40 +83,61 @@ final class SourceRigRestPoseCache {
             return embedded
         }
 
-        if let path = clip.source.sourcePath,
-           FileManager.default.fileExists(atPath: path) {
-            let url = URL(fileURLWithPath: path)
-            return try loadRestPoseFromUSDZ(
-                url: url,
-                rig: rig,
-                resolution: "sourceUSDZPath"
-            )
-        }
-
-        if let defaultDadUSDZURL {
-            print(
-                """
-                [JockRuntimeDriver] legacy clip source rig inferred as dad_biped
-                  clip: \(clip.clipID)
-                  sourceFile: \(clip.source.sourceFile)
-                """
-            )
-
-            return try loadRestPoseFromUSDZ(
-                url: defaultDadUSDZURL,
-                rig: rig,
-                resolution: "defaultDadUSDZ"
-            )
-        }
-
         throw NSError(
             domain: "SourceRigRestPoseCache",
             code: 404,
             userInfo: [
                 NSLocalizedDescriptionKey:
-                    "No source rig rest pose available for clip \(clip.clipID). Do not retarget using first key as rest."
+                    "No source_rig rest pose reference available for clip \(clip.clipID). Run Blender backfill or re-export; do not retarget using first key as rest."
             ]
         )
+    }
+
+    private func sourceRestPoseFromRegistryReference(
+        _ reference: JockSourceRigReference,
+        rig: JockRigDefinition
+    ) throws -> SourceRigRestPose {
+        let key = "registry|\(reference.sourceRigID)|\(reference.skeletonHash)"
+
+        if let cached = cache[key] {
+            return cached
+        }
+
+        let entry = try JockSourceRigCache.shared.resolve(
+            reference: reference,
+            animationLibraryRoot: try JockAnimationLibraryLoader.animationLibraryRootURL()
+        )
+        let transforms = entry.restLocalTransforms.reduce(
+            into: [String: Transform]()
+        ) { partial, pair in
+            partial[pair.key] = pair.value.realityKitTransform
+        }
+
+        let pose = SourceRigRestPose(
+            characterID: entry.characterID,
+            skeletonHash: entry.skeletonHash,
+            jointOrder: entry.jointPaths.isEmpty
+                ? rig.canonicalLeafNames
+                : entry.jointPaths.map { path in
+                    path.split(separator: "/").last.map(String.init) ?? path
+                },
+            restLocalTransforms: transforms,
+            resolution: "sourceRigRegistry"
+        )
+
+        cache[key] = pose
+
+        print(
+            """
+            [SourceRigRestPoseCache] resolved registry source rest pose
+              sourceRigID: \(entry.sourceRigID)
+              character: \(entry.characterID)
+              joints: \(transforms.count)
+              hash: \(entry.skeletonHash.prefix(12))
+            """
+        )
+
+        return pose
     }
 
     private func sourceRestPoseFromEmbeddedClipMetadata(
@@ -1184,7 +1214,7 @@ final class JockRuntimeDriver {
             sourceRest = try SourceRigRestPoseCache.shared.resolve(
                 clip: clip,
                 rig: adapter.rig,
-                defaultDadUSDZURL: CharacterAssetRegistry.url(for: .dad)
+                defaultDadUSDZURL: nil
             )
         } catch {
             print(

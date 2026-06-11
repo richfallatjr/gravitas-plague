@@ -15890,5 +15890,14 @@
     "approved_for_episode": false,
     "debug_only": false
   },
-  "notes": "light hit to left side of face\nMirrored export generated from hit_light_left_01."
+  "notes": "light hit to left side of face\nMirrored export generated from hit_light_left_01.",
+  "source_rig": {
+    "schema": "com.gravitas.jockanim.source_rig_ref.v0",
+    "source_rig_id": "dad_biped_9ddc45fe6105",
+    "character_id": "dad_biped",
+    "skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+    "relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+    "dedupe_status": "backfilled",
+    "source_asset_file": "dad_biped.usdz"
+  }
 }

@@ -18,6 +18,26 @@ enum JockLoaderError: LocalizedError {
 }
 
 enum JockAnimationLibraryLoader {
+    static func animationLibraryRootURL() throws -> URL {
+        if let url = Bundle.main.url(
+            forResource: "AnimationLibrary",
+            withExtension: nil
+        ) {
+            return url
+        }
+
+        if let resourceURL = Bundle.main.resourceURL {
+            let candidate = resourceURL
+                .appendingPathComponent("AnimationLibrary", isDirectory: true)
+
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+        }
+
+        throw JockLoaderError.missingResource("AnimationLibrary")
+    }
+
     static func loadRigDefinition() throws -> JockRigDefinition {
         try loadJSON(
             fileName: "GravitasMeshyBiped24_v001.rig",

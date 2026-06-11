@@ -71,6 +71,11 @@ DEFAULT_SKELETON_MAP_PATH = os.path.join(
     "SkeletonMaps",
     "MeshyBiped24_identity.map.json",
 )
+SOURCE_RIGS_FOLDER_NAME = "SourceRigs"
+SOURCE_RIG_REGISTRY_FILENAME = "source_rig_registry.json"
+DEFAULT_DAD_SOURCE_CHARACTER_ID = "dad_biped"
+DEFAULT_SOURCE_RIG_SCHEMA = "com.gravitas.source_rig.v0"
+DEFAULT_SOURCE_RIG_REGISTRY_SCHEMA = "com.gravitas.source_rig_registry.v0"
 
 MANIFEST_CLIP_ENUM_CACHE = []
 MANIFEST_CLIP_SUMMARY_BY_ID = {}
@@ -210,6 +215,57 @@ def _now_iso():
 def _current_scene_fps():
     scene = bpy.context.scene
     return float(scene.render.fps / max(scene.render.fps_base, 0.0001))
+
+
+def _source_rigs_root(library_root):
+    return os.path.join(
+        bpy.path.abspath(library_root),
+        "Rigs",
+        SOURCE_RIGS_FOLDER_NAME,
+    )
+
+
+def _source_rig_registry_path(library_root):
+    return os.path.join(
+        _source_rigs_root(library_root),
+        SOURCE_RIG_REGISTRY_FILENAME,
+    )
+
+
+def _source_rig_relative_path(source_rig_id):
+    return f"Rigs/{SOURCE_RIGS_FOLDER_NAME}/{source_rig_id}.source_rig.json"
+
+
+def _source_rig_absolute_path(library_root, source_rig_id):
+    return os.path.join(
+        _source_rigs_root(library_root),
+        f"{source_rig_id}.source_rig.json",
+    )
+
+
+def _round_float(value, places=7):
+    return round(float(value), places)
+
+
+def _round_list(values, places=7):
+    return [_round_float(value, places=places) for value in values]
+
+
+def _stable_json_hash(payload):
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _sanitize_id_component(value):
+    value = os.path.splitext(os.path.basename(str(value)))[0]
+    value = re.sub(r"[^A-Za-z0-9_]+", "_", value)
+    value = re.sub(r"_+", "_", value).strip("_")
+    return value or "source_rig"
 
 
 # ============================================================
@@ -382,6 +438,11 @@ def _populate_settings_from_clip_payload(settings, clip_payload, summary=None):
     source_path = source.get("source_path")
     if source_path:
         settings.donor_file_path = source_path
+
+    source_rig = clip_payload.get("source_rig", {})
+    source_character_id = source_rig.get("character_id")
+    if source_character_id:
+        settings.source_character_id = source_character_id
 
     locomotion = clip_payload.get("locomotion", {})
     settings.locomotion_enabled = bool(locomotion.get("enabled", False))
@@ -624,8 +685,17 @@ def _mirror_clip_payload(clip_payload):
 
     source = mirrored.get("source", {})
     source["mirrored_from_clip_id"] = source_clip_id
+    source["mirrored_from_source_rig_id"] = (
+        clip_payload.get("source_rig", {}).get("source_rig_id", "")
+    )
     source["mirror_plane"] = "X"
     mirrored["source"] = source
+
+    if "source_rig" in clip_payload:
+        # Mirroring changes clip motion, not the source skeleton identity.
+        mirrored["source_rig"] = json.loads(
+            json.dumps(clip_payload["source_rig"])
+        )
 
     notes = mirrored.get("notes", "")
     mirrored["notes"] = (
@@ -1936,7 +2006,7 @@ def _sample_pose_bone_local(pose_bone):
     }
 
 
-def _sample_rest_bone_local(_armature, pose_bone):
+def _sample_rest_bone_local(pose_bone):
     bone = pose_bone.bone
 
     if bone.parent is None:
@@ -1947,62 +2017,208 @@ def _sample_rest_bone_local(_armature, pose_bone):
     location, rotation, scale = local_matrix.decompose()
 
     return {
-        "translation_xyz": [
-            float(location.x),
-            float(location.y),
-            float(location.z),
-        ],
-        "rotation_quat_wxyz": [
-            float(rotation.w),
-            float(rotation.x),
-            float(rotation.y),
-            float(rotation.z),
-        ],
-        "scale_xyz": [
-            float(scale.x),
-            float(scale.y),
-            float(scale.z),
-        ],
+        "translation_xyz": _round_list([
+            location.x,
+            location.y,
+            location.z,
+        ]),
+        "rotation_quat_wxyz": _round_list([
+            rotation.w,
+            rotation.x,
+            rotation.y,
+            rotation.z,
+        ]),
+        "scale_xyz": _round_list([
+            scale.x,
+            scale.y,
+            scale.z,
+        ]),
     }
 
 
-def _extract_source_rig_rest_payload(
-    armature,
-    rig_json,
-    skeleton_map,
-    donor_file_path,
-):
-    rest_transforms = {}
+def _source_rest_parent_map(armature, rig_json, skeleton_map):
+    source_to_canonical = {}
+
+    for canonical_leaf in _rig_leaf_names(rig_json):
+        source_name = _resolve_source_bone_name(canonical_leaf, skeleton_map)
+        source_to_canonical[source_name] = canonical_leaf
+
+    parent_by_joint = {}
 
     for canonical_leaf in _rig_leaf_names(rig_json):
         source_name = _resolve_source_bone_name(canonical_leaf, skeleton_map)
         pose_bone = armature.pose.bones.get(source_name)
 
         if pose_bone is None:
+            parent_by_joint[canonical_leaf] = None
             continue
 
-        rest_transforms[canonical_leaf] = _sample_rest_bone_local(
-            armature,
-            pose_bone,
+        if pose_bone.parent is None:
+            parent_by_joint[canonical_leaf] = None
+        else:
+            parent_by_joint[canonical_leaf] = source_to_canonical.get(
+                pose_bone.parent.name
+            )
+
+    return parent_by_joint
+
+
+def _extract_source_rig_payload(
+    armature,
+    rig_json,
+    skeleton_map,
+    donor_file_path,
+    character_id=None,
+):
+    donor_path = bpy.path.abspath(donor_file_path)
+    donor_basename = os.path.basename(donor_path)
+    character_id = character_id or _sanitize_id_component(donor_basename)
+
+    rest_transforms = {}
+    missing = []
+
+    for canonical_leaf in _rig_leaf_names(rig_json):
+        source_name = _resolve_source_bone_name(canonical_leaf, skeleton_map)
+        pose_bone = armature.pose.bones.get(source_name)
+
+        if pose_bone is None:
+            missing.append({
+                "canonical": canonical_leaf,
+                "source": source_name,
+            })
+            continue
+
+        rest_transforms[canonical_leaf] = _sample_rest_bone_local(pose_bone)
+
+    if missing:
+        raise RuntimeError(
+            f"Cannot extract source rig rest pose: {len(missing)} missing mapped joints."
         )
 
-    skeleton_hash_source = json.dumps(
-        rest_transforms,
-        sort_keys=True,
-        separators=(",", ":"),
+    parent_by_joint = _source_rest_parent_map(
+        armature=armature,
+        rig_json=rig_json,
+        skeleton_map=skeleton_map,
     )
-    skeleton_hash = hashlib.sha256(
-        skeleton_hash_source.encode("utf-8")
-    ).hexdigest()
+
+    skeleton_hash_payload = {
+        "rig_id": rig_json["rig_id"],
+        "rig_version": rig_json["version"],
+        "joint_paths": _rig_leaf_names(rig_json),
+        "parent_by_joint": parent_by_joint,
+        "rest_local_transforms": rest_transforms,
+    }
+
+    skeleton_hash = _stable_json_hash(skeleton_hash_payload)
+    source_rig_id = f"{character_id}_{skeleton_hash[:12]}"
 
     return {
-        "schema": "com.gravitas.source_rig_rest.v0",
-        "character_id": "dad_biped",
-        "source_usdz": os.path.basename(bpy.path.abspath(donor_file_path)),
-        "source_usdz_path": bpy.path.abspath(donor_file_path),
+        "schema": DEFAULT_SOURCE_RIG_SCHEMA,
+        "source_rig_id": source_rig_id,
+        "character_id": character_id,
+        "display_name": character_id.replace("_", " ").title(),
+        "source_asset": {
+            "file_name": donor_basename,
+            "source_path": donor_path,
+        },
+        "canonical_rig": {
+            "rig_id": rig_json["rig_id"],
+            "rig_version": rig_json["version"],
+        },
         "skeleton_hash": skeleton_hash,
         "joint_paths": _rig_leaf_names(rig_json),
+        "parent_by_joint": parent_by_joint,
         "rest_local_transforms": rest_transforms,
+        "created_at": _now_iso(),
+        "updated_at": _now_iso(),
+    }
+
+
+def _load_or_create_source_rig_registry(library_root):
+    path = _source_rig_registry_path(library_root)
+
+    if os.path.isfile(path):
+        return _json_load(path)
+
+    return {
+        "schema": DEFAULT_SOURCE_RIG_REGISTRY_SCHEMA,
+        "generated_at": _now_iso(),
+        "source_rigs": [],
+    }
+
+
+def _register_source_rig_payload(library_root, source_rig_payload, log):
+    registry = _load_or_create_source_rig_registry(library_root)
+    source_rigs = registry.get("source_rigs", [])
+
+    skeleton_hash = source_rig_payload["skeleton_hash"]
+    existing = None
+
+    for item in source_rigs:
+        if item.get("skeleton_hash") == skeleton_hash:
+            existing = item
+            break
+
+    if existing:
+        source_rig_id = existing["source_rig_id"]
+        relative_path = existing["relative_path"]
+        absolute_path = os.path.join(
+            bpy.path.abspath(library_root),
+            relative_path.replace("/", os.sep),
+        )
+
+        _log_append(
+            log,
+            f"Source rig deduped: {source_rig_id} hash={skeleton_hash[:12]}",
+        )
+
+        return {
+            "source_rig_id": source_rig_id,
+            "skeleton_hash": skeleton_hash,
+            "relative_path": relative_path,
+            "dedupe_status": "existing",
+            "absolute_path": absolute_path,
+        }
+
+    source_rig_id = source_rig_payload["source_rig_id"]
+    relative_path = _source_rig_relative_path(source_rig_id)
+    absolute_path = _source_rig_absolute_path(library_root, source_rig_id)
+
+    _json_write(absolute_path, source_rig_payload)
+
+    source_rigs.append({
+        "source_rig_id": source_rig_id,
+        "character_id": source_rig_payload["character_id"],
+        "display_name": source_rig_payload["display_name"],
+        "skeleton_hash": skeleton_hash,
+        "relative_path": relative_path,
+        "source_asset_file": source_rig_payload["source_asset"]["file_name"],
+        "canonical_rig_id": source_rig_payload["canonical_rig"]["rig_id"],
+        "canonical_rig_version": (
+            source_rig_payload["canonical_rig"]["rig_version"]
+        ),
+        "created_at": source_rig_payload["created_at"],
+        "updated_at": source_rig_payload["updated_at"],
+    })
+
+    source_rigs.sort(key=lambda item: item.get("source_rig_id", ""))
+
+    registry["source_rigs"] = source_rigs
+    registry["generated_at"] = _now_iso()
+
+    _json_write(_source_rig_registry_path(library_root), registry)
+
+    _log_append(
+        log,
+        f"Source rig registered: {source_rig_id} hash={skeleton_hash[:12]}",
+    )
+
+    return {
+        "source_rig_id": source_rig_id,
+        "skeleton_hash": skeleton_hash,
+        "relative_path": relative_path,
+        "dedupe_status": "created",
+        "absolute_path": absolute_path,
     }
 
 
@@ -2151,6 +2367,7 @@ def _update_manifest(library_root, clip_payload, output_path):
 
     clip_id = clip_payload["clip_id"]
     relative_path = _relative_to_library_root(output_path, library_root)
+    source_rig = clip_payload.get("source_rig", {})
 
     summary = {
         "clip_id": clip_id,
@@ -2182,6 +2399,10 @@ def _update_manifest(library_root, clip_payload, output_path):
         ),
         "approved_for_runtime": clip_payload["quality"]["approved_for_runtime"],
         "debug_only": clip_payload["quality"]["debug_only"],
+        "source_rig_id": source_rig.get("source_rig_id", ""),
+        "source_character_id": source_rig.get("character_id", ""),
+        "source_skeleton_hash": source_rig.get("skeleton_hash", ""),
+        "source_rig_relative_path": source_rig.get("relative_path", ""),
         "updated_at": _now_iso(),
     }
 
@@ -2340,6 +2561,15 @@ class GravitasAnimationLibrarySettings(PropertyGroup):
         name="Donor Animation File",
         subtype="FILE_PATH",
         default="",
+    )
+
+    source_character_id: StringProperty(
+        name="Source Character ID",
+        description=(
+            "Character/rig that authored this animation. Used for source rig "
+            "rest-pose dedupe."
+        ),
+        default=DEFAULT_DAD_SOURCE_CHARACTER_ID,
     )
 
     detected_armature_name: StringProperty(
@@ -3047,6 +3277,75 @@ class GRAVITAS_OT_validate_donor_rig(Operator):
         return {"FINISHED"}
 
 
+def _candidate_dad_biped_paths(settings):
+    library_root = bpy.path.abspath(settings.animation_library_root)
+    project_root = DEFAULT_PROJECT_ROOT
+
+    candidates = []
+
+    donor = bpy.path.abspath(settings.donor_file_path)
+    if donor and os.path.basename(donor).lower() == "dad_biped.usdz":
+        candidates.append(donor)
+
+    candidates.extend([
+        os.path.join(project_root, "dad_biped.usdz"),
+        os.path.join(
+            project_root,
+            "Gravitas Plague",
+            "Gravitas Plague",
+            "dad_biped.usdz",
+        ),
+        os.path.join(
+            project_root,
+            "Gravitas Plague",
+            "Gravitas Plague",
+            "Characters",
+            "dad_biped.usdz",
+        ),
+        os.path.join(
+            project_root,
+            "Gravitas Plague",
+            "Gravitas Plague",
+            "Resources",
+            "dad_biped.usdz",
+        ),
+        os.path.join(
+            project_root,
+            "Gravitas Plague",
+            "Gravitas Plague",
+            "Assets",
+            "dad_biped.usdz",
+        ),
+        os.path.join(
+            library_root,
+            "Rigs",
+            "SourceAssets",
+            "dad_biped.usdz",
+        ),
+    ])
+
+    seen = set()
+    out = []
+    for path in candidates:
+        if path and path not in seen:
+            seen.add(path)
+            out.append(path)
+
+    return out
+
+
+def _resolve_dad_biped_usdz(settings):
+    for path in _candidate_dad_biped_paths(settings):
+        if os.path.isfile(path):
+            return path
+
+    raise FileNotFoundError(
+        "Could not locate dad_biped.usdz. Set Donor Animation File to "
+        "dad_biped.usdz, or place it under the project/resources/"
+        "AnimationLibrary/Rigs/SourceAssets path."
+    )
+
+
 class GRAVITAS_OT_export_jock_clip(Operator):
     bl_idname = "gravitas.export_jock_clip"
     bl_label = "Export JockAnim Clip"
@@ -3143,6 +3442,20 @@ class GRAVITAS_OT_export_jock_clip(Operator):
             if not clip_id:
                 raise RuntimeError("Clip ID is empty.")
 
+            source_rig_payload = _extract_source_rig_payload(
+                armature=armature,
+                rig_json=rig,
+                skeleton_map=skeleton_map,
+                donor_file_path=settings.donor_file_path,
+                character_id=settings.source_character_id.strip() or None,
+            )
+
+            source_rig_ref = _register_source_rig_payload(
+                library_root=library_root,
+                source_rig_payload=source_rig_payload,
+                log=log,
+            )
+
             clip_payload = {
                 "schema": "com.gravitas.jockanim.v0",
                 "clip_id": clip_id,
@@ -3175,12 +3488,17 @@ class GRAVITAS_OT_export_jock_clip(Operator):
                     "sample_every_n_frames": int(settings.sample_every_n_frames),
                     "notes": "Extracted by Gravitas Animation Library Tool v2.0.",
                 },
-                "source_rig": _extract_source_rig_rest_payload(
-                    armature=armature,
-                    rig_json=rig,
-                    skeleton_map=skeleton_map,
-                    donor_file_path=settings.donor_file_path,
-                ),
+                "source_rig": {
+                    "schema": "com.gravitas.jockanim.source_rig_ref.v0",
+                    "source_rig_id": source_rig_ref["source_rig_id"],
+                    "character_id": source_rig_payload["character_id"],
+                    "skeleton_hash": source_rig_ref["skeleton_hash"],
+                    "relative_path": source_rig_ref["relative_path"],
+                    "dedupe_status": source_rig_ref["dedupe_status"],
+                    "source_asset_file": (
+                        source_rig_payload["source_asset"]["file_name"]
+                    ),
+                },
                 "timing": {
                     "fps": fps,
                     "duration_seconds": duration_seconds,
@@ -3232,16 +3550,12 @@ class GRAVITAS_OT_export_jock_clip(Operator):
             }
 
             _log_append(log, f"Clip type: {clip_type}")
+            _log_append(log, f"Source rig ref: {source_rig_ref['source_rig_id']}")
+            _log_append(log, f"Source rig dedupe: {source_rig_ref['dedupe_status']}")
+            _log_append(log, f"Source rig path: {source_rig_ref['relative_path']}")
             _log_append(
                 log,
-                (
-                    "Source rest transforms exported: "
-                    f"{len(clip_payload['source_rig']['rest_local_transforms'])}"
-                ),
-            )
-            _log_append(
-                log,
-                f"Source skeleton hash: {clip_payload['source_rig']['skeleton_hash']}",
+                f"Source skeleton hash: {source_rig_ref['skeleton_hash']}",
             )
 
             if clip_type == CLIP_TYPE_SUB_ANIMATION_OVERRIDE:
@@ -3284,6 +3598,165 @@ class GRAVITAS_OT_export_jock_clip(Operator):
                 self,
                 {"INFO"},
                 f"Exported JockAnim clip: {payload_to_write['clip_id']}",
+            )
+
+        except Exception as error:
+            _log_append(log, "ERROR")
+            _log_append(log, str(error))
+            _log_append(log, traceback.format_exc())
+            _safe_report(self, {"ERROR"}, str(error))
+            return {"CANCELLED"}
+
+        finally:
+            if settings.log_text:
+                _write_log(log)
+
+        return {"FINISHED"}
+
+
+class GRAVITAS_OT_backfill_dad_source_rig_to_existing_clips(Operator):
+    bl_idname = "gravitas.backfill_dad_source_rig_to_existing_clips"
+    bl_label = "Backfill Dad Source Rig To Existing Clips"
+    bl_description = (
+        "Registers dad_biped.usdz as a source rig and writes source_rig "
+        "references into existing clips that lack one."
+    )
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        settings = context.scene.gravitas_animation_library
+        log = []
+
+        try:
+            library_root = bpy.path.abspath(settings.animation_library_root)
+            dad_path = _resolve_dad_biped_usdz(settings)
+
+            rig = _json_load(bpy.path.abspath(settings.rig_json_path))
+            skeleton_map = _load_skeleton_map_or_identity(
+                bpy.path.abspath(settings.skeleton_map_path),
+                rig,
+            )
+
+            imported, _collection = _import_donor_file(dad_path, log)
+
+            armature = _find_animated_armature(imported)
+            if armature is None:
+                armatures = [obj for obj in imported if obj.type == "ARMATURE"]
+                if not armatures:
+                    raise RuntimeError("No armature found in dad_biped.usdz.")
+
+                armatures.sort(
+                    key=lambda obj: len(obj.pose.bones) if obj.pose else 0,
+                    reverse=True,
+                )
+                armature = armatures[0]
+
+            missing = _validate_armature_against_rig(
+                armature,
+                rig,
+                skeleton_map,
+            )
+            if missing:
+                raise RuntimeError(
+                    f"Dad rig validation failed: {len(missing)} missing joints."
+                )
+
+            source_rig_payload = _extract_source_rig_payload(
+                armature=armature,
+                rig_json=rig,
+                skeleton_map=skeleton_map,
+                donor_file_path=dad_path,
+                character_id=DEFAULT_DAD_SOURCE_CHARACTER_ID,
+            )
+
+            source_rig_ref = _register_source_rig_payload(
+                library_root=library_root,
+                source_rig_payload=source_rig_payload,
+                log=log,
+            )
+
+            manifest = _load_or_create_manifest(library_root)
+            updated = 0
+            skipped = 0
+            missing_files = 0
+
+            for summary in manifest.get("clips", []):
+                relative_path = summary.get("relative_path", "")
+                if not relative_path:
+                    skipped += 1
+                    continue
+
+                clip_path = os.path.join(
+                    library_root,
+                    relative_path.replace("/", os.sep),
+                )
+
+                if not os.path.isfile(clip_path):
+                    missing_files += 1
+                    _log_append(log, f"Missing clip file: {clip_path}")
+                    continue
+
+                clip_payload = _json_load(clip_path)
+
+                if clip_payload.get("clip_id") != summary.get("clip_id"):
+                    _log_append(
+                        log,
+                        (
+                            "Warning: manifest clip_id does not match clip file "
+                            f"payload: manifest={summary.get('clip_id')} "
+                            f"payload={clip_payload.get('clip_id')} "
+                            f"path={relative_path}"
+                        ),
+                    )
+
+                existing_ref = clip_payload.get("source_rig", {})
+                if existing_ref.get("source_rig_id"):
+                    ref_for_summary = existing_ref
+                    skipped += 1
+                else:
+                    ref_for_summary = {
+                        "schema": "com.gravitas.jockanim.source_rig_ref.v0",
+                        "source_rig_id": source_rig_ref["source_rig_id"],
+                        "character_id": DEFAULT_DAD_SOURCE_CHARACTER_ID,
+                        "skeleton_hash": source_rig_ref["skeleton_hash"],
+                        "relative_path": source_rig_ref["relative_path"],
+                        "dedupe_status": "backfilled",
+                        "source_asset_file": os.path.basename(dad_path),
+                    }
+
+                    clip_payload["source_rig"] = ref_for_summary
+                    _json_write(clip_path, clip_payload)
+                    updated += 1
+
+                summary["source_rig_id"] = ref_for_summary.get("source_rig_id", "")
+                summary["source_character_id"] = ref_for_summary.get("character_id", "")
+                summary["source_skeleton_hash"] = ref_for_summary.get(
+                    "skeleton_hash",
+                    "",
+                )
+                summary["source_rig_relative_path"] = ref_for_summary.get(
+                    "relative_path",
+                    "",
+                )
+                summary["updated_at"] = _now_iso()
+
+            manifest["generated_at"] = _now_iso()
+            _json_write(_manifest_path(library_root), manifest)
+
+            _refresh_manifest_clip_cache(settings, log)
+
+            _log_append(log, "")
+            _log_append(log, "Dad source rig backfill complete.")
+            _log_append(log, f"Dad path: {dad_path}")
+            _log_append(log, f"Source rig ID: {source_rig_ref['source_rig_id']}")
+            _log_append(log, f"Updated clips: {updated}")
+            _log_append(log, f"Skipped clips: {skipped}")
+            _log_append(log, f"Missing clip files: {missing_files}")
+
+            _safe_report(
+                self,
+                {"INFO"},
+                f"Backfilled Dad source rig onto {updated} clips.",
             )
 
         except Exception as error:
@@ -3636,6 +4109,7 @@ class GRAVITAS_PT_animation_library_panel(Panel):
         clip_box.prop(settings, "display_name")
         clip_box.prop(settings, "description")
         clip_box.prop(settings, "author")
+        clip_box.prop(settings, "source_character_id")
         clip_box.prop(settings, "output_category_folder")
 
         range_box = layout.box()
@@ -3707,6 +4181,14 @@ class GRAVITAS_PT_animation_library_panel(Panel):
         quality_box.prop(settings, "debug_only")
         quality_box.prop(settings, "log_text")
 
+        maintenance_box = layout.box()
+        maintenance_box.label(text="Source Rig Maintenance", icon="ARMATURE_DATA")
+        maintenance_box.operator(
+            GRAVITAS_OT_backfill_dad_source_rig_to_existing_clips.bl_idname,
+            text="Backfill Dad Source Rig To Existing Clips",
+            icon="FILE_REFRESH",
+        )
+
         layout.separator()
 
         export_type_box = layout.box()
@@ -3763,6 +4245,7 @@ classes = (
     GRAVITAS_OT_import_donor_animation,
     GRAVITAS_OT_validate_donor_rig,
     GRAVITAS_OT_export_jock_clip,
+    GRAVITAS_OT_backfill_dad_source_rig_to_existing_clips,
     GRAVITAS_OT_build_animated_target_from_selected_clip,
     GRAVITAS_OT_cleanup_donor_import,
     GRAVITAS_OT_create_locomotion_root,

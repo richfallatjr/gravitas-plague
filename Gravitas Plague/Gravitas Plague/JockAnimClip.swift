@@ -29,21 +29,89 @@ struct JockAnimClip: Codable, Equatable {
         }
 
         let schema: String?
+        let sourceRigID: String?
         let characterID: String?
         let sourceUSDZ: String?
         let sourceUSDZPath: String?
         let skeletonHash: String?
+        let relativePath: String?
+        let dedupeStatus: String?
+        let sourceAssetFile: String?
         let jointPaths: [String]
         let restLocalTransforms: [String: RestLocalTransform]
 
         enum CodingKeys: String, CodingKey {
             case schema
+            case sourceRigID = "source_rig_id"
             case characterID = "character_id"
             case sourceUSDZ = "source_usdz"
             case sourceUSDZPath = "source_usdz_path"
             case skeletonHash = "skeleton_hash"
+            case relativePath = "relative_path"
+            case dedupeStatus = "dedupe_status"
+            case sourceAssetFile = "source_asset_file"
             case jointPaths = "joint_paths"
             case restLocalTransforms = "rest_local_transforms"
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+
+            schema = try container.decodeIfPresent(String.self, forKey: .schema)
+            sourceRigID = try container.decodeIfPresent(String.self, forKey: .sourceRigID)
+            characterID = try container.decodeIfPresent(String.self, forKey: .characterID)
+            sourceUSDZ = try container.decodeIfPresent(String.self, forKey: .sourceUSDZ)
+            sourceUSDZPath = try container.decodeIfPresent(String.self, forKey: .sourceUSDZPath)
+            skeletonHash = try container.decodeIfPresent(String.self, forKey: .skeletonHash)
+            relativePath = try container.decodeIfPresent(String.self, forKey: .relativePath)
+            dedupeStatus = try container.decodeIfPresent(String.self, forKey: .dedupeStatus)
+            sourceAssetFile = try container.decodeIfPresent(String.self, forKey: .sourceAssetFile)
+            jointPaths = try container.decodeIfPresent([String].self, forKey: .jointPaths) ?? []
+            restLocalTransforms = try container.decodeIfPresent(
+                [String: RestLocalTransform].self,
+                forKey: .restLocalTransforms
+            ) ?? [:]
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+
+            try container.encodeIfPresent(schema, forKey: .schema)
+            try container.encodeIfPresent(sourceRigID, forKey: .sourceRigID)
+            try container.encodeIfPresent(characterID, forKey: .characterID)
+            try container.encodeIfPresent(sourceUSDZ, forKey: .sourceUSDZ)
+            try container.encodeIfPresent(sourceUSDZPath, forKey: .sourceUSDZPath)
+            try container.encodeIfPresent(skeletonHash, forKey: .skeletonHash)
+            try container.encodeIfPresent(relativePath, forKey: .relativePath)
+            try container.encodeIfPresent(dedupeStatus, forKey: .dedupeStatus)
+            try container.encodeIfPresent(sourceAssetFile, forKey: .sourceAssetFile)
+            if !jointPaths.isEmpty {
+                try container.encode(jointPaths, forKey: .jointPaths)
+            }
+            if !restLocalTransforms.isEmpty {
+                try container.encode(restLocalTransforms, forKey: .restLocalTransforms)
+            }
+        }
+
+        var registryReference: JockSourceRigReference? {
+            guard let sourceRigID,
+                  let skeletonHash,
+                  let relativePath,
+                  !sourceRigID.isEmpty,
+                  !skeletonHash.isEmpty,
+                  !relativePath.isEmpty else {
+                return nil
+            }
+
+            return JockSourceRigReference(
+                schema: schema,
+                sourceRigID: sourceRigID,
+                characterID: characterID,
+                skeletonHash: skeletonHash,
+                relativePath: relativePath,
+                dedupeStatus: dedupeStatus,
+                sourceAssetFile: sourceAssetFile
+            )
         }
     }
 

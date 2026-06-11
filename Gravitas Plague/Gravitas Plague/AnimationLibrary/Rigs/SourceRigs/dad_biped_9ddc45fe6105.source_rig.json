@@ -1,0 +1,503 @@
+{
+  "schema": "com.gravitas.source_rig.v0",
+  "source_rig_id": "dad_biped_9ddc45fe6105",
+  "character_id": "dad_biped",
+  "display_name": "Dad Biped",
+  "source_asset": {
+    "file_name": "dad_biped.usdz",
+    "source_path": "/Users/richardfallat/Projects/dev/gravitas-plague/dad_biped.usdz"
+  },
+  "canonical_rig": {
+    "rig_id": "GravitasMeshyBiped24",
+    "rig_version": "001"
+  },
+  "skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+  "joint_paths": [
+    "Hips",
+    "LeftUpLeg",
+    "LeftLeg",
+    "LeftFoot",
+    "LeftToeBase",
+    "RightUpLeg",
+    "RightLeg",
+    "RightFoot",
+    "RightToeBase",
+    "Spine02",
+    "Spine01",
+    "Spine",
+    "LeftShoulder",
+    "LeftArm",
+    "LeftForeArm",
+    "LeftHand",
+    "RightShoulder",
+    "RightArm",
+    "RightForeArm",
+    "RightHand",
+    "neck",
+    "Head",
+    "head_end",
+    "headfront"
+  ],
+  "parent_by_joint": {
+    "Hips": null,
+    "LeftUpLeg": "Hips",
+    "LeftLeg": "LeftUpLeg",
+    "LeftFoot": "LeftLeg",
+    "LeftToeBase": "LeftFoot",
+    "RightUpLeg": "Hips",
+    "RightLeg": "RightUpLeg",
+    "RightFoot": "RightLeg",
+    "RightToeBase": "RightFoot",
+    "Spine02": "Hips",
+    "Spine01": "Spine02",
+    "Spine": "Spine01",
+    "LeftShoulder": "Spine",
+    "LeftArm": "LeftShoulder",
+    "LeftForeArm": "LeftArm",
+    "LeftHand": "LeftForeArm",
+    "RightShoulder": "Spine",
+    "RightArm": "RightShoulder",
+    "RightForeArm": "RightArm",
+    "RightHand": "RightForeArm",
+    "neck": "Spine",
+    "Head": "neck",
+    "head_end": "Head",
+    "headfront": "Head"
+  },
+  "rest_local_transforms": {
+    "Hips": {
+      "translation_xyz": [
+        0.3826046,
+        -1.5531406,
+        99.9851913
+      ],
+      "rotation_quat_wxyz": [
+        0.5994747,
+        0.8003627,
+        -0.0,
+        0.0070533
+      ],
+      "scale_xyz": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "LeftUpLeg": {
+      "translation_xyz": [
+        9.5129786,
+        -9.3005009,
+        2.4032159
+      ],
+      "rotation_quat_wxyz": [
+        0.1239684,
+        0.9901346,
+        0.038449,
+        -0.0527917
+      ],
+      "scale_xyz": [
+        1.0000001,
+        0.9999999,
+        1.000001
+      ]
+    },
+    "LeftLeg": {
+      "translation_xyz": [
+        4.7e-06,
+        38.1958389,
+        -7.7e-06
+      ],
+      "rotation_quat_wxyz": [
+        0.9993569,
+        0.0263474,
+        0.0187762,
+        0.0154616
+      ],
+      "scale_xyz": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "LeftFoot": {
+      "translation_xyz": [
+        -7.2e-06,
+        43.4406967,
+        6.2e-06
+      ],
+      "rotation_quat_wxyz": [
+        0.849884,
+        -0.5247091,
+        -0.0478186,
+        -0.0095373
+      ],
+      "scale_xyz": [
+        1.0,
+        0.9999999,
+        1.0000001
+      ]
+    },
+    "LeftToeBase": {
+      "translation_xyz": [
+        3.3e-06,
+        11.7581625,
+        -5.8e-06
+      ],
+      "rotation_quat_wxyz": [
+        0.9627778,
+        -0.269033,
+        -0.0251194,
+        -0.0070181
+      ],
+      "scale_xyz": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "RightUpLeg": {
+      "translation_xyz": [
+        -9.7066011,
+        -8.9895344,
+        2.1464131
+      ],
+      "rotation_quat_wxyz": [
+        0.1239107,
+        0.9890117,
+        -0.0490368,
+        0.0640109
+      ],
+      "scale_xyz": [
+        0.9999998,
+        0.9999999,
+        0.9999992
+      ]
+    },
+    "RightLeg": {
+      "translation_xyz": [
+        6.5e-06,
+        37.5855293,
+        1.7e-06
+      ],
+      "rotation_quat_wxyz": [
+        0.9995914,
+        0.0250365,
+        -0.0111214,
+        -0.0081595
+      ],
+      "scale_xyz": [
+        1.0,
+        1.0,
+        0.9999999
+      ]
+    },
+    "RightFoot": {
+      "translation_xyz": [
+        1.85e-05,
+        44.2609749,
+        -2e-07
+      ],
+      "rotation_quat_wxyz": [
+        0.8509799,
+        -0.523304,
+        0.0445278,
+        -0.0018313
+      ],
+      "scale_xyz": [
+        1.0,
+        1.0000002,
+        1.0000001
+      ]
+    },
+    "RightToeBase": {
+      "translation_xyz": [
+        1.21e-05,
+        11.7530422,
+        -4.3e-06
+      ],
+      "rotation_quat_wxyz": [
+        0.9627767,
+        -0.2690351,
+        0.0251367,
+        0.0070247
+      ],
+      "scale_xyz": [
+        1.0,
+        1.0000001,
+        0.9999999
+      ]
+    },
+    "Spine02": {
+      "translation_xyz": [
+        0.1936231,
+        11.8092346,
+        -4.5496306
+      ],
+      "rotation_quat_wxyz": [
+        0.9831107,
+        -0.182842,
+        -0.0032954,
+        -0.0071675
+      ],
+      "scale_xyz": [
+        0.9999999,
+        0.9999998,
+        0.9999999
+      ]
+    },
+    "Spine01": {
+      "translation_xyz": [
+        -6e-07,
+        12.6568613,
+        3.8e-06
+      ],
+      "rotation_quat_wxyz": [
+        1.0,
+        1e-07,
+        0.0,
+        0.0
+      ],
+      "scale_xyz": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "Spine": {
+      "translation_xyz": [
+        -1e-07,
+        12.6568403,
+        -0.0
+      ],
+      "rotation_quat_wxyz": [
+        0.9991162,
+        -0.041019,
+        -0.0068192,
+        0.0061394
+      ],
+      "scale_xyz": [
+        1.0,
+        0.9999999,
+        1.0
+      ]
+    },
+    "LeftShoulder": {
+      "translation_xyz": [
+        3.5602098,
+        3.8361294,
+        -0.3777702
+      ],
+      "rotation_quat_wxyz": [
+        0.4362792,
+        0.5206081,
+        0.5576417,
+        -0.4771409
+      ],
+      "scale_xyz": [
+        0.9999999,
+        1.0,
+        0.9999999
+      ]
+    },
+    "LeftArm": {
+      "translation_xyz": [
+        2.5e-06,
+        14.1553335,
+        -3.14e-05
+      ],
+      "rotation_quat_wxyz": [
+        0.7709191,
+        0.4076035,
+        0.4366012,
+        0.2211845
+      ],
+      "scale_xyz": [
+        1.0,
+        0.9999999,
+        1.0
+      ]
+    },
+    "LeftForeArm": {
+      "translation_xyz": [
+        -4.24e-05,
+        25.8452644,
+        3.1e-05
+      ],
+      "rotation_quat_wxyz": [
+        0.9707825,
+        -0.2153273,
+        -0.0465669,
+        0.0951158
+      ],
+      "scale_xyz": [
+        0.9999999,
+        0.9999999,
+        0.9999999
+      ]
+    },
+    "LeftHand": {
+      "translation_xyz": [
+        1.34e-05,
+        23.7489223,
+        3.24e-05
+      ],
+      "rotation_quat_wxyz": [
+        0.9791739,
+        0.1084493,
+        0.1115207,
+        0.1304624
+      ],
+      "scale_xyz": [
+        0.9999999,
+        1.0,
+        1.0000001
+      ]
+    },
+    "RightShoulder": {
+      "translation_xyz": [
+        -3.7040045,
+        3.8990166,
+        -0.3028104
+      ],
+      "rotation_quat_wxyz": [
+        0.4469664,
+        0.5216612,
+        -0.5566568,
+        0.4671443
+      ],
+      "scale_xyz": [
+        1.0000001,
+        1.0000002,
+        1.0
+      ]
+    },
+    "RightArm": {
+      "translation_xyz": [
+        -1e-06,
+        14.9690218,
+        -1.56e-05
+      ],
+      "rotation_quat_wxyz": [
+        0.7713477,
+        0.4084085,
+        -0.4358039,
+        -0.219773
+      ],
+      "scale_xyz": [
+        1.0,
+        1.0000001,
+        1.0
+      ]
+    },
+    "RightForeArm": {
+      "translation_xyz": [
+        -5.53e-05,
+        25.8451157,
+        -3.81e-05
+      ],
+      "rotation_quat_wxyz": [
+        0.9707882,
+        -0.2151583,
+        0.0458892,
+        -0.0957668
+      ],
+      "scale_xyz": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "RightHand": {
+      "translation_xyz": [
+        1.19e-05,
+        23.1680927,
+        -2.55e-05
+      ],
+      "rotation_quat_wxyz": [
+        0.9805268,
+        0.1064384,
+        -0.1078338,
+        -0.1249399
+      ],
+      "scale_xyz": [
+        1.0,
+        1.0,
+        1.0000001
+      ]
+    },
+    "neck": {
+      "translation_xyz": [
+        0.1437937,
+        8.2873592,
+        0.6805685
+      ],
+      "rotation_quat_wxyz": [
+        0.99908,
+        0.041032,
+        0.0093329,
+        -0.0082697
+      ],
+      "scale_xyz": [
+        1.0,
+        1.0,
+        1.0000001
+      ]
+    },
+    "Head": {
+      "translation_xyz": [
+        -3e-07,
+        7.9569507,
+        -9e-07
+      ],
+      "rotation_quat_wxyz": [
+        0.9315058,
+        0.3637143,
+        -0.0001389,
+        0.0029787
+      ],
+      "scale_xyz": [
+        0.9999999,
+        0.9999999,
+        0.9999999
+      ]
+    },
+    "head_end": {
+      "translation_xyz": [
+        0.0871384,
+        21.1236324,
+        -11.762989
+      ],
+      "rotation_quat_wxyz": [
+        0.9679013,
+        -0.2513238,
+        0.0,
+        -0.0018618
+      ],
+      "scale_xyz": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "headfront": {
+      "translation_xyz": [
+        -0.0871376,
+        9.1634436,
+        11.7629385
+      ],
+      "rotation_quat_wxyz": [
+        0.8984811,
+        0.4390002,
+        1e-07,
+        0.0032521
+      ],
+      "scale_xyz": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  },
+  "created_at": "2026-06-11T16:02:25.824274+00:00",
+  "updated_at": "2026-06-11T16:02:25.824281+00:00"
+}

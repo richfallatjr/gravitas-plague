@@ -25,6 +25,10 @@ struct JockAnimationManifest: Codable, Equatable {
         let locomotionStartMode: String?
         let approvedForRuntime: Bool
         let debugOnly: Bool
+        let sourceRigID: String?
+        let sourceCharacterID: String?
+        let sourceSkeletonHash: String?
+        let sourceRigRelativePath: String?
         let updatedAt: String?
 
         var id: String { clipID }
@@ -53,6 +57,10 @@ struct JockAnimationManifest: Codable, Equatable {
             case locomotionStartMode = "locomotion_start_mode"
             case approvedForRuntime = "approved_for_runtime"
             case debugOnly = "debug_only"
+            case sourceRigID = "source_rig_id"
+            case sourceCharacterID = "source_character_id"
+            case sourceSkeletonHash = "source_skeleton_hash"
+            case sourceRigRelativePath = "source_rig_relative_path"
             case updatedAt = "updated_at"
         }
     }

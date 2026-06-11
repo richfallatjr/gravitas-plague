@@ -1,0 +1,18 @@
+{
+  "schema": "com.gravitas.source_rig_registry.v0",
+  "generated_at": "2026-06-11T16:02:25.824772+00:00",
+  "source_rigs": [
+    {
+      "source_rig_id": "dad_biped_9ddc45fe6105",
+      "character_id": "dad_biped",
+      "display_name": "Dad Biped",
+      "skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
+      "relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+      "source_asset_file": "dad_biped.usdz",
+      "canonical_rig_id": "GravitasMeshyBiped24",
+      "canonical_rig_version": "001",
+      "created_at": "2026-06-11T16:02:25.824274+00:00",
+      "updated_at": "2026-06-11T16:02:25.824281+00:00"
+    }
+  ]
+}
