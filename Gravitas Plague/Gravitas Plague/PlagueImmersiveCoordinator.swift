@@ -7,6 +7,22 @@ import UIKit
 
 @MainActor
 final class PlagueImmersiveCoordinator: ObservableObject {
+    private struct HordeSpawnFailureRecord: Identifiable {
+        let id = UUID()
+        let wave: Int
+        let spawnIndex: Int
+        let archetype: PlagueCharacterArchetype
+        let reason: String
+    }
+
+    private enum HordeWaveSpawnState: String {
+        case idle
+        case spawning
+        case active
+        case degraded
+        case failed
+    }
+
     private let spatialProvider = PhaseOneSpatialProvider()
     private let audioController = GravitasDemoAudioController()
 
@@ -33,6 +49,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var hordePlayerHitsThisWave = 0
     private var hordeTotalSpawned = 0
     private var hordeTotalKilled = 0
+    private var hordeWaveSpawnState: HordeWaveSpawnState = .idle
+    private var hordeSpawnFailures: [HordeSpawnFailureRecord] = []
+    private var isSpawningHordeWave = false
 
     private var lastTickDate: Date?
     private var handledCommandIDs = Set<UUID>()
@@ -232,6 +251,26 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     currentHeadPosition: currentHeadPosition
                 )
             }
+
+            #if DEBUG
+            if let sceneRoot {
+                for child in sceneRoot.children where child.name.hasPrefix("Horde_") {
+                    let isRegistered = hordeEnemyControllersByID.values.contains { controller in
+                        controller.rootEntity === child
+                    }
+
+                    if child.isEnabled, !isRegistered {
+                        print(
+                            """
+                            [Horde] ERROR visible horde entity is not registered
+                              entity: \(child.name)
+                              thisCanCauseAPose: true
+                            """
+                        )
+                    }
+                }
+            }
+            #endif
         } else {
             jockRetargetController?.update(
                 deltaTime: deltaTime,
@@ -347,6 +386,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordePlayerHitsThisWave = 0
         hordeTotalSpawned = 0
         hordeTotalKilled = 0
+        hordeWaveSpawnState = .idle
+        hordeSpawnFailures.removeAll()
+        isSpawningHordeWave = false
 
         jockRetargetController?.hide()
         audioController.stopPrimaryHostDadBreathing()
@@ -364,9 +406,17 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         dyingHordeEnemyIDs.removeAll()
         corpseHordeEnemyIDs.removeAll()
         hordePlayerHitsThisWave = 0
+        hordeWaveSpawnState = .idle
+        hordeSpawnFailures.removeAll()
+        isSpawningHordeWave = false
     }
 
     private func spawnNextHordeWave() async {
+        guard !isSpawningHordeWave else {
+            print("[Horde] spawnNextHordeWave ignored: already spawning")
+            return
+        }
+
         guard hordeBenchmarkRunning else {
             print("[HordeBenchmark] spawnNextWave ignored: benchmark not running")
             return
@@ -377,7 +427,26 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             return
         }
 
-        guard let sceneRoot else { return }
+        guard sceneRoot != nil else { return }
+
+        guard activeHordeEnemyIDs.isEmpty,
+              dyingHordeEnemyIDs.isEmpty else {
+            print(
+                """
+                [Horde] ERROR spawn requested while current wave still has live/dying enemies
+                  currentWave: \(hordeCurrentWave)
+                  active: \(activeHordeEnemyIDs.count)
+                  dying: \(dyingHordeEnemyIDs.count)
+                  waveState: \(hordeWaveSpawnState.rawValue)
+                """
+            )
+            return
+        }
+
+        isSpawningHordeWave = true
+        defer {
+            isSpawningHordeWave = false
+        }
 
         let spawnPose = spatialProvider.currentPoseOrFallback()
         let config = PhaseOneConfiguration.phaseOneDefault
@@ -406,114 +475,293 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                   positions: \(positions.count)
                 """
             )
+            hordeWaveSpawnState = .failed
             return
         }
 
-        clearHordeEnemyControllers()
-        activeHordeEnemyIDs.removeAll()
-        dyingHordeEnemyIDs.removeAll()
-        corpseHordeEnemyIDs.removeAll()
-
-        hordeCurrentWave = nextWave
+        hordeWaveSpawnState = .spawning
+        hordeSpawnFailures.removeAll()
         hordePlayerHitsThisWave = 0
-        hordeTotalSpawned += spawnCount
 
-        var spawnedIDs: [UUID] = []
+        print(
+            """
+            [Horde] wave spawn started
+              wave: \(nextWave)
+              requestedCount: \(spawnCount)
+              lineup: \(lineup.map { $0.rawValue }.joined(separator: ", "))
+            """
+        )
+
+        var successfulSpawnCount = 0
 
         for index in 0..<spawnCount {
             let archetype = lineup[index]
             let id = UUID()
             let hitsToKill = Int.random(in: 3...5)
-            let controller = JockRetargetTestController()
-
-            controller.configureHordeIdentity(
-                id: id,
-                archetype: archetype,
-                wave: nextWave,
-                spawnIndex: index,
-                hitsToKill: hitsToKill
-            )
-
-            wireJockCallbacks(
-                controller,
-                hostAudioSourceID: id
-            )
-            sceneRoot.addChild(controller.rootEntity)
 
             do {
-                try await controller.loadIfNeeded()
-
-                controller.configureHordeSpawn(
+                let controller = try await createLoadedHordeEnemyController(
+                    id: id,
+                    archetype: archetype,
                     position: positions[index],
+                    wave: nextWave,
+                    spawnIndex: index,
+                    hitsToKill: hitsToKill,
                     playerHeadPosition: spawnPose.headPosition
                 )
 
-                let audioStartDelay = TimeInterval.random(in: 0...1)
-                audioController.attachHostAudioSource(
+                guard hordeBenchmarkRunning,
+                      !isPlayerDeathSequenceActive else {
+                    controller.hide()
+                    print(
+                        """
+                        [Horde] spawn cancelled before reveal
+                          wave: \(nextWave)
+                          index: \(index)
+                          archetype: \(archetype.rawValue)
+                          benchmarkRunning: \(hordeBenchmarkRunning)
+                          playerDeathActive: \(isPlayerDeathSequenceActive)
+                        """
+                    )
+                    return
+                }
+
+                try registerAndRevealHordeEnemy(
+                    controller: controller,
                     id: id,
-                    hostRootEntity: controller.rootEntity,
-                    breathingStartDelay: audioStartDelay
+                    archetype: archetype,
+                    wave: nextWave,
+                    spawnIndex: index,
+                    currentHeadPosition: spatialProvider.currentPose()?.headPosition ?? spawnPose.headPosition
                 )
 
-                try controller.playFollowDemo(
-                    resetBenchmarkState: false
-                )
+                if successfulSpawnCount == 0 {
+                    hordeCurrentWave = nextWave
+                }
 
-                hordeEnemyControllersByID[id] = controller
-                activeHordeEnemyIDs.insert(id)
-                spawnedIDs.append(id)
+                successfulSpawnCount += 1
+                hordeTotalSpawned += 1
 
                 print(
                     """
-                    [HordeBenchmark] spawned infected
+                    [Horde] enemy spawned and registered
                       wave: \(nextWave)
                       index: \(index)
                       archetype: \(archetype.rawValue)
                       id: \(id)
                       hitsToKill: \(hitsToKill)
-                      audioStartDelay: \(String(format: "%.3f", audioStartDelay))
                       position: \(positions[index])
-                      entityName: \(controller.rootEntity.name)
-                      entityObject: \(Unmanaged.passUnretained(controller.rootEntity).toOpaque())
+                      activeIDs: \(activeHordeEnemyIDs.count)
+                      controllers: \(hordeEnemyControllersByID.count)
                     """
                 )
             } catch {
-                audioController.stopHostAudioSource(id: id)
-                controller.rootEntity.removeFromParent()
+                handleHordeSpawnFailure(
+                    HordeSpawnFailureRecord(
+                        wave: nextWave,
+                        spawnIndex: index,
+                        archetype: archetype,
+                        reason: error.localizedDescription
+                    )
+                )
 
                 print(
                     """
-                    [HordeBenchmark] ERROR failed to spawn infected
+                    [Horde] ERROR enemy spawn failed
                       wave: \(nextWave)
                       index: \(index)
                       archetype: \(archetype.rawValue)
                       file: \(archetype.usdzFileName)
                       policy: \(archetype.poseApplicationPolicy.rawValue)
                       id: \(id)
-                      error: \(error)
+                      reason: \(error.localizedDescription)
+                      alreadySpawnedEnemiesRemainAlive: true
+                      waveWillNotResetToOne: true
                     """
                 )
             }
         }
 
-        let aliveEnemies = activeHordeEnemyIDs.count
+        if successfulSpawnCount == 0 {
+            hordeWaveSpawnState = .failed
+
+            print(
+                """
+                [Horde] ERROR wave spawn failed completely
+                  wave: \(nextWave)
+                  requestedCount: \(spawnCount)
+                  successfulSpawnCount: 0
+                  failures: \(hordeSpawnFailures.map { "\($0.spawnIndex):\($0.archetype.rawValue):\($0.reason)" }.joined(separator: " | "))
+                  currentWavePreserved: \(hordeCurrentWave)
+                  noResetToWaveOne: true
+                """
+            )
+
+            return
+        }
+
+        hordeWaveSpawnState = hordeSpawnFailures.isEmpty ? .active : .degraded
 
         print(
             """
-            [HordeBenchmark] wave spawned
+            [Horde] wave spawn complete
               wave: \(nextWave)
               requestedCount: \(spawnCount)
-              positionsCount: \(positions.count)
-              spawnedIDs: \(spawnedIDs.count)
+              successfulSpawnCount: \(successfulSpawnCount)
+              failureCount: \(hordeSpawnFailures.count)
+              state: \(hordeWaveSpawnState.rawValue)
               activeEnemyIDs: \(activeHordeEnemyIDs.count)
-              aliveEnemies: \(aliveEnemies)
+              controllers: \(hordeEnemyControllersByID.count)
+              aliveEnemies: \(activeHordeEnemyIDs.count)
               totalSpawned: \(hordeTotalSpawned)
               lineup: \(lineup.map { $0.rawValue }.joined(separator: ", "))
+              noResetToWaveOne: true
             """
         )
 
         validateWaveSpawnCount(
-            expected: spawnCount
+            expected: successfulSpawnCount
+        )
+
+        checkWaveCanEnd(
+            wave: nextWave
+        )
+    }
+
+    private func createLoadedHordeEnemyController(
+        id: UUID,
+        archetype: PlagueCharacterArchetype,
+        position: SIMD3<Float>,
+        wave: Int,
+        spawnIndex: Int,
+        hitsToKill: Int,
+        playerHeadPosition: SIMD3<Float>
+    ) async throws -> JockRetargetTestController {
+        guard CharacterAssetRegistry.url(for: archetype) != nil else {
+            throw NSError(
+                domain: "HordeSpawn",
+                code: 404,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Missing character asset \(archetype.usdzFileName)"
+                ]
+            )
+        }
+
+        let controller = JockRetargetTestController()
+
+        controller.configureHordeIdentity(
+            id: id,
+            archetype: archetype,
+            wave: wave,
+            spawnIndex: spawnIndex,
+            hitsToKill: hitsToKill
+        )
+
+        wireJockCallbacks(
+            controller,
+            hostAudioSourceID: id
+        )
+
+        try await controller.loadIfNeeded()
+
+        controller.configureHordeSpawn(
+            position: position,
+            playerHeadPosition: playerHeadPosition
+        )
+
+        controller.rootEntity.isEnabled = false
+
+        return controller
+    }
+
+    private func registerAndRevealHordeEnemy(
+        controller: JockRetargetTestController,
+        id: UUID,
+        archetype: PlagueCharacterArchetype,
+        wave: Int,
+        spawnIndex: Int,
+        currentHeadPosition: SIMD3<Float>
+    ) throws {
+        guard let sceneRoot else {
+            throw NSError(
+                domain: "HordeSpawn",
+                code: 500,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Missing scene root while registering horde enemy"
+                ]
+            )
+        }
+
+        precondition(controller.rootEntity.isEnabled == false)
+
+        hordeEnemyControllersByID[id] = controller
+        activeHordeEnemyIDs.insert(id)
+
+        if controller.rootEntity.parent == nil {
+            sceneRoot.addChild(controller.rootEntity)
+        }
+
+        let audioStartDelay = TimeInterval.random(in: 0...1)
+        audioController.attachHostAudioSource(
+            id: id,
+            hostRootEntity: controller.rootEntity,
+            breathingStartDelay: audioStartDelay
+        )
+
+        do {
+            try controller.playFollowDemo(
+                resetBenchmarkState: false
+            )
+
+            controller.update(
+                deltaTime: 1.0 / 60.0,
+                currentHeadPosition: currentHeadPosition
+            )
+        } catch {
+            activeHordeEnemyIDs.remove(id)
+            hordeEnemyControllersByID.removeValue(forKey: id)
+            audioController.stopHostAudioSource(id: id)
+            controller.hide()
+            controller.rootEntity.removeFromParent()
+            throw error
+        }
+
+        print(
+            """
+            [Horde] registered/revealed enemy
+              wave: \(wave)
+              index: \(spawnIndex)
+              archetype: \(archetype.rawValue)
+              id: \(id)
+              rootEnabled: \(controller.rootEntity.isEnabled)
+              hasParent: \(controller.rootEntity.parent != nil)
+              audioStartDelay: \(String(format: "%.3f", audioStartDelay))
+              entityName: \(controller.rootEntity.name)
+              entityObject: \(Unmanaged.passUnretained(controller.rootEntity).toOpaque())
+              registeredBeforeVisible: true
+              playFollowDemoAfterRegister: true
+              primedOneTick: true
+            """
+        )
+    }
+
+    private func handleHordeSpawnFailure(
+        _ record: HordeSpawnFailureRecord
+    ) {
+        hordeSpawnFailures.append(record)
+        hordeWaveSpawnState = activeHordeEnemyIDs.isEmpty ? .failed : .degraded
+
+        print(
+            """
+            [Horde] spawn failure recorded
+              wave: \(record.wave)
+              index: \(record.spawnIndex)
+              archetype: \(record.archetype.rawValue)
+              reason: \(record.reason)
+              state: \(hordeWaveSpawnState.rawValue)
+              activeEnemiesPreserved: \(activeHordeEnemyIDs.count)
+              noResetToWaveOne: true
+            """
         )
     }
 
@@ -764,6 +1012,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               active: \(activeHordeEnemyIDs.count)
               dying: \(dyingHordeEnemyIDs.count)
               corpses: \(corpseHordeEnemyIDs.count)
+              waveState: \(hordeWaveSpawnState.rawValue)
               totalKilled: \(hordeTotalKilled)
             """
         )
@@ -801,6 +1050,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               active: \(activeHordeEnemyIDs.count)
               dying: \(dyingHordeEnemyIDs.count)
               corpses: \(corpseHordeEnemyIDs.count)
+              waveState: \(hordeWaveSpawnState.rawValue)
             """
         )
 
@@ -828,6 +1078,22 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                   active: \(activeHordeEnemyIDs.count)
                   dying: \(dyingHordeEnemyIDs.count)
                   corpses: \(corpseHordeEnemyIDs.count)
+                  waveState: \(hordeWaveSpawnState.rawValue)
+                """
+            )
+            return
+        }
+
+        guard hordeWaveSpawnState == .active ||
+            hordeWaveSpawnState == .degraded else {
+            print(
+                """
+                [HordeBenchmark] wave clear ignored in state
+                  wave: \(wave)
+                  state: \(hordeWaveSpawnState.rawValue)
+                  active: \(activeHordeEnemyIDs.count)
+                  dying: \(dyingHordeEnemyIDs.count)
+                  corpses: \(corpseHordeEnemyIDs.count)
                 """
             )
             return
@@ -837,6 +1103,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             """
             [HordeBenchmark] wave cleared
               wave: \(wave)
+              state: \(hordeWaveSpawnState.rawValue)
+              spawnFailures: \(hordeSpawnFailures.count)
               corpsesToClear: \(corpseHordeEnemyIDs.count)
               nextWave: \(wave + 1)
             """

@@ -38,10 +38,7 @@ struct JockAttackConfiguration: Equatable {
         exposureMax: 100,
         failOnExposureMax: false,
 
-        attackClipIDs: [
-            "charged-slash-left",
-            "charged-slash-right"
-        ],
+        attackClipIDs: HordeAttackAnimationCatalogue.allAttackClipIDs,
 
         escalationDamageLevels: [
             .hard,

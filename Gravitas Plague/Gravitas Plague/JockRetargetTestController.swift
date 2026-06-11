@@ -108,6 +108,7 @@ final class JockRetargetTestController {
     private var combatState: FollowCombatState = .normal
     private var activeAttack: JockActiveAttackState?
     private let attackConfiguration = JockAttackConfiguration.phaseOne
+    private let attackAnimationRandomizer = AttackAnimationRandomizer()
     private var playerExposure: Int = 0
     private var escalateAfterHitReact = false
     private let benchmarkPlayerHitLimitPerWave = 3
@@ -286,6 +287,13 @@ final class JockRetargetTestController {
         let manifest = try JockAnimationLibraryLoader.loadManifest()
         let overrides = JockAnimationLibraryLoader.loadRuntimeClipOverridesIfAvailable()
 
+        if let animationLibraryRoot = try? JockAnimationLibraryLoader.animationLibraryRootURL() {
+            _ = AnimationManifestConsistencyValidator.validate(
+                manifest: manifest,
+                animationLibraryRoot: animationLibraryRoot
+            )
+        }
+
         let runtimeApprovedSummaries = manifest.clips.filter { $0.approvedForRuntime }
 
         var loadedClips: [String: JockAnimClip] = [:]
@@ -365,20 +373,9 @@ final class JockRetargetTestController {
             print("[Gravitas SubAnim] Missing or invalid head snap sub-animations: \(missingHeadSnapSides.joined(separator: " | "))")
         }
 
-        let requiredAttackClipIDs = [
-            "charged-slash-left",
-            "charged-slash-right"
-        ]
-
-        let missingAttackClips = requiredAttackClipIDs.filter { clipID in
-            loadedClips[clipID] == nil
-        }
-
-        if missingAttackClips.isEmpty {
-            print("[Gravitas Attack] All phase-one attack clips loaded.")
-        } else {
-            print("[Gravitas Attack] Missing attack clips: \(missingAttackClips.joined(separator: ", "))")
-        }
+        RequiredAttackAnimationClipValidator.validate(
+            clipsByID: loadedClips
+        )
 
         let adapter = JockSkeletonAdapter(
             rig: rig,
@@ -433,19 +430,14 @@ final class JockRetargetTestController {
 
         validateHitClipsArePrewarmed()
 
-        let strictAttackClipIDs = [
-            "charged-slash-left",
-            "charged-slash-right"
-        ]
-
-        let loadedAttackIDs = strictAttackClipIDs.filter { clipID in
-            clipsByID[clipID] != nil
-        }
+        let loadedAttackIDs = HordeAttackAnimationCatalogue.validAttackClipIDs(
+            clipsByID: clipsByID
+        )
 
         print(
             """
-            [Gravitas Attack] Strict attack clip load check
-              required: \(strictAttackClipIDs.joined(separator: ", "))
+            [AttackCatalogue] runtime attack clip load check
+              required: \(HordeAttackAnimationCatalogue.allAttackClipIDs.joined(separator: ", "))
               loaded: \(loadedAttackIDs.joined(separator: ", "))
               allClipIDsCount: \(clipsByID.keys.count)
             """
@@ -468,10 +460,7 @@ final class JockRetargetTestController {
             hitConfiguration.clipBuckets.values.flatMap { $0 } +
             hitConfiguration.deathClipIDs +
             hitConfiguration.headSnapSubAnimationBySide.values.flatMap { $0 } +
-            [
-                "charged-slash-left",
-                "charged-slash-right"
-            ]
+            HordeAttackAnimationCatalogue.allAttackClipIDs
         )
 
         let loadedClipIDs = Set(clipsByID.keys)
@@ -582,6 +571,7 @@ final class JockRetargetTestController {
         lifecycleState = .alive
         activeDeathClipID = nil
         acceptedHitCount = 0
+        attackAnimationRandomizer.reset(enemyID: id)
         hasLoggedHeadHitZoneBuild = false
         hasLoggedMissingHeadHitZone = false
 
@@ -596,6 +586,14 @@ final class JockRetargetTestController {
               index: \(spawnIndex)
               hitsToKill: \(self.hitsToKill)
               entityName: \(rootEntity.name)
+            """
+        )
+
+        print(
+            """
+            [InfectedEnemy] attack role is random-at-trigger
+              archetype: \(archetype.rawValue)
+              catalogue: \(HordeAttackAnimationCatalogue.allAttackClipIDs.joined(separator: ", "))
             """
         )
     }
@@ -990,6 +988,26 @@ final class JockRetargetTestController {
 
         return expectedClip.clipID == completedClip.clipID ||
             expectedClip == completedClip
+    }
+
+    private func activeDriverClipID(
+        _ activeClipID: String?,
+        matchesExpectedClipID expectedClipID: String
+    ) -> Bool {
+        guard let activeClipID,
+              !activeClipID.isEmpty else {
+            return false
+        }
+
+        if activeClipID == expectedClipID {
+            return true
+        }
+
+        guard let expectedClip = clipsByID[expectedClipID] else {
+            return false
+        }
+
+        return expectedClip.clipID == activeClipID
     }
 
     private func handleHitReactionCompleted(
@@ -1813,38 +1831,27 @@ final class JockRetargetTestController {
     private func startAttackIfPossible() {
         guard followDemoState != .inactive else { return }
 
-        // HARD STOP: attack selection is ONLY these two IDs.
-        let attackIDs = [
-            "charged-slash-left",
-            "charged-slash-right"
-        ]
-
-        guard let leftClip = clipsByID["charged-slash-left"] else {
-            assertionFailure("[Gravitas Attack] Missing REQUIRED clip: charged-slash-left")
-            print("[Gravitas Attack] ERROR missing REQUIRED clip: charged-slash-left")
+        guard let selectedAttack = attackAnimationRandomizer.randomAttackClip(
+            enemyID: hordeID,
+            clipsByID: clipsByID
+        ) else {
+            print(
+                """
+                [InfectedEnemy] ERROR no random attack clip resolved
+                  enemyID: \(hordeID)
+                  archetype: \(characterArchetype.rawValue)
+                  catalogue: \(HordeAttackAnimationCatalogue.allAttackClipIDs.joined(separator: ", "))
+                """
+            )
             return
         }
 
-        guard let rightClip = clipsByID["charged-slash-right"] else {
-            assertionFailure("[Gravitas Attack] Missing REQUIRED clip: charged-slash-right")
-            print("[Gravitas Attack] ERROR missing REQUIRED clip: charged-slash-right")
-            return
-        }
-
-        let attackClip: JockAnimClip = Bool.random() ? leftClip : rightClip
-
-        print(
-            """
-            [Gravitas Attack] TWO-CLIP ONLY RANDOM SELECT
-              candidates: \(attackIDs.joined(separator: ", "))
-              selected: \(attackClip.clipID)
-            """
-        )
+        let attackClip = selectedAttack.clip
 
         let metadata = attackClip.resolvedAttackMetadata()
 
         activeAttack = JockActiveAttackState(
-            clipID: attackClip.clipID,
+            clipID: selectedAttack.clipID,
             metadata: metadata,
             elapsedSeconds: 0,
             hasDealtDamage: false,
@@ -1867,8 +1874,15 @@ final class JockRetargetTestController {
 
         print(
             """
+            [InfectedEnemy] playing random attack
+              enemyID: \(hordeID)
+              archetype: \(characterArchetype.rawValue)
+              clipID: \(selectedAttack.clipID)
+              payloadClipID: \(attackClip.clipID)
+              catalogue: \(HordeAttackAnimationCatalogue.allAttackClipIDs.joined(separator: ", "))
+
             [Gravitas Attack] Started attack
-              clipID: \(attackClip.clipID)
+              clipID: \(selectedAttack.clipID)
               joint: \(metadata.attackingJoint)
               window: \(metadata.attackWindowStartFrame)-\(metadata.attackWindowEndFrame)
               radius: \(metadata.damageRadiusMeters)
@@ -1928,7 +1942,10 @@ final class JockRetargetTestController {
         guard let clip = clipsByID[attack.clipID] else { return }
         guard let driver else { return }
 
-        if driver.currentActiveClipID == attack.clipID {
+        if activeDriverClipID(
+            driver.currentActiveClipID,
+            matchesExpectedClipID: attack.clipID
+        ) {
             attack.elapsedSeconds = driver.currentPlaybackTime
             activeAttack = attack
         }
