@@ -36,6 +36,7 @@
 		8E1A10382FCD000100000001 /* ../plague_menu_ui_mockup.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10392FCD000100000001 /* ../plague_menu_ui_mockup.png */; };
 		8E1A103A2FCD000100000001 /* ../plague_menu_horde_button.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A103B2FCD000100000001 /* ../plague_menu_horde_button.png */; };
 		8E1A103C2FCD000100000001 /* ../plague_menu_walk_button.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A103D2FCD000100000001 /* ../plague_menu_walk_button.png */; };
+		8E1A103E2FCD000100000001 /* ../robot_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A103F2FCD000100000001 /* ../robot_biped.usdz */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -88,6 +89,7 @@
 		8E1A10392FCD000100000001 /* ../plague_menu_ui_mockup.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../plague_menu_ui_mockup.png; sourceTree = SOURCE_ROOT; };
 		8E1A103B2FCD000100000001 /* ../plague_menu_horde_button.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../plague_menu_horde_button.png; sourceTree = SOURCE_ROOT; };
 		8E1A103D2FCD000100000001 /* ../plague_menu_walk_button.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../plague_menu_walk_button.png; sourceTree = SOURCE_ROOT; };
+		8E1A103F2FCD000100000001 /* ../robot_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../robot_biped.usdz; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -178,6 +180,7 @@
 				8E1A10332FCD000100000001 /* ../biker_biped.usdz */,
 				8E1A10352FCD000100000001 /* ../grandma_biped.usdz */,
 				8E1A102F2FCD000100000001 /* ../neighbor_biped.usdz */,
+				8E1A103F2FCD000100000001 /* ../robot_biped.usdz */,
 				8E1A10372FCD000100000001 /* ../plague_menu_ui_clean.png */,
 				8E1A10392FCD000100000001 /* ../plague_menu_ui_mockup.png */,
 				8E1A103B2FCD000100000001 /* ../plague_menu_horde_button.png */,
@@ -329,6 +332,7 @@
 				8E1A10322FCD000100000001 /* ../biker_biped.usdz in Resources */,
 				8E1A10342FCD000100000001 /* ../grandma_biped.usdz in Resources */,
 				8E1A102E2FCD000100000001 /* ../neighbor_biped.usdz in Resources */,
+				8E1A103E2FCD000100000001 /* ../robot_biped.usdz in Resources */,
 				8E1A10362FCD000100000001 /* ../plague_menu_ui_clean.png in Resources */,
 				8E1A10382FCD000100000001 /* ../plague_menu_ui_mockup.png in Resources */,
 				8E1A103A2FCD000100000001 /* ../plague_menu_horde_button.png in Resources */,

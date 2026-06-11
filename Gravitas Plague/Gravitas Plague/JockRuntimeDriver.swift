@@ -433,6 +433,7 @@ final class JockRuntimeDriver {
     private var loggedDirectionRetargetEdgeDiagnostics = Set<String>()
     private var loggedSourceRestDeltaDiagnostics = Set<String>()
     private var loggedSourceRestDeltaJointDiagnostics = Set<String>()
+    private var loggedSourceCompatiblePolicyClipIDs = Set<String>()
     private var preserveTargetJointRotationCorrections: [String: JockJointRotationCorrection] = [:]
     private let directionRetargetIterations = 10
     private let directionRetargetDiagnosticFrames: Set<Int> = [0, 30, 60]
@@ -1017,7 +1018,9 @@ final class JockRuntimeDriver {
         preparedTracks: [JockPreparedTrack],
         at time: TimeInterval
     ) -> [Transform] {
-        switch poseApplicationPolicy {
+        let effectivePolicy = effectivePoseApplicationPolicy(for: clip)
+
+        switch effectivePolicy {
         case .authorAbsoluteLocal:
             return sampleClipPoseAuthorAbsoluteLocal(
                 clip,
@@ -1054,6 +1057,49 @@ final class JockRuntimeDriver {
                 at: time
             )
         }
+    }
+
+    private func effectivePoseApplicationPolicy(
+        for clip: JockAnimClip
+    ) -> JockPoseApplicationPolicy {
+        if characterArchetype == .dad {
+            return .authorAbsoluteLocal
+        }
+
+        if let sourceCharacterID = clip.sourceRig?.characterID,
+           sourceCharacterID == characterArchetype.usdzResourceName {
+            logSourceCompatiblePolicyIfNeeded(
+                clip: clip,
+                sourceCharacterID: sourceCharacterID
+            )
+
+            return .authorAbsoluteLocal
+        }
+
+        return poseApplicationPolicy
+    }
+
+    private func logSourceCompatiblePolicyIfNeeded(
+        clip: JockAnimClip,
+        sourceCharacterID: String
+    ) {
+        let key = "\(characterArchetype.rawValue)|\(clip.clipID)|\(sourceCharacterID)"
+
+        guard !loggedSourceCompatiblePolicyClipIDs.contains(key) else {
+            return
+        }
+
+        loggedSourceCompatiblePolicyClipIDs.insert(key)
+
+        print(
+            """
+            [JockRuntimeDriver] source-compatible clip for target
+              archetype: \(characterArchetype.rawValue)
+              clip: \(clip.clipID)
+              sourceCharacterID: \(sourceCharacterID)
+              policy: \(JockPoseApplicationPolicy.authorAbsoluteLocal.rawValue)
+            """
+        )
     }
 
     private func sampleClipPoseAuthorAbsoluteLocal(

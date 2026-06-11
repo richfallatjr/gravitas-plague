@@ -7,6 +7,7 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
     case biker
     case grandma
     case neighbor
+    case robot
     // Future:
     // case convict
 
@@ -24,6 +25,8 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
             return "Grandma"
         case .neighbor:
             return "Neighbor"
+        case .robot:
+            return "Robot"
         }
     }
 
@@ -39,6 +42,8 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
             return "grandma_biped"
         case .neighbor:
             return "neighbor_biped"
+        case .robot:
+            return "robot_biped"
         }
     }
 
@@ -50,7 +55,7 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .dad:
             return .authorAbsoluteLocal
-        case .spouse, .biker, .grandma, .neighbor:
+        case .spouse, .biker, .grandma, .neighbor, .robot:
             return .sourceRestDeltaToTargetRest
         }
     }
@@ -62,7 +67,8 @@ enum CharacterAssetRegistry {
         .spouse,
         .biker,
         .grandma,
-        .neighbor
+        .neighbor,
+        .robot
     ]
 
     static func url(
@@ -104,7 +110,8 @@ enum HordeCharacterWaveLineup {
         .spouse,
         .biker,
         .grandma,
-        .neighbor
+        .neighbor,
+        .robot
     ]
 
     static func archetypeForSpawnIndex(

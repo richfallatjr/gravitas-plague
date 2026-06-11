@@ -90,6 +90,7 @@ final class JockRetargetTestController {
     private var followConfiguration = JockFollowDemoConfiguration.defaultDemo
     private var latestHeadPosition: SIMD3<Float>?
     private var followDelayElapsed: TimeInterval = 0
+    private var loggedCharacterClipResolutionKeys = Set<String>()
 
     private let hitConfiguration = JockHitReactionConfiguration.phaseOne
     private lazy var hitDetector = JockHandHitDetector(
@@ -291,8 +292,24 @@ final class JockRetargetTestController {
 
         for summary in runtimeApprovedSummaries {
             let clip = try JockAnimationLibraryLoader.loadClip(summary: summary)
+            loadedClips[summary.clipID] = clip
             loadedClips[clip.clipID] = clip
+
+            if summary.clipID != clip.clipID {
+                print(
+                    """
+                    [JockAnim] WARNING manifest clip ID differs from sidecar payload
+                      manifestClipID: \(summary.clipID)
+                      payloadClipID: \(clip.clipID)
+                      relativePath: \(summary.relativePath)
+                    """
+                )
+            }
         }
+
+        RequiredCharacterAnimationClips.validate(
+            availableClipIDs: Set(loadedClips.keys)
+        )
 
         if loadedClips["dead_fall_forward"] == nil,
            let fallbackDeathClip = loadedClips["dead_fall_forward_01"] {
@@ -685,6 +702,81 @@ final class JockRetargetTestController {
         )
     }
 
+    private func resolvedClipID(
+        for role: JockAnimationRole,
+        defaultClipID: String
+    ) -> String {
+        if let overrideClipID = CharacterAnimationClipOverrides.overrideClipID(
+            archetype: characterArchetype,
+            role: role
+        ) {
+            if clipsByID[overrideClipID] != nil {
+                logCharacterClipResolutionIfNeeded(
+                    archetype: characterArchetype,
+                    role: role,
+                    clipID: overrideClipID,
+                    isOverride: true
+                )
+
+                return overrideClipID
+            }
+
+            print(
+                """
+                [CharacterAnimationClipResolver] ERROR override clip missing
+                  archetype: \(characterArchetype.rawValue)
+                  role: \(role.rawValue)
+                  requiredClipID: \(overrideClipID)
+                  fallbackWillUseDefault: true
+                """
+            )
+        }
+
+        logCharacterClipResolutionIfNeeded(
+            archetype: characterArchetype,
+            role: role,
+            clipID: defaultClipID,
+            isOverride: false
+        )
+
+        return defaultClipID
+    }
+
+    private func logCharacterClipResolutionIfNeeded(
+        archetype: PlagueCharacterArchetype,
+        role: JockAnimationRole,
+        clipID: String,
+        isOverride: Bool
+    ) {
+        let key = "\(archetype.rawValue)|\(role.rawValue)|\(clipID)|\(isOverride)"
+
+        guard !loggedCharacterClipResolutionKeys.contains(key) else {
+            return
+        }
+
+        loggedCharacterClipResolutionKeys.insert(key)
+
+        if isOverride {
+            print(
+                """
+                [CharacterAnimationClipResolver] override clip resolved
+                  archetype: \(archetype.rawValue)
+                  role: \(role.rawValue)
+                  clipID: \(clipID)
+                """
+            )
+        } else {
+            print(
+                """
+                [CharacterAnimationClipResolver] default clip resolved
+                  archetype: \(archetype.rawValue)
+                  role: \(role.rawValue)
+                  clipID: \(clipID)
+                """
+            )
+        }
+    }
+
     func playFollowDemo(
         resetBenchmarkState: Bool = true
     ) throws {
@@ -707,12 +799,21 @@ final class JockRetargetTestController {
             isBenchmarkPlayerDead = false
         }
 
-        guard clipsByID[followConfiguration.idleClipID] != nil else {
-            throw RetargetError.clipNotFound(followConfiguration.idleClipID)
+        let idleClipID = resolvedClipID(
+            for: .idle,
+            defaultClipID: followConfiguration.idleClipID
+        )
+        let walkClipID = resolvedClipID(
+            for: .walk,
+            defaultClipID: followConfiguration.walkClipID
+        )
+
+        guard clipsByID[idleClipID] != nil else {
+            throw RetargetError.clipNotFound(idleClipID)
         }
 
-        guard clipsByID[followConfiguration.walkClipID] != nil else {
-            throw RetargetError.clipNotFound(followConfiguration.walkClipID)
+        guard clipsByID[walkClipID] != nil else {
+            throw RetargetError.clipNotFound(walkClipID)
         }
 
         driver?.locomotionDeltaHandler = { [weak self] delta in
@@ -728,8 +829,8 @@ final class JockRetargetTestController {
         print(
             """
             [Gravitas Follow] Follow demo started
-              idleClip: \(followConfiguration.idleClipID)
-              walkClip: \(followConfiguration.walkClipID)
+              idleClip: \(idleClipID)
+              walkClip: \(walkClipID)
               stopDistance: \(followConfiguration.stopDistanceMeters)
               resumeDistance: \(followConfiguration.resumeDistanceMeters)
               faceHits: enabled
@@ -831,20 +932,29 @@ final class JockRetargetTestController {
 
     private func handleJockClipCompleted(_ completedClip: JockAnimClip) {
         if case .attacking = combatState,
-           completedClip.clipID == activeAttack?.clipID {
+           completedClipMatches(
+            completedClip,
+            matchesExpectedClipID: activeAttack?.clipID
+           ) {
             handleAttackCompleted(completedClip)
             return
         }
 
         switch combatState {
         case .dead where lifecycleState == .dying &&
-            completedClip.clipID == activeDeathClipID:
+            completedClipMatches(
+                completedClip,
+                matchesExpectedClipID: activeDeathClipID
+            ):
             finishBenchmarkEnemyDeathAnimation(
                 completedClip: completedClip
             )
 
         case .hitReaction(let clipID, let damage):
-            guard completedClip.clipID == clipID else {
+            guard completedClipMatches(
+                completedClip,
+                matchesExpectedClipID: clipID
+            ) else {
                 return
             }
 
@@ -859,6 +969,27 @@ final class JockRetargetTestController {
         case .normal, .closeRangeReady, .attacking:
             handleClipCompleted(completedClip)
         }
+    }
+
+    private func completedClipMatches(
+        _ completedClip: JockAnimClip,
+        matchesExpectedClipID expectedClipID: String?
+    ) -> Bool {
+        guard let expectedClipID,
+              !expectedClipID.isEmpty else {
+            return false
+        }
+
+        if completedClip.clipID == expectedClipID {
+            return true
+        }
+
+        guard let expectedClip = clipsByID[expectedClipID] else {
+            return false
+        }
+
+        return expectedClip.clipID == completedClip.clipID ||
+            expectedClip == completedClip
     }
 
     private func handleHitReactionCompleted(
@@ -1058,6 +1189,9 @@ final class JockRetargetTestController {
 
         case .grandma:
             return 0.12
+
+        case .robot:
+            return 0.14
         }
     }
 
@@ -2191,8 +2325,13 @@ final class JockRetargetTestController {
             return
         }
 
-        guard let clip = clipsByID[followConfiguration.idleClipID] else {
-            assertionFailure("Missing follow idle clip: \(followConfiguration.idleClipID)")
+        let idleClipID = resolvedClipID(
+            for: .idle,
+            defaultClipID: followConfiguration.idleClipID
+        )
+
+        guard let clip = clipsByID[idleClipID] else {
+            assertionFailure("Missing follow idle clip: \(idleClipID)")
             return
         }
 
@@ -2204,7 +2343,7 @@ final class JockRetargetTestController {
             runtimeOverride: followVisualRuntimeOverride()
         )
 
-        print("[Gravitas Follow] Playing idle")
+        print("[Gravitas Follow] Playing idle clipID: \(idleClipID)")
     }
 
     private func playFollowWalk() {
@@ -2213,8 +2352,13 @@ final class JockRetargetTestController {
             return
         }
 
-        guard let clip = clipsByID[followConfiguration.walkClipID] else {
-            assertionFailure("Missing follow walk clip: \(followConfiguration.walkClipID)")
+        let walkClipID = resolvedClipID(
+            for: .walk,
+            defaultClipID: followConfiguration.walkClipID
+        )
+
+        guard let clip = clipsByID[walkClipID] else {
+            assertionFailure("Missing follow walk clip: \(walkClipID)")
             return
         }
 
@@ -2226,7 +2370,13 @@ final class JockRetargetTestController {
             runtimeOverride: followVisualRuntimeOverride()
         )
 
-        print("[Gravitas Follow] Playing walk")
+        print(
+            """
+            [Gravitas Follow] Playing walk
+              archetype: \(characterArchetype.rawValue)
+              clipID: \(walkClipID)
+            """
+        )
     }
 
     private func followVisualRuntimeOverride() -> JockRuntimeClipOverride {

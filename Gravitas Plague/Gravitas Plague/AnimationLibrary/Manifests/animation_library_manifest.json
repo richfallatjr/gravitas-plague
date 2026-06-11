@@ -1,7 +1,7 @@
 {
   "schema": "com.gravitas.animation_library_manifest.v0",
   "library_id": "GravitasPlagueAnimationLibrary",
-  "generated_at": "2026-06-11T16:02:26.361719+00:00",
+  "generated_at": "2026-06-11T19:00:20.211656+00:00",
   "clips": [
     {
       "clip_id": "charged-slash-left",
@@ -585,6 +585,46 @@
       "updated_at": "2026-06-11T16:02:26.249669+00:00"
     },
     {
+      "clip_id": "left_hook_01",
+      "display_name": "Left hook 01",
+      "relative_path": "Clips/HitReact/charged-slash-left.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
+      "category": [
+        "hit"
+      ],
+      "emotion": [
+        "aggressive",
+        "attack"
+      ],
+      "threat": [
+        "hight threat"
+      ],
+      "story": [
+        "fight",
+        "survival"
+      ],
+      "looping": false,
+      "duration_seconds": 1.25,
+      "locomotion_type": "hit_react",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "source_rig_id": "robot_biped_b1f44d95e841",
+      "source_character_id": "robot_biped",
+      "source_skeleton_hash": "b1f44d95e8416746503e89c5e86090af96c45854e8ea6a8b408b3ff336877961",
+      "source_rig_relative_path": "Rigs/SourceRigs/robot_biped_b1f44d95e841.source_rig.json",
+      "updated_at": "2026-06-11T19:00:10.373049+00:00"
+    },
+    {
       "clip_id": "mocap_test_01",
       "display_name": "Mocap test 01",
       "relative_path": "Clips/Idle/mocap_test_01.jockanim.json",
@@ -624,6 +664,85 @@
       "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
       "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
       "updated_at": "2026-06-11T16:02:26.306717+00:00"
+    },
+    {
+      "clip_id": "right_hook_01",
+      "display_name": "Right hook 01",
+      "relative_path": "Clips/HitReact/right_hook_01.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
+      "category": [
+        "hit"
+      ],
+      "emotion": [
+        "aggressive",
+        "attack"
+      ],
+      "threat": [
+        "hight threat"
+      ],
+      "story": [
+        "fight",
+        "survival"
+      ],
+      "looping": false,
+      "duration_seconds": 1.25,
+      "locomotion_type": "hit_react",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "source_rig_id": "robot_biped_b1f44d95e841",
+      "source_character_id": "robot_biped",
+      "source_skeleton_hash": "b1f44d95e8416746503e89c5e86090af96c45854e8ea6a8b408b3ff336877961",
+      "source_rig_relative_path": "Rigs/SourceRigs/robot_biped_b1f44d95e841.source_rig.json",
+      "updated_at": "2026-06-11T19:00:20.211644+00:00"
+    },
+    {
+      "clip_id": "robot_walk_01",
+      "display_name": "Robot Stiff Walk 01",
+      "relative_path": "Clips/Walk/robot_walk_01.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
+      "category": [
+        "walk"
+      ],
+      "emotion": [
+        "stiff",
+        "calm"
+      ],
+      "threat": [
+        "calm"
+      ],
+      "story": [
+        "approaching"
+      ],
+      "looping": true,
+      "duration_seconds": 5.125,
+      "locomotion_type": "root_motion_walk",
+      "world_space_motion": "none",
+      "locomotion_enabled": true,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "source_rig_id": "robot_biped_b1f44d95e841",
+      "source_character_id": "robot_biped",
+      "source_skeleton_hash": "b1f44d95e8416746503e89c5e86090af96c45854e8ea6a8b408b3ff336877961",
+      "source_rig_relative_path": "Rigs/SourceRigs/robot_biped_b1f44d95e841.source_rig.json",
+      "updated_at": "2026-06-11T18:12:00.356227+00:00"
     },
     {
       "clip_id": "turn_left_90",
