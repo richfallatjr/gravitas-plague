@@ -239,10 +239,10 @@ struct PlagueOperationModePosterRoot: View {
 
     @ViewBuilder
     private var content: some View {
-        if session.wallPosterUIActive {
-            Color.clear
-                .frame(width: 1, height: 1)
-                .accessibilityHidden(true)
+        if session.swiftUIControlWindowSuppressedForCurrentRun {
+            SuppressedControlWindowAutoDismiss(
+                session: session
+            )
         } else {
             PlagueOperationModePosterMenu(session: session)
                 .ornament(
@@ -492,6 +492,35 @@ struct PlagueOperationModePosterMenu: View {
 
         print("[PlagueMenu] selected operation mode: \(mode.rawValue)")
         session.selectOperationMode(mode)
+    }
+}
+
+struct SuppressedControlWindowAutoDismiss: View {
+    @ObservedObject var session: PlagueDemoSession
+    @Environment(\.dismissWindow) private var dismissWindow
+
+    var body: some View {
+        Color.clear
+            .frame(
+                width: 1,
+                height: 1
+            )
+            .accessibilityHidden(true)
+            .task {
+                await MainActor.run {
+                    dismissWindow(
+                        id: PlagueWindowID.control
+                    )
+
+                    print(
+                        """
+                        [PlagueUI] auto-dismissed suppressed control window
+                          reason: reopened_during_active_wall_ui_run
+                          blankGrayWindowPrevented: true
+                        """
+                    )
+                }
+            }
     }
 }
 

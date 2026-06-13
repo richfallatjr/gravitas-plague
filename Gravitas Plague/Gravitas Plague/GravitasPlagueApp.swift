@@ -15,6 +15,8 @@ struct GravitasPlagueApp: App {
                 .frame(minWidth: 543, minHeight: 724)
         }
         .defaultSize(width: 815, height: 1086)
+        .defaultLaunchBehavior(.automatic)
+        .restorationBehavior(.disabled)
 
         ImmersiveSpace(id: PlagueDemoSession.immersiveSpaceID) {
             PlagueImmersiveView(session: demoSession)

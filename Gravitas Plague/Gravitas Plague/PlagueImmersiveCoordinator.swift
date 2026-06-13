@@ -99,7 +99,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var hordeWaitingForRoomScan = false
     private var hordeWaitingForFloorPromptShown = false
     private var hordeRoomScanCompletionTask: Task<Void, Never>?
-    private var activeIngressControllers: [UUID: HordePortalSingleEnemyIngressController] = [:]
+    private var activeIngressControllers: [UUID: HordePortalInstancedIngressController] = [:]
     private var lastWallPosterPlacementAttempt: Date?
 
     private var lastTickDate: Date?
@@ -764,11 +764,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             )
 
             switch ingress.phase {
-            case .following, .failed:
+            case .realWorldFollowing, .failed:
                 finishedIDs.append(enemyID)
 
             case .walkingParallelInsidePortal,
-                 .turningTowardRoom,
+                 .turningTowardExit,
                  .crossingAperture:
                 break
             }
@@ -1002,9 +1002,20 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
         let hitsToKillByID = Dictionary(
             uniqueKeysWithValues: spawnRequests.map { request in
-                (
+                let hitsToKill = request.archetype.randomHordeHitsToKill()
+
+                print(
+                    """
+                    [HordeHealth] hitsToKill assigned
+                      archetype: \(request.archetype.rawValue)
+                      range: \(request.archetype.hordeHitsToKillRange.lowerBound)-\(request.archetype.hordeHitsToKillRange.upperBound)
+                      hitsToKill: \(hitsToKill)
+                    """
+                )
+
+                return (
                     request.id,
-                    Int.random(in: 3...5)
+                    hitsToKill
                 )
             }
         )
@@ -1076,7 +1087,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             let index = spawnIndexByID[assignment.enemyID] ?? successfulSpawnCount
             let archetype = assignment.archetype
             let id = assignment.enemyID
-            let hitsToKill = hitsToKillByID[id] ?? Int.random(in: 3...5)
+            let hitsToKill = hitsToKillByID[id] ?? archetype.randomHordeHitsToKill()
 
             do {
                 guard let portal = hordePortalManager.portals[assignment.portalID] else {
@@ -1115,7 +1126,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     return
                 }
 
-                try registerHordeEnemyForSinglePortalIngress(
+                try registerHordeEnemyForInstancedPortalIngress(
                     controller: controller,
                     id: id,
                     archetype: archetype,
@@ -1406,7 +1417,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
     }
 
-    private func registerHordeEnemyForSinglePortalIngress(
+    private func registerHordeEnemyForInstancedPortalIngress(
         controller: JockRetargetTestController,
         id: UUID,
         archetype: PlagueCharacterArchetype,
@@ -1432,7 +1443,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeEnemyControllersByID[id] = controller
         activeHordeEnemyIDs.insert(id)
 
-        let ingress = HordePortalSingleEnemyIngressController(
+        forestEnvironmentController.applyIBLReceiverRecursively(
+            root: controller.rootEntity
+        )
+
+        let ingress = try HordePortalInstancedIngressController(
             enemy: controller,
             portal: portal,
             sceneRoot: sceneRoot,
@@ -1440,10 +1455,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
 
         activeIngressControllers[id] = ingress
-
-        forestEnvironmentController.applyIBLReceiverRecursively(
-            root: controller.rootEntity
-        )
 
         let audioStartDelay = TimeInterval.random(in: 0...1)
         audioController.attachHostAudioSource(
@@ -1464,6 +1475,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               rootEnabled: \(controller.rootEntity.isEnabled)
               firstPosePrimed: true
               noPrePortalAPose: true
+              portalRenderInstance: true
             """
         )
 
@@ -1478,8 +1490,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               assignmentKind: \(assignmentKind.rawValue)
               side: \(side.rawValue)
               audioStartDelay: \(String(format: "%.3f", audioStartDelay))
-              parentWhileInside: portalWorldRoot
-              noProxyEnemy: true
+              realParent: sceneRoot
+              portalVisual: render_instance
+              secondController: false
+              secondAnimationClock: false
               noOpacityFade: true
             """
         )

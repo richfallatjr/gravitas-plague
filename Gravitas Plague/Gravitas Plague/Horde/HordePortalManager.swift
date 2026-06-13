@@ -84,6 +84,19 @@ final class HordePortalManager {
             seed: seed
         )
 
+        print(
+            """
+            [HordePortal] straight-top janky aperture created
+              bottomFlush: true
+              topShape: straight_line_between_side_tops
+              leftHeight: \(profile.leftHeight)
+              rightHeight: \(profile.rightHeight)
+              leftTopLean: \(profile.leftTopLean)
+              rightTopLean: \(profile.rightTopLean)
+              noSquiggleTop: true
+            """
+        )
+
         placement.height = profile.maxHeight
 
         guard let resolvedPlacement = wallManager.resolveFloorLockedPlacement(
@@ -279,7 +292,7 @@ final class HordePortalManager {
         print(
             """
             [HordePortal] portal created with real portal aperture
-              noProxyEnemy: true
+              renderInstancePortalEnemySupported: true
               noFade: true
               noWallOcclusionMask: true
               portalBackdropBehindMask: true

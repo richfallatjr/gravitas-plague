@@ -25,8 +25,27 @@ enum PlagueFeatureFlags {
 }
 
 extension Notification.Name {
-    static let plagueDismissSwiftUIControlWindowPermanently =
-        Notification.Name("plagueDismissSwiftUIControlWindowPermanently")
+    static let plagueDismissSwiftUIControlWindowForCurrentRun =
+        Notification.Name("plagueDismissSwiftUIControlWindowForCurrentRun")
+}
+
+enum PlagueUILegacySuppressionKeys {
+    static let keys = [
+        "roomSkinningHasOccurred",
+        "swiftUIControlWindowPermanentlySuppressed",
+        "swiftUIControlWindowSuppressedForCurrentRun",
+        "wallPosterUIActive"
+    ]
+
+    static func clear() {
+        for key in keys {
+            UserDefaults.standard.removeObject(
+                forKey: key
+            )
+        }
+
+        print("[PlagueUI] cleared legacy persisted UI suppression keys")
+    }
 }
 
 @MainActor
@@ -111,7 +130,7 @@ final class PlagueDemoSession: ObservableObject {
     @Published var portalHDRIAtmosphere: PortalHDRIAtmosphere = .night
     @Published var portalHDRIRevision: Int = 0
     @Published private(set) var roomSkinningHasOccurred = false
-    @Published private(set) var swiftUIControlWindowPermanentlySuppressed = false
+    @Published private(set) var swiftUIControlWindowSuppressedForCurrentRun = false
     @Published var wallPosterUIActive = false
     @Published var damageTintEventID = UUID()
     @Published var damageTintIntensity: Double = 0.0
@@ -122,8 +141,13 @@ final class PlagueDemoSession: ObservableObject {
     private var controlWindowDismissedForWallUI = false
 
     var shouldIgnoreControlWindowLifecycleBecauseWallUIIsActive: Bool {
-        (controlWindowDismissedForWallUI || swiftUIControlWindowPermanentlySuppressed) &&
+        (controlWindowDismissedForWallUI || swiftUIControlWindowSuppressedForCurrentRun) &&
             !isQuitting
+    }
+
+    init() {
+        PlagueUILegacySuppressionKeys.clear()
+        resetRuntimeUIForFreshLaunch()
     }
 
     var shouldShowStoryRoomSkinningControls: Bool {
@@ -184,33 +208,55 @@ final class PlagueDemoSession: ObservableObject {
 
     @MainActor
     func markRoomSkinningCommittedForHorde() {
-        let shouldPostDismiss = !swiftUIControlWindowPermanentlySuppressed
+        let shouldPostDismiss = !swiftUIControlWindowSuppressedForCurrentRun
 
         roomSkinningHasOccurred = true
-        swiftUIControlWindowPermanentlySuppressed = true
+        swiftUIControlWindowSuppressedForCurrentRun = true
         controlWindowDismissedForWallUI = true
         wallPosterUIActive = true
 
         if shouldPostDismiss {
             NotificationCenter.default.post(
-                name: .plagueDismissSwiftUIControlWindowPermanently,
+                name: .plagueDismissSwiftUIControlWindowForCurrentRun,
                 object: nil
             )
         }
 
         print(
             """
-            [PlagueUI] room skinning committed
-              SwiftUIControlWindowSuppressed: true
+            [PlagueUI] room skinning committed for current run
+              SwiftUIControlWindowSuppressedForCurrentRun: true
               wallPosterUIActive: true
-              reopenAllowedThisSession: false
+              relaunchWillShowPosterAgain: true
+            """
+        )
+    }
+
+    @MainActor
+    func resetRuntimeUIForFreshLaunch() {
+        roomSkinningHasOccurred = false
+        swiftUIControlWindowSuppressedForCurrentRun = false
+        controlWindowDismissedForWallUI = false
+        wallPosterUIActive = false
+        selectedOperationMode = nil
+        isPosterUIVisible = true
+        activeMode = .none
+        statusMessage = "Select operation mode."
+
+        print(
+            """
+            [PlagueUI] fresh launch UI reset
+              roomSkinningHasOccurred: false
+              swiftUIControlWindowSuppressedForCurrentRun: false
+              wallPosterUIActive: false
+              posterMenuFunctional: true
             """
         )
     }
 
     @MainActor
     func setWallPosterUIInactiveIfAllowed() {
-        guard !swiftUIControlWindowPermanentlySuppressed else {
+        guard !swiftUIControlWindowSuppressedForCurrentRun else {
             wallPosterUIActive = true
             return
         }
@@ -222,7 +268,7 @@ final class PlagueDemoSession: ObservableObject {
     func handlePlayerDeathUI(
         openWindow: OpenWindowAction
     ) {
-        if swiftUIControlWindowPermanentlySuppressed {
+        if swiftUIControlWindowSuppressedForCurrentRun {
             wallPosterUIActive = true
 
             print(
@@ -236,23 +282,25 @@ final class PlagueDemoSession: ObservableObject {
             return
         }
 
-        reopenSwiftUIControlWindowIfAllowed(
-            reason: "player_death",
+        openSwiftUIControlWindowIfAllowed(
+            reason: "death_before_room_skinning",
             openWindow: openWindow
         )
     }
 
     @MainActor
-    func reopenSwiftUIControlWindowIfAllowed(
+    func openSwiftUIControlWindowIfAllowed(
         reason: String,
         openWindow: OpenWindowAction
     ) {
-        guard !swiftUIControlWindowPermanentlySuppressed else {
+        guard !swiftUIControlWindowSuppressedForCurrentRun else {
             print(
                 """
                 [PlagueUI] blocked SwiftUI control window reopen
                   reason: \(reason)
                   roomSkinningHasOccurred: \(roomSkinningHasOccurred)
+                  wallPosterUIActive: \(wallPosterUIActive)
+                  currentRunSuppressed: true
                 """
             )
             return
@@ -264,27 +312,9 @@ final class PlagueDemoSession: ObservableObject {
 
         print(
             """
-            [PlagueUI] SwiftUI control window reopened
+            [PlagueUI] SwiftUI control window opened
               reason: \(reason)
-            """
-        )
-    }
-
-    @MainActor
-    func activateWallPosterUIForLegacyCallers() {
-        guard !wallPosterUIActive else {
-            return
-        }
-
-        wallPosterUIActive = true
-
-        print(
-            """
-            [WallPosterUI] active
-              SwiftUI visible poster hidden: true
-              RealityKit wall poster active: true
-              SwiftUI control window dismissal pending: true
-              RealityKit kill switch required: true
+              posterMenuFunctional: true
             """
         )
     }
@@ -595,11 +625,11 @@ final class PlagueDemoSession: ObservableObject {
     func notePosterUIMounted() {
         isPosterUIVisible = true
 
-        if !swiftUIControlWindowPermanentlySuppressed {
+        if !swiftUIControlWindowSuppressedForCurrentRun {
             controlWindowDismissedForWallUI = false
         } else {
             NotificationCenter.default.post(
-                name: .plagueDismissSwiftUIControlWindowPermanently,
+                name: .plagueDismissSwiftUIControlWindowForCurrentRun,
                 object: nil
             )
         }

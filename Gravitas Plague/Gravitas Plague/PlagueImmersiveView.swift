@@ -98,7 +98,7 @@ struct PlagueImmersiveView: View {
         }
         .onReceive(
             NotificationCenter.default.publisher(
-                for: .plagueDismissSwiftUIControlWindowPermanently
+                for: .plagueDismissSwiftUIControlWindowForCurrentRun
             )
         ) { _ in
             Task { @MainActor in
@@ -108,9 +108,10 @@ struct PlagueImmersiveView: View {
 
                 print(
                     """
-                    [PlagueUI] SwiftUI control window dismissed permanently for session
+                    [PlagueUI] SwiftUI control window dismissed for current run
                       windowID: \(PlagueWindowID.control)
-                      reason: room_skinning_committed
+                      reason: wall_ui_active
+                      blankKeepaliveView: false
                     """
                 )
             }

@@ -73,9 +73,8 @@ struct HordePortalApertureProfile: Codable, Equatable {
     var rightHeight: Float
     var leftTopLean: Float
     var rightTopLean: Float
-    var topPeakOffset: Float
-    var topSagOffset: Float
-    var topSamples: Int
+    var leftMidBend: Float
+    var rightMidBend: Float
 
     static func random(
         baseWidth: Float,
@@ -84,9 +83,9 @@ struct HordePortalApertureProfile: Codable, Equatable {
     ) -> HordePortalApertureProfile {
         var rng = SeededRNG(seed: seed)
 
-        let leftHeight = baseHeight * Float.random(in: 0.86...1.08, using: &rng)
-        let rightHeight = baseHeight * Float.random(in: 0.86...1.08, using: &rng)
-        let maxHeight = max(leftHeight, rightHeight) + 0.08
+        let leftHeight = baseHeight * Float.random(in: 0.88...1.08, using: &rng)
+        let rightHeight = baseHeight * Float.random(in: 0.88...1.08, using: &rng)
+        let maxHeight = max(leftHeight, rightHeight)
 
         return HordePortalApertureProfile(
             bottomWidth: baseWidth,
@@ -95,9 +94,8 @@ struct HordePortalApertureProfile: Codable, Equatable {
             rightHeight: rightHeight,
             leftTopLean: Float.random(in: -0.16...0.08, using: &rng),
             rightTopLean: Float.random(in: -0.08...0.16, using: &rng),
-            topPeakOffset: Float.random(in: 0.03...0.18, using: &rng),
-            topSagOffset: Float.random(in: -0.10...0.06, using: &rng),
-            topSamples: 7
+            leftMidBend: Float.random(in: -0.10...0.10, using: &rng),
+            rightMidBend: Float.random(in: -0.10...0.10, using: &rng)
         )
     }
 
@@ -116,6 +114,20 @@ struct HordePortalApertureProfile: Codable, Equatable {
         SIMD2<Float>(
             bottomWidth * 0.5,
             bottomY
+        )
+    }
+
+    var leftMid: SIMD2<Float> {
+        SIMD2<Float>(
+            -bottomWidth * 0.5 + leftMidBend,
+            bottomY + leftHeight * 0.52
+        )
+    }
+
+    var rightMid: SIMD2<Float> {
+        SIMD2<Float>(
+            bottomWidth * 0.5 + rightMidBend,
+            bottomY + rightHeight * 0.52
         )
     }
 

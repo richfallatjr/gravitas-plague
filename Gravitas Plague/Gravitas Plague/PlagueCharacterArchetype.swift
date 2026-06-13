@@ -61,6 +61,27 @@ enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+extension PlagueCharacterArchetype {
+    var hordeHitsToKillRange: ClosedRange<Int> {
+        switch self {
+        case .neighbor:
+            return 6...10
+
+        case .robot:
+            return 9...15
+
+        case .dad, .spouse, .biker, .grandma:
+            return 3...5
+        }
+    }
+
+    func randomHordeHitsToKill() -> Int {
+        Int.random(
+            in: hordeHitsToKillRange
+        )
+    }
+}
+
 enum CharacterAssetRegistry {
     static let requiredHordeAssets: [PlagueCharacterArchetype] = [
         .dad,

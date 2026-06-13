@@ -1032,6 +1032,25 @@ final class JockRetargetTestController {
         hordeID
     }
 
+    func skinnedModelEntityForPortalInstance() -> ModelEntity? {
+        modelEntity
+    }
+
+    func forceOneAnimationTickIfAvailable() {
+        forceAnimationTickIfAvailable(
+            deltaTime: 1.0 / 60.0
+        )
+    }
+
+    func forceAnimationTickIfAvailable(
+        deltaTime: Float
+    ) {
+        update(
+            deltaTime: deltaTime,
+            currentHeadPosition: nil
+        )
+    }
+
     func prepareForHordePortalIngress() {
         show()
 

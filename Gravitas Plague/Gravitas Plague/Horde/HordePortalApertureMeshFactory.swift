@@ -95,55 +95,14 @@ enum HordePortalApertureMeshFactory {
     static func makeBoundary(
         profile: HordePortalApertureProfile
     ) -> [SIMD2<Float>] {
-        var points: [SIMD2<Float>] = []
-
-        points.append(profile.leftBottom)
-        points.append(profile.rightBottom)
-        points.append(profile.rightTop)
-
-        let samples = max(
-            3,
-            profile.topSamples
-        )
-
-        for index in 1..<(samples - 1) {
-            let t = Float(index) / Float(samples - 1)
-            let x = lerp(
-                profile.rightTop.x,
-                profile.leftTop.x,
-                t
-            )
-            let baseY = lerp(
-                profile.rightTop.y,
-                profile.leftTop.y,
-                t
-            )
-            let arc = sin(t * .pi)
-            let asymmetry = sin(t * .pi * 2.0)
-            let y =
-                baseY +
-                arc * profile.topPeakOffset +
-                asymmetry * profile.topSagOffset
-
-            points.append(
-                SIMD2<Float>(
-                    x,
-                    y
-                )
-            )
-        }
-
-        points.append(profile.leftTop)
-
-        return points
-    }
-
-    private static func lerp(
-        _ a: Float,
-        _ b: Float,
-        _ t: Float
-    ) -> Float {
-        a + (b - a) * t
+        [
+            profile.leftBottom,
+            profile.rightBottom,
+            profile.rightMid,
+            profile.rightTop,
+            profile.leftTop,
+            profile.leftMid
+        ]
     }
 }
 
@@ -219,6 +178,12 @@ enum HordePortalSoftWallFeatherFactory {
         }
 
         print("[HordePortal] soft wall feather created, no hard frame")
+        print(
+            """
+            [HordePortal] feather uses same straight-top aperture profile
+              noSeparateLoft: true
+            """
+        )
 
         return root
     }
