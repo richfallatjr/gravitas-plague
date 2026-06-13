@@ -56,6 +56,18 @@ struct PlagueImmersiveView: View {
                     )
                 }
         )
+        .simultaneousGesture(
+            TapGesture()
+                .targetedToEntity(where: .has(WallPosterUIButtonComponent.self))
+                .onEnded { value in
+                    guard let component = value.entity.components[WallPosterUIButtonComponent.self],
+                          let action = component.action else {
+                        return
+                    }
+
+                    session.handleWallPosterAction(action)
+                }
+        )
         .preferredSurroundingsEffect(
             deathPresentationController.surroundingsEffect
                 ?? damageTintController.surroundingsEffect
@@ -92,6 +104,9 @@ struct PlagueImmersiveView: View {
             coordinator.onForestAppearanceStatusChanged = { status in
                 session.forestAppearanceStatus = status
             }
+            coordinator.onWallPosterUIActiveChanged = { active in
+                session.wallPosterUIActive = active
+            }
             coordinator.onRoomSkinningStatusChanged = { status in
                 session.roomSkinningStatus = status
             }
@@ -105,6 +120,7 @@ struct PlagueImmersiveView: View {
             damageTintController.reset()
             deathPresentationController.reset()
             coordinator.shutdown()
+            session.wallPosterUIActive = false
             session.forestImmersiveDidClose()
         }
     }

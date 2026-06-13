@@ -28,6 +28,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let forestEnvironmentController = PlagueGaussianForestEnvironmentController()
     private let roomSkinningCoordinator = RoomSkinningCoordinator()
     private let hordePortalManager = HordePortalManager()
+    private let wallPosterUIController = WallMountedPosterUIController()
     private let hordeRoomScanTracker = HordeRoomScanTracker()
     private let instructionHUD = PlagueHeadTrackedInstructionHUD()
 
@@ -55,6 +56,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             forestEnvironmentController.onAppearanceStatusChanged = onForestAppearanceStatusChanged
         }
     }
+    var onWallPosterUIActiveChanged: ((Bool) -> Void)?
     var onRoomSkinningStatusChanged: ((String) -> Void)? {
         didSet {
             roomSkinningCoordinator.onStatusChanged = onRoomSkinningStatusChanged
@@ -86,6 +88,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var hordeWaitingForFloorPromptShown = false
     private var hordeRoomScanCompletionTask: Task<Void, Never>?
     private var activeIngressControllers: [UUID: HordePortalWorldspaceIngressController] = [:]
+    private var lastWallPosterPlacementAttempt: Date?
 
     private var lastTickDate: Date?
     private var handledCommandIDs = Set<UUID>()
@@ -123,6 +126,15 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             sceneRoot: root,
             wallManager: roomSkinningCoordinator.wallManager
         )
+        wallPosterUIController.installIfNeeded(
+            sceneRoot: root,
+            wallManager: roomSkinningCoordinator.wallManager,
+            hordePortalManager: hordePortalManager
+        )
+        forestEnvironmentController.applyIBLReceiverRecursively(
+            root: wallPosterUIController.root
+        )
+        roomSkinningCoordinator.startHordeRoomScanOnly()
 
         audioController.startImmersiveAudio()
 
@@ -357,6 +369,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             updateHordeRoomScanIfNeeded(
                 currentPose: currentPose
             )
+
+            updateWallPosterUIIfNeeded(
+                currentPose: currentPose,
+                date: date
+            )
         }
 
         if hordeBenchmarkRunning {
@@ -410,10 +427,13 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         audioController.stopAllAudio()
         resetHordeBenchmarkDeathPresentation()
         forestEnvironmentController.shutdown()
+        wallPosterUIController.reset()
+        onWallPosterUIActiveChanged?(false)
 
         sceneRoot = nil
         headAnchor = nil
         jockRetargetController = nil
+        lastWallPosterPlacementAttempt = nil
         lastTickDate = nil
         handledCommandIDs.removeAll()
         pendingCommands.removeAll()
@@ -647,6 +667,36 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         for enemyID in finishedIDs {
             activeIngressControllers.removeValue(forKey: enemyID)
         }
+    }
+
+    private func updateWallPosterUIIfNeeded(
+        currentPose: PhaseOneSpawnPose,
+        date: Date
+    ) {
+        if wallPosterUIController.isPlaced {
+            wallPosterUIController.refreshTransformForWallUpdate()
+        }
+
+        if let lastWallPosterPlacementAttempt,
+           date.timeIntervalSince(lastWallPosterPlacementAttempt) < 2.0 {
+            return
+        }
+
+        lastWallPosterPlacementAttempt = date
+
+        let didPlace = wallPosterUIController.placeOnBestWall(
+            playerPosition: currentPose.headPosition,
+            playerForward: currentPose.headForward
+        )
+
+        guard didPlace else {
+            return
+        }
+
+        forestEnvironmentController.applyIBLReceiverRecursively(
+            root: wallPosterUIController.root
+        )
+        onWallPosterUIActiveChanged?(true)
     }
 
     private func startHordeBenchmark() async {

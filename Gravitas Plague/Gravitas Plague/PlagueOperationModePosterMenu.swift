@@ -126,7 +126,13 @@ struct PlagueOperationModePosterRoot: View {
     #endif
 
     var body: some View {
-        PlagueOperationModePosterMenu(session: session)
+        Group {
+            if session.wallPosterUIActive {
+                WallPosterControlWindowShell(session: session)
+            } else {
+                PlagueOperationModePosterMenu(session: session)
+            }
+        }
             .ornament(
                 visibility: .visible,
                 attachmentAnchor: .scene(.top),
@@ -273,6 +279,28 @@ struct PlagueOperationModePosterRoot: View {
         #else
         return "not_visionOS"
         #endif
+    }
+}
+
+struct WallPosterControlWindowShell: View {
+    @ObservedObject var session: PlagueDemoSession
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("Containment UI moved to wall")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text("Use system close to quit.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(18)
+        .glassBackgroundEffect()
+        .onAppear {
+            _ = session.wallPosterUIActive
+            print("[WallPosterUI] control window shell visible; system X remains kill switch")
+        }
     }
 }
 

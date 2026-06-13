@@ -275,6 +275,25 @@ final class HordePortalManager {
         return current
     }
 
+    func occupiedWallRects(
+        wallID: UUID
+    ) -> [SIMD4<Float>] {
+        portals.values
+            .filter {
+                $0.wallID == wallID
+            }
+            .map { portal in
+                let placement = portal.placement
+
+                return SIMD4<Float>(
+                    placement.localX - placement.width * 0.5 - 0.24,
+                    placement.localY - placement.height * 0.5 - 0.24,
+                    placement.width + 0.48,
+                    placement.height + 0.48
+                )
+            }
+    }
+
     func markEntranceUsed(
         portalID: UUID
     ) {

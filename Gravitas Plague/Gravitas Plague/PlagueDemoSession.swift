@@ -104,6 +104,7 @@ final class PlagueDemoSession: ObservableObject {
     @Published var roomSkinningStatus = "Room skinning idle."
     @Published var portalHDRIAtmosphere: PortalHDRIAtmosphere = .night
     @Published var portalHDRIRevision: Int = 0
+    @Published var wallPosterUIActive = false
     @Published var damageTintEventID = UUID()
     @Published var damageTintIntensity: Double = 0.0
     @Published private(set) var latestCommand: CommandEnvelope?
@@ -145,6 +146,20 @@ final class PlagueDemoSession: ObservableObject {
         case .walkLoop:
             experienceMode = .walkLoop
             startWalkLoopFromPoster()
+        }
+    }
+
+    func handleWallPosterAction(
+        _ action: WallPosterAction
+    ) {
+        print("[WallPosterUI] action tapped \(action.rawValue)")
+
+        switch action {
+        case .horde:
+            selectOperationMode(.horde)
+
+        case .walkLoop:
+            selectOperationMode(.walkLoop)
         }
     }
 
@@ -451,6 +466,7 @@ final class PlagueDemoSession: ObservableObject {
         forestImmersiveState = .closed
         immersiveSpaceStatus = .closed
         forestImmersiveStatus = "Mixed room scene closed."
+        wallPosterUIActive = false
 
         print("[PlagueQuit] shutdown complete")
     }

@@ -7,21 +7,31 @@ import UIKit
 
 enum HordePortalAssetValidator {
     static func validate() {
-        if let url = HordeHellscapeEXRLocator.url() {
-            print(
-                """
-                [HordePortal] found hellscape backdrop
-                  file: \(url.lastPathComponent)
-                  url: \(url.path)
-                """
-            )
-        } else {
-            print(
-                """
-                [HordePortal] ERROR missing hellscape backdrop
-                  file: hellscape_01.exr
-                """
-            )
+        let required = [
+            ("hellscape_01", "exr"),
+            ("hellscape_groundplane", "png")
+        ]
+
+        for item in required {
+            if let url = Bundle.main.url(
+                forResource: item.0,
+                withExtension: item.1
+            ) {
+                print(
+                    """
+                    [HordePortal] found asset
+                      file: \(item.0).\(item.1)
+                      url: \(url.path)
+                    """
+                )
+            } else {
+                print(
+                    """
+                    [HordePortal] ERROR missing asset
+                      file: \(item.0).\(item.1)
+                    """
+                )
+            }
         }
     }
 }
@@ -62,8 +72,7 @@ struct HordeHellscapePortalContentProvider: PortalContentProvider {
         portalWorld.addChild(dome)
 
         if context.groundDiscEnabled {
-            let ground = try PortalProjectedGroundDiscFactory.makeGroundDisc(
-                texture: resources.visibleTexture,
+            let ground = try HordePortalGroundDiscFactory.makeGroundDisc(
                 config: .init(
                     floorY: context.floorY + 0.004,
                     centerZ: context.groundDiscCenterZ,
@@ -90,8 +99,9 @@ struct HordeHellscapePortalContentProvider: PortalContentProvider {
             """
             [HordePortal] hellscape portal world populated
               backdrop: hellscape_01.exr
+              groundplane: hellscape_groundplane.png
               visibleDome: true
-              projectedGroundDisc: \(context.groundDiscEnabled)
+              pngGroundDisc: \(context.groundDiscEnabled)
               floorY: \(context.floorY)
               groundRadius: \(context.groundDiscRadius)
               ibl: true
