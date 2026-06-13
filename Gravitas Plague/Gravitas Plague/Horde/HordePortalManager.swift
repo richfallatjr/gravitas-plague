@@ -10,18 +10,27 @@ final class HordePortalManager {
 
     private weak var sceneRoot: Entity?
     private weak var wallManager: WallPlaneManager?
+    private weak var occupancyRegistry: WallPropOccupancyRegistry?
 
     func install(
         sceneRoot: Entity,
-        wallManager: WallPlaneManager
+        wallManager: WallPlaneManager,
+        occupancyRegistry: WallPropOccupancyRegistry
     ) {
         self.sceneRoot = sceneRoot
         self.wallManager = wallManager
+        self.occupancyRegistry = occupancyRegistry
 
         print("[HordePortal] manager installed")
     }
 
     func reset() {
+        for id in portalOrder {
+            occupancyRegistry?.unregister(
+                id: id
+            )
+        }
+
         for portal in portals.values {
             portal.root.removeFromParent()
         }
@@ -55,11 +64,12 @@ final class HordePortalManager {
         ) else {
             print(
                 """
-                [HordePortal] no unique portal placement available
+                [HordePortal] no safe wall slot for new portal
                   wave: \(wave)
                   spawnIndex: \(spawnIndex)
                   existingPortals: \(portals.count)
                   reservedThisWave: \(excludingPortalIDs.count)
+                  action: reuse_existing_portal_instead_of_overlapping_poster
                 """
             )
             return nil
@@ -85,6 +95,29 @@ final class HordePortalManager {
         }
 
         placement = resolvedPlacement
+
+        if occupancyRegistry?.hasHardOverlap(
+            wallID: wall.id,
+            candidate: wallRect(
+                for: placement
+            ).expanded(
+                by: 0.20
+            ),
+            candidateKind: .hordePortal
+        ) == true {
+            print(
+                """
+                [HordePortal] final portal placement rejected by wall occupancy
+                  wave: \(wave)
+                  spawnIndex: \(spawnIndex)
+                  wallID: \(wall.id)
+                  localX: \(placement.localX)
+                  localY: \(placement.localY)
+                  action: reuse_existing_portal_instead_of_overlapping_poster
+                """
+            )
+            return nil
+        }
 
         let root = Entity()
         root.name = "HordePortalRoot_wave\(wave)_\(UUID().uuidString.prefix(6))"
@@ -184,9 +217,10 @@ final class HordePortalManager {
             worldCenter.x - playerPosition.x,
             worldCenter.z - playerPosition.z
         )
+        let portalID = UUID()
 
         let portal = HordePortal(
-            id: UUID(),
+            id: portalID,
             waveCreated: wave,
             wallID: wall.id,
             placement: placement,
@@ -200,15 +234,19 @@ final class HordePortalManager {
             entranceCount: 0
         )
 
-        portals[portal.id] = portal
-        portalOrder.append(portal.id)
+        portals[portalID] = portal
+        portalOrder.append(portalID)
+        registerPortalOccupancy(
+            portalID: portalID,
+            placement: placement
+        )
 
         print(
             """
             [HordePortal] portal created
               wave: \(wave)
               spawnIndex: \(spawnIndex)
-              portalID: \(portal.id)
+              portalID: \(portalID)
               wallID: \(wall.id)
               localX: \(placement.localX)
               localY: \(placement.localY)
@@ -216,6 +254,7 @@ final class HordePortalManager {
               height: \(placement.height)
               nearestExistingM: \(candidate.nearestPortalDistance)
               nearestReservedM: \(candidate.nearestReservedDistance)
+              posterClearanceM: \(candidate.posterClearanceDistance)
               nearestBearingGapRad: \(candidate.nearestBearingGap)
               backdrop: hellscape_01.exr
               persists: true
@@ -374,6 +413,30 @@ final class HordePortalManager {
                 }
 
                 placement = resolved
+                let rect = wallRect(
+                    for: placement
+                )
+
+                if occupancyRegistry?.hasHardOverlap(
+                    wallID: wall.id,
+                    candidate: rect.expanded(
+                        by: 0.20
+                    ),
+                    candidateKind: .hordePortal
+                ) == true {
+                    print(
+                        """
+                        [HordePortalPlacement] candidate rejected by wall occupancy
+                          wave: \(wave)
+                          spawnIndex: \(spawnIndex)
+                          wallID: \(wall.id)
+                          localX: \(placement.localX)
+                          localY: \(placement.localY)
+                          reason: poster_or_portal_overlap
+                        """
+                    )
+                    continue
+                }
 
                 guard let transform = wallManager.convertWallLocalToWorldTransform(
                     placement: placement
@@ -396,6 +459,20 @@ final class HordePortalManager {
                     center,
                     to: existingCenters
                 )
+                let nearestRegisteredPortal = occupancyRegistry?.nearestDistance(
+                    wallID: wall.id,
+                    candidate: rect,
+                    kinds: [.hordePortal]
+                ) ?? Float.greatestFiniteMagnitude
+                let posterDistance = occupancyRegistry?.nearestDistance(
+                    wallID: wall.id,
+                    candidate: rect,
+                    kinds: [.wallPoster]
+                ) ?? Float.greatestFiniteMagnitude
+                let nearestPortalDistance = min(
+                    nearestExisting,
+                    nearestRegisteredPortal
+                )
                 let nearestReserved = nearestDistance(
                     center,
                     to: reservedCenters
@@ -404,15 +481,19 @@ final class HordePortalManager {
                     bearing
                 )
                 let spacingOK =
-                    nearestExisting >= HordePortalPlacementTuning.minSpacingMeters &&
+                    nearestPortalDistance >= HordePortalPlacementTuning.minSpacingMeters &&
                     nearestReserved >= HordePortalPlacementTuning.minSpacingMeters
 
                 let spacingScore = min(
                     1,
                     min(
-                        nearestExisting,
+                        nearestPortalDistance,
                         nearestReserved
                     ) / HordePortalPlacementTuning.preferredSpacingMeters
+                )
+                let posterClearanceScore = min(
+                    1,
+                    posterDistance / 1.0
                 )
                 let angularScore = min(
                     1,
@@ -421,8 +502,9 @@ final class HordePortalManager {
 
                 let score =
                     spacingScore * 3.0 +
+                    posterClearanceScore * 5.0 +
                     angularScore * 2.0 +
-                    Float.random(in: 0...0.25)
+                    Float.random(in: 0...0.20)
 
                 candidates.append(
                     HordePortalPlacementCandidate(
@@ -430,8 +512,9 @@ final class HordePortalManager {
                         placement: placement,
                         worldCenter: center,
                         bearingRadians: bearing,
-                        nearestPortalDistance: nearestExisting,
+                        nearestPortalDistance: nearestPortalDistance,
                         nearestReservedDistance: nearestReserved,
+                        posterClearanceDistance: posterDistance,
                         nearestBearingGap: bearingGap,
                         spacingOK: spacingOK,
                         score: score
@@ -456,9 +539,11 @@ final class HordePortalManager {
                   wallID: \(chosen.wall.id)
                   localX: \(chosen.placement.localX)
                   localY: \(chosen.placement.localY)
-                  nearestExistingM: \(chosen.nearestPortalDistance)
+                  nearestPortalDistanceM: \(chosen.nearestPortalDistance)
                   nearestReservedM: \(chosen.nearestReservedDistance)
+                  posterClearanceM: \(chosen.posterClearanceDistance)
                   bearingGapRad: \(chosen.nearestBearingGap)
+                  rejectedPosterOverlap: false
                   spacingOK: \(chosen.spacingOK)
                   score: \(chosen.score)
                 """
@@ -584,6 +669,33 @@ final class HordePortalManager {
         while delta > .pi { delta -= 2 * .pi }
         while delta < -.pi { delta += 2 * .pi }
         return delta
+    }
+
+    private func wallRect(
+        for placement: DoorPlacement
+    ) -> WallLocalRect {
+        WallLocalRect(
+            minX: placement.localX - placement.width * 0.5,
+            minY: placement.localY - placement.height * 0.5,
+            maxX: placement.localX + placement.width * 0.5,
+            maxY: placement.localY + placement.height * 0.5
+        )
+    }
+
+    private func registerPortalOccupancy(
+        portalID: UUID,
+        placement: DoorPlacement
+    ) {
+        occupancyRegistry?.register(
+            id: portalID,
+            wallID: placement.wallID,
+            kind: .hordePortal,
+            rect: wallRect(
+                for: placement
+            ),
+            padding: 0.46,
+            label: "Horde portal"
+        )
     }
 
     private func logFloorAnchorProof(

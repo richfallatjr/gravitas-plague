@@ -3,8 +3,19 @@ import RealityKit
 import simd
 
 enum HordePortalIngressDepth {
-    static let minDepth: Float = 5.0
-    static let maxDepth: Float = 10.0
+    static let feetToMeters: Float = 0.3048
+
+    static let minFeet: Float = 5.0
+    static let maxFeet: Float = 10.0
+
+    static let minMeters: Float = minFeet * feetToMeters
+    static let maxMeters: Float = maxFeet * feetToMeters
+
+    static func randomMeters() -> Float {
+        Float.random(
+            in: minMeters...maxMeters
+        )
+    }
 }
 
 @MainActor
@@ -49,9 +60,7 @@ final class HordePortalSingleEnemyIngressController {
         self.portalID = portal.id
         self.floorY = portal.resolvedFloorWorldY
 
-        let depth = Float.random(
-            in: HordePortalIngressDepth.minDepth...HordePortalIngressDepth.maxDepth
-        )
+        let depth = HordePortalIngressDepth.randomMeters()
         let startX = side.startLocalXSign * portal.placement.width * 0.72
         let localY = portal.localRootYForEnemy(
             enemy: enemy
@@ -119,12 +128,14 @@ private extension HordePortalSingleEnemyIngressController {
 
         print(
             """
-            [HordePortalIngress] enemy spawned deep inside portal
+            [HordePortalIngress] enemy spawned inside portal
               enemyID: \(enemyID)
               portalID: \(portalID)
               side: \(side.rawValue)
+              depthFeetRange: \(HordePortalIngressDepth.minFeet)-\(HordePortalIngressDepth.maxFeet)
               depthMeters: \(depthMeters)
               localZ: \(portalLocalPosition.z)
+              unitsFixed: feet_not_meters
               parent: portalWorldRoot
               apertureIsMask: true
               noWallOcclusionMask: true

@@ -200,6 +200,7 @@ struct HordePortalPlacementCandidate {
     let bearingRadians: Float
     let nearestPortalDistance: Float
     let nearestReservedDistance: Float
+    let posterClearanceDistance: Float
     let nearestBearingGap: Float
     let spacingOK: Bool
     let score: Float

@@ -17,11 +17,13 @@ final class WallMountedPosterUIController: ObservableObject {
 
     private weak var wallManager: WallPlaneManager?
     private weak var hordePortalManager: HordePortalManager?
+    private weak var occupancyRegistry: WallPropOccupancyRegistry?
 
     private var currentPlacement: WallPosterPlacement?
     private var currentPosterSize: SIMD2<Float>?
     private var placementState: WallPosterPlacementState = .notPlaced
     private var lastAppliedPosition: SIMD3<Float>?
+    private let posterOccupancyID = UUID()
 
     var isPlaced: Bool {
         currentPlacement != nil
@@ -36,10 +38,12 @@ final class WallMountedPosterUIController: ObservableObject {
     func installIfNeeded(
         sceneRoot: Entity,
         wallManager: WallPlaneManager,
-        hordePortalManager: HordePortalManager?
+        hordePortalManager: HordePortalManager?,
+        occupancyRegistry: WallPropOccupancyRegistry
     ) {
         self.wallManager = wallManager
         self.hordePortalManager = hordePortalManager
+        self.occupancyRegistry = occupancyRegistry
 
         if root.parent == nil {
             sceneRoot.addChild(root)
@@ -81,6 +85,9 @@ final class WallMountedPosterUIController: ObservableObject {
             height: placement.height
         )
         applyPlacement(placement)
+        registerPosterOccupancy(
+            placement: placement
+        )
 
         print(
             """
@@ -125,6 +132,10 @@ final class WallMountedPosterUIController: ObservableObject {
     }
 
     func reset() {
+        occupancyRegistry?.unregister(
+            id: posterOccupancyID
+        )
+
         currentPlacement = nil
         currentPosterSize = nil
         placementState = .notPlaced
@@ -270,7 +281,12 @@ final class WallMountedPosterUIController: ObservableObject {
             }
         }
 
-        return best?.placement
+        guard let best,
+              best.score > -999 else {
+            return nil
+        }
+
+        return best.placement
     }
 
     private func clearanceScore(
@@ -278,60 +294,57 @@ final class WallMountedPosterUIController: ObservableObject {
         wall: WallCandidate
     ) -> Float {
         var score: Float = 1.0
+        let rect = WallLocalRect(
+            minX: placement.localX - placement.width * 0.5,
+            minY: placement.localY - placement.height * 0.5,
+            maxX: placement.localX + placement.width * 0.5,
+            maxY: placement.localY + placement.height * 0.5
+        )
 
-        if let hordePortalManager {
-            let rect = SIMD4<Float>(
-                placement.localX - placement.width * 0.5,
-                placement.localY - placement.height * 0.5,
-                placement.width,
-                placement.height
+        if occupancyRegistry?.hasHardOverlap(
+            wallID: wall.id,
+            candidate: rect.expanded(
+                by: 0.25
+            ),
+            candidateKind: .wallPoster
+        ) == true {
+            print(
+                """
+                [WallPosterUI] candidate rejected by wall occupancy
+                  wallID: \(wall.id)
+                  reason: overlaps_existing_portal
+                """
             )
-
-            for portalRect in hordePortalManager.occupiedWallRects(wallID: wall.id) {
-                if rectsOverlap(
-                    rect,
-                    portalRect
-                ) {
-                    score -= 10.0
-
-                    print(
-                        """
-                        [WallPosterUI] candidate rejected/penalized due to portal overlap
-                          wallID: \(wall.id)
-                          localX: \(placement.localX)
-                          localY: \(placement.localY)
-                        """
-                    )
-                }
-            }
+            return -1000
         }
 
         score += abs(placement.localX) * 0.05
 
         return score
     }
-
-    private func rectsOverlap(
-        _ a: SIMD4<Float>,
-        _ b: SIMD4<Float>
-    ) -> Bool {
-        let ax0 = a.x
-        let ay0 = a.y
-        let ax1 = a.x + a.z
-        let ay1 = a.y + a.w
-        let bx0 = b.x
-        let by0 = b.y
-        let bx1 = b.x + b.z
-        let by1 = b.y + b.w
-
-        return ax0 < bx1 &&
-            ax1 > bx0 &&
-            ay0 < by1 &&
-            ay1 > by0
-    }
 }
 
 private extension WallMountedPosterUIController {
+    func registerPosterOccupancy(
+        placement: WallPosterPlacement
+    ) {
+        let rect = WallLocalRect(
+            minX: placement.localX - placement.width * 0.5,
+            minY: placement.localY - placement.height * 0.5,
+            maxX: placement.localX + placement.width * 0.5,
+            maxY: placement.localY + placement.height * 0.5
+        )
+
+        occupancyRegistry?.register(
+            id: posterOccupancyID,
+            wallID: placement.wallID,
+            kind: .wallPoster,
+            rect: rect,
+            padding: 0.30,
+            label: "RealityKit wall poster UI"
+        )
+    }
+
     func rebuildPosterIfNeeded(
         width: Float,
         height: Float

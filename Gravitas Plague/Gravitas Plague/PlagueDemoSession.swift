@@ -24,6 +24,11 @@ enum PlagueFeatureFlags {
     static let showDebugTestDoor = false
 }
 
+extension Notification.Name {
+    static let plagueDismissSwiftUIControlWindowPermanently =
+        Notification.Name("plagueDismissSwiftUIControlWindowPermanently")
+}
+
 @MainActor
 final class PlagueDemoSession: ObservableObject {
     static let immersiveSpaceID = PlagueImmersiveSpaceID.forest
@@ -66,6 +71,7 @@ final class PlagueDemoSession: ObservableObject {
         case resetJockPose
         case prepareForUserQuitOrClose
         case closeDemo
+        case startHordeRoomScanOnly
         case startRoomSkinningScan
         case confirmRoomSkinningPlacement
         case enterRoomSkinningDoorAdjustment
@@ -104,6 +110,8 @@ final class PlagueDemoSession: ObservableObject {
     @Published var roomSkinningStatus = "Room skinning idle."
     @Published var portalHDRIAtmosphere: PortalHDRIAtmosphere = .night
     @Published var portalHDRIRevision: Int = 0
+    @Published private(set) var roomSkinningHasOccurred = false
+    @Published private(set) var swiftUIControlWindowPermanentlySuppressed = false
     @Published var wallPosterUIActive = false
     @Published var damageTintEventID = UUID()
     @Published var damageTintIntensity: Double = 0.0
@@ -114,8 +122,7 @@ final class PlagueDemoSession: ObservableObject {
     private var controlWindowDismissedForWallUI = false
 
     var shouldIgnoreControlWindowLifecycleBecauseWallUIIsActive: Bool {
-        wallPosterUIActive &&
-            controlWindowDismissedForWallUI &&
+        (controlWindowDismissedForWallUI || swiftUIControlWindowPermanentlySuppressed) &&
             !isQuitting
     }
 
@@ -172,6 +179,99 @@ final class PlagueDemoSession: ObservableObject {
 
     @MainActor
     func activateWallPosterUI() {
+        markRoomSkinningCommittedForHorde()
+    }
+
+    @MainActor
+    func markRoomSkinningCommittedForHorde() {
+        let shouldPostDismiss = !swiftUIControlWindowPermanentlySuppressed
+
+        roomSkinningHasOccurred = true
+        swiftUIControlWindowPermanentlySuppressed = true
+        controlWindowDismissedForWallUI = true
+        wallPosterUIActive = true
+
+        if shouldPostDismiss {
+            NotificationCenter.default.post(
+                name: .plagueDismissSwiftUIControlWindowPermanently,
+                object: nil
+            )
+        }
+
+        print(
+            """
+            [PlagueUI] room skinning committed
+              SwiftUIControlWindowSuppressed: true
+              wallPosterUIActive: true
+              reopenAllowedThisSession: false
+            """
+        )
+    }
+
+    @MainActor
+    func setWallPosterUIInactiveIfAllowed() {
+        guard !swiftUIControlWindowPermanentlySuppressed else {
+            wallPosterUIActive = true
+            return
+        }
+
+        wallPosterUIActive = false
+    }
+
+    @MainActor
+    func handlePlayerDeathUI(
+        openWindow: OpenWindowAction
+    ) {
+        if swiftUIControlWindowPermanentlySuppressed {
+            wallPosterUIActive = true
+
+            print(
+                """
+                [PlagueDeath] SwiftUI reopen blocked
+                  reason: room_skinning_already_committed
+                  wallPosterUIActive: \(wallPosterUIActive)
+                """
+            )
+
+            return
+        }
+
+        reopenSwiftUIControlWindowIfAllowed(
+            reason: "player_death",
+            openWindow: openWindow
+        )
+    }
+
+    @MainActor
+    func reopenSwiftUIControlWindowIfAllowed(
+        reason: String,
+        openWindow: OpenWindowAction
+    ) {
+        guard !swiftUIControlWindowPermanentlySuppressed else {
+            print(
+                """
+                [PlagueUI] blocked SwiftUI control window reopen
+                  reason: \(reason)
+                  roomSkinningHasOccurred: \(roomSkinningHasOccurred)
+                """
+            )
+            return
+        }
+
+        openWindow(
+            id: PlagueWindowID.control
+        )
+
+        print(
+            """
+            [PlagueUI] SwiftUI control window reopened
+              reason: \(reason)
+            """
+        )
+    }
+
+    @MainActor
+    func activateWallPosterUIForLegacyCallers() {
         guard !wallPosterUIActive else {
             return
         }
@@ -222,9 +322,9 @@ final class PlagueDemoSession: ObservableObject {
         activeMode = .jockRetargetTest
         statusMessage = "Running Horde Mode."
         resetPlayerDeathState()
-        send(.playJockFollowDemo)
+        send(.startHordeRoomScanOnly)
 
-        print("[PlagueMenu] Horde Mode started from poster UI; poster remains mounted.")
+        print("[PlagueMenu] Horde Mode requested from poster UI; waiting for first portal.")
     }
 
     func startWalkLoopFromPoster() {
@@ -494,7 +594,15 @@ final class PlagueDemoSession: ObservableObject {
 
     func notePosterUIMounted() {
         isPosterUIVisible = true
-        controlWindowDismissedForWallUI = false
+
+        if !swiftUIControlWindowPermanentlySuppressed {
+            controlWindowDismissedForWallUI = false
+        } else {
+            NotificationCenter.default.post(
+                name: .plagueDismissSwiftUIControlWindowPermanently,
+                object: nil
+            )
+        }
 
         print(
             """

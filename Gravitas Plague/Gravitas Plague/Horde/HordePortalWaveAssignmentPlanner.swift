@@ -121,6 +121,16 @@ final class HordePortalWaveAssignmentPlanner {
             )
         }
 
+        if let existing = portalManager.bestUnreservedPortal(
+            excluding: reservedPortalIDs,
+            playerPosition: playerPosition
+        ) {
+            return (
+                existing,
+                .uniqueExistingPortal
+            )
+        }
+
         if let reuse = portalManager.leastUsedPortal() {
             return (
                 reuse,

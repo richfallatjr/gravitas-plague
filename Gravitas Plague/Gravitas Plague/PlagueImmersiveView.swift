@@ -1,5 +1,6 @@
 import Combine
 import Darwin
+import Foundation
 import RealityKit
 import SwiftUI
 
@@ -95,6 +96,25 @@ struct PlagueImmersiveView: View {
         .onReceive(frameTimer) { date in
             coordinator.tick(at: date)
         }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .plagueDismissSwiftUIControlWindowPermanently
+            )
+        ) { _ in
+            Task { @MainActor in
+                dismissWindow(
+                    id: PlagueWindowID.control
+                )
+
+                print(
+                    """
+                    [PlagueUI] SwiftUI control window dismissed permanently for session
+                      windowID: \(PlagueWindowID.control)
+                      reason: room_skinning_committed
+                    """
+                )
+            }
+        }
         .onAppear {
             coordinator.deathPresentationController = deathPresentationController
             coordinator.onPlayerDamaged = { amount in
@@ -103,8 +123,9 @@ struct PlagueImmersiveView: View {
             }
             coordinator.onPlayerDeathStarted = {
                 damageTintController.reset()
-                session.wallPosterUIActive = false
-                openWindow(id: PlagueWindowID.control)
+                session.handlePlayerDeathUI(
+                    openWindow: openWindow
+                )
             }
             coordinator.onForestAtmosphereFatalFailure = { error in
                 Task { @MainActor in
@@ -124,19 +145,9 @@ struct PlagueImmersiveView: View {
             }
             coordinator.onWallPosterUIActiveChanged = { active in
                 if active {
-                    session.activateWallPosterUI()
-                    session.prepareControlWindowDismissalForWallUI()
-                    dismissWindow(id: PlagueWindowID.control)
-
-                    print(
-                        """
-                        [WallPosterUI] SwiftUI control window dismissed
-                          reason: wall_ui_active_after_room_skinning
-                          RealityKitKillSwitch: true
-                        """
-                    )
+                    session.markRoomSkinningCommittedForHorde()
                 } else {
-                    session.wallPosterUIActive = false
+                    session.setWallPosterUIInactiveIfAllowed()
                 }
             }
             coordinator.onRoomSkinningStatusChanged = { status in
@@ -152,7 +163,7 @@ struct PlagueImmersiveView: View {
             damageTintController.reset()
             deathPresentationController.reset()
             coordinator.shutdown()
-            session.wallPosterUIActive = false
+            session.setWallPosterUIInactiveIfAllowed()
             session.forestImmersiveDidClose()
         }
     }
