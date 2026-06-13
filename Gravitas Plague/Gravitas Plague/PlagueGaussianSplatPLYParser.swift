@@ -776,19 +776,27 @@ enum PlagueGaussianSplatBinaryChunkDecoder {
            let scale1 = try optionalFloat("scale_1", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian),
            let scale2 = try optionalFloat("scale_2", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian) {
             return SIMD3<Float>(
-                exp(scale0),
-                exp(scale1),
-                exp(scale2)
+                scale0,
+                scale1,
+                scale2
             )
         }
 
         if let sx = try optionalFloat("sx", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian),
            let sy = try optionalFloat("sy", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian),
            let sz = try optionalFloat("sz", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian) {
-            return SIMD3<Float>(sx, sy, sz)
+            return SIMD3<Float>(
+                log(max(sx, 0.000001)),
+                log(max(sy, 0.000001)),
+                log(max(sz, 0.000001))
+            )
         }
 
-        return SIMD3<Float>(0.01, 0.01, 0.01)
+        return SIMD3<Float>(
+            log(0.01),
+            log(0.01),
+            log(0.01)
+        )
     }
 
     nonisolated private static func parseRotationXYZW(
@@ -834,14 +842,21 @@ enum PlagueGaussianSplatBinaryChunkDecoder {
         littleEndian: Bool
     ) throws -> Float {
         if let opacity = try optionalFloat("opacity", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian) {
-            return 1.0 / (1.0 + exp(-opacity))
+            return opacity
         }
 
         if let alpha = try optionalFloat("alpha", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian) {
-            return max(0, min(1, alpha))
+            return logit(alpha)
         }
 
-        return 1
+        return 0
+    }
+
+    nonisolated private static func logit(
+        _ value: Float
+    ) -> Float {
+        let clamped = max(0.000001, min(0.999999, value))
+        return log(clamped / (1.0 - clamped))
     }
 
     nonisolated private static func inferSHDegree(
@@ -1534,19 +1549,27 @@ private extension PlagueGaussianSplatPLYParser {
            let scale1,
            let scale2 {
             return SIMD3<Float>(
-                exp(scale0),
-                exp(scale1),
-                exp(scale2)
+                scale0,
+                scale1,
+                scale2
             )
         }
 
         if let sx,
            let sy,
            let sz {
-            return SIMD3<Float>(sx, sy, sz)
+            return SIMD3<Float>(
+                log(max(sx, 0.000001)),
+                log(max(sy, 0.000001)),
+                log(max(sz, 0.000001))
+            )
         }
 
-        return SIMD3<Float>(0.01, 0.01, 0.01)
+        return SIMD3<Float>(
+            log(0.01),
+            log(0.01),
+            log(0.01)
+        )
     }
 
     nonisolated static func parseRotation(
@@ -1619,18 +1642,23 @@ private extension PlagueGaussianSplatPLYParser {
         alpha: Float?
     ) -> Float {
         if let opacity {
-            return sigmoid(opacity)
+            return opacity
         }
 
         if let alpha {
-            return max(0, min(1, alpha))
+            return logit(alpha)
         }
 
-        return 1
+        return 0
     }
 
     nonisolated static func sigmoid(_ x: Float) -> Float {
         1.0 / (1.0 + exp(-x))
+    }
+
+    nonisolated static func logit(_ value: Float) -> Float {
+        let clamped = max(0.000001, min(0.999999, value))
+        return log(clamped / (1.0 - clamped))
     }
 }
 

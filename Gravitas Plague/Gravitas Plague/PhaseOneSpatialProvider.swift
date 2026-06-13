@@ -17,13 +17,15 @@ struct PhaseOneSpawnPose: Equatable {
 final class PhaseOneSpatialProvider {
     private let session = ARKitSession()
     private let worldTrackingProvider = WorldTrackingProvider()
-    private let planeDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal])
+    private let planeDetectionProvider = PlaneDetectionProvider(alignments: [.horizontal, .vertical])
 
     private var isRunning = false
     private var isPlaneDetectionRunning = false
     private var planeUpdateTask: Task<Void, Never>?
 
     private var knownHorizontalPlaneYsByID: [UUID: Float] = [:]
+
+    var onPlaneAnchorUpdate: ((AnchorUpdate<PlaneAnchor>) -> Void)?
 
     func start() async {
         guard WorldTrackingProvider.isSupported else {
@@ -47,6 +49,10 @@ final class PhaseOneSpatialProvider {
                     isRunning = true
                     isPlaneDetectionRunning = true
                     beginConsumingPlaneUpdates()
+
+                    print("[RoomSkinning] ARKit session started")
+                    print("[RoomSkinning] vertical plane provider active")
+
                     return
                 }
             }
@@ -54,9 +60,11 @@ final class PhaseOneSpatialProvider {
             try await session.run([worldTrackingProvider])
             isRunning = true
             isPlaneDetectionRunning = false
+            print("[RoomSkinning] ARKit session started without plane detection")
         } catch {
             isRunning = false
             isPlaneDetectionRunning = false
+            print("[RoomSkinning] ARKit session failed: \(error.localizedDescription)")
         }
     }
 
@@ -96,7 +104,7 @@ final class PhaseOneSpatialProvider {
 
         let rawForward = -SIMD3<Float>(
             matrix.columns.2.x,
-            0,
+            matrix.columns.2.y,
             matrix.columns.2.z
         )
 
@@ -153,13 +161,17 @@ final class PhaseOneSpatialProvider {
 
                 switch update.event {
                 case .added, .updated:
-                    let transform = update.anchor.originFromAnchorTransform
-                    let planeY = transform.columns.3.y
-                    knownHorizontalPlaneYsByID[update.anchor.id] = planeY
+                    if update.anchor.alignment == .horizontal {
+                        let transform = update.anchor.originFromAnchorTransform
+                        let planeY = transform.columns.3.y
+                        knownHorizontalPlaneYsByID[update.anchor.id] = planeY
+                    }
 
                 case .removed:
                     knownHorizontalPlaneYsByID.removeValue(forKey: update.anchor.id)
                 }
+
+                onPlaneAnchorUpdate?(update)
             }
         }
     }

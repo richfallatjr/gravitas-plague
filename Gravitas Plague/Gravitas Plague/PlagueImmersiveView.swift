@@ -23,14 +23,7 @@ struct PlagueImmersiveView: View {
             )
             content.add(sceneRoot)
             content.add(coordinator.makeHeadAnchor())
-        } update: { _ in
-            Task { @MainActor in
-                await coordinator.updateForestAtmosphereIfNeeded(
-                    atmosphere: session.forestAtmosphere,
-                    revision: session.forestAtmosphereRevision
-                )
-            }
-        }
+        } update: { _ in }
         .preferredSurroundingsEffect(
             deathPresentationController.surroundingsEffect
                 ?? damageTintController.surroundingsEffect
@@ -59,6 +52,16 @@ struct PlagueImmersiveView: View {
             }
             coordinator.onForestSplatLoadStatusChanged = { status in
                 session.forestSplatLoadStatus = status
+            }
+            coordinator.onForestGeometryLoadStatusChanged = { status in
+                session.forestGeometryLoadStatus = status
+                session.forestSplatLoadStatus = status
+            }
+            coordinator.onForestAppearanceStatusChanged = { status in
+                session.forestAppearanceStatus = status
+            }
+            coordinator.onRoomSkinningStatusChanged = { status in
+                session.roomSkinningStatus = status
             }
         }
         .onChange(of: session.damageTintEventID) { _, _ in

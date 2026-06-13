@@ -3,6 +3,84 @@ import Metal
 import RealityKit
 import simd
 
+struct PlagueGaussianSplatAttributeStats {
+    var positionMin = SIMD3<Float>(repeating: Float.greatestFiniteMagnitude)
+    var positionMax = SIMD3<Float>(repeating: -Float.greatestFiniteMagnitude)
+
+    var rawScaleMin = SIMD3<Float>(repeating: Float.greatestFiniteMagnitude)
+    var rawScaleMax = SIMD3<Float>(repeating: -Float.greatestFiniteMagnitude)
+
+    var activatedScaleMin = SIMD3<Float>(repeating: Float.greatestFiniteMagnitude)
+    var activatedScaleMax = SIMD3<Float>(repeating: -Float.greatestFiniteMagnitude)
+
+    var rawOpacityMin = Float.greatestFiniteMagnitude
+    var rawOpacityMax = -Float.greatestFiniteMagnitude
+
+    var activatedOpacityMin = Float.greatestFiniteMagnitude
+    var activatedOpacityMax = -Float.greatestFiniteMagnitude
+
+    var dcMin = SIMD3<Float>(repeating: Float.greatestFiniteMagnitude)
+    var dcMax = SIMD3<Float>(repeating: -Float.greatestFiniteMagnitude)
+
+    mutating func record(
+        position: SIMD3<Float>,
+        rawScale: SIMD3<Float>,
+        activatedScale: SIMD3<Float>,
+        rawOpacity: Float,
+        activatedOpacity: Float,
+        dc: SIMD3<Float>
+    ) {
+        positionMin = componentMin(positionMin, position)
+        positionMax = componentMax(positionMax, position)
+        rawScaleMin = componentMin(rawScaleMin, rawScale)
+        rawScaleMax = componentMax(rawScaleMax, rawScale)
+        activatedScaleMin = componentMin(activatedScaleMin, activatedScale)
+        activatedScaleMax = componentMax(activatedScaleMax, activatedScale)
+        rawOpacityMin = min(rawOpacityMin, rawOpacity)
+        rawOpacityMax = max(rawOpacityMax, rawOpacity)
+        activatedOpacityMin = min(activatedOpacityMin, activatedOpacity)
+        activatedOpacityMax = max(activatedOpacityMax, activatedOpacity)
+        dcMin = componentMin(dcMin, dc)
+        dcMax = componentMax(dcMax, dc)
+    }
+
+    var maxActivatedScale: Float {
+        max(
+            activatedScaleMax.x,
+            max(activatedScaleMax.y, activatedScaleMax.z)
+        )
+    }
+
+    private func componentMin(
+        _ lhs: SIMD3<Float>,
+        _ rhs: SIMD3<Float>
+    ) -> SIMD3<Float> {
+        SIMD3<Float>(
+            min(lhs.x, rhs.x),
+            min(lhs.y, rhs.y),
+            min(lhs.z, rhs.z)
+        )
+    }
+
+    private func componentMax(
+        _ lhs: SIMD3<Float>,
+        _ rhs: SIMD3<Float>
+    ) -> SIMD3<Float> {
+        SIMD3<Float>(
+            max(lhs.x, rhs.x),
+            max(lhs.y, rhs.y),
+            max(lhs.z, rhs.z)
+        )
+    }
+}
+
+private struct PlaguePreparedGaussianSplatChunk {
+    let scales: [SIMD3<Float>]
+    let opacities: [Float]
+    let sphericalHarmonicsRGB: [SIMD3<Float>]
+    let stats: PlagueGaussianSplatAttributeStats
+}
+
 enum PlagueNativeGaussianSplatRenderer {
     static func makeEntities(
         plyURL: URL
@@ -52,11 +130,24 @@ enum PlagueNativeGaussianSplatRenderer {
         cloud: PlagueGaussianSplatCloud,
         name: String
     ) throws -> Entity {
+        try makeEntity(
+            cloud: cloud,
+            name: name,
+            appearance: PlagueSplatAppearancePresets.nativeRaw
+        )
+    }
+
+    static func makeEntity(
+        cloud: PlagueGaussianSplatCloud,
+        name: String,
+        appearance: PlagueGaussianSplatAppearanceSettings
+    ) throws -> Entity {
         #if os(visionOS) && !targetEnvironment(simulator)
         if #available(visionOS 27.0, *) {
             return try makeNativeEntity(
                 cloud: cloud,
-                name: name
+                name: name,
+                appearance: appearance
             )
         }
         #endif
@@ -69,10 +160,21 @@ enum PlagueNativeGaussianSplatRenderer {
     static func makeEntity(
         chunk: PlagueGaussianSplatChunk
     ) throws -> Entity {
+        try makeEntity(
+            chunk: chunk,
+            appearance: PlagueSplatAppearancePresets.nativeRaw
+        )
+    }
+
+    static func makeEntity(
+        chunk: PlagueGaussianSplatChunk,
+        appearance: PlagueGaussianSplatAppearanceSettings
+    ) throws -> Entity {
         #if os(visionOS) && !targetEnvironment(simulator)
         if #available(visionOS 27.0, *) {
             return try makeNativeEntity(
-                chunk: chunk
+                chunk: chunk,
+                appearance: appearance
             )
         }
         #endif
@@ -91,10 +193,12 @@ struct PlagueNativeSplatChunkHandle {
 
 enum PlagueRealityKitGaussianSplatBridge {
     static func makeHandle(
-        chunk: PlagueGaussianSplatChunk
+        chunk: PlagueGaussianSplatChunk,
+        appearance: PlagueGaussianSplatAppearanceSettings
     ) throws -> PlagueNativeSplatChunkHandle {
         let entity = try makeEntity(
-            chunk: chunk
+            chunk: chunk,
+            appearance: appearance
         )
 
         return PlagueNativeSplatChunkHandle(
@@ -106,6 +210,16 @@ enum PlagueRealityKitGaussianSplatBridge {
 
     static func makeEntity(
         chunk: PlagueGaussianSplatChunk
+    ) throws -> Entity {
+        try makeEntity(
+            chunk: chunk,
+            appearance: PlagueSplatAppearancePresets.nativeRaw
+        )
+    }
+
+    static func makeEntity(
+        chunk: PlagueGaussianSplatChunk,
+        appearance: PlagueGaussianSplatAppearanceSettings
     ) throws -> Entity {
         print(
             """
@@ -123,7 +237,8 @@ enum PlagueRealityKitGaussianSplatBridge {
         )
 
         let entity = try PlagueNativeGaussianSplatRenderer.makeEntity(
-            chunk: chunk
+            chunk: chunk,
+            appearance: appearance
         )
 
         print(
@@ -142,8 +257,168 @@ enum PlagueRealityKitGaussianSplatBridge {
 #if os(visionOS) && !targetEnvironment(simulator)
 @available(visionOS 27.0, *)
 private extension PlagueNativeGaussianSplatRenderer {
+    static func prepareChunkForUpload(
+        chunk: PlagueGaussianSplatChunk,
+        appearance: PlagueGaussianSplatAppearanceSettings
+    ) throws -> PlaguePreparedGaussianSplatChunk {
+        let coeffCount = (chunk.sphericalHarmonicsDegree + 1)
+            * (chunk.sphericalHarmonicsDegree + 1)
+
+        guard chunk.sphericalHarmonicsRGB.count == chunk.count * coeffCount else {
+            throw NSError(
+                domain: "PlagueSplatAppearance",
+                code: 200,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Spherical harmonic buffer count mismatch for chunk \(chunk.chunkIndex). expected=\(chunk.count * coeffCount) actual=\(chunk.sphericalHarmonicsRGB.count)"
+                ]
+            )
+        }
+
+        let scaleOffset = log(
+            max(appearance.gaussianScaleMultiplier, 0.0001)
+        )
+
+        var uploadedScales: [SIMD3<Float>] = []
+        var uploadedOpacities: [Float] = []
+        var uploadedSphericalHarmonics = chunk.sphericalHarmonicsRGB
+        var stats = PlagueGaussianSplatAttributeStats()
+
+        uploadedScales.reserveCapacity(chunk.count)
+        uploadedOpacities.reserveCapacity(chunk.count)
+
+        for index in 0..<chunk.count {
+            let rawScale = chunk.scales[index]
+            let rawScaleWithOffset = SIMD3<Float>(
+                rawScale.x + scaleOffset,
+                rawScale.y + scaleOffset,
+                rawScale.z + scaleOffset
+            )
+
+            let uploadedScale: SIMD3<Float>
+            let activatedScale: SIMD3<Float>
+
+            if appearance.useRawScaleWithExponentialActivation {
+                uploadedScale = rawScaleWithOffset
+                activatedScale = SIMD3<Float>(
+                    exp(rawScaleWithOffset.x),
+                    exp(rawScaleWithOffset.y),
+                    exp(rawScaleWithOffset.z)
+                )
+            } else {
+                activatedScale = SIMD3<Float>(
+                    exp(rawScaleWithOffset.x),
+                    exp(rawScaleWithOffset.y),
+                    exp(rawScaleWithOffset.z)
+                )
+                uploadedScale = activatedScale
+            }
+
+            let rawOpacity = chunk.opacities[index]
+            let rawOpacityWithBias = rawOpacity + appearance.opacityLogitBias
+
+            let uploadedOpacity: Float
+            let activatedOpacity = sigmoid(rawOpacityWithBias)
+
+            if appearance.useRawOpacityWithSigmoidActivation {
+                uploadedOpacity = rawOpacityWithBias
+            } else {
+                uploadedOpacity = activatedOpacity
+            }
+
+            let coefficientIndex = index * coeffCount
+            let dc = uploadedSphericalHarmonics[coefficientIndex]
+            var uploadedDC = dc
+
+            if (!appearance.useRawSphericalHarmonicCoefficients ||
+                appearance.debugConvertDegreeZeroDCToRGB) &&
+                chunk.sphericalHarmonicsDegree == 0 {
+                uploadedDC = PlagueGaussianSplatColorMath.dcToDisplayRGB(dc)
+
+                if appearance.debugSwapRGBToBGR {
+                    uploadedDC = SIMD3<Float>(
+                        uploadedDC.z,
+                        uploadedDC.y,
+                        uploadedDC.x
+                    )
+                }
+            }
+
+            uploadedSphericalHarmonics[coefficientIndex] = uploadedDC
+            uploadedScales.append(uploadedScale)
+            uploadedOpacities.append(uploadedOpacity)
+
+            stats.record(
+                position: chunk.positions[index],
+                rawScale: rawScale,
+                activatedScale: activatedScale,
+                rawOpacity: rawOpacity,
+                activatedOpacity: activatedOpacity,
+                dc: dc
+            )
+        }
+
+        print(
+            """
+            [PlagueSplatAppearance] color interpretation
+              shDegree: \(chunk.sphericalHarmonicsDegree)
+              rawSH: \(appearance.useRawSphericalHarmonicCoefficients)
+              debugConvertDegreeZeroDCToRGB: \(appearance.debugConvertDegreeZeroDCToRGB)
+              debugSwapRGBToBGR: \(appearance.debugSwapRGBToBGR)
+            """
+        )
+
+        print(
+            """
+            [PlagueSplatAppearance] attribute stats
+              chunkIndex: \(chunk.chunkIndex)
+              positionMin: \(stats.positionMin)
+              positionMax: \(stats.positionMax)
+
+              rawScaleMin: \(stats.rawScaleMin)
+              rawScaleMax: \(stats.rawScaleMax)
+              activatedScaleMin: \(stats.activatedScaleMin)
+              activatedScaleMax: \(stats.activatedScaleMax)
+
+              rawOpacityMin: \(stats.rawOpacityMin)
+              rawOpacityMax: \(stats.rawOpacityMax)
+              activatedOpacityMin: \(stats.activatedOpacityMin)
+              activatedOpacityMax: \(stats.activatedOpacityMax)
+
+              dcMin: \(stats.dcMin)
+              dcMax: \(stats.dcMax)
+            """
+        )
+
+        if stats.maxActivatedScale < 0.002 {
+            print(
+                """
+                [PlagueSplatAppearance] WARNING activated Gaussian scales are extremely small
+                  chunkIndex: \(chunk.chunkIndex)
+                  maxActivatedScale: \(stats.maxActivatedScale)
+                  resultLikely: point-cloud-like rendering
+                  suggestedTest: increase gaussianScaleMultiplier to 2, 4, or 8
+                """
+            )
+        }
+
+        return PlaguePreparedGaussianSplatChunk(
+            scales: uploadedScales,
+            opacities: uploadedOpacities,
+            sphericalHarmonicsRGB: uploadedSphericalHarmonics,
+            stats: stats
+        )
+    }
+
+    static func sigmoid(
+        _ value: Float
+    ) -> Float {
+        1.0 / (1.0 + exp(-value))
+    }
+
     static func makeNativeEntity(
-        chunk: PlagueGaussianSplatChunk
+        chunk: PlagueGaussianSplatChunk,
+        appearance: PlagueGaussianSplatAppearanceSettings
     ) throws -> Entity {
         try PlagueGaussianSplatAvailability.assertNativeAvailable()
 
@@ -158,13 +433,18 @@ private extension PlagueNativeGaussianSplatRenderer {
             """
         )
 
+        let prepared = try prepareChunkForUpload(
+            chunk: chunk,
+            appearance: appearance
+        )
+
         let position = try makeFloat3BufferDescriptor(
             chunk.positions,
             label: "positions_chunk\(chunk.chunkIndex)"
         )
 
         let scale = try makeFloat3BufferDescriptor(
-            chunk.scales,
+            prepared.scales,
             label: "scales_chunk\(chunk.chunkIndex)"
         )
 
@@ -174,7 +454,7 @@ private extension PlagueNativeGaussianSplatRenderer {
         )
 
         let opacity = try makeFloatBufferDescriptor(
-            chunk.opacities,
+            prepared.opacities,
             label: "opacities_chunk\(chunk.chunkIndex)"
         )
 
@@ -182,7 +462,7 @@ private extension PlagueNativeGaussianSplatRenderer {
             * (chunk.sphericalHarmonicsDegree + 1)
 
         let sphericalHarmonics = try makeFloat3BufferDescriptor(
-            chunk.sphericalHarmonicsRGB,
+            prepared.sphericalHarmonicsRGB,
             label: "spherical_harmonics_rgb_chunk\(chunk.chunkIndex)",
             descriptorStride: 3 * MemoryLayout<Float>.stride * sphericalHarmonicCoefficientCount
         )
@@ -205,11 +485,26 @@ private extension PlagueNativeGaussianSplatRenderer {
 
         let resource = GaussianSplatResource(bufferResource)
 
-        // PLY chunk decoder already converts log-scale and opacity logits.
-        resource.scaleActivation = .identity
-        resource.opacityActivation = .identity
+        resource.scaleActivation = appearance.useRawScaleWithExponentialActivation
+            ? .exponential
+            : .identity
+        resource.opacityActivation = appearance.useRawOpacityWithSigmoidActivation
+            ? .sigmoid
+            : .identity
         resource.projectionMode = .perspective
         resource.sortingMode = .depth
+
+        print(
+            """
+            [PlagueSplatAppearance] activation settings
+              rawScaleWithExponential: \(appearance.useRawScaleWithExponentialActivation)
+              rawOpacityWithSigmoid: \(appearance.useRawOpacityWithSigmoidActivation)
+              gaussianScaleMultiplier: \(appearance.gaussianScaleMultiplier)
+              opacityLogitBias: \(appearance.opacityLogitBias)
+              scaleActivation: \(resource.scaleActivation)
+              opacityActivation: \(resource.opacityActivation)
+            """
+        )
 
         let entity = Entity()
         entity.name = "GaussianSplatChunk_\(chunk.chunkIndex)"
@@ -235,7 +530,8 @@ private extension PlagueNativeGaussianSplatRenderer {
 
     static func makeNativeEntity(
         cloud: PlagueGaussianSplatCloud,
-        name: String
+        name: String,
+        appearance: PlagueGaussianSplatAppearanceSettings
     ) throws -> Entity {
         try PlagueGaussianSplatAvailability.assertNativeAvailable()
 
@@ -288,9 +584,12 @@ private extension PlagueNativeGaussianSplatRenderer {
 
         let resource = GaussianSplatResource(bufferResource)
 
-        // PLY parser already converts log-scale and opacity logits into runtime values.
-        resource.scaleActivation = .identity
-        resource.opacityActivation = .identity
+        resource.scaleActivation = appearance.useRawScaleWithExponentialActivation
+            ? .exponential
+            : .identity
+        resource.opacityActivation = appearance.useRawOpacityWithSigmoidActivation
+            ? .sigmoid
+            : .identity
         resource.projectionMode = .perspective
         resource.sortingMode = .depth
 

@@ -125,13 +125,87 @@ enum PlagueForestAssetValidator {
     }
 }
 
-struct PlagueGaussianSplatPlacement {
-    var scale: Float = 1.0
-    var position = SIMD3<Float>(0, 0, -2.0)
-    var rotation = simd_quatf(
-        angle: 0,
-        axis: SIMD3<Float>(0, 1, 0)
+struct PlagueGaussianSplatAppearanceSettings: Sendable {
+    var useRawScaleWithExponentialActivation: Bool
+    var useRawOpacityWithSigmoidActivation: Bool
+    var gaussianScaleMultiplier: Float
+    var opacityLogitBias: Float
+    var useRawSphericalHarmonicCoefficients: Bool
+    var debugConvertDegreeZeroDCToRGB: Bool
+    var debugSwapRGBToBGR: Bool
+    var rootPosition: SIMD3<Float>
+    var rootScale: Float
+    var yawDegrees: Float
+
+    nonisolated init(
+        useRawScaleWithExponentialActivation: Bool = true,
+        useRawOpacityWithSigmoidActivation: Bool = true,
+        gaussianScaleMultiplier: Float = 1.0,
+        opacityLogitBias: Float = 0.0,
+        useRawSphericalHarmonicCoefficients: Bool = true,
+        debugConvertDegreeZeroDCToRGB: Bool = false,
+        debugSwapRGBToBGR: Bool = false,
+        rootPosition: SIMD3<Float> = SIMD3<Float>(0, 1.2, -1.0),
+        rootScale: Float = 0.48,
+        yawDegrees: Float = 0.0
+    ) {
+        self.useRawScaleWithExponentialActivation = useRawScaleWithExponentialActivation
+        self.useRawOpacityWithSigmoidActivation = useRawOpacityWithSigmoidActivation
+        self.gaussianScaleMultiplier = gaussianScaleMultiplier
+        self.opacityLogitBias = opacityLogitBias
+        self.useRawSphericalHarmonicCoefficients = useRawSphericalHarmonicCoefficients
+        self.debugConvertDegreeZeroDCToRGB = debugConvertDegreeZeroDCToRGB
+        self.debugSwapRGBToBGR = debugSwapRGBToBGR
+        self.rootPosition = rootPosition
+        self.rootScale = rootScale
+        self.yawDegrees = yawDegrees
+    }
+}
+
+enum PlagueSplatAppearancePresets {
+    nonisolated static let nativeRaw = PlagueGaussianSplatAppearanceSettings(
+        gaussianScaleMultiplier: 1.0,
+        opacityLogitBias: 0.0,
+        debugConvertDegreeZeroDCToRGB: false
     )
+
+    nonisolated static let fatterGaussians2x = PlagueGaussianSplatAppearanceSettings(
+        gaussianScaleMultiplier: 2.0,
+        opacityLogitBias: 0.0,
+        debugConvertDegreeZeroDCToRGB: false
+    )
+
+    nonisolated static let fatterGaussians4x = PlagueGaussianSplatAppearanceSettings(
+        gaussianScaleMultiplier: 4.0,
+        opacityLogitBias: 0.0,
+        debugConvertDegreeZeroDCToRGB: false
+    )
+
+    nonisolated static let rgbDebug = PlagueGaussianSplatAppearanceSettings(
+        gaussianScaleMultiplier: 1.0,
+        opacityLogitBias: 0.0,
+        debugConvertDegreeZeroDCToRGB: true
+    )
+}
+
+enum PlagueGaussianSplatColorMath {
+    nonisolated static let shC0: Float = 0.28209479177387814
+
+    nonisolated static func clamp01(
+        _ value: Float
+    ) -> Float {
+        max(0, min(1, value))
+    }
+
+    nonisolated static func dcToDisplayRGB(
+        _ dc: SIMD3<Float>
+    ) -> SIMD3<Float> {
+        SIMD3<Float>(
+            clamp01(0.5 + shC0 * dc.x),
+            clamp01(0.5 + shC0 * dc.y),
+            clamp01(0.5 + shC0 * dc.z)
+        )
+    }
 }
 
 enum PlagueGaussianSplatStreamState: String {
@@ -213,6 +287,7 @@ final class PlagueGaussianForestEnvironmentController {
     private let environmentRoot = Entity()
     private let splatRoot = Entity()
     private let lightingEntity = Entity()
+    private var appearance = PlagueSplatAppearancePresets.nativeRaw
 
     private weak var sceneRoot: Entity?
     private var isInstalled = false
@@ -239,6 +314,8 @@ final class PlagueGaussianForestEnvironmentController {
 
     var onStrictAtmosphereFailure: ((Error) -> Void)?
     var onSplatLoadStatusChanged: ((String) -> Void)?
+    var onGeometryLoadStatusChanged: ((String) -> Void)?
+    var onAppearanceStatusChanged: ((String) -> Void)?
 
     init() {
         environmentRoot.name = "PlagueForestEnvironmentRoot"
@@ -414,7 +491,12 @@ final class PlagueGaussianForestEnvironmentController {
             """
         )
 
-        emitSplatStatus("Forest \(atmosphere.displayName): planning stream.")
+        emitGeometryStatus("Forest \(atmosphere.displayName): planning stream.")
+        emitAppearanceStatus(
+            """
+            Appearance: rawScaleExp=\(appearance.useRawScaleWithExponentialActivation), rawOpacitySigmoid=\(appearance.useRawOpacityWithSigmoidActivation), scale=\(appearance.gaussianScaleMultiplier)x, colorRawSH=\(appearance.useRawSphericalHarmonicCoefficients)
+            """
+        )
 
         activeStreamTask = Task { [weak self] in
             await self?.runAtmosphereStream(
@@ -516,6 +598,18 @@ final class PlagueGaussianForestEnvironmentController {
                 """
             )
 
+            if plan.chunkCount > 1 {
+                print(
+                    """
+                    [PlagueSplatAppearance] WARNING multiple GaussianSplatComponents active
+                      count: \(plan.chunkCount)
+                      risk: alpha compositing/sorting is per-component, not necessarily global
+                      visualSymptom: noisy/incomplete/flaky splats
+                      test: single-resource mode
+                    """
+                )
+            }
+
             let sphericalHarmonicsDegree = inferredSphericalHarmonicsDegree(
                 layout: plan.layout
             )
@@ -531,7 +625,12 @@ final class PlagueGaussianForestEnvironmentController {
                 )
             }
 
-            emitSplatStatus("Forest \(atmosphere.displayName): 0/\(expectedChunkCount) chunks, 0%.")
+            emitGeometryStatus("Forest \(atmosphere.displayName): 0/\(expectedChunkCount) chunks, 0%.")
+            emitAppearanceStatus(
+                """
+                Appearance: rawScaleExp=\(appearance.useRawScaleWithExponentialActivation), rawOpacitySigmoid=\(appearance.useRawOpacityWithSigmoidActivation), scale=\(appearance.gaussianScaleMultiplier)x, shDegree=\(sphericalHarmonicsDegree)
+                """
+            )
 
             try Task.checkCancellation()
 
@@ -588,7 +687,8 @@ final class PlagueGaussianForestEnvironmentController {
 
                 do {
                     handle = try PlagueRealityKitGaussianSplatBridge.makeHandle(
-                        chunk: chunk
+                        chunk: chunk,
+                        appearance: appearance
                     )
                 } catch {
                     throw NSError(
@@ -635,7 +735,7 @@ final class PlagueGaussianForestEnvironmentController {
                     """
                 )
 
-                emitSplatStatus(
+                emitGeometryStatus(
                     "Forest \(atmosphere.displayName): \(loadedChunkCount)/\(expectedChunkCount) chunks, \(Int(percent))%."
                 )
 
@@ -687,7 +787,7 @@ final class PlagueGaussianForestEnvironmentController {
                 """
             )
 
-            emitSplatStatus("Forest \(atmosphere.displayName): complete, 100%.")
+            emitGeometryStatus("Forest \(atmosphere.displayName): complete, 100%.")
         } catch is CancellationError {
             if activeStreamKey == key {
                 streamState = .cancelled
@@ -724,7 +824,7 @@ final class PlagueGaussianForestEnvironmentController {
                 """
             )
 
-            emitSplatStatus(
+            emitGeometryStatus(
                 "Forest \(atmosphere.displayName): failed at \(loadedChunkCount)/\(expectedChunkCount) chunks."
             )
 
@@ -841,17 +941,19 @@ final class PlagueGaussianForestEnvironmentController {
     private func applyCurrentSplatPlacement(
         to root: Entity
     ) {
-        let placement = PlagueGaussianSplatPlacement()
-        root.position = placement.position
-        root.scale = SIMD3<Float>(repeating: placement.scale)
-        root.orientation = placement.rotation
+        root.position = appearance.rootPosition
+        root.scale = SIMD3<Float>(repeating: appearance.rootScale)
+        root.orientation = simd_quatf(
+            angle: appearance.yawDegrees * .pi / 180.0,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
 
         print(
             """
-            [PlagueForest] splat root placement
+            [PlagueForest] splat placement applied
               position: \(root.position)
               scale: \(root.scale)
-              orientation: \(root.orientation.vector)
+              yawDegrees: \(appearance.yawDegrees)
             """
         )
     }
@@ -870,10 +972,17 @@ final class PlagueGaussianForestEnvironmentController {
         return 0
     }
 
-    private func emitSplatStatus(
+    private func emitGeometryStatus(
         _ status: String
     ) {
         onSplatLoadStatusChanged?(status)
+        onGeometryLoadStatusChanged?(status)
+    }
+
+    private func emitAppearanceStatus(
+        _ status: String
+    ) {
+        onAppearanceStatusChanged?(status)
     }
 
     private func loadHDRIEnvironment(

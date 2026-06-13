@@ -53,6 +53,12 @@ final class PlagueDemoSession: ObservableObject {
         case resetJockPose
         case prepareForUserQuitOrClose
         case closeDemo
+        case startRoomSkinningScan
+        case confirmRoomSkinningPlacement
+        case enterRoomSkinningDoorAdjustment
+        case confirmRoomSkinningDoorAdjustment
+        case cancelRoomSkinning
+        case updatePortalHDRIAtmosphere(PortalHDRIAtmosphere)
     }
 
     struct CommandEnvelope: Identifiable, Equatable {
@@ -79,6 +85,11 @@ final class PlagueDemoSession: ObservableObject {
     @Published var forestAtmosphereRevision: Int = 0
     @Published var forestImmersiveStatus = "Forest immersive closed."
     @Published var forestSplatLoadStatus = "Forest splat idle."
+    @Published var forestGeometryLoadStatus = "Geometry idle."
+    @Published var forestAppearanceStatus = "Appearance idle."
+    @Published var roomSkinningStatus = "Room skinning idle."
+    @Published var portalHDRIAtmosphere: PortalHDRIAtmosphere = .night
+    @Published var portalHDRIRevision: Int = 0
     @Published var damageTintEventID = UUID()
     @Published var damageTintIntensity: Double = 0.0
     @Published private(set) var latestCommand: CommandEnvelope?
@@ -174,16 +185,15 @@ final class PlagueDemoSession: ObservableObject {
         case .closed, .failed:
             forestImmersiveState = .opening
             immersiveSpaceStatus = .opening
-            forestImmersiveStatus = "Opening forest immersive..."
+            forestImmersiveStatus = "Opening mixed room scene..."
             markControlWindowBackgroundAsImmersiveTransition(
-                reason: "forest_open_requested"
+                reason: "mixed_room_open_requested"
             )
 
             print(
                 """
-                [PlagueForest] opening immersive space
+                [RoomSkinning] opening mixed room scene
                   id: \(PlagueImmersiveSpaceID.forest)
-                  atmosphere: \(forestAtmosphere.rawValue)
                 """
             )
 
@@ -195,51 +205,53 @@ final class PlagueDemoSession: ObservableObject {
             case .opened:
                 forestImmersiveState = .open
                 immersiveSpaceStatus = .open
-                forestImmersiveStatus = "Forest immersive open."
+                forestImmersiveStatus = "Mixed room scene open."
                 markControlWindowBackgroundAsImmersiveTransition(
-                    reason: "forest_opened"
+                    reason: "mixed_room_opened"
                 )
 
-                print("[PlagueForest] immersive opened")
+                print("[RoomSkinning] mixed room scene opened")
 
             case .userCancelled:
                 forestImmersiveState = .closed
                 immersiveSpaceStatus = .closed
-                forestImmersiveStatus = "Forest immersive cancelled."
+                forestImmersiveStatus = "Mixed room scene cancelled."
 
-                print("[PlagueForest] immersive open cancelled")
+                print("[RoomSkinning] mixed room scene open cancelled")
 
             case .error:
                 forestImmersiveState = .failed
                 immersiveSpaceStatus = .closed
-                forestImmersiveStatus = "Forest immersive failed."
+                forestImmersiveStatus = "Mixed room scene failed."
 
-                print("[PlagueForest] immersive open failed")
+                print("[RoomSkinning] mixed room scene open failed")
 
             @unknown default:
                 forestImmersiveState = .failed
                 immersiveSpaceStatus = .closed
-                forestImmersiveStatus = "Forest immersive failed: \(String(describing: result))"
+                forestImmersiveStatus = "Mixed room scene failed: \(String(describing: result))"
 
-                print("[PlagueForest] immersive open unknown result \(String(describing: result))")
+                print("[RoomSkinning] mixed room scene open unknown result \(String(describing: result))")
             }
 
         case .open:
             forestImmersiveState = .closing
-            forestImmersiveStatus = "Closing forest immersive..."
+            forestImmersiveStatus = "Closing mixed room scene..."
             markControlWindowBackgroundAsImmersiveTransition(
-                reason: "forest_close_requested"
+                reason: "mixed_room_close_requested"
             )
 
-            print("[PlagueForest] dismissing immersive space")
+            print("[RoomSkinning] dismissing mixed room scene")
 
             await dismissImmersiveSpace()
 
             forestImmersiveState = .closed
             immersiveSpaceStatus = .closed
-            forestImmersiveStatus = "Forest immersive closed."
+            forestImmersiveStatus = "Mixed room scene closed."
 
-            print("[PlagueForest] immersive dismissed")
+            send(.cancelRoomSkinning)
+
+            print("[RoomSkinning] mixed room scene dismissed")
 
         case .opening, .closing:
             print(
@@ -254,9 +266,9 @@ final class PlagueDemoSession: ObservableObject {
     func forestImmersiveDidOpen() {
         forestImmersiveState = .open
         immersiveSpaceStatus = .open
-        forestImmersiveStatus = "Forest immersive open."
+        forestImmersiveStatus = "Mixed room scene open."
         markControlWindowBackgroundAsImmersiveTransition(
-            reason: "forest_view_appeared"
+            reason: "mixed_room_view_appeared"
         )
     }
 
@@ -264,15 +276,15 @@ final class PlagueDemoSession: ObservableObject {
         if forestImmersiveState == .failed {
             immersiveSpaceStatus = .closed
 
-            print("[PlagueForest] immersive did close after strict splat failure")
+            print("[RoomSkinning] mixed room scene did close after failure")
             return
         }
 
         forestImmersiveState = .closed
         immersiveSpaceStatus = .closed
-        forestImmersiveStatus = "Forest immersive closed."
+        forestImmersiveStatus = "Mixed room scene closed."
 
-        print("[PlagueForest] immersive did close")
+        print("[RoomSkinning] mixed room scene did close")
     }
 
     private func markControlWindowBackgroundAsImmersiveTransition(
@@ -321,7 +333,8 @@ final class PlagueDemoSession: ObservableObject {
         }
 
         if let ignoreUntil = controlWindowBackgroundIgnoreUntil,
-           Date() < ignoreUntil {
+           Date() < ignoreUntil,
+           forestImmersiveState != .open {
             print(
                 """
                 [PlagueQuit] ignored transient control window background
@@ -404,9 +417,10 @@ final class PlagueDemoSession: ObservableObject {
         stopWalkLoopForQuit()
         statusMessage = "Closing."
         forestImmersiveState = .closing
-        forestImmersiveStatus = "Closing forest immersive..."
+        forestImmersiveStatus = "Closing mixed room scene..."
         activeMode = .none
         send(.prepareForUserQuitOrClose)
+        send(.cancelRoomSkinning)
         cancelRuntimeTasksForQuit()
         stopAudioForQuit()
 
@@ -417,7 +431,7 @@ final class PlagueDemoSession: ObservableObject {
 
         forestImmersiveState = .closed
         immersiveSpaceStatus = .closed
-        forestImmersiveStatus = "Forest immersive closed."
+        forestImmersiveStatus = "Mixed room scene closed."
 
         print("[PlagueQuit] shutdown complete")
     }
@@ -452,5 +466,46 @@ final class PlagueDemoSession: ObservableObject {
     func triggerDamageTint(intensity: Double) {
         damageTintIntensity = max(0.0, min(intensity, 1.0))
         damageTintEventID = UUID()
+    }
+
+    func startRoomSkinningExperiment() {
+        roomSkinningStatus = "Room skinning scan requested."
+        send(.startRoomSkinningScan)
+    }
+
+    func confirmRoomSkinningPlacement() {
+        roomSkinningStatus = "Room skinning confirm requested."
+        send(.confirmRoomSkinningPlacement)
+    }
+
+    func enterRoomSkinningDoorAdjustment() {
+        roomSkinningStatus = "Room skinning adjustment requested."
+        send(.enterRoomSkinningDoorAdjustment)
+    }
+
+    func confirmRoomSkinningDoorAdjustment() {
+        roomSkinningStatus = "Room skinning lock requested."
+        send(.confirmRoomSkinningDoorAdjustment)
+    }
+
+    func cancelRoomSkinningExperiment() {
+        roomSkinningStatus = "Room skinning cancel requested."
+        send(.cancelRoomSkinning)
+    }
+
+    func togglePortalHDRIAtmosphere() {
+        portalHDRIAtmosphere = portalHDRIAtmosphere.next
+        portalHDRIRevision &+= 1
+
+        print(
+            """
+            [PortalHDRI] atmosphere toggled
+              atmosphere: \(portalHDRIAtmosphere.rawValue)
+              exr: \(portalHDRIAtmosphere.exrResourceName).exr
+              revision: \(portalHDRIRevision)
+            """
+        )
+
+        send(.updatePortalHDRIAtmosphere(portalHDRIAtmosphere))
     }
 }

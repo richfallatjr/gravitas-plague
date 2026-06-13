@@ -132,7 +132,7 @@ struct PlagueOperationModePosterRoot: View {
                 attachmentAnchor: .scene(.top),
                 contentAlignment: .center
             ) {
-                PlagueForestTopOrnament(session: session)
+                PlagueRoomSkinningTopOrnament(session: session)
             }
             .background {
                 PlagueWindowAttachmentObserver(
@@ -232,20 +232,14 @@ struct PlagueOperationModePosterRoot: View {
 
         dismissSecondaryWindowsForQuit()
 
-        Task { @MainActor in
-            let outcome = await dismissImmersiveSpaceForQuit(
-                timeoutNanoseconds: 750_000_000
-            )
+        print(
+            """
+            [PlagueQuit] kill switch forcing process exit
+              reason: \(reason)
+            """
+        )
 
-            print(
-                """
-                [PlagueQuit] dismissImmersiveSpace outcome
-                  outcome: \(outcome)
-                """
-            )
-
-            exit(0)
-        }
+        exit(0)
     }
 
     @MainActor
@@ -416,6 +410,8 @@ struct PlagueOperationModePosterMenu: View {
 
         if session.immersiveSpaceStatus == .closed {
             session.immersiveSpaceStatus = .opening
+            session.forestImmersiveState = .opening
+            session.forestImmersiveStatus = "Opening mixed room scene..."
             session.statusMessage = "Opening mixed-reality space."
 
             let result = await openImmersiveSpace(
@@ -430,21 +426,21 @@ struct PlagueOperationModePosterMenu: View {
             case .userCancelled:
                 session.immersiveSpaceStatus = .closed
                 session.forestImmersiveState = .closed
-                session.forestImmersiveStatus = "Forest immersive cancelled."
+                session.forestImmersiveStatus = "Mixed room scene cancelled."
                 session.statusMessage = "Immersive space was not opened."
                 return
 
             case .error:
                 session.immersiveSpaceStatus = .closed
                 session.forestImmersiveState = .failed
-                session.forestImmersiveStatus = "Forest immersive failed."
+                session.forestImmersiveStatus = "Mixed room scene failed."
                 session.statusMessage = "Could not open immersive space."
                 return
 
             @unknown default:
                 session.immersiveSpaceStatus = .closed
                 session.forestImmersiveState = .failed
-                session.forestImmersiveStatus = "Forest immersive failed: \(String(describing: result))"
+                session.forestImmersiveStatus = "Mixed room scene failed: \(String(describing: result))"
                 session.statusMessage = "Unknown immersive-space result."
                 return
             }
@@ -452,6 +448,128 @@ struct PlagueOperationModePosterMenu: View {
 
         print("[PlagueMenu] selected operation mode: \(mode.rawValue)")
         session.selectOperationMode(mode)
+    }
+}
+
+struct PlagueRoomSkinningTopOrnament: View {
+    @ObservedObject var session: PlagueDemoSession
+
+    @Environment(\.openImmersiveSpace) private var openImmersiveSpace
+    @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button {
+                Task { @MainActor in
+                    await session.toggleForestImmersive(
+                        openImmersiveSpace: openImmersiveSpace,
+                        dismissImmersiveSpace: dismissImmersiveSpace
+                    )
+                }
+            } label: {
+                Image(systemName: mixedSceneIconName)
+                    .font(.system(size: 23, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .help(mixedSceneHelpText)
+            .accessibilityLabel(mixedSceneHelpText)
+
+            Button {
+                session.togglePortalHDRIAtmosphere()
+            } label: {
+                Image(systemName: session.portalHDRIAtmosphere == .night ? "moon.stars.fill" : "cloud.sun.fill")
+                    .font(.system(size: 23, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .disabled(session.forestImmersiveState != .open)
+            .help("Switch portal backdrop")
+            .accessibilityLabel("Switch portal backdrop")
+
+            Button {
+                session.startRoomSkinningExperiment()
+            } label: {
+                Image(systemName: "door.left.hand.open")
+                    .font(.system(size: 23, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .disabled(session.forestImmersiveState != .open)
+            .help("Scan wall and preview portal door")
+            .accessibilityLabel("Scan wall and preview portal door")
+
+            Button {
+                session.confirmRoomSkinningPlacement()
+            } label: {
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: 23, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .disabled(session.forestImmersiveState != .open)
+            .help("Confirm portal door")
+            .accessibilityLabel("Confirm portal door")
+
+            Button {
+                session.enterRoomSkinningDoorAdjustment()
+            } label: {
+                Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
+                    .font(.system(size: 22, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .disabled(session.forestImmersiveState != .open)
+            .help("Adjust portal door")
+            .accessibilityLabel("Adjust portal door")
+
+            Button {
+                session.confirmRoomSkinningDoorAdjustment()
+            } label: {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .disabled(session.forestImmersiveState != .open)
+            .help("Lock portal door")
+            .accessibilityLabel("Lock portal door")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .glassBackgroundEffect()
+        .onAppear {
+            print("[RoomSkinning] top ornament appeared")
+        }
+    }
+
+    private var mixedSceneIconName: String {
+        switch session.forestImmersiveState {
+        case .open:
+            return "door.left.hand.open"
+
+        case .opening, .closing:
+            return "hourglass"
+
+        case .closed, .failed:
+            return "door.left.hand.closed"
+        }
+    }
+
+    private var mixedSceneHelpText: String {
+        switch session.forestImmersiveState {
+        case .open:
+            return "Exit mixed room scene"
+
+        case .opening:
+            return "Opening mixed room scene"
+
+        case .closing:
+            return "Closing mixed room scene"
+
+        case .closed, .failed:
+            return "Enter mixed room scene"
+        }
     }
 }
 

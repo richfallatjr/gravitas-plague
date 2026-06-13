@@ -26,6 +26,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let spatialProvider = PhaseOneSpatialProvider()
     private let audioController = GravitasDemoAudioController()
     private let forestEnvironmentController = PlagueGaussianForestEnvironmentController()
+    private let roomSkinningCoordinator = RoomSkinningCoordinator()
 
     @Published private(set) var isPlayerDeathSequenceActive = false
 
@@ -39,6 +40,21 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     var onForestSplatLoadStatusChanged: ((String) -> Void)? {
         didSet {
             forestEnvironmentController.onSplatLoadStatusChanged = onForestSplatLoadStatusChanged
+        }
+    }
+    var onForestGeometryLoadStatusChanged: ((String) -> Void)? {
+        didSet {
+            forestEnvironmentController.onGeometryLoadStatusChanged = onForestGeometryLoadStatusChanged
+        }
+    }
+    var onForestAppearanceStatusChanged: ((String) -> Void)? {
+        didSet {
+            forestEnvironmentController.onAppearanceStatusChanged = onForestAppearanceStatusChanged
+        }
+    }
+    var onRoomSkinningStatusChanged: ((String) -> Void)? {
+        didSet {
+            roomSkinningCoordinator.onStatusChanged = onRoomSkinningStatusChanged
         }
     }
     weak var deathPresentationController: DeathPresentationController?
@@ -82,11 +98,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         atmosphereRevision: Int
     ) async -> AnchorEntity {
         if let sceneRoot {
-            await forestEnvironmentController.updateAtmosphereIfNeeded(
-                atmosphere: initialAtmosphere,
-                revision: atmosphereRevision
-            )
-
             return sceneRoot
         }
 
@@ -94,21 +105,22 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         root.name = "GravitasPlague_PhaseOne_SceneRoot"
 
         CharacterAssetRegistry.validateRequiredCharacterAssets()
-        PlagueForestAssetValidator.validate()
+        PortalHDRIAssetValidator.validate()
 
         _ = makeHeadAnchor()
-        forestEnvironmentController.attach(to: root)
+        roomSkinningCoordinator.installIfNeeded(sceneRoot: root)
 
         audioController.startImmersiveAudio()
+
+        spatialProvider.onPlaneAnchorUpdate = { [weak self] update in
+            self?.roomSkinningCoordinator.handlePlaneAnchorUpdate(update)
+        }
 
         await spatialProvider.start()
 
         let jockController = JockRetargetTestController()
         wireJockCallbacks(jockController)
         root.addChild(jockController.rootEntity)
-        forestEnvironmentController.applyIBLReceiverRecursively(
-            root: jockController.rootEntity
-        )
 
         audioController.attachToSceneIfNeeded(
             sceneRoot: root,
@@ -119,11 +131,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         self.jockRetargetController = jockController
         validateDeathPresentationAssets()
 
-        await forestEnvironmentController.applyInitialAtmosphere(
-            initialAtmosphere,
-            revision: atmosphereRevision
-        )
-
         drainPendingCommands()
 
         return root
@@ -133,14 +140,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         atmosphere: PlagueForestAtmosphere,
         revision: Int
     ) async {
-        guard sceneRoot != nil else {
-            return
-        }
-
-        await forestEnvironmentController.updateAtmosphereIfNeeded(
-            atmosphere: atmosphere,
-            revision: revision
-        )
+        // Gaussian forest loading is intentionally dormant for the room-skinning MVP.
     }
 
     func makeHeadAnchor() -> AnchorEntity {
@@ -271,6 +271,24 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         case .closeDemo:
             prepareForUserQuitOrClose()
+
+        case .startRoomSkinningScan:
+            roomSkinningCoordinator.startRoomSkinning()
+
+        case .confirmRoomSkinningPlacement:
+            roomSkinningCoordinator.confirmRoomSkinning()
+
+        case .enterRoomSkinningDoorAdjustment:
+            roomSkinningCoordinator.enterDoorAdjustment()
+
+        case .confirmRoomSkinningDoorAdjustment:
+            roomSkinningCoordinator.confirmDoorPlacement()
+
+        case .cancelRoomSkinning:
+            roomSkinningCoordinator.cancelRoomSkinning()
+
+        case .updatePortalHDRIAtmosphere(let atmosphere):
+            roomSkinningCoordinator.updatePortalContentAtmosphere(atmosphere)
         }
     }
 
@@ -285,7 +303,22 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         lastTickDate = date
 
-        let currentHeadPosition = spatialProvider.currentPose()?.headPosition
+        let currentPose = spatialProvider.currentPose()
+        let currentHeadPosition = currentPose?.headPosition
+
+        if let currentPose {
+            roomSkinningCoordinator.updatePlayerPose(
+                position: currentPose.headPosition,
+                forward: currentPose.headForward
+            )
+
+            roomSkinningCoordinator.slideDoorWithRay(
+                RoomSkinningRay(
+                    origin: currentPose.headPosition,
+                    direction: currentPose.headForward
+                )
+            )
+        }
 
         if hordeBenchmarkRunning {
             for controller in hordeEnemyControllersByID.values {
@@ -324,7 +357,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
     func shutdown() {
         stopHordeBenchmark()
+        roomSkinningCoordinator.cancelRoomSkinning()
         jockRetargetController?.hide()
+        spatialProvider.onPlaneAnchorUpdate = nil
         spatialProvider.stop()
         audioController.stopAllAudio()
         resetHordeBenchmarkDeathPresentation()
@@ -834,30 +869,37 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             fallback: SIMD3<Float>(1, 0, 0)
         )
 
-        let angles: [Float]
+        var positions: [SIMD3<Float>] = []
+        positions.reserveCapacity(count)
 
-        if count == 1 {
-            angles = [0]
-        } else if count == 2 {
-            angles = [0, .pi]
-        } else {
-            angles = (0..<count).map { index in
-                Float(index) * 2.0 * .pi / Float(count)
+        let candidateCount = max(count * 8, 16)
+
+        for index in 0..<candidateCount {
+            guard positions.count < count else {
+                break
             }
-        }
 
-        return angles.map { angle in
+            let angle = Float(index) * 2.0 * .pi / Float(candidateCount)
             let direction = PhaseOneMath.normalizedOrFallback(
                 front * cos(angle) + right * sin(angle),
                 fallback: front
             )
 
-            return SIMD3<Float>(
+            let candidate = SIMD3<Float>(
                 spawnPose.headPosition.x + direction.x * hordeSpawnRadiusMeters,
                 floorY,
                 spawnPose.headPosition.z + direction.z * hordeSpawnRadiusMeters
             )
+
+            if roomSkinningCoordinator.isUnsafeCombatPositionNearConfirmedPortalWall(candidate) {
+                print("[RoomSkinning] rejected combat spawn near portal wall")
+                continue
+            }
+
+            positions.append(candidate)
         }
+
+        return positions
     }
 
     private func validateWaveSpawnCount(
