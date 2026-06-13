@@ -4,6 +4,7 @@ import RealityKit
 @MainActor
 enum PlagueNativeBloomInstaller {
     static let targetIntensity: Float = 0.80
+    static let targetStrength: Float = targetIntensity
 
     static func installStrictBloom(
         on root: Entity
@@ -13,13 +14,34 @@ enum PlagueNativeBloomInstaller {
         }
 
         installBloomVisionOS27(
-            on: root
+            on: root,
+            label: "strict_bloom"
+        )
+    }
+
+    static func installOnEntity(
+        _ entity: Entity,
+        label: String
+    ) {
+        guard #available(visionOS 27.0, *) else {
+            fatalError(
+                """
+                [PlagueBloom] BloomComponent requires visionOS 27. No fallback.
+                  label: \(label)
+                """
+            )
+        }
+
+        installBloomVisionOS27(
+            on: entity,
+            label: label
         )
     }
 
     @available(visionOS 27.0, *)
     private static func installBloomVisionOS27(
-        on root: Entity
+        on root: Entity,
+        label: String
     ) {
         root.components.set(
             BloomComponent(
@@ -28,7 +50,7 @@ enum PlagueNativeBloomInstaller {
         )
 
         var options = BloomOptionsComponent()
-        options.strength = targetIntensity
+        options.strength = targetStrength
         options.threshold = 0.65
         options.blurRadius = 0.80
         root.components.set(options)
@@ -36,6 +58,7 @@ enum PlagueNativeBloomInstaller {
         print(
             """
             [PlagueBloom] native RealityKit BloomComponent installed
+              label: \(label)
               intensityTarget: \(targetIntensity)
               threshold: \(options.threshold)
               blurRadius: \(options.blurRadius)
@@ -45,6 +68,30 @@ enum PlagueNativeBloomInstaller {
               noFallback: true
             """
         )
+    }
+
+    static func verifyInstalled(
+        on entity: Entity,
+        label: String
+    ) {
+        guard #available(visionOS 27.0, *) else {
+            return
+        }
+
+        if entity.components[BloomComponent.self] == nil {
+            print(
+                """
+                [PlagueBloom] ERROR BloomComponent missing
+                  label: \(label)
+                  reinstalling: true
+                """
+            )
+
+            installOnEntity(
+                entity,
+                label: "\(label)_reinstall"
+            )
+        }
     }
 
     static func removeBloom(

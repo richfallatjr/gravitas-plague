@@ -437,6 +437,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 )
             }
 
+            hordePortalManager.updatePortalFX(
+                deltaTime: deltaTime
+            )
+
             for controller in hordeEnemyControllersByID.values {
                 controller.update(
                     deltaTime: deltaTime,

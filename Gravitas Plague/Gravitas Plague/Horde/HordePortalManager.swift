@@ -7,6 +7,7 @@ final class HordePortalManager {
     private(set) var portals: [UUID: HordePortal] = [:]
     private var portalOrder: [UUID] = []
     private var entranceSideByPortalID: [UUID: HordePortalEntranceSide] = [:]
+    private var transitionFXByPortalID: [UUID: PortalTransitionFXController] = [:]
 
     private weak var sceneRoot: Entity?
     private weak var wallManager: WallPlaneManager?
@@ -31,6 +32,11 @@ final class HordePortalManager {
             )
         }
 
+        for fx in transitionFXByPortalID.values {
+            fx.teardown()
+        }
+        transitionFXByPortalID.removeAll()
+
         for portal in portals.values {
             portal.root.removeFromParent()
         }
@@ -40,6 +46,16 @@ final class HordePortalManager {
         entranceSideByPortalID.removeAll()
 
         print("[HordePortal] reset")
+    }
+
+    func updatePortalFX(
+        deltaTime: Float
+    ) {
+        for fx in transitionFXByPortalID.values {
+            fx.update(
+                deltaTime: deltaTime
+            )
+        }
     }
 
     func createPortalForWave(
@@ -132,6 +148,7 @@ final class HordePortalManager {
             return nil
         }
 
+        let portalID = UUID()
         let root = Entity()
         root.name = "HordePortalRoot_wave\(wave)_\(UUID().uuidString.prefix(6))"
 
@@ -206,6 +223,44 @@ final class HordePortalManager {
             return nil
         }
 
+        let perimeterPoints = HordePortalApertureMeshFactory.makeBoundary3D(
+            profile: profile
+        ).map {
+            SIMD3<Float>(
+                $0.x,
+                $0.y,
+                0.018
+            )
+        }
+
+        let transitionFX = PortalTransitionFXController(
+            perimeterLocalPoints: perimeterPoints,
+            portalNormalLocal: SIMD3<Float>(0, 0, 1)
+        )
+
+        transitionFX.build()
+        root.addChild(transitionFX.rootEntity)
+        transitionFXByPortalID[portalID] = transitionFX
+
+        print(
+            """
+            [HordePortal] transition FX attached
+              portalID: \(portalID)
+              perimeterPoints: \(perimeterPoints.count)
+              tube: true
+              embers: true
+              bloom: true
+            """
+        )
+
+        print(
+            """
+            [HordePortal] bloom-driving materials active
+              tubeEmissiveIntensity: \(PortalFXDefaults.tubeEmissiveIntensity)
+              bloomTargetStrength: \(PortalFXDefaults.bloomTargetStrength)
+            """
+        )
+
         root.setTransformMatrix(
             transform,
             relativeTo: nil
@@ -230,7 +285,6 @@ final class HordePortalManager {
             worldCenter.x - playerPosition.x,
             worldCenter.z - playerPosition.z
         )
-        let portalID = UUID()
 
         let portal = HordePortal(
             id: portalID,

@@ -104,6 +104,20 @@ enum HordePortalApertureMeshFactory {
             profile.leftMid
         ]
     }
+
+    static func makeBoundary3D(
+        profile: HordePortalApertureProfile
+    ) -> [SIMD3<Float>] {
+        makeBoundary(
+            profile: profile
+        ).map {
+            SIMD3<Float>(
+                $0.x,
+                $0.y,
+                0
+            )
+        }
+    }
 }
 
 enum HordePortalSoftWallFeatherFactory {
