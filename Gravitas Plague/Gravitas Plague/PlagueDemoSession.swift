@@ -78,6 +78,7 @@ final class PlagueDemoSession: ObservableObject {
     @Published var forestAtmosphere: PlagueForestAtmosphere = .overcast
     @Published var forestAtmosphereRevision: Int = 0
     @Published var forestImmersiveStatus = "Forest immersive closed."
+    @Published var forestSplatLoadStatus = "Forest splat idle."
     @Published var damageTintEventID = UUID()
     @Published var damageTintIntensity: Double = 0.0
     @Published private(set) var latestCommand: CommandEnvelope?

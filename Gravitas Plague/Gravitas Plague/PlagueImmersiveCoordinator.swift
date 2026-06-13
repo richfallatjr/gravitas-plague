@@ -36,6 +36,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             forestEnvironmentController.onStrictAtmosphereFailure = onForestAtmosphereFatalFailure
         }
     }
+    var onForestSplatLoadStatusChanged: ((String) -> Void)? {
+        didSet {
+            forestEnvironmentController.onSplatLoadStatusChanged = onForestSplatLoadStatusChanged
+        }
+    }
     weak var deathPresentationController: DeathPresentationController?
 
     private var sceneRoot: AnchorEntity?

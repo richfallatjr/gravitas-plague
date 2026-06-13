@@ -57,6 +57,9 @@ struct PlagueImmersiveView: View {
                     await dismissImmersiveSpace()
                 }
             }
+            coordinator.onForestSplatLoadStatusChanged = { status in
+                session.forestSplatLoadStatus = status
+            }
         }
         .onChange(of: session.damageTintEventID) { _, _ in
             damageTintController.trigger(

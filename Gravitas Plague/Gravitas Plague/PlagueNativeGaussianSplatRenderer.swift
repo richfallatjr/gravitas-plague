@@ -12,7 +12,7 @@ enum PlagueNativeGaussianSplatRenderer {
             code: 1401,
             userInfo: [
                 NSLocalizedDescriptionKey:
-                    "Bulk Gaussian splat entity loading is disabled for \(plyURL.lastPathComponent). Use PlagueStreamingGaussianSplatLoader so chunk 0 renders immediately."
+                    "Bulk Gaussian splat entity loading is disabled for \(plyURL.lastPathComponent). Use PlagueGaussianForestEnvironmentController's stateful stream so chunk 0 renders immediately and the stream runs to completion."
             ]
         )
     }
@@ -83,7 +83,27 @@ enum PlagueNativeGaussianSplatRenderer {
     }
 }
 
+struct PlagueNativeSplatChunkHandle {
+    let entity: Entity
+    let debugChunkIndex: Int
+    let debugSplatCount: Int
+}
+
 enum PlagueRealityKitGaussianSplatBridge {
+    static func makeHandle(
+        chunk: PlagueGaussianSplatChunk
+    ) throws -> PlagueNativeSplatChunkHandle {
+        let entity = try makeEntity(
+            chunk: chunk
+        )
+
+        return PlagueNativeSplatChunkHandle(
+            entity: entity,
+            debugChunkIndex: chunk.chunkIndex,
+            debugSplatCount: chunk.count
+        )
+    }
+
     static func makeEntity(
         chunk: PlagueGaussianSplatChunk
     ) throws -> Entity {
@@ -640,7 +660,7 @@ final class PlagueGaussianSplatCache {
             code: 701,
             userInfo: [
                 NSLocalizedDescriptionKey:
-                    "Cached bulk Gaussian splat entities are disabled for \(atmosphere.rawValue) from \(sourceURL.lastPathComponent). Use PlagueStreamingGaussianSplatLoader."
+                    "Cached bulk Gaussian splat entities are disabled for \(atmosphere.rawValue) from \(sourceURL.lastPathComponent). Use PlagueGaussianForestEnvironmentController's stateful stream."
             ]
         )
     }

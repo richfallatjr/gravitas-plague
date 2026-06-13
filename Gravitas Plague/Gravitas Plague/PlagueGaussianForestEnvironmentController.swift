@@ -7,7 +7,7 @@ enum PlagueImmersiveSpaceID {
     static let forest = "plague-forest-immersive-space"
 }
 
-enum PlagueForestAtmosphere: String, Codable, CaseIterable, Identifiable {
+enum PlagueForestAtmosphere: String, Codable, CaseIterable, Identifiable, Hashable {
     case overcast
     case night
 
@@ -134,6 +134,32 @@ struct PlagueGaussianSplatPlacement {
     )
 }
 
+enum PlagueGaussianSplatStreamState: String {
+    case idle
+    case planning
+    case loadingHDRI
+    case decoding
+    case creatingNativeResource
+    case addingChunkEntity
+    case streaming
+    case complete
+    case failed
+    case cancelled
+}
+
+struct PlagueGaussianSplatStreamKey: Hashable {
+    let atmosphere: PlagueForestAtmosphere
+    let revision: Int
+}
+
+enum PlagueGaussianSplatStreamTuning {
+    nonisolated static let firstChunkSize = 50_000
+    nonisolated static let laterChunkSize = 150_000
+
+    // Set only while debugging native resource caps. Nil means stream every chunk.
+    nonisolated static let stopAfterChunkForDebug: Int? = nil
+}
+
 @MainActor
 private func applyHDRILighting(
     _ environment: EnvironmentResource,
@@ -183,133 +209,36 @@ private func applyIBLReceiverRecursively(
 }
 
 @MainActor
-final class PlagueStreamingGaussianSplatLoader {
-    private var activeTask: Task<Void, Never>?
-
-    func cancel() {
-        activeTask?.cancel()
-        activeTask = nil
-    }
-
-    func load(
-        atmosphere: PlagueForestAtmosphere,
-        plyURL: URL,
-        hdri: EnvironmentResource,
-        splatRoot: Entity,
-        lightingEntity: Entity,
-        onFirstChunkVisible: @escaping @MainActor () -> Void,
-        onFailure: @escaping @MainActor (Error) -> Void,
-        onComplete: @escaping @MainActor (Int) -> Void
-    ) {
-        cancel()
-
-        activeTask = Task { @MainActor in
-            do {
-                try Task.checkCancellation()
-
-                let planTask = Task.detached(priority: .userInitiated) {
-                    try PlagueGaussianSplatChunkPlanner.makePlan(
-                        url: plyURL
-                    )
-                }
-
-                let plan = try await withTaskCancellationHandler {
-                    try await planTask.value
-                } onCancel: {
-                    planTask.cancel()
-                }
-
-                try Task.checkCancellation()
-
-                applyHDRILighting(
-                    hdri,
-                    atmosphere: atmosphere,
-                    lightingEntity: lightingEntity,
-                    receiverRoot: splatRoot
-                )
-
-                var createdCount = 0
-
-                for chunkIndex in 0..<plan.chunkCount {
-                    try Task.checkCancellation()
-
-                    let decodeTask = Task.detached(priority: .userInitiated) {
-                        try PlagueGaussianSplatChunkDecoder.decodeChunk(
-                            plan: plan,
-                            chunkIndex: chunkIndex
-                        )
-                    }
-
-                    let chunk = try await withTaskCancellationHandler {
-                        try await decodeTask.value
-                    } onCancel: {
-                        decodeTask.cancel()
-                    }
-
-                    try Task.checkCancellation()
-
-                    let entity = try PlagueRealityKitGaussianSplatBridge.makeEntity(
-                        chunk: chunk
-                    )
-
-                    entity.name = "GaussianSplat_\(atmosphere.rawValue)_chunk\(chunkIndex)"
-                    splatRoot.addChild(entity)
-
-                    createdCount += 1
-
-                    print(
-                        """
-                        [PlagueGaussianSplat] native chunk entity added
-                          atmosphere: \(atmosphere.rawValue)
-                          chunkIndex: \(chunkIndex)
-                          chunkCount: \(plan.chunkCount)
-                          splats: \(chunk.count)
-                          createdEntities: \(createdCount)
-                          noFallback: true
-                        """
-                    )
-
-                    if chunkIndex == 0 {
-                        onFirstChunkVisible()
-                    }
-
-                    await Task.yield()
-                }
-
-                onComplete(createdCount)
-            } catch is CancellationError {
-                print(
-                    """
-                    [PlagueGaussianSplat] streaming load cancelled
-                      atmosphere: \(atmosphere.rawValue)
-                    """
-                )
-            } catch {
-                onFailure(error)
-            }
-        }
-    }
-}
-
-@MainActor
 final class PlagueGaussianForestEnvironmentController {
     private let environmentRoot = Entity()
     private let splatRoot = Entity()
     private let lightingEntity = Entity()
-    private let streamingLoader = PlagueStreamingGaussianSplatLoader()
 
     private weak var sceneRoot: Entity?
     private var isInstalled = false
     private var activeAtmosphere: PlagueForestAtmosphere?
     private var activeRevision = -1
-    private var isSwapInFlight = false
-    private var failedAtmosphereRevisionKey: String?
-    private var inFlightAtmosphereRevisionKey: String?
+
+    private var activeStreamKey: PlagueGaussianSplatStreamKey?
+    private var completedStreamKey: PlagueGaussianSplatStreamKey?
+    private var failedStreamKey: PlagueGaussianSplatStreamKey?
+    private var streamState: PlagueGaussianSplatStreamState = .idle
+    private var activeStreamTask: Task<Void, Never>?
+
     private var currentRoot: Entity?
     private var pendingRoot: Entity?
-    private var atmosphereGeneration = 0
+    private var currentChunkEntities: [Entity] = []
+    private var pendingChunkEntities: [Entity] = []
+    private var currentChunkHandles: [PlagueNativeSplatChunkHandle] = []
+    private var pendingChunkHandles: [PlagueNativeSplatChunkHandle] = []
+
+    private var loadedChunkCount = 0
+    private var expectedChunkCount = 0
+    private var loadedSplatCount = 0
+    private var expectedSplatCount = 0
 
     var onStrictAtmosphereFailure: ((Error) -> Void)?
+    var onSplatLoadStatusChanged: ((String) -> Void)?
 
     init() {
         environmentRoot.name = "PlagueForestEnvironmentRoot"
@@ -350,71 +279,40 @@ final class PlagueGaussianForestEnvironmentController {
         revision: Int,
         force: Bool = false
     ) async {
-        requestAtmosphere(
-            atmosphere,
-            revision: revision,
-            force: force
+        let key = PlagueGaussianSplatStreamKey(
+            atmosphere: atmosphere,
+            revision: revision
         )
-    }
 
-    private func requestAtmosphere(
-        _ atmosphere: PlagueForestAtmosphere,
-        revision: Int,
-        force: Bool = false
-    ) {
-        let key = "\(atmosphere.rawValue)|\(revision)"
+        if !force {
+            if completedStreamKey == key {
+                return
+            }
 
-        guard force ||
-              activeAtmosphere != atmosphere ||
-              activeRevision != revision else {
-            return
+            if activeStreamKey == key,
+               streamState != .failed,
+               streamState != .cancelled {
+                return
+            }
+
+            if failedStreamKey == key {
+                print(
+                    """
+                    [PlagueForest] skipped retry for failed stream key
+                      atmosphere: \(atmosphere.rawValue)
+                      revision: \(revision)
+                      change revision to retry
+                    """
+                )
+
+                return
+            }
         }
 
-        if failedAtmosphereRevisionKey == key,
-           !force {
-            return
-        }
-
-        if isSwapInFlight,
-           inFlightAtmosphereRevisionKey == key {
-            return
-        }
-
-        streamingLoader.cancel()
-        pendingRoot?.removeFromParent()
-        pendingRoot = nil
-
-        isSwapInFlight = true
-        inFlightAtmosphereRevisionKey = key
-        atmosphereGeneration += 1
-
-        let generation = atmosphereGeneration
-
-        do {
-            try startStreamingAtmosphere(
-                atmosphere: atmosphere,
-                revision: revision,
-                key: key,
-                generation: generation
-            )
-        } catch {
-            failedAtmosphereRevisionKey = key
-            isSwapInFlight = false
-            inFlightAtmosphereRevisionKey = nil
-
-            print(
-                """
-                [PlagueForest] FATAL atmosphere start failed
-                  atmosphere: \(atmosphere.rawValue)
-                  revision: \(revision)
-                  error: \(error.localizedDescription)
-                  noFallback: true
-                  preservedPreviousAtmosphere: \(activeAtmosphere?.rawValue ?? "none")
-                """
-            )
-
-            onStrictAtmosphereFailure?(error)
-        }
+        startAtmosphereStream(
+            atmosphere: atmosphere,
+            revision: revision
+        )
     }
 
     func applyIBLReceiverRecursively(
@@ -432,205 +330,550 @@ final class PlagueGaussianForestEnvironmentController {
     }
 
     func shutdown() {
-        streamingLoader.cancel()
+        activeStreamTask?.cancel()
+        activeStreamTask = nil
         pendingRoot?.removeFromParent()
         currentRoot?.removeFromParent()
         pendingRoot = nil
         currentRoot = nil
+        pendingChunkEntities.removeAll()
+        currentChunkEntities.removeAll()
+        pendingChunkHandles.removeAll()
+        currentChunkHandles.removeAll()
         environmentRoot.removeFromParent()
         sceneRoot = nil
         isInstalled = false
         activeAtmosphere = nil
         activeRevision = -1
-        isSwapInFlight = false
-        failedAtmosphereRevisionKey = nil
-        inFlightAtmosphereRevisionKey = nil
-        atmosphereGeneration += 1
+        activeStreamKey = nil
+        completedStreamKey = nil
+        failedStreamKey = nil
+        streamState = .idle
+        loadedChunkCount = 0
+        expectedChunkCount = 0
+        loadedSplatCount = 0
+        expectedSplatCount = 0
 
         print("[PlagueForest] environment shutdown")
     }
 
-    private func startStreamingAtmosphere(
+    private func startAtmosphereStream(
         atmosphere: PlagueForestAtmosphere,
-        revision: Int,
-        key: String,
-        generation: Int
-    ) throws {
-        guard let plyURL = Bundle.main.url(
-            forResource: atmosphere.gaussianSplatResourceName,
-            withExtension: atmosphere.gaussianSplatFileExtension
-        ) else {
-            throw NSError(
-                domain: "PlagueForest",
-                code: 404,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Missing Gaussian splat \(atmosphere.gaussianSplatResourceName).\(atmosphere.gaussianSplatFileExtension)"
-                ]
-            )
-        }
-
-        try PlagueGaussianSplatAvailability.assertNativeAvailable()
-
-        let hdri = try loadHDRIEnvironment(
-            atmosphere: atmosphere
+        revision: Int
+    ) {
+        let key = PlagueGaussianSplatStreamKey(
+            atmosphere: atmosphere,
+            revision: revision
         )
 
-        let placement = PlagueGaussianSplatPlacement()
+        if activeStreamKey == key,
+           streamState != .failed,
+           streamState != .cancelled {
+            print(
+                """
+                [PlagueForest] stream already active
+                  atmosphere: \(atmosphere.rawValue)
+                  revision: \(revision)
+                  state: \(streamState.rawValue)
+                  loadedChunks: \(loadedChunkCount)/\(expectedChunkCount)
+                """
+            )
+
+            return
+        }
+
+        cancelActiveStreamForReplacement()
+
+        activeStreamKey = key
+        failedStreamKey = nil
+        streamState = .planning
+        loadedChunkCount = 0
+        expectedChunkCount = 0
+        loadedSplatCount = 0
+        expectedSplatCount = 0
+        pendingChunkEntities.removeAll()
+        pendingChunkHandles.removeAll()
+
         let newRoot = Entity()
-        newRoot.name = "GaussianSplatStreamingRoot_\(atmosphere.rawValue)_rev\(revision)"
-        newRoot.position = placement.position
-        newRoot.scale = SIMD3<Float>(repeating: placement.scale)
-        newRoot.orientation = placement.rotation
+        newRoot.name = "GaussianSplatPendingRoot_\(atmosphere.rawValue)_rev\(revision)"
+        newRoot.isEnabled = true
+        applyCurrentSplatPlacement(
+            to: newRoot
+        )
 
         splatRoot.addChild(newRoot)
         pendingRoot = newRoot
 
         print(
             """
-            [PlagueForest] streaming atmosphere begin
+            [PlagueForest] stream started
               atmosphere: \(atmosphere.rawValue)
               revision: \(revision)
-              ply: \(plyURL.lastPathComponent)
-              hdri: \(atmosphere.hdriResourceName).\(atmosphere.hdriFileExtension)
-              waitingOnlyForFirstChunk: true
+              root: \(newRoot.name)
+              noFallback: true
+            """
+        )
+
+        emitSplatStatus("Forest \(atmosphere.displayName): planning stream.")
+
+        activeStreamTask = Task { [weak self] in
+            await self?.runAtmosphereStream(
+                key: key,
+                atmosphere: atmosphere,
+                root: newRoot
+            )
+        }
+
+        startStreamWatchdog(
+            key: key
+        )
+    }
+
+    private func cancelActiveStreamForReplacement() {
+        if let activeStreamTask {
+            activeStreamTask.cancel()
+
+            print(
+                """
+                [PlagueForest] cancelling previous stream
+                  activeKey: \(String(describing: activeStreamKey))
+                  loadedChunks: \(loadedChunkCount)/\(expectedChunkCount)
+                """
+            )
+        }
+
+        activeStreamTask = nil
+
+        if let pendingRoot {
+            pendingRoot.removeFromParent()
+        }
+
+        pendingRoot = nil
+        pendingChunkEntities.removeAll()
+        pendingChunkHandles.removeAll()
+    }
+
+    private func runAtmosphereStream(
+        key: PlagueGaussianSplatStreamKey,
+        atmosphere: PlagueForestAtmosphere,
+        root: Entity
+    ) async {
+        do {
+            try Task.checkCancellation()
+            try PlagueGaussianSplatAvailability.assertNativeAvailable()
+
+            guard let plyURL = Bundle.main.url(
+                forResource: atmosphere.gaussianSplatResourceName,
+                withExtension: atmosphere.gaussianSplatFileExtension
+            ) else {
+                throw NSError(
+                    domain: "PlagueForest",
+                    code: 404,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Missing Gaussian splat \(atmosphere.gaussianSplatResourceName).\(atmosphere.gaussianSplatFileExtension)"
+                    ]
+                )
+            }
+
+            streamState = .loadingHDRI
+
+            let hdri = try loadHDRIEnvironment(
+                atmosphere: atmosphere
+            )
+
+            try Task.checkCancellation()
+
+            streamState = .planning
+
+            let planTask = Task.detached(priority: .userInitiated) {
+                try PlagueGaussianSplatChunkPlanner.makePlan(
+                    url: plyURL,
+                    firstVisibleChunkSize: PlagueGaussianSplatStreamTuning.firstChunkSize,
+                    maxSplatsPerChunk: PlagueGaussianSplatStreamTuning.laterChunkSize
+                )
+            }
+
+            let plan = try await withTaskCancellationHandler {
+                try await planTask.value
+            } onCancel: {
+                planTask.cancel()
+            }
+
+            expectedChunkCount = plan.chunkCount
+            expectedSplatCount = plan.header.vertexCount
+
+            print(
+                """
+                [PlagueForest] stream plan ready
+                  atmosphere: \(atmosphere.rawValue)
+                  revision: \(key.revision)
+                  expectedChunks: \(expectedChunkCount)
+                  expectedSplats: \(expectedSplatCount)
+                  firstChunkSize: \(PlagueGaussianSplatStreamTuning.firstChunkSize)
+                  laterChunkSize: \(PlagueGaussianSplatStreamTuning.laterChunkSize)
+                  noFallback: true
+                """
+            )
+
+            let sphericalHarmonicsDegree = inferredSphericalHarmonicsDegree(
+                layout: plan.layout
+            )
+
+            if sphericalHarmonicsDegree == 0 {
+                print(
+                    """
+                    [PlagueForest] spherical harmonics degree is 0
+                      file: \(plyURL.lastPathComponent)
+                      meaning: DC color only; not a loading failure
+                      f_rest properties absent or not detected
+                    """
+                )
+            }
+
+            emitSplatStatus("Forest \(atmosphere.displayName): 0/\(expectedChunkCount) chunks, 0%.")
+
+            try Task.checkCancellation()
+
+            applyHDRILighting(
+                hdri,
+                atmosphere: atmosphere,
+                lightingEntity: lightingEntity,
+                receiverRoot: root
+            )
+
+            for chunkIndex in 0..<plan.chunkCount {
+                try Task.checkCancellation()
+
+                guard activeStreamKey == key else {
+                    throw CancellationError()
+                }
+
+                if let stop = PlagueGaussianSplatStreamTuning.stopAfterChunkForDebug,
+                   chunkIndex >= stop {
+                    throw NSError(
+                        domain: "PlagueForestDebug",
+                        code: 900,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "Debug stopAfterChunkForDebug hit at chunk \(chunkIndex)."
+                        ]
+                    )
+                }
+
+                streamState = .decoding
+
+                let decodeTask = Task.detached(priority: .userInitiated) {
+                    try PlagueGaussianSplatChunkDecoder.decodeChunk(
+                        plan: plan,
+                        chunkIndex: chunkIndex
+                    )
+                }
+
+                let chunk = try await withTaskCancellationHandler {
+                    try await decodeTask.value
+                } onCancel: {
+                    decodeTask.cancel()
+                }
+
+                try Task.checkCancellation()
+
+                guard activeStreamKey == key else {
+                    throw CancellationError()
+                }
+
+                streamState = .creatingNativeResource
+
+                let handle: PlagueNativeSplatChunkHandle
+
+                do {
+                    handle = try PlagueRealityKitGaussianSplatBridge.makeHandle(
+                        chunk: chunk
+                    )
+                } catch {
+                    throw NSError(
+                        domain: "PlagueForestChunkCreate",
+                        code: chunkIndex,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                """
+                                Failed creating native Gaussian splat entity for chunk \(chunkIndex).
+                                loadedChunks=\(loadedChunkCount)/\(expectedChunkCount)
+                                chunkSplats=\(chunk.count)
+                                underlying=\(error.localizedDescription)
+                                """
+                        ]
+                    )
+                }
+
+                handle.entity.name = "GaussianSplat_\(atmosphere.rawValue)_chunk\(chunkIndex)"
+
+                streamState = .addingChunkEntity
+
+                root.addChild(handle.entity)
+                pendingChunkEntities.append(handle.entity)
+                pendingChunkHandles.append(handle)
+
+                loadedChunkCount += 1
+                loadedSplatCount += chunk.count
+
+                let percent = Double(loadedSplatCount)
+                    / Double(max(expectedSplatCount, 1))
+                    * 100.0
+
+                print(
+                    """
+                    [PlagueForest] native chunk added
+                      atmosphere: \(atmosphere.rawValue)
+                      revision: \(key.revision)
+                      chunk: \(loadedChunkCount)/\(expectedChunkCount)
+                      chunkIndex: \(chunkIndex)
+                      chunkSplats: \(chunk.count)
+                      loadedSplats: \(loadedSplatCount)/\(expectedSplatCount)
+                      percent: \(String(format: "%.1f", percent))%
+                      noFallback: true
+                    """
+                )
+
+                emitSplatStatus(
+                    "Forest \(atmosphere.displayName): \(loadedChunkCount)/\(expectedChunkCount) chunks, \(Int(percent))%."
+                )
+
+                if chunkIndex == 0 {
+                    markFirstChunkVisible(
+                        key: key,
+                        atmosphere: atmosphere,
+                        root: root
+                    )
+                }
+
+                streamState = .streaming
+
+                try? await Task.sleep(nanoseconds: 1_000_000)
+                await Task.yield()
+            }
+
+            guard activeStreamKey == key else {
+                throw CancellationError()
+            }
+
+            streamState = .complete
+            completedStreamKey = key
+            activeStreamTask = nil
+
+            assert(
+                loadedChunkCount == expectedChunkCount,
+                "Stream marked complete before all chunks loaded."
+            )
+            assert(
+                loadedSplatCount == expectedSplatCount,
+                "Stream marked complete before all splats loaded."
+            )
+
+            currentChunkEntities = pendingChunkEntities
+            pendingChunkEntities.removeAll()
+            currentChunkHandles = pendingChunkHandles
+            pendingChunkHandles.removeAll()
+
+            print(
+                """
+                [PlagueForest] stream complete
+                  atmosphere: \(atmosphere.rawValue)
+                  revision: \(key.revision)
+                  chunks: \(loadedChunkCount)/\(expectedChunkCount)
+                  splats: \(loadedSplatCount)/\(expectedSplatCount)
+                  percent: 100.0%
+                  noFallback: true
+                """
+            )
+
+            emitSplatStatus("Forest \(atmosphere.displayName): complete, 100%.")
+        } catch is CancellationError {
+            if activeStreamKey == key {
+                streamState = .cancelled
+                activeStreamTask = nil
+            }
+
+            print(
+                """
+                [PlagueForest] stream cancelled
+                  key: \(key)
+                  loadedChunks: \(loadedChunkCount)/\(expectedChunkCount)
+                  loadedSplats: \(loadedSplatCount)/\(expectedSplatCount)
+                """
+            )
+        } catch {
+            guard activeStreamKey == key else {
+                return
+            }
+
+            streamState = .failed
+            failedStreamKey = key
+            activeStreamTask = nil
+
+            print(
+                """
+                [PlagueForest] FATAL stream failed
+                  atmosphere: \(atmosphere.rawValue)
+                  revision: \(key.revision)
+                  state: \(streamState.rawValue)
+                  loadedChunks: \(loadedChunkCount)/\(expectedChunkCount)
+                  loadedSplats: \(loadedSplatCount)/\(expectedSplatCount)
+                  error: \(error.localizedDescription)
+                  noFallback: true
+                """
+            )
+
+            emitSplatStatus(
+                "Forest \(atmosphere.displayName): failed at \(loadedChunkCount)/\(expectedChunkCount) chunks."
+            )
+
+            if loadedChunkCount == 0 {
+                pendingRoot?.removeFromParent()
+                pendingRoot = nil
+                onStrictAtmosphereFailure?(error)
+            }
+        }
+    }
+
+    private func markFirstChunkVisible(
+        key: PlagueGaussianSplatStreamKey,
+        atmosphere: PlagueForestAtmosphere,
+        root: Entity
+    ) {
+        guard activeStreamKey == key else {
+            return
+        }
+
+        if currentRoot !== root {
+            if let old = currentRoot {
+                old.removeFromParent()
+            }
+
+            currentRoot = root
+        }
+
+        if pendingRoot === root {
+            pendingRoot = nil
+        }
+
+        activeAtmosphere = atmosphere
+        activeRevision = key.revision
+
+        applyIBLReceiverRecursively(
+            root: environmentRoot
+        )
+
+        if let sceneRoot {
+            applyIBLReceiverRecursively(
+                root: sceneRoot
+            )
+        }
+
+        print(
+            """
+            [PlagueForest] first chunk visible
+              atmosphere: \(atmosphere.rawValue)
+              revision: \(key.revision)
+              rootStillAlive: \(root.parent != nil)
+              streamContinues: true
+              loadedChunks: \(loadedChunkCount)/\(expectedChunkCount)
               noFallback: true
             """
         )
 
         print(
             """
-            [PlagueForest] splat root placement
-              position: \(newRoot.position)
-              scale: \(newRoot.scale)
-              orientation: \(newRoot.orientation.vector)
+            [PlagueForest] atmosphere active
+              atmosphere: \(atmosphere.rawValue)
+              revision: \(key.revision)
+              ply: \(atmosphere.gaussianSplatResourceName).\(atmosphere.gaussianSplatFileExtension)
+              hdri: \(atmosphere.hdriResourceName).\(atmosphere.hdriFileExtension)
             """
         )
+    }
 
-        streamingLoader.load(
-            atmosphere: atmosphere,
-            plyURL: plyURL,
-            hdri: hdri,
-            splatRoot: newRoot,
-            lightingEntity: lightingEntity,
-            onFirstChunkVisible: { [weak self, weak newRoot] in
-                guard let self,
-                      let newRoot,
-                      generation == self.atmosphereGeneration else {
-                    newRoot?.removeFromParent()
+    private func startStreamWatchdog(
+        key: PlagueGaussianSplatStreamKey
+    ) {
+        Task { @MainActor in
+            var lastLoaded = -1
+
+            while activeStreamKey == key,
+                  streamState != .complete,
+                  streamState != .failed,
+                  streamState != .cancelled {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+
+                guard activeStreamKey == key else {
                     return
                 }
 
-                if let old = self.currentRoot,
-                   old !== newRoot {
-                    old.removeFromParent()
-                }
-
-                self.currentRoot = newRoot
-                self.pendingRoot = nil
-                self.activeAtmosphere = atmosphere
-                self.activeRevision = revision
-                self.failedAtmosphereRevisionKey = nil
-
-                if self.inFlightAtmosphereRevisionKey == key {
-                    self.isSwapInFlight = false
-                    self.inFlightAtmosphereRevisionKey = nil
-                }
-
-                self.applyIBLReceiverRecursively(
-                    root: self.environmentRoot
-                )
-
-                if let sceneRoot = self.sceneRoot {
-                    self.applyIBLReceiverRecursively(
-                        root: sceneRoot
-                    )
-                }
-
-                print(
-                    """
-                    [PlagueForest] first native splat chunk visible
-                      atmosphere: \(atmosphere.rawValue)
-                      revision: \(revision)
-                      oldRemovedAfterFirstChunk: true
-                      noFallback: true
-                    """
-                )
-
-                print(
-                    """
-                    [PlagueForest] atmosphere active
-                      atmosphere: \(atmosphere.rawValue)
-                      revision: \(revision)
-                      ply: \(atmosphere.gaussianSplatResourceName).\(atmosphere.gaussianSplatFileExtension)
-                      hdri: \(atmosphere.hdriResourceName).\(atmosphere.hdriFileExtension)
-                    """
-                )
-            },
-            onFailure: { [weak self, weak newRoot] error in
-                guard let self else {
-                    return
-                }
-
-                if generation != self.atmosphereGeneration {
-                    newRoot?.removeFromParent()
-                    return
-                }
-
-                self.failedAtmosphereRevisionKey = key
-
-                if self.inFlightAtmosphereRevisionKey == key {
-                    self.isSwapInFlight = false
-                    self.inFlightAtmosphereRevisionKey = nil
-                }
-
-                if self.currentRoot == nil {
+                if loadedChunkCount == lastLoaded {
                     print(
                         """
-                        [PlagueForest] FATAL first atmosphere failed
-                          atmosphere: \(atmosphere.rawValue)
-                          error: \(error.localizedDescription)
-                          noFallback: true
+                        [PlagueForest] WARNING stream progress stalled
+                          key: \(key)
+                          state: \(streamState.rawValue)
+                          loadedChunks: \(loadedChunkCount)/\(expectedChunkCount)
+                          loadedSplats: \(loadedSplatCount)/\(expectedSplatCount)
+                          rootAlive: \(currentRoot?.parent != nil || pendingRoot?.parent != nil)
+                          taskCancelled: \(activeStreamTask?.isCancelled ?? true)
                         """
                     )
                 } else {
                     print(
                         """
-                        [PlagueForest] atmosphere stream failed; preserving current
-                          requested: \(atmosphere.rawValue)
-                          current: \(self.activeAtmosphere?.rawValue ?? "none")
-                          error: \(error.localizedDescription)
-                          noFallback: true
+                        [PlagueForest] stream progress
+                          key: \(key)
+                          state: \(streamState.rawValue)
+                          loadedChunks: \(loadedChunkCount)/\(expectedChunkCount)
+                          loadedSplats: \(loadedSplatCount)/\(expectedSplatCount)
                         """
                     )
                 }
 
-                newRoot?.removeFromParent()
-                self.pendingRoot = nil
-                self.onStrictAtmosphereFailure?(error)
-            },
-            onComplete: { [weak self] entityCount in
-                guard let self,
-                      generation == self.atmosphereGeneration else {
-                    return
-                }
-
-                if self.inFlightAtmosphereRevisionKey == key {
-                    self.isSwapInFlight = false
-                    self.inFlightAtmosphereRevisionKey = nil
-                }
-
-                print(
-                    """
-                    [PlagueForest] atmosphere stream complete
-                      atmosphere: \(atmosphere.rawValue)
-                      revision: \(revision)
-                      nativeEntities: \(entityCount)
-                      noFallback: true
-                    """
-                )
+                lastLoaded = loadedChunkCount
             }
+        }
+    }
+
+    private func applyCurrentSplatPlacement(
+        to root: Entity
+    ) {
+        let placement = PlagueGaussianSplatPlacement()
+        root.position = placement.position
+        root.scale = SIMD3<Float>(repeating: placement.scale)
+        root.orientation = placement.rotation
+
+        print(
+            """
+            [PlagueForest] splat root placement
+              position: \(root.position)
+              scale: \(root.scale)
+              orientation: \(root.orientation.vector)
+            """
         )
+    }
+
+    private func inferredSphericalHarmonicsDegree(
+        layout: PlaguePLYBinaryVertexLayout
+    ) -> Int {
+        let restCount = layout.properties.keys.filter {
+            $0.hasPrefix("f_rest_")
+        }.count
+
+        if restCount >= 45 {
+            return 3
+        }
+
+        return 0
+    }
+
+    private func emitSplatStatus(
+        _ status: String
+    ) {
+        onSplatLoadStatusChanged?(status)
     }
 
     private func loadHDRIEnvironment(
