@@ -155,6 +155,34 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         return head
     }
 
+    var isDoorHandleDragActive: Bool {
+        roomSkinningCoordinator.isDoorHandleDragActive
+    }
+
+    func beginDoorHandleDrag(
+        worldPoint: SIMD3<Float>
+    ) {
+        roomSkinningCoordinator.beginDoorHandleDrag(
+            worldPoint: worldPoint
+        )
+    }
+
+    func updateDoorHandleDrag(
+        worldPoint: SIMD3<Float>
+    ) {
+        roomSkinningCoordinator.updateDoorHandleDrag(
+            worldPoint: worldPoint
+        )
+    }
+
+    func endDoorHandleDrag(
+        shouldConfirm: Bool = true
+    ) {
+        roomSkinningCoordinator.endDoorHandleDrag(
+            shouldConfirm: shouldConfirm
+        )
+    }
+
     private func wireJockCallbacks(
         _ jockController: JockRetargetTestController,
         hostAudioSourceID: UUID? = nil
@@ -310,13 +338,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             roomSkinningCoordinator.updatePlayerPose(
                 position: currentPose.headPosition,
                 forward: currentPose.headForward
-            )
-
-            roomSkinningCoordinator.slideDoorWithRay(
-                RoomSkinningRay(
-                    origin: currentPose.headPosition,
-                    direction: currentPose.headForward
-                )
             )
         }
 

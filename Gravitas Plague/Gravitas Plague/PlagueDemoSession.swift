@@ -319,13 +319,17 @@ final class PlagueDemoSession: ObservableObject {
 
     @discardableResult
     func handleControlWindowSceneBackgrounded() -> Bool {
-        if forestImmersiveState == .opening ||
-           forestImmersiveState == .closing {
+        let mixedRoomSceneActive =
+            forestImmersiveState == .opening ||
+            forestImmersiveState == .open ||
+            forestImmersiveState == .closing
+
+        if mixedRoomSceneActive {
             print(
                 """
-                [PlagueQuit] ignored control window background during forest immersive transition
+                [PlagueQuit] ignored control window background during mixed room scene
                   forestImmersiveState: \(forestImmersiveState.rawValue)
-                  reason: immersive_transition
+                  reason: mixed_room_transition_or_open
                 """
             )
 
@@ -333,8 +337,7 @@ final class PlagueDemoSession: ObservableObject {
         }
 
         if let ignoreUntil = controlWindowBackgroundIgnoreUntil,
-           Date() < ignoreUntil,
-           forestImmersiveState != .open {
+           Date() < ignoreUntil {
             print(
                 """
                 [PlagueQuit] ignored transient control window background

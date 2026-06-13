@@ -22,6 +22,25 @@ enum PortalDoorState: String, Codable {
     case disabled
 }
 
+struct WallBasis: Equatable {
+    var center: SIMD3<Float>
+    var right: SIMD3<Float>
+    var up: SIMD3<Float>
+    var normal: SIMD3<Float>
+
+    var width: Float
+    var height: Float
+
+    var worldFromDoorLocal: simd_float4x4 {
+        var m = matrix_identity_float4x4
+        m.columns.0 = SIMD4<Float>(right.x, right.y, right.z, 0)
+        m.columns.1 = SIMD4<Float>(up.x, up.y, up.z, 0)
+        m.columns.2 = SIMD4<Float>(normal.x, normal.y, normal.z, 0)
+        m.columns.3 = SIMD4<Float>(center.x, center.y, center.z, 1)
+        return m
+    }
+}
+
 enum PortalHDRIAtmosphere: String, Codable, CaseIterable, Identifiable, Equatable {
     case overcast
     case night
@@ -100,9 +119,24 @@ struct WallCandidate: Identifiable {
     var stabilityScore: Float
     var lastUpdated: Date
 
+    var basis: WallBasis {
+        WallBasis(
+            center: center,
+            right: right,
+            up: up,
+            normal: normal,
+            width: width,
+            height: height
+        )
+    }
+
     var isLargeEnoughForDefaultDoor: Bool {
         width >= 1.0 && height >= 1.8
     }
+}
+
+struct PortalDoorHandleComponent: Component, Codable {
+    var doorID: String
 }
 
 struct DoorPlacement: Codable, Equatable {

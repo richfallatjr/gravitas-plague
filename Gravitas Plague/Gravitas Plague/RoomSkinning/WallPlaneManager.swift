@@ -8,6 +8,14 @@ import simd
 final class WallPlaneManager: ObservableObject {
     @Published private(set) var wallCandidates: [UUID: WallCandidate] = [:]
 
+    private var lastKnownViewerPosition = SIMD3<Float>(0, 1.5, 0)
+
+    func updateViewerPositionForWallSelection(
+        _ position: SIMD3<Float>
+    ) {
+        lastKnownViewerPosition = position
+    }
+
     func beginScanning() {
         print("[RoomSkinning] wall plane manager scanning")
     }
@@ -65,43 +73,9 @@ final class WallPlaneManager: ObservableObject {
     private func makeWallCandidate(
         from anchor: PlaneAnchor
     ) -> WallCandidate? {
-        let transform = anchor.originFromAnchorTransform
-
-        let center = SIMD3<Float>(
-            transform.columns.3.x,
-            transform.columns.3.y,
-            transform.columns.3.z
-        )
-
-        var normal = normalizeSafe(
-            SIMD3<Float>(
-                transform.columns.2.x,
-                transform.columns.2.y,
-                transform.columns.2.z
-            ),
-            fallback: SIMD3<Float>(0, 0, 1)
-        )
-
-        var up = SIMD3<Float>(0, 1, 0)
-        up = up - normal * simd_dot(up, normal)
-        up = normalizeSafe(
-            up,
-            fallback: SIMD3<Float>(0, 1, 0)
-        )
-
-        var right = normalizeSafe(
-            simd_cross(up, normal),
-            fallback: SIMD3<Float>(1, 0, 0)
-        )
-
-        if simd_length(right) < 0.0001 {
-            right = SIMD3<Float>(1, 0, 0)
-        }
-
-        normal = normalizeSafe(
-            simd_cross(right, up),
-            fallback: normal
-        )
+        let worldFromAnchor = anchor.originFromAnchorTransform
+        let anchorFromExtent = anchor.geometry.extent.anchorFromExtentTransform
+        let worldFromExtent = worldFromAnchor * anchorFromExtent
 
         let width = max(
             Float(anchor.geometry.extent.width),
@@ -115,6 +89,18 @@ final class WallPlaneManager: ObservableObject {
 
         guard width >= 0.55,
               height >= 0.75 else {
+            return nil
+        }
+
+        let basis = deriveWallBasisFromExtentTransform(
+            worldFromExtent: worldFromExtent,
+            width: width,
+            height: height,
+            viewerPosition: lastKnownViewerPosition
+        )
+
+        guard basis.width >= 0.55,
+              basis.height >= 0.75 else {
             return nil
         }
 
@@ -132,18 +118,139 @@ final class WallPlaneManager: ObservableObject {
             stability = 0.15
         }
 
-        return WallCandidate(
+        let candidate = WallCandidate(
             id: old?.id ?? UUID(),
             anchorID: anchor.id,
-            worldTransform: transform,
-            center: center,
-            normal: normal,
-            up: up,
-            right: right,
-            width: width,
-            height: height,
+            worldTransform: worldFromExtent,
+            center: basis.center,
+            normal: basis.normal,
+            up: basis.up,
+            right: basis.right,
+            width: basis.width,
+            height: basis.height,
             stabilityScore: stability,
             lastUpdated: Date()
+        )
+
+        print(
+            """
+            [RoomSkinning] wall basis from plane extent
+              candidateID: \(candidate.id)
+              anchorID: \(anchor.id)
+              center: \(candidate.center)
+              right: \(candidate.right)
+              up: \(candidate.up)
+              normal: \(candidate.normal)
+              width: \(candidate.width)
+              height: \(candidate.height)
+              source: plane_extent_not_head
+            """
+        )
+
+        return candidate
+    }
+
+    private func deriveWallBasisFromExtentTransform(
+        worldFromExtent: simd_float4x4,
+        width: Float,
+        height: Float,
+        viewerPosition: SIMD3<Float>
+    ) -> WallBasis {
+        let center = SIMD3<Float>(
+            worldFromExtent.columns.3.x,
+            worldFromExtent.columns.3.y,
+            worldFromExtent.columns.3.z
+        )
+
+        let axis0 = normalizeSafe(
+            SIMD3<Float>(
+                worldFromExtent.columns.0.x,
+                worldFromExtent.columns.0.y,
+                worldFromExtent.columns.0.z
+            ),
+            fallback: SIMD3<Float>(1, 0, 0)
+        )
+
+        let axis1 = normalizeSafe(
+            SIMD3<Float>(
+                worldFromExtent.columns.1.x,
+                worldFromExtent.columns.1.y,
+                worldFromExtent.columns.1.z
+            ),
+            fallback: SIMD3<Float>(0, 1, 0)
+        )
+
+        let axis2 = normalizeSafe(
+            SIMD3<Float>(
+                worldFromExtent.columns.2.x,
+                worldFromExtent.columns.2.y,
+                worldFromExtent.columns.2.z
+            ),
+            fallback: SIMD3<Float>(0, 0, 1)
+        )
+
+        let gravityUp = SIMD3<Float>(0, 1, 0)
+        let axes = [axis0, axis1, axis2]
+
+        let upIndex = axes.indices.max {
+            abs(simd_dot(axes[$0], gravityUp)) < abs(simd_dot(axes[$1], gravityUp))
+        } ?? 1
+
+        var up = axes[upIndex]
+        if simd_dot(up, gravityUp) < 0 {
+            up = -up
+        }
+
+        let remaining = axes.indices.filter { $0 != upIndex }
+        let toViewer = normalizeSafe(
+            viewerPosition - center,
+            fallback: SIMD3<Float>(0, 0, -1)
+        )
+
+        let normalIndex = remaining.max {
+            abs(simd_dot(axes[$0], toViewer)) < abs(simd_dot(axes[$1], toViewer))
+        } ?? remaining[0]
+
+        var normal = axes[normalIndex]
+        if simd_dot(normal, toViewer) < 0 {
+            normal = -normal
+        }
+
+        var right = normalizeSafe(
+            simd_cross(up, normal),
+            fallback: SIMD3<Float>(1, 0, 0)
+        )
+
+        normal = normalizeSafe(
+            simd_cross(right, up),
+            fallback: normal
+        )
+
+        if simd_dot(normal, toViewer) < 0 {
+            normal = -normal
+            right = -right
+        }
+
+        print(
+            """
+            [RoomSkinning] derived wall basis
+              upIndex: \(upIndex)
+              normalIndex: \(normalIndex)
+              upDotGravity: \(simd_dot(up, gravityUp))
+              normalDotToViewer: \(simd_dot(normal, toViewer))
+              right: \(right)
+              up: \(up)
+              normal: \(normal)
+            """
+        )
+
+        return WallBasis(
+            center: center,
+            right: right,
+            up: up,
+            normal: normal,
+            width: width,
+            height: height
         )
     }
 
@@ -165,7 +272,8 @@ final class WallPlaneManager: ObservableObject {
                 fallback: SIMD3<Float>(0, 0, -1)
             )
 
-            let facesPlayer = abs(
+            let facesPlayer = max(
+                0,
                 simd_dot(wall.normal, -toWall)
             )
 
@@ -249,6 +357,22 @@ final class WallPlaneManager: ObservableObject {
         )
     }
 
+    func projectWorldPointToWall(
+        _ point: SIMD3<Float>,
+        wallID: UUID
+    ) -> SIMD3<Float>? {
+        guard let wall = wallCandidates[wallID] else {
+            return nil
+        }
+
+        let distance = simd_dot(
+            point - wall.center,
+            wall.normal
+        )
+
+        return point - wall.normal * distance
+    }
+
     func convertWallLocalToWorldTransform(
         placement: DoorPlacement
     ) -> simd_float4x4? {
@@ -272,6 +396,21 @@ final class WallPlaneManager: ObservableObject {
         matrix.columns.1 = SIMD4<Float>(wall.up.x, wall.up.y, wall.up.z, 0)
         matrix.columns.2 = SIMD4<Float>(wall.normal.x, wall.normal.y, wall.normal.z, 0)
         matrix.columns.3 = SIMD4<Float>(position.x, position.y, position.z, 1)
+
+        print(
+            """
+            [PortalDoor] wall-local transform rebuilt
+              wallID: \(clamped.wallID)
+              localX: \(clamped.localX)
+              localY: \(clamped.localY)
+              depthOffset: \(clamped.depthOffset)
+              right: \(wall.right)
+              up: \(wall.up)
+              normal: \(wall.normal)
+              position: \(position)
+              transformSource: wall_basis_not_head
+            """
+        )
 
         return matrix
     }

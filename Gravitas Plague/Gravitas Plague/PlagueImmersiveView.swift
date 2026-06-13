@@ -24,6 +24,38 @@ struct PlagueImmersiveView: View {
             content.add(sceneRoot)
             content.add(coordinator.makeHeadAnchor())
         } update: { _ in }
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .targetedToEntity(where: .has(PortalDoorHandleComponent.self))
+                .onChanged { value in
+                    let scenePoint = value.convert(
+                        value.location3D,
+                        from: .local,
+                        to: .scene
+                    )
+
+                    let worldPoint = SIMD3<Float>(
+                        Float(scenePoint.x),
+                        Float(scenePoint.y),
+                        Float(scenePoint.z)
+                    )
+
+                    if coordinator.isDoorHandleDragActive {
+                        coordinator.updateDoorHandleDrag(
+                            worldPoint: worldPoint
+                        )
+                    } else {
+                        coordinator.beginDoorHandleDrag(
+                            worldPoint: worldPoint
+                        )
+                    }
+                }
+                .onEnded { _ in
+                    coordinator.endDoorHandleDrag(
+                        shouldConfirm: true
+                    )
+                }
+        )
         .preferredSurroundingsEffect(
             deathPresentationController.surroundingsEffect
                 ?? damageTintController.surroundingsEffect

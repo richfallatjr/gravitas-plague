@@ -19,9 +19,22 @@ final class RoomSkinningCoordinator: ObservableObject {
     private weak var sceneRoot: Entity?
 
     private var monitorTask: Task<Void, Never>?
+    private var selectedWallID: UUID?
 
     private var lastPlayerPosition = SIMD3<Float>(0, 1.5, 0)
     private var lastPlayerForward = SIMD3<Float>(0, 0, -1)
+
+    private struct DoorHandleDragState {
+        var wallID: UUID
+        var startDoorLocal: SIMD2<Float>
+        var startHitLocal: SIMD2<Float>
+    }
+
+    private var activeDoorHandleDrag: DoorHandleDragState?
+
+    var isDoorHandleDragActive: Bool {
+        activeDoorHandleDrag != nil
+    }
 
     init() {
         root.name = "RoomSkinningRoot"
@@ -55,6 +68,7 @@ final class RoomSkinningCoordinator: ObservableObject {
             forward,
             fallback: SIMD3<Float>(0, 0, -1)
         )
+        wallManager.updateViewerPositionForWallSelection(position)
     }
 
     func startRoomSkinning() {
@@ -74,6 +88,8 @@ final class RoomSkinningCoordinator: ObservableObject {
     func cancelRoomSkinning() {
         monitorTask?.cancel()
         monitorTask = nil
+        selectedWallID = nil
+        activeDoorHandleDrag = nil
 
         wallManager.stop()
         roomTrackingManager.stop()
@@ -101,41 +117,55 @@ final class RoomSkinningCoordinator: ObservableObject {
     }
 
     private func evaluateBestWall() {
-        guard state == .scanning ||
-              state == .wallCandidateAvailable ||
-              state == .doorPreviewVisible else {
-            return
-        }
+        switch state {
+        case .scanning, .wallCandidateAvailable:
+            guard let wall = wallManager.bestWallCandidate(
+                relativeToPlayer: lastPlayerPosition,
+                playerForward: lastPlayerForward
+            ) else {
+                state = .scanning
+                setStatus("Scanning walls...")
+                return
+            }
 
-        guard let wall = wallManager.bestWallCandidate(
-            relativeToPlayer: lastPlayerPosition,
-            playerForward: lastPlayerForward
-        ) else {
-            state = .scanning
-            setStatus("Scanning walls...")
-            return
-        }
+            selectedWallID = wall.id
 
-        if state != .doorPreviewVisible {
             portalDoorController.createDoorPreview(
                 onWall: wall,
                 wallManager: wallManager
             )
 
             state = .doorPreviewVisible
-            setStatus("Door preview ready. Confirm placement.")
+            setStatus("Door preview ready. Grab the white handle to place.")
 
+            print(
+                """
+                [RoomSkinning] selected wall frozen for door preview
+                  wallID: \(wall.id)
+                  source: best_wall_once_not_head_follow
+                """
+            )
             print("[RoomSkinning] door preview visible wall=\(wall.id)")
-        } else {
+
+        case .doorPreviewVisible, .adjustingDoor, .doorConfirmed:
+            guard let selectedWallID,
+                  let wall = wallManager.wallCandidates[selectedWallID] else {
+                return
+            }
+
             portalDoorController.updateForWallRefinement(
                 wall: wall,
                 wallManager: wallManager
             )
+
+        default:
+            return
         }
     }
 
     func confirmRoomSkinning() {
-        guard state == .doorPreviewVisible else {
+        guard state == .doorPreviewVisible ||
+              state == .adjustingDoor else {
             print("[RoomSkinning] confirm ignored state=\(state.rawValue)")
             return
         }
@@ -206,25 +236,112 @@ final class RoomSkinningCoordinator: ObservableObject {
         print("[RoomSkinning] door placement confirmed")
     }
 
-    func slideDoorWithRay(
-        _ ray: RoomSkinningRay
+    func beginDoorHandleDrag(
+        worldPoint: SIMD3<Float>
     ) {
-        guard state == .adjustingDoor,
-              let placement = portalDoorController.placement,
-              let hit = wallManager.projectRayToWall(
-                ray: ray,
-                wallID: placement.wallID
-              ),
-              let local = wallManager.convertWorldPointToWallLocal(
-                point: hit,
-                wallID: placement.wallID
-              ) else {
+        guard let placement = portalDoorController.placement else {
             return
         }
 
-        portalDoorController.slideDoor(
-            toWallLocal: local,
+        let projected = wallManager.projectWorldPointToWall(
+            worldPoint,
+            wallID: placement.wallID
+        ) ?? worldPoint
+
+        guard let hitLocal = wallManager.convertWorldPointToWallLocal(
+            point: projected,
+            wallID: placement.wallID
+        ) else {
+            return
+        }
+
+        activeDoorHandleDrag = DoorHandleDragState(
+            wallID: placement.wallID,
+            startDoorLocal: SIMD2<Float>(
+                placement.localX,
+                placement.localY
+            ),
+            startHitLocal: hitLocal
+        )
+
+        if state == .doorPreviewVisible {
+            state = .adjustingDoor
+            portalDoorController.enterAdjustment()
+            setStatus("Adjusting door. Drag the white handle.")
+        }
+
+        print(
+            """
+            [PortalDoor] handle drag began
+              wallID: \(placement.wallID)
+              startDoorLocal: \(SIMD2<Float>(placement.localX, placement.localY))
+              startHitLocal: \(hitLocal)
+              inputSource: handle_gesture_not_head
+            """
+        )
+    }
+
+    func updateDoorHandleDrag(
+        worldPoint: SIMD3<Float>
+    ) {
+        guard let drag = activeDoorHandleDrag else {
+            return
+        }
+
+        let projected = wallManager.projectWorldPointToWall(
+            worldPoint,
+            wallID: drag.wallID
+        ) ?? worldPoint
+
+        guard let hitLocal = wallManager.convertWorldPointToWallLocal(
+            point: projected,
+            wallID: drag.wallID
+        ) else {
+            return
+        }
+
+        let delta = hitLocal - drag.startHitLocal
+        let newLocal = drag.startDoorLocal + delta
+
+        portalDoorController.setDoorLocalPosition(
+            x: newLocal.x,
+            y: newLocal.y,
             wallManager: wallManager
+        )
+
+        print(
+            """
+            [PortalDoor] handle drag updated
+              wallID: \(drag.wallID)
+              newLocal: \(newLocal)
+              inputSource: handle_gesture_not_head
+            """
+        )
+    }
+
+    func endDoorHandleDrag(
+        shouldConfirm: Bool = true
+    ) {
+        guard activeDoorHandleDrag != nil else {
+            return
+        }
+
+        activeDoorHandleDrag = nil
+
+        if shouldConfirm {
+            if portalDoorController.placement?.confirmed == true {
+                confirmDoorPlacement()
+            } else {
+                confirmRoomSkinning()
+            }
+        }
+
+        print(
+            """
+            [PortalDoor] handle drag ended
+              shouldConfirm: \(shouldConfirm)
+              inputSource: handle_gesture_not_head
+            """
         )
     }
 

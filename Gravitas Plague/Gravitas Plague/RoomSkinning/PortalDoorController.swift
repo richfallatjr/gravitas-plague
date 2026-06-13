@@ -12,6 +12,7 @@ final class PortalDoorController: ObservableObject {
     let root = Entity()
     private let doorRoot = Entity()
     private let portalWorldRoot = Entity()
+    private let handleRoot = Entity()
 
     private var selectedWall: WallCandidate?
     private var contentProvider: PortalContentProvider =
@@ -19,12 +20,17 @@ final class PortalDoorController: ObservableObject {
 
     private var doorFrameEntity: Entity?
     private var portalPlaneEntity: ModelEntity?
+    private var handleCollider: ModelEntity?
 
     init() {
+        PortalDoorHandleComponent.registerComponent()
+
         root.name = "PortalDoorControllerRoot"
         doorRoot.name = "DoorRootEntity"
         portalWorldRoot.name = "PortalWorldRoot"
+        handleRoot.name = "PortalDoorBottomHandleRoot"
 
+        doorRoot.addChild(handleRoot)
         root.addChild(doorRoot)
         root.addChild(portalWorldRoot)
     }
@@ -35,6 +41,12 @@ final class PortalDoorController: ObservableObject {
         self.contentProvider = provider
         placement?.contentProviderID = provider.providerID
         print("[PortalDoor] content provider set \(provider.providerID)")
+    }
+
+    private func resetDoorChildrenKeepingHandle() {
+        doorRoot.children.removeAll()
+        doorRoot.addChild(handleRoot)
+        handleCollider = nil
     }
 
     func reloadPortalContent() async {
@@ -80,7 +92,7 @@ final class PortalDoorController: ObservableObject {
         p.contentProviderID = contentProvider.providerID
         placement = wallManager.clampPlacement(p, on: wall)
 
-        doorRoot.children.removeAll()
+        resetDoorChildrenKeepingHandle()
 
         let frame = makeDoorFrame(
             width: p.width,
@@ -94,6 +106,7 @@ final class PortalDoorController: ObservableObject {
         applyTransformFromPlacement(
             wallManager: wallManager
         )
+        rebuildBottomHandle()
 
         state = .preview
 
@@ -125,7 +138,7 @@ final class PortalDoorController: ObservableObject {
         p.contentProviderID = contentProvider.providerID
         placement = p
 
-        doorRoot.children.removeAll()
+        resetDoorChildrenKeepingHandle()
         portalWorldRoot.children.removeAll()
 
         portalWorldRoot.components.set(WorldComponent())
@@ -172,6 +185,7 @@ final class PortalDoorController: ObservableObject {
         applyTransformFromPlacement(
             wallManager: wallManager
         )
+        rebuildBottomHandle()
 
         state = .active
 
@@ -211,6 +225,7 @@ final class PortalDoorController: ObservableObject {
         applyTransformFromPlacement(
             wallManager: wallManager
         )
+        rebuildBottomHandle()
 
         print(
             """
@@ -232,7 +247,9 @@ final class PortalDoorController: ObservableObject {
     }
 
     func enterAdjustment() {
-        guard state == .active || state == .confirmed else {
+        guard state == .preview ||
+              state == .active ||
+              state == .confirmed else {
             return
         }
 
@@ -274,6 +291,16 @@ final class PortalDoorController: ObservableObject {
         applyTransformFromPlacement(
             wallManager: wallManager
         )
+        rebuildBottomHandle()
+
+        print(
+            """
+            [PortalDoor] wall refinement applied
+              wallID: \(wall.id)
+              keptLocalPlacement: true
+              source: wall_anchor_update_not_head
+            """
+        )
     }
 
     private func applyTransformFromPlacement(
@@ -289,6 +316,94 @@ final class PortalDoorController: ObservableObject {
         doorRoot.setTransformMatrix(
             matrix,
             relativeTo: nil
+        )
+
+        if let wall = wallManager.wallCandidates[placement.wallID] {
+            let doorNormal = normalizeSafe(
+                SIMD3<Float>(
+                    matrix.columns.2.x,
+                    matrix.columns.2.y,
+                    matrix.columns.2.z
+                ),
+                fallback: wall.normal
+            )
+
+            let normalDot = simd_dot(
+                doorNormal,
+                wall.normal
+            )
+
+            if normalDot < 0.98 {
+                print(
+                    """
+                    [PortalDoor] ERROR door normal not aligned to wall normal
+                      dot: \(normalDot)
+                      doorNormal: \(doorNormal)
+                      wallNormal: \(wall.normal)
+                    """
+                )
+            }
+        }
+    }
+
+    @MainActor
+    func rebuildBottomHandle() {
+        handleRoot.children.removeAll()
+
+        guard let placement else {
+            return
+        }
+
+        let handleWidth = max(0.36, placement.width * 0.62)
+        let handleHeight: Float = 0.045
+        let handleDepth: Float = 0.028
+        let handleY = -placement.height * 0.5 - 0.115
+        let handleZ: Float = 0.055
+
+        handleRoot.position = SIMD3<Float>(
+            0,
+            handleY,
+            handleZ
+        )
+
+        let material = SimpleMaterial(
+            color: UIColor.white.withAlphaComponent(0.94),
+            roughness: 0.22,
+            isMetallic: false
+        )
+
+        let collider = ModelEntity(
+            mesh: .generateBox(
+                size: SIMD3<Float>(
+                    handleWidth,
+                    handleHeight,
+                    handleDepth
+                )
+            ),
+            materials: [material]
+        )
+
+        collider.name = "PortalDoorBottomWhitePlacementBar"
+        collider.components.set(
+            PortalDoorHandleComponent(
+                doorID: placement.wallID.uuidString
+            )
+        )
+        collider.components.set(InputTargetComponent())
+        collider.generateCollisionShapes(recursive: true)
+
+        handleRoot.addChild(collider)
+        handleCollider = collider
+
+        print(
+            """
+            [PortalDoor] bottom placement handle rebuilt
+              width: \(handleWidth)
+              height: \(handleHeight)
+              localPosition: \(handleRoot.position)
+              inputTarget: true
+              collision: true
+            """
         )
     }
 
@@ -392,4 +507,15 @@ final class PortalDoorController: ObservableObject {
 
         return portal
     }
+}
+
+private func normalizeSafe(
+    _ v: SIMD3<Float>,
+    fallback: SIMD3<Float>
+) -> SIMD3<Float> {
+    let length = simd_length(v)
+    guard length > 0.00001 else {
+        return fallback
+    }
+    return v / length
 }
