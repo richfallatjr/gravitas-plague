@@ -1,10 +1,13 @@
 import Combine
+import Darwin
 import RealityKit
 import SwiftUI
 
 struct PlagueImmersiveView: View {
     @ObservedObject var session: PlagueDemoSession
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
+    @Environment(\.dismissWindow) private var dismissWindow
+    @Environment(\.openWindow) private var openWindow
     @StateObject private var coordinator = PlagueImmersiveCoordinator()
     @StateObject private var damageTintController = DamageSurroundingsTintController()
     @StateObject private var deathPresentationController = DeathPresentationController()
@@ -68,6 +71,19 @@ struct PlagueImmersiveView: View {
                     session.handleWallPosterAction(action)
                 }
         )
+        .simultaneousGesture(
+            TapGesture()
+                .targetedToEntity(where: .has(WallPosterKillSwitchComponent.self))
+                .onEnded { _ in
+                    Task { @MainActor in
+                        session.requestImmediateQuitFromRealityKitKillSwitch(
+                            reason: "wall_poster_x_decorator"
+                        )
+                        await dismissImmersiveSpace()
+                        Darwin.exit(0)
+                    }
+                }
+        )
         .preferredSurroundingsEffect(
             deathPresentationController.surroundingsEffect
                 ?? damageTintController.surroundingsEffect
@@ -87,6 +103,8 @@ struct PlagueImmersiveView: View {
             }
             coordinator.onPlayerDeathStarted = {
                 damageTintController.reset()
+                session.wallPosterUIActive = false
+                openWindow(id: PlagueWindowID.control)
             }
             coordinator.onForestAtmosphereFatalFailure = { error in
                 Task { @MainActor in
@@ -105,7 +123,21 @@ struct PlagueImmersiveView: View {
                 session.forestAppearanceStatus = status
             }
             coordinator.onWallPosterUIActiveChanged = { active in
-                session.wallPosterUIActive = active
+                if active {
+                    session.activateWallPosterUI()
+                    session.prepareControlWindowDismissalForWallUI()
+                    dismissWindow(id: PlagueWindowID.control)
+
+                    print(
+                        """
+                        [WallPosterUI] SwiftUI control window dismissed
+                          reason: wall_ui_active_after_room_skinning
+                          RealityKitKillSwitch: true
+                        """
+                    )
+                } else {
+                    session.wallPosterUIActive = false
+                }
             }
             coordinator.onRoomSkinningStatusChanged = { status in
                 session.roomSkinningStatus = status

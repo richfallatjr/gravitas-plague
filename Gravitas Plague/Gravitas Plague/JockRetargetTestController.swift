@@ -944,12 +944,6 @@ final class JockRetargetTestController {
         )
     }
 
-    func setRecursiveOpacity(
-        _ opacity: Float
-    ) {
-        rootEntity.applyOpacityRecursively(opacity)
-    }
-
     func updateGroundingProfileFromLoadedEntityIfNeeded() {
         let bounds = rootEntity.visualBounds(
             relativeTo: rootEntity
@@ -986,6 +980,42 @@ final class JockRetargetTestController {
               floorY: \(floorY)
               rootY: \(position.y)
               offset: \(groundingProfile.rootYOffsetFromFloor)
+            """
+        )
+    }
+
+    func setOrientationYawOnlyFacingPlayer(
+        _ playerWorldPosition: SIMD3<Float>
+    ) {
+        let rootWorldPosition = rootEntity.position(
+            relativeTo: nil
+        )
+        var flatDirection = SIMD3<Float>(
+            playerWorldPosition.x - rootWorldPosition.x,
+            0,
+            playerWorldPosition.z - rootWorldPosition.z
+        )
+
+        if simd_length(flatDirection) < 0.001 {
+            flatDirection = SIMD3<Float>(0, 0, -1)
+        } else {
+            flatDirection = simd_normalize(flatDirection)
+        }
+
+        rootEntity.setOrientation(
+            simd_quatf(
+                from: SIMD3<Float>(0, 0, -1),
+                to: flatDirection
+            ),
+            relativeTo: nil
+        )
+
+        print(
+            """
+            [HordePortalIngress] enemy yaw-only orientation applied
+              enemyID: \(hordeID)
+              target: player
+              pitchRollRemoved: true
             """
         )
     }
@@ -1080,6 +1110,16 @@ final class JockRetargetTestController {
             locomotionPolicy: .ignoreClipLocomotion,
             runtimeOverride: followVisualRuntimeOverride()
         )
+    }
+
+    func durationForClip(
+        id clipID: String
+    ) -> Float? {
+        guard let clip = clipsByID[clipID] else {
+            return nil
+        }
+
+        return Float(clip.timing.durationSeconds)
     }
 
     func finishHordePortalIngressAndStartFollow() throws {

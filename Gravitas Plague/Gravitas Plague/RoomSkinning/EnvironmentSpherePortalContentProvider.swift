@@ -19,6 +19,9 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
     ) async throws {
         portalWorld.children.removeAll()
         portalWorld.components.set(WorldComponent())
+        PlagueNativeBloomInstaller.installStrictBloom(
+            on: portalWorld
+        )
 
         let resources = try loadEXRResources(atmosphere: atmosphere)
 

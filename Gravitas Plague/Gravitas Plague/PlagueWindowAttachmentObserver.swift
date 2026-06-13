@@ -12,14 +12,17 @@ final class PlagueControlWindowKillSwitch {
     private weak var controlScene: UIWindowScene?
     private var observers: [NSObjectProtocol] = []
     private var onQuitRequested: ((String) -> Void)?
+    private var shouldIgnoreQuitRequested: ((String) -> Bool)?
 
     private init() {}
 
     func registerControlWindow(
         window: UIWindow,
-        onQuitRequested: @escaping (String) -> Void
+        onQuitRequested: @escaping (String) -> Void,
+        shouldIgnoreQuitRequested: @escaping (String) -> Bool = { _ in false }
     ) {
         self.onQuitRequested = onQuitRequested
+        self.shouldIgnoreQuitRequested = shouldIgnoreQuitRequested
 
         if controlWindow !== window {
             removeObservers()
@@ -79,6 +82,10 @@ final class PlagueControlWindowKillSwitch {
     private func requestQuit(
         reason: String
     ) {
+        if shouldIgnoreQuitRequested?(reason) == true {
+            return
+        }
+
         print(
             """
             [PlagueQuit] control window kill switch requested quit

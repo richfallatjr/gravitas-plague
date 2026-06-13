@@ -16,13 +16,35 @@ enum HordePortalApertureMeshFactory {
             materials: [PortalMaterial()]
         )
 
-        portal.name = "HordeJankyPortalAperture"
+        portal.name = "HordePortalApertureMask"
         portal.position.z = -0.006
-        portal.components.set(
-            PortalComponent(
-                target: targetWorld
+
+        if #available(visionOS 27.0, *) {
+            let portalPlane = PortalComponent.Plane.positiveZ
+
+            portal.components.set(
+                PortalComponent(
+                    target: targetWorld,
+                    clippingMode: .plane(portalPlane),
+                    crossingMode: .plane(portalPlane)
+                )
             )
-        )
+
+            print(
+                """
+                [HordePortal] aperture PortalComponent configured
+                  clippingMode: plane_positiveZ
+                  crossingMode: plane_positiveZ
+                  apertureIsMask: true
+                """
+            )
+        } else {
+            portal.components.set(
+                PortalComponent(
+                    target: targetWorld
+                )
+            )
+        }
 
         return portal
     }
@@ -292,4 +314,3 @@ struct SeededRNG: RandomNumberGenerator {
         return value ^ (value >> 31)
     }
 }
-

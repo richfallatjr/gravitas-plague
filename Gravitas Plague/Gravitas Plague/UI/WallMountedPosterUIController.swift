@@ -3,6 +3,12 @@ import RealityKit
 import UIKit
 import simd
 
+enum WallPosterPlacementState: String {
+    case notPlaced
+    case placed
+    case locked
+}
+
 @MainActor
 final class WallMountedPosterUIController: ObservableObject {
     private(set) var root = Entity()
@@ -13,6 +19,9 @@ final class WallMountedPosterUIController: ObservableObject {
     private weak var hordePortalManager: HordePortalManager?
 
     private var currentPlacement: WallPosterPlacement?
+    private var currentPosterSize: SIMD2<Float>?
+    private var placementState: WallPosterPlacementState = .notPlaced
+    private var lastAppliedPosition: SIMD3<Float>?
 
     var isPlaced: Bool {
         currentPlacement != nil
@@ -20,6 +29,7 @@ final class WallMountedPosterUIController: ObservableObject {
 
     init() {
         WallPosterUIButtonComponent.registerComponent()
+        WallPosterKillSwitchComponent.registerComponent()
         root.name = "WallMountedPosterUIRoot"
     }
 
@@ -41,8 +51,14 @@ final class WallMountedPosterUIController: ObservableObject {
     @discardableResult
     func placeOnBestWall(
         playerPosition: SIMD3<Float>,
-        playerForward: SIMD3<Float>
+        playerForward: SIMD3<Float>,
+        force: Bool = false
     ) -> Bool {
+        if !force,
+           placementState == .placed || placementState == .locked {
+            return false
+        }
+
         guard let wallManager else {
             print("[WallPosterUI] ERROR no wallManager")
             return false
@@ -58,8 +74,12 @@ final class WallMountedPosterUIController: ObservableObject {
         }
 
         currentPlacement = placement
+        placementState = .placed
 
-        rebuildPosterIfNeeded()
+        rebuildPosterIfNeeded(
+            width: placement.width,
+            height: placement.height
+        )
         applyPlacement(placement)
 
         print(
@@ -78,6 +98,24 @@ final class WallMountedPosterUIController: ObservableObject {
         return true
     }
 
+    func lockPlacement() {
+        guard let currentPlacement else {
+            return
+        }
+
+        placementState = .locked
+
+        print(
+            """
+            [WallPosterUI] placement locked
+              wallID: \(currentPlacement.wallID)
+              localX: \(currentPlacement.localX)
+              localY: \(currentPlacement.localY)
+              snapsToHead: false
+            """
+        )
+    }
+
     func refreshTransformForWallUpdate() {
         guard let placement = currentPlacement else {
             return
@@ -88,6 +126,11 @@ final class WallMountedPosterUIController: ObservableObject {
 
     func reset() {
         currentPlacement = nil
+        currentPosterSize = nil
+        placementState = .notPlaced
+        lastAppliedPosition = nil
+        posterEntity = nil
+        buttonEntities.removeAll()
         root.isEnabled = false
     }
 
@@ -98,8 +141,8 @@ final class WallMountedPosterUIController: ObservableObject {
     ) -> WallPosterPlacement? {
         let walls = wallManager.wallCandidates.values
             .filter {
-                $0.width >= WallPosterMetrics.posterWidth + 0.1 &&
-                $0.height >= WallPosterMetrics.posterHeight + 0.1
+                $0.width >= 0.30 &&
+                $0.height >= 0.30
             }
 
         guard !walls.isEmpty else {
@@ -162,8 +205,11 @@ final class WallMountedPosterUIController: ObservableObject {
         on wall: WallCandidate,
         wallManager: WallPlaneManager
     ) -> WallPosterPlacement? {
-        let width = WallPosterMetrics.posterWidth
-        let height = WallPosterMetrics.posterHeight
+        let size = WallPosterMetrics.posterSize(
+            for: wall
+        )
+        let width = size.x
+        let height = size.y
         let floorY = wallManager.bestFloorCandidate(near: wall)?.worldY
         let desiredWorldY: Float = floorY.map { $0 + 1.35 } ?? wall.center.y
         let desiredLocalY: Float
@@ -286,14 +332,26 @@ final class WallMountedPosterUIController: ObservableObject {
 }
 
 private extension WallMountedPosterUIController {
-    func rebuildPosterIfNeeded() {
-        guard posterEntity == nil else {
+    func rebuildPosterIfNeeded(
+        width: Float,
+        height: Float
+    ) {
+        let newSize = SIMD2<Float>(
+            width,
+            height
+        )
+
+        if let currentPosterSize,
+           simd_length(currentPosterSize - newSize) < 0.001,
+           posterEntity != nil {
             root.isEnabled = true
             return
         }
 
         root.children.removeAll()
         buttonEntities.removeAll()
+        posterEntity = nil
+        currentPosterSize = newSize
         root.isEnabled = true
 
         let texture = try? TextureResource.load(
@@ -319,8 +377,8 @@ private extension WallMountedPosterUIController {
 
         let poster = ModelEntity(
             mesh: .generatePlane(
-                width: WallPosterMetrics.posterWidth,
-                height: WallPosterMetrics.posterHeight
+                width: width,
+                height: height
             ),
             materials: [material]
         )
@@ -334,30 +392,103 @@ private extension WallMountedPosterUIController {
 
         addButtonHitTarget(
             rectPixels: WallPosterMetrics.hordeRectPixels,
+            posterWidth: width,
+            posterHeight: height,
             action: .horde,
             name: "WallPosterButton_Horde"
         )
 
         addButtonHitTarget(
             rectPixels: WallPosterMetrics.walkRectPixels,
+            posterWidth: width,
+            posterHeight: height,
             action: .walkLoop,
             name: "WallPosterButton_WalkLoop"
+        )
+
+        addKillSwitchDecorator(
+            posterWidth: width,
+            posterHeight: height
         )
 
         print(
             """
             [WallPosterUI] RealityKit poster panel created
               texture: plague_menu_ui_mockup
-              widthMeters: \(WallPosterMetrics.posterWidth)
-              heightMeters: \(WallPosterMetrics.posterHeight)
-              maxHeightInches: 24
+              widthMeters: \(width)
+              heightMeters: \(height)
+              maxHeightInches: 36
               physicallyBasedMaterial: true
+            """
+        )
+    }
+
+    func addKillSwitchDecorator(
+        posterWidth: Float,
+        posterHeight: Float
+    ) {
+        guard let texture = try? TextureResource.load(
+            named: "kill_switch_x"
+        ) else {
+            print("[WallPosterUI] ERROR missing kill_switch_x.png")
+            return
+        }
+
+        var material = UnlitMaterial()
+        material.color = .init(
+            tint: .white,
+            texture: .init(texture)
+        )
+        material.blending = .transparent(
+            opacity: .init(floatLiteral: 1.0)
+        )
+
+        let size = min(
+            0.095,
+            posterHeight * 0.105
+        )
+        let x = posterWidth * 0.5 - size * 0.65
+        let y = -posterHeight * 0.5 - size * 0.90
+
+        let killSwitch = ModelEntity(
+            mesh: .generatePlane(
+                width: size,
+                height: size
+            ),
+            materials: [material]
+        )
+
+        killSwitch.name = "WallPosterKillSwitch_X"
+        killSwitch.position = SIMD3<Float>(
+            x,
+            y,
+            0.018
+        )
+        killSwitch.components.set(
+            WallPosterKillSwitchComponent(
+                id: "wall_poster_kill"
+            )
+        )
+        killSwitch.components.set(InputTargetComponent())
+        killSwitch.generateCollisionShapes(recursive: true)
+
+        root.addChild(killSwitch)
+
+        print(
+            """
+            [WallPosterUI] RealityKit kill switch decorator created
+              texture: kill_switch_x.png
+              size: \(size)
+              position: \(killSwitch.position)
+              underPoster: true
             """
         )
     }
 
     func addButtonHitTarget(
         rectPixels: SIMD4<Float>,
+        posterWidth: Float,
+        posterHeight: Float,
         action: WallPosterAction,
         name: String
     ) {
@@ -368,10 +499,10 @@ private extension WallMountedPosterUIController {
         let rectH = rectPixels.w
         let centerPixelX = rectX + rectW * 0.5
         let centerPixelY = rectY + rectH * 0.5
-        let localX = (centerPixelX / source.x - 0.5) * WallPosterMetrics.posterWidth
-        let localY = (0.5 - centerPixelY / source.y) * WallPosterMetrics.posterHeight
-        let width = rectW / source.x * WallPosterMetrics.posterWidth
-        let height = rectH / source.y * WallPosterMetrics.posterHeight
+        let localX = (centerPixelX / source.x - 0.5) * posterWidth
+        let localY = (0.5 - centerPixelY / source.y) * posterHeight
+        let width = rectW / source.x * posterWidth
+        let height = rectH / source.y * posterHeight
 
         let hit = ModelEntity(
             mesh: .generatePlane(
@@ -407,6 +538,8 @@ private extension WallMountedPosterUIController {
               localY: \(localY)
               width: \(width)
               height: \(height)
+              posterWidth: \(posterWidth)
+              posterHeight: \(posterHeight)
             """
         )
     }
@@ -445,14 +578,23 @@ private extension WallMountedPosterUIController {
             relativeTo: nil
         )
 
-        print(
-            """
-            [WallPosterUI] wall transform applied
-              wallID: \(placement.wallID)
-              position: \(position)
-              basis: wall_basis
-            """
-        )
+        let shouldLog =
+            lastAppliedPosition.map {
+                simd_length(position - $0) > 0.01
+            } ?? true
+
+        lastAppliedPosition = position
+
+        if shouldLog {
+            print(
+                """
+                [WallPosterUI] wall transform applied
+                  wallID: \(placement.wallID)
+                  position: \(position)
+                  basis: wall_basis
+                """
+            )
+        }
     }
 }
 

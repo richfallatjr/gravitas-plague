@@ -1,12 +1,16 @@
 import SwiftUI
 
+enum PlagueWindowID {
+    static let control = "plague-control"
+}
+
 @main
 struct GravitasPlagueApp: App {
     @StateObject private var demoSession = PlagueDemoSession()
     @State private var immersionStyle: ImmersionStyle = .mixed
 
     var body: some Scene {
-        WindowGroup(id: "plague-control") {
+        WindowGroup(id: PlagueWindowID.control) {
             PlagueDemoView(session: demoSession)
                 .frame(minWidth: 543, minHeight: 724)
         }

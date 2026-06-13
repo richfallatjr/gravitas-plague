@@ -87,7 +87,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var hordeWaitingForRoomScan = false
     private var hordeWaitingForFloorPromptShown = false
     private var hordeRoomScanCompletionTask: Task<Void, Never>?
-    private var activeIngressControllers: [UUID: HordePortalWorldspaceIngressController] = [:]
+    private var activeIngressControllers: [UUID: HordePortalSingleEnemyIngressController] = [:]
     private var lastWallPosterPlacementAttempt: Date?
 
     private var lastTickDate: Date?
@@ -113,6 +113,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         let root = AnchorEntity(world: SIMD3<Float>(0, 0, 0))
         root.name = "GravitasPlague_PhaseOne_SceneRoot"
+        PlagueNativeBloomInstaller.installStrictBloom(
+            on: root
+        )
 
         CharacterAssetRegistry.validateRequiredCharacterAssets()
         PortalHDRIAssetValidator.validate()
@@ -657,9 +660,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             case .following, .failed:
                 finishedIDs.append(enemyID)
 
-            case .walkingParallel,
-                 .turningTowardExit,
-                 .crossing:
+            case .walkingParallelInsidePortal,
+                 .turningTowardRoom,
+                 .crossingAperture:
                 break
             }
         }
@@ -675,6 +678,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     ) {
         if wallPosterUIController.isPlaced {
             wallPosterUIController.refreshTransformForWallUpdate()
+            return
         }
 
         if let lastWallPosterPlacementAttempt,
@@ -693,6 +697,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             return
         }
 
+        wallPosterUIController.lockPlacement()
         forestEnvironmentController.applyIBLReceiverRecursively(
             root: wallPosterUIController.root
         )
@@ -924,21 +929,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     hitsToKill: hitsToKill,
                     playerHeadPosition: spawnPose.headPosition
                 )
-                let portalProxyController = try await createLoadedHordeEnemyController(
-                    id: UUID(),
-                    archetype: archetype,
-                    position: positions[index],
-                    wave: nextWave,
-                    spawnIndex: index,
-                    hitsToKill: hitsToKill,
-                    playerHeadPosition: spawnPose.headPosition,
-                    wireCallbacks: false
-                )
-
                 guard hordeBenchmarkRunning,
                       !isPlayerDeathSequenceActive else {
                     controller.hide()
-                    portalProxyController.hide()
                     print(
                         """
                         [Horde] spawn cancelled before reveal
@@ -963,9 +956,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     )
                 }
 
-                try registerHordeEnemyForWorldspacePortalIngress(
+                try registerHordeEnemyForSinglePortalIngress(
                     controller: controller,
-                    portalProxyController: portalProxyController,
                     id: id,
                     archetype: archetype,
                     wave: nextWave,
@@ -1220,9 +1212,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
     }
 
-    private func registerHordeEnemyForWorldspacePortalIngress(
+    private func registerHordeEnemyForSinglePortalIngress(
         controller: JockRetargetTestController,
-        portalProxyController: JockRetargetTestController,
         id: UUID,
         archetype: PlagueCharacterArchetype,
         wave: Int,
@@ -1247,16 +1238,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeEnemyControllersByID[id] = controller
         activeHordeEnemyIDs.insert(id)
 
-        if controller.rootEntity.parent == nil {
-            sceneRoot.addChild(controller.rootEntity)
-        }
-
-        portalProxyController.rootEntity.removeFromParent()
-        portal.portalWorldRoot.addChild(portalProxyController.rootEntity)
-
-        let ingress = HordePortalWorldspaceIngressController(
-            realEnemy: controller,
-            portalEnemy: portalProxyController,
+        let ingress = HordePortalSingleEnemyIngressController(
+            enemy: controller,
             portal: portal,
             sceneRoot: sceneRoot,
             side: side
@@ -1266,9 +1249,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         forestEnvironmentController.applyIBLReceiverRecursively(
             root: controller.rootEntity
-        )
-        forestEnvironmentController.applyIBLReceiverRecursively(
-            root: portalProxyController.rootEntity
         )
 
         let audioStartDelay = TimeInterval.random(in: 0...1)
@@ -1282,14 +1262,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             deltaTime: 1.0 / 60.0,
             currentHeadPosition: currentHeadPosition
         )
-        portalProxyController.update(
-            deltaTime: 1.0 / 60.0,
-            currentHeadPosition: currentHeadPosition
-        )
 
         print(
             """
-            [HordePortal] worldspace ingress assigned
+            [HordePortal] portal-world ingress assigned
               wave: \(wave)
               index: \(spawnIndex)
               enemyID: \(id)
@@ -1298,9 +1274,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               assignmentKind: \(assignmentKind.rawValue)
               side: \(side.rawValue)
               audioStartDelay: \(String(format: "%.3f", audioStartDelay))
-              directRoomSpawnAllowed: false
-              realEnemySceneRoot: true
-              portalProxyWorldRoot: true
+              parentWhileInside: portalWorldRoot
+              noProxyEnemy: true
+              noOpacityFade: true
             """
         )
     }

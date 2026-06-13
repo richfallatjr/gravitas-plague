@@ -54,7 +54,8 @@ enum PlagueMenuAssetValidator {
             "plague_menu_ui_clean",
             "plague_menu_ui_mockup",
             "plague_menu_horde_button",
-            "plague_menu_walk_button"
+            "plague_menu_walk_button",
+            "kill_switch_x"
         ]
 
         for name in names {
@@ -126,20 +127,7 @@ struct PlagueOperationModePosterRoot: View {
     #endif
 
     var body: some View {
-        Group {
-            if session.wallPosterUIActive {
-                WallPosterControlWindowShell(session: session)
-            } else {
-                PlagueOperationModePosterMenu(session: session)
-            }
-        }
-            .ornament(
-                visibility: .visible,
-                attachmentAnchor: .scene(.top),
-                contentAlignment: .center
-            ) {
-                PlagueRoomSkinningTopOrnament(session: session)
-            }
+        content
             .background {
                 PlagueWindowAttachmentObserver(
                     onAttach: { window in
@@ -154,6 +142,17 @@ struct PlagueOperationModePosterRoot: View {
                                 performImmediateQuit(
                                     reason: reason
                                 )
+                            },
+                            shouldIgnoreQuitRequested: { reason in
+                                guard session.shouldIgnoreControlWindowLifecycleBecauseWallUIIsActive else {
+                                    return false
+                                }
+
+                                session.noteControlWindowLifecycleIgnoredForWallUI(
+                                    reason: "\(reason)_after_wall_ui_activation"
+                                )
+
+                                return true
                             }
                         )
                         #else
@@ -167,6 +166,13 @@ struct PlagueOperationModePosterRoot: View {
                     },
                     onDetach: {
                         guard !session.isQuitting else {
+                            return
+                        }
+
+                        guard !session.shouldIgnoreControlWindowLifecycleBecauseWallUIIsActive else {
+                            session.noteControlWindowLifecycleIgnoredForWallUI(
+                                reason: "control_window_detached_after_wall_ui_activation"
+                            )
                             return
                         }
 
@@ -184,6 +190,13 @@ struct PlagueOperationModePosterRoot: View {
                     return
                 }
 
+                guard !session.shouldIgnoreControlWindowLifecycleBecauseWallUIIsActive else {
+                    session.noteControlWindowLifecycleIgnoredForWallUI(
+                        reason: "control_window_closed_after_wall_ui_activation"
+                    )
+                    return
+                }
+
                 performImmediateQuit(
                     reason: "control_window_closed"
                 )
@@ -194,6 +207,13 @@ struct PlagueOperationModePosterRoot: View {
                 }
 
                 guard newPhase == .background else {
+                    return
+                }
+
+                guard !session.shouldIgnoreControlWindowLifecycleBecauseWallUIIsActive else {
+                    session.noteControlWindowLifecycleIgnoredForWallUI(
+                        reason: "control_window_backgrounded_after_wall_ui_activation"
+                    )
                     return
                 }
 
@@ -215,6 +235,24 @@ struct PlagueOperationModePosterRoot: View {
                     """
                 )
             }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if session.wallPosterUIActive {
+            Color.clear
+                .frame(width: 1, height: 1)
+                .accessibilityHidden(true)
+        } else {
+            PlagueOperationModePosterMenu(session: session)
+                .ornament(
+                    visibility: .visible,
+                    attachmentAnchor: .scene(.top),
+                    contentAlignment: .center
+                ) {
+                    PlagueRoomSkinningTopOrnament(session: session)
+                }
+        }
     }
 
     @MainActor
@@ -279,28 +317,6 @@ struct PlagueOperationModePosterRoot: View {
         #else
         return "not_visionOS"
         #endif
-    }
-}
-
-struct WallPosterControlWindowShell: View {
-    @ObservedObject var session: PlagueDemoSession
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Text("Containment UI moved to wall")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Text("Use system close to quit.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .padding(18)
-        .glassBackgroundEffect()
-        .onAppear {
-            _ = session.wallPosterUIActive
-            print("[WallPosterUI] control window shell visible; system X remains kill switch")
-        }
     }
 }
 

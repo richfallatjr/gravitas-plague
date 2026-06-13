@@ -111,6 +111,13 @@ final class PlagueDemoSession: ObservableObject {
 
     private var controlWindowBackgroundIgnoreUntil: Date?
     private var controlWindowBackgroundIgnoreReason: String?
+    private var controlWindowDismissedForWallUI = false
+
+    var shouldIgnoreControlWindowLifecycleBecauseWallUIIsActive: Bool {
+        wallPosterUIActive &&
+            controlWindowDismissedForWallUI &&
+            !isQuitting
+    }
 
     var shouldShowStoryRoomSkinningControls: Bool {
         (experienceMode == .story || experienceMode == .debug)
@@ -161,6 +168,52 @@ final class PlagueDemoSession: ObservableObject {
         case .walkLoop:
             selectOperationMode(.walkLoop)
         }
+    }
+
+    @MainActor
+    func activateWallPosterUI() {
+        guard !wallPosterUIActive else {
+            return
+        }
+
+        wallPosterUIActive = true
+
+        print(
+            """
+            [WallPosterUI] active
+              SwiftUI visible poster hidden: true
+              RealityKit wall poster active: true
+              SwiftUI control window dismissal pending: true
+              RealityKit kill switch required: true
+            """
+        )
+    }
+
+    @MainActor
+    func prepareControlWindowDismissalForWallUI() {
+        controlWindowDismissedForWallUI = true
+
+        print(
+            """
+            [WallPosterUI] control window dismissal armed
+              reason: wall_ui_active_after_room_skinning
+              RealityKitKillSwitch: true
+            """
+        )
+    }
+
+    @MainActor
+    func noteControlWindowLifecycleIgnoredForWallUI(
+        reason: String
+    ) {
+        print(
+            """
+            [WallPosterUI] ignored SwiftUI control window lifecycle event
+              reason: \(reason)
+              wallUIActive: \(wallPosterUIActive)
+              RealityKitKillSwitch: true
+            """
+        )
     }
 
     func startHordeBenchmarkFromPoster() {
@@ -412,8 +465,36 @@ final class PlagueDemoSession: ObservableObject {
         )
     }
 
+    func requestImmediateQuitFromRealityKitKillSwitch(
+        reason: String
+    ) {
+        if isQuitting {
+            print(
+                """
+                [PlagueQuit] RealityKit kill switch tapped while already quitting
+                  reason: \(reason)
+                  forcingExit: true
+                """
+            )
+
+            exit(0)
+        }
+
+        print(
+            """
+            [PlagueQuit] RealityKit kill switch tapped
+              reason: \(reason)
+            """
+        )
+
+        shutdownForQuit(
+            reason: reason
+        )
+    }
+
     func notePosterUIMounted() {
         isPosterUIVisible = true
+        controlWindowDismissedForWallUI = false
 
         print(
             """
@@ -467,6 +548,7 @@ final class PlagueDemoSession: ObservableObject {
         immersiveSpaceStatus = .closed
         forestImmersiveStatus = "Mixed room scene closed."
         wallPosterUIActive = false
+        controlWindowDismissedForWallUI = false
 
         print("[PlagueQuit] shutdown complete")
     }

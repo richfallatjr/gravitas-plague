@@ -92,6 +92,9 @@ final class HordePortalManager {
         let portalWorld = Entity()
         portalWorld.name = "HordePortalWorld_wave\(wave)"
         portalWorld.components.set(WorldComponent())
+        PlagueNativeBloomInstaller.installStrictBloom(
+            on: portalWorld
+        )
 
         let context = PortalContentContext.forDoor(
             width: placement.width,
@@ -122,6 +125,7 @@ final class HordePortalManager {
                 profile: profile,
                 targetWorld: portalWorld
             )
+            portalPlane.position.z = -0.040
 
             if HordePortalSoftWallFeatherFactory.enabled {
                 let feather = try HordePortalSoftWallFeatherFactory.makeFeather(
@@ -144,6 +148,10 @@ final class HordePortalManager {
 
         root.addChild(portalPlane)
         root.addChild(portalWorld)
+
+        if root.findEntity(named: "HordePortalWallOcclusionMask") != nil {
+            fatalError("[HordePortal] wall occlusion mask still present. Remove it.")
+        }
 
         guard let transform = wallManager.convertWallLocalToWorldTransform(
             placement: placement
@@ -226,6 +234,16 @@ final class HordePortalManager {
               rightTopLean: \(profile.rightTopLean)
               hardFrameRemoved: true
               bottomFlushToFloor: true
+            """
+        )
+
+        print(
+            """
+            [HordePortal] portal created with real portal aperture
+              noProxyEnemy: true
+              noFade: true
+              noWallOcclusionMask: true
+              portalBackdropBehindMask: true
             """
         )
 

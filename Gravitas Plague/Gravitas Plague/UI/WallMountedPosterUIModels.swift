@@ -17,6 +17,10 @@ struct WallPosterUIButtonComponent: Component, Codable {
     }
 }
 
+struct WallPosterKillSwitchComponent: Component, Codable {
+    let id: String
+}
+
 struct WallPosterPlacement {
     var wallID: UUID
     var localX: Float
@@ -31,18 +35,11 @@ enum WallPosterMetrics {
         1086,
         1448
     )
-    static let maxHeightMeters: Float = 0.6096
+    static let maxHeightMeters: Float = 0.9144
+    static let wallMarginMeters: Float = 0.12
 
     static var aspect: Float {
         sourcePixelSize.x / sourcePixelSize.y
-    }
-
-    static var posterHeight: Float {
-        maxHeightMeters
-    }
-
-    static var posterWidth: Float {
-        posterHeight * aspect
     }
 
     static let depthOffset: Float = 0.018
@@ -60,4 +57,35 @@ enum WallPosterMetrics {
         478,
         143
     )
+
+    static func posterSize(
+        for wall: WallCandidate
+    ) -> SIMD2<Float> {
+        let availableHeight = max(
+            0.30,
+            wall.height - wallMarginMeters * 2.0
+        )
+        let height = min(
+            maxHeightMeters,
+            availableHeight
+        )
+        var width = height * aspect
+        let maxWidth = max(
+            0.30,
+            wall.width - wallMarginMeters * 2.0
+        )
+
+        if width > maxWidth {
+            width = maxWidth
+            return SIMD2<Float>(
+                width,
+                width / aspect
+            )
+        }
+
+        return SIMD2<Float>(
+            width,
+            height
+        )
+    }
 }
