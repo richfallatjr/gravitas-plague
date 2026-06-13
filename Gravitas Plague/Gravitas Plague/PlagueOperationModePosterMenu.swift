@@ -475,71 +475,82 @@ struct PlagueRoomSkinningTopOrnament: View {
             .help(mixedSceneHelpText)
             .accessibilityLabel(mixedSceneHelpText)
 
-            Button {
-                session.togglePortalHDRIAtmosphere()
-            } label: {
-                Image(systemName: session.portalHDRIAtmosphere == .night ? "moon.stars.fill" : "cloud.sun.fill")
-                    .font(.system(size: 23, weight: .semibold))
-                    .frame(width: 44, height: 44)
+            if session.shouldShowForestDayNightToggle {
+                Button {
+                    session.togglePortalHDRIAtmosphere()
+                } label: {
+                    Image(systemName: session.portalHDRIAtmosphere == .night ? "moon.stars.fill" : "cloud.sun.fill")
+                        .font(.system(size: 23, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .disabled(session.forestImmersiveState != .open)
+                .help("Switch portal backdrop")
+                .accessibilityLabel("Switch portal backdrop")
             }
-            .buttonStyle(.plain)
-            .disabled(session.forestImmersiveState != .open)
-            .help("Switch portal backdrop")
-            .accessibilityLabel("Switch portal backdrop")
 
-            Button {
-                session.startRoomSkinningExperiment()
-            } label: {
-                Image(systemName: "door.left.hand.open")
-                    .font(.system(size: 23, weight: .semibold))
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
-            .disabled(session.forestImmersiveState != .open)
-            .help("Scan wall and preview portal door")
-            .accessibilityLabel("Scan wall and preview portal door")
+            if session.shouldShowStoryRoomSkinningControls {
+                Button {
+                    session.startRoomSkinningExperiment()
+                } label: {
+                    Image(systemName: "door.left.hand.open")
+                        .font(.system(size: 23, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .disabled(session.forestImmersiveState != .open)
+                .help("Scan wall and preview portal door")
+                .accessibilityLabel("Scan wall and preview portal door")
 
-            Button {
-                session.confirmRoomSkinningPlacement()
-            } label: {
-                Image(systemName: "checkmark.circle")
-                    .font(.system(size: 23, weight: .semibold))
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
-            .disabled(session.forestImmersiveState != .open)
-            .help("Confirm portal door")
-            .accessibilityLabel("Confirm portal door")
+                Button {
+                    session.confirmRoomSkinningPlacement()
+                } label: {
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 23, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .disabled(session.forestImmersiveState != .open)
+                .help("Confirm portal door")
+                .accessibilityLabel("Confirm portal door")
 
-            Button {
-                session.enterRoomSkinningDoorAdjustment()
-            } label: {
-                Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
-                    .font(.system(size: 22, weight: .semibold))
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
-            .disabled(session.forestImmersiveState != .open)
-            .help("Adjust portal door")
-            .accessibilityLabel("Adjust portal door")
+                Button {
+                    session.enterRoomSkinningDoorAdjustment()
+                } label: {
+                    Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
+                        .font(.system(size: 22, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .disabled(session.forestImmersiveState != .open)
+                .help("Adjust portal door")
+                .accessibilityLabel("Adjust portal door")
 
-            Button {
-                session.confirmRoomSkinningDoorAdjustment()
-            } label: {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 22, weight: .semibold))
-                    .frame(width: 44, height: 44)
+                Button {
+                    session.confirmRoomSkinningDoorAdjustment()
+                } label: {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .disabled(session.forestImmersiveState != .open)
+                .help("Lock portal door")
+                .accessibilityLabel("Lock portal door")
             }
-            .buttonStyle(.plain)
-            .disabled(session.forestImmersiveState != .open)
-            .help("Lock portal door")
-            .accessibilityLabel("Lock portal door")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .glassBackgroundEffect()
         .onAppear {
             print("[RoomSkinning] top ornament appeared")
+            if !session.shouldShowStoryRoomSkinningControls {
+                print("[RoomSkinning] debug test door hidden outside story/debug mode")
+            }
+
+            if !session.shouldShowForestDayNightToggle {
+                print("[PlagueForest] day/night toggle hidden")
+            }
         }
     }
 
@@ -597,22 +608,27 @@ struct PlagueForestTopOrnament: View {
             .help(mountainHelpText)
             .accessibilityLabel(mountainHelpText)
 
-            Button {
-                session.toggleForestAtmosphere()
-            } label: {
-                Image(systemName: session.forestAtmosphere.toggleTargetIconSystemName)
-                    .font(.system(size: 24, weight: .semibold))
-                    .frame(width: 44, height: 44)
+            if session.shouldShowForestDayNightToggle {
+                Button {
+                    session.toggleForestAtmosphere()
+                } label: {
+                    Image(systemName: session.forestAtmosphere.toggleTargetIconSystemName)
+                        .font(.system(size: 24, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .help("Switch to \(session.forestAtmosphere.next.displayName) atmosphere")
+                .accessibilityLabel("Switch to \(session.forestAtmosphere.next.displayName) atmosphere")
             }
-            .buttonStyle(.plain)
-            .help("Switch to \(session.forestAtmosphere.next.displayName) atmosphere")
-            .accessibilityLabel("Switch to \(session.forestAtmosphere.next.displayName) atmosphere")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .glassBackgroundEffect()
         .onAppear {
             print("[PlagueForest] top ornament appeared")
+            if !session.shouldShowForestDayNightToggle {
+                print("[PlagueForest] day/night toggle hidden")
+            }
         }
     }
 

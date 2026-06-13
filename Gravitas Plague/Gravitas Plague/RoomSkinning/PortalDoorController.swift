@@ -59,9 +59,23 @@ final class PortalDoorController: ObservableObject {
         portalWorldRoot.children.removeAll()
         portalWorldRoot.components.set(WorldComponent())
 
+        let context: PortalContentContext
+        if let placement {
+            context = .forDoor(
+                width: placement.width,
+                height: placement.height
+            )
+        } else {
+            context = .forDoor(
+                width: 0.92,
+                height: 2.0
+            )
+        }
+
         do {
             try await contentProvider.populatePortalWorld(
-                portalWorld: portalWorldRoot
+                portalWorld: portalWorldRoot,
+                context: context
             )
 
             print(
@@ -90,7 +104,9 @@ final class PortalDoorController: ObservableObject {
         var p = DoorPlacement.defaultForWall(wall)
         p.confirmed = false
         p.contentProviderID = contentProvider.providerID
-        placement = wallManager.clampPlacement(p, on: wall)
+        p.floorLocked = true
+        p = wallManager.resolveFloorLockedPlacementOrFallback(p)
+        placement = p
 
         resetDoorChildrenKeepingHandle()
 
@@ -136,6 +152,8 @@ final class PortalDoorController: ObservableObject {
 
         p.confirmed = true
         p.contentProviderID = contentProvider.providerID
+        p.floorLocked = true
+        p = wallManager.resolveFloorLockedPlacementOrFallback(p)
         placement = p
 
         resetDoorChildrenKeepingHandle()
@@ -143,9 +161,15 @@ final class PortalDoorController: ObservableObject {
 
         portalWorldRoot.components.set(WorldComponent())
 
+        let context = PortalContentContext.forDoor(
+            width: p.width,
+            height: p.height
+        )
+
         do {
             try await contentProvider.populatePortalWorld(
-                portalWorld: portalWorldRoot
+                portalWorld: portalWorldRoot,
+                context: context
             )
         } catch {
             print(
@@ -188,6 +212,10 @@ final class PortalDoorController: ObservableObject {
         rebuildBottomHandle()
 
         state = .active
+        logFloorAnchorProof(
+            placement: p,
+            wall: wall
+        )
 
         print(
             """
@@ -213,12 +241,21 @@ final class PortalDoorController: ObservableObject {
         }
 
         p.localX = x
-        p.localY = y
 
-        p = wallManager.clampPlacement(
-            p,
-            on: wall
-        )
+        if p.floorLocked {
+            print(
+                """
+                [PortalDoor] vertical drag ignored because portal is floor-locked
+                  requestedY: \(y)
+                  currentY: \(p.localY)
+                """
+            )
+        } else {
+            p.localY = y
+        }
+
+        p = wallManager.resolveFloorLockedPlacementOrFallback(p)
+        p = wallManager.clampPlacement(p, on: wall)
 
         placement = p
 
@@ -306,9 +343,18 @@ final class PortalDoorController: ObservableObject {
     private func applyTransformFromPlacement(
         wallManager: WallPlaneManager
     ) {
-        guard let placement,
+        guard let placement else {
+            return
+        }
+
+        let resolvedPlacement = wallManager.resolveFloorLockedPlacementOrFallback(
+            placement
+        )
+        self.placement = resolvedPlacement
+
+        guard
               let matrix = wallManager.convertWallLocalToWorldTransform(
-                placement: placement
+                placement: resolvedPlacement
               ) else {
             return
         }
@@ -318,7 +364,7 @@ final class PortalDoorController: ObservableObject {
             relativeTo: nil
         )
 
-        if let wall = wallManager.wallCandidates[placement.wallID] {
+        if let wall = wallManager.wallCandidates[resolvedPlacement.wallID] {
             let doorNormal = normalizeSafe(
                 SIMD3<Float>(
                     matrix.columns.2.x,
@@ -344,6 +390,33 @@ final class PortalDoorController: ObservableObject {
                 )
             }
         }
+    }
+
+    private func logFloorAnchorProof(
+        placement: DoorPlacement,
+        wall: WallCandidate
+    ) {
+        let bottomWorld =
+            wall.center +
+            wall.right * placement.localX +
+            wall.up * (placement.localY - placement.height * 0.5)
+
+        let difference = placement.floorWorldY.map {
+            bottomWorld.y - $0
+        } ?? 0
+        let floorWorldYDescription = placement.floorWorldY.map { value in
+            "\(value)"
+        } ?? "nil"
+
+        print(
+            """
+            [PortalDoor] floor anchor proof
+              floorLocked: \(placement.floorLocked)
+              bottomWorldY: \(bottomWorld.y)
+              floorWorldY: \(floorWorldYDescription)
+              difference: \(difference)
+            """
+        )
     }
 
     @MainActor

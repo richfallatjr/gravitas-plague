@@ -11,6 +11,19 @@ enum PlagueForestImmersiveState: String, Codable {
     case failed
 }
 
+enum PlagueExperienceMode: String, Codable {
+    case horde
+    case walkLoop
+    case story
+    case debug
+}
+
+enum PlagueFeatureFlags {
+    static let showStoryRoomSkinningControls = false
+    static let showForestDayNightToggle = false
+    static let showDebugTestDoor = false
+}
+
 @MainActor
 final class PlagueDemoSession: ObservableObject {
     static let immersiveSpaceID = PlagueImmersiveSpaceID.forest
@@ -74,6 +87,7 @@ final class PlagueDemoSession: ObservableObject {
     @Published var immersiveSpaceStatus: ImmersiveSpaceStatus = .closed
     @Published var activeMode: ActiveMode = .none
     @Published var selectedOperationMode: PlagueOperationMode?
+    @Published var experienceMode: PlagueExperienceMode = .horde
     @Published var isPosterUIVisible = true
     @Published var isQuitting = false
     @Published var statusMessage: String = "Start the demo."
@@ -97,6 +111,15 @@ final class PlagueDemoSession: ObservableObject {
     private var controlWindowBackgroundIgnoreUntil: Date?
     private var controlWindowBackgroundIgnoreReason: String?
 
+    var shouldShowStoryRoomSkinningControls: Bool {
+        (experienceMode == .story || experienceMode == .debug)
+            && PlagueFeatureFlags.showStoryRoomSkinningControls
+    }
+
+    var shouldShowForestDayNightToggle: Bool {
+        PlagueFeatureFlags.showForestDayNightToggle
+    }
+
     func send(_ command: Command) {
         latestCommand = CommandEnvelope(command)
     }
@@ -116,9 +139,11 @@ final class PlagueDemoSession: ObservableObject {
 
         switch mode {
         case .horde:
+            experienceMode = .horde
             startHordeBenchmarkFromPoster()
 
         case .walkLoop:
+            experienceMode = .walkLoop
             startWalkLoopFromPoster()
         }
     }
@@ -463,6 +488,12 @@ final class PlagueDemoSession: ObservableObject {
     }
 
     func startRoomSkinningExperiment() {
+        guard shouldShowStoryRoomSkinningControls else {
+            roomSkinningStatus = "Story room-skinning controls are hidden."
+            print("[RoomSkinning] debug test door hidden outside story/debug mode")
+            return
+        }
+
         roomSkinningStatus = "Room skinning scan requested."
         send(.startRoomSkinningScan)
     }

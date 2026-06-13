@@ -4,10 +4,16 @@ import Foundation
 import RealityKit
 import simd
 
+enum RoomSkinningPurpose: String {
+    case storyPlacement
+    case hordeScanOnly
+}
+
 @MainActor
 final class RoomSkinningCoordinator: ObservableObject {
     @Published private(set) var state: RoomSkinningState = .idle
     @Published private(set) var statusText: String = "Room skinning idle."
+    @Published private(set) var purpose: RoomSkinningPurpose = .storyPlacement
 
     let root = Entity()
     let wallManager = WallPlaneManager()
@@ -72,6 +78,8 @@ final class RoomSkinningCoordinator: ObservableObject {
     }
 
     func startRoomSkinning() {
+        purpose = .storyPlacement
+
         guard state == .idle || state == .failed else {
             print("[RoomSkinning] start ignored state=\(state.rawValue)")
             return
@@ -85,6 +93,21 @@ final class RoomSkinningCoordinator: ObservableObject {
         print("[RoomSkinning] scan started")
     }
 
+    func startHordeRoomScanOnly() {
+        purpose = .hordeScanOnly
+
+        guard state == .idle || state == .failed else {
+            print("[RoomSkinning] horde scan requested while already active state=\(state.rawValue)")
+            return
+        }
+
+        state = .scanning
+        setStatus("Scanning walls and floor for Horde portals.")
+        wallManager.beginScanning()
+
+        print("[RoomSkinning] Horde scan-only mode started")
+    }
+
     func cancelRoomSkinning() {
         monitorTask?.cancel()
         monitorTask = nil
@@ -94,6 +117,7 @@ final class RoomSkinningCoordinator: ObservableObject {
         wallManager.stop()
         roomTrackingManager.stop()
 
+        purpose = .storyPlacement
         state = .idle
         setStatus("Room skinning cancelled.")
 
@@ -117,6 +141,10 @@ final class RoomSkinningCoordinator: ObservableObject {
     }
 
     private func evaluateBestWall() {
+        guard purpose == .storyPlacement else {
+            return
+        }
+
         switch state {
         case .scanning, .wallCandidateAvailable:
             guard let wall = wallManager.bestWallCandidate(

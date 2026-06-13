@@ -27,6 +27,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let audioController = GravitasDemoAudioController()
     private let forestEnvironmentController = PlagueGaussianForestEnvironmentController()
     private let roomSkinningCoordinator = RoomSkinningCoordinator()
+    private let hordePortalManager = HordePortalManager()
+    private let hordeRoomScanTracker = HordeRoomScanTracker()
+    private let instructionHUD = PlagueHeadTrackedInstructionHUD()
 
     @Published private(set) var isPlayerDeathSequenceActive = false
 
@@ -79,6 +82,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var hordeWaveSpawnState: HordeWaveSpawnState = .idle
     private var hordeSpawnFailures: [HordeSpawnFailureRecord] = []
     private var isSpawningHordeWave = false
+    private var hordeWaitingForRoomScan = false
+    private var hordeWaitingForFloorPromptShown = false
+    private var hordeRoomScanCompletionTask: Task<Void, Never>?
+    private var activeIngressControllers: [UUID: HordePortalIngressController] = [:]
 
     private var lastTickDate: Date?
     private var handledCommandIDs = Set<UUID>()
@@ -106,9 +113,16 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         CharacterAssetRegistry.validateRequiredCharacterAssets()
         PortalHDRIAssetValidator.validate()
+        HordePortalAssetValidator.validate()
 
-        _ = makeHeadAnchor()
+        let head = makeHeadAnchor()
+        instructionHUD.ensure(on: head)
+
         roomSkinningCoordinator.installIfNeeded(sceneRoot: root)
+        hordePortalManager.install(
+            sceneRoot: root,
+            wallManager: roomSkinningCoordinator.wallManager
+        )
 
         audioController.startImmersiveAudio()
 
@@ -270,7 +284,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         case .playJockFollowDemo:
             Task {
                 await startJockRetargetTest(autoPlayLoop: false)
-                await startHordeBenchmark()
+                beginHordeRoomScanForBenchmark()
             }
 
         case .stopJockFollowDemo:
@@ -339,9 +353,20 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 position: currentPose.headPosition,
                 forward: currentPose.headForward
             )
+
+            updateHordeRoomScanIfNeeded(
+                currentPose: currentPose
+            )
         }
 
         if hordeBenchmarkRunning {
+            if let pose = currentPose {
+                updatePortalIngressControllers(
+                    deltaTime: deltaTime,
+                    playerWorldPosition: pose.headPosition
+                )
+            }
+
             for controller in hordeEnemyControllersByID.values {
                 controller.update(
                     deltaTime: deltaTime,
@@ -475,10 +500,167 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
     }
 
+    private func beginHordeRoomScanForBenchmark() {
+        guard !hordeWaitingForRoomScan else {
+            print("[HordeRoomScan] Horde start ignored; scan already active")
+            return
+        }
+
+        hordeRoomScanCompletionTask?.cancel()
+        hordeRoomScanCompletionTask = nil
+
+        hordeWaitingForRoomScan = true
+        hordeWaitingForFloorPromptShown = false
+        hordeRoomScanTracker.begin()
+        roomSkinningCoordinator.startHordeRoomScanOnly()
+
+        showInstructionHUD(
+            "Spin around in a full 360 degree circle to scan the room."
+        )
+
+        print(
+            """
+            [HordeRoomScan] Horde start delayed until 360 room scan completes
+            """
+        )
+    }
+
+    private func updateHordeRoomScanIfNeeded(
+        currentPose: PhaseOneSpawnPose
+    ) {
+        guard hordeWaitingForRoomScan else {
+            return
+        }
+
+        hordeRoomScanTracker.updateHeadForward(
+            currentPose.headForward
+        )
+
+        let percent = Int(hordeRoomScanTracker.progress * 100)
+
+        if percent >= 50,
+           !hordeRoomScanTracker.isComplete {
+            showInstructionHUD("Keep turning. The room is still being mapped. \(percent)%")
+        } else if !hordeRoomScanTracker.isComplete {
+            showInstructionHUD("Spin around in a full 360 degree circle to scan the room. \(percent)%")
+        }
+
+        if hordeRoomScanTracker.isComplete {
+            finishHordeRoomScanAndStartBenchmark()
+        }
+    }
+
+    private func finishHordeRoomScanAndStartBenchmark() {
+        guard hordeWaitingForRoomScan else {
+            return
+        }
+
+        guard roomSkinningCoordinator.wallManager.floorCandidates.values.contains(where: { $0.isUsableFloor }) else {
+            showInstructionHUD(
+                "Look down briefly. I need the floor before the breach can open."
+            )
+
+            if !hordeWaitingForFloorPromptShown {
+                hordeWaitingForFloorPromptShown = true
+
+                print(
+                    """
+                    [HordeRoomScan] scan has walls but no verified floor
+                      action: waiting_for_floor
+                    """
+                )
+            }
+
+            return
+        }
+
+        hordeWaitingForRoomScan = false
+        hordeWaitingForFloorPromptShown = false
+
+        hordeRoomScanCompletionTask?.cancel()
+        hordeRoomScanCompletionTask = Task { @MainActor in
+            showInstructionHUD("Walls mapped. Breach points forming.")
+
+            try? await Task.sleep(
+                nanoseconds: 1_000_000_000
+            )
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            showInstructionHUD("Portal breach detected.")
+
+            try? await Task.sleep(
+                nanoseconds: 1_400_000_000
+            )
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            instructionHUD.clear()
+
+            print("[HordeRoomScan] Horde starting after room scan")
+
+            await startHordeBenchmark()
+        }
+    }
+
+    private func showInstructionHUD(
+        _ text: String
+    ) {
+        guard let headAnchor else {
+            print("[PlagueHUD] WARNING cannot show HUD; head anchor not ready")
+            return
+        }
+
+        instructionHUD.show(
+            text,
+            on: headAnchor
+        )
+    }
+
+    private func updatePortalIngressControllers(
+        deltaTime: Float,
+        playerWorldPosition: SIMD3<Float>
+    ) {
+        var finishedIDs: [UUID] = []
+
+        for (enemyID, ingress) in activeIngressControllers {
+            ingress.update(
+                deltaTime: deltaTime,
+                playerWorldPosition: playerWorldPosition
+            )
+
+            switch ingress.phase {
+            case .followingPlayer, .complete, .failed:
+                finishedIDs.append(enemyID)
+
+            case .walkingParallelInsidePortal,
+                 .turningAtPortalCenter,
+                 .crossingIntoRoom:
+                break
+            }
+        }
+
+        for enemyID in finishedIDs {
+            activeIngressControllers.removeValue(forKey: enemyID)
+        }
+    }
+
     private func startHordeBenchmark() async {
         guard sceneRoot != nil else { return }
 
-        stopHordeBenchmark()
+        pendingNextBenchmarkWaveTask?.cancel()
+        pendingNextBenchmarkWaveTask = nil
+        clearHordeEnemyControllers()
+        activeIngressControllers.removeAll()
+        hordePortalManager.reset()
+        activeHordeEnemyIDs.removeAll()
+        dyingHordeEnemyIDs.removeAll()
+        corpseHordeEnemyIDs.removeAll()
+
         resetHordeBenchmarkDeathPresentation()
 
         hordeBenchmarkRunning = true
@@ -499,8 +681,16 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private func stopHordeBenchmark() {
         pendingNextBenchmarkWaveTask?.cancel()
         pendingNextBenchmarkWaveTask = nil
+        hordeRoomScanCompletionTask?.cancel()
+        hordeRoomScanCompletionTask = nil
 
         hordeBenchmarkRunning = false
+        hordeWaitingForRoomScan = false
+        hordeWaitingForFloorPromptShown = false
+        hordeRoomScanTracker.cancel()
+        instructionHUD.clear()
+        activeIngressControllers.removeAll()
+        hordePortalManager.reset()
         clearHordeEnemyControllers()
         activeHordeEnemyIDs.removeAll()
         dyingHordeEnemyIDs.removeAll()
@@ -583,6 +773,41 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeSpawnFailures.removeAll()
         hordePlayerHitsThisWave = 0
 
+        let newPortal = await hordePortalManager.createPortalForWave(
+            wave: nextWave,
+            playerPosition: spawnPose.headPosition,
+            playerForward: spawnPose.headForward
+        )
+
+        guard newPortal != nil || hordePortalManager.randomPortalForSpawn() != nil else {
+            hordeWaveSpawnState = .failed
+
+            print(
+                """
+                [HordePortal] ERROR no portal available for wave
+                  wave: \(nextWave)
+                  directRoomSpawnAllowed: false
+                  wallCandidates: \(roomSkinningCoordinator.wallManager.wallCandidates.count)
+                """
+            )
+
+            return
+        }
+
+        showInstructionHUD("Wave \(nextWave). They are coming through.")
+        Task { @MainActor in
+            try? await Task.sleep(
+                nanoseconds: 2_200_000_000
+            )
+
+            guard hordeBenchmarkRunning,
+                  hordeCurrentWave == nextWave else {
+                return
+            }
+
+            instructionHUD.clear()
+        }
+
         print(
             """
             [Horde] wave spawn started
@@ -626,13 +851,39 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     return
                 }
 
-                try registerAndRevealHordeEnemy(
+                let portal: HordePortal?
+                if index == 0 {
+                    portal = newPortal ?? hordePortalManager.randomPortalForSpawn(preferNewest: true)
+                } else {
+                    portal = hordePortalManager.randomPortalForSpawn()
+                }
+
+                guard let portal else {
+                    throw NSError(
+                        domain: "HordePortal",
+                        code: 501,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "No Horde portal available for enemy \(index). Direct room spawn is disabled."
+                        ]
+                    )
+                }
+
+                let side: HordePortalEntranceSide = Bool.random() ? .left : .right
+
+                try registerHordeEnemyForPortalIngress(
                     controller: controller,
                     id: id,
                     archetype: archetype,
                     wave: nextWave,
                     spawnIndex: index,
+                    portal: portal,
+                    side: side,
                     currentHeadPosition: spatialProvider.currentPose()?.headPosition ?? spawnPose.headPosition
+                )
+
+                hordePortalManager.markEntranceUsed(
+                    portalID: portal.id
                 )
 
                 if successfulSpawnCount == 0 {
@@ -650,7 +901,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                       archetype: \(archetype.rawValue)
                       id: \(id)
                       hitsToKill: \(hitsToKill)
-                      position: \(positions[index])
+                      portalID: \(portal.id)
+                      side: \(side.rawValue)
                       activeIDs: \(activeHordeEnemyIDs.count)
                       controllers: \(hordeEnemyControllersByID.count)
                     """
@@ -845,6 +1097,71 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               registeredBeforeVisible: true
               playFollowDemoAfterRegister: true
               primedOneTick: true
+            """
+        )
+    }
+
+    private func registerHordeEnemyForPortalIngress(
+        controller: JockRetargetTestController,
+        id: UUID,
+        archetype: PlagueCharacterArchetype,
+        wave: Int,
+        spawnIndex: Int,
+        portal: HordePortal,
+        side: HordePortalEntranceSide,
+        currentHeadPosition: SIMD3<Float>
+    ) throws {
+        guard let sceneRoot else {
+            throw NSError(
+                domain: "HordeSpawn",
+                code: 500,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Missing scene root while registering portal horde enemy"
+                ]
+            )
+        }
+
+        precondition(controller.rootEntity.isEnabled == false)
+
+        hordeEnemyControllersByID[id] = controller
+        activeHordeEnemyIDs.insert(id)
+
+        let ingress = HordePortalIngressController(
+            enemy: controller,
+            portal: portal,
+            sceneRoot: sceneRoot,
+            side: side
+        )
+
+        activeIngressControllers[id] = ingress
+
+        forestEnvironmentController.applyIBLReceiverRecursively(
+            root: controller.rootEntity
+        )
+
+        let audioStartDelay = TimeInterval.random(in: 0...1)
+        audioController.attachHostAudioSource(
+            id: id,
+            hostRootEntity: controller.rootEntity,
+            breathingStartDelay: audioStartDelay
+        )
+
+        controller.update(
+            deltaTime: 1.0 / 60.0,
+            currentHeadPosition: currentHeadPosition
+        )
+
+        print(
+            """
+            [HordePortal] enemy assigned to portal ingress
+              wave: \(wave)
+              index: \(spawnIndex)
+              enemyID: \(id)
+              archetype: \(archetype.rawValue)
+              portalID: \(portal.id)
+              side: \(side.rawValue)
+              audioStartDelay: \(String(format: "%.3f", audioStartDelay))
+              directRoomSpawnAllowed: false
             """
         )
     }

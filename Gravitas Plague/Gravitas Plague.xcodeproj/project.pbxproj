@@ -41,6 +41,7 @@
 		8E1A10432FCD000100000001 /* ../forest-overcast-01.exr in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10422FCD000100000001 /* ../forest-overcast-01.exr */; };
 		8E1A10452FCD000100000001 /* ../forest-night-01.ply in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10442FCD000100000001 /* ../forest-night-01.ply */; };
 		8E1A10472FCD000100000001 /* ../forest-night-01.exr in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10462FCD000100000001 /* ../forest-night-01.exr */; };
+		8E1A10492FCD000100000001 /* ../hellscape_01.exr in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10482FCD000100000001 /* ../hellscape_01.exr */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -98,6 +99,7 @@
 		8E1A10422FCD000100000001 /* ../forest-overcast-01.exr */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../forest-overcast-01.exr"; sourceTree = SOURCE_ROOT; };
 		8E1A10442FCD000100000001 /* ../forest-night-01.ply */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../forest-night-01.ply"; sourceTree = SOURCE_ROOT; };
 		8E1A10462FCD000100000001 /* ../forest-night-01.exr */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../forest-night-01.exr"; sourceTree = SOURCE_ROOT; };
+		8E1A10482FCD000100000001 /* ../hellscape_01.exr */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../hellscape_01.exr; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -197,6 +199,7 @@
 				8E1A10422FCD000100000001 /* ../forest-overcast-01.exr */,
 				8E1A10442FCD000100000001 /* ../forest-night-01.ply */,
 				8E1A10462FCD000100000001 /* ../forest-night-01.exr */,
+				8E1A10482FCD000100000001 /* ../hellscape_01.exr */,
 				8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */,
 				8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */,
 				8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */,
@@ -353,6 +356,7 @@
 				8E1A10432FCD000100000001 /* ../forest-overcast-01.exr in Resources */,
 				8E1A10452FCD000100000001 /* ../forest-night-01.ply in Resources */,
 				8E1A10472FCD000100000001 /* ../forest-night-01.exr in Resources */,
+				8E1A10492FCD000100000001 /* ../hellscape_01.exr in Resources */,
 				8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */,
 				8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav in Resources */,
 				8E1A10142FCD000100000001 /* ../Narrow-band-analog.wav in Resources */,

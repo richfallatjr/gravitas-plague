@@ -135,6 +135,46 @@ struct WallCandidate: Identifiable {
     }
 }
 
+enum HorizontalPlaneSemantic: String, Codable {
+    case floor
+    case ceiling
+    case highSurface
+    case unknown
+}
+
+struct FloorCandidate: Identifiable {
+    let id: UUID
+    let anchorID: UUID
+
+    var worldTransform: simd_float4x4
+
+    var center: SIMD3<Float>
+    var normal: SIMD3<Float>
+    var right: SIMD3<Float>
+    var forward: SIMD3<Float>
+
+    var width: Float
+    var depth: Float
+    var semantic: HorizontalPlaneSemantic
+
+    var worldY: Float {
+        center.y
+    }
+
+    var area: Float {
+        width * depth
+    }
+
+    var stabilityScore: Float
+    var lastUpdated: Date
+
+    var isUsableFloor: Bool {
+        semantic == .floor &&
+            stabilityScore >= 0.25 &&
+            area >= 1.2
+    }
+}
+
 struct PortalDoorHandleComponent: Component, Codable {
     var doorID: String
 }
@@ -145,10 +185,11 @@ struct DoorPlacement: Codable, Equatable {
     /// X slides horizontally along wallRight.
     var localX: Float
 
-    /// Y slides vertically along wallUp.
+    /// Door center in wall-local Y. If floorLocked is true,
+    /// this is resolved from the floor every transform.
     var localY: Float
 
-    /// Fixed offset away from wall normal to avoid z-fighting.
+    /// Tiny offset along wall normal to avoid z-fighting.
     var depthOffset: Float
 
     var width: Float
@@ -157,32 +198,61 @@ struct DoorPlacement: Codable, Equatable {
     var confirmed: Bool
     var contentProviderID: String
 
+    /// If true, bottom of portal stays on detected floor.
+    var floorLocked: Bool
+
+    /// Floor candidate or anchor ID used when available.
+    var floorAnchorID: UUID?
+
+    /// Last known floor world Y for session stability.
+    var floorWorldY: Float?
+
+    /// Small lift above floor to avoid z-fighting.
+    var bottomClearance: Float
+
     static func defaultForWall(
         _ wall: WallCandidate
     ) -> DoorPlacement {
-        let doorWidth: Float = 0.92
-        let doorHeight: Float = 2.0
-
-        let localY: Float
-
-        if wall.height > doorHeight {
-            localY = max(
-                -wall.height * 0.5 + doorHeight * 0.5,
-                -0.2
-            )
-        } else {
-            localY = 0
-        }
-
-        return DoorPlacement(
+        DoorPlacement(
             wallID: wall.id,
             localX: 0,
-            localY: localY,
+            localY: -wall.height * 0.5 + 1.0,
             depthOffset: 0.012,
-            width: doorWidth,
-            height: doorHeight,
+            width: 0.92,
+            height: 2.0,
             confirmed: false,
-            contentProviderID: HDRIDomePortalContentProvider.providerID
+            contentProviderID: HDRIDomePortalContentProvider.providerID,
+            floorLocked: true,
+            floorAnchorID: nil,
+            floorWorldY: nil,
+            bottomClearance: 0.015
+        )
+    }
+}
+
+struct PortalContentContext: Codable, Equatable {
+    var doorWidth: Float
+    var doorHeight: Float
+
+    /// In portal-world local space. Door opening is centered at 0,
+    /// so floor is normally -doorHeight / 2.
+    var floorY: Float
+
+    var groundDiscEnabled: Bool
+    var groundDiscRadius: Float
+    var groundDiscCenterZ: Float
+
+    static func forDoor(
+        width: Float,
+        height: Float
+    ) -> PortalContentContext {
+        PortalContentContext(
+            doorWidth: width,
+            doorHeight: height,
+            floorY: -height * 0.5,
+            groundDiscEnabled: true,
+            groundDiscRadius: max(2.8, width * 3.0),
+            groundDiscCenterZ: -2.25
         )
     }
 }

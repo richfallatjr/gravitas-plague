@@ -6,8 +6,24 @@ protocol PortalContentProvider {
 
     @MainActor
     func populatePortalWorld(
-        portalWorld: Entity
+        portalWorld: Entity,
+        context: PortalContentContext
     ) async throws
+}
+
+extension PortalContentProvider {
+    @MainActor
+    func populatePortalWorld(
+        portalWorld: Entity
+    ) async throws {
+        try await populatePortalWorld(
+            portalWorld: portalWorld,
+            context: .forDoor(
+                width: 0.92,
+                height: 2.0
+            )
+        )
+    }
 }
 
 enum PortalContentProviderRegistry {

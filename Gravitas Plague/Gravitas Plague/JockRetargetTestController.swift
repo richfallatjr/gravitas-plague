@@ -2,6 +2,14 @@ import Foundation
 import RealityKit
 import simd
 
+struct JockGroundingProfile {
+    var rootYOffsetFromFloor: Float
+
+    static let defaultInfected = JockGroundingProfile(
+        rootYOffsetFromFloor: 0.0
+    )
+}
+
 @MainActor
 final class JockRetargetTestController {
     private enum FollowDemoState: Equatable {
@@ -80,6 +88,8 @@ final class JockRetargetTestController {
 
     private var hasLoaded = false
     private var isVisible = false
+    private(set) var externalMotionDriven = false
+    private(set) var groundingProfile = JockGroundingProfile.defaultInfected
     private var rootYawRadians: Float = 0
 
     private var isPlayingPacingLoop = false
@@ -319,6 +329,10 @@ final class JockRetargetTestController {
             availableClipIDs: Set(loadedClips.keys)
         )
 
+        HordePortalRequiredClips.validate(
+            availableClipIDs: Set(loadedClips.keys)
+        )
+
         if loadedClips["dead_fall_forward"] == nil,
            let fallbackDeathClip = loadedClips["dead_fall_forward_01"] {
             loadedClips["dead_fall_forward"] = fallbackDeathClip
@@ -427,6 +441,8 @@ final class JockRetargetTestController {
             adapter: adapter
         )
         self.hasLoaded = true
+
+        updateGroundingProfileFromLoadedEntityIfNeeded()
 
         validateHitClipsArePrewarmed()
 
@@ -605,6 +621,7 @@ final class JockRetargetTestController {
 
     func hide() {
         isVisible = false
+        externalMotionDriven = false
         isPlayingPacingLoop = false
         followDemoState = .inactive
         lifecycleState = .despawned
@@ -676,6 +693,7 @@ final class JockRetargetTestController {
 
     func stopClip() {
         isPlayingPacingLoop = false
+        externalMotionDriven = false
         followDemoState = .inactive
         resetCombatRuntime()
         resetHitSelectionMemory()
@@ -837,6 +855,7 @@ final class JockRetargetTestController {
     }
 
     func stopFollowDemo() {
+        externalMotionDriven = false
         followDemoState = .inactive
         followDelayElapsed = 0
         latestHeadPosition = nil
@@ -852,6 +871,7 @@ final class JockRetargetTestController {
 
     func stopForBenchmarkPlayerDeath() {
         isVisible = false
+        externalMotionDriven = false
         rootEntity.isEnabled = false
         playerAttackEnabled = false
         lifecycleState = .despawned
@@ -880,12 +900,153 @@ final class JockRetargetTestController {
         )
     }
 
+    func setExternalMotionDriven(_ enabled: Bool) {
+        externalMotionDriven = enabled
+
+        print("[JockRuntime] externalMotionDriven=\(enabled)")
+    }
+
+    func updateGroundingProfileFromLoadedEntityIfNeeded() {
+        let bounds = rootEntity.visualBounds(
+            relativeTo: rootEntity
+        )
+
+        let minY = bounds.min.y
+        groundingProfile.rootYOffsetFromFloor = -minY
+
+        print(
+            """
+            [JockGrounding] profile updated
+              rootYOffsetFromFloor: \(groundingProfile.rootYOffsetFromFloor)
+              boundsMinY: \(minY)
+            """
+        )
+    }
+
+    func rootYForFloorY(
+        _ floorY: Float
+    ) -> Float {
+        floorY + groundingProfile.rootYOffsetFromFloor
+    }
+
+    func lockRootToFloorY(
+        _ floorY: Float
+    ) {
+        var position = rootEntity.position
+        position.y = rootYForFloorY(floorY)
+        rootEntity.position = position
+
+        print(
+            """
+            [JockGrounding] root locked to floor
+              floorY: \(floorY)
+              rootY: \(position.y)
+              offset: \(groundingProfile.rootYOffsetFromFloor)
+            """
+        )
+    }
+
     func setBenchmarkPlayerDead(_ isDead: Bool) {
         isBenchmarkPlayerDead = isDead
 
         if isDead {
             playerAttackEnabled = false
         }
+    }
+
+    var hordeBenchmarkID: UUID {
+        hordeID
+    }
+
+    func prepareForHordePortalIngress() {
+        show()
+
+        lifecycleState = .alive
+        activeDeathClipID = nil
+        isPlayingPacingLoop = false
+        followDemoState = .inactive
+        followDelayElapsed = 0
+        playerAttackEnabled = false
+        activeAttack = nil
+        combatState = .normal
+
+        resetCombatRuntime()
+        resetHitSelectionMemory()
+        setExternalMotionDriven(true)
+
+        driver?.locomotionDeltaHandler = nil
+        hitDetector.stop()
+
+        playHordePortalWalkLoop()
+
+        print(
+            """
+            [HordePortalIngress] combat disabled while inside portal
+              enemyID: \(hordeID)
+            """
+        )
+    }
+
+    func playHordePortalWalkLoop() {
+        let walkClipID = resolvedClipID(
+            for: .walk,
+            defaultClipID: followConfiguration.walkClipID
+        )
+
+        guard let clip = clipsByID[walkClipID] else {
+            print("[HordePortalIngress] ERROR missing walk clip \(walkClipID)")
+            return
+        }
+
+        driver?.playClip(
+            clip,
+            loop: true,
+            transition: true,
+            locomotionPolicy: .ignoreClipLocomotion,
+            runtimeOverride: followVisualRuntimeOverride()
+        )
+
+        print(
+            """
+            [HordePortalIngress] playing portal walk
+              enemyID: \(hordeID)
+              clipID: \(walkClipID)
+              locomotionPolicy: ignoreClipLocomotion
+            """
+        )
+    }
+
+    func playHordePortalTurnClip(
+        id clipID: String
+    ) {
+        guard let clip = clipsByID[clipID] else {
+            print("[HordePortalIngress] ERROR missing turn clip \(clipID)")
+            return
+        }
+
+        driver?.playClip(
+            clip,
+            loop: false,
+            transition: true,
+            locomotionPolicy: .ignoreClipLocomotion,
+            runtimeOverride: followVisualRuntimeOverride()
+        )
+    }
+
+    func finishHordePortalIngressAndStartFollow() throws {
+        setExternalMotionDriven(false)
+        playerAttackEnabled = true
+
+        print(
+            """
+            [HordePortalIngress] combat enabled after portal exit
+              enemyID: \(hordeID)
+            """
+        )
+
+        try playFollowDemo(
+            resetBenchmarkState: false
+        )
     }
 
     func update(
@@ -896,6 +1057,11 @@ final class JockRetargetTestController {
 
         latestHeadPosition = currentHeadPosition
         let dt = TimeInterval(deltaTime)
+
+        if externalMotionDriven {
+            driver?.update(deltaTime: dt)
+            return
+        }
 
         if followDemoState != .inactive {
             updateAttackMode(

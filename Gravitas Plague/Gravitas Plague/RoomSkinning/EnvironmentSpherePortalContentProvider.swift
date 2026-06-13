@@ -14,26 +14,42 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
 
     @MainActor
     func populatePortalWorld(
-        portalWorld: Entity
+        portalWorld: Entity,
+        context: PortalContentContext
     ) async throws {
         portalWorld.children.removeAll()
         portalWorld.components.set(WorldComponent())
 
-        let exr = try loadEXR(atmosphere: atmosphere)
+        let resources = try loadEXRResources(atmosphere: atmosphere)
 
         let dome = try makeInsideFacingHDRIDome(
-            cgImage: exr.cgImage,
-            resourceName: exr.name,
-            atmosphere: atmosphere
-        )
-
-        let iblEntity = try makeIBLEntity(
-            cgImage: exr.cgImage,
-            resourceName: exr.name,
+            texture: resources.visibleTexture,
+            resourceName: resources.name,
             atmosphere: atmosphere
         )
 
         portalWorld.addChild(dome)
+
+        if context.groundDiscEnabled {
+            let ground = try PortalProjectedGroundDiscFactory.makeGroundDisc(
+                texture: resources.visibleTexture,
+                config: .init(
+                    floorY: context.floorY + 0.004,
+                    centerZ: context.groundDiscCenterZ,
+                    radius: context.groundDiscRadius,
+                    exposure: atmosphere.visibleExposure
+                )
+            )
+
+            portalWorld.addChild(ground)
+        }
+
+        let iblEntity = makeIBLEntity(
+            environment: resources.environment,
+            resourceName: resources.name,
+            atmosphere: atmosphere
+        )
+
         portalWorld.addChild(iblEntity)
 
         attachIBLReceiversRecursively(
@@ -43,10 +59,13 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
 
         print(
             """
-            [PortalHDRI] portal world populated with EXR dome
+            [PortalHDRI] portal world populated
               atmosphere: \(atmosphere.rawValue)
               exr: \(atmosphere.exrResourceName).exr
-              visibleDome: true
+              dome: true
+              projectedGroundDisc: \(context.groundDiscEnabled)
+              floorY: \(context.floorY)
+              groundRadius: \(context.groundDiscRadius)
               ibl: true
               provider: \(Self.providerID)
             """
@@ -62,16 +81,18 @@ private enum PortalHDRIDomeOrientation {
     }
 }
 
-private struct LoadedPortalEXR {
+private struct LoadedPortalEXRResources {
     let name: String
-    let url: URL
     let cgImage: CGImage
+    let visibleTexture: TextureResource
+    let environment: EnvironmentResource
 }
 
 private extension HDRIDomePortalContentProvider {
-    func loadEXR(
+    @MainActor
+    func loadEXRResources(
         atmosphere: PortalHDRIAtmosphere
-    ) throws -> LoadedPortalEXR {
+    ) throws -> LoadedPortalEXRResources {
         guard let url = Bundle.main.url(
             forResource: atmosphere.exrResourceName,
             withExtension: atmosphere.exrExtension
@@ -124,26 +145,41 @@ private extension HDRIDomePortalContentProvider {
             """
         )
 
-        return LoadedPortalEXR(
+        let texture = try TextureResource(
+            image: cgImage,
+            withName: "\(atmosphere.exrResourceName)_portal_visible_texture",
+            options: .init(semantic: .color)
+        )
+
+        let environment = try EnvironmentResource(
+            equirectangular: cgImage,
+            withName: "\(atmosphere.exrResourceName)_portal_ibl"
+        )
+
+        return LoadedPortalEXRResources(
             name: atmosphere.exrResourceName,
-            url: url,
-            cgImage: cgImage
+            cgImage: cgImage,
+            visibleTexture: texture,
+            environment: environment
         )
     }
 
     @MainActor
     func makeInsideFacingHDRIDome(
-        cgImage: CGImage,
+        texture: TextureResource,
         resourceName: String,
         atmosphere: PortalHDRIAtmosphere
     ) throws -> ModelEntity {
-        let texture = try TextureResource(
-            image: cgImage,
-            withName: "\(resourceName)_portal_visible_dome",
-            options: .init(semantic: .color)
+        var material = UnlitMaterial()
+        material.color = .init(
+            tint: UIColor(
+                red: CGFloat(atmosphere.visibleExposure),
+                green: CGFloat(atmosphere.visibleExposure),
+                blue: CGFloat(atmosphere.visibleExposure),
+                alpha: 1.0
+            ),
+            texture: .init(texture)
         )
-
-        var material = UnlitMaterial(texture: texture)
         material.faceCulling = .none
 
         let radius: Float = 12.0
@@ -153,7 +189,7 @@ private extension HDRIDomePortalContentProvider {
             materials: [material]
         )
 
-        dome.name = "PortalHDRIVisibleDome_\(atmosphere.rawValue)"
+        dome.name = "PortalHDRIDome_\(resourceName)"
         dome.scale = SIMD3<Float>(-1, 1, 1)
         dome.orientation = simd_quatf(
             angle: PortalHDRIDomeOrientation.yRotationRadians,
@@ -179,17 +215,12 @@ private extension HDRIDomePortalContentProvider {
 
     @MainActor
     func makeIBLEntity(
-        cgImage: CGImage,
+        environment: EnvironmentResource,
         resourceName: String,
         atmosphere: PortalHDRIAtmosphere
-    ) throws -> Entity {
-        let environment = try EnvironmentResource(
-            equirectangular: cgImage,
-            withName: "\(resourceName)_portal_ibl"
-        )
-
+    ) -> Entity {
         let iblEntity = Entity()
-        iblEntity.name = "PortalHDRI_IBL_\(atmosphere.rawValue)"
+        iblEntity.name = "PortalIBL_\(resourceName)"
 
         var ibl = ImageBasedLightComponent(
             source: .single(environment)

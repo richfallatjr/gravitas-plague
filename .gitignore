@@ -2,3 +2,4 @@
 *.wav
 *.ply
 *.exr
+!hellscape_01.exr
