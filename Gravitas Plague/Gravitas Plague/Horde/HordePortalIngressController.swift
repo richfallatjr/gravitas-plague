@@ -122,6 +122,7 @@ final class HordePortalIngressController {
         )
 
         enemy.prepareForHordePortalIngress()
+        enemy.setRootMotionEnabled(false)
 
         print(
             """
@@ -180,6 +181,7 @@ final class HordePortalIngressController {
 
         turnStarted = true
         turnElapsed = 0
+        enemy.setRootMotionEnabled(false)
 
         let turnClipID = HordePortalTurnResolver.clipID(
             from: currentWalkDirectionLocal,
@@ -289,11 +291,17 @@ final class HordePortalIngressController {
             return
         }
 
+        let finalRootY = enemy.rootYForFloorY(floorY)
         let worldExit = SIMD3<Float>(
             rawWorldExit.x,
-            enemy.rootYForFloorY(floorY),
+            finalRootY,
             rawWorldExit.z
         )
+        let yawOnly = uprightYawOrientationFacing(
+            from: worldExit,
+            to: playerWorldPosition
+        )
+        let pitchRoll = debugPitchRollFromQuaternion(yawOnly)
 
         enemy.rootEntity.removeFromParent()
         sceneRoot.addChild(enemy.rootEntity)
@@ -302,18 +310,24 @@ final class HordePortalIngressController {
             worldExit,
             relativeTo: nil
         )
-        enemy.lockRootToFloorY(floorY)
-
-        let toPlayer = normalizeSafe(
-            playerWorldPosition - worldExit,
-            fallback: SIMD3<Float>(0, 0, 1)
-        )
-
-        enemy.rootEntity.look(
-            at: worldExit + toPlayer,
-            from: worldExit,
+        enemy.rootEntity.setOrientation(
+            yawOnly,
             relativeTo: nil
         )
+        enemy.lockRootToFloorY(floorY)
+        enemy.setExternalMotionDriven(false)
+        enemy.setRootMotionEnabled(true)
+
+        if abs(pitchRoll.pitch) > 0.02 ||
+           abs(pitchRoll.roll) > 0.02 {
+            print(
+                """
+                [HordePortalIngress] ERROR exit orientation is not upright
+                  pitch: \(pitchRoll.pitch)
+                  roll: \(pitchRoll.roll)
+                """
+            )
+        }
 
         do {
             try enemy.finishHordePortalIngressAndStartFollow()
@@ -345,12 +359,77 @@ final class HordePortalIngressController {
 
         print(
             """
-            [HordePortalIngress] enemy exited portal and began follow
+            [HordePortalIngress] enemy exited portal upright
               enemyID: \(enemyID)
               portalID: \(portalID)
-              worldExit: \(worldExit)
+              rawWorldExit: \(rawWorldExit)
+              floorY: \(floorY)
+              finalRootY: \(finalRootY)
+              yawOnlyQuaternion: \(yawOnly.vector)
+              pitchRollRemoved: true
               phase: \(phase.rawValue)
             """
+        )
+    }
+
+    private func uprightYawOrientationFacing(
+        from origin: SIMD3<Float>,
+        to target: SIMD3<Float>
+    ) -> simd_quatf {
+        var flat = SIMD3<Float>(
+            target.x - origin.x,
+            0,
+            target.z - origin.z
+        )
+
+        if simd_length(flat) < 0.001 {
+            flat = HordePortalLocalAxes.characterForward
+        } else {
+            flat = simd_normalize(flat)
+        }
+
+        return simd_quatf(
+            from: HordePortalLocalAxes.characterForward,
+            to: flat
+        )
+    }
+
+    private func debugPitchRollFromQuaternion(
+        _ quaternion: simd_quatf
+    ) -> (pitch: Float, roll: Float) {
+        let matrix = float3x3(quaternion)
+        let forward = -SIMD3<Float>(
+            matrix.columns.2.x,
+            matrix.columns.2.y,
+            matrix.columns.2.z
+        )
+        let right = SIMD3<Float>(
+            matrix.columns.0.x,
+            matrix.columns.0.y,
+            matrix.columns.0.z
+        )
+        let pitch = asin(
+            max(
+                -1,
+                min(
+                    1,
+                    forward.y
+                )
+            )
+        )
+        let roll = asin(
+            max(
+                -1,
+                min(
+                    1,
+                    right.y
+                )
+            )
+        )
+
+        return (
+            pitch,
+            roll
         )
     }
 

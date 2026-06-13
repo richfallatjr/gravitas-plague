@@ -1,7 +1,6 @@
 import Foundation
 import RealityKit
 import simd
-import UIKit
 
 @MainActor
 final class HordePortalManager {
@@ -53,7 +52,25 @@ final class HordePortalManager {
         }
 
         let wall = candidate.wall
-        let placement = candidate.placement
+        var placement = candidate.placement
+        let seed = UInt64(wave) ^ UInt64(portalOrder.count * 7919)
+        let profile = HordePortalApertureProfile.random(
+            baseWidth: placement.width,
+            baseHeight: placement.height,
+            seed: seed
+        )
+
+        placement.height = profile.maxHeight
+
+        guard let resolvedPlacement = wallManager.resolveFloorLockedPlacement(
+            placement,
+            requirement: .required
+        ) else {
+            print("[HordePortal] ERROR could not floor-lock janky aperture")
+            return nil
+        }
+
+        placement = resolvedPlacement
 
         let root = Entity()
         root.name = "HordePortalRoot_wave\(wave)_\(UUID().uuidString.prefix(6))"
@@ -84,21 +101,33 @@ final class HordePortalManager {
             return nil
         }
 
-        let rim = DimensionalTearPortalRimFactory.makeRim(
-            width: placement.width,
-            height: placement.height,
-            seed: UInt64(wave) ^ UInt64(portalOrder.count)
-        )
+        let portalPlane: ModelEntity
 
-        let portalPlane = makeHordePortalPlane(
-            width: placement.width * 0.84,
-            height: placement.height * 0.86,
-            targetWorld: portalWorld
-        )
+        do {
+            portalPlane = try HordePortalApertureMeshFactory.makePortalPlane(
+                profile: profile,
+                targetWorld: portalWorld
+            )
 
-        portalPlane.position.z = -0.006
+            if HordePortalSoftWallFeatherFactory.enabled {
+                let feather = try HordePortalSoftWallFeatherFactory.makeFeather(
+                    profile: profile,
+                    seed: seed
+                )
 
-        root.addChild(rim)
+                root.addChild(feather)
+            }
+        } catch {
+            print(
+                """
+                [HordePortal] ERROR failed to build janky aperture
+                  wave: \(wave)
+                  error: \(error.localizedDescription)
+                """
+            )
+            return nil
+        }
+
         root.addChild(portalPlane)
         root.addChild(portalWorld)
 
@@ -129,18 +158,23 @@ final class HordePortalManager {
             transform.columns.3.y,
             transform.columns.3.z
         )
+        let bearing = atan2(
+            worldCenter.x - playerPosition.x,
+            worldCenter.z - playerPosition.z
+        )
 
         let portal = HordePortal(
             id: UUID(),
             waveCreated: wave,
             wallID: wall.id,
             placement: placement,
+            apertureProfile: profile,
             root: root,
             portalWorldRoot: portalWorld,
             portalPlane: portalPlane,
             resolvedFloorWorldY: placement.floorWorldY,
             worldCenter: worldCenter,
-            bearingFromPlayerRadians: candidate.bearingRadians,
+            bearingFromPlayerRadians: bearing,
             entranceCount: 0
         )
 
@@ -161,6 +195,21 @@ final class HordePortalManager {
               nearestBearingGapRad: \(candidate.nearestBearingGap)
               backdrop: hellscape_01.exr
               persists: true
+            """
+        )
+
+        print(
+            """
+            [HordePortal] janky aperture portal created
+              wave: \(wave)
+              width: \(profile.bottomWidth)
+              maxHeight: \(profile.maxHeight)
+              leftHeight: \(profile.leftHeight)
+              rightHeight: \(profile.rightHeight)
+              leftTopLean: \(profile.leftTopLean)
+              rightTopLean: \(profile.rightTopLean)
+              hardFrameRemoved: true
+              bottomFlushToFloor: true
             """
         )
 
@@ -467,26 +516,4 @@ final class HordePortalManager {
         }
     }
 
-    private func makeHordePortalPlane(
-        width: Float,
-        height: Float,
-        targetWorld: Entity
-    ) -> ModelEntity {
-        let portal = ModelEntity(
-            mesh: .generatePlane(
-                width: width,
-                height: height
-            ),
-            materials: [PortalMaterial()]
-        )
-
-        portal.name = "HordePortalPlane"
-        portal.components.set(
-            PortalComponent(
-                target: targetWorld
-            )
-        )
-
-        return portal
-    }
 }

@@ -89,6 +89,7 @@ final class JockRetargetTestController {
     private var hasLoaded = false
     private var isVisible = false
     private(set) var externalMotionDriven = false
+    private(set) var rootMotionEnabled = true
     private(set) var groundingProfile = JockGroundingProfile.defaultInfected
     private var rootYawRadians: Float = 0
 
@@ -622,6 +623,7 @@ final class JockRetargetTestController {
     func hide() {
         isVisible = false
         externalMotionDriven = false
+        rootMotionEnabled = true
         isPlayingPacingLoop = false
         followDemoState = .inactive
         lifecycleState = .despawned
@@ -638,6 +640,7 @@ final class JockRetargetTestController {
 
     func playClip(id: String, loop: Bool) throws {
         show()
+        rootMotionEnabled = true
         isPlayingPacingLoop = false
         followDemoState = .inactive
         resetCombatRuntime()
@@ -666,6 +669,7 @@ final class JockRetargetTestController {
 
     func playPacingLoopFromStart() throws {
         show()
+        rootMotionEnabled = true
         followDemoState = .inactive
         resetCombatRuntime()
         resetHitSelectionMemory()
@@ -694,6 +698,7 @@ final class JockRetargetTestController {
     func stopClip() {
         isPlayingPacingLoop = false
         externalMotionDriven = false
+        rootMotionEnabled = true
         followDemoState = .inactive
         resetCombatRuntime()
         resetHitSelectionMemory()
@@ -856,6 +861,7 @@ final class JockRetargetTestController {
 
     func stopFollowDemo() {
         externalMotionDriven = false
+        rootMotionEnabled = true
         followDemoState = .inactive
         followDelayElapsed = 0
         latestHeadPosition = nil
@@ -872,6 +878,7 @@ final class JockRetargetTestController {
     func stopForBenchmarkPlayerDeath() {
         isVisible = false
         externalMotionDriven = false
+        rootMotionEnabled = true
         rootEntity.isEnabled = false
         playerAttackEnabled = false
         lifecycleState = .despawned
@@ -904,6 +911,19 @@ final class JockRetargetTestController {
         externalMotionDriven = enabled
 
         print("[JockRuntime] externalMotionDriven=\(enabled)")
+    }
+
+    func setRootMotionEnabled(
+        _ enabled: Bool
+    ) {
+        rootMotionEnabled = enabled
+
+        print(
+            """
+            [JockRuntime] rootMotionEnabled changed
+              enabled: \(enabled)
+            """
+        )
     }
 
     func updateGroundingProfileFromLoadedEntityIfNeeded() {
@@ -973,6 +993,7 @@ final class JockRetargetTestController {
         resetCombatRuntime()
         resetHitSelectionMemory()
         setExternalMotionDriven(true)
+        setRootMotionEnabled(false)
 
         driver?.locomotionDeltaHandler = nil
         hitDetector.stop()
@@ -988,6 +1009,8 @@ final class JockRetargetTestController {
     }
 
     func playHordePortalWalkLoop() {
+        setRootMotionEnabled(false)
+
         let walkClipID = resolvedClipID(
             for: .walk,
             defaultClipID: followConfiguration.walkClipID
@@ -1019,6 +1042,8 @@ final class JockRetargetTestController {
     func playHordePortalTurnClip(
         id clipID: String
     ) {
+        setRootMotionEnabled(false)
+
         guard let clip = clipsByID[clipID] else {
             print("[HordePortalIngress] ERROR missing turn clip \(clipID)")
             return
@@ -1035,6 +1060,7 @@ final class JockRetargetTestController {
 
     func finishHordePortalIngressAndStartFollow() throws {
         setExternalMotionDriven(false)
+        setRootMotionEnabled(true)
         playerAttackEnabled = true
 
         print(

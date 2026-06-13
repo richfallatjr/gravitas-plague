@@ -66,11 +66,80 @@ enum HordePortalTurnResolver {
     }
 }
 
+struct HordePortalApertureProfile: Codable, Equatable {
+    var bottomWidth: Float
+    var maxHeight: Float
+    var leftHeight: Float
+    var rightHeight: Float
+    var leftTopLean: Float
+    var rightTopLean: Float
+    var topPeakOffset: Float
+    var topSagOffset: Float
+    var topSamples: Int
+
+    static func random(
+        baseWidth: Float,
+        baseHeight: Float,
+        seed: UInt64
+    ) -> HordePortalApertureProfile {
+        var rng = SeededRNG(seed: seed)
+
+        let leftHeight = baseHeight * Float.random(in: 0.86...1.08, using: &rng)
+        let rightHeight = baseHeight * Float.random(in: 0.86...1.08, using: &rng)
+        let maxHeight = max(leftHeight, rightHeight) + 0.08
+
+        return HordePortalApertureProfile(
+            bottomWidth: baseWidth,
+            maxHeight: maxHeight,
+            leftHeight: leftHeight,
+            rightHeight: rightHeight,
+            leftTopLean: Float.random(in: -0.16...0.08, using: &rng),
+            rightTopLean: Float.random(in: -0.08...0.16, using: &rng),
+            topPeakOffset: Float.random(in: 0.03...0.18, using: &rng),
+            topSagOffset: Float.random(in: -0.10...0.06, using: &rng),
+            topSamples: 7
+        )
+    }
+
+    var bottomY: Float {
+        -maxHeight * 0.5
+    }
+
+    var leftBottom: SIMD2<Float> {
+        SIMD2<Float>(
+            -bottomWidth * 0.5,
+            bottomY
+        )
+    }
+
+    var rightBottom: SIMD2<Float> {
+        SIMD2<Float>(
+            bottomWidth * 0.5,
+            bottomY
+        )
+    }
+
+    var leftTop: SIMD2<Float> {
+        SIMD2<Float>(
+            -bottomWidth * 0.5 + leftTopLean,
+            bottomY + leftHeight
+        )
+    }
+
+    var rightTop: SIMD2<Float> {
+        SIMD2<Float>(
+            bottomWidth * 0.5 + rightTopLean,
+            bottomY + rightHeight
+        )
+    }
+}
+
 struct HordePortal: Identifiable {
     let id: UUID
     let waveCreated: Int
     let wallID: UUID
     var placement: DoorPlacement
+    var apertureProfile: HordePortalApertureProfile
     let root: Entity
     let portalWorldRoot: Entity
     let portalPlane: ModelEntity
