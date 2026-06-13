@@ -4,6 +4,19 @@ import RealityKit
 import simd
 
 enum PlagueNativeGaussianSplatRenderer {
+    static func makeEntities(
+        plyURL: URL
+    ) async throws -> [Entity] {
+        throw NSError(
+            domain: "PlagueNativeGaussianSplatRenderer",
+            code: 1401,
+            userInfo: [
+                NSLocalizedDescriptionKey:
+                    "Bulk Gaussian splat entity loading is disabled for \(plyURL.lastPathComponent). Use PlagueStreamingGaussianSplatLoader so chunk 0 renders immediately."
+            ]
+        )
+    }
+
     static func makeEntity(
         plyURL: URL,
         name: String
@@ -52,11 +65,154 @@ enum PlagueNativeGaussianSplatRenderer {
 
         fatalError("Native Gaussian splat compile gate was true but renderer path was not compiled.")
     }
+
+    static func makeEntity(
+        chunk: PlagueGaussianSplatChunk
+    ) throws -> Entity {
+        #if os(visionOS) && !targetEnvironment(simulator)
+        if #available(visionOS 27.0, *) {
+            return try makeNativeEntity(
+                chunk: chunk
+            )
+        }
+        #endif
+
+        try PlagueGaussianSplatAvailability.assertNativeAvailable()
+
+        fatalError("Native Gaussian splat compile gate was true but chunk renderer path was not compiled.")
+    }
+}
+
+enum PlagueRealityKitGaussianSplatBridge {
+    static func makeEntity(
+        chunk: PlagueGaussianSplatChunk
+    ) throws -> Entity {
+        print(
+            """
+            [PlagueRealityKitGaussianSplatBridge] creating native resource
+              chunkIndex: \(chunk.chunkIndex)
+              splats: \(chunk.count)
+              shDegree: \(chunk.sphericalHarmonicsDegree)
+              positionCount: \(chunk.positions.count)
+              scaleCount: \(chunk.scales.count)
+              rotationCount: \(chunk.rotations.count)
+              opacityCount: \(chunk.opacities.count)
+              shCount: \(chunk.sphericalHarmonicsRGB.count)
+              noFallback: true
+            """
+        )
+
+        let entity = try PlagueNativeGaussianSplatRenderer.makeEntity(
+            chunk: chunk
+        )
+
+        print(
+            """
+            [PlagueRealityKitGaussianSplatBridge] native component attached
+              chunkIndex: \(chunk.chunkIndex)
+              splats: \(chunk.count)
+              noFallback: true
+            """
+        )
+
+        return entity
+    }
 }
 
 #if os(visionOS) && !targetEnvironment(simulator)
 @available(visionOS 27.0, *)
 private extension PlagueNativeGaussianSplatRenderer {
+    static func makeNativeEntity(
+        chunk: PlagueGaussianSplatChunk
+    ) throws -> Entity {
+        try PlagueGaussianSplatAvailability.assertNativeAvailable()
+
+        print(
+            """
+            [PlagueNativeGaussianSplatRenderer] building native chunk resource
+              file: \(chunk.sourceURL.lastPathComponent)
+              chunkIndex: \(chunk.chunkIndex)
+              splats: \(chunk.count)
+              shDegree: \(chunk.sphericalHarmonicsDegree)
+              noFallback: true
+            """
+        )
+
+        let position = try makeFloat3BufferDescriptor(
+            chunk.positions,
+            label: "positions_chunk\(chunk.chunkIndex)"
+        )
+
+        let scale = try makeFloat3BufferDescriptor(
+            chunk.scales,
+            label: "scales_chunk\(chunk.chunkIndex)"
+        )
+
+        let rotation = try makeFloat4BufferDescriptor(
+            chunk.rotations,
+            label: "rotations_xyzw_chunk\(chunk.chunkIndex)"
+        )
+
+        let opacity = try makeFloatBufferDescriptor(
+            chunk.opacities,
+            label: "opacities_chunk\(chunk.chunkIndex)"
+        )
+
+        let sphericalHarmonicCoefficientCount = (chunk.sphericalHarmonicsDegree + 1)
+            * (chunk.sphericalHarmonicsDegree + 1)
+
+        let sphericalHarmonics = try makeFloat3BufferDescriptor(
+            chunk.sphericalHarmonicsRGB,
+            label: "spherical_harmonics_rgb_chunk\(chunk.chunkIndex)",
+            descriptorStride: 3 * MemoryLayout<Float>.stride * sphericalHarmonicCoefficientCount
+        )
+
+        let degree = try sphericalHarmonicDegree(
+            chunk.sphericalHarmonicsDegree
+        )
+
+        let bufferResource = try GaussianSplatResource.BufferResource(
+            count: chunk.count,
+            position: position,
+            scale: scale,
+            rotation: rotation,
+            opacity: opacity,
+            sphericalHarmonics: (
+                sphericalHarmonics,
+                degree
+            )
+        )
+
+        let resource = GaussianSplatResource(bufferResource)
+
+        // PLY chunk decoder already converts log-scale and opacity logits.
+        resource.scaleActivation = .identity
+        resource.opacityActivation = .identity
+        resource.projectionMode = .perspective
+        resource.sortingMode = .depth
+
+        let entity = Entity()
+        entity.name = "GaussianSplatChunk_\(chunk.chunkIndex)"
+        entity.components.set(
+            GaussianSplatComponent(resource)
+        )
+
+        print(
+            """
+            [PlagueNativeGaussianSplatRenderer] native splat chunk entity created
+              name: \(entity.name)
+              file: \(chunk.sourceURL.lastPathComponent)
+              chunkIndex: \(chunk.chunkIndex)
+              range: \(chunk.sourceVertexRange.lowerBound)..<\(chunk.sourceVertexRange.upperBound)
+              splats: \(chunk.count)
+              shDegree: \(chunk.sphericalHarmonicsDegree)
+              noFallback: true
+            """
+        )
+
+        return entity
+    }
+
     static func makeNativeEntity(
         cloud: PlagueGaussianSplatCloud,
         name: String
@@ -475,43 +631,17 @@ enum PlagueGaussianSplatChunker {
 final class PlagueGaussianSplatCache {
     static let shared = PlagueGaussianSplatCache()
 
-    private var parsedClouds: [String: PlagueGaussianSplatCloud] = [:]
-
     func entities(
         for atmosphere: PlagueForestAtmosphere,
         sourceURL: URL
     ) async throws -> [Entity] {
-        try PlagueGaussianSplatAvailability.assertNativeAvailable()
-
-        let key = atmosphere.rawValue
-        let cloud: PlagueGaussianSplatCloud
-
-        if let parsed = parsedClouds[key] {
-            cloud = parsed
-        } else {
-            cloud = try await Task.detached(priority: .userInitiated) {
-                try PlagueGaussianSplatPLYParser.parse(url: sourceURL)
-            }.value
-
-            parsedClouds[key] = cloud
-        }
-
-        let entities = try PlagueGaussianSplatChunker.makeChunkEntities(
-            cloud: cloud,
-            baseName: "GaussianSplat_\(key)"
+        throw NSError(
+            domain: "PlagueGaussianSplatCache",
+            code: 701,
+            userInfo: [
+                NSLocalizedDescriptionKey:
+                    "Cached bulk Gaussian splat entities are disabled for \(atmosphere.rawValue) from \(sourceURL.lastPathComponent). Use PlagueStreamingGaussianSplatLoader."
+            ]
         )
-
-        guard !entities.isEmpty else {
-            throw NSError(
-                domain: "PlagueGaussianSplatCache",
-                code: 700,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "No GaussianSplatComponent entities produced for \(sourceURL.lastPathComponent)."
-                ]
-            )
-        }
-
-        return entities
     }
 }

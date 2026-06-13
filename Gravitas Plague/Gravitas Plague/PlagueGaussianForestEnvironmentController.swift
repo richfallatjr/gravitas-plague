@@ -1,5 +1,7 @@
 import Foundation
+import ImageIO
 import RealityKit
+import simd
 
 enum PlagueImmersiveSpaceID {
     static let forest = "plague-forest-immersive-space"
@@ -123,19 +125,189 @@ enum PlagueForestAssetValidator {
     }
 }
 
+struct PlagueGaussianSplatPlacement {
+    var scale: Float = 1.0
+    var position = SIMD3<Float>(0, 0, -2.0)
+    var rotation = simd_quatf(
+        angle: 0,
+        axis: SIMD3<Float>(0, 1, 0)
+    )
+}
+
+@MainActor
+private func applyHDRILighting(
+    _ environment: EnvironmentResource,
+    atmosphere: PlagueForestAtmosphere,
+    lightingEntity: Entity,
+    receiverRoot: Entity
+) {
+    let ibl = ImageBasedLightComponent(
+        source: .single(environment),
+        intensityExponent: atmosphere.iblIntensityExponent
+    )
+
+    lightingEntity.components.set(ibl)
+
+    applyIBLReceiverRecursively(
+        root: receiverRoot,
+        lightingEntity: lightingEntity
+    )
+
+    print(
+        """
+        [PlagueForest] HDRI applied before splat visibility
+          atmosphere: \(atmosphere.rawValue)
+          hdri: \(atmosphere.hdriResourceName).\(atmosphere.hdriFileExtension)
+          intensityExponent: \(atmosphere.iblIntensityExponent)
+        """
+    )
+}
+
+@MainActor
+private func applyIBLReceiverRecursively(
+    root: Entity,
+    lightingEntity: Entity
+) {
+    root.components.set(
+        ImageBasedLightReceiverComponent(
+            imageBasedLight: lightingEntity
+        )
+    )
+
+    for child in root.children {
+        applyIBLReceiverRecursively(
+            root: child,
+            lightingEntity: lightingEntity
+        )
+    }
+}
+
+@MainActor
+final class PlagueStreamingGaussianSplatLoader {
+    private var activeTask: Task<Void, Never>?
+
+    func cancel() {
+        activeTask?.cancel()
+        activeTask = nil
+    }
+
+    func load(
+        atmosphere: PlagueForestAtmosphere,
+        plyURL: URL,
+        hdri: EnvironmentResource,
+        splatRoot: Entity,
+        lightingEntity: Entity,
+        onFirstChunkVisible: @escaping @MainActor () -> Void,
+        onFailure: @escaping @MainActor (Error) -> Void,
+        onComplete: @escaping @MainActor (Int) -> Void
+    ) {
+        cancel()
+
+        activeTask = Task { @MainActor in
+            do {
+                try Task.checkCancellation()
+
+                let planTask = Task.detached(priority: .userInitiated) {
+                    try PlagueGaussianSplatChunkPlanner.makePlan(
+                        url: plyURL
+                    )
+                }
+
+                let plan = try await withTaskCancellationHandler {
+                    try await planTask.value
+                } onCancel: {
+                    planTask.cancel()
+                }
+
+                try Task.checkCancellation()
+
+                applyHDRILighting(
+                    hdri,
+                    atmosphere: atmosphere,
+                    lightingEntity: lightingEntity,
+                    receiverRoot: splatRoot
+                )
+
+                var createdCount = 0
+
+                for chunkIndex in 0..<plan.chunkCount {
+                    try Task.checkCancellation()
+
+                    let decodeTask = Task.detached(priority: .userInitiated) {
+                        try PlagueGaussianSplatChunkDecoder.decodeChunk(
+                            plan: plan,
+                            chunkIndex: chunkIndex
+                        )
+                    }
+
+                    let chunk = try await withTaskCancellationHandler {
+                        try await decodeTask.value
+                    } onCancel: {
+                        decodeTask.cancel()
+                    }
+
+                    try Task.checkCancellation()
+
+                    let entity = try PlagueRealityKitGaussianSplatBridge.makeEntity(
+                        chunk: chunk
+                    )
+
+                    entity.name = "GaussianSplat_\(atmosphere.rawValue)_chunk\(chunkIndex)"
+                    splatRoot.addChild(entity)
+
+                    createdCount += 1
+
+                    print(
+                        """
+                        [PlagueGaussianSplat] native chunk entity added
+                          atmosphere: \(atmosphere.rawValue)
+                          chunkIndex: \(chunkIndex)
+                          chunkCount: \(plan.chunkCount)
+                          splats: \(chunk.count)
+                          createdEntities: \(createdCount)
+                          noFallback: true
+                        """
+                    )
+
+                    if chunkIndex == 0 {
+                        onFirstChunkVisible()
+                    }
+
+                    await Task.yield()
+                }
+
+                onComplete(createdCount)
+            } catch is CancellationError {
+                print(
+                    """
+                    [PlagueGaussianSplat] streaming load cancelled
+                      atmosphere: \(atmosphere.rawValue)
+                    """
+                )
+            } catch {
+                onFailure(error)
+            }
+        }
+    }
+}
+
 @MainActor
 final class PlagueGaussianForestEnvironmentController {
     private let environmentRoot = Entity()
     private let splatRoot = Entity()
     private let lightingEntity = Entity()
+    private let streamingLoader = PlagueStreamingGaussianSplatLoader()
 
     private weak var sceneRoot: Entity?
-    private var splatEntities: [Entity] = []
     private var isInstalled = false
     private var activeAtmosphere: PlagueForestAtmosphere?
     private var activeRevision = -1
     private var isSwapInFlight = false
     private var failedAtmosphereRevisionKey: String?
+    private var inFlightAtmosphereRevisionKey: String?
+    private var currentRoot: Entity?
+    private var pendingRoot: Entity?
+    private var atmosphereGeneration = 0
 
     var onStrictAtmosphereFailure: ((Error) -> Void)?
 
@@ -178,6 +350,18 @@ final class PlagueGaussianForestEnvironmentController {
         revision: Int,
         force: Bool = false
     ) async {
+        requestAtmosphere(
+            atmosphere,
+            revision: revision,
+            force: force
+        )
+    }
+
+    private func requestAtmosphere(
+        _ atmosphere: PlagueForestAtmosphere,
+        revision: Int,
+        force: Bool = false
+    ) {
         let key = "\(atmosphere.rawValue)|\(revision)"
 
         guard force ||
@@ -186,47 +370,44 @@ final class PlagueGaussianForestEnvironmentController {
             return
         }
 
-        guard !isSwapInFlight else {
-            return
-        }
-
         if failedAtmosphereRevisionKey == key,
            !force {
             return
         }
 
-        isSwapInFlight = true
-        defer {
-            isSwapInFlight = false
+        if isSwapInFlight,
+           inFlightAtmosphereRevisionKey == key {
+            return
         }
 
+        streamingLoader.cancel()
+        pendingRoot?.removeFromParent()
+        pendingRoot = nil
+
+        isSwapInFlight = true
+        inFlightAtmosphereRevisionKey = key
+        atmosphereGeneration += 1
+
+        let generation = atmosphereGeneration
+
         do {
-            try await applyAtmosphereAtomically(
-                atmosphere: atmosphere
-            )
-
-            activeAtmosphere = atmosphere
-            activeRevision = revision
-            failedAtmosphereRevisionKey = nil
-
-            print(
-                """
-                [PlagueForest] atmosphere active
-                  atmosphere: \(atmosphere.rawValue)
-                  revision: \(revision)
-                  ply: \(atmosphere.gaussianSplatResourceName).\(atmosphere.gaussianSplatFileExtension)
-                  hdri: \(atmosphere.hdriResourceName).\(atmosphere.hdriFileExtension)
-                """
+            try startStreamingAtmosphere(
+                atmosphere: atmosphere,
+                revision: revision,
+                key: key,
+                generation: generation
             )
         } catch {
             failedAtmosphereRevisionKey = key
+            isSwapInFlight = false
+            inFlightAtmosphereRevisionKey = nil
 
             print(
                 """
-                [PlagueForest] FATAL atmosphere swap failed once
-                  key: \(key)
+                [PlagueForest] FATAL atmosphere start failed
+                  atmosphere: \(atmosphere.rawValue)
+                  revision: \(revision)
                   error: \(error.localizedDescription)
-                  retrySuppressedUntilRevisionChanges: true
                   noFallback: true
                   preservedPreviousAtmosphere: \(activeAtmosphere?.rawValue ?? "none")
                 """
@@ -251,11 +432,11 @@ final class PlagueGaussianForestEnvironmentController {
     }
 
     func shutdown() {
-        for entity in splatEntities {
-            entity.removeFromParent()
-        }
-
-        splatEntities.removeAll()
+        streamingLoader.cancel()
+        pendingRoot?.removeFromParent()
+        currentRoot?.removeFromParent()
+        pendingRoot = nil
+        currentRoot = nil
         environmentRoot.removeFromParent()
         sceneRoot = nil
         isInstalled = false
@@ -263,75 +444,19 @@ final class PlagueGaussianForestEnvironmentController {
         activeRevision = -1
         isSwapInFlight = false
         failedAtmosphereRevisionKey = nil
+        inFlightAtmosphereRevisionKey = nil
+        atmosphereGeneration += 1
 
         print("[PlagueForest] environment shutdown")
     }
 
-    private func applyAtmosphereAtomically(
-        atmosphere: PlagueForestAtmosphere
-    ) async throws {
-        let newSplatEntities = try await loadNativeGaussianSplatEntities(
-            atmosphere: atmosphere
-        )
-
-        guard !newSplatEntities.isEmpty else {
-            throw NSError(
-                domain: "PlagueForest",
-                code: 600,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Native Gaussian splat loader returned zero entities. No fallback allowed."
-                ]
-            )
-        }
-
-        let hdri = try loadHDRIEnvironment(
-            atmosphere: atmosphere
-        )
-
-        for old in splatEntities {
-            old.removeFromParent()
-        }
-
-        splatEntities.removeAll()
-
-        for entity in newSplatEntities {
-            splatRoot.addChild(entity)
-        }
-
-        splatEntities = newSplatEntities
-
-        applyHDRILighting(
-            hdri,
-            atmosphere: atmosphere
-        )
-
-        applyIBLReceiverRecursively(
-            root: environmentRoot
-        )
-
-        if let sceneRoot {
-            applyIBLReceiverRecursively(
-                root: sceneRoot
-            )
-        }
-
-        print(
-            """
-            [PlagueForest] strict atmosphere applied
-              atmosphere: \(atmosphere.rawValue)
-              splatEntityCount: \(newSplatEntities.count)
-              hdri: \(atmosphere.hdriResourceName).\(atmosphere.hdriFileExtension)
-              atomicPairing: true
-              noFallback: true
-            """
-        )
-    }
-
-    private func loadNativeGaussianSplatEntities(
-        atmosphere: PlagueForestAtmosphere
-    ) async throws -> [Entity] {
-        guard let url = Bundle.main.url(
+    private func startStreamingAtmosphere(
+        atmosphere: PlagueForestAtmosphere,
+        revision: Int,
+        key: String,
+        generation: Int
+    ) throws {
+        guard let plyURL = Bundle.main.url(
             forResource: atmosphere.gaussianSplatResourceName,
             withExtension: atmosphere.gaussianSplatFileExtension
         ) else {
@@ -347,21 +472,165 @@ final class PlagueGaussianForestEnvironmentController {
 
         try PlagueGaussianSplatAvailability.assertNativeAvailable()
 
-        let entities = try await PlagueGaussianSplatCache.shared.entities(
-            for: atmosphere,
-            sourceURL: url
+        let hdri = try loadHDRIEnvironment(
+            atmosphere: atmosphere
+        )
+
+        let placement = PlagueGaussianSplatPlacement()
+        let newRoot = Entity()
+        newRoot.name = "GaussianSplatStreamingRoot_\(atmosphere.rawValue)_rev\(revision)"
+        newRoot.position = placement.position
+        newRoot.scale = SIMD3<Float>(repeating: placement.scale)
+        newRoot.orientation = placement.rotation
+
+        splatRoot.addChild(newRoot)
+        pendingRoot = newRoot
+
+        print(
+            """
+            [PlagueForest] streaming atmosphere begin
+              atmosphere: \(atmosphere.rawValue)
+              revision: \(revision)
+              ply: \(plyURL.lastPathComponent)
+              hdri: \(atmosphere.hdriResourceName).\(atmosphere.hdriFileExtension)
+              waitingOnlyForFirstChunk: true
+              noFallback: true
+            """
         )
 
         print(
             """
-            [PlagueForest] loaded native Gaussian splat entities
-              atmosphere: \(atmosphere.rawValue)
-              file: \(url.lastPathComponent)
-              entityCount: \(entities.count)
+            [PlagueForest] splat root placement
+              position: \(newRoot.position)
+              scale: \(newRoot.scale)
+              orientation: \(newRoot.orientation.vector)
             """
         )
 
-        return entities
+        streamingLoader.load(
+            atmosphere: atmosphere,
+            plyURL: plyURL,
+            hdri: hdri,
+            splatRoot: newRoot,
+            lightingEntity: lightingEntity,
+            onFirstChunkVisible: { [weak self, weak newRoot] in
+                guard let self,
+                      let newRoot,
+                      generation == self.atmosphereGeneration else {
+                    newRoot?.removeFromParent()
+                    return
+                }
+
+                if let old = self.currentRoot,
+                   old !== newRoot {
+                    old.removeFromParent()
+                }
+
+                self.currentRoot = newRoot
+                self.pendingRoot = nil
+                self.activeAtmosphere = atmosphere
+                self.activeRevision = revision
+                self.failedAtmosphereRevisionKey = nil
+
+                if self.inFlightAtmosphereRevisionKey == key {
+                    self.isSwapInFlight = false
+                    self.inFlightAtmosphereRevisionKey = nil
+                }
+
+                self.applyIBLReceiverRecursively(
+                    root: self.environmentRoot
+                )
+
+                if let sceneRoot = self.sceneRoot {
+                    self.applyIBLReceiverRecursively(
+                        root: sceneRoot
+                    )
+                }
+
+                print(
+                    """
+                    [PlagueForest] first native splat chunk visible
+                      atmosphere: \(atmosphere.rawValue)
+                      revision: \(revision)
+                      oldRemovedAfterFirstChunk: true
+                      noFallback: true
+                    """
+                )
+
+                print(
+                    """
+                    [PlagueForest] atmosphere active
+                      atmosphere: \(atmosphere.rawValue)
+                      revision: \(revision)
+                      ply: \(atmosphere.gaussianSplatResourceName).\(atmosphere.gaussianSplatFileExtension)
+                      hdri: \(atmosphere.hdriResourceName).\(atmosphere.hdriFileExtension)
+                    """
+                )
+            },
+            onFailure: { [weak self, weak newRoot] error in
+                guard let self else {
+                    return
+                }
+
+                if generation != self.atmosphereGeneration {
+                    newRoot?.removeFromParent()
+                    return
+                }
+
+                self.failedAtmosphereRevisionKey = key
+
+                if self.inFlightAtmosphereRevisionKey == key {
+                    self.isSwapInFlight = false
+                    self.inFlightAtmosphereRevisionKey = nil
+                }
+
+                if self.currentRoot == nil {
+                    print(
+                        """
+                        [PlagueForest] FATAL first atmosphere failed
+                          atmosphere: \(atmosphere.rawValue)
+                          error: \(error.localizedDescription)
+                          noFallback: true
+                        """
+                    )
+                } else {
+                    print(
+                        """
+                        [PlagueForest] atmosphere stream failed; preserving current
+                          requested: \(atmosphere.rawValue)
+                          current: \(self.activeAtmosphere?.rawValue ?? "none")
+                          error: \(error.localizedDescription)
+                          noFallback: true
+                        """
+                    )
+                }
+
+                newRoot?.removeFromParent()
+                self.pendingRoot = nil
+                self.onStrictAtmosphereFailure?(error)
+            },
+            onComplete: { [weak self] entityCount in
+                guard let self,
+                      generation == self.atmosphereGeneration else {
+                    return
+                }
+
+                if self.inFlightAtmosphereRevisionKey == key {
+                    self.isSwapInFlight = false
+                    self.inFlightAtmosphereRevisionKey = nil
+                }
+
+                print(
+                    """
+                    [PlagueForest] atmosphere stream complete
+                      atmosphere: \(atmosphere.rawValue)
+                      revision: \(revision)
+                      nativeEntities: \(entityCount)
+                      noFallback: true
+                    """
+                )
+            }
+        )
     }
 
     private func loadHDRIEnvironment(
@@ -389,8 +658,41 @@ final class PlagueGaussianForestEnvironmentController {
             """
         )
 
-        let environment = try EnvironmentResource.load(
-            named: atmosphere.hdriResourceName
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            throw NSError(
+                domain: "PlagueForest",
+                code: 406,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "ImageIO could not open HDRI EXR \(url.lastPathComponent)"
+                ]
+            )
+        }
+
+        guard let image = CGImageSourceCreateImageAtIndex(
+            source,
+            0,
+            nil
+        ) else {
+            throw NSError(
+                domain: "PlagueForest",
+                code: 407,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "ImageIO could not decode HDRI EXR \(url.lastPathComponent)"
+                ]
+            )
+        }
+
+        let options = EnvironmentResource.CreateOptions(
+            samplingQuality: .fast,
+            specularCubeDimension: nil,
+            compression: .default
+        )
+
+        let environment = try EnvironmentResource(
+            equirectangular: image,
+            options: options
         )
 
         print(
@@ -398,29 +700,13 @@ final class PlagueGaussianForestEnvironmentController {
             [PlagueForest] HDRI loaded
               atmosphere: \(atmosphere.rawValue)
               resource: \(atmosphere.hdriResourceName).\(atmosphere.hdriFileExtension)
+              source: raw EXR via ImageIO + EnvironmentResource(equirectangular:)
+              pixelWidth: \(image.width)
+              pixelHeight: \(image.height)
             """
         )
 
         return environment
     }
 
-    private func applyHDRILighting(
-        _ environment: EnvironmentResource,
-        atmosphere: PlagueForestAtmosphere
-    ) {
-        let ibl = ImageBasedLightComponent(
-            source: .single(environment),
-            intensityExponent: atmosphere.iblIntensityExponent
-        )
-
-        lightingEntity.components.set(ibl)
-
-        print(
-            """
-            [PlagueForest] HDRI lighting component applied
-              atmosphere: \(atmosphere.rawValue)
-              intensityExponent: \(atmosphere.iblIntensityExponent)
-            """
-        )
-    }
 }

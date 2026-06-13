@@ -9,14 +9,27 @@ final class PlagueControlWindowKillSwitch {
     static let shared = PlagueControlWindowKillSwitch()
 
     private weak var controlWindow: UIWindow?
+    private weak var controlScene: UIWindowScene?
+    private var observers: [NSObjectProtocol] = []
+    private var onQuitRequested: ((String) -> Void)?
 
     private init() {}
 
     func registerControlWindow(
-        window: UIWindow
+        window: UIWindow,
+        onQuitRequested: @escaping (String) -> Void
     ) {
+        self.onQuitRequested = onQuitRequested
+
         if controlWindow !== window {
+            removeObservers()
+
             controlWindow = window
+            controlScene = window.windowScene
+            installObservers(
+                window: window,
+                scene: window.windowScene
+            )
 
             print(
                 """
@@ -26,6 +39,62 @@ final class PlagueControlWindowKillSwitch {
                 """
             )
         }
+    }
+
+    private func installObservers(
+        window: UIWindow,
+        scene: UIWindowScene?
+    ) {
+        observers.append(
+            NotificationCenter.default.addObserver(
+                forName: UIWindow.didBecomeHiddenNotification,
+                object: window,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.requestQuit(
+                        reason: "control_window_hidden"
+                    )
+                }
+            }
+        )
+
+        if let scene {
+            observers.append(
+                NotificationCenter.default.addObserver(
+                    forName: UIScene.didDisconnectNotification,
+                    object: scene,
+                    queue: .main
+                ) { [weak self] _ in
+                    Task { @MainActor [weak self] in
+                        self?.requestQuit(
+                            reason: "control_window_scene_disconnected"
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    private func requestQuit(
+        reason: String
+    ) {
+        print(
+            """
+            [PlagueQuit] control window kill switch requested quit
+              reason: \(reason)
+            """
+        )
+
+        onQuitRequested?(reason)
+    }
+
+    private func removeObservers() {
+        for observer in observers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+
+        observers.removeAll()
     }
 }
 

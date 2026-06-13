@@ -139,7 +139,16 @@ struct PlagueOperationModePosterRoot: View {
                     onAttach: { window in
                         #if canImport(UIKit)
                         PlagueControlWindowKillSwitch.shared.registerControlWindow(
-                            window: window
+                            window: window,
+                            onQuitRequested: { reason in
+                                guard !session.isQuitting else {
+                                    return
+                                }
+
+                                performImmediateQuit(
+                                    reason: reason
+                                )
+                            }
                         )
                         #else
                         print(
@@ -182,6 +191,10 @@ struct PlagueOperationModePosterRoot: View {
                     return
                 }
 
+                guard session.handleControlWindowSceneBackgrounded() else {
+                    return
+                }
+
                 performImmediateQuit(
                     reason: "control_window_scene_backgrounded"
                 )
@@ -213,14 +226,7 @@ struct PlagueOperationModePosterRoot: View {
             exit(0)
         }
 
-        print(
-            """
-            [PlagueQuit] immediate quit requested
-              reason: \(reason)
-            """
-        )
-
-        session.shutdownForQuit(
+        session.requestImmediateQuitFromControlWindow(
             reason: reason
         )
 

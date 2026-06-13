@@ -99,6 +99,104 @@ struct PlaguePLYHeader: Sendable {
     let headerText: String
 }
 
+struct PlaguePLYBinaryPropertyLayout: Sendable {
+    let property: PlaguePLYProperty
+    let byteOffset: Int
+}
+
+struct PlaguePLYBinaryVertexLayout: Sendable {
+    let stride: Int
+    let properties: [String: PlaguePLYBinaryPropertyLayout]
+
+    nonisolated func offset(
+        for name: String
+    ) -> Int? {
+        properties[name]?.byteOffset
+    }
+
+    nonisolated func property(
+        _ name: String
+    ) -> PlaguePLYProperty? {
+        properties[name]?.property
+    }
+
+    nonisolated init(
+        properties: [PlaguePLYProperty]
+    ) {
+        var runningOffset = 0
+        var map: [String: PlaguePLYBinaryPropertyLayout] = [:]
+
+        for property in properties {
+            map[property.name] = PlaguePLYBinaryPropertyLayout(
+                property: property,
+                byteOffset: runningOffset
+            )
+
+            runningOffset += property.byteSize
+        }
+
+        self.stride = runningOffset
+        self.properties = map
+    }
+}
+
+struct PlagueGaussianSplatChunk: Sendable {
+    let sourceURL: URL
+    let chunkIndex: Int
+    let sourceVertexRange: Range<Int>
+    let count: Int
+
+    var positions: [SIMD3<Float>]
+    var scales: [SIMD3<Float>]
+    var rotations: [SIMD4<Float>]
+    var opacities: [Float]
+    var sphericalHarmonicsRGB: [SIMD3<Float>]
+    var sphericalHarmonicsDegree: Int
+}
+
+enum PlagueGaussianSplatChunkPolicy {
+    nonisolated static let firstVisibleChunkSize = 50_000
+    nonisolated static let streamingChunkSize = 150_000
+    nonisolated static let maxSplatsPerNativeComponent = streamingChunkSize
+}
+
+struct PlaguePLYBinaryChunkPlan: Sendable {
+    let data: Data
+    let header: PlaguePLYHeader
+    let layout: PlaguePLYBinaryVertexLayout
+    let sourceURL: URL
+    let firstVisibleChunkSize: Int
+    let maxSplatsPerChunk: Int
+
+    nonisolated var chunkCount: Int {
+        let firstCount = min(firstVisibleChunkSize, header.vertexCount)
+
+        guard firstCount < header.vertexCount else {
+            return 1
+        }
+
+        let remaining = header.vertexCount - firstCount
+
+        return 1 + Int(
+            ceil(Double(remaining) / Double(maxSplatsPerChunk))
+        )
+    }
+
+    nonisolated func rangeForChunk(
+        _ index: Int
+    ) -> Range<Int> {
+        if index == 0 {
+            return 0..<min(firstVisibleChunkSize, header.vertexCount)
+        }
+
+        let firstEnd = min(firstVisibleChunkSize, header.vertexCount)
+        let start = firstEnd + (index - 1) * maxSplatsPerChunk
+        let end = min(start + maxSplatsPerChunk, header.vertexCount)
+
+        return start..<end
+    }
+}
+
 enum PlaguePLYType {
     nonisolated static func byteSize(_ type: String) -> Int {
         switch type {
@@ -392,6 +490,533 @@ enum PlaguePLYHeaderParser {
         }
 
         return nil
+    }
+}
+
+enum PlagueGaussianSplatBinaryChunkDecoder {
+    nonisolated static func decodeChunk(
+        data: Data,
+        header: PlaguePLYHeader,
+        layout: PlaguePLYBinaryVertexLayout,
+        sourceURL: URL,
+        chunkIndex: Int,
+        vertexRange: Range<Int>
+    ) throws -> PlagueGaussianSplatChunk {
+        let count = vertexRange.count
+
+        var positions: [SIMD3<Float>] = []
+        var scales: [SIMD3<Float>] = []
+        var rotations: [SIMD4<Float>] = []
+        var opacities: [Float] = []
+
+        let shDegree = inferSHDegree(layout: layout)
+        let coeffCount = (shDegree + 1) * (shDegree + 1)
+        var sphericalHarmonics: [SIMD3<Float>] = []
+
+        positions.reserveCapacity(count)
+        scales.reserveCapacity(count)
+        rotations.reserveCapacity(count)
+        opacities.reserveCapacity(count)
+        sphericalHarmonics.reserveCapacity(count * coeffCount)
+
+        try data.withUnsafeBytes { rawBuffer in
+            guard let baseAddress = rawBuffer.baseAddress else {
+                throw NSError(
+                    domain: "PlaguePLY",
+                    code: 1100,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Unable to access PLY data bytes."
+                    ]
+                )
+            }
+
+            let littleEndian = header.format == .binaryLittleEndian
+            let xOffset = try requiredOffset(layout, "x")
+            let yOffset = try requiredOffset(layout, "y")
+            let zOffset = try requiredOffset(layout, "z")
+            let xProperty = try requiredProperty(layout, "x")
+            let yProperty = try requiredProperty(layout, "y")
+            let zProperty = try requiredProperty(layout, "z")
+
+            for vertexIndex in vertexRange {
+                if vertexIndex.isMultiple(of: 4096) {
+                    try Task.checkCancellation()
+                }
+
+                let vertexBase = header.bodyByteOffset + vertexIndex * layout.stride
+
+                positions.append(
+                    SIMD3<Float>(
+                        try readFloat(
+                            baseAddress: baseAddress,
+                            dataCount: data.count,
+                            offset: vertexBase + xOffset,
+                            property: xProperty,
+                            littleEndian: littleEndian
+                        ),
+                        try readFloat(
+                            baseAddress: baseAddress,
+                            dataCount: data.count,
+                            offset: vertexBase + yOffset,
+                            property: yProperty,
+                            littleEndian: littleEndian
+                        ),
+                        try readFloat(
+                            baseAddress: baseAddress,
+                            dataCount: data.count,
+                            offset: vertexBase + zOffset,
+                            property: zProperty,
+                            littleEndian: littleEndian
+                        )
+                    )
+                )
+
+                scales.append(
+                    try parseScale(
+                        baseAddress: baseAddress,
+                        dataCount: data.count,
+                        vertexBase: vertexBase,
+                        layout: layout,
+                        littleEndian: littleEndian
+                    )
+                )
+
+                rotations.append(
+                    try parseRotationXYZW(
+                        baseAddress: baseAddress,
+                        dataCount: data.count,
+                        vertexBase: vertexBase,
+                        layout: layout,
+                        littleEndian: littleEndian
+                    )
+                )
+
+                opacities.append(
+                    try parseOpacity(
+                        baseAddress: baseAddress,
+                        dataCount: data.count,
+                        vertexBase: vertexBase,
+                        layout: layout,
+                        littleEndian: littleEndian
+                    )
+                )
+
+                sphericalHarmonics.append(
+                    contentsOf: try parseSphericalHarmonics(
+                        baseAddress: baseAddress,
+                        dataCount: data.count,
+                        vertexBase: vertexBase,
+                        layout: layout,
+                        degree: shDegree,
+                        littleEndian: littleEndian
+                    )
+                )
+            }
+        }
+
+        print(
+            """
+            [PlagueGaussianSplatChunkDecoder] decoded chunk
+              file: \(sourceURL.lastPathComponent)
+              chunkIndex: \(chunkIndex)
+              range: \(vertexRange.lowerBound)..<\(vertexRange.upperBound)
+              count: \(count)
+              shDegree: \(shDegree)
+            """
+        )
+
+        return PlagueGaussianSplatChunk(
+            sourceURL: sourceURL,
+            chunkIndex: chunkIndex,
+            sourceVertexRange: vertexRange,
+            count: count,
+            positions: positions,
+            scales: scales,
+            rotations: rotations,
+            opacities: opacities,
+            sphericalHarmonicsRGB: sphericalHarmonics,
+            sphericalHarmonicsDegree: shDegree
+        )
+    }
+
+    nonisolated private static func requiredOffset(
+        _ layout: PlaguePLYBinaryVertexLayout,
+        _ name: String
+    ) throws -> Int {
+        guard let offset = layout.offset(for: name) else {
+            throw NSError(
+                domain: "PlaguePLY",
+                code: 1200,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Missing required PLY property \(name)."
+                ]
+            )
+        }
+
+        return offset
+    }
+
+    nonisolated private static func requiredProperty(
+        _ layout: PlaguePLYBinaryVertexLayout,
+        _ name: String
+    ) throws -> PlaguePLYProperty {
+        guard let property = layout.property(name) else {
+            throw NSError(
+                domain: "PlaguePLY",
+                code: 1201,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Missing required PLY property \(name)."
+                ]
+            )
+        }
+
+        return property
+    }
+
+    nonisolated private static func readFloat(
+        baseAddress: UnsafeRawPointer,
+        dataCount: Int,
+        offset: Int,
+        property: PlaguePLYProperty,
+        littleEndian: Bool
+    ) throws -> Float {
+        guard offset + property.byteSize <= dataCount else {
+            throw NSError(
+                domain: "PlaguePLY",
+                code: 1202,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "PLY read out of bounds for property \(property.name) at offset \(offset)."
+                ]
+            )
+        }
+
+        let pointer = baseAddress.advanced(by: offset)
+
+        switch property.type {
+        case "float", "float32":
+            let raw = pointer.loadUnaligned(as: UInt32.self)
+            let bits = littleEndian ? raw.littleEndian : raw.bigEndian
+            return Float(bitPattern: bits)
+
+        case "double", "float64":
+            let raw = pointer.loadUnaligned(as: UInt64.self)
+            let bits = littleEndian ? raw.littleEndian : raw.bigEndian
+            return Float(Double(bitPattern: bits))
+
+        case "uchar", "uint8":
+            return Float(pointer.loadUnaligned(as: UInt8.self))
+
+        case "char", "int8":
+            return Float(pointer.loadUnaligned(as: Int8.self))
+
+        case "ushort", "uint16":
+            let raw = pointer.loadUnaligned(as: UInt16.self)
+            return Float(littleEndian ? raw.littleEndian : raw.bigEndian)
+
+        case "short", "int16":
+            let raw = pointer.loadUnaligned(as: UInt16.self)
+            let bits = littleEndian ? raw.littleEndian : raw.bigEndian
+            return Float(Int16(bitPattern: bits))
+
+        case "uint", "uint32":
+            let raw = pointer.loadUnaligned(as: UInt32.self)
+            return Float(littleEndian ? raw.littleEndian : raw.bigEndian)
+
+        case "int", "int32":
+            let raw = pointer.loadUnaligned(as: UInt32.self)
+            let bits = littleEndian ? raw.littleEndian : raw.bigEndian
+            return Float(Int32(bitPattern: bits))
+
+        default:
+            throw NSError(
+                domain: "PlaguePLY",
+                code: 1203,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Unsupported PLY scalar type \(property.type) for \(property.name)."
+                ]
+            )
+        }
+    }
+
+    nonisolated private static func optionalFloat(
+        _ name: String,
+        baseAddress: UnsafeRawPointer,
+        dataCount: Int,
+        vertexBase: Int,
+        layout: PlaguePLYBinaryVertexLayout,
+        littleEndian: Bool
+    ) throws -> Float? {
+        guard let offset = layout.offset(for: name),
+              let property = layout.property(name) else {
+            return nil
+        }
+
+        return try readFloat(
+            baseAddress: baseAddress,
+            dataCount: dataCount,
+            offset: vertexBase + offset,
+            property: property,
+            littleEndian: littleEndian
+        )
+    }
+
+    nonisolated private static func parseScale(
+        baseAddress: UnsafeRawPointer,
+        dataCount: Int,
+        vertexBase: Int,
+        layout: PlaguePLYBinaryVertexLayout,
+        littleEndian: Bool
+    ) throws -> SIMD3<Float> {
+        if let scale0 = try optionalFloat("scale_0", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian),
+           let scale1 = try optionalFloat("scale_1", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian),
+           let scale2 = try optionalFloat("scale_2", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian) {
+            return SIMD3<Float>(
+                exp(scale0),
+                exp(scale1),
+                exp(scale2)
+            )
+        }
+
+        if let sx = try optionalFloat("sx", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian),
+           let sy = try optionalFloat("sy", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian),
+           let sz = try optionalFloat("sz", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian) {
+            return SIMD3<Float>(sx, sy, sz)
+        }
+
+        return SIMD3<Float>(0.01, 0.01, 0.01)
+    }
+
+    nonisolated private static func parseRotationXYZW(
+        baseAddress: UnsafeRawPointer,
+        dataCount: Int,
+        vertexBase: Int,
+        layout: PlaguePLYBinaryVertexLayout,
+        littleEndian: Bool
+    ) throws -> SIMD4<Float> {
+        if let rot0 = try optionalFloat("rot_0", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian),
+           let rot1 = try optionalFloat("rot_1", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian),
+           let rot2 = try optionalFloat("rot_2", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian),
+           let rot3 = try optionalFloat("rot_3", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian) {
+            return simd_normalize(
+                simd_quatf(
+                    vector: SIMD4<Float>(
+                        rot1,
+                        rot2,
+                        rot3,
+                        rot0
+                    )
+                )
+            ).vector
+        }
+
+        if let qx = try optionalFloat("qx", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian),
+           let qy = try optionalFloat("qy", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian),
+           let qz = try optionalFloat("qz", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian),
+           let qw = try optionalFloat("qw", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian) {
+            return simd_normalize(
+                simd_quatf(vector: SIMD4<Float>(qx, qy, qz, qw))
+            ).vector
+        }
+
+        return SIMD4<Float>(0, 0, 0, 1)
+    }
+
+    nonisolated private static func parseOpacity(
+        baseAddress: UnsafeRawPointer,
+        dataCount: Int,
+        vertexBase: Int,
+        layout: PlaguePLYBinaryVertexLayout,
+        littleEndian: Bool
+    ) throws -> Float {
+        if let opacity = try optionalFloat("opacity", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian) {
+            return 1.0 / (1.0 + exp(-opacity))
+        }
+
+        if let alpha = try optionalFloat("alpha", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian) {
+            return max(0, min(1, alpha))
+        }
+
+        return 1
+    }
+
+    nonisolated private static func inferSHDegree(
+        layout: PlaguePLYBinaryVertexLayout
+    ) -> Int {
+        let restCount = layout.properties.keys.filter {
+            $0.hasPrefix("f_rest_")
+        }.count
+
+        if restCount >= 45 {
+            return 3
+        }
+
+        return 0
+    }
+
+    nonisolated private static func parseSphericalHarmonics(
+        baseAddress: UnsafeRawPointer,
+        dataCount: Int,
+        vertexBase: Int,
+        layout: PlaguePLYBinaryVertexLayout,
+        degree: Int,
+        littleEndian: Bool
+    ) throws -> [SIMD3<Float>] {
+        let coeffCount = (degree + 1) * (degree + 1)
+
+        var result = Array(
+            repeating: SIMD3<Float>(0, 0, 0),
+            count: coeffCount
+        )
+
+        result[0] = SIMD3<Float>(
+            try optionalFloat("f_dc_0", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian)
+                ?? optionalFloat("red", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian)
+                ?? 0,
+            try optionalFloat("f_dc_1", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian)
+                ?? optionalFloat("green", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian)
+                ?? 0,
+            try optionalFloat("f_dc_2", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian)
+                ?? optionalFloat("blue", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian)
+                ?? 0
+        )
+
+        guard degree >= 3 else {
+            return result
+        }
+
+        for index in 0..<15 {
+            result[index + 1] = SIMD3<Float>(
+                try optionalFloat("f_rest_\(index)", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian) ?? 0,
+                try optionalFloat("f_rest_\(15 + index)", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian) ?? 0,
+                try optionalFloat("f_rest_\(30 + index)", baseAddress: baseAddress, dataCount: dataCount, vertexBase: vertexBase, layout: layout, littleEndian: littleEndian) ?? 0
+            )
+        }
+
+        return result
+    }
+}
+
+enum PlagueGaussianSplatChunkPlanner {
+    nonisolated static func makePlan(
+        url: URL,
+        firstVisibleChunkSize: Int = PlagueGaussianSplatChunkPolicy.firstVisibleChunkSize,
+        maxSplatsPerChunk: Int = PlagueGaussianSplatChunkPolicy.streamingChunkSize
+    ) throws -> PlaguePLYBinaryChunkPlan {
+        let data = try Data(
+            contentsOf: url,
+            options: [.mappedIfSafe]
+        )
+
+        let header = try PlaguePLYHeaderParser.parseHeader(
+            data: data,
+            sourceURL: url
+        )
+
+        guard header.format == .binaryLittleEndian ||
+              header.format == .binaryBigEndian else {
+            throw NSError(
+                domain: "PlagueGaussianSplat",
+                code: 100,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Forest splat must be binary PLY. No fallback renderer is allowed."
+                ]
+            )
+        }
+
+        let layout = PlaguePLYBinaryVertexLayout(
+            properties: header.properties
+        )
+
+        let expectedFileSize = header.bodyByteOffset + header.vertexCount * layout.stride
+
+        print(
+            """
+            [PlaguePLY] binary layout
+              file: \(url.lastPathComponent)
+              vertexCount: \(header.vertexCount)
+              propertyCount: \(header.properties.count)
+              stride: \(layout.stride)
+              bodyByteOffset: \(header.bodyByteOffset)
+              expectedFileSize: \(expectedFileSize)
+              actualFileSize: \(data.count)
+            """
+        )
+
+        guard data.count == expectedFileSize else {
+            throw NSError(
+                domain: "PlagueGaussianSplat",
+                code: 101,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "PLY file size mismatch. expected=\(expectedFileSize) actual=\(data.count)"
+                ]
+            )
+        }
+
+        let plan = PlaguePLYBinaryChunkPlan(
+            data: data,
+            header: header,
+            layout: layout,
+            sourceURL: url,
+            firstVisibleChunkSize: firstVisibleChunkSize,
+            maxSplatsPerChunk: maxSplatsPerChunk
+        )
+
+        print(
+            """
+            [PlagueGaussianSplat] streaming plan created
+              file: \(url.lastPathComponent)
+              vertexCount: \(header.vertexCount)
+              stride: \(layout.stride)
+              firstVisibleChunkSize: \(firstVisibleChunkSize)
+              chunkSize: \(maxSplatsPerChunk)
+              chunkCount: \(plan.chunkCount)
+              mappedIfSafe: true
+              noFallback: true
+            """
+        )
+
+        return plan
+    }
+}
+
+enum PlagueGaussianSplatChunkDecoder {
+    nonisolated static func decodeChunk(
+        plan: PlaguePLYBinaryChunkPlan,
+        chunkIndex: Int
+    ) throws -> PlagueGaussianSplatChunk {
+        try Task.checkCancellation()
+
+        return try PlagueGaussianSplatBinaryChunkDecoder.decodeChunk(
+            data: plan.data,
+            header: plan.header,
+            layout: plan.layout,
+            sourceURL: plan.sourceURL,
+            chunkIndex: chunkIndex,
+            vertexRange: plan.rangeForChunk(chunkIndex)
+        )
+    }
+}
+
+enum PlagueGaussianSplatChunkStream {
+    nonisolated static func decodeChunks(
+        url: URL,
+        maxSplatsPerChunk: Int = PlagueGaussianSplatChunkPolicy.maxSplatsPerNativeComponent
+    ) throws -> [PlagueGaussianSplatChunk] {
+        throw NSError(
+            domain: "PlagueGaussianSplatChunkStream",
+            code: 1302,
+            userInfo: [
+                NSLocalizedDescriptionKey:
+                    "Bulk decodeChunks is disabled for \(url.lastPathComponent) at chunkSize=\(maxSplatsPerChunk). Use PlagueGaussianSplatChunkPlanner plus PlagueGaussianSplatChunkDecoder.decodeChunk(plan:chunkIndex:) so chunk 0 renders immediately."
+            ]
+        )
     }
 }
 

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import Darwin
 import SwiftUI
 
 enum PlagueForestImmersiveState: String, Codable {
@@ -80,6 +81,8 @@ final class PlagueDemoSession: ObservableObject {
     @Published var damageTintEventID = UUID()
     @Published var damageTintIntensity: Double = 0.0
     @Published private(set) var latestCommand: CommandEnvelope?
+
+    private var controlWindowBackgroundIgnoreUntil: Date?
 
     func send(_ command: Command) {
         latestCommand = CommandEnvelope(command)
@@ -171,6 +174,9 @@ final class PlagueDemoSession: ObservableObject {
             forestImmersiveState = .opening
             immersiveSpaceStatus = .opening
             forestImmersiveStatus = "Opening forest immersive..."
+            markControlWindowBackgroundAsImmersiveTransition(
+                reason: "forest_open_requested"
+            )
 
             print(
                 """
@@ -189,6 +195,9 @@ final class PlagueDemoSession: ObservableObject {
                 forestImmersiveState = .open
                 immersiveSpaceStatus = .open
                 forestImmersiveStatus = "Forest immersive open."
+                markControlWindowBackgroundAsImmersiveTransition(
+                    reason: "forest_opened"
+                )
 
                 print("[PlagueForest] immersive opened")
 
@@ -217,6 +226,9 @@ final class PlagueDemoSession: ObservableObject {
         case .open:
             forestImmersiveState = .closing
             forestImmersiveStatus = "Closing forest immersive..."
+            markControlWindowBackgroundAsImmersiveTransition(
+                reason: "forest_close_requested"
+            )
 
             print("[PlagueForest] dismissing immersive space")
 
@@ -242,6 +254,9 @@ final class PlagueDemoSession: ObservableObject {
         forestImmersiveState = .open
         immersiveSpaceStatus = .open
         forestImmersiveStatus = "Forest immersive open."
+        markControlWindowBackgroundAsImmersiveTransition(
+            reason: "forest_view_appeared"
+        )
     }
 
     func forestImmersiveDidClose() {
@@ -259,6 +274,20 @@ final class PlagueDemoSession: ObservableObject {
         print("[PlagueForest] immersive did close")
     }
 
+    private func markControlWindowBackgroundAsImmersiveTransition(
+        reason: String
+    ) {
+        controlWindowBackgroundIgnoreUntil = Date().addingTimeInterval(2.0)
+
+        print(
+            """
+            [PlagueQuit] armed transient background ignore
+              reason: \(reason)
+              seconds: 2.0
+            """
+        )
+    }
+
     func closeForestImmersiveBecauseSplatFailed(
         error: Error
     ) {
@@ -272,6 +301,66 @@ final class PlagueDemoSession: ObservableObject {
               error: \(error.localizedDescription)
               noFallback: true
             """
+        )
+    }
+
+    @discardableResult
+    func handleControlWindowSceneBackgrounded() -> Bool {
+        if forestImmersiveState == .opening ||
+           forestImmersiveState == .closing {
+            print(
+                """
+                [PlagueQuit] ignored control window background during forest immersive transition
+                  forestImmersiveState: \(forestImmersiveState.rawValue)
+                  reason: immersive_transition
+                """
+            )
+
+            return false
+        }
+
+        if let ignoreUntil = controlWindowBackgroundIgnoreUntil,
+           Date() < ignoreUntil {
+            print(
+                """
+                [PlagueQuit] ignored transient control window background
+                  forestImmersiveState: \(forestImmersiveState.rawValue)
+                  reason: recent_immersive_transition
+                """
+            )
+
+            return false
+        }
+
+        controlWindowBackgroundIgnoreUntil = nil
+
+        return true
+    }
+
+    func requestImmediateQuitFromControlWindow(
+        reason: String
+    ) {
+        if isQuitting {
+            print(
+                """
+                [PlagueQuit] immediate quit requested while already quitting
+                  reason: \(reason)
+                  forcingExit: true
+                """
+            )
+
+            exit(0)
+        }
+
+        print(
+            """
+            [PlagueQuit] immediate quit requested
+              reason: \(reason)
+            """
+        )
+
+        shutdownForQuit(
+            reason: reason
         )
     }
 
