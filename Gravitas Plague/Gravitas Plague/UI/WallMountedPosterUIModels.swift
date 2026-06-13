@@ -1,5 +1,6 @@
 import Foundation
 import RealityKit
+import UIKit
 import simd
 
 enum WallPosterAction: String, Codable {
@@ -19,6 +20,20 @@ struct WallPosterUIButtonComponent: Component, Codable {
 
 struct WallPosterKillSwitchComponent: Component, Codable {
     let id: String
+}
+
+struct WallPosterLeaderboardButtonComponent: Component, Codable {
+    let id: String
+}
+
+enum WallStickerStyle {
+    static let twoStopsDownTint = UIColor(
+        white: 0.25,
+        alpha: 0.92
+    )
+
+    static let stickerSizeMeters: Float = 0.085
+    static let stickerSpacingMeters: Float = 0.035
 }
 
 struct WallPosterPlacement {

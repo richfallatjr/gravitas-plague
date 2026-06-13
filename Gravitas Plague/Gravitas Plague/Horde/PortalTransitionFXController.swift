@@ -36,7 +36,7 @@ final class PortalTransitionFXController {
 
     init(
         perimeterLocalPoints: [SIMD3<Float>],
-        portalNormalLocal: SIMD3<Float> = PortalFXDefaults.portalLocalOutwardNormal
+        portalNormalLocal: SIMD3<Float> = SIMD3<Float>(0, 0, 1)
     ) {
         self.perimeterLocalPoints = perimeterLocalPoints
         self.portalNormalLocal = portalFXNormalizeSafe(

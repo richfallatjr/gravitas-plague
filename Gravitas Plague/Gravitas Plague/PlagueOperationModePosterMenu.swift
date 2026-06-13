@@ -55,7 +55,8 @@ enum PlagueMenuAssetValidator {
             "plague_menu_ui_mockup",
             "plague_menu_horde_button",
             "plague_menu_walk_button",
-            "kill_switch_x"
+            "kill_switch_x",
+            "trophy_sticker"
         ]
 
         for name in names {
@@ -532,6 +533,20 @@ struct PlagueRoomSkinningTopOrnament: View {
 
     var body: some View {
         HStack(spacing: 10) {
+            if !session.wallPosterUIActive {
+                Button {
+                    session.showGameCenterLeaderboards()
+                } label: {
+                    Image(systemName: "trophy.fill")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.25))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .help("Leaderboards")
+                .accessibilityLabel("Leaderboards")
+            }
+
             Button {
                 Task { @MainActor in
                     await session.toggleForestImmersive(

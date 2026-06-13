@@ -2,6 +2,7 @@ import SwiftUI
 
 enum PlagueWindowID {
     static let control = "plague-control"
+    static let leaderboards = "plague-leaderboards"
 }
 
 @main
@@ -16,6 +17,12 @@ struct GravitasPlagueApp: App {
         }
         .defaultSize(width: 815, height: 1086)
         .defaultLaunchBehavior(.automatic)
+        .restorationBehavior(.disabled)
+
+        WindowGroup(id: PlagueWindowID.leaderboards) {
+            GameCenterLeaderboardsView()
+        }
+        .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
 
         ImmersiveSpace(id: PlagueDemoSession.immersiveSpaceID) {

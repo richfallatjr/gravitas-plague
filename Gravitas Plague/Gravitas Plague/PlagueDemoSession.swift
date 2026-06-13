@@ -27,6 +27,9 @@ enum PlagueFeatureFlags {
 extension Notification.Name {
     static let plagueDismissSwiftUIControlWindowForCurrentRun =
         Notification.Name("plagueDismissSwiftUIControlWindowForCurrentRun")
+
+    static let plagueShowGameCenterLeaderboards =
+        Notification.Name("plagueShowGameCenterLeaderboards")
 }
 
 enum PlagueUILegacySuppressionKeys {
@@ -134,11 +137,17 @@ final class PlagueDemoSession: ObservableObject {
     @Published var wallPosterUIActive = false
     @Published var damageTintEventID = UUID()
     @Published var damageTintIntensity: Double = 0.0
+    @Published private(set) var highestWaveReachedThisRun = 0
+    @Published private(set) var lifetimeWavesCleared = 0
     @Published private(set) var latestCommand: CommandEnvelope?
 
     private var controlWindowBackgroundIgnoreUntil: Date?
     private var controlWindowBackgroundIgnoreReason: String?
     private var controlWindowDismissedForWallUI = false
+    private let lifetimeWavesClearedKey =
+        "gravitas_plague_lifetime_waves_cleared"
+    private let localHighestWaveReachedKey =
+        "gravitas_plague_local_highest_wave_reached"
 
     var shouldIgnoreControlWindowLifecycleBecauseWallUIIsActive: Bool {
         (controlWindowDismissedForWallUI || swiftUIControlWindowSuppressedForCurrentRun) &&
@@ -148,6 +157,8 @@ final class PlagueDemoSession: ObservableObject {
     init() {
         PlagueUILegacySuppressionKeys.clear()
         resetRuntimeUIForFreshLaunch()
+        loadHordeLeaderboardStats()
+        PlagueGameCenterManager.shared.authenticateIfNeeded()
     }
 
     var shouldShowStoryRoomSkinningControls: Bool {
@@ -255,6 +266,137 @@ final class PlagueDemoSession: ObservableObject {
     }
 
     @MainActor
+    func loadHordeLeaderboardStats() {
+        lifetimeWavesCleared = UserDefaults.standard.integer(
+            forKey: lifetimeWavesClearedKey
+        )
+
+        let localBest = UserDefaults.standard.integer(
+            forKey: localHighestWaveReachedKey
+        )
+
+        print(
+            """
+            [HordeLeaderboards] local stats loaded
+              lifetimeWavesCleared: \(lifetimeWavesCleared)
+              localHighestWaveReached: \(localBest)
+            """
+        )
+    }
+
+    @MainActor
+    func resetHordeRunLeaderboardStats() {
+        highestWaveReachedThisRun = 0
+
+        print("[HordeLeaderboards] run stats reset")
+    }
+
+    @MainActor
+    func recordHordeWaveReached(
+        wave: Int
+    ) {
+        guard wave > 0 else { return }
+
+        highestWaveReachedThisRun = max(
+            highestWaveReachedThisRun,
+            wave
+        )
+
+        let previousLocalBest = UserDefaults.standard.integer(
+            forKey: localHighestWaveReachedKey
+        )
+        let localBest = max(
+            wave,
+            previousLocalBest
+        )
+
+        if localBest > previousLocalBest {
+            UserDefaults.standard.set(
+                localBest,
+                forKey: localHighestWaveReachedKey
+            )
+        }
+
+        PlagueGameCenterManager.shared.submitHighestWaveReached(
+            localBest
+        )
+
+        print(
+            """
+            [HordeLeaderboards] wave reached recorded
+              wave: \(wave)
+              highestWaveReachedThisRun: \(highestWaveReachedThisRun)
+              localBest: \(localBest)
+            """
+        )
+    }
+
+    @MainActor
+    func recordHordeWaveCleared(
+        wave: Int
+    ) {
+        guard wave > 0 else { return }
+
+        lifetimeWavesCleared += 1
+
+        UserDefaults.standard.set(
+            lifetimeWavesCleared,
+            forKey: lifetimeWavesClearedKey
+        )
+
+        PlagueGameCenterManager.shared.submitLifetimeWavesCleared(
+            lifetimeWavesCleared
+        )
+
+        print(
+            """
+            [HordeLeaderboards] wave cleared recorded
+              wave: \(wave)
+              lifetimeWavesCleared: \(lifetimeWavesCleared)
+            """
+        )
+    }
+
+    @MainActor
+    func submitHordeScoresOnSessionEnd() {
+        let localBest = UserDefaults.standard.integer(
+            forKey: localHighestWaveReachedKey
+        )
+        let bestWave = max(
+            highestWaveReachedThisRun,
+            localBest
+        )
+
+        PlagueGameCenterManager.shared.submitHighestWaveReached(
+            bestWave
+        )
+        PlagueGameCenterManager.shared.submitLifetimeWavesCleared(
+            lifetimeWavesCleared
+        )
+
+        print(
+            """
+            [HordeLeaderboards] session end submit
+              highestWaveReachedThisRun: \(highestWaveReachedThisRun)
+              submittedHighestWave: \(bestWave)
+              submittedLifetimeWavesCleared: \(lifetimeWavesCleared)
+            """
+        )
+    }
+
+    @MainActor
+    func showGameCenterLeaderboards() {
+        PlagueGameCenterManager.shared.authenticateIfNeeded()
+
+        NotificationCenter.default.post(
+            name: .plagueShowGameCenterLeaderboards,
+            object: nil
+        )
+
+        print("[GameCenter] show leaderboards requested")
+    }
+
+    @MainActor
     func setWallPosterUIInactiveIfAllowed() {
         guard !swiftUIControlWindowSuppressedForCurrentRun else {
             wallPosterUIActive = true
@@ -352,6 +494,7 @@ final class PlagueDemoSession: ObservableObject {
         activeMode = .jockRetargetTest
         statusMessage = "Running Horde Mode."
         resetPlayerDeathState()
+        resetHordeRunLeaderboardStats()
         send(.startHordeRoomScanOnly)
 
         print("[PlagueMenu] Horde Mode requested from poster UI; waiting for first portal.")

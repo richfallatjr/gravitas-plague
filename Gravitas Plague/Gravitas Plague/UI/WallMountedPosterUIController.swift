@@ -32,6 +32,7 @@ final class WallMountedPosterUIController: ObservableObject {
     init() {
         WallPosterUIButtonComponent.registerComponent()
         WallPosterKillSwitchComponent.registerComponent()
+        WallPosterLeaderboardButtonComponent.registerComponent()
         root.name = "WallMountedPosterUIRoot"
     }
 
@@ -419,7 +420,7 @@ private extension WallMountedPosterUIController {
             name: "WallPosterButton_WalkLoop"
         )
 
-        addKillSwitchDecorator(
+        addWallStickerButtons(
             posterWidth: width,
             posterHeight: height
         )
@@ -436,34 +437,84 @@ private extension WallMountedPosterUIController {
         )
     }
 
-    func addKillSwitchDecorator(
+    func addWallStickerButtons(
         posterWidth: Float,
         posterHeight: Float
     ) {
+        let size = min(
+            WallStickerStyle.stickerSizeMeters,
+            posterHeight * 0.105
+        )
+        let y = -posterHeight * 0.5 - size * 0.90
+        let closeX = posterWidth * 0.5 - size * 0.65
+        let trophyX =
+            closeX -
+            size -
+            WallStickerStyle.stickerSpacingMeters
+
+        addImageSticker(
+            textureName: "trophy_sticker",
+            name: "WallPosterLeaderboard_Trophy",
+            position: SIMD3<Float>(
+                trophyX,
+                y,
+                0.018
+            ),
+            size: size,
+            component: WallPosterLeaderboardButtonComponent(
+                id: "wall_poster_leaderboards"
+            )
+        )
+
+        addImageSticker(
+            textureName: "kill_switch_x",
+            name: "WallPosterKillSwitch_X",
+            position: SIMD3<Float>(
+                closeX,
+                y,
+                0.018
+            ),
+            size: size,
+            component: WallPosterKillSwitchComponent(
+                id: "wall_poster_kill"
+            )
+        )
+
+        print(
+            """
+            [WallPosterUI] bottom stickers created
+              trophy: true
+              closeX: true
+              tint: two_stops_down
+              pureWhite: false
+            """
+        )
+    }
+
+    func addImageSticker<C: Component>(
+        textureName: String,
+        name: String,
+        position: SIMD3<Float>,
+        size: Float,
+        component: C
+    ) {
         guard let texture = try? TextureResource.load(
-            named: "kill_switch_x"
+            named: textureName
         ) else {
-            print("[WallPosterUI] ERROR missing kill_switch_x.png")
+            print("[WallPosterUI] ERROR missing sticker texture \(textureName).png")
             return
         }
 
         var material = UnlitMaterial()
         material.color = .init(
-            tint: .white,
+            tint: WallStickerStyle.twoStopsDownTint,
             texture: .init(texture)
         )
         material.blending = .transparent(
-            opacity: .init(floatLiteral: 1.0)
+            opacity: .init(floatLiteral: 0.92)
         )
 
-        let size = min(
-            0.095,
-            posterHeight * 0.105
-        )
-        let x = posterWidth * 0.5 - size * 0.65
-        let y = -posterHeight * 0.5 - size * 0.90
-
-        let killSwitch = ModelEntity(
+        let sticker = ModelEntity(
             mesh: .generatePlane(
                 width: size,
                 height: size
@@ -471,29 +522,22 @@ private extension WallMountedPosterUIController {
             materials: [material]
         )
 
-        killSwitch.name = "WallPosterKillSwitch_X"
-        killSwitch.position = SIMD3<Float>(
-            x,
-            y,
-            0.018
-        )
-        killSwitch.components.set(
-            WallPosterKillSwitchComponent(
-                id: "wall_poster_kill"
-            )
-        )
-        killSwitch.components.set(InputTargetComponent())
-        killSwitch.generateCollisionShapes(recursive: true)
+        sticker.name = name
+        sticker.position = position
+        sticker.components.set(component)
+        sticker.components.set(InputTargetComponent())
+        sticker.generateCollisionShapes(recursive: true)
 
-        root.addChild(killSwitch)
+        root.addChild(sticker)
 
         print(
             """
-            [WallPosterUI] RealityKit kill switch decorator created
-              texture: kill_switch_x.png
+            [WallPosterUI] sticker created
+              name: \(name)
+              texture: \(textureName).png
               size: \(size)
-              position: \(killSwitch.position)
-              underPoster: true
+              position: \(position)
+              tintExposure: -2 stops
             """
         )
     }

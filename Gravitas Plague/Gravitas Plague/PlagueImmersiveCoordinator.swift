@@ -68,6 +68,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
     }
     var onWallPosterUIActiveChanged: ((Bool) -> Void)?
+    var onHordeWaveReached: ((Int) -> Void)?
+    var onHordeWaveCleared: ((Int) -> Void)?
+    var onHordeSessionEnded: (() -> Void)?
     var onRoomSkinningStatusChanged: ((String) -> Void)? {
         didSet {
             roomSkinningCoordinator.onStatusChanged = onRoomSkinningStatusChanged
@@ -96,6 +99,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var hordeWaveSpawnState: HordeWaveSpawnState = .idle
     private var hordeSpawnFailures: [HordeSpawnFailureRecord] = []
     private var isSpawningHordeWave = false
+    private var hordeScoresSubmittedForCurrentRun = false
     private var hordeWaitingForRoomScan = false
     private var hordeWaitingForFloorPromptShown = false
     private var hordeRoomScanCompletionTask: Task<Void, Never>?
@@ -606,6 +610,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeRoomScanTracker.begin()
         roomSkinningCoordinator.startHordeRoomScanOnly()
 
+        startHordeRadioLoopUsingCurrentPose(
+            reason: "horde_room_scan_started"
+        )
+
         showInstructionHUD(
             "Spin around in a full 360 degree circle to scan the room."
         )
@@ -724,6 +732,13 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 return
             }
 
+            if let firstPortal {
+                startHordeRadioLoopUsingCurrentPose(
+                    floorY: firstPortal.resolvedFloorWorldY ?? firstPortal.placement.floorWorldY,
+                    reason: "first_portal_floor_resolved"
+                )
+            }
+
             hordeRuntimePhase = .portalsReady
 
             print(
@@ -739,6 +754,46 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
             await startHordeBenchmark()
         }
+    }
+
+    private func startHordeRadioLoopUsingCurrentPose(
+        floorY resolvedFloorY: Float? = nil,
+        reason: String
+    ) {
+        guard let sceneRoot else {
+            print(
+                """
+                [Gravitas Audio] Horde radio loop start skipped
+                  reason: \(reason)
+                  sceneRootAvailable: false
+                """
+            )
+            return
+        }
+
+        let spawnPose = spatialProvider.currentPoseOrFallback()
+        let config = PhaseOneConfiguration.phaseOneDefault
+        let fallbackFloorY =
+            spawnPose.headPosition.y - config.fallbackHeadToFloorOffset
+        let floorY = resolvedFloorY ?? fallbackFloorY
+
+        audioController.attachRadioToSceneIfNeeded(
+            sceneRoot: sceneRoot
+        )
+
+        audioController.startHordeRadioLoop(
+            spawnPose: spawnPose,
+            floorY: floorY
+        )
+
+        print(
+            """
+            [Horde] radio loop active
+              reason: \(reason)
+              floorY: \(floorY)
+              source: existing_spatial_radio
+            """
+        )
     }
 
     private func showInstructionHUD(
@@ -894,6 +949,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeWaveSpawnState = .idle
         hordeSpawnFailures.removeAll()
         isSpawningHordeWave = false
+        hordeScoresSubmittedForCurrentRun = false
 
         jockRetargetController?.hide()
         audioController.stopPrimaryHostDadBreathing()
@@ -902,6 +958,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     }
 
     private func stopHordeBenchmark() {
+        submitHordeScoresIfNeeded(
+            reason: "horde_stopped"
+        )
+
         pendingNextBenchmarkWaveTask?.cancel()
         pendingNextBenchmarkWaveTask = nil
         hordeRoomScanCompletionTask?.cancel()
@@ -913,6 +973,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeWaitingForFloorPromptShown = false
         hordeRoomScanTracker.cancel()
         instructionHUD.clear()
+        audioController.stopDemoAudio()
         activeIngressControllers.removeAll()
         hordePortalManager.reset()
         clearHordeEnemyControllers()
@@ -923,6 +984,34 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeWaveSpawnState = .idle
         hordeSpawnFailures.removeAll()
         isSpawningHordeWave = false
+    }
+
+    private func submitHordeScoresIfNeeded(
+        reason: String
+    ) {
+        guard !hordeScoresSubmittedForCurrentRun else {
+            return
+        }
+
+        guard hordeCurrentWave > 0 ||
+            hordeTotalSpawned > 0 ||
+            hordeTotalKilled > 0 else {
+            return
+        }
+
+        hordeScoresSubmittedForCurrentRun = true
+
+        print(
+            """
+            [HordeLeaderboards] session end submit requested
+              reason: \(reason)
+              currentWave: \(hordeCurrentWave)
+              totalSpawned: \(hordeTotalSpawned)
+              totalKilled: \(hordeTotalKilled)
+            """
+        )
+
+        onHordeSessionEnded?()
     }
 
     private func spawnNextHordeWave() async {
@@ -1169,6 +1258,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
                 if successfulSpawnCount == 0 {
                     hordeCurrentWave = nextWave
+                    onHordeWaveReached?(
+                        nextWave
+                    )
                 }
 
                 successfulSpawnCount += 1
@@ -1673,6 +1765,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         isPlayerDeathSequenceActive = true
         hordeRuntimePhase = .playerDead
+        submitHordeScoresIfNeeded(
+            reason: "player_death"
+        )
         pendingNextBenchmarkWaveTask?.cancel()
         pendingNextBenchmarkWaveTask = nil
         jockRetargetController?.setPlayerAttackEnabled(false)
@@ -1902,6 +1997,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               corpsesToClear: \(corpseHordeEnemyIDs.count)
               nextWave: \(wave + 1)
             """
+        )
+
+        onHordeWaveCleared?(
+            wave
         )
 
         pendingNextBenchmarkWaveTask = Task { @MainActor in

@@ -85,6 +85,15 @@ struct PlagueImmersiveView: View {
                     }
                 }
         )
+        .simultaneousGesture(
+            TapGesture()
+                .targetedToEntity(where: .has(WallPosterLeaderboardButtonComponent.self))
+                .onEnded { _ in
+                    Task { @MainActor in
+                        session.showGameCenterLeaderboards()
+                    }
+                }
+        )
         .preferredSurroundingsEffect(
             deathPresentationController.surroundingsEffect
                 ?? damageTintController.surroundingsEffect
@@ -114,6 +123,19 @@ struct PlagueImmersiveView: View {
                       blankKeepaliveView: false
                     """
                 )
+            }
+        }
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: .plagueShowGameCenterLeaderboards
+            )
+        ) { _ in
+            Task { @MainActor in
+                openWindow(
+                    id: PlagueWindowID.leaderboards
+                )
+
+                print("[GameCenter] leaderboards window opened")
             }
         }
         .onAppear {
@@ -153,6 +175,19 @@ struct PlagueImmersiveView: View {
             }
             coordinator.onRoomSkinningStatusChanged = { status in
                 session.roomSkinningStatus = status
+            }
+            coordinator.onHordeWaveReached = { wave in
+                session.recordHordeWaveReached(
+                    wave: wave
+                )
+            }
+            coordinator.onHordeWaveCleared = { wave in
+                session.recordHordeWaveCleared(
+                    wave: wave
+                )
+            }
+            coordinator.onHordeSessionEnded = {
+                session.submitHordeScoresOnSessionEnd()
             }
         }
         .onChange(of: session.damageTintEventID) { _, _ in

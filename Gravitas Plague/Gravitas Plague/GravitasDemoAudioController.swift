@@ -109,6 +109,8 @@ final class GravitasDemoAudioController {
 
     private var hasPrepared = false
     private var hasAttachedEntities = false
+    private var hasAttachedRadioEntity = false
+    private var hasAttachedHostHeadEntity = false
     private var isImmersiveAudioActive = false
     private var isDemoAudioActive = false
 
@@ -128,21 +130,61 @@ final class GravitasDemoAudioController {
         self.sceneRoot = sceneRoot
         self.hostRootEntity = hostRootEntity
 
+        attachRadioEntityIfNeeded(
+            to: sceneRoot
+        )
+
+        attachHostHeadEntityIfNeeded(
+            to: hostRootEntity
+        )
+
         guard !hasAttachedEntities else { return }
 
-        radioAudioEntity.name = "Gravitas_SpatialRadioAudioSource"
-        hostHeadAudioEntity.name = "Gravitas_HostHeadAudioSource"
-        radioAudioEntity.components.set(SpatialAudioComponent())
-        hostHeadAudioEntity.components.set(SpatialAudioComponent())
+        hasAttachedEntities = hasAttachedRadioEntity && hasAttachedHostHeadEntity
 
+        print("[Gravitas Audio] Spatial audio entities attached.")
+    }
+
+    func attachRadioToSceneIfNeeded(
+        sceneRoot: Entity
+    ) {
+        self.sceneRoot = sceneRoot
+
+        attachRadioEntityIfNeeded(
+            to: sceneRoot
+        )
+    }
+
+    private func attachRadioEntityIfNeeded(
+        to sceneRoot: Entity
+    ) {
+        guard !hasAttachedRadioEntity else {
+            return
+        }
+
+        radioAudioEntity.name = "Gravitas_SpatialRadioAudioSource"
+        radioAudioEntity.components.set(SpatialAudioComponent())
         sceneRoot.addChild(radioAudioEntity)
+
+        hasAttachedRadioEntity = true
+
+        print("[Gravitas Audio] Radio spatial audio entity attached.")
+    }
+
+    private func attachHostHeadEntityIfNeeded(
+        to hostRootEntity: Entity
+    ) {
+        guard !hasAttachedHostHeadEntity else {
+            return
+        }
+
+        hostHeadAudioEntity.name = "Gravitas_HostHeadAudioSource"
+        hostHeadAudioEntity.components.set(SpatialAudioComponent())
         hostRootEntity.addChild(hostHeadAudioEntity)
 
         hostHeadAudioEntity.position = hostHeadAudioLocalPosition
 
-        hasAttachedEntities = true
-
-        print("[Gravitas Audio] Spatial audio entities attached.")
+        hasAttachedHostHeadEntity = true
     }
 
     func prepareIfNeeded() {
@@ -354,6 +396,35 @@ final class GravitasDemoAudioController {
         startEmergencyBroadcastLoop()
 
         print("[Gravitas Audio] Started spatial demo audio.")
+    }
+
+    func startHordeRadioLoop(
+        spawnPose: PhaseOneSpawnPose,
+        floorY: Float
+    ) {
+        prepareIfNeeded()
+        startImmersiveAudio()
+
+        configureRadioSourceBehindOriginalUserSpawn(
+            spawnPose: spawnPose,
+            floorY: floorY
+        )
+
+        if !isDemoAudioActive {
+            isDemoAudioActive = true
+            startEmergencyBroadcastLoop()
+        }
+
+        startRadioStatic()
+
+        print(
+            """
+            [Gravitas Audio] Started Horde radio loop
+              radioStatic: true
+              emergencyBroadcastLoop: true
+              primaryDadBreathing: false
+            """
+        )
     }
 
     func stopDemoAudio() {

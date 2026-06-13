@@ -12,6 +12,7 @@
 		8E1A10032FCD000100000001 /* ../unstable-walk.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10062FCD000100000001 /* ../unstable-walk.usdz */; };
 		8E1A10092FCD000100000001 /* ARKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E1A10072FCD000100000001 /* ARKit.framework */; };
 		8E1A100A2FCD000100000001 /* RealityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E1A10082FCD000100000001 /* RealityKit.framework */; };
+		8E1A104E2FCD000100000001 /* GameKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E1A104F2FCD000100000001 /* GameKit.framework */; };
 		8E1A100E2FCD000100000001 /* ../idle-turn-right-02.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */; };
 		8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */; };
 		8E1A10112FCD000100000001 /* ../dad_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10122FCD000100000001 /* ../dad_biped.usdz */; };
@@ -44,6 +45,7 @@
 		8E1A10492FCD000100000001 /* ../hellscape_01.exr in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10482FCD000100000001 /* ../hellscape_01.exr */; };
 		8E1A104B2FCD000100000001 /* ../hellscape_groundplane.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A104A2FCD000100000001 /* ../hellscape_groundplane.png */; };
 		8E1A104D2FCD000100000001 /* ../kill_switch_x.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A104C2FCD000100000001 /* ../kill_switch_x.png */; };
+		8E1A10502FCD000100000001 /* ../trophy_sticker.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10512FCD000100000001 /* ../trophy_sticker.png */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,6 +74,7 @@
 		8E1A10062FCD000100000001 /* ../unstable-walk.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../unstable-walk.usdz"; sourceTree = SOURCE_ROOT; };
 		8E1A10072FCD000100000001 /* ARKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ARKit.framework; path = System/Library/Frameworks/ARKit.framework; sourceTree = SDKROOT; };
 		8E1A10082FCD000100000001 /* RealityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = RealityKit.framework; path = System/Library/Frameworks/RealityKit.framework; sourceTree = SDKROOT; };
+		8E1A104F2FCD000100000001 /* GameKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameKit.framework; path = System/Library/Frameworks/GameKit.framework; sourceTree = SDKROOT; };
 		8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../idle-turn-right-02.usdz"; sourceTree = SOURCE_ROOT; };
 		8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Gravitas Plague/AnimationLibrary"; sourceTree = SOURCE_ROOT; };
 		8E1A10122FCD000100000001 /* ../dad_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../dad_biped.usdz; sourceTree = SOURCE_ROOT; };
@@ -104,6 +107,7 @@
 		8E1A10482FCD000100000001 /* ../hellscape_01.exr */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../hellscape_01.exr; sourceTree = SOURCE_ROOT; };
 		8E1A104A2FCD000100000001 /* ../hellscape_groundplane.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../hellscape_groundplane.png; sourceTree = SOURCE_ROOT; };
 		8E1A104C2FCD000100000001 /* ../kill_switch_x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../kill_switch_x.png; sourceTree = SOURCE_ROOT; };
+		8E1A10512FCD000100000001 /* ../trophy_sticker.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../trophy_sticker.png; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -131,6 +135,7 @@
 			files = (
 				8E1A10092FCD000100000001 /* ARKit.framework in Frameworks */,
 				8E1A100A2FCD000100000001 /* RealityKit.framework in Frameworks */,
+				8E1A104E2FCD000100000001 /* GameKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -178,6 +183,7 @@
 			children = (
 				8E1A10072FCD000100000001 /* ARKit.framework */,
 				8E1A10082FCD000100000001 /* RealityKit.framework */,
+				8E1A104F2FCD000100000001 /* GameKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -206,6 +212,7 @@
 				8E1A10482FCD000100000001 /* ../hellscape_01.exr */,
 				8E1A104A2FCD000100000001 /* ../hellscape_groundplane.png */,
 				8E1A104C2FCD000100000001 /* ../kill_switch_x.png */,
+				8E1A10512FCD000100000001 /* ../trophy_sticker.png */,
 				8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */,
 				8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */,
 				8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */,
@@ -307,6 +314,11 @@
 				TargetAttributes = {
 					2D78FE2F2FCCF44A0063708B = {
 						CreatedOnToolsVersion = 26.1.1;
+						SystemCapabilities = {
+							com.apple.GameCenter = {
+								enabled = 1;
+							};
+						};
 					};
 					2D78FE3C2FCCF44B0063708B = {
 						CreatedOnToolsVersion = 26.1.1;
@@ -365,6 +377,7 @@
 				8E1A10492FCD000100000001 /* ../hellscape_01.exr in Resources */,
 				8E1A104B2FCD000100000001 /* ../hellscape_groundplane.png in Resources */,
 				8E1A104D2FCD000100000001 /* ../kill_switch_x.png in Resources */,
+				8E1A10502FCD000100000001 /* ../trophy_sticker.png in Resources */,
 				8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */,
 				8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav in Resources */,
 				8E1A10142FCD000100000001 /* ../Narrow-band-analog.wav in Resources */,
@@ -564,6 +577,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Gravitas Plague/Gravitas_Plague.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
@@ -600,6 +614,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Gravitas Plague/Gravitas_Plague.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
