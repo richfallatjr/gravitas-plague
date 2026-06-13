@@ -156,6 +156,7 @@ final class PlagueDemoSession: ObservableObject {
 
     init() {
         PlagueUILegacySuppressionKeys.clear()
+        PlagueRobotAudioAssetValidator.validate()
         resetRuntimeUIForFreshLaunch()
         loadHordeLeaderboardStats()
         PlagueGameCenterManager.shared.authenticateIfNeeded()

@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import QuartzCore
 import RealityKit
 import simd
 
@@ -33,8 +34,9 @@ final class GravitasDemoAudioController {
 
     private struct HostAudioSource {
         let headEntity: Entity
-        var dadBreathingController: AudioPlaybackController?
-        var breathingStartTask: Task<Void, Never>?
+        let archetype: PlagueCharacterArchetype
+        var loopController: AudioPlaybackController?
+        var loopStartTask: Task<Void, Never>?
         var punchControllers: [AudioPlaybackController]
     }
 
@@ -68,6 +70,21 @@ final class GravitasDemoAudioController {
         fileExtension: "wav"
     )
 
+    private let robotFacePunchFile = BundleAudioFile(
+        fileName: PlagueAudioAssetName.fleshyFacePunch01,
+        fileExtension: "wav"
+    )
+
+    private let robotWalkingLoopFile = BundleAudioFile(
+        fileName: PlagueAudioAssetName.robotWalkingLoop,
+        fileExtension: "mp3"
+    )
+
+    private let robotDamageFiles: [BundleAudioFile] = [
+        BundleAudioFile(fileName: PlagueAudioAssetName.robotDamaged01, fileExtension: "wav"),
+        BundleAudioFile(fileName: PlagueAudioAssetName.robotDamaged02, fileExtension: "wav")
+    ]
+
     private let playerDamageFiles: [BundleAudioFile] = [
         BundleAudioFile(fileName: "damaged-01", fileExtension: "wav"),
         BundleAudioFile(fileName: "damaged-02", fileExtension: "wav"),
@@ -97,6 +114,7 @@ final class GravitasDemoAudioController {
     private var emergencyBeepResource: AudioFileResource?
     private var emergencyBroadcastResource: AudioFileResource?
     private var punchResource: AudioFileResource?
+    private var spatialResourcesByKey: [String: AudioFileResource] = [:]
 
     private var radioStaticController: AudioPlaybackController?
     private var dadBreathingController: AudioPlaybackController?
@@ -104,6 +122,7 @@ final class GravitasDemoAudioController {
     private var emergencyBroadcastController: AudioPlaybackController?
     private var punchControllers: [AudioPlaybackController] = []
     private var hostAudioSourcesByID: [UUID: HostAudioSource] = [:]
+    private var lastCharacterHitSoundTimeByEnemyID: [UUID: TimeInterval] = [:]
 
     private var emergencyBroadcastTask: Task<Void, Never>?
 
@@ -117,6 +136,7 @@ final class GravitasDemoAudioController {
     private let feetToMeters: Float = 0.3048
     private let radioDistanceBehindUserFeet: Float = 5.0
     private let hostHeadAudioLocalPosition = SIMD3<Float>(0, 1.45, -0.04)
+    private let characterHitSoundCooldown: TimeInterval = 0.045
 
     private let emergencyInitialDelaySeconds: TimeInterval = 30.0
     private let emergencyBreakAfterBroadcastSeconds: TimeInterval = 30.0
@@ -207,9 +227,11 @@ final class GravitasDemoAudioController {
             shouldLoop: true
         )
 
-        dadBreathingResource = makeOptionalSpatialResource(
-            file: dadBreathingFile,
-            shouldLoop: true
+        dadBreathingResource = preloadSound(
+            named: dadBreathingFile.fileName,
+            fileExtension: dadBreathingFile.fileExtension,
+            shouldLoop: true,
+            category: "default_character_loop"
         )
 
         emergencyBeepResource = makeOptionalSpatialResource(
@@ -222,10 +244,14 @@ final class GravitasDemoAudioController {
             shouldLoop: false
         )
 
-        punchResource = makeOptionalSpatialResource(
-            file: punchFile,
-            shouldLoop: false
+        punchResource = preloadSound(
+            named: punchFile.fileName,
+            fileExtension: punchFile.fileExtension,
+            shouldLoop: false,
+            category: "default_face_hit"
         )
+
+        preloadRobotAudio()
 
         playerDamagePlayersByFileName = makePlayerDamagePlayers()
         playerDeathPlayersByFileName = makePlayerDeathPlayers()
@@ -288,6 +314,7 @@ final class GravitasDemoAudioController {
     func attachHostAudioSource(
         id: UUID,
         hostRootEntity: Entity,
+        archetype: PlagueCharacterArchetype = .dad,
         breathingStartDelay: TimeInterval = TimeInterval.random(in: 0...1)
     ) {
         prepareIfNeeded()
@@ -301,13 +328,15 @@ final class GravitasDemoAudioController {
 
         hostAudioSourcesByID[id] = HostAudioSource(
             headEntity: headEntity,
-            dadBreathingController: nil,
-            breathingStartTask: nil,
+            archetype: archetype,
+            loopController: nil,
+            loopStartTask: nil,
             punchControllers: []
         )
 
-        startDadBreathing(
+        startCharacterLoopAudio(
             sourceID: id,
+            archetype: archetype,
             delay: breathingStartDelay
         )
 
@@ -315,6 +344,7 @@ final class GravitasDemoAudioController {
             """
             [Gravitas Audio] Attached horde host audio source
               id: \(id)
+              archetype: \(archetype.rawValue)
               breathingStartDelay: \(String(format: "%.3f", breathingStartDelay))
               parent: hostRootEntity
             """
@@ -328,11 +358,21 @@ final class GravitasDemoAudioController {
             return
         }
 
-        source.breathingStartTask?.cancel()
-        source.breathingStartTask = nil
+        source.loopStartTask?.cancel()
+        source.loopStartTask = nil
 
-        source.dadBreathingController?.stop()
-        source.dadBreathingController = nil
+        if source.loopController != nil {
+            source.loopController?.stop()
+            source.loopController = nil
+
+            print(
+                """
+                [PlagueAudio] character loop stopped
+                  archetype: \(source.archetype.rawValue)
+                  enemyID: \(id.uuidString)
+                """
+            )
+        }
 
         for controller in source.punchControllers {
             controller.stop()
@@ -340,26 +380,41 @@ final class GravitasDemoAudioController {
         source.punchControllers.removeAll()
 
         source.headEntity.removeFromParent()
+        lastCharacterHitSoundTimeByEnemyID.removeValue(forKey: id)
 
         print("[Gravitas Audio] Stopped horde host audio source: \(id)")
     }
 
-    func stopHostDadBreathing(
+    func stopCharacterLoopAudio(
         id: UUID
     ) {
         guard var source = hostAudioSourcesByID[id] else {
             return
         }
 
-        source.breathingStartTask?.cancel()
-        source.breathingStartTask = nil
+        source.loopStartTask?.cancel()
+        source.loopStartTask = nil
 
-        source.dadBreathingController?.stop()
-        source.dadBreathingController = nil
+        source.loopController?.stop()
+        source.loopController = nil
 
         hostAudioSourcesByID[id] = source
 
-        print("[Gravitas Audio] Stopped horde Dad breathing: \(id)")
+        print(
+            """
+            [PlagueAudio] character loop stopped
+              archetype: \(source.archetype.rawValue)
+              enemyID: \(id.uuidString)
+            """
+        )
+    }
+
+    func stopHostDadBreathing(
+        id: UUID
+    ) {
+        stopCharacterLoopAudio(
+            id: id
+        )
     }
 
     func startImmersiveAudio() {
@@ -464,10 +519,135 @@ final class GravitasDemoAudioController {
             return
         }
 
+        playCharacterOneShot(
+            resource: punchResource,
+            sourceID: sourceID,
+            linearVolume: 0.95
+        )
+    }
+
+    func playConfirmedCharacterHitSounds(
+        archetype: PlagueCharacterArchetype,
+        enemyID: UUID?,
+        hitRegion: InfectedHitRegion,
+        sourceID: UUID? = nil
+    ) {
+        prepareIfNeeded()
+
+        if let enemyID {
+            let now = CACurrentMediaTime()
+            let last = lastCharacterHitSoundTimeByEnemyID[enemyID] ?? 0
+
+            guard now - last >= characterHitSoundCooldown else {
+                return
+            }
+
+            lastCharacterHitSoundTimeByEnemyID[enemyID] = now
+        }
+
+        playFacePunchContactSoundIfNeeded(
+            archetype: archetype,
+            hitRegion: hitRegion,
+            sourceID: sourceID
+        )
+
+        playCharacterDamagedSound(
+            archetype: archetype,
+            sourceID: sourceID
+        )
+    }
+
+    private func playFacePunchContactSoundIfNeeded(
+        archetype: PlagueCharacterArchetype,
+        hitRegion: InfectedHitRegion,
+        sourceID: UUID?
+    ) {
+        guard hitRegion == .head else {
+            return
+        }
+
+        let profile = archetype.audioProfile
+
+        guard let sound = profile.facePunchContactSounds.randomElement() else {
+            return
+        }
+
+        let file = BundleAudioFile(
+            fileName: sound,
+            fileExtension: profile.facePunchContactExtension
+        )
+
+        guard let resource = spatialResource(
+            for: file,
+            shouldLoop: false
+        ) else {
+            print("[PlagueAudio] WARNING missing face punch sound \(file.fullName)")
+            return
+        }
+
+        playCharacterOneShot(
+            resource: resource,
+            sourceID: sourceID,
+            linearVolume: 0.95
+        )
+
+        print(
+            """
+            [PlagueAudio] face punch contact sound played
+              archetype: \(archetype.rawValue)
+              region: \(hitRegion.rawValue)
+              sound: \(file.fullName)
+            """
+        )
+    }
+
+    private func playCharacterDamagedSound(
+        archetype: PlagueCharacterArchetype,
+        sourceID: UUID?
+    ) {
+        let profile = archetype.audioProfile
+
+        guard let sound = profile.damagedSounds.randomElement() else {
+            return
+        }
+
+        let file = BundleAudioFile(
+            fileName: sound,
+            fileExtension: profile.damagedSoundExtension
+        )
+
+        guard let resource = spatialResource(
+            for: file,
+            shouldLoop: false
+        ) else {
+            print("[PlagueAudio] WARNING missing damaged sound \(file.fullName)")
+            return
+        }
+
+        playCharacterOneShot(
+            resource: resource,
+            sourceID: sourceID,
+            linearVolume: 0.88
+        )
+
+        print(
+            """
+            [PlagueAudio] damaged sound played
+              archetype: \(archetype.rawValue)
+              sound: \(file.fullName)
+            """
+        )
+    }
+
+    private func playCharacterOneShot(
+        resource: AudioFileResource,
+        sourceID: UUID?,
+        linearVolume: Float
+    ) {
         if let sourceID,
            var source = hostAudioSourcesByID[sourceID] {
-            let controller = source.headEntity.playAudio(punchResource)
-            controller.gain = decibels(linearVolume: 0.95)
+            let controller = source.headEntity.playAudio(resource)
+            controller.gain = decibels(linearVolume: linearVolume)
             source.punchControllers.append(controller)
 
             if source.punchControllers.count > 12 {
@@ -478,8 +658,8 @@ final class GravitasDemoAudioController {
             return
         }
 
-        let controller = hostHeadAudioEntity.playAudio(punchResource)
-        controller.gain = decibels(linearVolume: 0.95)
+        let controller = hostHeadAudioEntity.playAudio(resource)
+        controller.gain = decibels(linearVolume: linearVolume)
         punchControllers.append(controller)
 
         if punchControllers.count > 12 {
@@ -576,36 +756,50 @@ final class GravitasDemoAudioController {
         dadBreathingController?.gain = decibels(linearVolume: 0.42)
     }
 
-    private func startDadBreathing(
+    private func startCharacterLoopAudio(
         sourceID: UUID,
+        archetype: PlagueCharacterArchetype,
         delay: TimeInterval
     ) {
-        guard let dadBreathingResource else {
-            print("[Gravitas Audio] Dad breathing resource missing.")
+        let profile = archetype.audioProfile
+
+        guard let loopName = profile.breathingOrMovementLoop,
+              let loopExtension = profile.breathingOrMovementLoopExtension else {
+            return
+        }
+
+        let loopFile = BundleAudioFile(
+            fileName: loopName,
+            fileExtension: loopExtension
+        )
+
+        guard let loopResource = spatialResource(
+            for: loopFile,
+            shouldLoop: true
+        ) else {
+            print("[PlagueAudio] WARNING missing character loop \(loopFile.fullName)")
             return
         }
 
         guard var source = hostAudioSourcesByID[sourceID] else {
-            print("[Gravitas Audio] Missing horde host audio source for Dad breathing: \(sourceID)")
+            print("[PlagueAudio] Missing horde host audio source for character loop: \(sourceID)")
             return
         }
 
-        source.breathingStartTask?.cancel()
-        source.dadBreathingController?.stop()
+        source.loopStartTask?.cancel()
+        source.loopController?.stop()
 
         if delay <= 0 {
-            source.dadBreathingController = source.headEntity.playAudio(dadBreathingResource)
-            source.dadBreathingController?.gain = decibels(linearVolume: 0.42)
-            source.breathingStartTask = nil
+            source.loopController = source.headEntity.playAudio(loopResource)
+            source.loopController?.gain = decibels(linearVolume: characterLoopGain(for: archetype))
+            source.loopStartTask = nil
             hostAudioSourcesByID[sourceID] = source
 
             print(
                 """
-                [Gravitas Audio] Started horde Dad breathing
-                  id: \(sourceID)
-                  delayedBy: 0.000
-                  immediate: true
-                  gatedByDemoAudioActive: false
+                [PlagueAudio] character loop attached
+                  archetype: \(archetype.rawValue)
+                  sound: \(loopFile.fullName)
                 """
             )
 
@@ -619,30 +813,39 @@ final class GravitasDemoAudioController {
 
             guard !Task.isCancelled,
                   let self,
-                  let dadBreathingResource = self.dadBreathingResource,
                   var source = self.hostAudioSourcesByID[sourceID] else {
                 return
             }
 
-            source.dadBreathingController?.stop()
-            source.dadBreathingController = source.headEntity.playAudio(dadBreathingResource)
-            source.dadBreathingController?.gain = self.decibels(linearVolume: 0.42)
-            source.breathingStartTask = nil
+            source.loopController?.stop()
+            source.loopController = source.headEntity.playAudio(loopResource)
+            source.loopController?.gain = self.decibels(linearVolume: self.characterLoopGain(for: archetype))
+            source.loopStartTask = nil
             self.hostAudioSourcesByID[sourceID] = source
 
             print(
                 """
-                [Gravitas Audio] Started horde Dad breathing
-                  id: \(sourceID)
-                  delayedBy: \(String(format: "%.3f", delay))
-                  immediate: false
-                  gatedByDemoAudioActive: false
+                [PlagueAudio] character loop attached
+                  archetype: \(archetype.rawValue)
+                  sound: \(loopFile.fullName)
                 """
             )
         }
 
-        source.breathingStartTask = task
+        source.loopStartTask = task
         hostAudioSourcesByID[sourceID] = source
+    }
+
+    private func characterLoopGain(
+        for archetype: PlagueCharacterArchetype
+    ) -> Float {
+        switch archetype {
+        case .robot:
+            return 0.48
+
+        case .dad, .spouse, .biker, .grandma, .neighbor:
+            return 0.42
+        }
     }
 
     private func startEmergencyBroadcastLoop() {
@@ -834,6 +1037,107 @@ final class GravitasDemoAudioController {
         }
     }
 
+    @discardableResult
+    private func preloadSound(
+        named fileName: String,
+        fileExtension: String,
+        shouldLoop: Bool = false,
+        category: String
+    ) -> AudioFileResource? {
+        let file = BundleAudioFile(
+            fileName: fileName,
+            fileExtension: fileExtension
+        )
+
+        let key = spatialResourceKey(
+            file: file,
+            shouldLoop: shouldLoop
+        )
+
+        if let resource = spatialResourcesByKey[key] {
+            return resource
+        }
+
+        guard let resource = makeOptionalSpatialResource(
+            file: file,
+            shouldLoop: shouldLoop
+        ) else {
+            print(
+                """
+                [PlagueAudio] WARNING failed to preload sound
+                  category: \(category)
+                  file: \(file.fullName)
+                """
+            )
+            return nil
+        }
+
+        spatialResourcesByKey[key] = resource
+        return resource
+    }
+
+    private func preloadRobotAudio() {
+        preloadSound(
+            named: robotFacePunchFile.fileName,
+            fileExtension: robotFacePunchFile.fileExtension,
+            shouldLoop: false,
+            category: "robot_face_hit"
+        )
+
+        preloadSound(
+            named: robotWalkingLoopFile.fileName,
+            fileExtension: robotWalkingLoopFile.fileExtension,
+            shouldLoop: true,
+            category: "robot_loop"
+        )
+
+        for file in robotDamageFiles {
+            preloadSound(
+                named: file.fileName,
+                fileExtension: file.fileExtension,
+                shouldLoop: false,
+                category: "robot_damage"
+            )
+        }
+
+        print(
+            """
+            [PlagueAudio] robot audio preloaded
+              faceHit: fleshy-face-punch-01.wav
+              loop: robot-walking-loop.mp3
+              damaged: robot-damaged-01.wav, robot-damaged-02.wav
+            """
+        )
+    }
+
+    private func spatialResource(
+        for file: BundleAudioFile,
+        shouldLoop: Bool
+    ) -> AudioFileResource? {
+        let key = spatialResourceKey(
+            file: file,
+            shouldLoop: shouldLoop
+        )
+
+        if let resource = spatialResourcesByKey[key] {
+            return resource
+        }
+
+        return preloadSound(
+            named: file.fileName,
+            fileExtension: file.fileExtension,
+            shouldLoop: shouldLoop,
+            category: "lazy_character_audio"
+        )
+    }
+
+    private func spatialResourceKey(
+        file: BundleAudioFile,
+        shouldLoop: Bool
+    ) -> String {
+        "\(file.fullName)|loop:\(shouldLoop)"
+    }
+
     private func loadSpatialResource(
         file: BundleAudioFile,
         shouldLoop: Bool
@@ -844,11 +1148,19 @@ final class GravitasDemoAudioController {
                 shouldLoop: shouldLoop
             )
 
-            return try AudioFileResource.load(
-                named: file.fullName,
-                in: nil,
-                configuration: configuration
-            )
+            do {
+                return try AudioFileResource.load(
+                    named: file.fullName,
+                    in: nil,
+                    configuration: configuration
+                )
+            } catch {
+                return try AudioFileResource.load(
+                    named: "Audio/\(file.fullName)",
+                    in: nil,
+                    configuration: configuration
+                )
+            }
         } catch {
             throw AudioError.resourceLoadFailed(file.fullName, error)
         }
@@ -876,10 +1188,7 @@ final class GravitasDemoAudioController {
         volume: Float,
         loopsForever: Bool
     ) throws -> AVAudioPlayer {
-        guard let url = Bundle.main.url(
-            forResource: file.fileName,
-            withExtension: file.fileExtension
-        ) else {
+        guard let url = bundleURL(for: file) else {
             throw AudioError.missingResource(file.fullName)
         }
 
@@ -895,10 +1204,7 @@ final class GravitasDemoAudioController {
     }
 
     private func durationSeconds(for file: BundleAudioFile) -> TimeInterval {
-        guard let url = Bundle.main.url(
-            forResource: file.fileName,
-            withExtension: file.fileExtension
-        ) else {
+        guard let url = bundleURL(for: file) else {
             return 0
         }
 
@@ -916,5 +1222,18 @@ final class GravitasDemoAudioController {
         }
 
         return Double(20.0 * log10(linearVolume))
+    }
+
+    private func bundleURL(
+        for file: BundleAudioFile
+    ) -> URL? {
+        Bundle.main.url(
+            forResource: file.fileName,
+            withExtension: file.fileExtension
+        ) ?? Bundle.main.url(
+            forResource: file.fileName,
+            withExtension: file.fileExtension,
+            subdirectory: "Audio"
+        )
     }
 }

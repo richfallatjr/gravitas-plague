@@ -60,7 +60,7 @@ final class JockRetargetTestController {
 
     let rootEntity = Entity()
 
-    var onPunchHit: (() -> Void)?
+    var onPunchHit: ((InfectedHitRegion) -> Void)?
     var onPlayerDamaged: ((Int) -> Void)?
     var onBenchmarkPlayerHit: ((Int, UUID?) -> Bool)?
     var onBenchmarkPlayerDeath: ((Int, Int) -> Void)?
@@ -1032,6 +1032,10 @@ final class JockRetargetTestController {
         hordeID
     }
 
+    var archetype: PlagueCharacterArchetype {
+        characterArchetype
+    }
+
     func skinnedModelEntityForPortalInstance() -> ModelEntity? {
         modelEntity
     }
@@ -1572,7 +1576,9 @@ final class JockRetargetTestController {
         }
 
         acceptedHitCount += 1
-        onPunchHit?()
+        onPunchHit?(
+            event.region
+        )
 
         let shouldDie = acceptedHitCount >= hitsToKill
         let finalDamage: JockHitDamageLevel = shouldDie

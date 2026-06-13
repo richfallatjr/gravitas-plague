@@ -263,9 +263,16 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         _ jockController: JockRetargetTestController,
         hostAudioSourceID: UUID? = nil
     ) {
-        jockController.onPunchHit = { [weak self] in
+        jockController.onPunchHit = { [weak self, weak jockController] hitRegion in
             Task { @MainActor in
-                self?.audioController.playPunchHitAtHostHead(
+                guard let jockController else {
+                    return
+                }
+
+                self?.audioController.playConfirmedCharacterHitSounds(
+                    archetype: jockController.archetype,
+                    enemyID: jockController.hordeBenchmarkID,
+                    hitRegion: hitRegion,
                     sourceID: hostAudioSourceID
                 )
             }
@@ -827,13 +834,15 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 audioController.attachHostAudioSource(
                     id: enemyID,
                     hostRootEntity: controller.rootEntity,
+                    archetype: controller.archetype,
                     breathingStartDelay: 0
                 )
 
                 print(
                     """
-                    [HordePortalIngress] breathing audio started at room visual reveal
+                    [HordePortalIngress] character loop audio started at room visual reveal
                       enemyID: \(enemyID)
+                      archetype: \(controller.archetype.rawValue)
                       parent: enemyRoot
                       delay: 0.000
                     """
@@ -1494,6 +1503,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         audioController.attachHostAudioSource(
             id: id,
             hostRootEntity: controller.rootEntity,
+            archetype: archetype,
             breathingStartDelay: audioStartDelay
         )
 
@@ -1888,7 +1898,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         activeHordeEnemyIDs.remove(id)
         dyingHordeEnemyIDs.insert(id)
-        audioController.stopHostDadBreathing(id: id)
+        audioController.stopCharacterLoopAudio(id: id)
 
         hordeTotalKilled += 1
 
