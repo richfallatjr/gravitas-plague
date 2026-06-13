@@ -200,6 +200,17 @@ final class HordePortalInstancedIngressController {
         case failed
     }
 
+    private enum IngressRevealThresholds {
+        static let roomVisualEnableDistanceFeet: Float = 1.0
+        static let feetToMeters: Float = 0.3048
+
+        // Portal-local Z is negative while inside the portal.
+        static let roomVisualEnableZ: Float =
+            -roomVisualEnableDistanceFeet * feetToMeters
+
+        static let removePortalInstanceZ: Float = 0.45
+    }
+
     let enemyID: UUID
     let portalID: UUID
     let side: HordePortalEntranceSide
@@ -234,7 +245,8 @@ final class HordePortalInstancedIngressController {
         axis: SIMD3<Float>(0, 1, 0)
     )
 
-    private let removeInstanceZ: Float = 0.45
+    private var roomVisualHasBeenEnabled = false
+    private var portalInstanceHasBeenRemoved = false
 
     init(
         enemy: JockRetargetTestController,
@@ -303,7 +315,7 @@ final class HordePortalInstancedIngressController {
             break
         }
 
-        assertBothVisualsAlwaysOn(
+        assertPortalInstanceVisibleWhileIngressActive(
             context: "pre_\(phase.rawValue)"
         )
 
@@ -342,8 +354,9 @@ final class HordePortalInstancedIngressController {
             deltaTime: deltaTime
         )
         syncInstanceFromSource()
+        updateRoomVisualRevealIfNeeded()
 
-        assertBothVisualsAlwaysOn(
+        assertPortalInstanceVisibleWhileIngressActive(
             context: "post_\(phase.rawValue)"
         )
     }
@@ -368,7 +381,9 @@ private extension HordePortalInstancedIngressController {
         }
 
         enemy.prepareForHordePortalIngress()
-        enemy.rootEntity.isEnabled = true
+        enemy.rootEntity.isEnabled = false
+        roomVisualHasBeenEnabled = false
+        portalInstanceHasBeenRemoved = false
         enemy.setCombatEnabled(false)
         enemy.setRootMotionEnabled(false)
         enemy.setExternalMotionDriven(true)
@@ -391,7 +406,7 @@ private extension HordePortalInstancedIngressController {
 
         syncInstanceFromSource()
 
-        assertBothVisualsAlwaysOn(
+        assertPortalInstanceVisibleWhileIngressActive(
             context: "setup"
         )
 
@@ -400,13 +415,16 @@ private extension HordePortalInstancedIngressController {
             [HordePortalIngress] setup complete
               enemyID: \(enemyID)
               portalID: \(portalID)
-              roomVisualEnabledFromStart: true
+              roomVisualEnabledFromStart: false
               portalInstanceEnabledFromStart: true
+              roomVisualEnableZ: \(IngressRevealThresholds.roomVisualEnableZ)
+              roomVisualEnableDistanceFeet: \(IngressRevealThresholds.roomVisualEnableDistanceFeet)
+              sourceControllerAliveFromStart: true
+              sourceAnimationRunsWhileHidden: true
               oneController: true
               oneAnimationSource: true
               depthFeetRange: \(HordePortalIngressDepth.minFeet)-\(HordePortalIngressDepth.maxFeet)
               depthFeet: \(depthMeters / HordePortalIngressDepth.feetToMeters)
-              noEnablePop: true
               noFade: true
             """
         )
@@ -572,7 +590,9 @@ private extension HordePortalInstancedIngressController {
             localDirection: HordePortalLocalAxes.outToRoom
         )
 
-        if portalLocalPosition.z >= removeInstanceZ {
+        updateRoomVisualRevealIfNeeded()
+
+        if portalLocalPosition.z >= IngressRevealThresholds.removePortalInstanceZ {
             finishExit(
                 playerWorldPosition: playerWorldPosition
             )
@@ -627,25 +647,74 @@ private extension HordePortalInstancedIngressController {
         )
     }
 
-    func assertBothVisualsAlwaysOn(
-        context: String
-    ) {
-        if enemy.rootEntity.isEnabled == false {
-            fatalError(
-                """
-                [HordePortalIngress] ERROR room enemy visual was disabled
-                  context: \(context)
-                  requirement: both_visuals_always_on
-                """
-            )
+    func updateRoomVisualRevealIfNeeded() {
+        guard roomVisualHasBeenEnabled == false else {
+            return
         }
 
+        guard portalLocalPosition.z >= IngressRevealThresholds.roomVisualEnableZ else {
+            return
+        }
+
+        enemy.forceOneAnimationTickIfAvailable()
+        applyAuthoritativeWorldPose(
+            localDirection: currentPortalLocalFacingDirection()
+        )
+        syncInstanceFromSource()
+
+        enemy.rootEntity.isEnabled = true
+        roomVisualHasBeenEnabled = true
+
+        let portalInstanceVisible = portalInstance?.rootEntity.isEnabled == true
+
+        print(
+            """
+            [HordePortalIngress] room visual enabled near aperture
+              enemyID: \(enemyID)
+              portalID: \(portalID)
+              portalLocalZ: \(portalLocalPosition.z)
+              thresholdZ: \(IngressRevealThresholds.roomVisualEnableZ)
+              distanceBehindPortalFeet: \(abs(portalLocalPosition.z) / IngressRevealThresholds.feetToMeters)
+              exactPosePreApplied: true
+              animationRestarted: false
+              noFade: true
+              portalInstanceStillVisible: \(portalInstanceVisible)
+            """
+        )
+    }
+
+    func currentPortalLocalFacingDirection() -> SIMD3<Float> {
+        switch phase {
+        case .walkingParallelInsidePortal:
+            return SIMD3<Float>(
+                side.walkDirectionLocalX,
+                0,
+                0
+            )
+
+        case .turningTowardExit:
+            return SIMD3<Float>(
+                side.walkDirectionLocalX,
+                0,
+                0
+            )
+
+        case .crossingAperture,
+             .realWorldFollowing,
+             .failed:
+            return HordePortalLocalAxes.outToRoom
+        }
+    }
+
+    func assertPortalInstanceVisibleWhileIngressActive(
+        context: String
+    ) {
         guard let portalInstance else {
             fatalError(
                 """
                 [HordePortalIngress] ERROR portal instance missing while ingress is active
                   context: \(context)
-                  requirement: both_visuals_always_on
+                  requirement: portal_instance_always_on_until_exit
                 """
             )
         }
@@ -655,7 +724,18 @@ private extension HordePortalInstancedIngressController {
                 """
                 [HordePortalIngress] ERROR portal instance visual was disabled
                   context: \(context)
-                  requirement: both_visuals_always_on
+                  requirement: portal_instance_always_on_until_exit
+                """
+            )
+        }
+
+        if roomVisualHasBeenEnabled,
+           enemy.rootEntity.isEnabled == false {
+            fatalError(
+                """
+                [HordePortalIngress] ERROR room enemy visual was disabled after reveal
+                  context: \(context)
+                  requirement: room_visual_stays_on_after_threshold
                 """
             )
         }
@@ -664,7 +744,24 @@ private extension HordePortalInstancedIngressController {
     func finishExit(
         playerWorldPosition: SIMD3<Float>
     ) {
-        enemy.rootEntity.isEnabled = true
+        if roomVisualHasBeenEnabled == false {
+            enemy.forceOneAnimationTickIfAvailable()
+            applyAuthoritativeWorldPose(
+                localDirection: HordePortalLocalAxes.outToRoom
+            )
+            syncInstanceFromSource()
+
+            enemy.rootEntity.isEnabled = true
+            roomVisualHasBeenEnabled = true
+
+            print(
+                """
+                [HordePortalIngress] room visual force-enabled at exit
+                  reason: threshold missed due to large deltaTime
+                  noFade: true
+                """
+            )
+        }
 
         enemy.setRootMotionEnabled(true)
         enemy.setExternalMotionDriven(false)
@@ -685,8 +782,11 @@ private extension HordePortalInstancedIngressController {
         )
         enemy.lockRootToFloorY(floorY)
 
-        portalInstance?.removeAfterExit()
-        portalInstance = nil
+        if portalInstanceHasBeenRemoved == false {
+            portalInstance?.removeAfterExit()
+            portalInstance = nil
+            portalInstanceHasBeenRemoved = true
+        }
 
         do {
             try enemy.finishHordePortalIngressAndStartFollow()
@@ -710,11 +810,10 @@ private extension HordePortalInstancedIngressController {
             [HordePortalIngress] exit complete
               enemyID: \(enemyID)
               portalID: \(portalID)
-              roomVisualWasAlwaysEnabled: true
-              removedInstanceOnly: true
-              removedPortalInstanceOnly: true
-              noEnablePop: true
+              roomVisualWasEnabledNearAperture: \(roomVisualHasBeenEnabled)
+              portalInstanceRemovedAfterFullyOut: true
               noFade: true
+              animationRestartedAtReveal: false
               noDuplicateTurn: true
               combatEnabled: true
             """
