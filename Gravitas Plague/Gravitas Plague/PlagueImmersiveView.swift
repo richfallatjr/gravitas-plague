@@ -4,6 +4,7 @@ import SwiftUI
 
 struct PlagueImmersiveView: View {
     @ObservedObject var session: PlagueDemoSession
+    @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     @StateObject private var coordinator = PlagueImmersiveCoordinator()
     @StateObject private var damageTintController = DamageSurroundingsTintController()
     @StateObject private var deathPresentationController = DeathPresentationController()
@@ -16,9 +17,19 @@ struct PlagueImmersiveView: View {
 
     var body: some View {
         RealityView { content in
-            let sceneRoot = await coordinator.makeSceneRoot()
+            let sceneRoot = await coordinator.makeSceneRoot(
+                initialAtmosphere: session.forestAtmosphere,
+                atmosphereRevision: session.forestAtmosphereRevision
+            )
             content.add(sceneRoot)
             content.add(coordinator.makeHeadAnchor())
+        } update: { _ in
+            Task { @MainActor in
+                await coordinator.updateForestAtmosphereIfNeeded(
+                    atmosphere: session.forestAtmosphere,
+                    revision: session.forestAtmosphereRevision
+                )
+            }
         }
         .preferredSurroundingsEffect(
             deathPresentationController.surroundingsEffect
@@ -40,6 +51,12 @@ struct PlagueImmersiveView: View {
             coordinator.onPlayerDeathStarted = {
                 damageTintController.reset()
             }
+            coordinator.onForestAtmosphereFatalFailure = { error in
+                Task { @MainActor in
+                    session.closeForestImmersiveBecauseSplatFailed(error: error)
+                    await dismissImmersiveSpace()
+                }
+            }
         }
         .onChange(of: session.damageTintEventID) { _, _ in
             damageTintController.trigger(
@@ -50,6 +67,7 @@ struct PlagueImmersiveView: View {
             damageTintController.reset()
             deathPresentationController.reset()
             coordinator.shutdown()
+            session.forestImmersiveDidClose()
         }
     }
 }

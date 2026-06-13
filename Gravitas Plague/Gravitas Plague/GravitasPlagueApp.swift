@@ -3,10 +3,10 @@ import SwiftUI
 @main
 struct GravitasPlagueApp: App {
     @StateObject private var demoSession = PlagueDemoSession()
-    @State private var immersionStyle: ImmersionStyle = .mixed
+    @State private var immersionStyle: ImmersionStyle = .full
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "plague-control") {
             PlagueDemoView(session: demoSession)
                 .frame(minWidth: 543, minHeight: 724)
         }
@@ -15,6 +15,6 @@ struct GravitasPlagueApp: App {
         ImmersiveSpace(id: PlagueDemoSession.immersiveSpaceID) {
             PlagueImmersiveView(session: demoSession)
         }
-        .immersionStyle(selection: $immersionStyle, in: .mixed)
+        .immersionStyle(selection: $immersionStyle, in: .full)
     }
 }

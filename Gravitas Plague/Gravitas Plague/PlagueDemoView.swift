@@ -8,6 +8,7 @@ struct PlagueDemoView: View {
         PlagueOperationModePosterRoot(session: session)
             .onAppear {
                 PlagueMenuAssetValidator.validate()
+                PlagueForestAssetValidator.validate()
                 loadJockManifestForUI()
             }
     }

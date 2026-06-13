@@ -37,6 +37,10 @@
 		8E1A103A2FCD000100000001 /* ../plague_menu_horde_button.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A103B2FCD000100000001 /* ../plague_menu_horde_button.png */; };
 		8E1A103C2FCD000100000001 /* ../plague_menu_walk_button.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A103D2FCD000100000001 /* ../plague_menu_walk_button.png */; };
 		8E1A103E2FCD000100000001 /* ../robot_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A103F2FCD000100000001 /* ../robot_biped.usdz */; };
+		8E1A10412FCD000100000001 /* ../forest-overcast-01.ply in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10402FCD000100000001 /* ../forest-overcast-01.ply */; };
+		8E1A10432FCD000100000001 /* ../forest-overcast-01.exr in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10422FCD000100000001 /* ../forest-overcast-01.exr */; };
+		8E1A10452FCD000100000001 /* ../forest-night-01.ply in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10442FCD000100000001 /* ../forest-night-01.ply */; };
+		8E1A10472FCD000100000001 /* ../forest-night-01.exr in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10462FCD000100000001 /* ../forest-night-01.exr */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -90,6 +94,10 @@
 		8E1A103B2FCD000100000001 /* ../plague_menu_horde_button.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../plague_menu_horde_button.png; sourceTree = SOURCE_ROOT; };
 		8E1A103D2FCD000100000001 /* ../plague_menu_walk_button.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../plague_menu_walk_button.png; sourceTree = SOURCE_ROOT; };
 		8E1A103F2FCD000100000001 /* ../robot_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../robot_biped.usdz; sourceTree = SOURCE_ROOT; };
+		8E1A10402FCD000100000001 /* ../forest-overcast-01.ply */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../forest-overcast-01.ply"; sourceTree = SOURCE_ROOT; };
+		8E1A10422FCD000100000001 /* ../forest-overcast-01.exr */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../forest-overcast-01.exr"; sourceTree = SOURCE_ROOT; };
+		8E1A10442FCD000100000001 /* ../forest-night-01.ply */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../forest-night-01.ply"; sourceTree = SOURCE_ROOT; };
+		8E1A10462FCD000100000001 /* ../forest-night-01.exr */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../forest-night-01.exr"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -185,6 +193,10 @@
 				8E1A10392FCD000100000001 /* ../plague_menu_ui_mockup.png */,
 				8E1A103B2FCD000100000001 /* ../plague_menu_horde_button.png */,
 				8E1A103D2FCD000100000001 /* ../plague_menu_walk_button.png */,
+				8E1A10402FCD000100000001 /* ../forest-overcast-01.ply */,
+				8E1A10422FCD000100000001 /* ../forest-overcast-01.exr */,
+				8E1A10442FCD000100000001 /* ../forest-night-01.ply */,
+				8E1A10462FCD000100000001 /* ../forest-night-01.exr */,
 				8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */,
 				8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */,
 				8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */,
@@ -337,6 +349,10 @@
 				8E1A10382FCD000100000001 /* ../plague_menu_ui_mockup.png in Resources */,
 				8E1A103A2FCD000100000001 /* ../plague_menu_horde_button.png in Resources */,
 				8E1A103C2FCD000100000001 /* ../plague_menu_walk_button.png in Resources */,
+				8E1A10412FCD000100000001 /* ../forest-overcast-01.ply in Resources */,
+				8E1A10432FCD000100000001 /* ../forest-overcast-01.exr in Resources */,
+				8E1A10452FCD000100000001 /* ../forest-night-01.ply in Resources */,
+				8E1A10472FCD000100000001 /* ../forest-night-01.exr in Resources */,
 				8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */,
 				8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav in Resources */,
 				8E1A10142FCD000100000001 /* ../Narrow-band-analog.wav in Resources */,
@@ -469,7 +485,7 @@
 				SUPPORTED_PLATFORMS = "xros xrsimulator";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				XROS_DEPLOYMENT_TARGET = 26.1;
+				XROS_DEPLOYMENT_TARGET = 27;
 			};
 			name = Debug;
 		};
@@ -527,7 +543,7 @@
 				SUPPORTED_PLATFORMS = "xros xrsimulator";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
-				XROS_DEPLOYMENT_TARGET = 26.1;
+				XROS_DEPLOYMENT_TARGET = 27;
 			};
 			name = Release;
 		};
@@ -563,6 +579,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 7;
+				XROS_DEPLOYMENT_TARGET = 27;
 			};
 			name = Debug;
 		};
@@ -598,6 +615,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 7;
+				XROS_DEPLOYMENT_TARGET = 27;
 			};
 			name = Release;
 		};
@@ -609,7 +627,6 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "GravitasDiscover.Gravitas-PlagueTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -618,8 +635,9 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 7;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Gravitas Plague.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Gravitas Plague";
+				XROS_DEPLOYMENT_TARGET = 27;
 			};
 			name = Debug;
 		};
@@ -631,7 +649,6 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "GravitasDiscover.Gravitas-PlagueTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -640,8 +657,9 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 7;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Gravitas Plague.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Gravitas Plague";
+				XROS_DEPLOYMENT_TARGET = 27;
 			};
 			name = Release;
 		};
@@ -660,8 +678,9 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 7;
 				TEST_TARGET_NAME = "Gravitas Plague";
+				XROS_DEPLOYMENT_TARGET = 27;
 			};
 			name = Debug;
 		};
@@ -680,8 +699,9 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 7;
 				TEST_TARGET_NAME = "Gravitas Plague";
+				XROS_DEPLOYMENT_TARGET = 27;
 			};
 			name = Release;
 		};

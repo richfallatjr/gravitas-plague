@@ -2,9 +2,17 @@ import Foundation
 import Combine
 import SwiftUI
 
+enum PlagueForestImmersiveState: String, Codable {
+    case closed
+    case opening
+    case open
+    case closing
+    case failed
+}
+
 @MainActor
 final class PlagueDemoSession: ObservableObject {
-    static let immersiveSpaceID = "GravitasPlaguePresenceDemoSpace"
+    static let immersiveSpaceID = PlagueImmersiveSpaceID.forest
 
     enum PlagueOperationMode: String, Codable, CaseIterable, Identifiable {
         case horde
@@ -65,6 +73,10 @@ final class PlagueDemoSession: ObservableObject {
     @Published var selectedJockClipID: String?
     @Published var jockPickerLoopEnabled = false
     @Published var availableJockClips: [JockAnimationManifest.ClipSummary] = []
+    @Published var forestImmersiveState: PlagueForestImmersiveState = .closed
+    @Published var forestAtmosphere: PlagueForestAtmosphere = .overcast
+    @Published var forestAtmosphereRevision: Int = 0
+    @Published var forestImmersiveStatus = "Forest immersive closed."
     @Published var damageTintEventID = UUID()
     @Published var damageTintIntensity: Double = 0.0
     @Published private(set) var latestCommand: CommandEnvelope?
@@ -134,6 +146,135 @@ final class PlagueDemoSession: ObservableObject {
         print("[PlagueMenu] returned to operation menu")
     }
 
+    func toggleForestAtmosphere() {
+        forestAtmosphere = forestAtmosphere.next
+        forestAtmosphereRevision &+= 1
+        forestImmersiveStatus = "Atmosphere changed to \(forestAtmosphere.displayName)."
+
+        print(
+            """
+            [PlagueForest] atmosphere toggled
+              atmosphere: \(forestAtmosphere.rawValue)
+              ply: \(forestAtmosphere.gaussianSplatResourceName).\(forestAtmosphere.gaussianSplatFileExtension)
+              hdri: \(forestAtmosphere.hdriResourceName).\(forestAtmosphere.hdriFileExtension)
+              revision: \(forestAtmosphereRevision)
+            """
+        )
+    }
+
+    func toggleForestImmersive(
+        openImmersiveSpace: OpenImmersiveSpaceAction,
+        dismissImmersiveSpace: DismissImmersiveSpaceAction
+    ) async {
+        switch forestImmersiveState {
+        case .closed, .failed:
+            forestImmersiveState = .opening
+            immersiveSpaceStatus = .opening
+            forestImmersiveStatus = "Opening forest immersive..."
+
+            print(
+                """
+                [PlagueForest] opening immersive space
+                  id: \(PlagueImmersiveSpaceID.forest)
+                  atmosphere: \(forestAtmosphere.rawValue)
+                """
+            )
+
+            let result = await openImmersiveSpace(
+                id: PlagueImmersiveSpaceID.forest
+            )
+
+            switch result {
+            case .opened:
+                forestImmersiveState = .open
+                immersiveSpaceStatus = .open
+                forestImmersiveStatus = "Forest immersive open."
+
+                print("[PlagueForest] immersive opened")
+
+            case .userCancelled:
+                forestImmersiveState = .closed
+                immersiveSpaceStatus = .closed
+                forestImmersiveStatus = "Forest immersive cancelled."
+
+                print("[PlagueForest] immersive open cancelled")
+
+            case .error:
+                forestImmersiveState = .failed
+                immersiveSpaceStatus = .closed
+                forestImmersiveStatus = "Forest immersive failed."
+
+                print("[PlagueForest] immersive open failed")
+
+            @unknown default:
+                forestImmersiveState = .failed
+                immersiveSpaceStatus = .closed
+                forestImmersiveStatus = "Forest immersive failed: \(String(describing: result))"
+
+                print("[PlagueForest] immersive open unknown result \(String(describing: result))")
+            }
+
+        case .open:
+            forestImmersiveState = .closing
+            forestImmersiveStatus = "Closing forest immersive..."
+
+            print("[PlagueForest] dismissing immersive space")
+
+            await dismissImmersiveSpace()
+
+            forestImmersiveState = .closed
+            immersiveSpaceStatus = .closed
+            forestImmersiveStatus = "Forest immersive closed."
+
+            print("[PlagueForest] immersive dismissed")
+
+        case .opening, .closing:
+            print(
+                """
+                [PlagueForest] immersive toggle ignored
+                  state: \(forestImmersiveState.rawValue)
+                """
+            )
+        }
+    }
+
+    func forestImmersiveDidOpen() {
+        forestImmersiveState = .open
+        immersiveSpaceStatus = .open
+        forestImmersiveStatus = "Forest immersive open."
+    }
+
+    func forestImmersiveDidClose() {
+        if forestImmersiveState == .failed {
+            immersiveSpaceStatus = .closed
+
+            print("[PlagueForest] immersive did close after strict splat failure")
+            return
+        }
+
+        forestImmersiveState = .closed
+        immersiveSpaceStatus = .closed
+        forestImmersiveStatus = "Forest immersive closed."
+
+        print("[PlagueForest] immersive did close")
+    }
+
+    func closeForestImmersiveBecauseSplatFailed(
+        error: Error
+    ) {
+        forestImmersiveState = .failed
+        immersiveSpaceStatus = .closed
+        forestImmersiveStatus = "Forest immersive failed: \(error.localizedDescription)"
+
+        print(
+            """
+            [PlagueForest] closing immersive because strict splat atmosphere failed
+              error: \(error.localizedDescription)
+              noFallback: true
+            """
+        )
+    }
+
     func notePosterUIMounted() {
         isPosterUIVisible = true
 
@@ -172,6 +313,8 @@ final class PlagueDemoSession: ObservableObject {
         stopHordeBenchmarkForQuit()
         stopWalkLoopForQuit()
         statusMessage = "Closing."
+        forestImmersiveState = .closing
+        forestImmersiveStatus = "Closing forest immersive..."
         activeMode = .none
         send(.prepareForUserQuitOrClose)
         cancelRuntimeTasksForQuit()
@@ -181,6 +324,10 @@ final class PlagueDemoSession: ObservableObject {
             Date(),
             forKey: "lastExitDate"
         )
+
+        forestImmersiveState = .closed
+        immersiveSpaceStatus = .closed
+        forestImmersiveStatus = "Forest immersive closed."
 
         print("[PlagueQuit] shutdown complete")
     }

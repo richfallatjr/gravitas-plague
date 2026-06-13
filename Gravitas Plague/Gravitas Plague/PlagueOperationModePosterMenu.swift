@@ -127,6 +127,13 @@ struct PlagueOperationModePosterRoot: View {
 
     var body: some View {
         PlagueOperationModePosterMenu(session: session)
+            .ornament(
+                visibility: .visible,
+                attachmentAnchor: .scene(.top),
+                contentAlignment: .center
+            ) {
+                PlagueForestTopOrnament(session: session)
+            }
             .background {
                 PlagueWindowAttachmentObserver(
                     onAttach: { window in
@@ -412,19 +419,26 @@ struct PlagueOperationModePosterMenu: View {
             switch result {
             case .opened:
                 session.immersiveSpaceStatus = .open
+                session.forestImmersiveDidOpen()
 
             case .userCancelled:
                 session.immersiveSpaceStatus = .closed
+                session.forestImmersiveState = .closed
+                session.forestImmersiveStatus = "Forest immersive cancelled."
                 session.statusMessage = "Immersive space was not opened."
                 return
 
             case .error:
                 session.immersiveSpaceStatus = .closed
+                session.forestImmersiveState = .failed
+                session.forestImmersiveStatus = "Forest immersive failed."
                 session.statusMessage = "Could not open immersive space."
                 return
 
             @unknown default:
                 session.immersiveSpaceStatus = .closed
+                session.forestImmersiveState = .failed
+                session.forestImmersiveStatus = "Forest immersive failed: \(String(describing: result))"
                 session.statusMessage = "Unknown immersive-space result."
                 return
             }
@@ -432,6 +446,79 @@ struct PlagueOperationModePosterMenu: View {
 
         print("[PlagueMenu] selected operation mode: \(mode.rawValue)")
         session.selectOperationMode(mode)
+    }
+}
+
+struct PlagueForestTopOrnament: View {
+    @ObservedObject var session: PlagueDemoSession
+
+    @Environment(\.openImmersiveSpace) private var openImmersiveSpace
+    @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Button {
+                Task { @MainActor in
+                    await session.toggleForestImmersive(
+                        openImmersiveSpace: openImmersiveSpace,
+                        dismissImmersiveSpace: dismissImmersiveSpace
+                    )
+                }
+            } label: {
+                Image(systemName: mountainIconName)
+                    .font(.system(size: 24, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .help(mountainHelpText)
+            .accessibilityLabel(mountainHelpText)
+
+            Button {
+                session.toggleForestAtmosphere()
+            } label: {
+                Image(systemName: session.forestAtmosphere.toggleTargetIconSystemName)
+                    .font(.system(size: 24, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .help("Switch to \(session.forestAtmosphere.next.displayName) atmosphere")
+            .accessibilityLabel("Switch to \(session.forestAtmosphere.next.displayName) atmosphere")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .glassBackgroundEffect()
+        .onAppear {
+            print("[PlagueForest] top ornament appeared")
+        }
+    }
+
+    private var mountainIconName: String {
+        switch session.forestImmersiveState {
+        case .open:
+            return "mountain.2.fill"
+
+        case .opening, .closing:
+            return "hourglass"
+
+        case .closed, .failed:
+            return "mountain.2"
+        }
+    }
+
+    private var mountainHelpText: String {
+        switch session.forestImmersiveState {
+        case .open:
+            return "Exit full immersive forest"
+
+        case .opening:
+            return "Opening forest immersive"
+
+        case .closing:
+            return "Closing forest immersive"
+
+        case .closed, .failed:
+            return "Enter full immersive forest"
+        }
     }
 }
 

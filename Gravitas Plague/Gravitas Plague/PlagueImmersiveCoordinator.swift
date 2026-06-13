@@ -25,11 +25,17 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
     private let spatialProvider = PhaseOneSpatialProvider()
     private let audioController = GravitasDemoAudioController()
+    private let forestEnvironmentController = PlagueGaussianForestEnvironmentController()
 
     @Published private(set) var isPlayerDeathSequenceActive = false
 
     var onPlayerDamaged: ((Int) -> Void)?
     var onPlayerDeathStarted: (() -> Void)?
+    var onForestAtmosphereFatalFailure: ((Error) -> Void)? {
+        didSet {
+            forestEnvironmentController.onStrictAtmosphereFailure = onForestAtmosphereFatalFailure
+        }
+    }
     weak var deathPresentationController: DeathPresentationController?
 
     private var sceneRoot: AnchorEntity?
@@ -66,8 +72,16 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let YOU_DIED_WIDTH_M: Float = 1.70
     private let YOU_DIED_HEIGHT_M: Float = 0.84
 
-    func makeSceneRoot() async -> AnchorEntity {
+    func makeSceneRoot(
+        initialAtmosphere: PlagueForestAtmosphere,
+        atmosphereRevision: Int
+    ) async -> AnchorEntity {
         if let sceneRoot {
+            await forestEnvironmentController.updateAtmosphereIfNeeded(
+                atmosphere: initialAtmosphere,
+                revision: atmosphereRevision
+            )
+
             return sceneRoot
         }
 
@@ -75,8 +89,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         root.name = "GravitasPlague_PhaseOne_SceneRoot"
 
         CharacterAssetRegistry.validateRequiredCharacterAssets()
+        PlagueForestAssetValidator.validate()
 
         _ = makeHeadAnchor()
+        forestEnvironmentController.attach(to: root)
 
         audioController.startImmersiveAudio()
 
@@ -85,6 +101,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         let jockController = JockRetargetTestController()
         wireJockCallbacks(jockController)
         root.addChild(jockController.rootEntity)
+        forestEnvironmentController.applyIBLReceiverRecursively(
+            root: jockController.rootEntity
+        )
 
         audioController.attachToSceneIfNeeded(
             sceneRoot: root,
@@ -95,9 +114,28 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         self.jockRetargetController = jockController
         validateDeathPresentationAssets()
 
+        await forestEnvironmentController.applyInitialAtmosphere(
+            initialAtmosphere,
+            revision: atmosphereRevision
+        )
+
         drainPendingCommands()
 
         return root
+    }
+
+    func updateForestAtmosphereIfNeeded(
+        atmosphere: PlagueForestAtmosphere,
+        revision: Int
+    ) async {
+        guard sceneRoot != nil else {
+            return
+        }
+
+        await forestEnvironmentController.updateAtmosphereIfNeeded(
+            atmosphere: atmosphere,
+            revision: revision
+        )
     }
 
     func makeHeadAnchor() -> AnchorEntity {
@@ -285,6 +323,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         spatialProvider.stop()
         audioController.stopAllAudio()
         resetHordeBenchmarkDeathPresentation()
+        forestEnvironmentController.shutdown()
 
         sceneRoot = nil
         headAnchor = nil
@@ -700,6 +739,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         if controller.rootEntity.parent == nil {
             sceneRoot.addChild(controller.rootEntity)
         }
+
+        forestEnvironmentController.applyIBLReceiverRecursively(
+            root: controller.rootEntity
+        )
 
         let audioStartDelay = TimeInterval.random(in: 0...1)
         audioController.attachHostAudioSource(
