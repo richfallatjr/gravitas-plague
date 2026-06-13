@@ -95,6 +95,7 @@ final class PlagueDemoSession: ObservableObject {
     @Published private(set) var latestCommand: CommandEnvelope?
 
     private var controlWindowBackgroundIgnoreUntil: Date?
+    private var controlWindowBackgroundIgnoreReason: String?
 
     func send(_ command: Command) {
         latestCommand = CommandEnvelope(command)
@@ -291,6 +292,7 @@ final class PlagueDemoSession: ObservableObject {
         reason: String
     ) {
         controlWindowBackgroundIgnoreUntil = Date().addingTimeInterval(2.0)
+        controlWindowBackgroundIgnoreReason = reason
 
         print(
             """
@@ -319,30 +321,18 @@ final class PlagueDemoSession: ObservableObject {
 
     @discardableResult
     func handleControlWindowSceneBackgrounded() -> Bool {
-        let mixedRoomSceneActive =
-            forestImmersiveState == .opening ||
-            forestImmersiveState == .open ||
-            forestImmersiveState == .closing
-
-        if mixedRoomSceneActive {
-            print(
-                """
-                [PlagueQuit] ignored control window background during mixed room scene
-                  forestImmersiveState: \(forestImmersiveState.rawValue)
-                  reason: mixed_room_transition_or_open
-                """
-            )
-
-            return false
-        }
-
         if let ignoreUntil = controlWindowBackgroundIgnoreUntil,
            Date() < ignoreUntil {
+            let reason = controlWindowBackgroundIgnoreReason ?? "unknown"
+            controlWindowBackgroundIgnoreUntil = nil
+            controlWindowBackgroundIgnoreReason = nil
+
             print(
                 """
-                [PlagueQuit] ignored transient control window background
+                [PlagueQuit] ignored one transient control window background
                   forestImmersiveState: \(forestImmersiveState.rawValue)
-                  reason: recent_immersive_transition
+                  armedReason: \(reason)
+                  killSwitchNextBackground: true
                 """
             )
 
@@ -350,6 +340,7 @@ final class PlagueDemoSession: ObservableObject {
         }
 
         controlWindowBackgroundIgnoreUntil = nil
+        controlWindowBackgroundIgnoreReason = nil
 
         return true
     }
