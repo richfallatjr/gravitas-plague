@@ -160,6 +160,20 @@ struct HordePortal: Identifiable {
     }
 }
 
+struct HordePortalAssignment {
+    let enemyID: UUID
+    let archetype: PlagueCharacterArchetype
+    let portalID: UUID
+    let side: HordePortalEntranceSide
+    let assignmentKind: AssignmentKind
+
+    enum AssignmentKind: String {
+        case uniqueExistingPortal
+        case uniqueNewPortal
+        case forcedReuseNoCapacity
+    }
+}
+
 enum HordePortalRequiredClips {
     static let clipIDs = [
         "turn_left_90",
@@ -185,7 +199,9 @@ struct HordePortalPlacementCandidate {
     let worldCenter: SIMD3<Float>
     let bearingRadians: Float
     let nearestPortalDistance: Float
+    let nearestReservedDistance: Float
     let nearestBearingGap: Float
+    let spacingOK: Bool
     let score: Float
 }
 

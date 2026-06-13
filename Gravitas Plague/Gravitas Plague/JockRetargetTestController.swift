@@ -907,6 +907,24 @@ final class JockRetargetTestController {
         )
     }
 
+    func setCombatEnabled(
+        _ enabled: Bool
+    ) {
+        playerAttackEnabled = enabled
+
+        if !enabled {
+            resetCombatRuntime()
+            hitDetector.stop()
+        }
+
+        print(
+            """
+            [HordePortalIngress] combat \(enabled ? "enabled" : "disabled")
+              enemyID: \(hordeID)
+            """
+        )
+    }
+
     func setExternalMotionDriven(_ enabled: Bool) {
         externalMotionDriven = enabled
 
@@ -924,6 +942,12 @@ final class JockRetargetTestController {
               enabled: \(enabled)
             """
         )
+    }
+
+    func setRecursiveOpacity(
+        _ opacity: Float
+    ) {
+        rootEntity.applyOpacityRecursively(opacity)
     }
 
     func updateGroundingProfileFromLoadedEntityIfNeeded() {

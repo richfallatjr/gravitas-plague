@@ -85,7 +85,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var hordeWaitingForRoomScan = false
     private var hordeWaitingForFloorPromptShown = false
     private var hordeRoomScanCompletionTask: Task<Void, Never>?
-    private var activeIngressControllers: [UUID: HordePortalIngressController] = [:]
+    private var activeIngressControllers: [UUID: HordePortalWorldspaceIngressController] = [:]
 
     private var lastTickDate: Date?
     private var handledCommandIDs = Set<UUID>()
@@ -634,12 +634,12 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             )
 
             switch ingress.phase {
-            case .followingPlayer, .complete, .failed:
+            case .following, .failed:
                 finishedIDs.append(enemyID)
 
-            case .walkingParallelInsidePortal,
-                 .turningAtPortalCenter,
-                 .crossingIntoRoom:
+            case .walkingParallel,
+                 .turningTowardExit,
+                 .crossing:
                 break
             }
         }
@@ -773,13 +773,39 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeSpawnFailures.removeAll()
         hordePlayerHitsThisWave = 0
 
-        let newPortal = await hordePortalManager.createPortalForWave(
+        let spawnRequests = lineup.map { archetype in
+            (
+                id: UUID(),
+                archetype: archetype
+            )
+        }
+        let spawnIndexByID = Dictionary(
+            uniqueKeysWithValues: spawnRequests.enumerated().map { index, request in
+                (
+                    request.id,
+                    index
+                )
+            }
+        )
+        let hitsToKillByID = Dictionary(
+            uniqueKeysWithValues: spawnRequests.map { request in
+                (
+                    request.id,
+                    Int.random(in: 3...5)
+                )
+            }
+        )
+        let assignments = await HordePortalWaveAssignmentPlanner(
+            portalManager: hordePortalManager
+        )
+        .buildAssignmentsForWave(
             wave: nextWave,
+            spawnRequests: spawnRequests,
             playerPosition: spawnPose.headPosition,
             playerForward: spawnPose.headForward
         )
 
-        guard newPortal != nil || hordePortalManager.randomPortalForSpawn() != nil else {
+        guard !assignments.isEmpty else {
             hordeWaveSpawnState = .failed
 
             print(
@@ -792,6 +818,19 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             )
 
             return
+        }
+
+        let assignedIDs = Set(assignments.map(\.enemyID))
+        for request in spawnRequests where !assignedIDs.contains(request.id) {
+            let index = spawnIndexByID[request.id] ?? 0
+            handleHordeSpawnFailure(
+                HordeSpawnFailureRecord(
+                    wave: nextWave,
+                    spawnIndex: index,
+                    archetype: request.archetype,
+                    reason: "No portal assignment available"
+                )
+            )
         }
 
         showInstructionHUD("Wave \(nextWave). They are coming through.")
@@ -819,10 +858,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         var successfulSpawnCount = 0
 
-        for index in 0..<spawnCount {
-            let archetype = lineup[index]
-            let id = UUID()
-            let hitsToKill = Int.random(in: 3...5)
+        for assignment in assignments {
+            let index = spawnIndexByID[assignment.enemyID] ?? successfulSpawnCount
+            let archetype = assignment.archetype
+            let id = assignment.enemyID
+            let hitsToKill = hitsToKillByID[id] ?? Int.random(in: 3...5)
 
             do {
                 let controller = try await createLoadedHordeEnemyController(
@@ -834,10 +874,21 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     hitsToKill: hitsToKill,
                     playerHeadPosition: spawnPose.headPosition
                 )
+                let portalProxyController = try await createLoadedHordeEnemyController(
+                    id: UUID(),
+                    archetype: archetype,
+                    position: positions[index],
+                    wave: nextWave,
+                    spawnIndex: index,
+                    hitsToKill: hitsToKill,
+                    playerHeadPosition: spawnPose.headPosition,
+                    wireCallbacks: false
+                )
 
                 guard hordeBenchmarkRunning,
                       !isPlayerDeathSequenceActive else {
                     controller.hide()
+                    portalProxyController.hide()
                     print(
                         """
                         [Horde] spawn cancelled before reveal
@@ -851,34 +902,27 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     return
                 }
 
-                let portal: HordePortal?
-                if index == 0 {
-                    portal = newPortal ?? hordePortalManager.randomPortalForSpawn(preferNewest: true)
-                } else {
-                    portal = hordePortalManager.randomPortalForSpawn()
-                }
-
-                guard let portal else {
+                guard let portal = hordePortalManager.portals[assignment.portalID] else {
                     throw NSError(
                         domain: "HordePortal",
                         code: 501,
                         userInfo: [
                             NSLocalizedDescriptionKey:
-                                "No Horde portal available for enemy \(index). Direct room spawn is disabled."
+                                "Assigned Horde portal missing \(assignment.portalID)."
                         ]
                     )
                 }
 
-                let side: HordePortalEntranceSide = Bool.random() ? .left : .right
-
-                try registerHordeEnemyForPortalIngress(
+                try registerHordeEnemyForWorldspacePortalIngress(
                     controller: controller,
+                    portalProxyController: portalProxyController,
                     id: id,
                     archetype: archetype,
                     wave: nextWave,
                     spawnIndex: index,
                     portal: portal,
-                    side: side,
+                    side: assignment.side,
+                    assignmentKind: assignment.assignmentKind,
                     currentHeadPosition: spatialProvider.currentPose()?.headPosition ?? spawnPose.headPosition
                 )
 
@@ -902,7 +946,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                       id: \(id)
                       hitsToKill: \(hitsToKill)
                       portalID: \(portal.id)
-                      side: \(side.rawValue)
+                      side: \(assignment.side.rawValue)
+                      assignmentKind: \(assignment.assignmentKind.rawValue)
                       activeIDs: \(activeHordeEnemyIDs.count)
                       controllers: \(hordeEnemyControllersByID.count)
                     """
@@ -989,6 +1034,28 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hitsToKill: Int,
         playerHeadPosition: SIMD3<Float>
     ) async throws -> JockRetargetTestController {
+        try await createLoadedHordeEnemyController(
+            id: id,
+            archetype: archetype,
+            position: position,
+            wave: wave,
+            spawnIndex: spawnIndex,
+            hitsToKill: hitsToKill,
+            playerHeadPosition: playerHeadPosition,
+            wireCallbacks: true
+        )
+    }
+
+    private func createLoadedHordeEnemyController(
+        id: UUID,
+        archetype: PlagueCharacterArchetype,
+        position: SIMD3<Float>,
+        wave: Int,
+        spawnIndex: Int,
+        hitsToKill: Int,
+        playerHeadPosition: SIMD3<Float>,
+        wireCallbacks: Bool
+    ) async throws -> JockRetargetTestController {
         guard CharacterAssetRegistry.url(for: archetype) != nil else {
             throw NSError(
                 domain: "HordeSpawn",
@@ -1009,10 +1076,12 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             hitsToKill: hitsToKill
         )
 
-        wireJockCallbacks(
-            controller,
-            hostAudioSourceID: id
-        )
+        if wireCallbacks {
+            wireJockCallbacks(
+                controller,
+                hostAudioSourceID: id
+            )
+        }
 
         try await controller.loadIfNeeded()
 
@@ -1101,14 +1170,16 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
     }
 
-    private func registerHordeEnemyForPortalIngress(
+    private func registerHordeEnemyForWorldspacePortalIngress(
         controller: JockRetargetTestController,
+        portalProxyController: JockRetargetTestController,
         id: UUID,
         archetype: PlagueCharacterArchetype,
         wave: Int,
         spawnIndex: Int,
         portal: HordePortal,
         side: HordePortalEntranceSide,
+        assignmentKind: HordePortalAssignment.AssignmentKind,
         currentHeadPosition: SIMD3<Float>
     ) throws {
         guard let sceneRoot else {
@@ -1126,8 +1197,16 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeEnemyControllersByID[id] = controller
         activeHordeEnemyIDs.insert(id)
 
-        let ingress = HordePortalIngressController(
-            enemy: controller,
+        if controller.rootEntity.parent == nil {
+            sceneRoot.addChild(controller.rootEntity)
+        }
+
+        portalProxyController.rootEntity.removeFromParent()
+        portal.portalWorldRoot.addChild(portalProxyController.rootEntity)
+
+        let ingress = HordePortalWorldspaceIngressController(
+            realEnemy: controller,
+            portalEnemy: portalProxyController,
             portal: portal,
             sceneRoot: sceneRoot,
             side: side
@@ -1137,6 +1216,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         forestEnvironmentController.applyIBLReceiverRecursively(
             root: controller.rootEntity
+        )
+        forestEnvironmentController.applyIBLReceiverRecursively(
+            root: portalProxyController.rootEntity
         )
 
         let audioStartDelay = TimeInterval.random(in: 0...1)
@@ -1150,18 +1232,25 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             deltaTime: 1.0 / 60.0,
             currentHeadPosition: currentHeadPosition
         )
+        portalProxyController.update(
+            deltaTime: 1.0 / 60.0,
+            currentHeadPosition: currentHeadPosition
+        )
 
         print(
             """
-            [HordePortal] enemy assigned to portal ingress
+            [HordePortal] worldspace ingress assigned
               wave: \(wave)
               index: \(spawnIndex)
               enemyID: \(id)
               archetype: \(archetype.rawValue)
               portalID: \(portal.id)
+              assignmentKind: \(assignmentKind.rawValue)
               side: \(side.rawValue)
               audioStartDelay: \(String(format: "%.3f", audioStartDelay))
               directRoomSpawnAllowed: false
+              realEnemySceneRoot: true
+              portalProxyWorldRoot: true
             """
         )
     }

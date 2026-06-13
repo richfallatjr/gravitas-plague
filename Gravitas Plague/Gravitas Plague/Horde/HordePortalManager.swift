@@ -6,6 +6,7 @@ import simd
 final class HordePortalManager {
     private(set) var portals: [UUID: HordePortal] = [:]
     private var portalOrder: [UUID] = []
+    private var entranceSideByPortalID: [UUID: HordePortalEntranceSide] = [:]
 
     private weak var sceneRoot: Entity?
     private weak var wallManager: WallPlaneManager?
@@ -27,14 +28,17 @@ final class HordePortalManager {
 
         portals.removeAll()
         portalOrder.removeAll()
+        entranceSideByPortalID.removeAll()
 
         print("[HordePortal] reset")
     }
 
     func createPortalForWave(
         wave: Int,
+        spawnIndex: Int,
         playerPosition: SIMD3<Float>,
-        playerForward: SIMD3<Float>
+        playerForward: SIMD3<Float>,
+        excludingPortalIDs: Set<UUID>
     ) async -> HordePortal? {
         guard let sceneRoot,
               let wallManager else {
@@ -44,10 +48,20 @@ final class HordePortalManager {
 
         guard let candidate = choosePortalPlacement(
             wave: wave,
+            spawnIndex: spawnIndex,
             playerPosition: playerPosition,
-            playerForward: playerForward
+            playerForward: playerForward,
+            excludingPortalIDs: excludingPortalIDs
         ) else {
-            print("[HordePortal] ERROR no placement candidate")
+            print(
+                """
+                [HordePortal] no unique portal placement available
+                  wave: \(wave)
+                  spawnIndex: \(spawnIndex)
+                  existingPortals: \(portals.count)
+                  reservedThisWave: \(excludingPortalIDs.count)
+                """
+            )
             return nil
         }
 
@@ -185,13 +199,15 @@ final class HordePortalManager {
             """
             [HordePortal] portal created
               wave: \(wave)
+              spawnIndex: \(spawnIndex)
               portalID: \(portal.id)
               wallID: \(wall.id)
               localX: \(placement.localX)
               localY: \(placement.localY)
               width: \(placement.width)
               height: \(placement.height)
-              nearestDistanceM: \(candidate.nearestPortalDistance)
+              nearestExistingM: \(candidate.nearestPortalDistance)
+              nearestReservedM: \(candidate.nearestReservedDistance)
               nearestBearingGapRad: \(candidate.nearestBearingGap)
               backdrop: hellscape_01.exr
               persists: true
@@ -216,24 +232,47 @@ final class HordePortalManager {
         return portal
     }
 
-    func randomPortalForSpawn(
-        preferNewest: Bool = false
+    func bestUnreservedPortal(
+        excluding reserved: Set<UUID>,
+        playerPosition: SIMD3<Float>
     ) -> HordePortal? {
-        if preferNewest,
-           let lastID = portalOrder.last,
-           let portal = portals[lastID] {
-            return portal
+        let candidates = portals.values.filter {
+            !reserved.contains($0.id)
         }
 
-        let sorted = portals.values.sorted { lhs, rhs in
+        guard !candidates.isEmpty else {
+            return nil
+        }
+
+        return candidates.sorted { lhs, rhs in
             if lhs.entranceCount != rhs.entranceCount {
                 return lhs.entranceCount < rhs.entranceCount
             }
 
-            return Bool.random()
-        }
+            let lhsDistance = simd_length(lhs.worldCenter - playerPosition)
+            let rhsDistance = simd_length(rhs.worldCenter - playerPosition)
 
-        return sorted.prefix(3).randomElement()
+            return lhsDistance > rhsDistance
+        }.first
+    }
+
+    func leastUsedPortal() -> HordePortal? {
+        portals.values.sorted { lhs, rhs in
+            if lhs.entranceCount != rhs.entranceCount {
+                return lhs.entranceCount < rhs.entranceCount
+            }
+
+            return lhs.waveCreated < rhs.waveCreated
+        }.first
+    }
+
+    func nextEntranceSide(
+        portalID: UUID
+    ) -> HordePortalEntranceSide {
+        let current = entranceSideByPortalID[portalID] ?? .left
+        let next: HordePortalEntranceSide = current == .left ? .right : .left
+        entranceSideByPortalID[portalID] = next
+        return current
     }
 
     func markEntranceUsed(
@@ -249,13 +288,20 @@ final class HordePortalManager {
 
     private func choosePortalPlacement(
         wave: Int,
+        spawnIndex: Int,
         playerPosition: SIMD3<Float>,
-        playerForward: SIMD3<Float>
+        playerForward: SIMD3<Float>,
+        excludingPortalIDs: Set<UUID>
     ) -> HordePortalPlacementCandidate? {
         guard let wallManager else {
             return nil
         }
         _ = playerForward
+
+        let existingCenters = portals.values.map(\.worldCenter)
+        let reservedCenters = portals.values
+            .filter { excludingPortalIDs.contains($0.id) }
+            .map(\.worldCenter)
 
         let walls = wallManager.wallCandidates.values
             .filter { $0.isLargeEnoughForDefaultDoor }
@@ -278,23 +324,10 @@ final class HordePortalManager {
                 continue
             }
 
-            for _ in 0..<HordePortalPlacementTuning.candidateCountPerWall {
-                var placement = DoorPlacement.defaultForWall(wall)
-                placement.floorLocked = true
-                placement.confirmed = true
-                placement.contentProviderID = HordeHellscapePortalContentProvider.providerID
-                placement.width = Float.random(in: 0.78...1.08)
-                placement.height = Float.random(in: 1.85...2.18)
-
-                let maxX = max(
-                    0,
-                    wall.width * 0.5 - placement.width * 0.5 - 0.1
-                )
-
-                placement.localX = maxX > 0
-                    ? Float.random(in: -maxX...maxX)
-                    : 0
-
+            for slot in generateWallSlots(
+                wall: wall
+            ) {
+                var placement = slot
                 guard let resolved = wallManager.resolveFloorLockedPlacement(
                     placement,
                     requirement: .required
@@ -322,33 +355,37 @@ final class HordePortalManager {
                     center.z - playerPosition.z
                 )
 
-                let nearestDistance = nearestExistingPortalDistance(
-                    to: center
+                let nearestExisting = nearestDistance(
+                    center,
+                    to: existingCenters
                 )
-
+                let nearestReserved = nearestDistance(
+                    center,
+                    to: reservedCenters
+                )
                 let bearingGap = nearestExistingPortalBearingGap(
                     bearing
                 )
+                let spacingOK =
+                    nearestExisting >= HordePortalPlacementTuning.minSpacingMeters &&
+                    nearestReserved >= HordePortalPlacementTuning.minSpacingMeters
 
                 let spacingScore = min(
                     1,
-                    nearestDistance / HordePortalPlacementTuning.preferredSpacingMeters
+                    min(
+                        nearestExisting,
+                        nearestReserved
+                    ) / HordePortalPlacementTuning.preferredSpacingMeters
                 )
-
                 let angularScore = min(
                     1,
                     bearingGap / (.pi / 3)
                 )
 
-                let wallReusePenalty: Float = portals.values.contains { $0.wallID == wall.id }
-                    ? 0.25
-                    : 0.0
-
                 let score =
-                    spacingScore * 2.0 +
+                    spacingScore * 3.0 +
                     angularScore * 2.0 +
-                    Float.random(in: 0...0.35) -
-                    wallReusePenalty
+                    Float.random(in: 0...0.25)
 
                 candidates.append(
                     HordePortalPlacementCandidate(
@@ -356,17 +393,17 @@ final class HordePortalManager {
                         placement: placement,
                         worldCenter: center,
                         bearingRadians: bearing,
-                        nearestPortalDistance: nearestDistance,
+                        nearestPortalDistance: nearestExisting,
+                        nearestReservedDistance: nearestReserved,
                         nearestBearingGap: bearingGap,
+                        spacingOK: spacingOK,
                         score: score
                     )
                 )
             }
         }
 
-        let valid = candidates.filter {
-            $0.nearestPortalDistance >= HordePortalPlacementTuning.minSpacingMeters
-        }
+        let valid = candidates.filter(\.spacingOK)
 
         let chosen = (valid.isEmpty ? candidates : valid)
             .max { lhs, rhs in
@@ -376,15 +413,17 @@ final class HordePortalManager {
         if let chosen {
             print(
                 """
-                [HordePortalPlacement] candidate chosen
+                [HordePortalPlacement] chosen
                   wave: \(wave)
+                  spawnIndex: \(spawnIndex)
                   wallID: \(chosen.wall.id)
                   localX: \(chosen.placement.localX)
                   localY: \(chosen.placement.localY)
-                  nearestDistanceM: \(chosen.nearestPortalDistance)
-                  nearestBearingGapRad: \(chosen.nearestBearingGap)
+                  nearestExistingM: \(chosen.nearestPortalDistance)
+                  nearestReservedM: \(chosen.nearestReservedDistance)
+                  bearingGapRad: \(chosen.nearestBearingGap)
+                  spacingOK: \(chosen.spacingOK)
                   score: \(chosen.score)
-                  validSpacing: \(!valid.isEmpty)
                 """
             )
         }
@@ -401,6 +440,74 @@ final class HordePortalManager {
         }
 
         return chosen
+    }
+
+    private func generateWallSlots(
+        wall: WallCandidate
+    ) -> [DoorPlacement] {
+        let widths: [Float] = [0.82, 0.92, 1.05]
+        let heights: [Float] = [1.90, 2.05, 2.18]
+        var placements: [DoorPlacement] = []
+
+        for width in widths {
+            for height in heights {
+                var base = DoorPlacement.defaultForWall(wall)
+                base.floorLocked = true
+                base.confirmed = true
+                base.contentProviderID = HordeHellscapePortalContentProvider.providerID
+                base.width = width
+                base.height = height
+
+                let maxX = max(
+                    0,
+                    wall.width * 0.5 - width * 0.5 - 0.10
+                )
+
+                let spacing = max(
+                    HordePortalPlacementTuning.minSpacingMeters,
+                    width + 0.20
+                )
+
+                guard maxX > 0.01 else {
+                    placements.append(base)
+                    continue
+                }
+
+                var x = -maxX
+                while x <= maxX + 0.001 {
+                    var placement = base
+                    placement.localX = x
+                    placements.append(placement)
+                    x += spacing
+                }
+
+                if !placements.contains(where: { existing in
+                    existing.wallID == base.wallID &&
+                    abs(existing.localX) < 0.01 &&
+                    abs(existing.width - base.width) < 0.001 &&
+                    abs(existing.height - base.height) < 0.001
+                }) {
+                    var center = base
+                    center.localX = 0
+                    placements.append(center)
+                }
+            }
+        }
+
+        return placements
+    }
+
+    private func nearestDistance(
+        _ point: SIMD3<Float>,
+        to points: [SIMD3<Float>]
+    ) -> Float {
+        guard !points.isEmpty else {
+            return Float.greatestFiniteMagnitude
+        }
+
+        return points.map {
+            simd_length($0 - point)
+        }.min() ?? Float.greatestFiniteMagnitude
     }
 
     private func nearestExistingPortalDistance(
