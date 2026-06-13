@@ -763,8 +763,29 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 playerWorldPosition: playerWorldPosition
             )
 
+            if ingress.consumeRoomVisualRevealEvent(),
+               let controller = hordeEnemyControllersByID[enemyID] {
+                audioController.attachHostAudioSource(
+                    id: enemyID,
+                    hostRootEntity: controller.rootEntity,
+                    breathingStartDelay: 0
+                )
+
+                print(
+                    """
+                    [HordePortalIngress] breathing audio started at room visual reveal
+                      enemyID: \(enemyID)
+                      parent: enemyRoot
+                      delay: 0.000
+                    """
+                )
+            }
+
             switch ingress.phase {
-            case .realWorldFollowing, .failed:
+            case .realWorldFollowing:
+                finishedIDs.append(enemyID)
+
+            case .failed:
                 finishedIDs.append(enemyID)
 
             case .walkingParallelInsidePortal,
@@ -1456,13 +1477,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         activeIngressControllers[id] = ingress
 
-        let audioStartDelay = TimeInterval.random(in: 0...1)
-        audioController.attachHostAudioSource(
-            id: id,
-            hostRootEntity: controller.rootEntity,
-            breathingStartDelay: audioStartDelay
-        )
-
         controller.update(
             deltaTime: 1.0 / 60.0,
             currentHeadPosition: currentHeadPosition
@@ -1476,6 +1490,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               firstPosePrimed: true
               noPrePortalAPose: true
               portalRenderInstance: true
+              breathingAudioStartsAtRoomReveal: true
             """
         )
 
@@ -1489,7 +1504,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               portalID: \(portal.id)
               assignmentKind: \(assignmentKind.rawValue)
               side: \(side.rawValue)
-              audioStartDelay: \(String(format: "%.3f", audioStartDelay))
+              breathingAudioStart: room_visual_reveal
               realParent: sceneRoot
               portalVisual: render_instance
               secondController: false

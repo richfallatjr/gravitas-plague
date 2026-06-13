@@ -274,6 +274,7 @@ final class GravitasDemoAudioController {
             [Gravitas Audio] Attached horde host audio source
               id: \(id)
               breathingStartDelay: \(String(format: "%.3f", breathingStartDelay))
+              parent: hostRootEntity
             """
         )
     }
@@ -508,7 +509,7 @@ final class GravitasDemoAudioController {
         sourceID: UUID,
         delay: TimeInterval
     ) {
-        guard dadBreathingResource != nil else {
+        guard let dadBreathingResource else {
             print("[Gravitas Audio] Dad breathing resource missing.")
             return
         }
@@ -521,16 +522,32 @@ final class GravitasDemoAudioController {
         source.breathingStartTask?.cancel()
         source.dadBreathingController?.stop()
 
+        if delay <= 0 {
+            source.dadBreathingController = source.headEntity.playAudio(dadBreathingResource)
+            source.dadBreathingController?.gain = decibels(linearVolume: 0.42)
+            source.breathingStartTask = nil
+            hostAudioSourcesByID[sourceID] = source
+
+            print(
+                """
+                [Gravitas Audio] Started horde Dad breathing
+                  id: \(sourceID)
+                  delayedBy: 0.000
+                  immediate: true
+                  gatedByDemoAudioActive: false
+                """
+            )
+
+            return
+        }
+
         let task = Task { @MainActor [weak self] in
-            if delay > 0 {
-                try? await Task.sleep(
-                    nanoseconds: UInt64(delay * 1_000_000_000)
-                )
-            }
+            try? await Task.sleep(
+                nanoseconds: UInt64(delay * 1_000_000_000)
+            )
 
             guard !Task.isCancelled,
                   let self,
-                  self.isDemoAudioActive,
                   let dadBreathingResource = self.dadBreathingResource,
                   var source = self.hostAudioSourcesByID[sourceID] else {
                 return
@@ -547,6 +564,8 @@ final class GravitasDemoAudioController {
                 [Gravitas Audio] Started horde Dad breathing
                   id: \(sourceID)
                   delayedBy: \(String(format: "%.3f", delay))
+                  immediate: false
+                  gatedByDemoAudioActive: false
                 """
             )
         }

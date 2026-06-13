@@ -246,6 +246,7 @@ final class HordePortalInstancedIngressController {
     )
 
     private var roomVisualHasBeenEnabled = false
+    private var roomVisualRevealEventPending = false
     private var portalInstanceHasBeenRemoved = false
 
     init(
@@ -299,6 +300,15 @@ final class HordePortalInstancedIngressController {
         )
 
         try setup()
+    }
+
+    func consumeRoomVisualRevealEvent() -> Bool {
+        guard roomVisualRevealEventPending else {
+            return false
+        }
+
+        roomVisualRevealEventPending = false
+        return true
     }
 
     func update(
@@ -383,6 +393,7 @@ private extension HordePortalInstancedIngressController {
         enemy.prepareForHordePortalIngress()
         enemy.rootEntity.isEnabled = false
         roomVisualHasBeenEnabled = false
+        roomVisualRevealEventPending = false
         portalInstanceHasBeenRemoved = false
         enemy.setCombatEnabled(false)
         enemy.setRootMotionEnabled(false)
@@ -664,6 +675,7 @@ private extension HordePortalInstancedIngressController {
 
         enemy.rootEntity.isEnabled = true
         roomVisualHasBeenEnabled = true
+        roomVisualRevealEventPending = true
 
         let portalInstanceVisible = portalInstance?.rootEntity.isEnabled == true
 
@@ -753,6 +765,7 @@ private extension HordePortalInstancedIngressController {
 
             enemy.rootEntity.isEnabled = true
             roomVisualHasBeenEnabled = true
+            roomVisualRevealEventPending = true
 
             print(
                 """
