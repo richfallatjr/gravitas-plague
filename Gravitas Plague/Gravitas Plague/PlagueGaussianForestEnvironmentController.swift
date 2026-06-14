@@ -93,9 +93,7 @@ enum PlagueForestAtmosphere: String, Codable, CaseIterable, Identifiable, Hashab
 enum PlagueForestAssetValidator {
     static func validate() {
         let files = [
-            ("forest-overcast-01", "ply"),
             ("forest-overcast-01", "exr"),
-            ("forest-night-01", "ply"),
             ("forest-night-01", "exr")
         ]
 
@@ -121,7 +119,14 @@ enum PlagueForestAssetValidator {
             }
         }
 
-        print("[PlagueForest] strict native Gaussian splat path enabled; no fallback renderer is allowed")
+        print(
+            """
+            [PlagueForest] gaussian splat PLY bundle validation skipped
+              reason: large_ply_assets_removed_from_app_bundle
+              activeForestLoader: dormant_for_room_skinning_mvp
+              fallbackRenderer: false
+            """
+        )
     }
 }
 

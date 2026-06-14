@@ -37,9 +37,7 @@
 		8E1A103A2FCD000100000001 /* ../plague_menu_horde_button.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A103B2FCD000100000001 /* ../plague_menu_horde_button.png */; };
 		8E1A103C2FCD000100000001 /* ../plague_menu_walk_button.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A103D2FCD000100000001 /* ../plague_menu_walk_button.png */; };
 		8E1A103E2FCD000100000001 /* ../robot_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A103F2FCD000100000001 /* ../robot_biped.usdz */; };
-		8E1A10412FCD000100000001 /* ../forest-overcast-01.ply in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10402FCD000100000001 /* ../forest-overcast-01.ply */; };
 		8E1A10432FCD000100000001 /* ../forest-overcast-01.exr in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10422FCD000100000001 /* ../forest-overcast-01.exr */; };
-		8E1A10452FCD000100000001 /* ../forest-night-01.ply in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10442FCD000100000001 /* ../forest-night-01.ply */; };
 		8E1A10472FCD000100000001 /* ../forest-night-01.exr in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10462FCD000100000001 /* ../forest-night-01.exr */; };
 		8E1A10492FCD000100000001 /* ../hellscape_01.exr in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10482FCD000100000001 /* ../hellscape_01.exr */; };
 		8E1A104B2FCD000100000001 /* ../hellscape_groundplane.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A104A2FCD000100000001 /* ../hellscape_groundplane.png */; };
@@ -100,9 +98,7 @@
 		8E1A103B2FCD000100000001 /* ../plague_menu_horde_button.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../plague_menu_horde_button.png; sourceTree = SOURCE_ROOT; };
 		8E1A103D2FCD000100000001 /* ../plague_menu_walk_button.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../plague_menu_walk_button.png; sourceTree = SOURCE_ROOT; };
 		8E1A103F2FCD000100000001 /* ../robot_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../robot_biped.usdz; sourceTree = SOURCE_ROOT; };
-		8E1A10402FCD000100000001 /* ../forest-overcast-01.ply */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../forest-overcast-01.ply"; sourceTree = SOURCE_ROOT; };
 		8E1A10422FCD000100000001 /* ../forest-overcast-01.exr */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../forest-overcast-01.exr"; sourceTree = SOURCE_ROOT; };
-		8E1A10442FCD000100000001 /* ../forest-night-01.ply */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../forest-night-01.ply"; sourceTree = SOURCE_ROOT; };
 		8E1A10462FCD000100000001 /* ../forest-night-01.exr */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../forest-night-01.exr"; sourceTree = SOURCE_ROOT; };
 		8E1A10482FCD000100000001 /* ../hellscape_01.exr */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../hellscape_01.exr; sourceTree = SOURCE_ROOT; };
 		8E1A104A2FCD000100000001 /* ../hellscape_groundplane.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../hellscape_groundplane.png; sourceTree = SOURCE_ROOT; };
@@ -207,9 +203,7 @@
 				8E1A10392FCD000100000001 /* ../plague_menu_ui_mockup.png */,
 				8E1A103B2FCD000100000001 /* ../plague_menu_horde_button.png */,
 				8E1A103D2FCD000100000001 /* ../plague_menu_walk_button.png */,
-				8E1A10402FCD000100000001 /* ../forest-overcast-01.ply */,
 				8E1A10422FCD000100000001 /* ../forest-overcast-01.exr */,
-				8E1A10442FCD000100000001 /* ../forest-night-01.ply */,
 				8E1A10462FCD000100000001 /* ../forest-night-01.exr */,
 				8E1A10482FCD000100000001 /* ../hellscape_01.exr */,
 				8E1A104A2FCD000100000001 /* ../hellscape_groundplane.png */,
@@ -374,9 +368,7 @@
 				8E1A10382FCD000100000001 /* ../plague_menu_ui_mockup.png in Resources */,
 				8E1A103A2FCD000100000001 /* ../plague_menu_horde_button.png in Resources */,
 				8E1A103C2FCD000100000001 /* ../plague_menu_walk_button.png in Resources */,
-				8E1A10412FCD000100000001 /* ../forest-overcast-01.ply in Resources */,
 				8E1A10432FCD000100000001 /* ../forest-overcast-01.exr in Resources */,
-				8E1A10452FCD000100000001 /* ../forest-night-01.ply in Resources */,
 				8E1A10472FCD000100000001 /* ../forest-night-01.exr in Resources */,
 				8E1A10492FCD000100000001 /* ../hellscape_01.exr in Resources */,
 				8E1A104B2FCD000100000001 /* ../hellscape_groundplane.png in Resources */,
