@@ -8,6 +8,7 @@ import UIKit
 enum PortalGlyphKind: String {
     case directional
     case floor
+    case circle
     case free
 }
 
@@ -52,6 +53,10 @@ enum PortalGlyphAssetClassifier {
             return .directional
         }
 
+        if lower.hasSuffix("circle.png") {
+            return .circle
+        }
+
         return .free
     }
 }
@@ -63,6 +68,7 @@ final class PortalGlyphAssetLibrary {
     private(set) var all: [PortalGlyphAsset] = []
     private(set) var directional: [PortalGlyphAsset] = []
     private(set) var floor: [PortalGlyphAsset] = []
+    private(set) var circle: [PortalGlyphAsset] = []
     private(set) var free: [PortalGlyphAsset] = []
 
     private var didLoad = false
@@ -126,6 +132,7 @@ final class PortalGlyphAssetLibrary {
             all = loaded
             directional = loaded.filter { $0.kind == .directional }
             floor = loaded.filter { $0.kind == .floor }
+            circle = loaded.filter { $0.kind == .circle }
             free = loaded.filter { $0.kind == .free }
 
             print(
@@ -134,9 +141,10 @@ final class PortalGlyphAssetLibrary {
                   folder: \(folderURL.path)
                   total: \(all.count)
                   directional: \(directional.count)
+                  circle: \(circle.count)
                   floor: \(floor.count)
                   free: \(free.count)
-                  naming: *dir.png, *floor.png, *.png
+                  naming: *dir.png, *circle.png, *floor.png, *.png
                 """
             )
 

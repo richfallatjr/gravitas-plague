@@ -10,7 +10,7 @@ enum PortalGlyphDecalFactory {
         if placement.asset.kind == .floor {
             fatalError(
                 """
-                [PortalGlyphs] FLOOR GLYPH SENT TO WALL ENTITY
+                [PortalGlyphs] FLOOR GLYPH SENT TO WALL
                   file: \(placement.asset.fileName)
                 """
             )
@@ -62,7 +62,7 @@ enum PortalGlyphDecalFactory {
         if placement.asset.kind != .floor {
             fatalError(
                 """
-                [PortalGlyphs] NON-FLOOR GLYPH SENT TO FLOOR ENTITY
+                [PortalGlyphs] NON-FLOOR GLYPH SENT TO FLOOR
                   file: \(placement.asset.fileName)
                   kind: \(placement.asset.kind.rawValue)
                 """

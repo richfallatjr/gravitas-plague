@@ -11,23 +11,38 @@ enum PortalGlyphFXSettings {
     static let wallGlyphPadding: Float = 0.0
     static let floorGlyphPadding: Float = 0.0
 
-    /// Absolute maximum spread from nearest non-bottom portal border.
-    static let maxDistanceFromBorderFeet: Float = 3.0
-    static let maxDistanceFromBorderMeters: Float =
-        maxDistanceFromBorderFeet * feetToMeters
+    /// Desired max spread. Try this first.
+    static let targetMaxDistanceFromBorderFeet: Float = 2.0
+    static let targetMaxDistanceFromBorderMeters: Float =
+        targetMaxDistanceFromBorderFeet * feetToMeters
+
+    /// Soft fallback only for failed strict placement.
+    static let fallbackMaxDistanceFromBorderFeet: Float = 2.65
+    static let fallbackMaxDistanceFromBorderMeters: Float =
+        fallbackMaxDistanceFromBorderFeet * feetToMeters
 
     /// Directional glyphs sit directly against the border.
     static let directionalBorderJitterMeters: Float = 0.015
 
-    /// General glyphs may be on-border or outside, but never farther than 3ft.
-    static let generalBorderProbability: Float = 0.42
+    /// General glyphs may be on-border or outside; strict pass targets 2ft.
+    static let generalBorderProbability: Float = 0.48
 
-    static let wallGlyphCountPerSegmentRange = 5...12
+    static let candidateAttemptsPerGlyph = 128
+    static let fallbackCandidateAttemptsPerGlyph = 64
+
+    static let wallGlyphCountPerSegmentRange = 5...11
+    static let maxFreeGlyphsPerSegment = 3
 
     /// Exactly one floor glyph per portal.
     static let floorGlyphCountPerPortal = 1
 
-    static let candidateAttemptsPerGlyph = 128
+    /// Entire portal limit.
+    static let maxCircleGlyphsPerPortal = 1
+
+    /// Chance that a portal gets its one circle glyph when circle assets exist.
+    static let circleGlyphProbability: Float = 0.85
+
+    static let directionalPreference: Float = 0.58
 
     static let emissiveTint = UIColor(
         red: 1.0,

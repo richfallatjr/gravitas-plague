@@ -86,7 +86,7 @@ extension PortalGlyphAsset {
         case .floor:
             return .floor
 
-        case .directional, .free:
+        case .directional, .circle, .free:
             return .wall
         }
     }
@@ -101,4 +101,5 @@ struct PortalGlyphPlacement {
     let size: SIMD2<Float>
     let rotationRadians: Float
     let obb: PortalGlyphOBB
+    let sourceSegmentIndex: Int?
 }
