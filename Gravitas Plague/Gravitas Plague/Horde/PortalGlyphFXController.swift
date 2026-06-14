@@ -61,13 +61,33 @@ final class PortalGlyphFXController {
                 relativeTo: nil
             )
 
-            let floorPlacements = PortalGlyphLayoutEngine.generateFloorPlacements(
+            let floorPlacements = PortalGlyphLayoutEngine.generateFloorPlacementsFromBottomLine(
+                perimeterPoints: perimeterLocalPoints,
                 seed: seed,
-                library: library,
-                portalWidth: portalWidth
+                library: library
             )
 
+            if floorPlacements.count > 1 {
+                fatalError(
+                    """
+                    [PortalGlyphs] more than one floor glyph generated
+                      count: \(floorPlacements.count)
+                      maxAllowed: 1
+                    """
+                )
+            }
+
             for placement in floorPlacements {
+                if placement.asset.kind != .floor {
+                    fatalError(
+                        """
+                        [PortalGlyphs] non-floor placement reached floor entity creation
+                          file: \(placement.asset.fileName)
+                          kind: \(placement.asset.kind.rawValue)
+                        """
+                    )
+                }
+
                 let entity = PortalGlyphDecalFactory.makeFloorGlyph(
                     placement: placement,
                     floorY: floorY,
@@ -81,6 +101,23 @@ final class PortalGlyphFXController {
             if floorRoot.parent == nil {
                 sceneRoot.addChild(floorRoot)
             }
+
+            if floorRoot.parent === portalRoot {
+                fatalError("[PortalGlyphs] floorRoot incorrectly parented to portalRoot")
+            }
+
+            if floorRoot.parent === wallRoot {
+                fatalError("[PortalGlyphs] floorRoot incorrectly parented to wallRoot")
+            }
+        } else {
+            print(
+                """
+                [PortalGlyphs] floor glyphs skipped
+                  portalID: \(portalID)
+                  reason: missing_detected_floor
+                  action: no_floor_glyphs_on_wall
+                """
+            )
         }
 
         print(
@@ -91,9 +128,11 @@ final class PortalGlyphFXController {
               wallGlyphs: \(wallEntities.count)
               floorGlyphs: \(floorEntities.count)
               seed: \(seed)
-              pixelsPerMeter: \(PortalGlyphFXSettings.pixelsPerMeter)
+              pixelsPerFoot: \(PortalGlyphFXSettings.pixelsPerFoot)
               noRuntimeScale: true
               emissiveIntensity: \(PortalGlyphFXSettings.emissiveIntensity)
+              grid: false
+              shelfRows: false
             """
         )
     }

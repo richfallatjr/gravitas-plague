@@ -10,6 +10,11 @@ struct PortalGlyphOBB {
         _ other: PortalGlyphOBB,
         padding: Float
     ) -> Bool {
+        let clampedPadding = max(
+            0,
+            padding
+        )
+
         let axes = [
             axisX,
             axisY,
@@ -25,12 +30,12 @@ struct PortalGlyphOBB {
 
             let a = projectedRadius(
                 on: normalized,
-                padding: padding
+                padding: clampedPadding
             )
 
             let b = other.projectedRadius(
                 on: normalized,
-                padding: padding
+                padding: clampedPadding
             )
 
             let distance = abs(
@@ -40,7 +45,7 @@ struct PortalGlyphOBB {
                 )
             )
 
-            if distance > a + b {
+            if distance >= a + b {
                 return false
             }
         }
@@ -73,6 +78,18 @@ func normalizeSafe2(
 enum PortalGlyphPlacementSurface {
     case wall
     case floor
+}
+
+extension PortalGlyphAsset {
+    var allowedSurface: PortalGlyphPlacementSurface {
+        switch kind {
+        case .floor:
+            return .floor
+
+        case .directional, .free:
+            return .wall
+        }
+    }
 }
 
 struct PortalGlyphPlacement {

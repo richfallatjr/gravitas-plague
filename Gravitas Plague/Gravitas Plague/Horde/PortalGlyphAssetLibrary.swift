@@ -24,12 +24,16 @@ struct PortalGlyphAsset: Identifiable {
         Float(pixelWidth) / Float(max(pixelHeight, 1))
     }
 
-    func physicalSize(
-        pixelsPerMeter: Float
-    ) -> SIMD2<Float> {
-        SIMD2<Float>(
-            Float(pixelWidth) / pixelsPerMeter,
-            Float(pixelHeight) / pixelsPerMeter
+    func physicalSizeMeters() -> SIMD2<Float> {
+        let widthFeet =
+            Float(pixelWidth) / PortalGlyphFXSettings.pixelsPerFoot
+
+        let heightFeet =
+            Float(pixelHeight) / PortalGlyphFXSettings.pixelsPerFoot
+
+        return SIMD2<Float>(
+            widthFeet * PortalGlyphFXSettings.feetToMeters,
+            heightFeet * PortalGlyphFXSettings.feetToMeters
         )
     }
 }
@@ -133,6 +137,14 @@ final class PortalGlyphAssetLibrary {
                   floor: \(floor.count)
                   free: \(free.count)
                   naming: *dir.png, *floor.png, *.png
+                """
+            )
+
+            print(
+                """
+                [PortalGlyphs] size mapping active
+                  pixelsPerFoot: \(PortalGlyphFXSettings.pixelsPerFoot)
+                  noRuntimeScale: true
                 """
             )
         } catch {

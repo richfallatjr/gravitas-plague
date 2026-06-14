@@ -7,6 +7,25 @@ enum PortalGlyphDecalFactory {
     static func makeWallGlyph(
         placement: PortalGlyphPlacement
     ) -> ModelEntity {
+        if placement.asset.kind == .floor {
+            fatalError(
+                """
+                [PortalGlyphs] FLOOR GLYPH SENT TO WALL ENTITY
+                  file: \(placement.asset.fileName)
+                """
+            )
+        }
+
+        if placement.surface != .wall {
+            fatalError(
+                """
+                [PortalGlyphs] non-wall placement sent to makeWallGlyph
+                  file: \(placement.asset.fileName)
+                  surface: \(placement.surface)
+                """
+            )
+        }
+
         let entity = ModelEntity(
             mesh: .generatePlane(
                 width: placement.size.x,
@@ -40,6 +59,26 @@ enum PortalGlyphDecalFactory {
         floorY: Float,
         portalWorldFromLocal: simd_float4x4
     ) -> ModelEntity {
+        if placement.asset.kind != .floor {
+            fatalError(
+                """
+                [PortalGlyphs] NON-FLOOR GLYPH SENT TO FLOOR ENTITY
+                  file: \(placement.asset.fileName)
+                  kind: \(placement.asset.kind.rawValue)
+                """
+            )
+        }
+
+        if placement.surface != .floor {
+            fatalError(
+                """
+                [PortalGlyphs] non-floor placement sent to makeFloorGlyph
+                  file: \(placement.asset.fileName)
+                  surface: \(placement.surface)
+                """
+            )
+        }
+
         let entity = ModelEntity(
             mesh: makeFloorPlaneMesh(
                 width: placement.size.x,
@@ -54,26 +93,6 @@ enum PortalGlyphDecalFactory {
 
         entity.name = "PortalFloorGlyph_\(placement.asset.fileName)"
 
-        let local = SIMD3<Float>(
-            placement.center2D.x,
-            0,
-            placement.center2D.y
-        )
-
-        let world = transformPoint(
-            portalWorldFromLocal,
-            local
-        )
-
-        entity.setPosition(
-            SIMD3<Float>(
-                world.x,
-                floorY + PortalGlyphFXSettings.floorLift,
-                world.z
-            ),
-            relativeTo: nil
-        )
-
         let portalRight = normalizeSafe3(
             SIMD3<Float>(
                 portalWorldFromLocal.columns.0.x,
@@ -83,17 +102,54 @@ enum PortalGlyphDecalFactory {
             fallback: SIMD3<Float>(1, 0, 0)
         )
 
-        let basisYaw = atan2(
-            portalRight.z,
-            portalRight.x
+        let portalForward = normalizeSafe3(
+            SIMD3<Float>(
+                portalWorldFromLocal.columns.2.x,
+                0,
+                portalWorldFromLocal.columns.2.z
+            ),
+            fallback: SIMD3<Float>(0, 0, 1)
         )
 
+        let portalBaseWorld = SIMD3<Float>(
+            portalWorldFromLocal.columns.3.x,
+            floorY + PortalGlyphFXSettings.floorLift,
+            portalWorldFromLocal.columns.3.z
+        )
+
+        let worldPosition =
+            portalBaseWorld +
+            portalRight * placement.center2D.x +
+            portalForward * placement.center2D.y
+
+        entity.setPosition(
+            worldPosition,
+            relativeTo: nil
+        )
+
+        let yaw = atan2(
+            portalRight.z,
+            portalRight.x
+        ) + placement.rotationRadians
+
         entity.orientation = simd_quatf(
-            angle: basisYaw + placement.rotationRadians,
+            angle: yaw,
             axis: SIMD3<Float>(0, 1, 0)
         )
 
         stripInput(entity)
+
+        print(
+            """
+            [PortalGlyphs] floor glyph entity created
+              file: \(placement.asset.fileName)
+              worldY: \(worldPosition.y)
+              floorY: \(floorY)
+              lift: \(PortalGlyphFXSettings.floorLift)
+              surface: actual_floor
+              cannotGoThroughFloor: true
+            """
+        )
 
         return entity
     }
@@ -170,24 +226,6 @@ enum PortalGlyphDecalFactory {
         entity.components.remove(InputTargetComponent.self)
         entity.components.remove(CollisionComponent.self)
     }
-}
-
-private func transformPoint(
-    _ matrix: simd_float4x4,
-    _ point: SIMD3<Float>
-) -> SIMD3<Float> {
-    let p = matrix * SIMD4<Float>(
-        point.x,
-        point.y,
-        point.z,
-        1
-    )
-
-    return SIMD3<Float>(
-        p.x,
-        p.y,
-        p.z
-    )
 }
 
 private func normalizeSafe3(
