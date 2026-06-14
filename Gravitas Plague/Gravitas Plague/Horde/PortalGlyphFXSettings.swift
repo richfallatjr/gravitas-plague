@@ -2,7 +2,8 @@ import simd
 import UIKit
 
 enum PortalGlyphFXSettings {
-    static let pixelsPerMeter: Float = 1024.0
+    /// 1024 pixels = 1 foot.
+    static let pixelsPerMeter: Float = 1024.0 / 0.3048
 
     static let wallDepthOffset: Float = 0.024
     static let floorLift: Float = 0.006
