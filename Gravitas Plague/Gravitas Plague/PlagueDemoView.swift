@@ -16,6 +16,10 @@ struct PlagueDemoView: View {
     private func loadJockManifestForUI() {
         do {
             let manifest = try JockAnimationLibraryLoader.loadManifest()
+            try CharacterAttributeStore.shared.loadStrict(
+                animationManifest: manifest
+            )
+
             let clips = manifest.clips.filter { $0.approvedForRuntime }
 
             session.availableJockClips = clips
@@ -28,7 +32,7 @@ struct PlagueDemoView: View {
             session.availableJockClips = []
             session.selectedJockClipID = nil
 
-            print("[PlagueUI] ERROR failed to load JockAnim manifest: \(error.localizedDescription)")
+            print("[PlagueUI] ERROR failed to load JockAnim manifest or character attributes: \(error.localizedDescription)")
         }
     }
 }

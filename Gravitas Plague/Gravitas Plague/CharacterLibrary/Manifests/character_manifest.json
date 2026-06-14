@@ -1,0 +1,11 @@
+{
+  "schema": "com.gravitas.character_manifest.v1",
+  "characters": [
+    "dad",
+    "spouse",
+    "biker",
+    "grandma",
+    "neighbor",
+    "robot"
+  ]
+}

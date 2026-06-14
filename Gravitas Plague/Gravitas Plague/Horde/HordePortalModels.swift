@@ -32,6 +32,11 @@ enum HordePortalEntranceSide: String, Codable {
     }
 }
 
+enum HordePortalTurnDirection: String {
+    case left90 = "left_90"
+    case right90 = "right_90"
+}
+
 enum HordePortalTurnResolver {
     static func signedYawRadians(
         from current: SIMD3<Float>,
@@ -57,12 +62,27 @@ enum HordePortalTurnResolver {
         from current: SIMD3<Float>,
         to target: SIMD3<Float>
     ) -> String {
+        switch direction(
+            from: current,
+            to: target
+        ) {
+        case .left90:
+            return "turn_left_90"
+        case .right90:
+            return "turn_right_90"
+        }
+    }
+
+    static func direction(
+        from current: SIMD3<Float>,
+        to target: SIMD3<Float>
+    ) -> HordePortalTurnDirection {
         let yaw = signedYawRadians(
             from: current,
             to: target
         )
 
-        return yaw >= 0 ? "turn_left_90" : "turn_right_90"
+        return yaw >= 0 ? .left90 : .right90
     }
 }
 

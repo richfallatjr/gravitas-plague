@@ -128,6 +128,7 @@ final class JockRetargetTestController {
     private var isBenchmarkPlayerDead = false
     private var playerAttackEnabled = true
     private var characterArchetype: PlagueCharacterArchetype = .dad
+    private var characterAttributes: CharacterAttributes?
     private var hordeID = UUID()
     private var hordeWave = 1
     private var hordeSpawnIndex = 0
@@ -230,14 +231,18 @@ final class JockRetargetTestController {
     func loadIfNeeded() async throws {
         guard !hasLoaded else { return }
 
+        let attributes = try resolvedCharacterAttributes()
+
         guard let url = CharacterAssetRegistry.url(
-            for: characterArchetype
+            attributes: attributes
         ) else {
             print(
                 """
                 [CharacterAssetRegistry] ERROR missing required character asset at load
                   archetype: \(characterArchetype.rawValue)
-                  file: \(characterArchetype.usdzFileName)
+                  file: \(attributes.asset.usdz)
+                  source: character_attributes
+                  noFallback: true
                 """
             )
             throw RetargetError.missingCharacterAsset(characterArchetype)
@@ -247,8 +252,12 @@ final class JockRetargetTestController {
             """
             [CharacterAssetRegistry] loading character asset
               archetype: \(characterArchetype.rawValue)
-              file: \(characterArchetype.usdzFileName)
+              characterID: \(attributes.characterID)
+              file: \(attributes.asset.usdz)
               url: \(url.path)
+              policy: \(attributes.runtime.poseApplicationPolicy.rawValue)
+              source: character_attributes
+              noFallback: true
             """
         )
 
@@ -261,7 +270,7 @@ final class JockRetargetTestController {
                 """
                 [CharacterAssetRegistry] ERROR RealityKit failed to load character asset
                   archetype: \(characterArchetype.rawValue)
-                  file: \(characterArchetype.usdzFileName)
+                  file: \(attributes.asset.usdz)
                   url: \(url.path)
                   error: \(error)
                 """
@@ -270,7 +279,7 @@ final class JockRetargetTestController {
             throw error
         }
 
-        loadedEntity.name = "\(characterArchetype.usdzResourceName)_loaded_character"
+        loadedEntity.name = "\(attributes.characterID)_loaded_character"
 
         CharacterRigValidator.validate(
             archetype: characterArchetype,
@@ -413,7 +422,7 @@ final class JockRetargetTestController {
             modelEntity: skinnedModel,
             adapter: adapter,
             characterArchetype: characterArchetype,
-            poseApplicationPolicy: characterArchetype.poseApplicationPolicy,
+            poseApplicationPolicy: attributes.runtime.poseApplicationPolicy,
             locomotionRootEntity: rootEntity,
             visualOffsetEntity: visualOffsetEntity
         )
@@ -463,7 +472,7 @@ final class JockRetargetTestController {
         debugStatus = """
         JockAsset Retarget Test loaded.
         Character: \(characterArchetype.displayName)
-        Asset: \(characterArchetype.usdzFileName)
+        Asset: \(attributes.asset.usdz)
         Runtime joints: \(skinnedModel.jointNames.count)
         Matched joints: \(adapter.validationReport.matchedJointCount)
         Library clips: \(loadedClips.count)
@@ -578,9 +587,11 @@ final class JockRetargetTestController {
         archetype: PlagueCharacterArchetype,
         wave: Int,
         spawnIndex: Int,
-        hitsToKill: Int
+        hitsToKill: Int,
+        attributes: CharacterAttributes? = nil
     ) {
         characterArchetype = archetype
+        characterAttributes = attributes
         hordeID = id
         hordeWave = wave
         hordeSpawnIndex = spawnIndex
@@ -599,9 +610,11 @@ final class JockRetargetTestController {
             [EnemySpawner] configured horde enemy instance
               id: \(id)
               archetype: \(archetype.rawValue)
+              characterID: \(attributes?.characterID ?? "unloaded")
               wave: \(wave)
               index: \(spawnIndex)
               hitsToKill: \(self.hitsToKill)
+              source: character_attributes
               entityName: \(rootEntity.name)
             """
         )
@@ -820,14 +833,28 @@ final class JockRetargetTestController {
             isBenchmarkPlayerDead = false
         }
 
-        let idleClipID = resolvedClipID(
-            for: .idle,
-            defaultClipID: followConfiguration.idleClipID
+        let idleClipID = pickAnimationClipIDFromAttributes(
+            role: "idle",
+            refs: { $0.animations.idle }
         )
-        let walkClipID = resolvedClipID(
-            for: .walk,
-            defaultClipID: followConfiguration.walkClipID
+        let walkClipID = pickAnimationClipIDFromAttributes(
+            role: "walk",
+            refs: { $0.animations.walk }
         )
+
+        guard let idleClipID else {
+            throw CharacterAttributeError.missingAnimationRole(
+                characterID: characterArchetype.rawValue,
+                role: "idle"
+            )
+        }
+
+        guard let walkClipID else {
+            throw CharacterAttributeError.missingAnimationRole(
+                characterID: characterArchetype.rawValue,
+                role: "walk"
+            )
+        }
 
         guard clipsByID[idleClipID] != nil else {
             throw RetargetError.clipNotFound(idleClipID)
@@ -852,6 +879,7 @@ final class JockRetargetTestController {
             [Gravitas Follow] Follow demo started
               idleClip: \(idleClipID)
               walkClip: \(walkClipID)
+              source: character_attributes
               stopDistance: \(followConfiguration.stopDistanceMeters)
               resumeDistance: \(followConfiguration.resumeDistanceMeters)
               faceHits: enabled
@@ -1036,6 +1064,23 @@ final class JockRetargetTestController {
         characterArchetype
     }
 
+    var attributes: CharacterAttributes? {
+        characterAttributes
+    }
+
+    private func resolvedCharacterAttributes() throws -> CharacterAttributes {
+        if let characterAttributes {
+            return characterAttributes
+        }
+
+        let attributes = try CharacterAttributeStore.shared.attributes(
+            for: characterArchetype
+        )
+
+        characterAttributes = attributes
+        return attributes
+    }
+
     func skinnedModelEntityForPortalInstance() -> ModelEntity? {
         modelEntity
     }
@@ -1088,19 +1133,43 @@ final class JockRetargetTestController {
     func playHordePortalWalkLoop() {
         setRootMotionEnabled(false)
 
-        let walkClipID = resolvedClipID(
-            for: .walk,
-            defaultClipID: followConfiguration.walkClipID
-        )
+        let ref: AnimationClipRef
+
+        do {
+            let attributes = try resolvedCharacterAttributes()
+            ref = try attributes.animations.walk.weightedPickStrict(
+                role: "walk",
+                characterID: attributes.characterID
+            )
+        } catch {
+            print(
+                """
+                [CharacterAnimation] ERROR walk selection failed
+                  archetype: \(characterArchetype.rawValue)
+                  error: \(error.localizedDescription)
+                  noFallback: true
+                """
+            )
+            return
+        }
+
+        let walkClipID = ref.clipID
 
         guard let clip = clipsByID[walkClipID] else {
-            print("[HordePortalIngress] ERROR missing walk clip \(walkClipID)")
+            print(
+                """
+                [CharacterAnimation] ERROR missing walk clip
+                  characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+                  clipID: \(walkClipID)
+                  noFallback: true
+                """
+            )
             return
         }
 
         driver?.playClip(
             clip,
-            loop: true,
+            loop: ref.loop,
             transition: true,
             locomotionPolicy: .ignoreClipLocomotion,
             runtimeOverride: followVisualRuntimeOverride()
@@ -1110,29 +1179,84 @@ final class JockRetargetTestController {
             """
             [HordePortalIngress] playing portal walk
               enemyID: \(hordeID)
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
               clipID: \(walkClipID)
+              source: character_attributes
               locomotionPolicy: ignoreClipLocomotion
             """
         )
     }
 
-    func playHordePortalTurnClip(
-        id clipID: String
-    ) {
+    @discardableResult
+    func playHordePortalTurnFromAttributes(
+        direction: HordePortalTurnDirection
+    ) -> String? {
         setRootMotionEnabled(false)
 
+        let ref: AnimationClipRef
+
+        do {
+            let attributes = try resolvedCharacterAttributes()
+            let refs: [AnimationClipRef]
+
+            switch direction {
+            case .left90:
+                refs = attributes.animations.turn.left90
+            case .right90:
+                refs = attributes.animations.turn.right90
+            }
+
+            ref = try refs.weightedPickStrict(
+                role: "turn.\(direction.rawValue)",
+                characterID: attributes.characterID
+            )
+        } catch {
+            print(
+                """
+                [CharacterAnimation] ERROR turn selection failed
+                  archetype: \(characterArchetype.rawValue)
+                  direction: \(direction.rawValue)
+                  error: \(error.localizedDescription)
+                  noFallback: true
+                """
+            )
+            return nil
+        }
+
+        let clipID = ref.clipID
+
         guard let clip = clipsByID[clipID] else {
-            print("[HordePortalIngress] ERROR missing turn clip \(clipID)")
-            return
+            print(
+                """
+                [CharacterAnimation] ERROR missing turn clip
+                  characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+                  direction: \(direction.rawValue)
+                  clipID: \(clipID)
+                  noFallback: true
+                """
+            )
+            return nil
         }
 
         driver?.playClip(
             clip,
-            loop: false,
+            loop: ref.loop,
             transition: true,
             locomotionPolicy: .ignoreClipLocomotion,
             runtimeOverride: followVisualRuntimeOverride()
         )
+
+        print(
+            """
+            [CharacterAnimation] play turn
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              direction: \(direction.rawValue)
+              clipID: \(clipID)
+              source: character_attributes
+            """
+        )
+
+        return clipID
     }
 
     func durationForClip(
@@ -1603,9 +1727,9 @@ final class JockRetargetTestController {
         triggerHeadSnapSubAnimation(for: event.side)
 
         if shouldDie {
-            selectedClipID = randomAvailableClipID(
-                from: hitConfiguration.deathClipIDs,
-                avoidRepeatKey: "death"
+            selectedClipID = pickAnimationClipIDFromAttributes(
+                role: "death",
+                refs: { $0.animations.death }
             )
         } else {
             selectedClipID = selectHitClipID(
@@ -1653,10 +1777,15 @@ final class JockRetargetTestController {
 
         guard let selectedClipID,
               let clip = clipsByID[selectedClipID] else {
-            print("[Gravitas Hit] No valid hit clip found. Falling back to idle.")
+            print(
+                """
+                [CharacterAnimation] ERROR no valid damage clip resolved
+                  characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+                  noFallback: true
+                """
+            )
             combatState = .normal
             activeAttack = nil
-            playFollowIdle()
             return
         }
 
@@ -1855,30 +1984,98 @@ final class JockRetargetTestController {
             : detectedSide
     }
 
+    private func pickAnimationClipIDFromAttributes(
+        role: String,
+        refs: (CharacterAttributes) -> [AnimationClipRef],
+        avoidRepeatKey: String? = nil
+    ) -> String? {
+        do {
+            let attributes = try resolvedCharacterAttributes()
+            let references = refs(attributes)
+            var availableRefs = references.filter { clipsByID[$0.clipID] != nil }
+
+            guard !availableRefs.isEmpty else {
+                let missingClipIDs = references
+                    .filter { clipsByID[$0.clipID] == nil }
+                    .map(\.clipID)
+
+                print(
+                    """
+                    [CharacterAnimation] ERROR no available clip for role
+                      characterID: \(attributes.characterID)
+                      role: \(role)
+                      missingClipIDs: \(missingClipIDs.joined(separator: ", "))
+                      noFallback: true
+                    """
+                )
+                return nil
+            }
+
+            if let avoidRepeatKey,
+               let last = lastHitClipIDByBucket[avoidRepeatKey],
+               availableRefs.count > 1 {
+                let nonRepeats = availableRefs.filter {
+                    $0.clipID != last
+                }
+
+                if !nonRepeats.isEmpty {
+                    availableRefs = nonRepeats
+                }
+            }
+
+            let selected = try availableRefs.weightedPickStrict(
+                role: role,
+                characterID: attributes.characterID
+            )
+
+            if let avoidRepeatKey {
+                lastHitClipIDByBucket[avoidRepeatKey] = selected.clipID
+            }
+
+            print(
+                """
+                [CharacterAnimation] clip selected
+                  characterID: \(attributes.characterID)
+                  role: \(role)
+                  clipID: \(selected.clipID)
+                  source: character_attributes
+                """
+            )
+
+            return selected.clipID
+        } catch {
+            print(
+                """
+                [CharacterAnimation] ERROR clip selection failed
+                  archetype: \(characterArchetype.rawValue)
+                  role: \(role)
+                  error: \(error.localizedDescription)
+                  noFallback: true
+                """
+            )
+            return nil
+        }
+    }
+
     private func selectHitClipID(
         side: JockHitSide,
         damage: JockHitDamageLevel
     ) -> String? {
-        let candidateIDs = hitClipCandidates(
-            side: side,
-            damage: damage
-        )
-
         let bucketKey = "\(side.rawValue)_\(damage.rawValue)"
-
-        let selected = randomAvailableClipID(
-            from: candidateIDs,
+        let selected = pickAnimationClipIDFromAttributes(
+            role: "damage",
+            refs: { $0.animations.damage },
             avoidRepeatKey: bucketKey
         )
 
         print(
             """
-            [Gravitas Hit] Clip selection
+            [CharacterAnimation] damage clip selection
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
               side: \(side.rawValue)
               damage: \(damage.rawValue)
-              candidates: \(candidateIDs.joined(separator: ", "))
-              available: \(candidateIDs.filter { clipsByID[$0] != nil }.joined(separator: ", "))
               selected: \(selected ?? "none")
+              source: character_attributes
             """
         )
 
@@ -2112,27 +2309,27 @@ final class JockRetargetTestController {
     private func startAttackIfPossible() {
         guard followDemoState != .inactive else { return }
 
-        guard let selectedAttack = attackAnimationRandomizer.randomAttackClip(
-            enemyID: hordeID,
-            clipsByID: clipsByID
-        ) else {
+        guard let selectedAttackClipID = pickAnimationClipIDFromAttributes(
+            role: "attack",
+            refs: { $0.animations.attack }
+        ),
+              let attackClip = clipsByID[selectedAttackClipID] else {
             print(
                 """
-                [InfectedEnemy] ERROR no random attack clip resolved
+                [InfectedEnemy] ERROR no attribute attack clip resolved
                   enemyID: \(hordeID)
                   archetype: \(characterArchetype.rawValue)
-                  catalogue: \(HordeAttackAnimationCatalogue.allAttackClipIDs.joined(separator: ", "))
+                  source: character_attributes
+                  noFallback: true
                 """
             )
             return
         }
 
-        let attackClip = selectedAttack.clip
-
         let metadata = attackClip.resolvedAttackMetadata()
 
         activeAttack = JockActiveAttackState(
-            clipID: selectedAttack.clipID,
+            clipID: selectedAttackClipID,
             metadata: metadata,
             elapsedSeconds: 0,
             hasDealtDamage: false,
@@ -2158,12 +2355,13 @@ final class JockRetargetTestController {
             [InfectedEnemy] playing random attack
               enemyID: \(hordeID)
               archetype: \(characterArchetype.rawValue)
-              clipID: \(selectedAttack.clipID)
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              clipID: \(selectedAttackClipID)
               payloadClipID: \(attackClip.clipID)
-              catalogue: \(HordeAttackAnimationCatalogue.allAttackClipIDs.joined(separator: ", "))
+              source: character_attributes
 
             [Gravitas Attack] Started attack
-              clipID: \(selectedAttack.clipID)
+              clipID: \(selectedAttackClipID)
               joint: \(metadata.attackingJoint)
               window: \(metadata.attackWindowStartFrame)-\(metadata.attackWindowEndFrame)
               radius: \(metadata.damageRadiusMeters)
@@ -2623,13 +2821,15 @@ final class JockRetargetTestController {
             return
         }
 
-        let idleClipID = resolvedClipID(
-            for: .idle,
-            defaultClipID: followConfiguration.idleClipID
-        )
+        guard let idleClipID = pickAnimationClipIDFromAttributes(
+            role: "idle",
+            refs: { $0.animations.idle }
+        ) else {
+            return
+        }
 
         guard let clip = clipsByID[idleClipID] else {
-            assertionFailure("Missing follow idle clip: \(idleClipID)")
+            assertionFailure("Missing attribute follow idle clip: \(idleClipID)")
             return
         }
 
@@ -2641,7 +2841,14 @@ final class JockRetargetTestController {
             runtimeOverride: followVisualRuntimeOverride()
         )
 
-        print("[Gravitas Follow] Playing idle clipID: \(idleClipID)")
+        print(
+            """
+            [Gravitas Follow] Playing idle
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              clipID: \(idleClipID)
+              source: character_attributes
+            """
+        )
     }
 
     private func playFollowWalk() {
@@ -2650,13 +2857,15 @@ final class JockRetargetTestController {
             return
         }
 
-        let walkClipID = resolvedClipID(
-            for: .walk,
-            defaultClipID: followConfiguration.walkClipID
-        )
+        guard let walkClipID = pickAnimationClipIDFromAttributes(
+            role: "walk",
+            refs: { $0.animations.walk }
+        ) else {
+            return
+        }
 
         guard let clip = clipsByID[walkClipID] else {
-            assertionFailure("Missing follow walk clip: \(walkClipID)")
+            assertionFailure("Missing attribute follow walk clip: \(walkClipID)")
             return
         }
 
@@ -2672,7 +2881,9 @@ final class JockRetargetTestController {
             """
             [Gravitas Follow] Playing walk
               archetype: \(characterArchetype.rawValue)
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
               clipID: \(walkClipID)
+              source: character_attributes
             """
         )
     }

@@ -11,26 +11,16 @@ enum JockAnimationRole: String, Codable, CaseIterable {
 }
 
 enum CharacterAnimationClipOverrides {
-    static let robotWalkClipID = "robot_walk_01"
-
     static func overrideClipID(
         archetype: PlagueCharacterArchetype,
         role: JockAnimationRole
     ) -> String? {
-        switch (archetype, role) {
-        case (.robot, .walk):
-            return robotWalkClipID
-
-        default:
-            return nil
-        }
+        nil
     }
 }
 
 enum RequiredCharacterAnimationClips {
-    static let requiredClipIDs: [String] = [
-        CharacterAnimationClipOverrides.robotWalkClipID
-    ]
+    static let requiredClipIDs: [String] = []
 
     static func validate(
         availableClipIDs: Set<String>

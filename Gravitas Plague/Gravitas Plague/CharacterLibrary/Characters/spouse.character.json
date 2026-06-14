@@ -1,0 +1,121 @@
+{
+  "schema": "com.gravitas.character_attributes.v1",
+  "character_id": "spouse",
+  "display_name": "Spouse",
+  "archetype": "spouse",
+  "asset": {
+    "usdz": "spouse_biped.usdz",
+    "bundle_subdirectory": null
+  },
+  "runtime": {
+    "pose_application_policy": "sourceRestDeltaToTargetRest",
+    "forward_axis": "-z",
+    "up_axis": "y"
+  },
+  "horde": {
+    "enabled": true,
+    "hits_to_kill": {
+      "min": 3,
+      "max": 5
+    },
+    "spawn_weight": 1.0
+  },
+  "animations": {
+    "idle": [
+      {
+        "clip_id": "idle_01",
+        "weight": 1.0,
+        "loop": true
+      }
+    ],
+    "walk": [
+      {
+        "clip_id": "unstable_walk_01",
+        "weight": 1.0,
+        "loop": true
+      }
+    ],
+    "turn": {
+      "left_90": [
+        {
+          "clip_id": "turn_left_90",
+          "weight": 1.0,
+          "loop": false
+        }
+      ],
+      "right_90": [
+        {
+          "clip_id": "turn_right_90",
+          "weight": 1.0,
+          "loop": false
+        }
+      ]
+    },
+    "attack": [
+      {
+        "clip_id": "charged-slash-right",
+        "weight": 1.0,
+        "loop": false
+      },
+      {
+        "clip_id": "left_hook_01",
+        "weight": 1.0,
+        "loop": false
+      },
+      {
+        "clip_id": "right_hook_01",
+        "weight": 1.0,
+        "loop": false
+      }
+    ],
+    "damage": [
+      {
+        "clip_id": "hit_medium_left_01",
+        "weight": 1.0,
+        "loop": false
+      },
+      {
+        "clip_id": "hit_medium_right_01",
+        "weight": 1.0,
+        "loop": false
+      }
+    ],
+    "death": [
+      {
+        "clip_id": "dead_fall_forward_01",
+        "weight": 1.0,
+        "loop": false
+      },
+      {
+        "clip_id": "dead_fall_backward_01",
+        "weight": 1.0,
+        "loop": false
+      }
+    ]
+  },
+  "audio": {
+    "presence_loop": {
+      "file": "dad_breathing.wav",
+      "volume_db": -7.5,
+      "spatial": true,
+      "loop": true
+    },
+    "damage_hits": [
+    ],
+    "face_hits": [
+      {
+        "file": "face-punch_mixdown.wav",
+        "weight": 1.0,
+        "volume_db": -2.5
+      },
+      {
+        "file": "fleshy-face-punch-01.wav",
+        "weight": 1.0,
+        "volume_db": -2.5
+      }
+    ],
+    "death": [],
+    "attack": []
+  },
+  "extensions": {}
+}

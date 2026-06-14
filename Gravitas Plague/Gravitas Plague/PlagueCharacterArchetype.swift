@@ -101,6 +101,22 @@ enum CharacterAssetRegistry {
         )
     }
 
+    static func url(
+        attributes: CharacterAttributes
+    ) -> URL? {
+        let file = attributes.asset.usdz
+        let ext = URL(fileURLWithPath: file).pathExtension
+        let name = URL(fileURLWithPath: file)
+            .deletingPathExtension()
+            .lastPathComponent
+
+        return Bundle.main.url(
+            forResource: name,
+            withExtension: ext.isEmpty ? "usdz" : ext,
+            subdirectory: attributes.asset.bundleSubdirectory
+        )
+    }
+
     static func validateRequiredCharacterAssets() {
         for archetype in requiredHordeAssets {
             if let url = url(for: archetype) {

@@ -238,6 +238,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 2D78FE512FCCF44B0063708B /* Build configuration list for PBXNativeTarget "Gravitas Plague" */;
 			buildPhases = (
+				8E1A10522FCD000100000001 /* Validate Character Audio Routing */,
 				2D78FE2C2FCCF44A0063708B /* Sources */,
 				2D78FE2D2FCCF44A0063708B /* Frameworks */,
 				2D78FE2E2FCCF44A0063708B /* Resources */,
@@ -411,6 +412,30 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		8E1A10522FCD000100000001 /* Validate Character Audio Routing */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${SRCROOT}/Gravitas Plague",
+				"${SRCROOT}/../Scripts/validate_character_audio_routing.sh",
+			);
+			name = "Validate Character Audio Routing";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"${SRCROOT}/../Scripts/validate_character_audio_routing.sh\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		2D78FE2C2FCCF44A0063708B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -582,6 +607,7 @@
 				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Gravitas Plague";
 				INFOPLIST_KEY_NSHandsTrackingUsageDescription = "Gravitas Plague uses hand tracking to detect player interactions with nearby infected characters.";
@@ -619,6 +645,7 @@
 				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Gravitas Plague";
 				INFOPLIST_KEY_NSHandsTrackingUsageDescription = "Gravitas Plague uses hand tracking to detect player interactions with nearby infected characters.";

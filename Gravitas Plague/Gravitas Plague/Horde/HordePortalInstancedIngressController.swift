@@ -512,10 +512,26 @@ private extension HordePortalInstancedIngressController {
             0
         )
         let toDirection = HordePortalLocalAxes.outToRoom
-        let clipID = HordePortalTurnResolver.clipID(
+        let direction = HordePortalTurnResolver.direction(
             from: fromDirection,
             to: toDirection
         )
+
+        guard let clipID = enemy.playHordePortalTurnFromAttributes(
+            direction: direction
+        ) else {
+            phase = .failed
+            print(
+                """
+                [HordePortalIngress] ERROR sidecar turn clip start failed
+                  enemyID: \(enemyID)
+                  portalID: \(portalID)
+                  direction: \(direction.rawValue)
+                  noFallback: true
+                """
+            )
+            return
+        }
 
         turnClipID = clipID
         turnDuration = enemy.durationForClip(
@@ -532,16 +548,14 @@ private extension HordePortalInstancedIngressController {
         )
         worldOrientation = turnStartYaw
 
-        enemy.playHordePortalTurnClip(
-            id: clipID
-        )
-
         print(
             """
             [HordePortalIngress] single 90-degree turn started
               enemyID: \(enemyID)
               portalID: \(portalID)
               clipID: \(clipID)
+              turnDirection: \(direction.rawValue)
+              source: character_attributes
               rootYawDuringClip: held_constant
               programmaticYawSlerp: false
               walkLoopStoppedForTurn: true

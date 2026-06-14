@@ -142,7 +142,18 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             on: root
         )
 
-        CharacterAssetRegistry.validateRequiredCharacterAssets()
+        do {
+            try CharacterAttributeStore.shared.loadStrict()
+        } catch {
+            print(
+                """
+                [CharacterAttributes] ERROR strict startup validation failed
+                  error: \(error.localizedDescription)
+                  noFallback: true
+                """
+            )
+        }
+
         PortalHDRIAssetValidator.validate()
         HordePortalAssetValidator.validate()
 
@@ -1218,16 +1229,47 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 )
             }
         )
-        let hitsToKillByID = Dictionary(
-            uniqueKeysWithValues: spawnRequests.map { request in
-                let hitsToKill = request.archetype.randomHordeHitsToKill()
+        let hitsToKillByID: [UUID: Int] = Dictionary(
+            uniqueKeysWithValues: spawnRequests.compactMap { request in
+                let attributes: CharacterAttributes
+
+                do {
+                    attributes = try CharacterAttributeStore.shared.attributes(
+                        for: request.archetype
+                    )
+                } catch {
+                    handleHordeSpawnFailure(
+                        HordeSpawnFailureRecord(
+                            wave: nextWave,
+                            spawnIndex: spawnIndexByID[request.id] ?? 0,
+                            archetype: request.archetype,
+                            reason: error.localizedDescription
+                        )
+                    )
+
+                    print(
+                        """
+                        [HordeSpawn] ERROR character attributes missing
+                          archetype: \(request.archetype.rawValue)
+                          error: \(error.localizedDescription)
+                          noFallback: true
+                        """
+                    )
+
+                    return nil
+                }
+
+                let hitsToKill = attributes.horde.hitsToKill.random()
 
                 print(
                     """
-                    [HordeHealth] hitsToKill assigned
+                    [HordeSpawn] character attributes selected
                       archetype: \(request.archetype.rawValue)
-                      range: \(request.archetype.hordeHitsToKillRange.lowerBound)-\(request.archetype.hordeHitsToKillRange.upperBound)
+                      characterID: \(attributes.characterID)
                       hitsToKill: \(hitsToKill)
+                      usdz: \(attributes.asset.usdz)
+                      range: \(attributes.horde.hitsToKill.min)-\(attributes.horde.hitsToKill.max)
+                      noFallback: true
                     """
                 )
 
@@ -1305,7 +1347,27 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             let index = spawnIndexByID[assignment.enemyID] ?? successfulSpawnCount
             let archetype = assignment.archetype
             let id = assignment.enemyID
-            let hitsToKill = hitsToKillByID[id] ?? archetype.randomHordeHitsToKill()
+
+            guard let hitsToKill = hitsToKillByID[id] else {
+                handleHordeSpawnFailure(
+                    HordeSpawnFailureRecord(
+                        wave: nextWave,
+                        spawnIndex: index,
+                        archetype: archetype,
+                        reason: "Missing sidecar-derived hitsToKill"
+                    )
+                )
+
+                print(
+                    """
+                    [HordeSpawn] ERROR missing sidecar-derived hitsToKill
+                      archetype: \(archetype.rawValue)
+                      enemyID: \(id)
+                      noFallback: true
+                    """
+                )
+                continue
+            }
 
             do {
                 guard let portal = hordePortalManager.portals[assignment.portalID] else {
@@ -1386,6 +1448,12 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     """
                 )
             } catch {
+                let attributes = try? CharacterAttributeStore.shared.attributes(
+                    for: archetype
+                )
+                let assetFile = attributes?.asset.usdz ?? "attribute_missing"
+                let posePolicy = attributes?.runtime.poseApplicationPolicy.rawValue ?? "attribute_missing"
+
                 handleHordeSpawnFailure(
                     HordeSpawnFailureRecord(
                         wave: nextWave,
@@ -1401,10 +1469,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                       wave: \(nextWave)
                       index: \(index)
                       archetype: \(archetype.rawValue)
-                      file: \(archetype.usdzFileName)
-                      policy: \(archetype.poseApplicationPolicy.rawValue)
+                      file: \(assetFile)
+                      policy: \(posePolicy)
                       id: \(id)
                       reason: \(error.localizedDescription)
+                      noFallback: true
                       alreadySpawnedEnemiesRemainAlive: true
                       waveWillNotResetToOne: true
                     """
@@ -1509,12 +1578,17 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             )
         }
 
-        guard CharacterAssetRegistry.url(for: archetype) != nil else {
+        let attributes = try CharacterAttributeStore.shared.attributes(
+            for: archetype
+        )
+
+        guard CharacterAssetRegistry.url(attributes: attributes) != nil else {
             throw NSError(
                 domain: "HordeSpawn",
                 code: 404,
                 userInfo: [
-                    NSLocalizedDescriptionKey: "Missing character asset \(archetype.usdzFileName)"
+                    NSLocalizedDescriptionKey:
+                        "Missing character asset \(attributes.asset.usdz)"
                 ]
             )
         }
@@ -1526,7 +1600,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             archetype: archetype,
             wave: wave,
             spawnIndex: spawnIndex,
-            hitsToKill: hitsToKill
+            hitsToKill: hitsToKill,
+            attributes: attributes
         )
 
         if wireCallbacks {

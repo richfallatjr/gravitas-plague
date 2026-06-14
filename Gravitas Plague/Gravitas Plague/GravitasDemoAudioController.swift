@@ -36,10 +36,10 @@ final class GravitasDemoAudioController {
         }
 
         init(
-            _ fileRef: AudioFileRef
+            _ soundRef: SoundRef
         ) {
-            self.fileName = fileRef.name
-            self.fileExtension = fileRef.ext
+            self.fileName = soundRef.basename
+            self.fileExtension = soundRef.ext
         }
 
         var fullName: String {
@@ -251,7 +251,7 @@ final class GravitasDemoAudioController {
             category: "default_face_hit"
         )
 
-        preloadRobotAudio()
+        preloadCharacterAttributeAudio()
 
         playerDamagePlayersByFileName = makePlayerDamagePlayers()
         playerDeathPlayersByFileName = makePlayerDeathPlayers()
@@ -339,7 +339,7 @@ final class GravitasDemoAudioController {
             [PlagueAudio] attaching audio for character
               enemyID: \(id.uuidString)
               archetype: \(archetype.rawValue)
-              bank: \(archetype.audioBank.rawValue)
+              source: character_attributes
             """
         )
 
@@ -531,7 +531,7 @@ final class GravitasDemoAudioController {
         playCharacterOneShot(
             resource: punchResource,
             sourceID: sourceID,
-            linearVolume: 0.95
+            volumeDB: Float(decibels(linearVolume: 0.95))
         )
     }
 
@@ -575,29 +575,52 @@ final class GravitasDemoAudioController {
             return
         }
 
-        let bank = archetype.audioBank
+        let attributes: CharacterAttributes
 
-        guard let sound = bank.facePunchContactSounds.randomElement() else {
+        do {
+            attributes = try CharacterAttributeStore.shared.attributes(
+                for: archetype
+            )
+        } catch {
+            print(
+                """
+                [CharacterAudio] ERROR face hit failed
+                  archetype: \(archetype.rawValue)
+                  error: \(error.localizedDescription)
+                  noFallback: true
+                """
+            )
             return
         }
 
-        guard assertValidSoundForArchetype(
-            archetype: archetype,
-            sound: sound,
-            context: "face_punch"
-        ) else {
-            return
-        }
+        let sound: SoundRef
 
-        guard validateAudioFileExistsForPlayback(
-            sound,
-            archetype: archetype,
-            context: "face punch contact"
-        ) else {
+        do {
+            sound = try attributes.audio.faceHits.weightedPickStrict(
+                role: "face_hits",
+                characterID: attributes.characterID
+            )
+        } catch {
+            print(
+                """
+                [CharacterAudio] ERROR face hit failed
+                  characterID: \(attributes.characterID)
+                  error: \(error.localizedDescription)
+                  noFallback: true
+                """
+            )
             return
         }
 
         let file = BundleAudioFile(sound)
+
+        guard validateAudioFileExistsForPlayback(
+            sound,
+            characterID: attributes.characterID,
+            context: "face punch contact"
+        ) else {
+            return
+        }
 
         guard let resource = spatialResource(
             for: file,
@@ -605,11 +628,11 @@ final class GravitasDemoAudioController {
         ) else {
             print(
                 """
-                [PlagueAudio] ERROR missing face punch contact sound
-                  archetype: \(archetype.rawValue)
+                [CharacterAudio] ERROR missing face punch contact sound
+                  characterID: \(attributes.characterID)
                   region: \(hitRegion.rawValue)
                   file: \(file.fullName)
-                  fallbackToZombie: false
+                  noFallback: true
                 """
             )
             return
@@ -618,16 +641,18 @@ final class GravitasDemoAudioController {
         playCharacterOneShot(
             resource: resource,
             sourceID: sourceID,
-            linearVolume: 0.95
+            volumeDB: sound.volumeDB ?? Float(decibels(linearVolume: 0.95))
         )
 
         print(
             """
-            [PlagueAudio] face punch contact sound played
-              archetype: \(archetype.rawValue)
+            [CharacterAudio] one-shot played
+              characterID: \(attributes.characterID)
+              role: face_hits
               region: \(hitRegion.rawValue)
-              sound: \(file.fullName)
-              robotUsesZombieHitBank: false
+              file: \(sound.file)
+              source: character_attributes
+              noFallback: true
             """
         )
     }
@@ -636,29 +661,52 @@ final class GravitasDemoAudioController {
         archetype: PlagueCharacterArchetype,
         sourceID: UUID?
     ) {
-        let bank = archetype.audioBank
+        let attributes: CharacterAttributes
 
-        guard let sound = bank.damageSounds.randomElement() else {
+        do {
+            attributes = try CharacterAttributeStore.shared.attributes(
+                for: archetype
+            )
+        } catch {
+            print(
+                """
+                [CharacterAudio] ERROR damage hit failed
+                  archetype: \(archetype.rawValue)
+                  error: \(error.localizedDescription)
+                  noFallback: true
+                """
+            )
             return
         }
 
-        guard assertValidSoundForArchetype(
-            archetype: archetype,
-            sound: sound,
-            context: "damage"
-        ) else {
-            return
-        }
+        let sound: SoundRef
 
-        guard validateAudioFileExistsForPlayback(
-            sound,
-            archetype: archetype,
-            context: "damage"
-        ) else {
+        do {
+            sound = try attributes.audio.damageHits.weightedPickStrict(
+                role: "damage_hits",
+                characterID: attributes.characterID
+            )
+        } catch {
+            print(
+                """
+                [CharacterAudio] ERROR damage hit failed
+                  characterID: \(attributes.characterID)
+                  error: \(error.localizedDescription)
+                  noFallback: true
+                """
+            )
             return
         }
 
         let file = BundleAudioFile(sound)
+
+        guard validateAudioFileExistsForPlayback(
+            sound,
+            characterID: attributes.characterID,
+            context: "damage"
+        ) else {
+            return
+        }
 
         guard let resource = spatialResource(
             for: file,
@@ -666,10 +714,10 @@ final class GravitasDemoAudioController {
         ) else {
             print(
                 """
-                [PlagueAudio] ERROR missing damage sound
-                  archetype: \(archetype.rawValue)
+                [CharacterAudio] ERROR missing damage sound
+                  characterID: \(attributes.characterID)
                   file: \(file.fullName)
-                  fallbackToZombie: false
+                  noFallback: true
                 """
             )
             return
@@ -678,22 +726,24 @@ final class GravitasDemoAudioController {
         playCharacterOneShot(
             resource: resource,
             sourceID: sourceID,
-            linearVolume: 0.88
+            volumeDB: sound.volumeDB ?? Float(decibels(linearVolume: 0.88))
         )
 
         print(
             """
-            [PlagueAudio] damaged sound played
-              archetype: \(archetype.rawValue)
-              sound: \(file.fullName)
-              robotUsesZombieDamageBank: false
+            [CharacterAudio] one-shot played
+              characterID: \(attributes.characterID)
+              role: damage_hits
+              file: \(sound.file)
+              source: character_attributes
+              noFallback: true
             """
         )
     }
 
     private func validateAudioFileExistsForPlayback(
-        _ sound: AudioFileRef,
-        archetype: PlagueCharacterArchetype,
+        _ sound: SoundRef,
+        characterID: String,
         context: String
     ) -> Bool {
         if bundleURL(
@@ -702,84 +752,40 @@ final class GravitasDemoAudioController {
             return true
         }
 
-        if archetype == .robot {
-            print(
-                """
-                [PlagueAudio] ERROR missing \(context) sound
-                  archetype: \(archetype.rawValue)
-                  file: \(sound.filename)
-                  fallbackToZombie: false
-                """
-            )
-        } else {
-            print(
-                """
-                [PlagueAudio] WARNING missing \(context) sound
-                  archetype: \(archetype.rawValue)
-                  file: \(sound.filename)
-                """
-            )
-        }
+        print(
+            """
+            [CharacterAudio] ERROR missing \(context) sound
+              characterID: \(characterID)
+              file: \(sound.file)
+              noFallback: true
+            """
+        )
 
         return false
     }
 
     private func bundleURL(
-        for sound: AudioFileRef
+        for sound: SoundRef
     ) -> URL? {
         Bundle.main.url(
-            forResource: sound.name,
+            forResource: sound.basename,
             withExtension: sound.ext
         ) ?? Bundle.main.url(
-            forResource: sound.name,
+            forResource: sound.basename,
             withExtension: sound.ext,
             subdirectory: "Audio"
         )
     }
 
-    private func assertValidSoundForArchetype(
-        archetype: PlagueCharacterArchetype,
-        sound: AudioFileRef,
-        context: String
-    ) -> Bool {
-        guard archetype == .robot else {
-            return true
-        }
-
-        let allowedRobotSounds: Set<String> = [
-            "robot-walking-loop.mp3",
-            "robot-damaged-01.wav",
-            "robot-damaged-02.wav",
-            "fleshy-face-punch-01.wav"
-        ]
-
-        if !allowedRobotSounds.contains(sound.filename) {
-            print(
-                """
-                [PlagueAudio] FATAL ROUTING ERROR
-                  archetype: robot
-                  attemptedSound: \(sound.filename)
-                  context: \(context)
-                  allowedRobotOnly: \(allowedRobotSounds.sorted())
-                """
-            )
-
-            assertionFailure("Robot attempted to play non-robot sound: \(sound.filename)")
-            return false
-        }
-
-        return true
-    }
-
     private func playCharacterOneShot(
         resource: AudioFileResource,
         sourceID: UUID?,
-        linearVolume: Float
+        volumeDB: Float
     ) {
         if let sourceID,
            var source = hostAudioSourcesByID[sourceID] {
             let controller = source.headEntity.playAudio(resource)
-            controller.gain = decibels(linearVolume: linearVolume)
+            controller.gain = Double(volumeDB)
             source.punchControllers.append(controller)
 
             if source.punchControllers.count > 12 {
@@ -791,7 +797,7 @@ final class GravitasDemoAudioController {
         }
 
         let controller = hostHeadAudioEntity.playAudio(resource)
-        controller.gain = decibels(linearVolume: linearVolume)
+        controller.gain = Double(volumeDB)
         punchControllers.append(controller)
 
         if punchControllers.count > 12 {
@@ -893,29 +899,32 @@ final class GravitasDemoAudioController {
         archetype: PlagueCharacterArchetype,
         delay: TimeInterval
     ) {
-        let bank = archetype.audioBank
+        let attributes: CharacterAttributes
 
-        guard let loop = bank.loopSound else {
+        do {
+            attributes = try CharacterAttributeStore.shared.attributes(
+                for: archetype
+            )
+        } catch {
             print(
                 """
-                [PlagueAudio] no loop sound configured
+                [CharacterAudio] ERROR presence loop failed
                   archetype: \(archetype.rawValue)
+                  error: \(error.localizedDescription)
+                  noFallback: true
                 """
             )
             return
         }
 
-        guard assertValidSoundForArchetype(
-            archetype: archetype,
-            sound: loop,
-            context: "loop"
-        ) else {
+        guard let loop = attributes.audio.presenceLoop else {
+            assertionFailure("Missing presence loop for \(attributes.characterID)")
             return
         }
 
         guard validateAudioFileExistsForPlayback(
             loop,
-            archetype: archetype,
+            characterID: attributes.characterID,
             context: "loop"
         ) else {
             return
@@ -929,10 +938,10 @@ final class GravitasDemoAudioController {
         ) else {
             print(
                 """
-                [PlagueAudio] ERROR missing loop sound
-                  archetype: \(archetype.rawValue)
+                [CharacterAudio] ERROR missing presence loop
+                  characterID: \(attributes.characterID)
                   file: \(loopFile.fullName)
-                  fallbackToZombie: false
+                  noFallback: true
                 """
             )
             return
@@ -948,16 +957,17 @@ final class GravitasDemoAudioController {
 
         if delay <= 0 {
             source.loopController = source.headEntity.playAudio(loopResource)
-            source.loopController?.gain = decibels(linearVolume: characterLoopGain(for: archetype))
+            source.loopController?.gain = Double(loop.volumeDB ?? 0)
             source.loopStartTask = nil
             hostAudioSourcesByID[sourceID] = source
 
             print(
                 """
-                [PlagueAudio] character loop attached
-                  archetype: \(archetype.rawValue)
-                  sound: \(loopFile.fullName)
-                  robotUsesZombieBreathing: false
+                [CharacterAudio] presence loop attached
+                  characterID: \(attributes.characterID)
+                  file: \(loop.file)
+                  source: character_attributes
+                  noFallback: true
                 """
             )
 
@@ -977,34 +987,23 @@ final class GravitasDemoAudioController {
 
             source.loopController?.stop()
             source.loopController = source.headEntity.playAudio(loopResource)
-            source.loopController?.gain = self.decibels(linearVolume: self.characterLoopGain(for: archetype))
+            source.loopController?.gain = Double(loop.volumeDB ?? 0)
             source.loopStartTask = nil
             self.hostAudioSourcesByID[sourceID] = source
 
             print(
                 """
-                [PlagueAudio] character loop attached
-                  archetype: \(archetype.rawValue)
-                  sound: \(loopFile.fullName)
-                  robotUsesZombieBreathing: false
+                [CharacterAudio] presence loop attached
+                  characterID: \(attributes.characterID)
+                  file: \(loop.file)
+                  source: character_attributes
+                  noFallback: true
                 """
             )
         }
 
         source.loopStartTask = task
         hostAudioSourcesByID[sourceID] = source
-    }
-
-    private func characterLoopGain(
-        for archetype: PlagueCharacterArchetype
-    ) -> Float {
-        switch archetype {
-        case .robot:
-            return 0.48
-
-        case .dad, .spouse, .biker, .grandma, .neighbor:
-            return 0.42
-        }
     }
 
     private func startEmergencyBroadcastLoop() {
@@ -1235,40 +1234,57 @@ final class GravitasDemoAudioController {
         return resource
     }
 
-    private func preloadRobotAudio() {
-        for file in PlagueCharacterAudioBank.robot.facePunchContactSounds {
-            preloadSound(
-                named: file.name,
-                fileExtension: file.ext,
-                shouldLoop: false,
-                category: "robot_face_hit"
+    private func preloadCharacterAttributeAudio() {
+        do {
+            if !CharacterAttributeStore.shared.isLoaded {
+                try CharacterAttributeStore.shared.loadStrict()
+            }
+        } catch {
+            print(
+                """
+                [CharacterAudio] ERROR strict character audio preload skipped
+                  error: \(error.localizedDescription)
+                  noFallback: true
+                """
             )
+            return
         }
 
-        if let loop = PlagueCharacterAudioBank.robot.loopSound {
-            preloadSound(
-                named: loop.name,
-                fileExtension: loop.ext,
-                shouldLoop: true,
-                category: "robot_loop"
-            )
-        }
+        for attributes in CharacterAttributeStore.shared.attributesByID.values {
+            if let loop = attributes.audio.presenceLoop {
+                preloadSound(
+                    named: loop.basename,
+                    fileExtension: loop.ext,
+                    shouldLoop: loop.loop ?? true,
+                    category: "\(attributes.characterID)_presence_loop"
+                )
+            }
 
-        for file in PlagueCharacterAudioBank.robot.damageSounds {
-            preloadSound(
-                named: file.name,
-                fileExtension: file.ext,
-                shouldLoop: false,
-                category: "robot_damage"
-            )
+            for sound in attributes.audio.damageHits {
+                preloadSound(
+                    named: sound.basename,
+                    fileExtension: sound.ext,
+                    shouldLoop: false,
+                    category: "\(attributes.characterID)_damage_hits"
+                )
+            }
+
+            for sound in attributes.audio.faceHits {
+                preloadSound(
+                    named: sound.basename,
+                    fileExtension: sound.ext,
+                    shouldLoop: false,
+                    category: "\(attributes.characterID)_face_hits"
+                )
+            }
         }
 
         print(
             """
-            [PlagueAudio] robot audio preloaded
-              faceHit: fleshy-face-punch-01.wav
-              loop: robot-walking-loop.mp3
-              damaged: robot-damaged-01.wav, robot-damaged-02.wav
+            [CharacterAudio] attribute audio preloaded
+              characters: \(CharacterAttributeStore.shared.attributesByID.keys.sorted().joined(separator: ", "))
+              source: character_attributes
+              noFallback: true
             """
         )
     }
