@@ -11,8 +11,8 @@ enum PortalGlyphFXSettings {
     static let glyphCountPerSegmentRange = 5...10
     static let directionalPreference: Float = 0.68
 
-    static let wallGlyphPadding: Float = 0.018
-    static let floorGlyphPadding: Float = 0.025
+    static let wallGlyphPadding: Float = 0.0
+    static let floorGlyphPadding: Float = 0.0
 
     static let directionalLaneSpacing: Float = 0.075
     static let directionalMaxLanes = 4
