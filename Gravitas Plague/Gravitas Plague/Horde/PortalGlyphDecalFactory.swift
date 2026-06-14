@@ -51,6 +51,19 @@ enum PortalGlyphDecalFactory {
 
         stripInput(entity)
 
+        let rotationDegrees =
+            placement.rotationRadians * 180.0 / Float.pi
+
+        print(
+            """
+            [PortalGlyphs] wall glyph entity created
+              file: \(placement.asset.fileName)
+              kind: \(placement.asset.kind.rawValue)
+              rotationDegrees: \(rotationDegrees)
+              orientationPolicy: \(placement.asset.orientationPolicy.rawValue)
+            """
+        )
+
         return entity
     }
 

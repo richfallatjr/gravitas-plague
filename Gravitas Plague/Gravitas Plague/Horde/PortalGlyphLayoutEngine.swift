@@ -123,6 +123,9 @@ enum PortalGlyphLayoutEngine {
             placements: placements,
             wallSegments: wallSegments
         )
+        validateWallGlyphOrientationRules(
+            placements: placements
+        )
         validateNonDirectionalUniqueness(
             placements: placements
         )
@@ -732,6 +735,16 @@ private extension PortalGlyphLayoutEngine {
         attempts: Int,
         passLabel: String
     ) -> PortalGlyphPlacement? {
+        guard asset.kind == .circle else {
+            fatalError(
+                """
+                [PortalGlyphs] non-circle glyph sent to circle placement
+                  file: \(asset.fileName)
+                  kind: \(asset.kind.rawValue)
+                """
+            )
+        }
+
         let rawSize = asset.physicalSizeMeters()
         let side = max(
             rawSize.x,
@@ -772,25 +785,9 @@ private extension PortalGlyphLayoutEngine {
                 edgePoint +
                 segment.outward * (size.y * 0.5 + outwardExtra)
 
-            let angle = Float.random(
-                in: 0...(2.0 * .pi),
-                using: &rng
-            )
-
-            let axisX = normalizeSafe2(
-                SIMD2<Float>(
-                    cos(angle),
-                    sin(angle)
-                ),
-                fallback: SIMD2<Float>(1, 0)
-            )
-            let axisY = normalizeSafe2(
-                SIMD2<Float>(
-                    -sin(angle),
-                    cos(angle)
-                ),
-                fallback: SIMD2<Float>(0, 1)
-            )
+            let axisX = PortalGlyphWallAxes.xRight
+            let axisY = PortalGlyphWallAxes.yUp
+            let angle = PortalGlyphWallAxes.yUpRotationRadians
 
             let obb = PortalGlyphOBB(
                 center: center,
@@ -876,6 +873,16 @@ private extension PortalGlyphLayoutEngine {
         occupied: [PortalGlyphOBB],
         rng: inout SeededRNG
     ) -> PortalGlyphPlacement? {
+        guard asset.kind == .directional else {
+            fatalError(
+                """
+                [PortalGlyphs] non-directional glyph sent to directional placement
+                  file: \(asset.fileName)
+                  kind: \(asset.kind.rawValue)
+                """
+            )
+        }
+
         let size = asset.physicalSizeMeters()
         var best: PortalGlyphPlacement?
         var bestScore = Float.greatestFiniteMagnitude
@@ -895,28 +902,26 @@ private extension PortalGlyphLayoutEngine {
                 using: &rng
             )
 
-            // Directional art is authored vertically: local Y follows the portal border.
-            let angle =
-                atan2(
-                    -segment.direction.x,
-                    segment.direction.y
-                ) +
-                angleJitter
+            let baseAngle = atan2(
+                segment.direction.y,
+                segment.direction.x
+            )
+            let angle = baseAngle + angleJitter
 
             let axisX = normalizeSafe2(
                 SIMD2<Float>(
                     cos(angle),
                     sin(angle)
                 ),
-                fallback: segment.outward
+                fallback: segment.direction
             )
 
             let axisY = normalizeSafe2(
                 SIMD2<Float>(
-                    -sin(angle),
-                    cos(angle)
+                    -axisX.y,
+                    axisX.x
                 ),
-                fallback: segment.direction
+                fallback: segment.outward
             )
 
             let provisionalOBB = PortalGlyphOBB(
@@ -1057,6 +1062,16 @@ private extension PortalGlyphLayoutEngine {
         attempts: Int,
         passLabel: String
     ) -> PortalGlyphPlacement? {
+        guard asset.kind == .free else {
+            fatalError(
+                """
+                [PortalGlyphs] non-free glyph sent to general placement
+                  file: \(asset.fileName)
+                  kind: \(asset.kind.rawValue)
+                """
+            )
+        }
+
         let rawSize = asset.physicalSizeMeters()
         let side = max(
             rawSize.x,
@@ -1112,26 +1127,9 @@ private extension PortalGlyphLayoutEngine {
                 segment.outward * (size.y * 0.5 + outwardExtra) +
                 tangentJitter
 
-            let angle = Float.random(
-                in: 0...(2.0 * .pi),
-                using: &rng
-            )
-
-            let axisX = normalizeSafe2(
-                SIMD2<Float>(
-                    cos(angle),
-                    sin(angle)
-                ),
-                fallback: SIMD2<Float>(1, 0)
-            )
-
-            let axisY = normalizeSafe2(
-                SIMD2<Float>(
-                    -sin(angle),
-                    cos(angle)
-                ),
-                fallback: SIMD2<Float>(0, 1)
-            )
+            let axisX = PortalGlyphWallAxes.xRight
+            let axisY = PortalGlyphWallAxes.yUp
+            let rotation = PortalGlyphWallAxes.yUpRotationRadians
 
             let obb = PortalGlyphOBB(
                 center: center,
@@ -1186,7 +1184,7 @@ private extension PortalGlyphLayoutEngine {
                     axisX: obb.axisX,
                     axisY: obb.axisY,
                     size: size,
-                    rotationRadians: angle,
+                    rotationRadians: rotation,
                     obb: obb,
                     sourceSegmentIndex: segment.index
                 )
@@ -1366,6 +1364,57 @@ private extension PortalGlyphLayoutEngine {
                   rule: free_circle_floor_unique_per_portal
                 """
             )
+        }
+    }
+
+    static func validateWallGlyphOrientationRules(
+        placements: [PortalGlyphPlacement]
+    ) {
+        for placement in placements where placement.surface == .wall {
+            switch placement.asset.kind {
+            case .directional:
+                continue
+
+            case .free, .circle:
+                if abs(placement.rotationRadians) > 0.0001 {
+                    fatalError(
+                        """
+                        [PortalGlyphs] NON-DIRECTIONAL WALL GLYPH ROTATED
+                          file: \(placement.asset.fileName)
+                          kind: \(placement.asset.kind.rawValue)
+                          rotationRadians: \(placement.rotationRadians)
+                          required: y_up_rotation_0
+                        """
+                    )
+                }
+
+                let axisXDelta = simd_length(
+                    placement.axisX - PortalGlyphWallAxes.xRight
+                )
+                let axisYDelta = simd_length(
+                    placement.axisY - PortalGlyphWallAxes.yUp
+                )
+
+                if axisXDelta > 0.0001 || axisYDelta > 0.0001 {
+                    fatalError(
+                        """
+                        [PortalGlyphs] NON-DIRECTIONAL WALL GLYPH AXES NOT Y-UP
+                          file: \(placement.asset.fileName)
+                          kind: \(placement.asset.kind.rawValue)
+                          axisX: \(placement.axisX)
+                          axisY: \(placement.axisY)
+                        """
+                    )
+                }
+
+            case .floor:
+                fatalError(
+                    """
+                    [PortalGlyphs] floor glyph found in wall placements
+                      file: \(placement.asset.fileName)
+                    """
+                )
+            }
         }
     }
 

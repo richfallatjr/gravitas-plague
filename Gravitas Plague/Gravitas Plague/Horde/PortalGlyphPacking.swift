@@ -80,6 +80,18 @@ enum PortalGlyphPlacementSurface {
     case floor
 }
 
+enum PortalGlyphOrientationPolicy: String {
+    case followSegment
+    case wallYUp
+    case floor
+}
+
+enum PortalGlyphWallAxes {
+    static let xRight = SIMD2<Float>(1, 0)
+    static let yUp = SIMD2<Float>(0, 1)
+    static let yUpRotationRadians: Float = 0
+}
+
 extension PortalGlyphAsset {
     var allowedSurface: PortalGlyphPlacementSurface {
         switch kind {
@@ -88,6 +100,19 @@ extension PortalGlyphAsset {
 
         case .directional, .circle, .free:
             return .wall
+        }
+    }
+
+    var orientationPolicy: PortalGlyphOrientationPolicy {
+        switch kind {
+        case .directional:
+            return .followSegment
+
+        case .free, .circle:
+            return .wallYUp
+
+        case .floor:
+            return .floor
         }
     }
 }
