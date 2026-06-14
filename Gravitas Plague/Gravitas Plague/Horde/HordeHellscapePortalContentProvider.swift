@@ -68,11 +68,15 @@ struct HordeHellscapePortalContentProvider: PortalContentProvider {
 
         let resources = try loadHellscapeResources()
 
+        let backdropRoot = Entity()
+        backdropRoot.name = "HordeHellscapeBackdropRoot"
+        portalWorld.addChild(backdropRoot)
+
         let dome = try makeInsideFacingDome(
             texture: resources.visibleTexture
         )
 
-        portalWorld.addChild(dome)
+        backdropRoot.addChild(dome)
 
         if context.groundDiscEnabled {
             let ground = try HordePortalGroundDiscFactory.makeGroundDisc(
@@ -84,13 +88,15 @@ struct HordeHellscapePortalContentProvider: PortalContentProvider {
                 )
             )
 
-            portalWorld.addChild(ground)
+            backdropRoot.addChild(ground)
         }
 
         let ibl = makeIBLEntity(
             environment: resources.environment
         )
 
+        // Future: rotate ImageBasedLightComponent environment if RealityKit exposes
+        // a clean orientation control. Current pass rotates visible dome/ground only.
         portalWorld.addChild(ibl)
 
         attachIBLReceiversRecursively(
@@ -103,6 +109,9 @@ struct HordeHellscapePortalContentProvider: PortalContentProvider {
             [HordePortal] hellscape portal world populated
               backdrop: hellscape_01.exr
               groundplane: hellscape_groundplane.png
+              backdropRoot: HordeHellscapeBackdropRoot
+              domeUnderBackdropRoot: true
+              groundUnderBackdropRoot: \(context.groundDiscEnabled)
               visibleDome: true
               pngGroundDisc: \(context.groundDiscEnabled)
               floorY: \(context.floorY)

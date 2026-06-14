@@ -8,6 +8,9 @@ final class HordePortalManager {
     private var portalOrder: [UUID] = []
     private var entranceSideByPortalID: [UUID: HordePortalEntranceSide] = [:]
     private var transitionFXByPortalID: [UUID: PortalTransitionFXController] = [:]
+    private let backdropOrientationLock = HordePortalBackdropOrientationLock(
+        baseArtYawDegrees: 0
+    )
 
     private weak var sceneRoot: Entity?
     private weak var wallManager: WallPlaneManager?
@@ -49,6 +52,7 @@ final class HordePortalManager {
         portals.removeAll()
         portalOrder.removeAll()
         entranceSideByPortalID.removeAll()
+        backdropOrientationLock.reset()
 
         print("[HordePortal] reset")
     }
@@ -284,6 +288,31 @@ final class HordePortalManager {
             relativeTo: nil
         )
 
+        if let backdropRoot = portalWorld.findEntity(
+            named: "HordeHellscapeBackdropRoot"
+        ) {
+            backdropOrientationLock.applyBackdropOrientation(
+                to: backdropRoot,
+                portalRoot: root,
+                portalID: portalID,
+                label: "wave_\(wave)_spawn_\(spawnIndex)"
+            )
+        } else {
+            print(
+                """
+                [HordePortalBackdrop] ERROR missing backdrop root
+                  portalID: \(portalID)
+                  expected: HordeHellscapeBackdropRoot
+                  result: domeWillUseDefaultOrientation
+                """
+            )
+        }
+
+        assertNoEnemyUnderBackdropRoot(
+            portalWorld: portalWorld,
+            portalID: portalID
+        )
+
         sceneRoot.addChild(root)
         logFloorAnchorProof(
             placement: placement,
@@ -372,6 +401,30 @@ final class HordePortalManager {
         )
 
         return portal
+    }
+
+    func reapplyBackdropOrientationsToAllPortals() {
+        for portal in portals.values {
+            guard let backdropRoot = portal.portalWorldRoot.findEntity(
+                named: "HordeHellscapeBackdropRoot"
+            ) else {
+                print(
+                    """
+                    [HordePortalBackdrop] ERROR missing backdrop root during reapply
+                      portalID: \(portal.id)
+                      expected: HordeHellscapeBackdropRoot
+                    """
+                )
+                continue
+            }
+
+            backdropOrientationLock.applyBackdropOrientation(
+                to: backdropRoot,
+                portalRoot: portal.root,
+                portalID: portal.id,
+                label: "reapply"
+            )
+        }
     }
 
     func bestUnreservedPortal(
@@ -793,6 +846,32 @@ final class HordePortalManager {
             padding: 0.46,
             label: "Horde portal"
         )
+    }
+
+    private func assertNoEnemyUnderBackdropRoot(
+        portalWorld: Entity,
+        portalID: UUID
+    ) {
+        guard let backdrop = portalWorld.findEntity(
+            named: "HordeHellscapeBackdropRoot"
+        ) else {
+            return
+        }
+
+        for child in backdrop.children {
+            if child.name.contains("Enemy") ||
+                child.name.contains("PortalRenderInstance") ||
+                child.name.contains("Jock") {
+                print(
+                    """
+                    [HordePortalBackdrop] ERROR gameplay/render instance under backdrop root
+                      portalID: \(portalID)
+                      child: \(child.name)
+                      action: move_to_portalWorldRoot
+                    """
+                )
+            }
+        }
     }
 
     private func logFloorAnchorProof(
