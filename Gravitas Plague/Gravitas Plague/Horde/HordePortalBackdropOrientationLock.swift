@@ -123,6 +123,18 @@ final class HordePortalBackdropOrientationLock {
               enemyIngressUnaffected: true
             """
         )
+
+        if backdropRoot.findEntity(
+            named: "HordePortalGroundDiscRoot"
+        ) != nil {
+            print(
+                """
+                [HordePortalGroundDisc] ERROR ground disc is under backdrop root
+                  portalID: \(portalID)
+                  action: move_to_portalWorldRoot
+                """
+            )
+        }
     }
 
     private static func portalBehindDirectionWorld(

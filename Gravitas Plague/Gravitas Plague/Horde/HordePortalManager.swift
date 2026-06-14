@@ -8,6 +8,7 @@ final class HordePortalManager {
     private var portalOrder: [UUID] = []
     private var entranceSideByPortalID: [UUID: HordePortalEntranceSide] = [:]
     private var transitionFXByPortalID: [UUID: PortalTransitionFXController] = [:]
+    private var groundDiscByPortalID: [UUID: Entity] = [:]
     private let backdropOrientationLock = HordePortalBackdropOrientationLock(
         baseArtYawDegrees: 0
     )
@@ -44,6 +45,11 @@ final class HordePortalManager {
             fx.teardown()
         }
         transitionFXByPortalID.removeAll()
+
+        for ground in groundDiscByPortalID.values {
+            ground.removeFromParent()
+        }
+        groundDiscByPortalID.removeAll()
 
         for portal in portals.values {
             portal.root.removeFromParent()
@@ -201,6 +207,49 @@ final class HordePortalManager {
                 """
             )
             return nil
+        }
+
+        let groundFloorY = context.floorY + 0.004
+
+        do {
+            let groundDisc = try HordePortalGroundDiscFactory.makeGroundDisc(
+                config: .init(
+                    floorY: groundFloorY,
+                    centerZ: context.groundDiscCenterZ,
+                    radius: context.groundDiscRadius,
+                    segments: 96,
+                    featherRingCount: 8,
+                    featherStartFraction: 0.72,
+                    textureName: "hellscape_groundplane",
+                    exposure: 1.0
+                )
+            )
+
+            portalWorld.addChild(groundDisc)
+            groundDiscByPortalID[portalID] = groundDisc
+
+            print(
+                """
+                [HordePortal] faded ground disc attached
+                  portalID: \(portalID)
+                  parent: portalWorldRoot
+                  floorY: \(groundFloorY)
+                  centerZ: \(context.groundDiscCenterZ)
+                  radius: \(context.groundDiscRadius)
+                  geometry: circular_disc_with_faded_edge
+                  placementSource: committed_portal_context
+                  notBackdropRoot: true
+                """
+            )
+        } catch {
+            print(
+                """
+                [HordePortalGroundDisc] ERROR faded disc build failed
+                  portalID: \(portalID)
+                  error: \(error.localizedDescription)
+                  action: continue_without_ground_disc_no_fallback
+                """
+            )
         }
 
         let portalPlane: ModelEntity
@@ -861,10 +910,11 @@ final class HordePortalManager {
         for child in backdrop.children {
             if child.name.contains("Enemy") ||
                 child.name.contains("PortalRenderInstance") ||
-                child.name.contains("Jock") {
+                child.name.contains("Jock") ||
+                child.name.contains("HordePortalGroundDiscRoot") {
                 print(
                     """
-                    [HordePortalBackdrop] ERROR gameplay/render instance under backdrop root
+                    [HordePortalBackdrop] ERROR non-backdrop entity under backdrop root
                       portalID: \(portalID)
                       child: \(child.name)
                       action: move_to_portalWorldRoot
