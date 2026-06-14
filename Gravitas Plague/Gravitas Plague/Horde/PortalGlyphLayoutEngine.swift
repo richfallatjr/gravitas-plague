@@ -329,14 +329,15 @@ private extension PortalGlyphLayoutEngine {
             let rotation: Float
 
             if isDirectional {
-                axisX = segment.direction
-                axisY = SIMD2<Float>(
-                    -segment.direction.y,
-                    segment.direction.x
-                )
-                rotation = atan2(
+                // Directional glyph artwork uses the vertical image axis.
+                axisX = SIMD2<Float>(
                     segment.direction.y,
-                    segment.direction.x
+                    -segment.direction.x
+                )
+                axisY = segment.direction
+                rotation = atan2(
+                    -segment.direction.x,
+                    segment.direction.y
                 )
             } else {
                 let angle = Float.random(
