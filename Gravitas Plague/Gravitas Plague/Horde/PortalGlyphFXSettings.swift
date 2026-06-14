@@ -21,17 +21,17 @@ enum PortalGlyphFXSettings {
     static let fallbackMaxDistanceFromBorderMeters: Float =
         fallbackMaxDistanceFromBorderFeet * feetToMeters
 
-    /// Directional glyphs sit directly against the border.
-    static let directionalBorderJitterMeters: Float = 0.015
-
     /// General glyphs may be on-border or outside; strict pass targets 2ft.
     static let generalBorderProbability: Float = 0.48
 
     static let candidateAttemptsPerGlyph = 128
     static let fallbackCandidateAttemptsPerGlyph = 64
 
-    static let wallGlyphCountPerSegmentRange = 5...11
-    static let maxFreeGlyphsPerSegment = 3
+    /// Hard total cap per non-bottom portal line.
+    static let maxWallGlyphsPerSegment = 3
+
+    /// Try to put at least this many on each non-bottom line.
+    static let minWallGlyphsPerSegmentWhenPossible = 1
 
     /// Exactly one floor glyph per portal.
     static let floorGlyphCountPerPortal = 1

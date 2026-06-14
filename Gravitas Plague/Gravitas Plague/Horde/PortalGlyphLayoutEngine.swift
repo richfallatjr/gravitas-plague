@@ -9,7 +9,6 @@ enum PortalGlyphLayoutEngine {
         library: PortalGlyphAssetLibrary
     ) -> [PortalGlyphPlacement] {
         var rng = SeededRNG(seed: seed)
-        var context = PortalGlyphLayoutContext()
         let allSegments = buildPerimeterSegments(
             perimeterPoints
         )
@@ -22,6 +21,7 @@ enum PortalGlyphLayoutEngine {
 
         var placements: [PortalGlyphPlacement] = []
         var occupied: [PortalGlyphOBB] = []
+        var context = PortalGlyphLayoutContext()
 
         if let circlePlacement = generateSingleCirclePlacement(
             wallSegments: wallSegments,
@@ -32,91 +32,99 @@ enum PortalGlyphLayoutEngine {
         ) {
             placements.append(circlePlacement)
             occupied.append(circlePlacement.obb)
+
+            if let segmentIndex = circlePlacement.sourceSegmentIndex {
+                context.incrementWallCount(
+                    for: segmentIndex
+                )
+            }
+
+            context.markUsed(
+                circlePlacement.asset,
+                segmentIndex: circlePlacement.sourceSegmentIndex
+            )
+            context.circleGlyphCount += 1
         }
 
         for segment in wallSegments {
-            let count = Int.random(
-                in: PortalGlyphFXSettings.wallGlyphCountPerSegmentRange,
-                using: &rng
-            )
+            guard context.hasCapacityOnLine(
+                segment.index
+            ) else {
+                continue
+            }
 
-            let assets = pickWallAssets(
-                count: count,
-                segmentIndex: segment.index,
+            if context.wallCount(for: segment.index) >=
+                PortalGlyphFXSettings.minWallGlyphsPerSegmentWhenPossible {
+                continue
+            }
+
+            guard let placement = placeOneGlyphOnSegment(
+                segment: segment,
+                allWallSegments: wallSegments,
                 library: library,
+                occupied: occupied,
                 context: context,
-                rng: &rng
+                rng: &rng,
+                preferDirectional: true
+            ) else {
+                print(
+                    """
+                    [PortalGlyphs] line minimum placement skipped
+                      segment: \(segment.index)
+                      reason: no_valid_candidate
+                      hardFail: false
+                    """
+                )
+                continue
+            }
+
+            placements.append(placement)
+            occupied.append(placement.obb)
+
+            context.incrementWallCount(
+                for: segment.index
             )
+            context.markUsed(
+                placement.asset,
+                segmentIndex: placement.sourceSegmentIndex
+            )
+        }
 
-            for asset in assets {
-                guard context.canUse(
-                    asset,
-                    segmentIndex: segment.index
-                ) else {
-                    if asset.kind == .directional {
-                        print(
-                            """
-                            [PortalGlyphs] skipped directional duplicate on same line
-                              file: \(asset.fileName)
-                              segment: \(segment.index)
-                            """
-                        )
-                    } else {
-                        print(
-                            """
-                            [PortalGlyphs] skipped glyph due to duplicate rule
-                              file: \(asset.fileName)
-                              kind: \(asset.kind.rawValue)
-                              segment: \(segment.index)
-                              directionalDuplicatesAllowedAcrossPortal: true
-                              directionalDuplicatesAllowedOnSameLine: false
-                              nonDirectionalDuplicatesAllowed: false
-                            """
-                        )
-                    }
-                    continue
-                }
-
-                if asset.kind == .free,
-                   context.freeCount(for: segment.index) >= PortalGlyphFXSettings.maxFreeGlyphsPerSegment {
-                    print(
-                        """
-                        [PortalGlyphs] skipped free glyph
-                          file: \(asset.fileName)
-                          segment: \(segment.index)
-                          reason: free_limit_per_segment
-                          limit: \(PortalGlyphFXSettings.maxFreeGlyphsPerSegment)
-                        """
-                    )
-                    continue
-                }
-
-                if let placement = placeWallGlyph(
-                    asset: asset,
+        for segment in wallSegments {
+            while context.hasCapacityOnLine(
+                segment.index
+            ) {
+                guard let placement = placeOneGlyphOnSegment(
                     segment: segment,
                     allWallSegments: wallSegments,
+                    library: library,
                     occupied: occupied,
-                    rng: &rng
-                ) {
-                    placements.append(placement)
-                    occupied.append(placement.obb)
-                    context.markUsed(
-                        asset,
-                        segmentIndex: segment.index
-                    )
-
-                    if asset.kind == .free {
-                        context.incrementFreeCount(
-                            for: segment.index
-                        )
-                    }
+                    context: context,
+                    rng: &rng,
+                    preferDirectional: false
+                ) else {
+                    break
                 }
+
+                placements.append(placement)
+                occupied.append(placement.obb)
+
+                context.incrementWallCount(
+                    for: segment.index
+                )
+                context.markUsed(
+                    placement.asset,
+                    segmentIndex: placement.sourceSegmentIndex
+                )
             }
         }
 
-        validateGlyphDuplicateRules(
+        validateLineBudgets(
             placements: placements,
-            context: context
+            wallSegments: wallSegments
+        )
+        validateNonDirectionalUniqueness(
+            placements: placements
         )
 
         let directionalCount = placements.filter {
@@ -131,16 +139,15 @@ enum PortalGlyphLayoutEngine {
             $0.asset.kind == .circle
         }
         .count
+        let lineCounts = wallSegments.map { segment in
+            let count = placements.filter {
+                $0.sourceSegmentIndex == segment.index
+            }
+            .count
 
-        if circleCount > PortalGlyphFXSettings.maxCircleGlyphsPerPortal {
-            fatalError(
-                """
-                [PortalGlyphs] more than one circle glyph generated
-                  count: \(circleCount)
-                  maxAllowed: \(PortalGlyphFXSettings.maxCircleGlyphsPerPortal)
-                """
-            )
+            return "\(segment.index):\(count)"
         }
+        .joined(separator: ", ")
 
         let minY = perimeterPoints.map(\.y).min() ?? 0
 
@@ -164,7 +171,7 @@ enum PortalGlyphLayoutEngine {
         print(
             """
             [PortalGlyphs] wall placements generated
-              mode: border_constrained_cloud
+              mode: segment_budgeted_border_cloud
               wallSegments: \(wallSegments.count)
               bottomSegmentsSkipped: \(bottomSegments.count)
               placements: \(placements.count)
@@ -172,12 +179,12 @@ enum PortalGlyphLayoutEngine {
               freeCount: \(freeCount)
               circleCount: \(circleCount)
               circleLimit: \(PortalGlyphFXSettings.maxCircleGlyphsPerPortal)
-              maxFreePerSegment: \(PortalGlyphFXSettings.maxFreeGlyphsPerSegment)
-              directionalOnBordersOnly: true
-              generalOnBorderOrOutside: true
+              maxPerLine: \(PortalGlyphFXSettings.maxWallGlyphsPerSegment)
+              minPerLineAttempted: \(PortalGlyphFXSettings.minWallGlyphsPerSegmentWhenPossible)
+              lineCounts: \(lineCounts)
               directionalDuplicatesAcrossPortal: allowed
               directionalDuplicatesPerLine: forbidden
-              nonDirectionalDuplicatesPerPortal: forbidden
+              freeDuplicatesPerPortal: forbidden
               bottomLineDirectionalGlyphs: false
               bottomLineFreeGlyphs: false
               targetMaxDistanceFromBorderFeet: \(PortalGlyphFXSettings.targetMaxDistanceFromBorderFeet)
@@ -297,6 +304,46 @@ enum PortalGlyphSegmentKind: String {
     case bottomFloorOnly
 }
 
+extension PortalGlyphLayoutEngine {
+    static func validateCombinedPortalRules(
+        placements: [PortalGlyphPlacement]
+    ) {
+        validateNonDirectionalUniqueness(
+            placements: placements
+        )
+
+        let floorCount = placements.filter {
+            $0.asset.kind == .floor
+        }
+        .count
+
+        if floorCount > PortalGlyphFXSettings.floorGlyphCountPerPortal {
+            fatalError(
+                """
+                [PortalGlyphs] too many floor glyphs
+                  count: \(floorCount)
+                  maxAllowed: \(PortalGlyphFXSettings.floorGlyphCountPerPortal)
+                """
+            )
+        }
+
+        let circleCount = placements.filter {
+            $0.asset.kind == .circle
+        }
+        .count
+
+        if circleCount > PortalGlyphFXSettings.maxCircleGlyphsPerPortal {
+            fatalError(
+                """
+                [PortalGlyphs] too many circle glyphs
+                  count: \(circleCount)
+                  maxAllowed: \(PortalGlyphFXSettings.maxCircleGlyphsPerPortal)
+                """
+            )
+        }
+    }
+}
+
 private struct GlyphSegment {
     let index: Int
     let a: SIMD2<Float>
@@ -311,9 +358,27 @@ private struct GlyphSegment {
 private struct PortalGlyphLayoutContext {
     var usedNonDirectionalAssetIDs = Set<String>()
     var usedDirectionalAssetIDsBySegmentIndex: [Int: Set<String>] = [:]
-    var freeGlyphCountBySegmentIndex: [Int: Int] = [:]
+    var wallGlyphCountBySegmentIndex: [Int: Int] = [:]
     var circleGlyphCount = 0
     var floorGlyphCount = 0
+
+    func wallCount(
+        for segmentIndex: Int
+    ) -> Int {
+        wallGlyphCountBySegmentIndex[segmentIndex] ?? 0
+    }
+
+    func hasCapacityOnLine(
+        _ segmentIndex: Int
+    ) -> Bool {
+        wallCount(for: segmentIndex) < PortalGlyphFXSettings.maxWallGlyphsPerSegment
+    }
+
+    mutating func incrementWallCount(
+        for segmentIndex: Int
+    ) {
+        wallGlyphCountBySegmentIndex[segmentIndex, default: 0] += 1
+    }
 
     func canUse(
         _ asset: PortalGlyphAsset,
@@ -352,27 +417,91 @@ private struct PortalGlyphLayoutContext {
             usedNonDirectionalAssetIDs.insert(asset.id)
         }
     }
-
-    func freeCount(
-        for segmentIndex: Int
-    ) -> Int {
-        freeGlyphCountBySegmentIndex[segmentIndex] ?? 0
-    }
-
-    mutating func incrementFreeCount(
-        for segmentIndex: Int
-    ) {
-        freeGlyphCountBySegmentIndex[segmentIndex, default: 0] += 1
-    }
 }
 
 private extension PortalGlyphLayoutEngine {
-    static func pickWallAssets(
-        count: Int,
+    static func placeOneGlyphOnSegment(
+        segment: GlyphSegment,
+        allWallSegments: [GlyphSegment],
+        library: PortalGlyphAssetLibrary,
+        occupied: [PortalGlyphOBB],
+        context: PortalGlyphLayoutContext,
+        rng: inout SeededRNG,
+        preferDirectional: Bool
+    ) -> PortalGlyphPlacement? {
+        guard context.hasCapacityOnLine(
+            segment.index
+        ) else {
+            print(
+                """
+                [PortalGlyphs] line capacity reached
+                  segment: \(segment.index)
+                  maxPerLine: \(PortalGlyphFXSettings.maxWallGlyphsPerSegment)
+                """
+            )
+            return nil
+        }
+
+        let candidates = candidateAssetsForSegment(
+            segmentIndex: segment.index,
+            library: library,
+            context: context,
+            rng: &rng,
+            preferDirectional: preferDirectional
+        )
+
+        for asset in candidates {
+            guard context.canUse(
+                asset,
+                segmentIndex: segment.index
+            ) else {
+                continue
+            }
+
+            let placement: PortalGlyphPlacement?
+
+            switch asset.kind {
+            case .directional:
+                placement = placeDirectionalGlyphOnBorder(
+                    asset: asset,
+                    segment: segment,
+                    occupied: occupied,
+                    rng: &rng
+                )
+
+            case .free:
+                placement = placeGeneralGlyphNearBorder(
+                    asset: asset,
+                    segment: segment,
+                    allWallSegments: allWallSegments,
+                    occupied: occupied,
+                    rng: &rng
+                )
+
+            case .circle, .floor:
+                fatalError(
+                    """
+                    [PortalGlyphs] invalid asset in normal segment placement
+                      file: \(asset.fileName)
+                      kind: \(asset.kind.rawValue)
+                    """
+                )
+            }
+
+            if let placement {
+                return placement
+            }
+        }
+
+        return nil
+    }
+
+    static func candidateAssetsForSegment(
         segmentIndex: Int,
         library: PortalGlyphAssetLibrary,
         context: PortalGlyphLayoutContext,
-        rng: inout SeededRNG
+        rng: inout SeededRNG,
+        preferDirectional: Bool
     ) -> [PortalGlyphAsset] {
         let usedDirectionalOnThisLine =
             context.usedDirectionalAssetIDsBySegmentIndex[segmentIndex] ?? []
@@ -381,146 +510,89 @@ private extension PortalGlyphLayoutEngine {
             $0.kind == .directional &&
             !usedDirectionalOnThisLine.contains($0.id)
         }
-        let general = library.free.filter {
+
+        let free = library.free.filter {
             $0.kind == .free &&
             !context.usedNonDirectionalAssetIDs.contains($0.id)
         }
 
-        guard !directional.isEmpty || !general.isEmpty else {
-            print(
-                """
-                [PortalGlyphs] no wall assets available for segment
-                  segment: \(segmentIndex)
-                  directionalUniqueForLine: false
-                  generalUniqueForPortal: false
-                """
+        var ordered: [PortalGlyphAsset] = []
+
+        if preferDirectional {
+            ordered.append(
+                contentsOf: shuffled(
+                    directional,
+                    rng: &rng
+                )
             )
-            return []
-        }
-
-        var out: [PortalGlyphAsset] = []
-        var localDirectionalUsed = Set<String>()
-        var localGeneralUsed = Set<String>()
-
-        var freeRemainingForSegment = max(
-            0,
-            PortalGlyphFXSettings.maxFreeGlyphsPerSegment -
-            context.freeCount(for: segmentIndex)
-        )
-
-        for index in 0..<count {
-            let preferDirectional =
-                index < count / 2 ||
-                freeRemainingForSegment <= 0 ||
+            ordered.append(
+                contentsOf: shuffled(
+                    free,
+                    rng: &rng
+                )
+            )
+        } else {
+            let useDirectionalFirst =
                 Float.random(
                     in: 0...1,
                     using: &rng
                 ) < PortalGlyphFXSettings.directionalPreference
 
-            if preferDirectional {
-                let used =
-                    usedDirectionalOnThisLine.union(localDirectionalUsed)
-
-                if let asset = directional.randomElementExcluding(
-                    usedIDs: used,
-                    rng: &rng
-                ) {
-                    out.append(asset)
-                    localDirectionalUsed.insert(asset.id)
-                    continue
-                }
-            }
-
-            if freeRemainingForSegment > 0 {
-                let used =
-                    context.usedNonDirectionalAssetIDs.union(localGeneralUsed)
-
-                if let asset = general.randomElementExcluding(
-                    usedIDs: used,
-                    rng: &rng
-                ) {
-                    out.append(asset)
-                    localGeneralUsed.insert(asset.id)
-                    freeRemainingForSegment -= 1
-                    continue
-                }
-            }
-
-            let directionalUsed =
-                usedDirectionalOnThisLine.union(localDirectionalUsed)
-
-            if let asset = directional.randomElementExcluding(
-                usedIDs: directionalUsed,
-                rng: &rng
-            ) {
-                out.append(asset)
-                localDirectionalUsed.insert(asset.id)
-                continue
-            }
-        }
-
-        for asset in out {
-            if asset.kind == .floor || asset.kind == .circle {
-                fatalError(
-                    """
-                    [PortalGlyphs] INVALID ASSET SELECTED FOR NORMAL WALL PASS
-                      file: \(asset.fileName)
-                      kind: \(asset.kind.rawValue)
-                    """
+            if useDirectionalFirst {
+                ordered.append(
+                    contentsOf: shuffled(
+                        directional,
+                        rng: &rng
+                    )
+                )
+                ordered.append(
+                    contentsOf: shuffled(
+                        free,
+                        rng: &rng
+                    )
+                )
+            } else {
+                ordered.append(
+                    contentsOf: shuffled(
+                        free,
+                        rng: &rng
+                    )
+                )
+                ordered.append(
+                    contentsOf: shuffled(
+                        directional,
+                        rng: &rng
+                    )
                 )
             }
         }
 
-        let freePicked = out.filter {
-            $0.kind == .free
-        }
-        .count
-
-        if freePicked > PortalGlyphFXSettings.maxFreeGlyphsPerSegment {
-            fatalError(
-                """
-                [PortalGlyphs] too many free glyphs selected for segment
-                  segment: \(segmentIndex)
-                  freePicked: \(freePicked)
-                  max: \(PortalGlyphFXSettings.maxFreeGlyphsPerSegment)
-                """
-            )
-        }
-
-        let directionalIDs = out
-            .filter {
-                $0.kind == .directional
-            }
-            .map(\.id)
-
-        if Set(directionalIDs).count != directionalIDs.count {
-            fatalError(
-                """
-                [PortalGlyphs] duplicate directional selected on same line
-                  segment: \(segmentIndex)
-                  rule: directional_duplicates_allowed_across_portal_not_per_line
-                """
-            )
-        }
-
-        return out
+        return ordered
     }
-}
 
-private extension Array where Element == PortalGlyphAsset {
-    func randomElementExcluding(
-        usedIDs: Set<String>,
+    static func shuffled(
+        _ input: [PortalGlyphAsset],
         rng: inout SeededRNG
-    ) -> PortalGlyphAsset? {
-        let available = filter {
-            !usedIDs.contains($0.id)
+    ) -> [PortalGlyphAsset] {
+        var result = input
+
+        guard result.count > 1 else {
+            return result
         }
 
-        guard !available.isEmpty else {
-            return nil
+        for index in result.indices.reversed() {
+            let swapIndex = Int.random(
+                in: 0...index,
+                using: &rng
+            )
+
+            result.swapAt(
+                index,
+                swapIndex
+            )
         }
 
-        return available.randomElement(using: &rng)
+        return result
     }
 }
 
@@ -532,6 +604,10 @@ private extension PortalGlyphLayoutEngine {
         context: inout PortalGlyphLayoutContext,
         rng: inout SeededRNG
     ) -> PortalGlyphPlacement? {
+        guard context.circleGlyphCount < PortalGlyphFXSettings.maxCircleGlyphsPerPortal else {
+            return nil
+        }
+
         let availableCircles = library.circle.filter {
             $0.kind == .circle &&
             context.canUse(
@@ -560,11 +636,17 @@ private extension PortalGlyphLayoutEngine {
             fatalError("[PortalGlyphs] non-circle asset in circle pool")
         }
 
-        guard !wallSegments.isEmpty else {
+        let eligibleSegments = wallSegments.filter {
+            context.hasCapacityOnLine(
+                $0.index
+            )
+        }
+
+        guard !eligibleSegments.isEmpty else {
             return nil
         }
 
-        let preferredSegments = wallSegments.sorted {
+        let preferredSegments = eligibleSegments.sorted {
             $0.midpoint.y > $1.midpoint.y
         }
 
@@ -577,11 +659,6 @@ private extension PortalGlyphLayoutEngine {
             attempts: PortalGlyphFXSettings.candidateAttemptsPerGlyph,
             passLabel: "strict_2ft"
         ) {
-            context.markUsed(
-                strict.asset,
-                segmentIndex: nil
-            )
-            context.circleGlyphCount += 1
             return strict
         }
 
@@ -594,11 +671,6 @@ private extension PortalGlyphLayoutEngine {
             attempts: PortalGlyphFXSettings.fallbackCandidateAttemptsPerGlyph,
             passLabel: "soft_fallback"
         ) {
-            context.markUsed(
-                fallback.asset,
-                segmentIndex: nil
-            )
-            context.circleGlyphCount += 1
             return fallback
         }
 
@@ -861,11 +933,7 @@ private extension PortalGlyphLayoutEngine {
 
             let center =
                 edgePoint +
-                segment.outward * borderRadius +
-                segment.outward * Float.random(
-                    in: 0...PortalGlyphFXSettings.directionalBorderJitterMeters,
-                    using: &rng
-                )
+                segment.outward * borderRadius
 
             let obb = PortalGlyphOBB(
                 center: center,
@@ -1210,9 +1278,77 @@ private extension PortalGlyphLayoutEngine {
         )
     }
 
-    static func validateGlyphDuplicateRules(
+    static func validateLineBudgets(
         placements: [PortalGlyphPlacement],
-        context: PortalGlyphLayoutContext
+        wallSegments: [GlyphSegment]
+    ) {
+        let wallSegmentIDs = Set(
+            wallSegments.map(\.index)
+        )
+
+        let grouped = Dictionary(
+            grouping: placements.filter {
+                $0.surface == .wall &&
+                $0.sourceSegmentIndex != nil
+            },
+            by: {
+                $0.sourceSegmentIndex!
+            }
+        )
+
+        for (segmentIndex, glyphs) in grouped {
+            guard wallSegmentIDs.contains(
+                segmentIndex
+            ) else {
+                continue
+            }
+
+            if glyphs.count > PortalGlyphFXSettings.maxWallGlyphsPerSegment {
+                fatalError(
+                    """
+                    [PortalGlyphs] TOO MANY GLYPHS ON ONE LINE
+                      segment: \(segmentIndex)
+                      count: \(glyphs.count)
+                      maxAllowed: \(PortalGlyphFXSettings.maxWallGlyphsPerSegment)
+                      files: \(glyphs.map { $0.asset.fileName }.joined(separator: ", "))
+                    """
+                )
+            }
+
+            let directionalIDs = glyphs
+                .filter {
+                    $0.asset.kind == .directional
+                }
+                .map(\.asset.id)
+
+            if Set(directionalIDs).count != directionalIDs.count {
+                fatalError(
+                    """
+                    [PortalGlyphs] duplicate directional glyph on same line
+                      segment: \(segmentIndex)
+                      files: \(glyphs.map { $0.asset.fileName }.joined(separator: ", "))
+                    """
+                )
+            }
+        }
+
+        for segment in wallSegments {
+            let count = grouped[segment.index]?.count ?? 0
+
+            if count == 0 {
+                print(
+                    """
+                    [PortalGlyphs] WARNING no glyphs placed on non-floor line
+                      segment: \(segment.index)
+                      hardFail: false
+                    """
+                )
+            }
+        }
+    }
+
+    static func validateNonDirectionalUniqueness(
+        placements: [PortalGlyphPlacement]
     ) {
         let nonDirectional = placements.filter {
             $0.asset.kind == .free ||
@@ -1220,60 +1356,14 @@ private extension PortalGlyphLayoutEngine {
             $0.asset.kind == .floor
         }
 
-        let nonDirectionalIDs = nonDirectional.map(\.asset.id)
+        let ids = nonDirectional.map(\.asset.id)
 
-        if Set(nonDirectionalIDs).count != nonDirectionalIDs.count {
+        if Set(ids).count != ids.count {
             fatalError(
                 """
-                [PortalGlyphs] duplicate non-directional glyph assets detected
-                  rule: free_circle_floor_no_duplicates_per_portal
-                """
-            )
-        }
-
-        let directionalBySegment =
-            Dictionary(grouping: placements.filter { $0.asset.kind == .directional }) {
-                $0.sourceSegmentIndex ?? -1
-            }
-
-        for (segmentIndex, glyphs) in directionalBySegment {
-            let ids = glyphs.map(\.asset.id)
-
-            if Set(ids).count != ids.count {
-                fatalError(
-                    """
-                    [PortalGlyphs] duplicate directional glyphs on same segment
-                      segment: \(segmentIndex)
-                      rule: directional_duplicates_allowed_across_portal_not_per_line
-                    """
-                )
-            }
-        }
-
-        let freeBySegment =
-            Dictionary(grouping: placements.filter { $0.asset.kind == .free }) {
-                $0.sourceSegmentIndex ?? -1
-            }
-
-        for (segmentIndex, glyphs) in freeBySegment {
-            if glyphs.count > PortalGlyphFXSettings.maxFreeGlyphsPerSegment {
-                fatalError(
-                    """
-                    [PortalGlyphs] too many free glyphs on segment
-                      segment: \(segmentIndex)
-                      count: \(glyphs.count)
-                      max: \(PortalGlyphFXSettings.maxFreeGlyphsPerSegment)
-                    """
-                )
-            }
-        }
-
-        if context.circleGlyphCount > PortalGlyphFXSettings.maxCircleGlyphsPerPortal {
-            fatalError(
-                """
-                [PortalGlyphs] too many circle glyphs in context
-                  count: \(context.circleGlyphCount)
-                  max: \(PortalGlyphFXSettings.maxCircleGlyphsPerPortal)
+                [PortalGlyphs] duplicate non-directional glyph detected
+                  files: \(nonDirectional.map { $0.asset.fileName }.joined(separator: ", "))
+                  rule: free_circle_floor_unique_per_portal
                 """
             )
         }

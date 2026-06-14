@@ -42,6 +42,7 @@ final class PortalGlyphFXController {
             seed: seed,
             library: library
         )
+        var floorPlacements: [PortalGlyphPlacement] = []
 
         for placement in wallPlacements {
             let entity = PortalGlyphDecalFactory.makeWallGlyph(
@@ -61,7 +62,7 @@ final class PortalGlyphFXController {
                 relativeTo: nil
             )
 
-            let floorPlacements = PortalGlyphLayoutEngine.generateFloorPlacementsFromBottomLine(
+            floorPlacements = PortalGlyphLayoutEngine.generateFloorPlacementsFromBottomLine(
                 perimeterPoints: perimeterLocalPoints,
                 seed: seed,
                 library: library
@@ -119,6 +120,10 @@ final class PortalGlyphFXController {
                 """
             )
         }
+
+        PortalGlyphLayoutEngine.validateCombinedPortalRules(
+            placements: wallPlacements + floorPlacements
+        )
 
         print(
             """
