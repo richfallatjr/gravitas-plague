@@ -123,6 +123,9 @@ enum PortalGlyphLayoutEngine {
             placements: placements,
             wallSegments: wallSegments
         )
+        validateAspectPreserved(
+            placements: placements
+        )
         validateWallGlyphOrientationRules(
             placements: placements
         )
@@ -344,6 +347,10 @@ extension PortalGlyphLayoutEngine {
                 """
             )
         }
+
+        validateAspectPreserved(
+            placements: placements
+        )
     }
 }
 
@@ -745,15 +752,10 @@ private extension PortalGlyphLayoutEngine {
             )
         }
 
-        let rawSize = asset.physicalSizeMeters()
-        let side = max(
-            rawSize.x,
-            rawSize.y
-        )
-        let size = SIMD2<Float>(
-            side,
-            side
-        )
+        let size = asset.physicalSizeMeters()
+        let axisX = PortalGlyphWallAxes.xRight
+        let axisY = PortalGlyphWallAxes.yUp
+        let angle = PortalGlyphWallAxes.yUpRotationRadians
 
         var best: PortalGlyphPlacement?
         var bestScore = Float.greatestFiniteMagnitude
@@ -781,13 +783,16 @@ private extension PortalGlyphLayoutEngine {
                     1.65
                 ) * maxDistance
 
+            let radiusAway = projectedRadius(
+                size: size,
+                axisX: axisX,
+                axisY: axisY,
+                along: segment.outward
+            )
+
             let center =
                 edgePoint +
-                segment.outward * (size.y * 0.5 + outwardExtra)
-
-            let axisX = PortalGlyphWallAxes.xRight
-            let axisY = PortalGlyphWallAxes.yUp
-            let angle = PortalGlyphWallAxes.yUpRotationRadians
+                segment.outward * (radiusAway + outwardExtra)
 
             let obb = PortalGlyphOBB(
                 center: center,
@@ -815,13 +820,20 @@ private extension PortalGlyphLayoutEngine {
                 point: center,
                 segments: segments
             )
+            let awayDirection = normalizeSafe2(
+                center - nearestBorderPoint,
+                fallback: segment.outward
+            )
+            let outerRadius = projectedRadius(
+                size: size,
+                axisX: axisX,
+                axisY: axisY,
+                along: awayDirection
+            )
 
             let outerDistance =
                 distanceToBorder +
-                projectedRadiusAlong(
-                    obb: obb,
-                    direction: center - nearestBorderPoint
-                )
+                outerRadius
 
             guard outerDistance <= maxDistance else {
                 continue
@@ -926,21 +938,16 @@ private extension PortalGlyphLayoutEngine {
                 fallback: segment.direction
             )
 
-            let provisionalOBB = PortalGlyphOBB(
-                center: edgePoint,
+            let radiusAway = projectedRadius(
+                size: size,
                 axisX: axisX,
                 axisY: axisY,
-                halfSize: size * 0.5
-            )
-
-            let borderRadius = projectedRadiusAlong(
-                obb: provisionalOBB,
-                direction: segment.outward
+                along: segment.outward
             )
 
             let center =
                 edgePoint +
-                segment.outward * borderRadius
+                segment.outward * radiusAway
 
             let obb = PortalGlyphOBB(
                 center: center,
@@ -965,13 +972,25 @@ private extension PortalGlyphLayoutEngine {
                 a: segment.a,
                 b: segment.b
             )
+            let nearest = nearestPointOnSegment(
+                point: center,
+                a: segment.a,
+                b: segment.b
+            )
+            let awayDirection = normalizeSafe2(
+                center - nearest,
+                fallback: segment.outward
+            )
+            let outerRadius = projectedRadius(
+                size: size,
+                axisX: axisX,
+                axisY: axisY,
+                along: awayDirection
+            )
 
             let outerDistance =
                 distanceFromBorder +
-                projectedRadiusAlong(
-                    obb: obb,
-                    direction: segment.outward
-                )
+                outerRadius
 
             guard outerDistance <= PortalGlyphFXSettings.targetMaxDistanceFromBorderMeters else {
                 continue
@@ -1074,15 +1093,10 @@ private extension PortalGlyphLayoutEngine {
             )
         }
 
-        let rawSize = asset.physicalSizeMeters()
-        let side = max(
-            rawSize.x,
-            rawSize.y
-        )
-        let size = SIMD2<Float>(
-            side,
-            side
-        )
+        let size = asset.physicalSizeMeters()
+        let axisX = PortalGlyphWallAxes.xRight
+        let axisY = PortalGlyphWallAxes.yUp
+        let rotation = PortalGlyphWallAxes.yUpRotationRadians
 
         var best: PortalGlyphPlacement?
         var bestScore = Float.greatestFiniteMagnitude
@@ -1124,14 +1138,17 @@ private extension PortalGlyphLayoutEngine {
                     using: &rng
                 )
 
+            let radiusAway = projectedRadius(
+                size: size,
+                axisX: axisX,
+                axisY: axisY,
+                along: segment.outward
+            )
+
             let center =
                 edgePoint +
-                segment.outward * (size.y * 0.5 + outwardExtra) +
+                segment.outward * (radiusAway + outwardExtra) +
                 tangentJitter
-
-            let axisX = PortalGlyphWallAxes.xRight
-            let axisY = PortalGlyphWallAxes.yUp
-            let rotation = PortalGlyphWallAxes.yUpRotationRadians
 
             let obb = PortalGlyphOBB(
                 center: center,
@@ -1155,16 +1172,24 @@ private extension PortalGlyphLayoutEngine {
                 point: center,
                 segments: allWallSegments
             )
+            let nearest = nearestPointOnAnySegment(
+                point: center,
+                segments: allWallSegments
+            )
+            let awayDirection = normalizeSafe2(
+                center - nearest,
+                fallback: segment.outward
+            )
+            let outerRadius = projectedRadius(
+                size: size,
+                axisX: axisX,
+                axisY: axisY,
+                along: awayDirection
+            )
 
             let outerDistance =
                 distanceToNearestBorder +
-                projectedRadiusAlong(
-                    obb: obb,
-                    direction: center - nearestPointOnAnySegment(
-                        point: center,
-                        segments: allWallSegments
-                    )
-                )
+                outerRadius
 
             guard outerDistance <= maxDistance else {
                 continue
@@ -1369,6 +1394,33 @@ private extension PortalGlyphLayoutEngine {
         }
     }
 
+    static func validateAspectPreserved(
+        placements: [PortalGlyphPlacement]
+    ) {
+        for placement in placements {
+            let expected = placement.asset.physicalSizeMeters()
+            let dx = abs(
+                expected.x - placement.size.x
+            )
+            let dy = abs(
+                expected.y - placement.size.y
+            )
+
+            if dx > 0.0001 || dy > 0.0001 {
+                fatalError(
+                    """
+                    [PortalGlyphs] ASPECT/SIZE CHANGED AT RUNTIME
+                      file: \(placement.asset.fileName)
+                      kind: \(placement.asset.kind.rawValue)
+                      expectedSize: \(expected)
+                      placementSize: \(placement.size)
+                      rule: preserve_source_png_aspect
+                    """
+                )
+            }
+        }
+    }
+
     static func validateWallGlyphOrientationRules(
         placements: [PortalGlyphPlacement]
     ) {
@@ -1475,9 +1527,11 @@ private extension PortalGlyphLayoutEngine {
         )
     }
 
-    static func projectedRadiusAlong(
-        obb: PortalGlyphOBB,
-        direction: SIMD2<Float>
+    static func projectedRadius(
+        size: SIMD2<Float>,
+        axisX: SIMD2<Float>,
+        axisY: SIMD2<Float>,
+        along direction: SIMD2<Float>
     ) -> Float {
         let normalizedDirection = normalizeSafe2(
             direction,
@@ -1486,16 +1540,16 @@ private extension PortalGlyphLayoutEngine {
 
         return abs(
             simd_dot(
-                obb.axisX,
+                axisX,
                 normalizedDirection
             )
-        ) * obb.halfSize.x +
+        ) * size.x * 0.5 +
         abs(
             simd_dot(
-                obb.axisY,
+                axisY,
                 normalizedDirection
             )
-        ) * obb.halfSize.y
+        ) * size.y * 0.5
     }
 }
 

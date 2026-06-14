@@ -53,14 +53,22 @@ enum PortalGlyphDecalFactory {
 
         let rotationDegrees =
             placement.rotationRadians * 180.0 / Float.pi
+        let aspect =
+            placement.size.x / max(
+                placement.size.y,
+                0.0001
+            )
 
         print(
             """
             [PortalGlyphs] wall glyph entity created
               file: \(placement.asset.fileName)
               kind: \(placement.asset.kind.rawValue)
+              sizeMeters: \(placement.size)
+              aspect: \(aspect)
               rotationDegrees: \(rotationDegrees)
               orientationPolicy: \(placement.asset.orientationPolicy.rawValue)
+              aspectPreserved: true
             """
         )
 

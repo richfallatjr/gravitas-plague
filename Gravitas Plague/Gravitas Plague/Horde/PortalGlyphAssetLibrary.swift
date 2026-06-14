@@ -24,7 +24,9 @@ struct PortalGlyphAsset: Identifiable {
     var aspect: Float {
         Float(pixelWidth) / Float(max(pixelHeight, 1))
     }
+}
 
+extension PortalGlyphAsset {
     func physicalSizeMeters() -> SIMD2<Float> {
         let widthFeet =
             Float(pixelWidth) / PortalGlyphFXSettings.pixelsPerFoot
@@ -229,12 +231,18 @@ final class PortalGlyphAssetLibrary {
             texture: texture
         )
 
+        let aspect =
+            Float(width) / Float(max(height, 1))
+
         print(
             """
             [PortalGlyphs] loaded glyph
               file: \(fileName)
               kind: \(kind.rawValue)
               pixels: \(width)x\(height)
+              aspect: \(aspect)
+              physicalSizeMeters: \(asset.physicalSizeMeters())
+              aspectPreserved: true
               maskRule: white_opaque_black_transparent
               colorSource: material_constant
             """
