@@ -46,6 +46,7 @@
 		8E1A104D2FCD000100000001 /* ../kill_switch_x.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A104C2FCD000100000001 /* ../kill_switch_x.png */; };
 		8E1A104E2FCD000100000001 /* GameKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E1A104F2FCD000100000001 /* GameKit.framework */; };
 		8E1A10502FCD000100000001 /* ../trophy_sticker.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10512FCD000100000001 /* ../trophy_sticker.png */; };
+		8E1A10612FCD000100000001 /* Gravitas Plague/PortalGlyphs in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10602FCD000100000001 /* Gravitas Plague/PortalGlyphs */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -108,6 +109,7 @@
 		8E1A104C2FCD000100000001 /* ../kill_switch_x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../kill_switch_x.png; sourceTree = SOURCE_ROOT; };
 		8E1A104F2FCD000100000001 /* GameKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameKit.framework; path = System/Library/Frameworks/GameKit.framework; sourceTree = SDKROOT; };
 		8E1A10512FCD000100000001 /* ../trophy_sticker.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../trophy_sticker.png; sourceTree = SOURCE_ROOT; };
+		8E1A10602FCD000100000001 /* Gravitas Plague/PortalGlyphs */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Gravitas Plague/PortalGlyphs"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -213,6 +215,7 @@
 				8E1A104A2FCD000100000001 /* ../hellscape_groundplane.png */,
 				8E1A104C2FCD000100000001 /* ../kill_switch_x.png */,
 				8E1A10512FCD000100000001 /* ../trophy_sticker.png */,
+				8E1A10602FCD000100000001 /* Gravitas Plague/PortalGlyphs */,
 				8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */,
 				8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */,
 				8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */,
@@ -379,6 +382,7 @@
 				8E1A104B2FCD000100000001 /* ../hellscape_groundplane.png in Resources */,
 				8E1A104D2FCD000100000001 /* ../kill_switch_x.png in Resources */,
 				8E1A10502FCD000100000001 /* ../trophy_sticker.png in Resources */,
+				8E1A10612FCD000100000001 /* Gravitas Plague/PortalGlyphs in Resources */,
 				8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */,
 				8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav in Resources */,
 				8E1A10142FCD000100000001 /* ../Narrow-band-analog.wav in Resources */,

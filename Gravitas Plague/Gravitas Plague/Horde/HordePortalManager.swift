@@ -9,6 +9,7 @@ final class HordePortalManager {
     private var entranceSideByPortalID: [UUID: HordePortalEntranceSide] = [:]
     private var transitionFXByPortalID: [UUID: PortalTransitionFXController] = [:]
     private var groundDiscByPortalID: [UUID: Entity] = [:]
+    private var glyphFXByPortalID: [UUID: PortalGlyphFXController] = [:]
     private let backdropOrientationLock = HordePortalBackdropOrientationLock(
         baseArtYawDegrees: 0
     )
@@ -45,6 +46,11 @@ final class HordePortalManager {
             fx.teardown()
         }
         transitionFXByPortalID.removeAll()
+
+        for fx in glyphFXByPortalID.values {
+            fx.teardown()
+        }
+        glyphFXByPortalID.removeAll()
 
         for ground in groundDiscByPortalID.values {
             ground.removeFromParent()
@@ -337,6 +343,11 @@ final class HordePortalManager {
             relativeTo: nil
         )
 
+        PlagueNativeBloomInstaller.installOnEntity(
+            root,
+            label: "horde_portal_root_glyphs_\(portalID)"
+        )
+
         if let backdropRoot = portalWorld.findEntity(
             named: "HordeHellscapeBackdropRoot"
         ) {
@@ -360,6 +371,30 @@ final class HordePortalManager {
         assertNoEnemyUnderBackdropRoot(
             portalWorld: portalWorld,
             portalID: portalID
+        )
+
+        let glyphFX = PortalGlyphFXController(
+            portalID: portalID,
+            seed: seed ^ UInt64(spawnIndex * 7919) ^ portalID.uuidSeed
+        )
+
+        glyphFX.build(
+            perimeterLocalPoints: perimeterPoints,
+            portalRoot: root,
+            sceneRoot: sceneRoot,
+            floorY: placement.floorWorldY,
+            portalPlacement: placement,
+            portalWidth: placement.width
+        )
+
+        glyphFXByPortalID[portalID] = glyphFX
+
+        print(
+            """
+            [HordePortal] occult glyph FX attached
+              portalID: \(portalID)
+              perimeterPoints: \(perimeterPoints.count)
+            """
         )
 
         sceneRoot.addChild(root)
