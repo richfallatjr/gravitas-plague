@@ -22,7 +22,12 @@ final class HordePortalManager {
         self.wallManager = wallManager
         self.occupancyRegistry = occupancyRegistry
 
-        print("[HordePortal] manager installed")
+        print(
+            """
+            [HordePortal] manager installed
+              occupancyRegistry: true
+            """
+        )
     }
 
     func reset() {
@@ -125,15 +130,27 @@ final class HordePortalManager {
 
         placement = resolvedPlacement
 
-        if occupancyRegistry?.hasHardOverlap(
+        guard let occupancyRegistry else {
+            print(
+                """
+                [HordePortal] FATAL missing occupancy registry after placement
+                  action: block_portal_creation_to_protect_wall_ui
+                """
+            )
+            return nil
+        }
+
+        let finalCandidateRect = wallRect(
+            for: placement
+        ).expanded(
+            by: WallPosterPlacementTuning.portalCandidateExpansionMeters
+        )
+
+        if occupancyRegistry.hasHardOverlap(
             wallID: wall.id,
-            candidate: wallRect(
-                for: placement
-            ).expanded(
-                by: 0.20
-            ),
+            candidate: finalCandidateRect,
             candidateKind: .hordePortal
-        ) == true {
+        ) {
             print(
                 """
                 [HordePortal] final portal placement rejected by wall occupancy
@@ -142,6 +159,7 @@ final class HordePortalManager {
                   wallID: \(wall.id)
                   localX: \(placement.localX)
                   localY: \(placement.localY)
+                  rect: \(finalCandidateRect)
                   action: reuse_existing_portal_instead_of_overlapping_poster
                 """
             )
@@ -439,6 +457,15 @@ final class HordePortalManager {
         guard let wallManager else {
             return nil
         }
+        guard let occupancyRegistry else {
+            print(
+                """
+                [HordePortalPlacement] FATAL missing occupancy registry
+                  action: block_portal_creation_to_protect_wall_ui
+                """
+            )
+            return nil
+        }
         _ = playerForward
 
         let existingCenters = portals.values.map(\.worldCenter)
@@ -484,22 +511,25 @@ final class HordePortalManager {
                     for: placement
                 )
 
-                if occupancyRegistry?.hasHardOverlap(
+                let candidateRect = rect.expanded(
+                    by: WallPosterPlacementTuning.portalCandidateExpansionMeters
+                )
+
+                if occupancyRegistry.hasHardOverlap(
                     wallID: wall.id,
-                    candidate: rect.expanded(
-                        by: 0.20
-                    ),
+                    candidate: candidateRect,
                     candidateKind: .hordePortal
-                ) == true {
+                ) {
                     print(
                         """
-                        [HordePortalPlacement] candidate rejected by wall occupancy
+                        [HordePortalPlacement] rejected candidate
                           wave: \(wave)
                           spawnIndex: \(spawnIndex)
+                          reason: overlaps_wall_poster_or_existing_portal
                           wallID: \(wall.id)
                           localX: \(placement.localX)
                           localY: \(placement.localY)
-                          reason: poster_or_portal_overlap
+                          rect: \(candidateRect)
                         """
                     )
                     continue
@@ -526,16 +556,16 @@ final class HordePortalManager {
                     center,
                     to: existingCenters
                 )
-                let nearestRegisteredPortal = occupancyRegistry?.nearestDistance(
+                let nearestRegisteredPortal = occupancyRegistry.nearestDistance(
                     wallID: wall.id,
                     candidate: rect,
                     kinds: [.hordePortal]
-                ) ?? Float.greatestFiniteMagnitude
-                let posterDistance = occupancyRegistry?.nearestDistance(
+                )
+                let posterDistance = occupancyRegistry.nearestDistance(
                     wallID: wall.id,
                     candidate: rect,
                     kinds: [.wallPoster]
-                ) ?? Float.greatestFiniteMagnitude
+                )
                 let nearestPortalDistance = min(
                     nearestExisting,
                     nearestRegisteredPortal

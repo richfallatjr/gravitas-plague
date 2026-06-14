@@ -711,6 +711,29 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             }
 
             let spawnPose = spatialProvider.currentPoseOrFallback()
+            guard prepareWallPosterBeforeHordePortals(
+                currentPose: spawnPose
+            ) else {
+                hordeRuntimePhase = .waitingForRoomScan
+                hordeWaitingForRoomScan = true
+                hordeRoomScanTracker.begin()
+
+                showInstructionHUD(
+                    "Look around slowly. I need a stable wall for the control panel before the breach can open."
+                )
+
+                print(
+                    """
+                    [Horde] first portal creation blocked
+                      reason: wall_poster_occupancy_not_registered
+                      enemyCreationAllowed: false
+                      action: keep_scanning
+                    """
+                )
+
+                return
+            }
+
             let firstPortal = await hordePortalManager.createPortalForWave(
                 wave: 1,
                 spawnIndex: 0,
@@ -922,6 +945,78 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             root: wallPosterUIController.root
         )
         onWallPosterUIActiveChanged?(true)
+    }
+
+    private func prepareWallPosterBeforeHordePortals(
+        currentPose: PhaseOneSpawnPose
+    ) -> Bool {
+        if wallPosterUIController.isPlaced {
+            wallPosterUIController.lockPlacement()
+
+            guard wallPosterUIController.hasRegisteredOccupancy else {
+                print(
+                    """
+                    [Horde] FATAL portal creation attempted before poster occupancy
+                      action: block_first_portal_creation
+                    """
+                )
+
+                return false
+            }
+
+            print(
+                """
+                [Horde] wall poster ready before portal creation
+                  occupancyRegistered: true
+                """
+            )
+
+            return true
+        }
+
+        let didPlace = wallPosterUIController.placeOnBestWall(
+            playerPosition: currentPose.headPosition,
+            playerForward: currentPose.headForward,
+            force: false
+        )
+
+        guard didPlace else {
+            print(
+                """
+                [WallPosterUI] failed to reserve occupancy before first portal
+                  portalPlacementMayProceed: false
+                """
+            )
+
+            return false
+        }
+
+        wallPosterUIController.lockPlacement()
+
+        guard wallPosterUIController.hasRegisteredOccupancy else {
+            print(
+                """
+                [Horde] ERROR wall poster occupancy not registered
+                  action: block_first_portal_creation
+                """
+            )
+
+            return false
+        }
+
+        forestEnvironmentController.applyIBLReceiverRecursively(
+            root: wallPosterUIController.root
+        )
+        onWallPosterUIActiveChanged?(true)
+
+        print(
+            """
+            [Horde] wall poster ready before portal creation
+              occupancyRegistered: true
+            """
+        )
+
+        return true
     }
 
     private func startHordeBenchmark() async {

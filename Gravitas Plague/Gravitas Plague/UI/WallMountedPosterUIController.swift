@@ -24,6 +24,7 @@ final class WallMountedPosterUIController: ObservableObject {
     private var placementState: WallPosterPlacementState = .notPlaced
     private var lastAppliedPosition: SIMD3<Float>?
     private let posterOccupancyID = UUID()
+    private(set) var hasRegisteredOccupancy = false
 
     var isPlaced: Bool {
         currentPlacement != nil
@@ -141,6 +142,7 @@ final class WallMountedPosterUIController: ObservableObject {
         currentPosterSize = nil
         placementState = .notPlaced
         lastAppliedPosition = nil
+        hasRegisteredOccupancy = false
         posterEntity = nil
         buttonEntities.removeAll()
         root.isEnabled = false
@@ -223,7 +225,24 @@ final class WallMountedPosterUIController: ObservableObject {
         let width = size.x
         let height = size.y
         let floorY = wallManager.bestFloorCandidate(near: wall)?.worldY
-        let desiredWorldY: Float = floorY.map { $0 + 1.35 } ?? wall.center.y
+        let desiredWorldY: Float
+
+        if let floorY {
+            let preferredCenter =
+                floorY + WallPosterPlacementTuning.preferredCenterHeightMeters
+            let minCenter =
+                floorY +
+                WallPosterPlacementTuning.minBottomClearanceMeters +
+                height * 0.5
+
+            desiredWorldY = max(
+                preferredCenter,
+                minCenter
+            )
+        } else {
+            desiredWorldY = wall.center.y
+        }
+
         let desiredLocalY: Float
 
         if abs(wall.up.y) > 0.05 {
@@ -234,51 +253,51 @@ final class WallMountedPosterUIController: ObservableObject {
 
         let maxX = max(
             0,
-            wall.width * 0.5 - width * 0.5 - 0.06
+            wall.width * 0.5 - width * 0.5 - WallPosterPlacementTuning.wallMarginMeters
         )
         let maxY = max(
             0,
-            wall.height * 0.5 - height * 0.5 - 0.06
+            wall.height * 0.5 - height * 0.5 - WallPosterPlacementTuning.wallMarginMeters
+        )
+        let clampedY = min(
+            max(
+                desiredLocalY,
+                -maxY
+            ),
+            maxY
         )
 
         let candidateXs: [Float] = [
             0,
-            -maxX * 0.65,
-            maxX * 0.65,
+            -maxX * 0.55,
+            maxX * 0.55,
             -maxX,
             maxX
-        ]
-        let candidateYs: [Float] = [
-            min(max(desiredLocalY, -maxY), maxY),
-            0,
-            maxY * 0.4,
-            -maxY * 0.4
         ]
 
         var best: (placement: WallPosterPlacement, score: Float)?
 
         for x in candidateXs {
-            for y in candidateYs {
-                let placement = WallPosterPlacement(
-                    wallID: wall.id,
-                    localX: x,
-                    localY: y,
-                    depthOffset: WallPosterMetrics.depthOffset,
-                    width: width,
-                    height: height
-                )
-                let score = clearanceScore(
-                    placement: placement,
-                    wall: wall
-                )
+            let placement = WallPosterPlacement(
+                wallID: wall.id,
+                localX: x,
+                localY: clampedY,
+                depthOffset: WallPosterMetrics.depthOffset,
+                width: width,
+                height: height
+            )
+            let score = clearanceScore(
+                placement: placement,
+                wall: wall,
+                floorY: floorY
+            )
 
-                if best == nil ||
-                   score > best!.score {
-                    best = (
-                        placement,
-                        score
-                    )
-                }
+            if best == nil ||
+               score > best!.score {
+                best = (
+                    placement,
+                    score
+                )
             }
         }
 
@@ -287,12 +306,30 @@ final class WallMountedPosterUIController: ObservableObject {
             return nil
         }
 
+        let floorLog = floorY.map {
+            String($0)
+        } ?? "nil"
+
+        print(
+            """
+            [WallPosterUI] best wall slot selected
+              wallID: \(wall.id)
+              floorY: \(floorLog)
+              desiredWorldY: \(desiredWorldY)
+              localY: \(best.placement.localY)
+              posterHeight: \(height)
+              posterWidth: \(width)
+              centerHeightTuning: \(WallPosterPlacementTuning.preferredCenterHeightMeters)
+            """
+        )
+
         return best.placement
     }
 
     private func clearanceScore(
         placement: WallPosterPlacement,
-        wall: WallCandidate
+        wall: WallCandidate,
+        floorY: Float?
     ) -> Float {
         var score: Float = 1.0
         let rect = WallLocalRect(
@@ -305,7 +342,7 @@ final class WallMountedPosterUIController: ObservableObject {
         if occupancyRegistry?.hasHardOverlap(
             wallID: wall.id,
             candidate: rect.expanded(
-                by: WallPosterMetrics.placementRejectionPaddingMeters
+                by: WallPosterPlacementTuning.portalCandidateExpansionMeters
             ),
             candidateKind: .wallPoster
         ) == true {
@@ -319,6 +356,32 @@ final class WallMountedPosterUIController: ObservableObject {
             return -1000
         }
 
+        if abs(wall.up.y) > 0.05 {
+            let bottomWorldY =
+                wall.center.y +
+                wall.up.y * (placement.localY - placement.height * 0.5)
+            let bottomAboveFloor = floorY.map {
+                bottomWorldY - $0
+            } ?? Float.greatestFiniteMagnitude
+
+            guard bottomAboveFloor >= WallPosterPlacementTuning.minBottomClearanceMeters else {
+                print(
+                    """
+                    [WallPosterUI] candidate rejected below floor-height minimum
+                      wallID: \(wall.id)
+                      bottomAboveFloorMeters: \(bottomAboveFloor)
+                      requiredMeters: \(WallPosterPlacementTuning.minBottomClearanceMeters)
+                    """
+                )
+                return -1000
+            }
+
+            score += min(
+                1.0,
+                bottomAboveFloor / WallPosterPlacementTuning.minBottomClearanceMeters
+            )
+        }
+
         score += abs(placement.localX) * 0.05
 
         return score
@@ -329,20 +392,52 @@ private extension WallMountedPosterUIController {
     func registerPosterOccupancy(
         placement: WallPosterPlacement
     ) {
-        let rect = WallLocalRect(
-            minX: placement.localX - placement.width * 0.5,
-            minY: placement.localY - placement.height * 0.5,
-            maxX: placement.localX + placement.width * 0.5,
-            maxY: placement.localY + placement.height * 0.5
+        guard let occupancyRegistry else {
+            hasRegisteredOccupancy = false
+
+            print(
+                """
+                [WallPosterUI] ERROR cannot register poster occupancy
+                  reason: missing_wall_prop_occupancy_registry
+                """
+            )
+
+            return
+        }
+
+        occupancyRegistry.unregister(
+            id: posterOccupancyID
         )
 
-        occupancyRegistry?.register(
+        let stickerDepth =
+            WallStickerStyle.stickerSizeMeters * 1.95 +
+            WallStickerStyle.stickerSpacingMeters
+
+        let rect = WallLocalRect(
+            minX: placement.localX - placement.width * 0.5 - 0.08,
+            minY: placement.localY - placement.height * 0.5 - stickerDepth,
+            maxX: placement.localX + placement.width * 0.5 + 0.08,
+            maxY: placement.localY + placement.height * 0.5 + 0.08
+        )
+
+        occupancyRegistry.register(
             id: posterOccupancyID,
             wallID: placement.wallID,
             kind: .wallPoster,
             rect: rect,
-            padding: WallPosterMetrics.portalHardClearancePaddingMeters,
-            label: "RealityKit wall poster UI"
+            padding: WallPosterPlacementTuning.occupancyPaddingMeters,
+            label: "RealityKit wall poster UI + stickers"
+        )
+        hasRegisteredOccupancy = true
+
+        print(
+            """
+            [WallPosterUI] poster occupancy registered
+              wallID: \(placement.wallID)
+              includesStickerRow: true
+              rect: \(rect)
+              padding: \(WallPosterPlacementTuning.occupancyPaddingMeters)
+            """
         )
     }
 
@@ -431,8 +526,8 @@ private extension WallMountedPosterUIController {
               texture: plague_menu_ui_mockup
               widthMeters: \(width)
               heightMeters: \(height)
-              minimumHeightInches: \(WallPosterMetrics.minimumHeightMeters / 0.0254)
-              portalHardClearancePaddingMeters: \(WallPosterMetrics.portalHardClearancePaddingMeters)
+              maxHeightInches: \(WallPosterMetrics.maxHeightMeters / 0.0254)
+              occupancyPaddingMeters: \(WallPosterPlacementTuning.occupancyPaddingMeters)
               physicallyBasedMaterial: true
             """
         )
