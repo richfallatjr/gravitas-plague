@@ -44,19 +44,23 @@ enum PortalGlyphFXSettings {
 
     static let directionalPreference: Float = 0.58
 
-    static let emissiveTint = UIColor(
-        red: 1.0,
-        green: 0.22,
-        blue: 0.035,
-        alpha: 1.0
+    static let emissiveTint = PortalFXPalette.bloodRedPreservingAlpha(
+        UIColor(
+            red: 1.0,
+            green: 0.22,
+            blue: 0.035,
+            alpha: 1.0
+        )
     )
 
-    static let baseTint = UIColor(
-        red: 0.95,
-        green: 0.10,
-        blue: 0.02,
-        alpha: 0.92
+    static let baseTint = PortalFXPalette.bloodRedPreservingAlpha(
+        UIColor(
+            red: 0.95,
+            green: 0.10,
+            blue: 0.02,
+            alpha: 0.92
+        )
     )
 
-    static let emissiveIntensity: Float = 3.0
+    static let emissiveIntensity: Float = 0.6
 }

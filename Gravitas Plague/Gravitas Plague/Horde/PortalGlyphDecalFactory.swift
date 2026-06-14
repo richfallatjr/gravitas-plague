@@ -196,6 +196,18 @@ enum PortalGlyphDecalFactory {
         )
         material.faceCulling = .none
 
+        print(
+            """
+            [PortalFX] retint applied
+              target: glyphs
+              hue: \(PortalFXPalette.bloodRedHue)
+              saturation: \(PortalFXPalette.bloodRedSaturation)
+              brightness: \(PortalFXPalette.bloodRedBrightness)
+              materialEmissiveIntensity: \(PortalGlyphFXSettings.emissiveIntensity)
+              bloom: unchanged_installed
+            """
+        )
+
         return material
     }
 

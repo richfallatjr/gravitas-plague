@@ -1,4 +1,5 @@
 import RealityKit
+import simd
 import UIKit
 
 enum PortalFXDefaults {
@@ -8,8 +9,8 @@ enum PortalFXDefaults {
     /// Joint bead also reduced to stay proportional.
     static let tubeJointRadiusMeters: Float = 0.0075
 
-    /// HDR emissive intensity.
-    static let tubeEmissiveIntensity: Float = 3.0
+    /// Blood-red material emissive intensity. Bloom remains installed separately.
+    static let tubeEmissiveIntensity: Float = 0.6
     static let bloomTargetStrength: Float = 1.0
 
     /// Was 1000/sec. New first pass is ~1/16.7 density.
@@ -46,19 +47,19 @@ enum PortalFXDefaults {
 }
 
 enum PortalFXPalette {
-    static let tubeOrange = UIColor(
-        red: 1.00,
-        green: 0.22,
-        blue: 0.035,
+    /// ~357 degrees: blood red, nearly saturated, one stop down from 0.58 value.
+    static let bloodRedHue: CGFloat = 357.0 / 360.0
+    static let bloodRedSaturation: CGFloat = 0.98
+    static let bloodRedBrightness: CGFloat = 0.29
+
+    static let bloodRedUIColor = UIColor(
+        hue: bloodRedHue,
+        saturation: bloodRedSaturation,
+        brightness: bloodRedBrightness,
         alpha: 1.0
     )
 
-    static let tubeDeepRed = UIColor(
-        red: 0.62,
-        green: 0.035,
-        blue: 0.01,
-        alpha: 1.0
-    )
+    static let bloodRedSIMD = SIMD3<Float>(0.29, 0.006, 0.020)
 
     static let emberBirth = UIColor(
         red: 1.00,
@@ -87,6 +88,30 @@ enum PortalFXPalette {
         blue: 0.005,
         alpha: 0.0
     )
+
+    /// Uses fixed blood-red hue/saturation/value while preserving source alpha.
+    static func bloodRedPreservingAlpha(
+        _ color: UIColor
+    ) -> UIColor {
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = bloodRedBrightness
+        var alpha: CGFloat = 1
+
+        _ = color.getHue(
+            &hue,
+            saturation: &saturation,
+            brightness: &brightness,
+            alpha: &alpha
+        )
+
+        return UIColor(
+            hue: bloodRedHue,
+            saturation: bloodRedSaturation,
+            brightness: bloodRedBrightness,
+            alpha: alpha
+        )
+    }
 }
 
 @MainActor
@@ -105,23 +130,25 @@ final class PortalFXSharedResources {
 
     private init() {
         tubeMaterial = Self.makeEmissiveMaterial(
-            base: UIColor(
-                red: 0.95,
-                green: 0.12,
-                blue: 0.015,
-                alpha: 1.0
-            ),
-            emissive: UIColor(
-                red: 1.0,
-                green: 0.22,
-                blue: 0.035,
-                alpha: 1.0
-            ),
+            base: PortalFXPalette.bloodRedUIColor,
+            emissive: PortalFXPalette.bloodRedUIColor,
             intensity: PortalFXDefaults.tubeEmissiveIntensity,
-            label: "tube_hdr_orange_red"
+            label: "tube_hdr_blood_red"
         )
 
         jointMaterial = tubeMaterial
+
+        print(
+            """
+            [PortalFX] retint applied
+              target: border_tube
+              hue: \(PortalFXPalette.bloodRedHue)
+              saturation: \(PortalFXPalette.bloodRedSaturation)
+              brightness: \(PortalFXPalette.bloodRedBrightness)
+              materialEmissiveIntensity: \(PortalFXDefaults.tubeEmissiveIntensity)
+              bloom: unchanged_installed
+            """
+        )
 
         emberBirthMaterials = [
             Self.makeEmissiveMaterial(
