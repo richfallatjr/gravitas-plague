@@ -10,7 +10,7 @@ enum PortalFXDefaults {
 
     /// HDR emissive intensity.
     static let tubeEmissiveIntensity: Float = 3.0
-    static let bloomTargetStrength: Float = 0.80
+    static let bloomTargetStrength: Float = 1.0
 
     /// Was 1000/sec. New first pass is ~1/16.7 density.
     static let emberBirthRatePerDoor: Float = 60.0

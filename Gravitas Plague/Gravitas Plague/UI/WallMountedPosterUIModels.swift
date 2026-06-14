@@ -50,7 +50,10 @@ enum WallPosterMetrics {
         1086,
         1448
     )
-    static let maxHeightMeters: Float = 0.9144
+    static let minimumHeightMeters: Float = 4.0 * 0.3048
+    static let maxHeightMeters: Float = minimumHeightMeters
+    static let portalHardClearancePaddingMeters: Float = 2.0 * 0.3048
+    static let placementRejectionPaddingMeters: Float = 2.0 * 0.3048
     static let wallMarginMeters: Float = 0.12
 
     static var aspect: Float {
@@ -77,16 +80,19 @@ enum WallPosterMetrics {
         for wall: WallCandidate
     ) -> SIMD2<Float> {
         let availableHeight = max(
-            0.30,
+            minimumHeightMeters,
             wall.height - wallMarginMeters * 2.0
         )
-        let height = min(
-            maxHeightMeters,
-            availableHeight
+        let height = max(
+            minimumHeightMeters,
+            min(
+                maxHeightMeters,
+                availableHeight
+            )
         )
         var width = height * aspect
         let maxWidth = max(
-            0.30,
+            minimumHeightMeters * aspect,
             wall.width - wallMarginMeters * 2.0
         )
 
@@ -94,7 +100,10 @@ enum WallPosterMetrics {
             width = maxWidth
             return SIMD2<Float>(
                 width,
-                width / aspect
+                max(
+                    minimumHeightMeters,
+                    width / aspect
+                )
             )
         }
 

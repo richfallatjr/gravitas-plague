@@ -305,7 +305,7 @@ final class WallMountedPosterUIController: ObservableObject {
         if occupancyRegistry?.hasHardOverlap(
             wallID: wall.id,
             candidate: rect.expanded(
-                by: 0.25
+                by: WallPosterMetrics.placementRejectionPaddingMeters
             ),
             candidateKind: .wallPoster
         ) == true {
@@ -341,7 +341,7 @@ private extension WallMountedPosterUIController {
             wallID: placement.wallID,
             kind: .wallPoster,
             rect: rect,
-            padding: 0.30,
+            padding: WallPosterMetrics.portalHardClearancePaddingMeters,
             label: "RealityKit wall poster UI"
         )
     }
@@ -431,7 +431,8 @@ private extension WallMountedPosterUIController {
               texture: plague_menu_ui_mockup
               widthMeters: \(width)
               heightMeters: \(height)
-              maxHeightInches: 36
+              minimumHeightInches: \(WallPosterMetrics.minimumHeightMeters / 0.0254)
+              portalHardClearancePaddingMeters: \(WallPosterMetrics.portalHardClearancePaddingMeters)
               physicallyBasedMaterial: true
             """
         )

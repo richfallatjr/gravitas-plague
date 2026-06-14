@@ -50,7 +50,8 @@ extension PlagueCharacterArchetype {
                 damagedSounds: [],
                 damagedSoundExtension: "wav",
                 facePunchContactSounds: [
-                    PlagueAudioAssetName.defaultFacePunch
+                    PlagueAudioAssetName.defaultFacePunch,
+                    PlagueAudioAssetName.fleshyFacePunch01
                 ],
                 facePunchContactExtension: "wav"
             )

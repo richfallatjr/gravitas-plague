@@ -3,7 +3,7 @@ import RealityKit
 
 @MainActor
 enum PlagueNativeBloomInstaller {
-    static let targetIntensity: Float = 0.80
+    static let targetIntensity: Float = 1.0
     static let targetStrength: Float = targetIntensity
 
     static func installStrictBloom(
