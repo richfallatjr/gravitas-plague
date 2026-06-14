@@ -902,26 +902,28 @@ private extension PortalGlyphLayoutEngine {
                 using: &rng
             )
 
-            let baseAngle = atan2(
-                segment.direction.y,
-                segment.direction.x
-            )
-            let angle = baseAngle + angleJitter
+            // Directional art is authored vertically: local Y follows the portal border.
+            let angle =
+                atan2(
+                    -segment.direction.x,
+                    segment.direction.y
+                ) +
+                angleJitter
 
             let axisX = normalizeSafe2(
                 SIMD2<Float>(
                     cos(angle),
                     sin(angle)
                 ),
-                fallback: segment.direction
+                fallback: segment.outward
             )
 
             let axisY = normalizeSafe2(
                 SIMD2<Float>(
-                    -axisX.y,
-                    axisX.x
+                    -sin(angle),
+                    cos(angle)
                 ),
-                fallback: segment.outward
+                fallback: segment.direction
             )
 
             let provisionalOBB = PortalGlyphOBB(
