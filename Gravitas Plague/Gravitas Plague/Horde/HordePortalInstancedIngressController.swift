@@ -44,6 +44,7 @@ final class HordePortalRenderInstance {
         self.rootEntity = instance
 
         Self.stripGameplayComponentsRecursively(instance)
+        Self.stripAudioComponentsRecursively(instance)
 
         self.sourceSkinnedModel = source.skinnedModelEntityForPortalInstance()
         self.instanceSkinnedModel = Self.firstSkinnedModelEntity(
@@ -66,6 +67,14 @@ final class HordePortalRenderInstance {
               secondAnimationClock: false
               enabledFromStart: true
               noFade: true
+            """
+        )
+
+        print(
+            """
+            [HordePortalInstance] audio stripped from render instance
+              sourceEnemyID: \(sourceEnemyID)
+              instanceID: \(id)
             """
         )
     }
@@ -140,6 +149,16 @@ final class HordePortalRenderInstance {
 
         for child in entity.children {
             stripGameplayComponentsRecursively(child)
+        }
+    }
+
+    private static func stripAudioComponentsRecursively(
+        _ entity: Entity
+    ) {
+        entity.components.remove(SpatialAudioComponent.self)
+
+        for child in entity.children {
+            stripAudioComponentsRecursively(child)
         }
     }
 

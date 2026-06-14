@@ -10,51 +10,97 @@ enum PlagueAudioAssetName {
     static let robotDamaged02 = "robot-damaged-02"
 }
 
-struct PlagueCharacterAudioProfile {
-    let archetype: PlagueCharacterArchetype
+struct AudioFileRef: Hashable {
+    let name: String
+    let ext: String
 
-    let breathingOrMovementLoop: String?
-    let breathingOrMovementLoopExtension: String?
+    var filename: String {
+        "\(name).\(ext)"
+    }
+}
 
-    let damagedSounds: [String]
-    let damagedSoundExtension: String
+enum PlagueZombieAudioBank {
+    static let loopSound = AudioFileRef(
+        name: PlagueAudioAssetName.defaultCharacterLoop,
+        ext: "wav"
+    )
 
-    let facePunchContactSounds: [String]
-    let facePunchContactExtension: String
+    // No general zombie body-hit bank is currently authored in the project.
+    // Keep existing non-robot behavior: confirmed head/face contact audio only.
+    static let damageSounds: [AudioFileRef] = []
+
+    static let facePunchContactSounds = [
+        AudioFileRef(
+            name: PlagueAudioAssetName.defaultFacePunch,
+            ext: "wav"
+        ),
+        AudioFileRef(
+            name: PlagueAudioAssetName.fleshyFacePunch01,
+            ext: "wav"
+        )
+    ]
+}
+
+enum PlagueCharacterAudioBank: String {
+    case zombie
+    case robot
+
+    var loopSound: AudioFileRef? {
+        switch self {
+        case .zombie:
+            return PlagueZombieAudioBank.loopSound
+
+        case .robot:
+            return AudioFileRef(
+                name: PlagueAudioAssetName.robotWalkingLoop,
+                ext: "mp3"
+            )
+        }
+    }
+
+    var damageSounds: [AudioFileRef] {
+        switch self {
+        case .zombie:
+            return PlagueZombieAudioBank.damageSounds
+
+        case .robot:
+            return [
+                AudioFileRef(
+                    name: PlagueAudioAssetName.robotDamaged01,
+                    ext: "wav"
+                ),
+                AudioFileRef(
+                    name: PlagueAudioAssetName.robotDamaged02,
+                    ext: "wav"
+                )
+            ]
+        }
+    }
+
+    var facePunchContactSounds: [AudioFileRef] {
+        switch self {
+        case .zombie:
+            return PlagueZombieAudioBank.facePunchContactSounds
+
+        case .robot:
+            return [
+                AudioFileRef(
+                    name: PlagueAudioAssetName.fleshyFacePunch01,
+                    ext: "wav"
+                )
+            ]
+        }
+    }
 }
 
 extension PlagueCharacterArchetype {
-    var audioProfile: PlagueCharacterAudioProfile {
+    var audioBank: PlagueCharacterAudioBank {
         switch self {
         case .robot:
-            return PlagueCharacterAudioProfile(
-                archetype: self,
-                breathingOrMovementLoop: PlagueAudioAssetName.robotWalkingLoop,
-                breathingOrMovementLoopExtension: "mp3",
-                damagedSounds: [
-                    PlagueAudioAssetName.robotDamaged01,
-                    PlagueAudioAssetName.robotDamaged02
-                ],
-                damagedSoundExtension: "wav",
-                facePunchContactSounds: [
-                    PlagueAudioAssetName.fleshyFacePunch01
-                ],
-                facePunchContactExtension: "wav"
-            )
+            return .robot
 
         case .dad, .spouse, .biker, .grandma, .neighbor:
-            return PlagueCharacterAudioProfile(
-                archetype: self,
-                breathingOrMovementLoop: PlagueAudioAssetName.defaultCharacterLoop,
-                breathingOrMovementLoopExtension: "wav",
-                damagedSounds: [],
-                damagedSoundExtension: "wav",
-                facePunchContactSounds: [
-                    PlagueAudioAssetName.defaultFacePunch,
-                    PlagueAudioAssetName.fleshyFacePunch01
-                ],
-                facePunchContactExtension: "wav"
-            )
+            return .zombie
         }
     }
 }
@@ -62,25 +108,37 @@ extension PlagueCharacterArchetype {
 enum PlagueRobotAudioAssetValidator {
     static func validate() {
         let required = [
-            (PlagueAudioAssetName.fleshyFacePunch01, "wav"),
-            (PlagueAudioAssetName.robotWalkingLoop, "mp3"),
-            (PlagueAudioAssetName.robotDamaged01, "wav"),
-            (PlagueAudioAssetName.robotDamaged02, "wav")
+            AudioFileRef(
+                name: PlagueAudioAssetName.fleshyFacePunch01,
+                ext: "wav"
+            ),
+            AudioFileRef(
+                name: PlagueAudioAssetName.robotWalkingLoop,
+                ext: "mp3"
+            ),
+            AudioFileRef(
+                name: PlagueAudioAssetName.robotDamaged01,
+                ext: "wav"
+            ),
+            AudioFileRef(
+                name: PlagueAudioAssetName.robotDamaged02,
+                ext: "wav"
+            )
         ]
 
         for asset in required {
             if let url = Bundle.main.url(
-                forResource: asset.0,
-                withExtension: asset.1
+                forResource: asset.name,
+                withExtension: asset.ext
             ) ?? Bundle.main.url(
-                forResource: asset.0,
-                withExtension: asset.1,
+                forResource: asset.name,
+                withExtension: asset.ext,
                 subdirectory: "Audio"
             ) {
                 print(
                     """
                     [PlagueAudio] found robot audio asset
-                      file: \(asset.0).\(asset.1)
+                      file: \(asset.filename)
                       url: \(url.path)
                     """
                 )
@@ -88,7 +146,8 @@ enum PlagueRobotAudioAssetValidator {
                 print(
                     """
                     [PlagueAudio] ERROR missing robot audio asset
-                      file: \(asset.0).\(asset.1)
+                      file: \(asset.filename)
+                      robotWillNotFallbackToZombie: true
                     """
                 )
             }
