@@ -61,6 +61,8 @@ final class JockRetargetTestController {
     let rootEntity = Entity()
 
     var onPunchHit: ((InfectedHitRegion) -> Void)?
+    var onCharacterDamageHit: (() -> Void)?
+    var onCharacterDeath: (() -> Void)?
     var onPlayerDamaged: ((Int) -> Void)?
     var onBenchmarkPlayerHit: ((Int, UUID?) -> Bool)?
     var onBenchmarkPlayerDeath: ((Int, Int) -> Void)?
@@ -72,6 +74,7 @@ final class JockRetargetTestController {
 
     private var characterEntity: Entity?
     private var modelEntity: ModelEntity?
+    private(set) var characterAudioEmitter: Entity?
 
     private var rigDefinition: JockRigDefinition?
     private var skeletonMap: JockSkeletonMap?
@@ -140,6 +143,9 @@ final class JockRetargetTestController {
     private var lastHitClipIDByBucket: [String: String] = [:]
     private var hasLoggedHeadHitZoneBuild = false
     private var hasLoggedMissingHeadHitZone = false
+    private var hasLoggedCharacterAudioEmitterMissingAnchor = false
+    private var hasLoggedCharacterAudioEmitterMissingJoint = false
+    private var didPlayDeathAudio = false
 
     private var spawnPosition = SIMD3<Float>(0, 0, -3.05)
     private var spawnOrientation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
@@ -213,6 +219,7 @@ final class JockRetargetTestController {
 
         if resetHitCount {
             acceptedHitCount = 0
+            didPlayDeathAudio = false
         }
     }
 
@@ -452,6 +459,8 @@ final class JockRetargetTestController {
         )
         self.hasLoaded = true
 
+        setupCharacterAudioEmitterFromAttributes()
+
         updateGroundingProfileFromLoadedEntityIfNeeded()
 
         validateHitClipsArePrewarmed()
@@ -599,9 +608,12 @@ final class JockRetargetTestController {
         lifecycleState = .alive
         activeDeathClipID = nil
         acceptedHitCount = 0
+        didPlayDeathAudio = false
         attackAnimationRandomizer.reset(enemyID: id)
         hasLoggedHeadHitZoneBuild = false
         hasLoggedMissingHeadHitZone = false
+        hasLoggedCharacterAudioEmitterMissingAnchor = false
+        hasLoggedCharacterAudioEmitterMissingJoint = false
 
         rootEntity.name = "Horde_\(archetype.rawValue)_wave\(wave)_index\(spawnIndex)_\(id.uuidString.prefix(6))"
 
@@ -1068,6 +1080,57 @@ final class JockRetargetTestController {
         characterAttributes
     }
 
+    func setupCharacterAudioEmitterFromAttributes() {
+        guard let anchor = characterAttributes?.audio.spatialAnchor else {
+            logMissingCharacterAudioAnchorIfNeeded()
+            return
+        }
+
+        guard let worldPosition = characterAudioAnchorWorldPosition(
+            joint: anchor.joint
+        ) else {
+            logMissingCharacterAudioJointIfNeeded(
+                joint: anchor.joint
+            )
+            return
+        }
+
+        let emitter = characterAudioEmitter ?? Entity()
+        emitter.name = "CharacterAudioEmitter_\(characterAttributes?.characterID ?? characterArchetype.rawValue)_\(anchor.joint)"
+        emitter.components.set(SpatialAudioComponent())
+
+        if emitter.parent == nil {
+            rootEntity.addChild(emitter)
+        }
+
+        emitter.setPosition(
+            worldPosition,
+            relativeTo: nil
+        )
+
+        characterAudioEmitter = emitter
+
+        print(
+            """
+            [CharacterAudio] spatial audio emitter attached
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              joint: \(anchor.joint)
+              parent: \(rootEntity.name)
+              emitsFromHead: true
+              noFallback: true
+            """
+        )
+    }
+
+    func playDeathAudioOnce() {
+        guard !didPlayDeathAudio else {
+            return
+        }
+
+        didPlayDeathAudio = true
+        onCharacterDeath?()
+    }
+
     private func resolvedCharacterAttributes() throws -> CharacterAttributes {
         if let characterAttributes {
             return characterAttributes
@@ -1079,6 +1142,81 @@ final class JockRetargetTestController {
 
         characterAttributes = attributes
         return attributes
+    }
+
+    private func updateCharacterAudioEmitterWorldPosition() {
+        guard let anchor = characterAttributes?.audio.spatialAnchor,
+              let emitter = characterAudioEmitter else {
+            return
+        }
+
+        guard let worldPosition = characterAudioAnchorWorldPosition(
+            joint: anchor.joint
+        ) else {
+            logMissingCharacterAudioJointIfNeeded(
+                joint: anchor.joint
+            )
+            return
+        }
+
+        emitter.setPosition(
+            worldPosition,
+            relativeTo: nil
+        )
+    }
+
+    private func characterAudioAnchorWorldPosition(
+        joint: String
+    ) -> SIMD3<Float>? {
+        guard let driver,
+              let modelEntity,
+              let skeletonWorldPoseResolver else {
+            return nil
+        }
+
+        return skeletonWorldPoseResolver.worldPosition(
+            for: joint,
+            jointTransforms: driver.currentJointTransforms,
+            modelEntity: modelEntity
+        )
+    }
+
+    private func logMissingCharacterAudioAnchorIfNeeded() {
+        guard !hasLoggedCharacterAudioEmitterMissingAnchor else {
+            return
+        }
+
+        hasLoggedCharacterAudioEmitterMissingAnchor = true
+
+        print(
+            """
+            [CharacterAudio] ERROR missing spatial audio anchor
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              requiredFor: damage_death_spatial_audio
+              noFallback: true
+            """
+        )
+    }
+
+    private func logMissingCharacterAudioJointIfNeeded(
+        joint: String
+    ) {
+        guard !hasLoggedCharacterAudioEmitterMissingJoint else {
+            return
+        }
+
+        hasLoggedCharacterAudioEmitterMissingJoint = true
+
+        print(
+            """
+            [CharacterAudio] ERROR missing spatial audio joint
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              joint: \(joint)
+              requiredFor: damage_death_spatial_audio
+              availableJoints: \(adapter?.runtimeJointNames.joined(separator: ", ") ?? "nil")
+              noFallback: true
+            """
+        )
     }
 
     func skinnedModelEntityForPortalInstance() -> ModelEntity? {
@@ -1297,6 +1435,7 @@ final class JockRetargetTestController {
 
         if externalMotionDriven {
             driver?.update(deltaTime: dt)
+            updateCharacterAudioEmitterWorldPosition()
             return
         }
 
@@ -1315,6 +1454,7 @@ final class JockRetargetTestController {
         }
 
         driver?.update(deltaTime: dt)
+        updateCharacterAudioEmitterWorldPosition()
 
         if followDemoState != .inactive,
            playerAttackEnabled,
@@ -1769,11 +1909,15 @@ final class JockRetargetTestController {
         )
 
         if shouldDie {
+            playDeathAudioOnce()
+
             completeBenchmarkEnemyKill(
                 selectedClipID: selectedClipID
             )
             return
         }
+
+        onCharacterDamageHit?()
 
         guard let selectedClipID,
               let clip = clipsByID[selectedClipID] else {

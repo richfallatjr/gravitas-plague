@@ -281,10 +281,40 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     return
                 }
 
-                self?.audioController.playConfirmedCharacterHitSounds(
+                self?.audioController.playConfirmedCharacterFaceHitSound(
                     archetype: jockController.archetype,
                     enemyID: jockController.hordeBenchmarkID,
                     hitRegion: hitRegion,
+                    sourceID: hostAudioSourceID
+                )
+            }
+        }
+
+        jockController.onCharacterDamageHit = { [weak self, weak jockController] in
+            Task { @MainActor in
+                guard let jockController,
+                      let hostAudioSourceID else {
+                    return
+                }
+
+                self?.audioController.playCharacterDamageHit(
+                    archetype: jockController.archetype,
+                    enemyID: jockController.hordeBenchmarkID,
+                    sourceID: hostAudioSourceID
+                )
+            }
+        }
+
+        jockController.onCharacterDeath = { [weak self, weak jockController] in
+            Task { @MainActor in
+                guard let jockController,
+                      let hostAudioSourceID else {
+                    return
+                }
+
+                self?.audioController.playCharacterDeath(
+                    archetype: jockController.archetype,
+                    enemyID: jockController.hordeBenchmarkID,
                     sourceID: hostAudioSourceID
                 )
             }
@@ -873,6 +903,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     id: enemyID,
                     hostRootEntity: controller.rootEntity,
                     archetype: controller.archetype,
+                    headAudioEntity: controller.characterAudioEmitter,
                     breathingStartDelay: 0
                 )
 
@@ -1678,6 +1709,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             id: id,
             hostRootEntity: controller.rootEntity,
             archetype: archetype,
+            headAudioEntity: controller.characterAudioEmitter,
             breathingStartDelay: audioStartDelay
         )
 

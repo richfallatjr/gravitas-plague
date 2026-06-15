@@ -106,6 +106,7 @@ struct AnimationClipRef: Codable {
 }
 
 struct CharacterAudioAttributes: Codable {
+    let spatialAnchor: CharacterAudioSpatialAnchor?
     let presenceLoop: SoundRef?
     let damageHits: [SoundRef]
     let faceHits: [SoundRef]
@@ -114,6 +115,7 @@ struct CharacterAudioAttributes: Codable {
     let extensions: [String: JSONValue]?
 
     enum CodingKeys: String, CodingKey {
+        case spatialAnchor = "spatial_anchor"
         case presenceLoop = "presence_loop"
         case damageHits = "damage_hits"
         case faceHits = "face_hits"
@@ -121,6 +123,10 @@ struct CharacterAudioAttributes: Codable {
         case attack
         case extensions
     }
+}
+
+struct CharacterAudioSpatialAnchor: Codable {
+    let joint: String
 }
 
 struct SoundRef: Codable, Hashable {

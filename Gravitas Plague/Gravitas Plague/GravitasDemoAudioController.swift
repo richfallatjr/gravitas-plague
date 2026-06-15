@@ -50,6 +50,7 @@ final class GravitasDemoAudioController {
     private struct HostAudioSource {
         let headEntity: Entity
         let archetype: PlagueCharacterArchetype
+        let usesResolvedHeadAnchor: Bool
         var loopController: AudioPlaybackController?
         var loopStartTask: Task<Void, Never>?
         var punchControllers: [AudioPlaybackController]
@@ -316,20 +317,44 @@ final class GravitasDemoAudioController {
         id: UUID,
         hostRootEntity: Entity,
         archetype: PlagueCharacterArchetype = .dad,
+        headAudioEntity: Entity?,
         breathingStartDelay: TimeInterval = TimeInterval.random(in: 0...1)
     ) {
         prepareIfNeeded()
         stopHostAudioSource(id: id)
 
-        let headEntity = Entity()
-        headEntity.name = "Gravitas_HordeHostHeadAudioSource_\(id.uuidString.prefix(6))"
+        let headEntity: Entity
+        let usesResolvedHeadAnchor: Bool
+
+        if let headAudioEntity {
+            headEntity = headAudioEntity
+            usesResolvedHeadAnchor = true
+        } else {
+            print(
+                """
+                [CharacterAudio] ERROR missing head audio emitter
+                  enemyID: \(id.uuidString)
+                  archetype: \(archetype.rawValue)
+                  requiredFor: damage_death_spatial_audio
+                  noFallback: true
+                """
+            )
+
+            let fallbackEntity = Entity()
+            fallbackEntity.name = "Gravitas_HordeHostPresenceAudioSource_\(id.uuidString.prefix(6))"
+            fallbackEntity.position = hostHeadAudioLocalPosition
+            hostRootEntity.addChild(fallbackEntity)
+
+            headEntity = fallbackEntity
+            usesResolvedHeadAnchor = false
+        }
+
         headEntity.components.set(SpatialAudioComponent())
-        headEntity.position = hostHeadAudioLocalPosition
-        hostRootEntity.addChild(headEntity)
 
         hostAudioSourcesByID[id] = HostAudioSource(
             headEntity: headEntity,
             archetype: archetype,
+            usesResolvedHeadAnchor: usesResolvedHeadAnchor,
             loopController: nil,
             loopStartTask: nil,
             punchControllers: []
@@ -341,6 +366,8 @@ final class GravitasDemoAudioController {
               enemyID: \(id.uuidString)
               archetype: \(archetype.rawValue)
               source: character_attributes
+              emitter: head
+              resolvedHeadAnchor: \(usesResolvedHeadAnchor)
             """
         )
 
@@ -356,7 +383,7 @@ final class GravitasDemoAudioController {
               id: \(id)
               archetype: \(archetype.rawValue)
               breathingStartDelay: \(String(format: "%.3f", breathingStartDelay))
-              parent: hostRootEntity
+              parent: \(usesResolvedHeadAnchor ? "characterAudioEmitter" : "legacyPresenceOffset")
             """
         )
     }
@@ -389,7 +416,10 @@ final class GravitasDemoAudioController {
         }
         source.punchControllers.removeAll()
 
-        source.headEntity.removeFromParent()
+        if !source.usesResolvedHeadAnchor {
+            source.headEntity.removeFromParent()
+        }
+
         lastCharacterHitSoundTimeByEnemyID.removeValue(forKey: id)
 
         print("[Gravitas Audio] Stopped horde host audio source: \(id)")
@@ -679,34 +709,61 @@ final class GravitasDemoAudioController {
         )
     }
 
-    func playConfirmedCharacterHitSounds(
+    func playConfirmedCharacterFaceHitSound(
         archetype: PlagueCharacterArchetype,
         enemyID: UUID?,
         hitRegion: InfectedHitRegion,
         sourceID: UUID? = nil
     ) {
         prepareIfNeeded()
-
-        if let enemyID {
-            let now = CACurrentMediaTime()
-            let last = lastCharacterHitSoundTimeByEnemyID[enemyID] ?? 0
-
-            guard now - last >= characterHitSoundCooldown else {
-                return
-            }
-
-            lastCharacterHitSoundTimeByEnemyID[enemyID] = now
-        }
+        _ = enemyID
 
         playFacePunchContactSoundIfNeeded(
             archetype: archetype,
             hitRegion: hitRegion,
             sourceID: sourceID
         )
+    }
 
-        playCharacterDamagedSound(
+    func playCharacterDamageHit(
+        archetype: PlagueCharacterArchetype,
+        enemyID: UUID,
+        sourceID: UUID
+    ) {
+        prepareIfNeeded()
+
+        let now = CACurrentMediaTime()
+        let last = lastCharacterHitSoundTimeByEnemyID[enemyID] ?? 0
+
+        guard now - last >= characterHitSoundCooldown else {
+            return
+        }
+
+        lastCharacterHitSoundTimeByEnemyID[enemyID] = now
+
+        playCharacterAudioBankOneShot(
             archetype: archetype,
-            sourceID: sourceID
+            sourceID: sourceID,
+            role: "damage_hits",
+            refs: { $0.audio.damageHits },
+            fallbackVolumeDB: Float(decibels(linearVolume: 0.88))
+        )
+    }
+
+    func playCharacterDeath(
+        archetype: PlagueCharacterArchetype,
+        enemyID: UUID,
+        sourceID: UUID
+    ) {
+        _ = enemyID
+        prepareIfNeeded()
+
+        playCharacterAudioBankOneShot(
+            archetype: archetype,
+            sourceID: sourceID,
+            role: "death",
+            refs: { $0.audio.death },
+            fallbackVolumeDB: 0
         )
     }
 
@@ -801,9 +858,12 @@ final class GravitasDemoAudioController {
         )
     }
 
-    private func playCharacterDamagedSound(
+    private func playCharacterAudioBankOneShot(
         archetype: PlagueCharacterArchetype,
-        sourceID: UUID?
+        sourceID: UUID,
+        role: String,
+        refs: (CharacterAttributes) -> [SoundRef],
+        fallbackVolumeDB: Float
     ) {
         let attributes: CharacterAttributes
 
@@ -814,7 +874,7 @@ final class GravitasDemoAudioController {
         } catch {
             print(
                 """
-                [CharacterAudio] ERROR damage hit failed
+                [CharacterAudio] ERROR \(role) failed
                   archetype: \(archetype.rawValue)
                   error: \(error.localizedDescription)
                   noFallback: true
@@ -826,14 +886,26 @@ final class GravitasDemoAudioController {
         let sound: SoundRef
 
         do {
-            sound = try attributes.audio.damageHits.weightedPickStrict(
-                role: "damage_hits",
+            let bank = refs(attributes)
+
+            sound = try bank.weightedPickStrict(
+                role: role,
                 characterID: attributes.characterID
+            )
+
+            print(
+                """
+                [CharacterAudio] random bank selected
+                  characterID: \(attributes.characterID)
+                  role: \(role)
+                  bankSize: \(bank.count)
+                  selected: \(sound.file)
+                """
             )
         } catch {
             print(
                 """
-                [CharacterAudio] ERROR damage hit failed
+                [CharacterAudio] ERROR \(role) failed
                   characterID: \(attributes.characterID)
                   error: \(error.localizedDescription)
                   noFallback: true
@@ -847,7 +919,7 @@ final class GravitasDemoAudioController {
         guard validateAudioFileExistsForPlayback(
             sound,
             characterID: attributes.characterID,
-            context: "damage"
+            context: role
         ) else {
             return
         }
@@ -858,7 +930,7 @@ final class GravitasDemoAudioController {
         ) else {
             print(
                 """
-                [CharacterAudio] ERROR missing damage sound
+                [CharacterAudio] ERROR missing \(role) sound
                   characterID: \(attributes.characterID)
                   file: \(file.fullName)
                   noFallback: true
@@ -867,18 +939,54 @@ final class GravitasDemoAudioController {
             return
         }
 
-        playCharacterOneShot(
-            resource: resource,
-            sourceID: sourceID,
-            volumeDB: sound.volumeDB ?? Float(decibels(linearVolume: 0.88))
-        )
+        guard var source = hostAudioSourcesByID[sourceID] else {
+            print(
+                """
+                [CharacterAudio] ERROR missing head audio emitter
+                  characterID: \(attributes.characterID)
+                  role: \(role)
+                  file: \(sound.file)
+                  enemyID: \(sourceID.uuidString)
+                  noFallback: true
+                """
+            )
+            return
+        }
+
+        guard source.usesResolvedHeadAnchor else {
+            print(
+                """
+                [CharacterAudio] ERROR head audio anchor unresolved
+                  characterID: \(attributes.characterID)
+                  role: \(role)
+                  file: \(sound.file)
+                  enemyID: \(sourceID.uuidString)
+                  noFallback: true
+                """
+            )
+            return
+        }
+
+        let controller = source.headEntity.playAudio(resource)
+        controller.gain = Double(sound.volumeDB ?? fallbackVolumeDB)
+        source.punchControllers.append(controller)
+
+        if source.punchControllers.count > 12 {
+            source.punchControllers.removeFirst(
+                max(0, source.punchControllers.count - 8)
+            )
+        }
+
+        hostAudioSourcesByID[sourceID] = source
 
         print(
             """
             [CharacterAudio] one-shot played
               characterID: \(attributes.characterID)
-              role: damage_hits
+              role: \(role)
               file: \(sound.file)
+              emitter: head
+              spatial: true
               source: character_attributes
               noFallback: true
             """
@@ -1427,6 +1535,15 @@ final class GravitasDemoAudioController {
                     fileExtension: sound.ext,
                     shouldLoop: false,
                     category: "\(attributes.characterID)_face_hits"
+                )
+            }
+
+            for sound in attributes.audio.death {
+                preloadSound(
+                    named: sound.basename,
+                    fileExtension: sound.ext,
+                    shouldLoop: false,
+                    category: "\(attributes.characterID)_death"
                 )
             }
         }

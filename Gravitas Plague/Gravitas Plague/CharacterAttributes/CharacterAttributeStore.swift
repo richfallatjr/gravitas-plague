@@ -340,21 +340,37 @@ private extension CharacterAttributeStore {
             )
         }
 
-        try validateOptionalSoundRefs(
-            attributes.audio.damageHits,
-            characterID: attributes.characterID,
-            role: "damage_hits"
-        )
+        if attributes.characterID == "dad" {
+            try validateSoundRefs(
+                attributes.audio.damageHits,
+                characterID: attributes.characterID,
+                role: "damage_hits"
+            )
+        } else {
+            try validateOptionalSoundRefs(
+                attributes.audio.damageHits,
+                characterID: attributes.characterID,
+                role: "damage_hits"
+            )
+        }
         try validateSoundRefs(
             attributes.audio.faceHits,
             characterID: attributes.characterID,
             role: "face_hits"
         )
-        try validateOptionalSoundRefs(
-            attributes.audio.death,
-            characterID: attributes.characterID,
-            role: "death"
-        )
+        if attributes.characterID == "dad" {
+            try validateSoundRefs(
+                attributes.audio.death,
+                characterID: attributes.characterID,
+                role: "death"
+            )
+        } else {
+            try validateOptionalSoundRefs(
+                attributes.audio.death,
+                characterID: attributes.characterID,
+                role: "death"
+            )
+        }
         try validateOptionalSoundRefs(
             attributes.audio.attack,
             characterID: attributes.characterID,
