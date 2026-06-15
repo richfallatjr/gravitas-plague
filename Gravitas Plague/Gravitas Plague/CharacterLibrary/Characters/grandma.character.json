@@ -94,6 +94,9 @@
     ]
   },
   "audio": {
+    "spatial_anchor": {
+      "joint": "Head"
+    },
     "presence_loop": {
       "file": "dad_breathing.wav",
       "volume_db": -7.5,
@@ -101,6 +104,26 @@
       "loop": true
     },
     "damage_hits": [
+      {
+        "file": "grandma-damaged-01.wav",
+        "weight": 1.0,
+        "volume_db": -3.0
+      },
+      {
+        "file": "grandma-damaged-02.wav",
+        "weight": 1.0,
+        "volume_db": -3.0
+      },
+      {
+        "file": "grandma-damaged-03.wav",
+        "weight": 1.0,
+        "volume_db": -3.0
+      },
+      {
+        "file": "grandma-damaged-04.wav",
+        "weight": 1.0,
+        "volume_db": -3.0
+      }
     ],
     "face_hits": [
       {
@@ -114,7 +137,28 @@
         "volume_db": -2.5
       }
     ],
-    "death": [],
+    "death": [
+      {
+        "file": "grandma-death-01.wav",
+        "weight": 1.0,
+        "volume_db": -2.0
+      },
+      {
+        "file": "grandma-death-02.wav",
+        "weight": 1.0,
+        "volume_db": -2.0
+      },
+      {
+        "file": "grandma-death-03.wav",
+        "weight": 1.0,
+        "volume_db": -2.0
+      },
+      {
+        "file": "grandma-death-04.wav",
+        "weight": 1.0,
+        "volume_db": -2.0
+      }
+    ],
     "attack": []
   },
   "extensions": {}

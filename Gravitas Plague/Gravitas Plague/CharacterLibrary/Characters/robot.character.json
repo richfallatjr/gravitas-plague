@@ -94,6 +94,9 @@
     ]
   },
   "audio": {
+    "spatial_anchor": {
+      "joint": "Head"
+    },
     "presence_loop": {
       "file": "robot-walking-loop.mp3",
       "volume_db": -8.0,
@@ -101,6 +104,26 @@
       "loop": true
     },
     "damage_hits": [
+      {
+        "file": "robot-damaged-03.wav",
+        "weight": 1.0,
+        "volume_db": -3.0
+      },
+      {
+        "file": "robot-damaged-04.wav",
+        "weight": 1.0,
+        "volume_db": -3.0
+      },
+      {
+        "file": "robot-damaged-05.wav",
+        "weight": 1.0,
+        "volume_db": -3.0
+      },
+      {
+        "file": "robot-damaged-06.wav",
+        "weight": 1.0,
+        "volume_db": -3.0
+      }
     ],
     "face_hits": [
       {
@@ -114,7 +137,28 @@
         "volume_db": -2.5
       }
     ],
-    "death": [],
+    "death": [
+      {
+        "file": "robot-death-01.wav",
+        "weight": 1.0,
+        "volume_db": -2.0
+      },
+      {
+        "file": "robot-death-02.wav",
+        "weight": 1.0,
+        "volume_db": -2.0
+      },
+      {
+        "file": "robot-death-03.wav",
+        "weight": 1.0,
+        "volume_db": -2.0
+      },
+      {
+        "file": "robot-death-04.wav",
+        "weight": 1.0,
+        "volume_db": -2.0
+      }
+    ],
     "attack": []
   },
   "extensions": {}

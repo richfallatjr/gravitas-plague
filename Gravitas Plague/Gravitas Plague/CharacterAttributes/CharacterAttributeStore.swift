@@ -404,7 +404,12 @@ private extension CharacterAttributeStore {
     static func requiresAuthoredDamageDeathAudio(
         characterID: String
     ) -> Bool {
-        characterID == "dad" || characterID == "spouse"
+        characterID == "dad" ||
+        characterID == "spouse" ||
+        characterID == "biker" ||
+        characterID == "grandma" ||
+        characterID == "neighbor" ||
+        characterID == "robot"
     }
 
     func validateOptionalSoundRefs(
