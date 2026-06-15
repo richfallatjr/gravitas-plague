@@ -163,6 +163,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         roomSkinningCoordinator.installIfNeeded(sceneRoot: root)
         hordePortalManager.install(
             sceneRoot: root,
+            audioController: audioController,
             wallManager: roomSkinningCoordinator.wallManager,
             occupancyRegistry: wallPropOccupancyRegistry
         )
@@ -414,6 +415,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         case .updatePortalHDRIAtmosphere(let atmosphere):
             roomSkinningCoordinator.updatePortalContentAtmosphere(atmosphere)
+
+        case .updatePortalLoopGainDB(let gainDB):
+            hordePortalManager.updatePortalLoopGainDB(gainDB)
         }
     }
 

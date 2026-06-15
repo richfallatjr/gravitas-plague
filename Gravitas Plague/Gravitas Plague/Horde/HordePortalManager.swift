@@ -10,20 +10,24 @@ final class HordePortalManager {
     private var transitionFXByPortalID: [UUID: PortalTransitionFXController] = [:]
     private var groundDiscByPortalID: [UUID: Entity] = [:]
     private var glyphFXByPortalID: [UUID: PortalGlyphFXController] = [:]
+    private var portalAudioByPortalID: [UUID: HordePortalAudioController] = [:]
     private let backdropOrientationLock = HordePortalBackdropOrientationLock(
         baseArtYawDegrees: 0
     )
 
     private weak var sceneRoot: Entity?
+    private weak var audioController: GravitasDemoAudioController?
     private weak var wallManager: WallPlaneManager?
     private weak var occupancyRegistry: WallPropOccupancyRegistry?
 
     func install(
         sceneRoot: Entity,
+        audioController: GravitasDemoAudioController,
         wallManager: WallPlaneManager,
         occupancyRegistry: WallPropOccupancyRegistry
     ) {
         self.sceneRoot = sceneRoot
+        self.audioController = audioController
         self.wallManager = wallManager
         self.occupancyRegistry = occupancyRegistry
 
@@ -31,6 +35,7 @@ final class HordePortalManager {
             """
             [HordePortal] manager installed
               occupancyRegistry: true
+              portalAudio: true
             """
         )
     }
@@ -51,6 +56,11 @@ final class HordePortalManager {
             fx.teardown()
         }
         glyphFXByPortalID.removeAll()
+
+        for audio in portalAudioByPortalID.values {
+            audio.stop()
+        }
+        portalAudioByPortalID.removeAll()
 
         for ground in groundDiscByPortalID.values {
             ground.removeFromParent()
@@ -77,6 +87,24 @@ final class HordePortalManager {
                 deltaTime: deltaTime
             )
         }
+    }
+
+    func updatePortalLoopGainDB(
+        _ gainDB: Float
+    ) {
+        HordePortalAudioSettings.portalLoopGainDB = gainDB
+
+        for audio in portalAudioByPortalID.values {
+            audio.updateGainDB(gainDB)
+        }
+
+        print(
+            """
+            [HordePortalAudio] all active portal loop gains updated
+              portalCount: \(portalAudioByPortalID.count)
+              gainDB: \(gainDB)
+            """
+        )
     }
 
     func createPortalForWave(
@@ -398,6 +426,39 @@ final class HordePortalManager {
         )
 
         sceneRoot.addChild(root)
+
+        if let audioController {
+            let portalAudio = HordePortalAudioController(
+                portalID: portalID,
+                audioController: audioController
+            )
+
+            let didStartAudio = portalAudio.attachAndStart(
+                portalRoot: root
+            )
+
+            if didStartAudio {
+                portalAudioByPortalID[portalID] = portalAudio
+
+                print(
+                    """
+                    [HordePortal] audio attached
+                      portalID: \(portalID)
+                      loop: \(HordePortalAudioSettings.mixdownName).\(HordePortalAudioSettings.mixdownExtension)
+                      gainDB: \(HordePortalAudioSettings.portalLoopGainDB)
+                    """
+                )
+            }
+        } else {
+            print(
+                """
+                [HordePortalAudio] ERROR portal audio controller unavailable
+                  portalID: \(portalID)
+                  fallback: false
+                """
+            )
+        }
+
         logFloorAnchorProof(
             placement: placement,
             wall: wall

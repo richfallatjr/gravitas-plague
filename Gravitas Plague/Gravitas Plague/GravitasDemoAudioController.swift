@@ -426,6 +426,80 @@ final class GravitasDemoAudioController {
         )
     }
 
+    @discardableResult
+    func attachSpatialLoop(
+        named name: String,
+        fileExtension ext: String,
+        to entity: Entity,
+        volumeDB: Float,
+        label: String
+    ) -> AudioPlaybackController? {
+        prepareIfNeeded()
+
+        let file = BundleAudioFile(
+            fileName: name,
+            fileExtension: ext
+        )
+
+        guard bundleURL(for: file) != nil else {
+            print(
+                """
+                [Gravitas Audio] ERROR missing spatial loop
+                  file: \(file.fullName)
+                  label: \(label)
+                  fallback: false
+                """
+            )
+            return nil
+        }
+
+        guard let resource = spatialResource(
+            for: file,
+            shouldLoop: true
+        ) else {
+            print(
+                """
+                [Gravitas Audio] ERROR failed to load spatial loop
+                  file: \(file.fullName)
+                  label: \(label)
+                  fallback: false
+                """
+            )
+            return nil
+        }
+
+        entity.components.set(SpatialAudioComponent())
+
+        let controller = entity.playAudio(resource)
+        controller.gain = Double(volumeDB)
+
+        print(
+            """
+            [Gravitas Audio] spatial loop attached
+              file: \(file.fullName)
+              label: \(label)
+              gainDB: \(volumeDB)
+              spatial: true
+              loop: true
+            """
+        )
+
+        return controller
+    }
+
+    func setLoopGainDB(
+        _ controller: AudioPlaybackController,
+        gainDB: Float
+    ) {
+        controller.gain = Double(gainDB)
+    }
+
+    func stopLoop(
+        _ controller: AudioPlaybackController
+    ) {
+        controller.stop()
+    }
+
     func startImmersiveAudio() {
         prepareIfNeeded()
 

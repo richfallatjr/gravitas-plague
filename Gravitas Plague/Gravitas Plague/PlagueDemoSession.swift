@@ -100,6 +100,7 @@ final class PlagueDemoSession: ObservableObject {
         case confirmRoomSkinningDoorAdjustment
         case cancelRoomSkinning
         case updatePortalHDRIAtmosphere(PortalHDRIAtmosphere)
+        case updatePortalLoopGainDB(Float)
     }
 
     struct CommandEnvelope: Identifiable, Equatable {
@@ -132,6 +133,26 @@ final class PlagueDemoSession: ObservableObject {
     @Published var roomSkinningStatus = "Room skinning idle."
     @Published var portalHDRIAtmosphere: PortalHDRIAtmosphere = .night
     @Published var portalHDRIRevision: Int = 0
+    @Published var portalLoopGainDB: Float = HordePortalAudioSettings.portalLoopGainDB {
+        didSet {
+            HordePortalAudioSettings.portalLoopGainDB = portalLoopGainDB
+
+            guard portalLoopGainDB != oldValue else {
+                return
+            }
+
+            send(
+                .updatePortalLoopGainDB(portalLoopGainDB)
+            )
+
+            print(
+                """
+                [HordePortalAudio] global portal loop gain changed
+                  gainDB: \(portalLoopGainDB)
+                """
+            )
+        }
+    }
     @Published private(set) var roomSkinningHasOccurred = false
     @Published private(set) var swiftUIControlWindowSuppressedForCurrentRun = false
     @Published var wallPosterUIActive = false

@@ -9,6 +9,7 @@ struct PlagueDemoView: View {
             .onAppear {
                 PlagueMenuAssetValidator.validate()
                 PlagueForestAssetValidator.validate()
+                HordePortalAudioAssetValidator.validate()
                 loadJockManifestForUI()
             }
     }
