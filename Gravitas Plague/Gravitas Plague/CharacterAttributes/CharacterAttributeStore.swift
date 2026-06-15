@@ -340,7 +340,9 @@ private extension CharacterAttributeStore {
             )
         }
 
-        if attributes.characterID == "dad" {
+        if Self.requiresAuthoredDamageDeathAudio(
+            characterID: attributes.characterID
+        ) {
             try validateSoundRefs(
                 attributes.audio.damageHits,
                 characterID: attributes.characterID,
@@ -358,7 +360,9 @@ private extension CharacterAttributeStore {
             characterID: attributes.characterID,
             role: "face_hits"
         )
-        if attributes.characterID == "dad" {
+        if Self.requiresAuthoredDamageDeathAudio(
+            characterID: attributes.characterID
+        ) {
             try validateSoundRefs(
                 attributes.audio.death,
                 characterID: attributes.characterID,
@@ -395,6 +399,12 @@ private extension CharacterAttributeStore {
             characterID: characterID,
             role: role
         )
+    }
+
+    static func requiresAuthoredDamageDeathAudio(
+        characterID: String
+    ) -> Bool {
+        characterID == "dad" || characterID == "spouse"
     }
 
     func validateOptionalSoundRefs(
