@@ -23,22 +23,10 @@ final class HordePortalAudioController {
     func attachAndStart(
         portalRoot: Entity
     ) -> Bool {
-        guard HordePortalAudioSettings.mixdownURL() != nil else {
-            print(
-                """
-                [HordePortalAudio] ERROR cannot start portal loop; asset missing
-                  portalID: \(portalID)
-                  file: \(HordePortalAudioSettings.mixdownName).\(HordePortalAudioSettings.mixdownExtension)
-                  fallback: false
-                """
-            )
-            return false
-        }
-
         guard let audioController else {
             print(
                 """
-                [HordePortalAudio] ERROR cannot start portal loop; audio controller missing
+                [HordePortalAudio] ERROR cannot start portal audio; audio controller missing
                   portalID: \(portalID)
                   fallback: false
                 """
@@ -51,6 +39,68 @@ final class HordePortalAudioController {
         }
 
         emitter.position = HordePortalAudioSettings.localEmitterOffset
+
+        playSpawnOneShot(
+            audioController: audioController
+        )
+
+        return startLoop(
+            audioController: audioController
+        )
+    }
+
+    private func playSpawnOneShot(
+        audioController: GravitasDemoAudioController
+    ) {
+        guard let variant = HordePortalAudioSettings.randomSpawnVariant() else {
+            print(
+                """
+                [HordePortalAudio] ERROR no available portal spawn variants
+                  portalID: \(portalID)
+                  fallback: false
+                """
+            )
+            return
+        }
+
+        let didPlay = audioController.playSpatialOneShot(
+            named: variant.name,
+            fileExtension: variant.ext,
+            at: emitter,
+            volumeDB: HordePortalAudioSettings.portalSpawnGainDB,
+            label: "\(HordePortalAudioSettings.spawnLabelPrefix)_\(portalID.uuidString)"
+        )
+
+        guard didPlay else {
+            return
+        }
+
+        print(
+            """
+            [HordePortalAudio] portal spawn one-shot played
+              portalID: \(portalID)
+              file: \(variant.filename)
+              gainDB: \(HordePortalAudioSettings.portalSpawnGainDB)
+              spatial: true
+              loop: false
+            """
+        )
+    }
+
+    private func startLoop(
+        audioController: GravitasDemoAudioController
+    ) -> Bool {
+        guard HordePortalAudioSettings.mixdownURL() != nil else {
+            print(
+                """
+                [HordePortalAudio] ERROR cannot start portal loop; asset missing
+                  portalID: \(portalID)
+                  file: \(HordePortalAudioSettings.mixdownName).\(HordePortalAudioSettings.mixdownExtension)
+                  fallback: false
+                """
+            )
+            return false
+        }
 
         let label = "\(HordePortalAudioSettings.labelPrefix)_\(portalID.uuidString)"
 
@@ -120,7 +170,7 @@ final class HordePortalAudioController {
 
         print(
             """
-            [HordePortalAudio] portal loop stopped
+            [HordePortalAudio] portal audio stopped
               portalID: \(portalID)
             """
         )

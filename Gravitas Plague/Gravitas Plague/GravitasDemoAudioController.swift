@@ -121,6 +121,7 @@ final class GravitasDemoAudioController {
     private var emergencyBeepController: AudioPlaybackController?
     private var emergencyBroadcastController: AudioPlaybackController?
     private var punchControllers: [AudioPlaybackController] = []
+    private var portalOneShotControllers: [AudioPlaybackController] = []
     private var hostAudioSourcesByID: [UUID: HostAudioSource] = [:]
     private var lastCharacterHitSoundTimeByEnemyID: [UUID: TimeInterval] = [:]
 
@@ -487,6 +488,74 @@ final class GravitasDemoAudioController {
         return controller
     }
 
+    @discardableResult
+    func playSpatialOneShot(
+        named name: String,
+        fileExtension ext: String,
+        at entity: Entity,
+        volumeDB: Float,
+        label: String
+    ) -> Bool {
+        prepareIfNeeded()
+
+        let file = BundleAudioFile(
+            fileName: name,
+            fileExtension: ext
+        )
+
+        guard bundleURL(for: file) != nil else {
+            print(
+                """
+                [Gravitas Audio] ERROR missing spatial one-shot
+                  file: \(file.fullName)
+                  label: \(label)
+                  fallback: false
+                """
+            )
+            return false
+        }
+
+        guard let resource = spatialResource(
+            for: file,
+            shouldLoop: false
+        ) else {
+            print(
+                """
+                [Gravitas Audio] ERROR failed to load spatial one-shot
+                  file: \(file.fullName)
+                  label: \(label)
+                  fallback: false
+                """
+            )
+            return false
+        }
+
+        entity.components.set(SpatialAudioComponent())
+
+        let controller = entity.playAudio(resource)
+        controller.gain = Double(volumeDB)
+        portalOneShotControllers.append(controller)
+
+        if portalOneShotControllers.count > 16 {
+            portalOneShotControllers.removeFirst(
+                max(0, portalOneShotControllers.count - 12)
+            )
+        }
+
+        print(
+            """
+            [Gravitas Audio] spatial one-shot played
+              file: \(file.fullName)
+              label: \(label)
+              gainDB: \(volumeDB)
+              spatial: true
+              loop: false
+            """
+        )
+
+        return true
+    }
+
     func setLoopGainDB(
         _ controller: AudioPlaybackController,
         gainDB: Float
@@ -588,6 +657,7 @@ final class GravitasDemoAudioController {
         stopSpatialDemoControllers()
         stopPlayerDamagePlayers()
         stopPlayerDeathPlayers()
+        stopPortalOneShotControllers()
 
         print("[Gravitas Audio] Stopped all audio.")
     }
@@ -1238,6 +1308,14 @@ final class GravitasDemoAudioController {
         }
 
         lastPlayerDeathFileName = nil
+    }
+
+    private func stopPortalOneShotControllers() {
+        for controller in portalOneShotControllers {
+            controller.stop()
+        }
+
+        portalOneShotControllers.removeAll()
     }
 
     private func configureAudioSession() throws {

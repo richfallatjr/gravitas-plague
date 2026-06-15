@@ -153,6 +153,18 @@ final class PlagueDemoSession: ObservableObject {
             )
         }
     }
+    @Published var portalSpawnGainDB: Float = HordePortalAudioSettings.portalSpawnGainDB {
+        didSet {
+            HordePortalAudioSettings.portalSpawnGainDB = portalSpawnGainDB
+
+            print(
+                """
+                [HordePortalAudio] global portal spawn gain changed
+                  gainDB: \(portalSpawnGainDB)
+                """
+            )
+        }
+    }
     @Published private(set) var roomSkinningHasOccurred = false
     @Published private(set) var swiftUIControlWindowSuppressedForCurrentRun = false
     @Published var wallPosterUIActive = false
