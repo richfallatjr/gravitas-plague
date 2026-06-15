@@ -53,7 +53,16 @@ final class GravitasDemoAudioController {
         let usesResolvedHeadAnchor: Bool
         var loopController: AudioPlaybackController?
         var loopStartTask: Task<Void, Never>?
-        var punchControllers: [AudioPlaybackController]
+    }
+
+    private struct ActiveSpatialOneShot {
+        let id: UUID
+        let label: String
+        let file: String
+        let startedAt: TimeInterval
+        let expectedEndTime: TimeInterval
+        let emitterName: String
+        let playbackController: AudioPlaybackController
     }
 
     private let backgroundMusicFile = BundleAudioFile(
@@ -114,17 +123,15 @@ final class GravitasDemoAudioController {
     private var dadBreathingResource: AudioFileResource?
     private var emergencyBeepResource: AudioFileResource?
     private var emergencyBroadcastResource: AudioFileResource?
-    private var punchResource: AudioFileResource?
     private var spatialResourcesByKey: [String: AudioFileResource] = [:]
 
     private var radioStaticController: AudioPlaybackController?
     private var dadBreathingController: AudioPlaybackController?
     private var emergencyBeepController: AudioPlaybackController?
     private var emergencyBroadcastController: AudioPlaybackController?
-    private var punchControllers: [AudioPlaybackController] = []
     private var portalOneShotControllers: [AudioPlaybackController] = []
     private var hostAudioSourcesByID: [UUID: HostAudioSource] = [:]
-    private var lastCharacterHitSoundTimeByEnemyID: [UUID: TimeInterval] = [:]
+    private var activeSpatialOneShotsByID: [UUID: ActiveSpatialOneShot] = [:]
 
     private var emergencyBroadcastTask: Task<Void, Never>?
 
@@ -138,7 +145,7 @@ final class GravitasDemoAudioController {
     private let feetToMeters: Float = 0.3048
     private let radioDistanceBehindUserFeet: Float = 5.0
     private let hostHeadAudioLocalPosition = SIMD3<Float>(0, 1.45, -0.04)
-    private let characterHitSoundCooldown: TimeInterval = 0.045
+    private let maxActiveSpatialOneShots = 96
 
     private let emergencyInitialDelaySeconds: TimeInterval = 30.0
     private let emergencyBreakAfterBroadcastSeconds: TimeInterval = 30.0
@@ -246,7 +253,7 @@ final class GravitasDemoAudioController {
             shouldLoop: false
         )
 
-        punchResource = preloadSound(
+        preloadSound(
             named: punchFile.fileName,
             fileExtension: punchFile.fileExtension,
             shouldLoop: false,
@@ -356,8 +363,7 @@ final class GravitasDemoAudioController {
             archetype: archetype,
             usesResolvedHeadAnchor: usesResolvedHeadAnchor,
             loopController: nil,
-            loopStartTask: nil,
-            punchControllers: []
+            loopStartTask: nil
         )
 
         print(
@@ -411,16 +417,9 @@ final class GravitasDemoAudioController {
             )
         }
 
-        for controller in source.punchControllers {
-            controller.stop()
-        }
-        source.punchControllers.removeAll()
-
         if !source.usesResolvedHeadAnchor {
             source.headEntity.removeFromParent()
         }
-
-        lastCharacterHitSoundTimeByEnemyID.removeValue(forKey: id)
 
         print("[Gravitas Audio] Stopped horde host audio source: \(id)")
     }
@@ -528,6 +527,18 @@ final class GravitasDemoAudioController {
     ) -> Bool {
         prepareIfNeeded()
 
+        if isForbiddenCharacterOneShotLabel(label) {
+            print(
+                """
+                [Gravitas Audio] ERROR blocked forbidden global character sound
+                  file: \(name).\(ext)
+                  label: \(label)
+                  routeRequired: concurrent_spatial_head
+                """
+            )
+            return false
+        }
+
         let file = BundleAudioFile(
             fileName: name,
             fileExtension: ext
@@ -584,6 +595,27 @@ final class GravitasDemoAudioController {
         )
 
         return true
+    }
+
+    @discardableResult
+    func playConcurrentSpatialOneShot(
+        named name: String,
+        fileExtension ext: String,
+        at entity: Entity,
+        volumeDB: Float,
+        label: String
+    ) -> UUID? {
+        let file = BundleAudioFile(
+            fileName: name,
+            fileExtension: ext
+        )
+
+        return playConcurrentSpatialOneShot(
+            file: file,
+            at: entity,
+            volumeDB: volumeDB,
+            label: label
+        )
     }
 
     func setLoopGainDB(
@@ -688,6 +720,7 @@ final class GravitasDemoAudioController {
         stopPlayerDamagePlayers()
         stopPlayerDeathPlayers()
         stopPortalOneShotControllers()
+        stopActiveSpatialOneShots()
 
         print("[Gravitas Audio] Stopped all audio.")
     }
@@ -697,13 +730,10 @@ final class GravitasDemoAudioController {
     ) {
         prepareIfNeeded()
 
-        guard let punchResource else {
-            print("[Gravitas Audio] Punch resource missing.")
-            return
-        }
-
-        playCharacterOneShot(
-            resource: punchResource,
+        _ = playConcurrentCharacterSpatialOneShot(
+            file: punchFile,
+            characterID: "host",
+            role: "face_hits",
             sourceID: sourceID,
             volumeDB: Float(decibels(linearVolume: 0.95))
         )
@@ -730,16 +760,8 @@ final class GravitasDemoAudioController {
         enemyID: UUID,
         sourceID: UUID
     ) {
+        _ = enemyID
         prepareIfNeeded()
-
-        let now = CACurrentMediaTime()
-        let last = lastCharacterHitSoundTimeByEnemyID[enemyID] ?? 0
-
-        guard now - last >= characterHitSoundCooldown else {
-            return
-        }
-
-        lastCharacterHitSoundTimeByEnemyID[enemyID] = now
 
         playCharacterAudioBankOneShot(
             archetype: archetype,
@@ -823,38 +845,12 @@ final class GravitasDemoAudioController {
             return
         }
 
-        guard let resource = spatialResource(
-            for: file,
-            shouldLoop: false
-        ) else {
-            print(
-                """
-                [CharacterAudio] ERROR missing face punch contact sound
-                  characterID: \(attributes.characterID)
-                  region: \(hitRegion.rawValue)
-                  file: \(file.fullName)
-                  noFallback: true
-                """
-            )
-            return
-        }
-
-        playCharacterOneShot(
-            resource: resource,
+        _ = playConcurrentCharacterSpatialOneShot(
+            file: file,
+            characterID: attributes.characterID,
+            role: "face_hits",
             sourceID: sourceID,
             volumeDB: sound.volumeDB ?? Float(decibels(linearVolume: 0.95))
-        )
-
-        print(
-            """
-            [CharacterAudio] one-shot played
-              characterID: \(attributes.characterID)
-              role: face_hits
-              region: \(hitRegion.rawValue)
-              file: \(sound.file)
-              source: character_attributes
-              noFallback: true
-            """
         )
     }
 
@@ -924,72 +920,12 @@ final class GravitasDemoAudioController {
             return
         }
 
-        guard let resource = spatialResource(
-            for: file,
-            shouldLoop: false
-        ) else {
-            print(
-                """
-                [CharacterAudio] ERROR missing \(role) sound
-                  characterID: \(attributes.characterID)
-                  file: \(file.fullName)
-                  noFallback: true
-                """
-            )
-            return
-        }
-
-        guard var source = hostAudioSourcesByID[sourceID] else {
-            print(
-                """
-                [CharacterAudio] ERROR missing head audio emitter
-                  characterID: \(attributes.characterID)
-                  role: \(role)
-                  file: \(sound.file)
-                  enemyID: \(sourceID.uuidString)
-                  noFallback: true
-                """
-            )
-            return
-        }
-
-        guard source.usesResolvedHeadAnchor else {
-            print(
-                """
-                [CharacterAudio] ERROR head audio anchor unresolved
-                  characterID: \(attributes.characterID)
-                  role: \(role)
-                  file: \(sound.file)
-                  enemyID: \(sourceID.uuidString)
-                  noFallback: true
-                """
-            )
-            return
-        }
-
-        let controller = source.headEntity.playAudio(resource)
-        controller.gain = Double(sound.volumeDB ?? fallbackVolumeDB)
-        source.punchControllers.append(controller)
-
-        if source.punchControllers.count > 12 {
-            source.punchControllers.removeFirst(
-                max(0, source.punchControllers.count - 8)
-            )
-        }
-
-        hostAudioSourcesByID[sourceID] = source
-
-        print(
-            """
-            [CharacterAudio] one-shot played
-              characterID: \(attributes.characterID)
-              role: \(role)
-              file: \(sound.file)
-              emitter: head
-              spatial: true
-              source: character_attributes
-              noFallback: true
-            """
+        _ = playConcurrentCharacterSpatialOneShot(
+            file: file,
+            characterID: attributes.characterID,
+            role: role,
+            sourceID: sourceID,
+            volumeDB: sound.volumeDB ?? fallbackVolumeDB
         )
     }
 
@@ -1027,34 +963,6 @@ final class GravitasDemoAudioController {
             withExtension: sound.ext,
             subdirectory: "Audio"
         )
-    }
-
-    private func playCharacterOneShot(
-        resource: AudioFileResource,
-        sourceID: UUID?,
-        volumeDB: Float
-    ) {
-        if let sourceID,
-           var source = hostAudioSourcesByID[sourceID] {
-            let controller = source.headEntity.playAudio(resource)
-            controller.gain = Double(volumeDB)
-            source.punchControllers.append(controller)
-
-            if source.punchControllers.count > 12 {
-                source.punchControllers.removeFirst(max(0, source.punchControllers.count - 8))
-            }
-
-            hostAudioSourcesByID[sourceID] = source
-            return
-        }
-
-        let controller = hostHeadAudioEntity.playAudio(resource)
-        controller.gain = Double(volumeDB)
-        punchControllers.append(controller)
-
-        if punchControllers.count > 12 {
-            punchControllers.removeFirst(max(0, punchControllers.count - 8))
-        }
     }
 
     func playRandomPlayerDamageHit() {
@@ -1338,11 +1246,6 @@ final class GravitasDemoAudioController {
         emergencyBroadcastController?.stop()
         emergencyBroadcastController = nil
 
-        for controller in punchControllers {
-            controller.stop()
-        }
-        punchControllers.removeAll()
-
         for id in Array(hostAudioSourcesByID.keys) {
             stopHostAudioSource(id: id)
         }
@@ -1424,6 +1327,23 @@ final class GravitasDemoAudioController {
         }
 
         portalOneShotControllers.removeAll()
+    }
+
+    private func stopActiveSpatialOneShots() {
+        for oneShot in activeSpatialOneShotsByID.values {
+            oneShot.playbackController.stop()
+        }
+
+        if !activeSpatialOneShotsByID.isEmpty {
+            print(
+                """
+                [Gravitas Audio] stopped active concurrent spatial one-shots
+                  stopped: \(activeSpatialOneShotsByID.count)
+                """
+            )
+        }
+
+        activeSpatialOneShotsByID.removeAll()
     }
 
     private func configureAudioSession() throws {
@@ -1584,6 +1504,268 @@ final class GravitasDemoAudioController {
         shouldLoop: Bool
     ) -> String {
         "\(file.fullName)|loop:\(shouldLoop)"
+    }
+
+    private func isForbiddenCharacterOneShotLabel(
+        _ label: String
+    ) -> Bool {
+        label.contains("_damage") ||
+        label.contains("_death") ||
+        label.contains("damage_hits") ||
+        label.contains("face_hits")
+    }
+
+    @discardableResult
+    private func playConcurrentSpatialOneShot(
+        file: BundleAudioFile,
+        at entity: Entity,
+        volumeDB: Float,
+        label: String
+    ) -> UUID? {
+        prepareIfNeeded()
+
+        guard bundleURL(for: file) != nil else {
+            print(
+                """
+                [Gravitas Audio] ERROR missing concurrent spatial one-shot
+                  file: \(file.fullName)
+                  label: \(label)
+                  fallback: false
+                """
+            )
+            return nil
+        }
+
+        guard entity.parent != nil else {
+            print(
+                """
+                [Gravitas Audio] ERROR spatial one-shot emitter is not in scene
+                  file: \(file.fullName)
+                  label: \(label)
+                  emitter: \(entity.name)
+                  fallback: false
+                """
+            )
+            return nil
+        }
+
+        pruneFinishedSpatialOneShots()
+
+        if activeSpatialOneShotsByID.count >= maxActiveSpatialOneShots {
+            pruneOldestSpatialOneShot()
+
+            print(
+                """
+                [Gravitas Audio] WARNING active one-shot limit reached; pruned oldest
+                  maxActive: \(maxActiveSpatialOneShots)
+                  label: \(label)
+                """
+            )
+        }
+
+        guard let resource = spatialResource(
+            for: file,
+            shouldLoop: false
+        ) else {
+            print(
+                """
+                [Gravitas Audio] ERROR failed loading concurrent spatial one-shot
+                  file: \(file.fullName)
+                  label: \(label)
+                  fallback: false
+                """
+            )
+            return nil
+        }
+
+        entity.components.set(SpatialAudioComponent())
+
+        let controller = entity.playAudio(resource)
+        controller.gain = Double(volumeDB)
+
+        print(
+            """
+            [Gravitas Audio] spatial playback controller configured
+              label: \(label)
+              requestedVolumeDB: \(volumeDB)
+              appliedGainMode: controller.gain
+              appliedGainValue: \(controller.gain)
+              spatial: true
+              attachedEmitter: \(entity.name)
+            """
+        )
+
+        let id = UUID()
+        let now = CACurrentMediaTime()
+        let duration = estimatedDurationSeconds(
+            for: file,
+            fallback: 3.0
+        )
+
+        activeSpatialOneShotsByID[id] = ActiveSpatialOneShot(
+            id: id,
+            label: label,
+            file: file.fullName,
+            startedAt: now,
+            expectedEndTime: now + duration + 0.25,
+            emitterName: entity.name,
+            playbackController: controller
+        )
+
+        print(
+            """
+            [Gravitas Audio] concurrent spatial one-shot started
+              id: \(id)
+              file: \(file.fullName)
+              label: \(label)
+              emitter: \(entity.name)
+              volumeDB: \(volumeDB)
+              activeOneShots: \(activeSpatialOneShotsByID.count)
+              replacesExisting: false
+              spatial: true
+              global: false
+            """
+        )
+
+        return id
+    }
+
+    @discardableResult
+    private func playConcurrentCharacterSpatialOneShot(
+        file: BundleAudioFile,
+        characterID: String,
+        role: String,
+        sourceID: UUID?,
+        volumeDB: Float
+    ) -> UUID? {
+        guard let sourceID else {
+            print(
+                """
+                [CharacterAudio] ERROR missing head audio emitter
+                  characterID: \(characterID)
+                  role: \(role)
+                  file: \(file.fullName)
+                  noFallback: true
+                  noRootFallback: true
+                  global: false
+                """
+            )
+            return nil
+        }
+
+        guard let source = hostAudioSourcesByID[sourceID] else {
+            print(
+                """
+                [CharacterAudio] ERROR missing head audio emitter
+                  characterID: \(characterID)
+                  role: \(role)
+                  file: \(file.fullName)
+                  enemyID: \(sourceID.uuidString)
+                  noFallback: true
+                  noRootFallback: true
+                  global: false
+                """
+            )
+            return nil
+        }
+
+        guard source.usesResolvedHeadAnchor else {
+            print(
+                """
+                [CharacterAudio] ERROR head audio anchor unresolved
+                  characterID: \(characterID)
+                  role: \(role)
+                  file: \(file.fullName)
+                  enemyID: \(sourceID.uuidString)
+                  noFallback: true
+                  noRootFallback: true
+                  global: false
+                """
+            )
+            return nil
+        }
+
+        let id = playConcurrentSpatialOneShot(
+            file: file,
+            at: source.headEntity,
+            volumeDB: volumeDB,
+            label: "\(characterID)_\(role)"
+        )
+
+        print(
+            """
+            [CharacterAudio] one-shot requested
+              id: \(id?.uuidString ?? "nil")
+              characterID: \(characterID)
+              role: \(role)
+              file: \(file.fullName)
+              emitter: head
+              emitterName: \(source.headEntity.name)
+              volumeDB: \(volumeDB)
+              spatial: true
+              global: false
+              concurrent: true
+              source: character_attributes
+              noFallback: true
+            """
+        )
+
+        return id
+    }
+
+    private func pruneFinishedSpatialOneShots() {
+        let now = CACurrentMediaTime()
+        let expired = activeSpatialOneShotsByID.values.filter {
+            $0.expectedEndTime <= now
+        }
+
+        for oneShot in expired {
+            activeSpatialOneShotsByID.removeValue(
+                forKey: oneShot.id
+            )
+        }
+
+        if !expired.isEmpty {
+            print(
+                """
+                [Gravitas Audio] pruned finished spatial one-shots
+                  removed: \(expired.count)
+                  activeRemaining: \(activeSpatialOneShotsByID.count)
+                """
+            )
+        }
+    }
+
+    private func pruneOldestSpatialOneShot() {
+        guard let oldest = activeSpatialOneShotsByID.values.min(
+            by: { $0.startedAt < $1.startedAt }
+        ) else {
+            return
+        }
+
+        oldest.playbackController.stop()
+        activeSpatialOneShotsByID.removeValue(
+            forKey: oldest.id
+        )
+    }
+
+    private func estimatedDurationSeconds(
+        for file: BundleAudioFile,
+        fallback: TimeInterval
+    ) -> TimeInterval {
+        guard let url = bundleURL(for: file) else {
+            return fallback
+        }
+
+        let asset = AVURLAsset(url: url)
+        let seconds = CMTimeGetSeconds(asset.duration)
+
+        guard seconds.isFinite,
+              seconds > 0 else {
+            return fallback
+        }
+
+        return seconds
     }
 
     private func loadSpatialResource(

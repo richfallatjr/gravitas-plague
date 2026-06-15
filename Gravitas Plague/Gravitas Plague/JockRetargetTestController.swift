@@ -1116,6 +1116,7 @@ final class JockRetargetTestController {
               characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
               joint: \(anchor.joint)
               parent: \(rootEntity.name)
+              emitterName: \(emitter.name)
               emitsFromHead: true
               noFallback: true
             """
