@@ -5,8 +5,8 @@ enum HordePortalAudioSettings {
     static let mixdownName = "hellscape_portal_mixdown"
     static let mixdownExtension = "mp3"
 
-    /// Start conservative because several portals can be active at once.
-    static var portalLoopGainDB: Float = -14.0
+    /// Exposed tuning value for the per-portal hellscape loop.
+    static var portalLoopGainDB: Float = -5.0
 
     /// Slightly behind the aperture center so it reads from inside the doorway.
     static let localEmitterOffset = SIMD3<Float>(0, 0, -0.18)
