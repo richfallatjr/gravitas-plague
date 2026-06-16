@@ -60,6 +60,8 @@ final class HordeEnemyBodyCollisionBox {
               box: \(root.name)
               sizeMeters: \(sizeMeters)
               centerOffsetMeters: \(centerOffsetMeters)
+              queryCollision: true
+              physicsResponse: false
             """
         )
     }
@@ -84,10 +86,8 @@ final class HordeEnemyBodyCollisionBox {
         let color: UIColor
 
         switch state {
-        case .moving:
+        case .active:
             color = UIColor.green.withAlphaComponent(0.22)
-        case .blockedIdle:
-            color = UIColor.yellow.withAlphaComponent(0.30)
         case .dead:
             color = UIColor.red.withAlphaComponent(0.18)
         }

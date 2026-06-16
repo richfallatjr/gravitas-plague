@@ -263,6 +263,8 @@ private extension CharacterAttributeStore {
             )
         }
 
+        let probes = collision.probes
+
         print(
             """
             [CharacterAttributes] body collision validated
@@ -272,6 +274,9 @@ private extension CharacterAttributeStore {
               sizeMeters: \(collision.sizeMeters)
               centerOffsetMeters: \(collision.resolvedCenterOffsetMeters)
               bottomAnchoredToGround: \(collision.bottomAnchoredToGround)
+              probeForwardLength: \(probes?.scaled(probes?.forwardLength, default: 1.2) ?? 1.2)
+              probeSideLength: \(probes?.scaled(probes?.sideLength, default: 1.0) ?? 1.0)
+              probeFloorDrop: \(probes?.scaled(probes?.floorDrop, default: 0.75) ?? 0.75)
             """
         )
     }

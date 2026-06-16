@@ -34,7 +34,14 @@
       "z": 0.0
     },
     "bottom_anchored_to_ground": true,
-    "debug_visible": false
+    "debug_visible": false,
+    "probes": {
+      "forward_length": 1.2,
+      "side_length": 1.0,
+      "floor_drop": 0.75,
+      "wall_clearance": 0.22,
+      "units": "meters"
+    }
   },
   "animations": {
     "idle": [

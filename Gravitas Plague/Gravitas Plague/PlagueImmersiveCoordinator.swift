@@ -41,7 +41,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let wallPosterUIController = WallMountedPosterUIController()
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
     private let hordeRoomScanTracker = HordeRoomScanTracker()
-    private let enemyCollisionCoordinator = HordeEnemyCollisionCoordinator()
+    private let enemyBodySeparationResolver = HordeEnemyBodySeparationResolver()
     private let instructionHUD = PlagueHeadTrackedInstructionHUD()
 
     @Published private(set) var isPlayerDeathSequenceActive = false
@@ -459,8 +459,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     func setEnemyCollisionDebugVisible(
         _ visible: Bool
     ) {
-        enemyCollisionCoordinator.debugVisible = visible
-
         for enemy in hordeEnemyControllersByID.values {
             enemy.bodyCollisionBox?.setDebugVisible(
                 visible,
@@ -469,6 +467,18 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
 
         print("[EnemyCollision] debug toggle \(visible)")
+    }
+
+    private func buildCrowdSnapshots(
+        enemies: [JockRetargetTestController],
+        headsetPosition: SIMD3<Float>
+    ) -> [HordeEnemyCollisionSnapshot] {
+        enemies.compactMap {
+            HordeEnemyCollisionSnapshotBuilder.makeSnapshot(
+                controller: $0,
+                headsetPosition: headsetPosition
+            )
+        }
     }
 
     func tick(at date: Date) {
@@ -517,20 +527,29 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 deltaTime: deltaTime
             )
 
-            if let pose = currentPose,
-               let sceneRoot {
-                enemyCollisionCoordinator.update(
-                    deltaTime: deltaTime,
-                    headsetPosition: pose.headPosition,
+            let crowdSnapshots: [HordeEnemyCollisionSnapshot]
+
+            if let pose = currentPose {
+                crowdSnapshots = buildCrowdSnapshots(
                     enemies: Array(hordeEnemyControllersByID.values),
-                    sceneRoot: sceneRoot
+                    headsetPosition: pose.headPosition
                 )
+            } else {
+                crowdSnapshots = []
             }
 
             for controller in hordeEnemyControllersByID.values {
+                controller.updateCrowdSnapshots(crowdSnapshots)
                 controller.update(
                     deltaTime: deltaTime,
                     currentHeadPosition: currentHeadPosition
+                )
+            }
+
+            if let pose = currentPose {
+                enemyBodySeparationResolver.resolve(
+                    enemies: Array(hordeEnemyControllersByID.values),
+                    headsetPosition: pose.headPosition
                 )
             }
 
@@ -951,6 +970,20 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
             switch ingress.phase {
             case .realWorldFollowing:
+                if let controller = hordeEnemyControllersByID[enemyID] {
+                    let snapshots = buildCrowdSnapshots(
+                        enemies: Array(hordeEnemyControllersByID.values),
+                        headsetPosition: playerWorldPosition
+                    )
+
+                    controller.updateCrowdSnapshots(snapshots)
+                    controller.solveCrowdSteering(
+                        headsetPosition: playerWorldPosition,
+                        snapshots: snapshots,
+                        reason: "portal_exit_initial"
+                    )
+                }
+
                 finishedIDs.append(enemyID)
 
             case .failed:

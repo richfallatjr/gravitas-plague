@@ -1,4 +1,5 @@
 import Foundation
+import QuartzCore
 import RealityKit
 import simd
 
@@ -104,6 +105,7 @@ final class JockRetargetTestController {
     private var followConfiguration = JockFollowDemoConfiguration.defaultDemo
     private var latestHeadPosition: SIMD3<Float>?
     private var followDelayElapsed: TimeInterval = 0
+    private var latestFrameDeltaTime: Float = 1.0 / 60.0
     private var loggedCharacterClipResolutionKeys = Set<String>()
 
     private let hitConfiguration = JockHitReactionConfiguration.phaseOne
@@ -147,17 +149,14 @@ final class JockRetargetTestController {
     private var hasLoggedCharacterAudioEmitterMissingJoint = false
     private var didPlayDeathAudio = false
 
-    var enemyCollisionState: HordeEnemyCollisionState = .moving
+    var enemyCollisionState: HordeEnemyCollisionState = .active
     var enemyBodyCollisionEnabled = false
     var enemyBodyCollisionParticipant = false
-    var enemyCollisionDistanceToHeadset: Float = 0
-    var enemyCollisionBlockedThisFrame = false
-    var enemyCollisionBlockedByIDs = Set<UUID>()
-    var enemyCollisionClearTimer: Float = 0
-    var enemyCollisionBlockedTimer: Float = 0
-    private(set) var hordeLocomotionBlockedByEnemyCollision = false
     var bodyCollisionBox: HordeEnemyBodyCollisionBox?
+    var crowdSteering = HordeCrowdSteeringState()
 
+    private var attackAnchorUserPosition: SIMD3<Float>?
+    private var latestCrowdSnapshots: [HordeEnemyCollisionSnapshot] = []
     private var spawnPosition = SIMD3<Float>(0, 0, -3.05)
     private var spawnOrientation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
     private var cameraFacingVisualOffset = simd_quatf(
@@ -208,6 +207,15 @@ final class JockRetargetTestController {
         }
     }
 
+    private var isAttackOrCombatActiveForCrowdSteering: Bool {
+        switch combatState {
+        case .closeRangeReady, .attacking:
+            return true
+        case .normal, .hitReaction, .dead:
+            return activeAttack != nil
+        }
+    }
+
     private var canUpdateFollowMovement: Bool {
         switch combatState {
         case .normal:
@@ -225,6 +233,7 @@ final class JockRetargetTestController {
     private func resetCombatRuntime(resetHitCount: Bool = true) {
         combatState = .normal
         activeAttack = nil
+        attackAnchorUserPosition = nil
         escalateAfterHitReact = false
         playerExposure = 0
 
@@ -627,14 +636,9 @@ final class JockRetargetTestController {
         hasLoggedMissingHeadHitZone = false
         hasLoggedCharacterAudioEmitterMissingAnchor = false
         hasLoggedCharacterAudioEmitterMissingJoint = false
-        enemyCollisionState = .moving
+        enemyCollisionState = .active
         enemyBodyCollisionParticipant = false
-        enemyCollisionDistanceToHeadset = 0
-        enemyCollisionBlockedThisFrame = false
-        enemyCollisionBlockedByIDs.removeAll()
-        enemyCollisionClearTimer = 0
-        enemyCollisionBlockedTimer = 0
-        hordeLocomotionBlockedByEnemyCollision = false
+        resetEnemyBodyCollisionRuntime()
         bodyCollisionBox?.setEnabled(false)
 
         rootEntity.name = "Horde_\(archetype.rawValue)_wave\(wave)_index\(spawnIndex)_\(id.uuidString.prefix(6))"
@@ -690,9 +694,7 @@ final class JockRetargetTestController {
         latestHeadPosition = nil
         enemyCollisionState = .dead
         enemyBodyCollisionParticipant = false
-        enemyCollisionBlockedThisFrame = false
-        enemyCollisionBlockedByIDs.removeAll()
-        hordeLocomotionBlockedByEnemyCollision = false
+        resetEnemyBodyCollisionRuntime()
         bodyCollisionBox?.setEnabled(false)
         driver?.locomotionDeltaHandler = nil
         driver?.stop()
@@ -944,8 +946,8 @@ final class JockRetargetTestController {
         latestHeadPosition = nil
         resetCombatRuntime()
         resetHitSelectionMemory()
-        enemyCollisionState = .moving
-        hordeLocomotionBlockedByEnemyCollision = false
+        enemyCollisionState = .active
+        resetEnemyBodyCollisionRuntime()
 
         driver?.locomotionDeltaHandler = nil
         driver?.stop()
@@ -969,9 +971,7 @@ final class JockRetargetTestController {
         isPlayingPacingLoop = false
         enemyCollisionState = .dead
         enemyBodyCollisionParticipant = false
-        enemyCollisionBlockedThisFrame = false
-        enemyCollisionBlockedByIDs.removeAll()
-        hordeLocomotionBlockedByEnemyCollision = false
+        resetEnemyBodyCollisionRuntime()
         bodyCollisionBox?.setEnabled(false)
 
         driver?.locomotionDeltaHandler = nil
@@ -1181,8 +1181,37 @@ final class JockRetargetTestController {
         "\(characterAttributes?.characterID ?? characterArchetype.rawValue)_\(hordeID.uuidString.prefix(6))"
     }
 
+    var hordeEnemyID: UUID {
+        hordeID
+    }
+
     var isDeadForHordeCollision: Bool {
         lifecycleState != .alive || combatState == .dead
+    }
+
+    var isAttackOrCombatActiveForSeparation: Bool {
+        activeAttack != nil ||
+            isInNonInterruptibleCombatState ||
+            combatState != .normal
+    }
+
+    var currentAnimationNameForSeparationDebug: String? {
+        switch combatState {
+        case .normal:
+            return String(describing: followDemoState)
+        case .closeRangeReady:
+            return "closeRangeReady"
+        case .attacking:
+            return activeAttack?.clipID ?? "attacking"
+        case .hitReaction(let clipID, _):
+            return clipID
+        case .dead:
+            return "dead"
+        }
+    }
+
+    var enemySeparationCharacterID: String {
+        characterAttributes?.characterID ?? characterArchetype.rawValue
     }
 
     func setupEnemyBodyCollisionBoxIfNeeded() {
@@ -1229,6 +1258,10 @@ final class JockRetargetTestController {
     ) {
         enemyBodyCollisionParticipant = enabled
 
+        if enabled && !isDeadForHordeCollision {
+            enemyCollisionState = .active
+        }
+
         bodyCollisionBox?.setEnabled(
             enabled && enemyBodyCollisionEnabled
         )
@@ -1244,82 +1277,317 @@ final class JockRetargetTestController {
         )
     }
 
-    func enterEnemyBlockedIdle() {
-        guard enemyCollisionState != .dead else {
-            return
+    private func resetEnemyBodyCollisionRuntime() {
+        enemyCollisionState = enemyCollisionState == .dead ? .dead : .active
+        crowdSteering = HordeCrowdSteeringState()
+        latestCrowdSnapshots.removeAll()
+    }
+
+    private func directDirectionToUser(
+        headsetPosition: SIMD3<Float>
+    ) -> SIMD3<Float> {
+        let delta = headsetPosition - rootEntity.position(relativeTo: nil)
+        let flat = SIMD3<Float>(delta.x, 0, delta.z)
+
+        guard simd_length(flat) > 0.001 else {
+            return SIMD3<Float>(0, 0, -1)
         }
 
-        enemyCollisionState = .blockedIdle
-        enemyCollisionBlockedTimer = 0
-        enemyCollisionClearTimer = 0
+        return simd_normalize(flat)
+    }
 
-        setHordeLocomotionBlocked(
-            true,
-            reason: "enemy_body_overlap"
-        )
+    func updateCrowdSnapshots(
+        _ snapshots: [HordeEnemyCollisionSnapshot]
+    ) {
+        latestCrowdSnapshots = snapshots
+    }
 
-        if canSwitchToBlockedIdleAnimation {
-            playBlockedIdleAnimationFromAttributesOrIdle()
-        } else {
-            print(
-                """
-                [EnemyCollision] blocked idle animation skipped
-                  enemyID: \(hordeID.uuidString)
-                  reason: current_animation_has_priority
-                """
-            )
-        }
+    func initializeCrowdSteering() {
+        let phase = TimeInterval(hordeSpawnIndex % 11) * 0.017
+
+        crowdSteering = HordeCrowdSteeringState()
+        crowdSteering.nextSolveTime = CACurrentMediaTime() + phase
 
         print(
             """
-            [EnemyCollision] entered BlockedIdle
+            [CrowdSteering] initialized
               enemyID: \(hordeID.uuidString)
               characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
-              blockedBy: \(enemyCollisionBlockedByIDs.map { $0.uuidString }.joined(separator: ","))
+              target: user
+              blockers: enemy_body_only
+              noWorldGeometry: true
             """
         )
     }
 
-    func exitEnemyBlockedIdle() {
-        guard enemyCollisionState == .blockedIdle else {
+    func shouldYieldToEnemy(
+        _ other: JockRetargetTestController,
+        headsetPosition: SIMD3<Float>
+    ) -> Bool {
+        guard other !== self else { return false }
+        guard !other.isDeadForHordeCollision else { return false }
+
+        if isAttackOrCombatActiveForCrowdSteering {
+            return false
+        }
+
+        let myDistance = crowdDistanceXZ(
+            rootEntity.position(relativeTo: nil),
+            headsetPosition
+        )
+
+        if myDistance <= attackConfiguration.attackProximityMeters {
+            return false
+        }
+
+        if other.isAttackOrCombatActiveForCrowdSteering {
+            return true
+        }
+
+        let otherDistance = crowdDistanceXZ(
+            other.rootEntity.position(relativeTo: nil),
+            headsetPosition
+        )
+
+        let delta = myDistance - otherDistance
+
+        if delta > HordeCrowdSteeringSettings.rightOfWayDistanceEpsilon {
+            return true
+        }
+
+        if abs(delta) <= HordeCrowdSteeringSettings.rightOfWayDistanceEpsilon {
+            return hordeSpawnIndex > other.hordeSpawnIndex
+        }
+
+        return false
+    }
+
+    private func crowdLocomotionDirection(
+        headsetPosition: SIMD3<Float>
+    ) -> SIMD3<Float> {
+        rotateFlat(
+            directDirectionToUser(headsetPosition: headsetPosition),
+            radians: crowdSteering.steerAngleRadians
+        )
+    }
+
+    func solveCrowdSteering(
+        headsetPosition: SIMD3<Float>,
+        snapshots: [HordeEnemyCollisionSnapshot],
+        reason: String
+    ) {
+        guard !isDeadForHordeCollision,
+              !isAttackOrCombatActiveForCrowdSteering,
+              !isInNonInterruptibleCombatState else {
             return
         }
 
-        enemyCollisionState = .moving
-        enemyCollisionClearTimer = 0
-        enemyCollisionBlockedTimer = 0
-        enemyCollisionBlockedByIDs.removeAll()
-
-        setHordeLocomotionBlocked(
-            false,
-            reason: "enemy_body_overlap_cleared"
+        let enemyPosition = rootEntity.position(relativeTo: nil)
+        let directToUser = directDirectionToUser(
+            headsetPosition: headsetPosition
+        )
+        let currentForward = crowdLocomotionDirection(
+            headsetPosition: headsetPosition
+        )
+        let distance = crowdDistanceXZ(
+            enemyPosition,
+            headsetPosition
         )
 
-        if canSwitchFromBlockedIdleToWalk {
-            resumeFollowAfterEnemyCollisionClear()
+        let goalRayLength = max(
+            0.05,
+            distance -
+                attackConfiguration.attackProximityMeters -
+                HordeCrowdSteeringSettings.attackRangeBufferMeters
+        )
+
+        let forwardRayLength = min(
+            HordeCrowdSteeringSettings.forwardRayLengthMeters,
+            goalRayLength
+        )
+
+        let bodyHeight =
+            characterAttributes?.bodyCollision.sizeMeters.y ??
+            bodyCollisionBox?.sizeMeters.y ??
+            1.5
+
+        let rayOrigin =
+            enemyPosition +
+            SIMD3<Float>(
+                0,
+                bodyHeight *
+                    HordeCrowdSteeringSettings.rayOriginHeightFraction,
+                0
+            )
+
+        let goal = validateEnemyBodyRay(
+            selfEnemy: self,
+            originWorld: rayOrigin,
+            directionWorld: directToUser,
+            length: goalRayLength,
+            headsetPosition: headsetPosition,
+            snapshots: snapshots
+        )
+
+        let forward = validateEnemyBodyRay(
+            selfEnemy: self,
+            originWorld: rayOrigin,
+            directionWorld: currentForward,
+            length: forwardRayLength,
+            headsetPosition: headsetPosition,
+            snapshots: snapshots
+        )
+
+        crowdSteering.lastGoalBlocked = goal.blocked
+        crowdSteering.lastForwardBlocked = forward.blocked
+        crowdSteering.debugGoalBlockerName = goal.debugBlockerName
+        crowdSteering.debugForwardBlockerName = forward.debugBlockerName
+
+        if !goal.blocked {
+            crowdSteering.mode = .reGoalToUser
+            crowdSteering.lockedRotateSign = 0
+
+            print(
+                """
+                [CrowdSteering] goal ray clear
+                  enemyID: \(hordeID.uuidString)
+                  reason: \(reason)
+                  action: re_goal_to_user
+                  target: user
+                """
+            )
+
+            return
         }
+
+        if !forward.blocked {
+            crowdSteering.mode = .flanking
+
+            print(
+                """
+                [CrowdSteering] goal blocked, forward clear
+                  enemyID: \(hordeID.uuidString)
+                  action: keep_flanking
+                  targetStill: user
+                  goalBlocker: \(goal.debugBlockerName ?? "nil")
+                """
+            )
+
+            return
+        }
+
+        rotateLocomotionFiveDegrees()
+    }
+
+    private func rotateLocomotionFiveDegrees() {
+        if crowdSteering.lockedRotateSign == 0 {
+            crowdSteering.lockedRotateSign = Bool.random() ? -1 : 1
+
+            print(
+                """
+                [CrowdSteering] locked rotate sign
+                  enemyID: \(hordeID.uuidString)
+                  sign: \(crowdSteering.lockedRotateSign)
+                """
+            )
+        }
+
+        let step =
+            HordeCrowdSteeringSettings.rotationStepDegrees *
+            .pi / 180.0 *
+            crowdSteering.lockedRotateSign
+
+        crowdSteering.steerAngleRadians += step
+        crowdSteering.mode = .flanking
 
         print(
             """
-            [EnemyCollision] exited BlockedIdle
+            [CrowdSteering] rotated locomotion
               enemyID: \(hordeID.uuidString)
-              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              degrees: \(HordeCrowdSteeringSettings.rotationStepDegrees)
+              totalAngleDegrees: \(crowdSteering.steerAngleRadians * 180.0 / .pi)
+              noTurnAnimation: true
+              noIdle: true
             """
+        )
+    }
+
+    private func updateCrowdReGoal(
+        deltaTime: Float,
+        headsetPosition: SIMD3<Float>
+    ) {
+        guard crowdSteering.mode == .reGoalToUser else {
+            return
+        }
+
+        let step =
+            HordeCrowdSteeringSettings.reGoalDegreesPerSecond *
+            .pi / 180.0 *
+            deltaTime
+
+        if abs(crowdSteering.steerAngleRadians) <= step {
+            crowdSteering.steerAngleRadians = 0
+            crowdSteering.mode = .directToUser
+            crowdSteering.lockedRotateSign = 0
+            return
+        }
+
+        crowdSteering.steerAngleRadians -=
+            signFloat(crowdSteering.steerAngleRadians) * step
+    }
+
+    private func updateCrowdSteeringIfNeeded(
+        deltaTime: Float,
+        headsetPosition: SIMD3<Float>
+    ) {
+        guard enemyCollisionState == .active,
+              !isDeadForHordeCollision,
+              !isAttackOrCombatActiveForCrowdSteering,
+              !isInNonInterruptibleCombatState else {
+            return
+        }
+
+        let distance = crowdDistanceXZ(
+            rootEntity.position(relativeTo: nil),
+            headsetPosition
+        )
+
+        if distance <= attackConfiguration.attackProximityMeters +
+            HordeCrowdSteeringSettings.attackRangeBufferMeters {
+            crowdSteering = HordeCrowdSteeringState()
+            return
+        }
+
+        let now = CACurrentMediaTime()
+
+        guard now >= crowdSteering.nextSolveTime else {
+            updateCrowdReGoal(
+                deltaTime: deltaTime,
+                headsetPosition: headsetPosition
+            )
+            return
+        }
+
+        crowdSteering.nextSolveTime =
+            now + TimeInterval.random(
+                in: HordeCrowdSteeringSettings.solveIntervalMin...HordeCrowdSteeringSettings.solveIntervalMax
+            )
+
+        solveCrowdSteering(
+            headsetPosition: headsetPosition,
+            snapshots: latestCrowdSnapshots,
+            reason: "poll"
         )
     }
 
     func onEnemyDeathDisableCollision() {
         enemyCollisionState = .dead
-        enemyBodyCollisionParticipant = false
-        enemyCollisionBlockedThisFrame = false
-        enemyCollisionBlockedByIDs.removeAll()
-        enemyCollisionClearTimer = 0
-        enemyCollisionBlockedTimer = 0
+        crowdSteering = HordeCrowdSteeringState()
+        attackAnchorUserPosition = nil
+        latestCrowdSnapshots.removeAll()
 
-        bodyCollisionBox?.setEnabled(false)
-
-        setHordeLocomotionBlocked(
-            true,
+        setEnemyBodyCollisionParticipant(
+            false,
             reason: "death"
         )
 
@@ -1328,34 +1596,6 @@ final class JockRetargetTestController {
             [EnemyCollision] disabled on death
               enemyID: \(hordeID.uuidString)
               characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
-            """
-        )
-    }
-
-    func setHordeLocomotionBlocked(
-        _ blocked: Bool,
-        reason: String
-    ) {
-        hordeLocomotionBlockedByEnemyCollision = blocked
-
-        if blocked {
-            driver?.locomotionDeltaHandler = nil
-            setRootMotionEnabled(false)
-            setExternalMotionDriven(false)
-        } else if followDemoState != .inactive,
-                  lifecycleState == .alive {
-            driver?.locomotionDeltaHandler = { [weak self] delta in
-                self?.consumeFollowLocomotionDelta(delta) ?? true
-            }
-            setRootMotionEnabled(true)
-        }
-
-        print(
-            """
-            [EnemyCollision] locomotion blocked changed
-              enemyID: \(hordeID.uuidString)
-              blocked: \(blocked)
-              reason: \(reason)
             """
         )
     }
@@ -1648,6 +1888,7 @@ final class JockRetargetTestController {
             true,
             reason: "portal_exit_complete"
         )
+        initializeCrowdSteering()
 
         print(
             """
@@ -1668,6 +1909,7 @@ final class JockRetargetTestController {
         guard isVisible else { return }
 
         latestHeadPosition = currentHeadPosition
+        latestFrameDeltaTime = deltaTime
         let dt = TimeInterval(deltaTime)
 
         if externalMotionDriven {
@@ -1676,7 +1918,8 @@ final class JockRetargetTestController {
             return
         }
 
-        if followDemoState != .inactive {
+        if followDemoState != .inactive,
+           currentHeadPosition != nil {
             updateAttackMode(
                 deltaTime: dt,
                 currentHeadPosition: currentHeadPosition
@@ -2616,6 +2859,12 @@ final class JockRetargetTestController {
             return
 
         case .attacking:
+            if userMovedFromAttackAnchor(
+                currentHeadPosition
+            ) {
+                attackAnchorUserPosition = nil
+            }
+
             if var attack = activeAttack {
                 attack.elapsedSeconds += deltaTime
                 activeAttack = attack
@@ -2623,6 +2872,13 @@ final class JockRetargetTestController {
             return
 
         case .closeRangeReady(let delayRemaining):
+            if userMovedFromAttackAnchor(
+                currentHeadPosition
+            ) {
+                exitCloseRangeToFollow()
+                return
+            }
+
             let distance = horizontalDistanceToUser(
                 headPosition: currentHeadPosition
             )
@@ -2646,13 +2902,34 @@ final class JockRetargetTestController {
             )
 
             if distance <= attackConfiguration.attackProximityMeters {
+                attackAnchorUserPosition = currentHeadPosition
                 enterCloseRangeReady()
             }
         }
     }
 
+    private func userMovedFromAttackAnchor(
+        _ currentHeadPosition: SIMD3<Float>
+    ) -> Bool {
+        guard let attackAnchorUserPosition else {
+            return false
+        }
+
+        return crowdDistanceXZ(
+            currentHeadPosition,
+            attackAnchorUserPosition
+        ) >= HordeCrowdSteeringSettings.userMoveBreakAttackMeters
+    }
+
     private func enterCloseRangeReady() {
         guard followDemoState != .inactive else { return }
+
+        if let latestHeadPosition,
+           attackAnchorUserPosition == nil {
+            attackAnchorUserPosition = latestHeadPosition
+        }
+
+        crowdSteering = HordeCrowdSteeringState()
 
         driver?.locomotionDeltaHandler = nil
 
@@ -2679,6 +2956,7 @@ final class JockRetargetTestController {
     private func exitCloseRangeToFollow() {
         activeAttack = nil
         combatState = .normal
+        attackAnchorUserPosition = nil
         followDemoState = .waitingToFollow
         followDelayElapsed = 0
 
@@ -2691,6 +2969,13 @@ final class JockRetargetTestController {
 
     private func startAttackIfPossible() {
         guard followDemoState != .inactive else { return }
+
+        if let latestHeadPosition,
+           attackAnchorUserPosition == nil {
+            attackAnchorUserPosition = latestHeadPosition
+        }
+
+        crowdSteering = HordeCrowdSteeringState()
 
         guard let selectedAttackClipID = pickAnimationClipIDFromAttributes(
             role: "attack",
@@ -2751,6 +3036,16 @@ final class JockRetargetTestController {
               damage: \(metadata.damageAmount)
             """
         )
+
+        print(
+            """
+            [EnemyAttack] entered attack
+              enemyID: \(hordeID.uuidString)
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              multipleAttackersAllowed: true
+              collisionDoesNotOwnAttack: true
+            """
+        )
     }
 
     private func handleAttackCompleted(_ completedClip: JockAnimClip) {
@@ -2765,6 +3060,12 @@ final class JockRetargetTestController {
 
         guard let latestHeadPosition else {
             combatState = .normal
+            return
+        }
+
+        if attackAnchorUserPosition == nil ||
+            userMovedFromAttackAnchor(latestHeadPosition) {
+            exitCloseRangeToFollow()
             return
         }
 
@@ -3076,14 +3377,6 @@ final class JockRetargetTestController {
             return
         }
 
-        if hordeLocomotionBlockedByEnemyCollision {
-            steerRootTowardUser(
-                headPosition: currentHeadPosition,
-                deltaTime: Float(deltaTime)
-            )
-            return
-        }
-
         let horizontalDistance = horizontalDistanceToUser(
             headPosition: currentHeadPosition
         )
@@ -3279,54 +3572,6 @@ final class JockRetargetTestController {
         )
     }
 
-    private var canSwitchToBlockedIdleAnimation: Bool {
-        lifecycleState == .alive &&
-        !isActionLocked
-    }
-
-    private var canSwitchFromBlockedIdleToWalk: Bool {
-        lifecycleState == .alive &&
-        !isActionLocked
-    }
-
-    private func playBlockedIdleAnimationFromAttributesOrIdle() {
-        followDemoState = .idleStopped
-        followDelayElapsed = 0
-        playFollowIdle(
-            allowDuringCombat: true
-        )
-
-        print(
-            """
-            [EnemyCollision] blocked idle animation
-              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
-              source: idle
-            """
-        )
-    }
-
-    private func resumeFollowAfterEnemyCollisionClear() {
-        guard let latestHeadPosition else {
-            followDemoState = .waitingToFollow
-            followDelayElapsed = 0
-            return
-        }
-
-        let horizontalDistance = horizontalDistanceToUser(
-            headPosition: latestHeadPosition
-        )
-
-        if horizontalDistance <= followConfiguration.stopDistanceMeters {
-            followDemoState = .idleStopped
-            followDelayElapsed = 0
-            playFollowIdle()
-        } else {
-            followDemoState = .following
-            followDelayElapsed = 0
-            playFollowWalk()
-        }
-    }
-
     private func followVisualRuntimeOverride() -> JockRuntimeClipOverride {
         JockRuntimeClipOverride(
             entryHeadingDegrees: -followConfiguration.visualHeadingCorrectionDegrees,
@@ -3346,21 +3591,53 @@ final class JockRetargetTestController {
         )
     }
 
+    private func steerRootTowardWorldDirection(
+        _ direction: SIMD3<Float>,
+        deltaTime: Float
+    ) {
+        let flatDirection = PhaseOneMath.normalizedOrFallback(
+            SIMD3<Float>(direction.x, 0, direction.z),
+            fallback: rootEntity.orientation.act(SIMD3<Float>(0, 0, -1))
+        )
+
+        let targetYaw = PhaseOneMath.yawRadiansForNegativeZForward(
+            worldForward: flatDirection
+        )
+
+        let currentForward = rootEntity.orientation.act(
+            SIMD3<Float>(0, 0, -1)
+        )
+
+        let currentHorizontalForward = PhaseOneMath.normalizedOrFallback(
+            SIMD3<Float>(currentForward.x, 0, currentForward.z),
+            fallback: SIMD3<Float>(0, 0, -1)
+        )
+
+        let currentYaw = PhaseOneMath.yawRadiansForNegativeZForward(
+            worldForward: currentHorizontalForward
+        )
+
+        let deltaYaw = PhaseOneMath.normalizedAngleRadians(
+            targetYaw - currentYaw
+        )
+
+        guard abs(deltaYaw) > followConfiguration.facingDeadZoneRadians else {
+            return
+        }
+
+        let maxStep = followConfiguration.maxTurnRadiansPerSecond * deltaTime
+        let clampedStep = min(max(deltaYaw, -maxStep), maxStep)
+
+        rootEntity.orientation = simd_quatf(
+            angle: currentYaw + clampedStep,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
+    }
+
     private func consumeFollowLocomotionDelta(
         _ delta: JockRuntimeLocomotionDelta
     ) -> Bool {
         guard !isActionLocked else {
-            return true
-        }
-
-        if hordeLocomotionBlockedByEnemyCollision {
-            if let latestHeadPosition {
-                steerRootTowardUser(
-                    headPosition: latestHeadPosition,
-                    deltaTime: 1.0 / 60.0
-                )
-            }
-
             return true
         }
 
@@ -3414,16 +3691,28 @@ final class JockRetargetTestController {
             return true
         }
 
-        let rootForward = rootEntity.orientation.act(
-            SIMD3<Float>(0, 0, -1)
+        updateCrowdSteeringIfNeeded(
+            deltaTime: latestFrameDeltaTime,
+            headsetPosition: headPosition
         )
 
-        let horizontalForward = PhaseOneMath.normalizedOrFallback(
-            SIMD3<Float>(rootForward.x, 0, rootForward.z),
-            fallback: SIMD3<Float>(0, 0, -1)
+        let movementDirection = crowdLocomotionDirection(
+            headsetPosition: headPosition
         )
 
-        rootEntity.position += horizontalForward * clampedStep
+        steerRootTowardWorldDirection(
+            movementDirection,
+            deltaTime: latestFrameDeltaTime
+        )
+
+        let currentPosition = rootEntity.position(relativeTo: nil)
+        var targetPosition = currentPosition + movementDirection * clampedStep
+        targetPosition.y = currentPosition.y
+
+        rootEntity.setPosition(
+            targetPosition,
+            relativeTo: nil
+        )
 
         if clampedStep >= remainingSafeTravel - 0.001 {
             followDemoState = .idleStopped

@@ -22,6 +22,7 @@ struct CharacterBodyCollisionAttributes: Codable {
     let centerOffset: CharacterBodyCollisionOffset
     let bottomAnchoredToGround: Bool
     let debugVisible: Bool?
+    let probes: CharacterBodyCollisionProbeAttributes?
 
     enum CodingKeys: String, CodingKey {
         case enabled
@@ -30,6 +31,7 @@ struct CharacterBodyCollisionAttributes: Codable {
         case centerOffset = "center_offset"
         case bottomAnchoredToGround = "bottom_anchored_to_ground"
         case debugVisible = "debug_visible"
+        case probes
     }
 
     var sizeMeters: SIMD3<Float> {
@@ -69,4 +71,28 @@ struct CharacterBodyCollisionOffset: Codable {
     let x: Float
     let y: Float
     let z: Float
+}
+
+struct CharacterBodyCollisionProbeAttributes: Codable {
+    let forwardLength: Float?
+    let sideLength: Float?
+    let floorDrop: Float?
+    let wallClearance: Float?
+    let units: CharacterCollisionUnits?
+
+    enum CodingKeys: String, CodingKey {
+        case forwardLength = "forward_length"
+        case sideLength = "side_length"
+        case floorDrop = "floor_drop"
+        case wallClearance = "wall_clearance"
+        case units
+    }
+
+    func scaled(
+        _ value: Float?,
+        default defaultValue: Float
+    ) -> Float {
+        let scale = units?.metersScale ?? 1.0
+        return (value ?? defaultValue) * scale
+    }
 }
