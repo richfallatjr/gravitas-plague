@@ -197,6 +197,7 @@ private extension CharacterAttributeStore {
     ) throws {
         try validateUSDZ(attributes)
         try validateHits(attributes)
+        try validateBodyCollision(attributes)
         try validateAnimations(
             attributes,
             animationManifest: animationManifest
@@ -244,6 +245,35 @@ private extension CharacterAttributeStore {
                 max: max
             )
         }
+    }
+
+    func validateBodyCollision(
+        _ attributes: CharacterAttributes
+    ) throws {
+        let collision = attributes.bodyCollision
+
+        guard collision.size.width > 0,
+              collision.size.depth > 0,
+              collision.size.height > 0 else {
+            throw CharacterAttributeError.invalidBodyCollision(
+                characterID: attributes.characterID,
+                width: collision.size.width,
+                depth: collision.size.depth,
+                height: collision.size.height
+            )
+        }
+
+        print(
+            """
+            [CharacterAttributes] body collision validated
+              characterID: \(attributes.characterID)
+              enabled: \(collision.enabled)
+              units: \(collision.units.rawValue)
+              sizeMeters: \(collision.sizeMeters)
+              centerOffsetMeters: \(collision.resolvedCenterOffsetMeters)
+              bottomAnchoredToGround: \(collision.bottomAnchoredToGround)
+            """
+        )
     }
 
     func validateAnimations(

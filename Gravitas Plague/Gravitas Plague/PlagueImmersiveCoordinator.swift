@@ -41,6 +41,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let wallPosterUIController = WallMountedPosterUIController()
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
     private let hordeRoomScanTracker = HordeRoomScanTracker()
+    private let enemyCollisionCoordinator = HordeEnemyCollisionCoordinator()
     private let instructionHUD = PlagueHeadTrackedInstructionHUD()
 
     @Published private(set) var isPlayerDeathSequenceActive = false
@@ -96,6 +97,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var hordePlayerHitsThisWave = 0
     private var hordeTotalSpawned = 0
     private var hordeTotalKilled = 0
+    private var nextGlobalEnemySpawnIndex = 0
     private var hordeWaveSpawnState: HordeWaveSpawnState = .idle
     private var hordeSpawnFailures: [HordeSpawnFailureRecord] = []
     private var isSpawningHordeWave = false
@@ -448,7 +450,25 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         case .updatePortalLoopGainDB(let gainDB):
             hordePortalManager.updatePortalLoopGainDB(gainDB)
+
+        case .updateEnemyCollisionDebugVisible(let visible):
+            setEnemyCollisionDebugVisible(visible)
         }
+    }
+
+    func setEnemyCollisionDebugVisible(
+        _ visible: Bool
+    ) {
+        enemyCollisionCoordinator.debugVisible = visible
+
+        for enemy in hordeEnemyControllersByID.values {
+            enemy.bodyCollisionBox?.setDebugVisible(
+                visible,
+                state: enemy.enemyCollisionState
+            )
+        }
+
+        print("[EnemyCollision] debug toggle \(visible)")
     }
 
     func tick(at date: Date) {
@@ -496,6 +516,16 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             hordePortalManager.updatePortalFX(
                 deltaTime: deltaTime
             )
+
+            if let pose = currentPose,
+               let sceneRoot {
+                enemyCollisionCoordinator.update(
+                    deltaTime: deltaTime,
+                    headsetPosition: pose.headPosition,
+                    enemies: Array(hordeEnemyControllersByID.values),
+                    sceneRoot: sceneRoot
+                )
+            }
 
             for controller in hordeEnemyControllersByID.values {
                 controller.update(
@@ -659,6 +689,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeWaveSpawnState = .idle
         hordeSpawnFailures.removeAll()
         isSpawningHordeWave = false
+        nextGlobalEnemySpawnIndex = 0
         hordeRoomScanTracker.begin()
         roomSkinningCoordinator.startHordeRoomScanOnly()
 
@@ -1096,6 +1127,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordePlayerHitsThisWave = 0
         hordeTotalSpawned = 0
         hordeTotalKilled = 0
+        nextGlobalEnemySpawnIndex = 0
         hordeWaveSpawnState = .idle
         hordeSpawnFailures.removeAll()
         isSpawningHordeWave = false
@@ -1382,6 +1414,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             let index = spawnIndexByID[assignment.enemyID] ?? successfulSpawnCount
             let archetype = assignment.archetype
             let id = assignment.enemyID
+            let collisionSpawnIndex = nextGlobalEnemySpawnIndex
+            nextGlobalEnemySpawnIndex += 1
 
             guard let hitsToKill = hitsToKillByID[id] else {
                 handleHordeSpawnFailure(
@@ -1421,7 +1455,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     archetype: archetype,
                     position: positions[index],
                     wave: nextWave,
-                    spawnIndex: index,
+                    spawnIndex: collisionSpawnIndex,
                     hitsToKill: hitsToKill,
                     playerHeadPosition: spawnPose.headPosition
                 )

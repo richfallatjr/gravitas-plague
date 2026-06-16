@@ -20,6 +20,22 @@
     },
     "spawn_weight": 1.0
   },
+  "body_collision": {
+    "enabled": true,
+    "units": "feet",
+    "size": {
+      "width": 2.2,
+      "depth": 2.2,
+      "height": 6.2
+    },
+    "center_offset": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "bottom_anchored_to_ground": true,
+    "debug_visible": false
+  },
   "animations": {
     "idle": [
       {

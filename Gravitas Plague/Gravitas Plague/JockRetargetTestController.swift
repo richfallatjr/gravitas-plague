@@ -134,7 +134,7 @@ final class JockRetargetTestController {
     private var characterAttributes: CharacterAttributes?
     private var hordeID = UUID()
     private var hordeWave = 1
-    private var hordeSpawnIndex = 0
+    private(set) var hordeSpawnIndex = 0
     private var hitsToKill = Int.random(in: 3...5)
     private var lifecycleState: InfectedLifecycleState = .alive
     private var activeDeathClipID: String?
@@ -146,6 +146,17 @@ final class JockRetargetTestController {
     private var hasLoggedCharacterAudioEmitterMissingAnchor = false
     private var hasLoggedCharacterAudioEmitterMissingJoint = false
     private var didPlayDeathAudio = false
+
+    var enemyCollisionState: HordeEnemyCollisionState = .moving
+    var enemyBodyCollisionEnabled = false
+    var enemyBodyCollisionParticipant = false
+    var enemyCollisionDistanceToHeadset: Float = 0
+    var enemyCollisionBlockedThisFrame = false
+    var enemyCollisionBlockedByIDs = Set<UUID>()
+    var enemyCollisionClearTimer: Float = 0
+    var enemyCollisionBlockedTimer: Float = 0
+    private(set) var hordeLocomotionBlockedByEnemyCollision = false
+    var bodyCollisionBox: HordeEnemyBodyCollisionBox?
 
     private var spawnPosition = SIMD3<Float>(0, 0, -3.05)
     private var spawnOrientation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
@@ -463,6 +474,8 @@ final class JockRetargetTestController {
 
         updateGroundingProfileFromLoadedEntityIfNeeded()
 
+        setupEnemyBodyCollisionBoxIfNeeded()
+
         validateHitClipsArePrewarmed()
 
         let loadedAttackIDs = HordeAttackAnimationCatalogue.validAttackClipIDs(
@@ -614,6 +627,15 @@ final class JockRetargetTestController {
         hasLoggedMissingHeadHitZone = false
         hasLoggedCharacterAudioEmitterMissingAnchor = false
         hasLoggedCharacterAudioEmitterMissingJoint = false
+        enemyCollisionState = .moving
+        enemyBodyCollisionParticipant = false
+        enemyCollisionDistanceToHeadset = 0
+        enemyCollisionBlockedThisFrame = false
+        enemyCollisionBlockedByIDs.removeAll()
+        enemyCollisionClearTimer = 0
+        enemyCollisionBlockedTimer = 0
+        hordeLocomotionBlockedByEnemyCollision = false
+        bodyCollisionBox?.setEnabled(false)
 
         rootEntity.name = "Horde_\(archetype.rawValue)_wave\(wave)_index\(spawnIndex)_\(id.uuidString.prefix(6))"
 
@@ -628,6 +650,15 @@ final class JockRetargetTestController {
               hitsToKill: \(self.hitsToKill)
               source: character_attributes
               entityName: \(rootEntity.name)
+            """
+        )
+
+        print(
+            """
+            [EnemyCollision] spawn index assigned
+              enemyID: \(hordeID.uuidString)
+              characterID: \(attributes?.characterID ?? archetype.rawValue)
+              spawnIndex: \(hordeSpawnIndex)
             """
         )
 
@@ -657,6 +688,12 @@ final class JockRetargetTestController {
         resetHitSelectionMemory()
         followDelayElapsed = 0
         latestHeadPosition = nil
+        enemyCollisionState = .dead
+        enemyBodyCollisionParticipant = false
+        enemyCollisionBlockedThisFrame = false
+        enemyCollisionBlockedByIDs.removeAll()
+        hordeLocomotionBlockedByEnemyCollision = false
+        bodyCollisionBox?.setEnabled(false)
         driver?.locomotionDeltaHandler = nil
         driver?.stop()
         hitDetector.stop()
@@ -907,6 +944,8 @@ final class JockRetargetTestController {
         latestHeadPosition = nil
         resetCombatRuntime()
         resetHitSelectionMemory()
+        enemyCollisionState = .moving
+        hordeLocomotionBlockedByEnemyCollision = false
 
         driver?.locomotionDeltaHandler = nil
         driver?.stop()
@@ -928,6 +967,12 @@ final class JockRetargetTestController {
         activeAttack = nil
         combatState = .normal
         isPlayingPacingLoop = false
+        enemyCollisionState = .dead
+        enemyBodyCollisionParticipant = false
+        enemyCollisionBlockedThisFrame = false
+        enemyCollisionBlockedByIDs.removeAll()
+        hordeLocomotionBlockedByEnemyCollision = false
+        bodyCollisionBox?.setEnabled(false)
 
         driver?.locomotionDeltaHandler = nil
         driver?.stop()
@@ -1132,6 +1177,189 @@ final class JockRetargetTestController {
         onCharacterDeath?()
     }
 
+    var hordeCollisionDebugName: String {
+        "\(characterAttributes?.characterID ?? characterArchetype.rawValue)_\(hordeID.uuidString.prefix(6))"
+    }
+
+    var isDeadForHordeCollision: Bool {
+        lifecycleState != .alive || combatState == .dead
+    }
+
+    func setupEnemyBodyCollisionBoxIfNeeded() {
+        guard let attributes = characterAttributes else {
+            enemyBodyCollisionEnabled = false
+            enemyBodyCollisionParticipant = false
+            return
+        }
+
+        guard attributes.bodyCollision.enabled else {
+            enemyBodyCollisionEnabled = false
+            enemyBodyCollisionParticipant = false
+            bodyCollisionBox?.setEnabled(false)
+            return
+        }
+
+        let box = HordeEnemyBodyCollisionBox(
+            attributes: attributes.bodyCollision,
+            name: hordeCollisionDebugName
+        )
+
+        box.attach(to: rootEntity)
+        box.setEnabled(false)
+
+        bodyCollisionBox = box
+        enemyBodyCollisionEnabled = true
+        enemyBodyCollisionParticipant = false
+
+        print(
+            """
+            [EnemyCollision] setup complete
+              enemyID: \(hordeID.uuidString)
+              characterID: \(attributes.characterID)
+              spawnIndex: \(hordeSpawnIndex)
+              sizeMeters: \(attributes.bodyCollision.sizeMeters)
+              participant: false
+            """
+        )
+    }
+
+    func setEnemyBodyCollisionParticipant(
+        _ enabled: Bool,
+        reason: String
+    ) {
+        enemyBodyCollisionParticipant = enabled
+
+        bodyCollisionBox?.setEnabled(
+            enabled && enemyBodyCollisionEnabled
+        )
+
+        print(
+            """
+            [EnemyCollision] participant changed
+              enemyID: \(hordeID.uuidString)
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              enabled: \(enabled)
+              reason: \(reason)
+            """
+        )
+    }
+
+    func enterEnemyBlockedIdle() {
+        guard enemyCollisionState != .dead else {
+            return
+        }
+
+        enemyCollisionState = .blockedIdle
+        enemyCollisionBlockedTimer = 0
+        enemyCollisionClearTimer = 0
+
+        setHordeLocomotionBlocked(
+            true,
+            reason: "enemy_body_overlap"
+        )
+
+        if canSwitchToBlockedIdleAnimation {
+            playBlockedIdleAnimationFromAttributesOrIdle()
+        } else {
+            print(
+                """
+                [EnemyCollision] blocked idle animation skipped
+                  enemyID: \(hordeID.uuidString)
+                  reason: current_animation_has_priority
+                """
+            )
+        }
+
+        print(
+            """
+            [EnemyCollision] entered BlockedIdle
+              enemyID: \(hordeID.uuidString)
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              blockedBy: \(enemyCollisionBlockedByIDs.map { $0.uuidString }.joined(separator: ","))
+            """
+        )
+    }
+
+    func exitEnemyBlockedIdle() {
+        guard enemyCollisionState == .blockedIdle else {
+            return
+        }
+
+        enemyCollisionState = .moving
+        enemyCollisionClearTimer = 0
+        enemyCollisionBlockedTimer = 0
+        enemyCollisionBlockedByIDs.removeAll()
+
+        setHordeLocomotionBlocked(
+            false,
+            reason: "enemy_body_overlap_cleared"
+        )
+
+        if canSwitchFromBlockedIdleToWalk {
+            resumeFollowAfterEnemyCollisionClear()
+        }
+
+        print(
+            """
+            [EnemyCollision] exited BlockedIdle
+              enemyID: \(hordeID.uuidString)
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+            """
+        )
+    }
+
+    func onEnemyDeathDisableCollision() {
+        enemyCollisionState = .dead
+        enemyBodyCollisionParticipant = false
+        enemyCollisionBlockedThisFrame = false
+        enemyCollisionBlockedByIDs.removeAll()
+        enemyCollisionClearTimer = 0
+        enemyCollisionBlockedTimer = 0
+
+        bodyCollisionBox?.setEnabled(false)
+
+        setHordeLocomotionBlocked(
+            true,
+            reason: "death"
+        )
+
+        print(
+            """
+            [EnemyCollision] disabled on death
+              enemyID: \(hordeID.uuidString)
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+            """
+        )
+    }
+
+    func setHordeLocomotionBlocked(
+        _ blocked: Bool,
+        reason: String
+    ) {
+        hordeLocomotionBlockedByEnemyCollision = blocked
+
+        if blocked {
+            driver?.locomotionDeltaHandler = nil
+            setRootMotionEnabled(false)
+            setExternalMotionDriven(false)
+        } else if followDemoState != .inactive,
+                  lifecycleState == .alive {
+            driver?.locomotionDeltaHandler = { [weak self] delta in
+                self?.consumeFollowLocomotionDelta(delta) ?? true
+            }
+            setRootMotionEnabled(true)
+        }
+
+        print(
+            """
+            [EnemyCollision] locomotion blocked changed
+              enemyID: \(hordeID.uuidString)
+              blocked: \(blocked)
+              reason: \(reason)
+            """
+        )
+    }
+
     private func resolvedCharacterAttributes() throws -> CharacterAttributes {
         if let characterAttributes {
             return characterAttributes
@@ -1253,6 +1481,10 @@ final class JockRetargetTestController {
 
         resetCombatRuntime()
         resetHitSelectionMemory()
+        setEnemyBodyCollisionParticipant(
+            false,
+            reason: "inside_portal_ingress"
+        )
         setExternalMotionDriven(true)
         setRootMotionEnabled(false)
 
@@ -1412,6 +1644,10 @@ final class JockRetargetTestController {
         setExternalMotionDriven(false)
         setRootMotionEnabled(true)
         playerAttackEnabled = true
+        setEnemyBodyCollisionParticipant(
+            true,
+            reason: "portal_exit_complete"
+        )
 
         print(
             """
@@ -1965,6 +2201,8 @@ final class JockRetargetTestController {
             )
             return
         }
+
+        onEnemyDeathDisableCollision()
 
         lifecycleState = .dying
         activeDeathClipID = selectedClipID
@@ -2838,6 +3076,14 @@ final class JockRetargetTestController {
             return
         }
 
+        if hordeLocomotionBlockedByEnemyCollision {
+            steerRootTowardUser(
+                headPosition: currentHeadPosition,
+                deltaTime: Float(deltaTime)
+            )
+            return
+        }
+
         let horizontalDistance = horizontalDistanceToUser(
             headPosition: currentHeadPosition
         )
@@ -3033,6 +3279,54 @@ final class JockRetargetTestController {
         )
     }
 
+    private var canSwitchToBlockedIdleAnimation: Bool {
+        lifecycleState == .alive &&
+        !isActionLocked
+    }
+
+    private var canSwitchFromBlockedIdleToWalk: Bool {
+        lifecycleState == .alive &&
+        !isActionLocked
+    }
+
+    private func playBlockedIdleAnimationFromAttributesOrIdle() {
+        followDemoState = .idleStopped
+        followDelayElapsed = 0
+        playFollowIdle(
+            allowDuringCombat: true
+        )
+
+        print(
+            """
+            [EnemyCollision] blocked idle animation
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              source: idle
+            """
+        )
+    }
+
+    private func resumeFollowAfterEnemyCollisionClear() {
+        guard let latestHeadPosition else {
+            followDemoState = .waitingToFollow
+            followDelayElapsed = 0
+            return
+        }
+
+        let horizontalDistance = horizontalDistanceToUser(
+            headPosition: latestHeadPosition
+        )
+
+        if horizontalDistance <= followConfiguration.stopDistanceMeters {
+            followDemoState = .idleStopped
+            followDelayElapsed = 0
+            playFollowIdle()
+        } else {
+            followDemoState = .following
+            followDelayElapsed = 0
+            playFollowWalk()
+        }
+    }
+
     private func followVisualRuntimeOverride() -> JockRuntimeClipOverride {
         JockRuntimeClipOverride(
             entryHeadingDegrees: -followConfiguration.visualHeadingCorrectionDegrees,
@@ -3056,6 +3350,17 @@ final class JockRetargetTestController {
         _ delta: JockRuntimeLocomotionDelta
     ) -> Bool {
         guard !isActionLocked else {
+            return true
+        }
+
+        if hordeLocomotionBlockedByEnemyCollision {
+            if let latestHeadPosition {
+                steerRootTowardUser(
+                    headPosition: latestHeadPosition,
+                    deltaTime: 1.0 / 60.0
+                )
+            }
+
             return true
         }
 

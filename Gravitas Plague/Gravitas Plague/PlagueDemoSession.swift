@@ -101,6 +101,7 @@ final class PlagueDemoSession: ObservableObject {
         case cancelRoomSkinning
         case updatePortalHDRIAtmosphere(PortalHDRIAtmosphere)
         case updatePortalLoopGainDB(Float)
+        case updateEnemyCollisionDebugVisible(Bool)
     }
 
     struct CommandEnvelope: Identifiable, Equatable {
@@ -162,6 +163,17 @@ final class PlagueDemoSession: ObservableObject {
                 [HordePortalAudio] global portal spawn gain changed
                   gainDB: \(portalSpawnGainDB)
                 """
+            )
+        }
+    }
+    @Published var enemyCollisionDebugVisible = false {
+        didSet {
+            guard enemyCollisionDebugVisible != oldValue else {
+                return
+            }
+
+            send(
+                .updateEnemyCollisionDebugVisible(enemyCollisionDebugVisible)
             )
         }
     }

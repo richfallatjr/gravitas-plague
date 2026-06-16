@@ -10,6 +10,7 @@ struct CharacterAttributes: Codable, Identifiable {
     let asset: CharacterAssetAttributes
     let runtime: CharacterRuntimeAttributes
     let horde: CharacterHordeAttributes
+    let bodyCollision: CharacterBodyCollisionAttributes
     let animations: CharacterAnimationAttributes
     let audio: CharacterAudioAttributes
     let extensions: [String: JSONValue]?
@@ -22,6 +23,7 @@ struct CharacterAttributes: Codable, Identifiable {
         case asset
         case runtime
         case horde
+        case bodyCollision = "body_collision"
         case animations
         case audio
         case extensions
@@ -291,6 +293,7 @@ enum CharacterAttributeError: Error, LocalizedError {
     case missingAudioFile(characterID: String, role: String, file: String)
     case invalidWeights(characterID: String, role: String)
     case invalidHitsToKill(characterID: String, min: Int, max: Int)
+    case invalidBodyCollision(characterID: String, width: Float, depth: Float, height: Float)
 
     var errorDescription: String? {
         switch self {
@@ -320,6 +323,8 @@ enum CharacterAttributeError: Error, LocalizedError {
             return "\(characterID) invalid weights for \(role)."
         case .invalidHitsToKill(let characterID, let min, let max):
             return "\(characterID) invalid hit range \(min)-\(max)."
+        case .invalidBodyCollision(let characterID, let width, let depth, let height):
+            return "\(characterID) invalid body_collision size \(width)x\(depth)x\(height)."
         }
     }
 }
