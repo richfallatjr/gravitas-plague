@@ -26,9 +26,11 @@ struct EnemySeparationCommand: Sendable {
 
 actor HordeSimulationEngine {
     private var lastCrowdStateByEnemyID: [UUID: HordeCrowdSteeringState] = [:]
+    private var didLogRayValidationSource = false
 
     func reset() {
         lastCrowdStateByEnemyID.removeAll()
+        didLogRayValidationSource = false
     }
 
     func stepCrowd(
@@ -37,6 +39,8 @@ actor HordeSimulationEngine {
         enemies: [EnemyBodySnapshot],
         brain: [EnemyBrainSnapshot]
     ) -> HordeSimulationCommands {
+        logRayValidationSourceIfNeeded()
+
         let liveIDs = Set(
             brain
                 .filter { !$0.isDead }
@@ -66,6 +70,26 @@ actor HordeSimulationEngine {
             frameIndex: frame.frameIndex,
             steering: steering.commands,
             separation: separation
+        )
+    }
+
+    private func logRayValidationSourceIfNeeded() {
+        guard RuntimeDiagnostics.hordeRuntimeSummariesEnabled,
+              !didLogRayValidationSource else {
+            return
+        }
+
+        didLogRayValidationSource = true
+
+        print(
+            """
+            [CrowdSteering] ray validation source
+              source: simplified_body_collision_boxes
+              worldGeometry: false
+              fullEnemyGeometry: false
+              hitZones: false
+              attackColliders: false
+            """
         )
     }
 }

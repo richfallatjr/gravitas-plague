@@ -5,12 +5,13 @@ import UIKit
 @MainActor
 final class HordeEnemyBodyCollisionBox {
     let root = Entity()
-    let debugEntity: ModelEntity
 
     private(set) var enabled = false
 
     let sizeMeters: SIMD3<Float>
     let centerOffsetMeters: SIMD3<Float>
+
+    private let debugEntity: ModelEntity
 
     init(
         attributes: CharacterBodyCollisionAttributes,
@@ -60,7 +61,9 @@ final class HordeEnemyBodyCollisionBox {
               box: \(root.name)
               sizeMeters: \(sizeMeters)
               centerOffsetMeters: \(centerOffsetMeters)
-              queryCollision: true
+              source: character_attributes.body_collision
+              logicalMathOnly: true
+              realityKitCollisionComponent: false
               physicsResponse: false
             """
         )

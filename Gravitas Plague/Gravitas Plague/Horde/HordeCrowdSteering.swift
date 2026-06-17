@@ -117,33 +117,39 @@ enum HordeCrowdEnemyRayMath {
 
 @MainActor
 func validateEnemyBodyRay(
-    selfEnemy: JockRetargetTestController,
+    selfEnemyID: UUID,
+    selfSpawnIndex: Int,
+    selfIsAttacking: Bool,
     originWorld: SIMD3<Float>,
     directionWorld: SIMD3<Float>,
     length: Float,
     headsetPosition: SIMD3<Float>,
     snapshots: [HordeEnemyCollisionSnapshot]
 ) -> HordeCrowdRayValidation {
-    let selfID = selfEnemy.hordeBenchmarkID
     let origin = SIMD2<Float>(originWorld.x, originWorld.z)
     let direction = normalizeCrowdRay2(
         SIMD2<Float>(directionWorld.x, directionWorld.z),
         fallback: SIMD2<Float>(0, -1)
+    )
+    let selfDistanceToHeadset = crowdDistanceXZ(
+        originWorld,
+        headsetPosition
     )
 
     var bestDistance = Float.greatestFiniteMagnitude
     var bestName: String?
 
     for snapshot in snapshots {
-        guard snapshot.enemyID != selfID else {
+        guard snapshot.enemyID != selfEnemyID,
+              !snapshot.isDead else {
             continue
         }
 
-        let other = snapshot.controller
-
-        guard selfEnemy.shouldYieldToEnemy(
-            other,
-            headsetPosition: headsetPosition
+        guard shouldYieldToSnapshot(
+            selfDistanceToHeadset: selfDistanceToHeadset,
+            selfSpawnIndex: selfSpawnIndex,
+            selfIsAttacking: selfIsAttacking,
+            other: snapshot
         ) else {
             continue
         }
@@ -166,7 +172,7 @@ func validateEnemyBodyRay(
 
         if distance < bestDistance {
             bestDistance = distance
-            bestName = "enemy:\(other.enemySeparationCharacterID):\(snapshot.enemyID.uuidString)"
+            bestName = "enemy:\(snapshot.characterID):\(snapshot.enemyID.uuidString)"
         }
     }
 
@@ -174,6 +180,33 @@ func validateEnemyBodyRay(
         blocked: bestName != nil,
         debugBlockerName: bestName
     )
+}
+
+private func shouldYieldToSnapshot(
+    selfDistanceToHeadset: Float,
+    selfSpawnIndex: Int,
+    selfIsAttacking: Bool,
+    other: HordeEnemyCollisionSnapshot
+) -> Bool {
+    if selfIsAttacking {
+        return false
+    }
+
+    if other.isAttacking {
+        return true
+    }
+
+    let delta = selfDistanceToHeadset - other.distanceToHeadsetXZ
+
+    if delta > HordeCrowdSteeringSettings.rightOfWayDistanceEpsilon {
+        return true
+    }
+
+    if abs(delta) <= HordeCrowdSteeringSettings.rightOfWayDistanceEpsilon {
+        return selfSpawnIndex > other.spawnIndex
+    }
+
+    return false
 }
 
 func crowdDistanceXZ(

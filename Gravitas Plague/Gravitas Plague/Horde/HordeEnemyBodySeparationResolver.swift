@@ -31,6 +31,12 @@ final class HordeEnemyBodySeparationResolver {
             return
         }
 
+        let controllerByEnemyID = Dictionary(
+            uniqueKeysWithValues: activeEnemies.map {
+                ($0.hordeBenchmarkID, $0)
+            }
+        )
+
         for _ in 0..<Settings.solverIterations {
             let snapshots = activeEnemies.compactMap {
                 HordeEnemyCollisionSnapshotBuilder.makeSnapshot(
@@ -64,7 +70,8 @@ final class HordeEnemyBodySeparationResolver {
 
             applyCorrections(
                 correctionsByEnemyID,
-                snapshots: snapshots
+                snapshots: snapshots,
+                controllerByEnemyID: controllerByEnemyID
             )
         }
     }
@@ -85,8 +92,8 @@ private extension HordeEnemyBodySeparationResolver {
             mtv.axisXZ.y
         )
 
-        let aAttacking = a.controller.isAttackOrCombatActiveForSeparation
-        let bAttacking = b.controller.isAttackOrCombatActiveForSeparation
+        let aAttacking = a.isAttacking
+        let bAttacking = b.isAttacking
 
         if aAttacking && bAttacking {
             correctionsByEnemyID[
@@ -150,7 +157,8 @@ private extension HordeEnemyBodySeparationResolver {
 
     func applyCorrections(
         _ corrections: [UUID: SIMD3<Float>],
-        snapshots: [HordeEnemyCollisionSnapshot]
+        snapshots: [HordeEnemyCollisionSnapshot],
+        controllerByEnemyID: [UUID: JockRetargetTestController]
     ) {
         for snapshot in snapshots {
             guard let rawCorrection = corrections[snapshot.enemyID] else {
@@ -166,7 +174,10 @@ private extension HordeEnemyBodySeparationResolver {
                 continue
             }
 
-            let enemy = snapshot.controller
+            guard let enemy = controllerByEnemyID[snapshot.enemyID] else {
+                continue
+            }
+
             let beforeAttackActive = enemy.isAttackOrCombatActiveForSeparation
             let beforeAnimationName = enemy.currentAnimationNameForSeparationDebug
             let current = enemy.rootEntity.position(relativeTo: nil)
@@ -188,7 +199,7 @@ private extension HordeEnemyBodySeparationResolver {
 
             recordCorrectionSummaryIfNeeded(
                 enemyID: snapshot.enemyID,
-                characterID: enemy.enemySeparationCharacterID,
+                characterID: snapshot.characterID,
                 correction: correction
             )
         }

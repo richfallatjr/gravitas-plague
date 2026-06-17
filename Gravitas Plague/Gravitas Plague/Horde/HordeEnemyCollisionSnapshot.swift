@@ -2,10 +2,12 @@ import Foundation
 import RealityKit
 import simd
 
-struct HordeEnemyCollisionSnapshot {
+struct HordeEnemyCollisionSnapshot: Sendable {
     let enemyID: UUID
     let spawnIndex: Int
-    let controller: JockRetargetTestController
+    let characterID: String
+    let isAttacking: Bool
+    let isDead: Bool
 
     let centerWorld: SIMD3<Float>
 
@@ -23,6 +25,8 @@ struct HordeEnemyCollisionSnapshot {
 
 @MainActor
 enum HordeEnemyCollisionSnapshotBuilder {
+    private static var loggedSimplifiedBodyBoxSnapshotIDs = Set<UUID>()
+
     static func makeSnapshot(
         controller: JockRetargetTestController,
         headsetPosition: SIMD3<Float>
@@ -36,6 +40,7 @@ enum HordeEnemyCollisionSnapshotBuilder {
             return nil
         }
 
+        let enemyID = controller.hordeBenchmarkID
         let matrix = box.root.transformMatrix(relativeTo: nil)
 
         let center = SIMD3<Float>(
@@ -73,11 +78,21 @@ enum HordeEnemyCollisionSnapshotBuilder {
             center.x,
             center.z
         )
+        let distanceToHeadset = simd_length(centerXZ - headsetXZ)
+
+        logSimplifiedBodyBoxSnapshotIfNeeded(
+            enemyID: enemyID,
+            characterID: controller.enemySeparationCharacterID,
+            halfSize: halfSize,
+            sizeMeters: box.sizeMeters
+        )
 
         return HordeEnemyCollisionSnapshot(
-            enemyID: controller.hordeBenchmarkID,
+            enemyID: enemyID,
             spawnIndex: controller.hordeSpawnIndex,
-            controller: controller,
+            characterID: controller.enemySeparationCharacterID,
+            isAttacking: controller.isAttackOrCombatActiveForSeparation,
+            isDead: controller.isDeadForHordeCollision,
             centerWorld: center,
             rightXZ: right,
             forwardXZ: forward,
@@ -85,7 +100,34 @@ enum HordeEnemyCollisionSnapshotBuilder {
             halfDepth: halfSize.z,
             minY: center.y - halfSize.y,
             maxY: center.y + halfSize.y,
-            distanceToHeadsetXZ: simd_length(centerXZ - headsetXZ)
+            distanceToHeadsetXZ: distanceToHeadset
+        )
+    }
+
+    private static func logSimplifiedBodyBoxSnapshotIfNeeded(
+        enemyID: UUID,
+        characterID: String,
+        halfSize: SIMD3<Float>,
+        sizeMeters: SIMD3<Float>
+    ) {
+        guard RuntimeDiagnostics.hordeRuntimeSummariesEnabled,
+              !loggedSimplifiedBodyBoxSnapshotIDs.contains(enemyID) else {
+            return
+        }
+
+        loggedSimplifiedBodyBoxSnapshotIDs.insert(enemyID)
+
+        print(
+            """
+            [CrowdBlocker] snapshot built from simplified body box
+              enemyID: \(enemyID.uuidString)
+              characterID: \(characterID)
+              halfWidth: \(halfSize.x)
+              halfDepth: \(halfSize.z)
+              height: \(sizeMeters.y)
+              source: character_attributes.body_collision
+              fullGeometryUsed: false
+            """
         )
     }
 }

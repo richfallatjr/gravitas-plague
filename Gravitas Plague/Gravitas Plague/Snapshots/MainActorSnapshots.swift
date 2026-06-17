@@ -54,8 +54,13 @@ struct EnemyBrainSnapshot: Sendable, Identifiable {
     let isHitReacting: Bool
     let isAttacking: Bool
     let attackAnchorUserPosition: SIMD3<Float>?
+    let closeRangeDelayRemaining: TimeInterval?
     let crowdSteerAngleRadians: Float
+    let attackEnabled: Bool
     let attackProximityMeters: Float
+    let resumeFollowDistanceMeters: Float
+    let aggressiveDelayMinSeconds: TimeInterval
+    let aggressiveDelayMaxSeconds: TimeInterval
 }
 
 struct PortalRuntimeSnapshot: Sendable, Identifiable {

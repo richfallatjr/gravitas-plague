@@ -147,6 +147,7 @@ final class JockRetargetTestController {
     private var hasLoggedMissingHeadHitZone = false
     private var hasLoggedCharacterAudioEmitterMissingAnchor = false
     private var hasLoggedCharacterAudioEmitterMissingJoint = false
+    private var hasLoggedSimplifiedBodySnapshotSource = false
     private var didPlayDeathAudio = false
 
     var enemyCollisionState: HordeEnemyCollisionState = .active
@@ -154,6 +155,7 @@ final class JockRetargetTestController {
     var enemyBodyCollisionParticipant = false
     var bodyCollisionBox: HordeEnemyBodyCollisionBox?
     var crowdSteering = HordeCrowdSteeringState()
+    var enemyBrainCommandDriven = false
 
     private var attackAnchorUserPosition: SIMD3<Float>?
     private var latestCrowdSnapshots: [HordeEnemyCollisionSnapshot] = []
@@ -631,6 +633,7 @@ final class JockRetargetTestController {
         hordeID = id
         hordeWave = wave
         hordeSpawnIndex = spawnIndex
+        enemyBrainCommandDriven = true
         self.hitsToKill = max(1, hitsToKill)
         lifecycleState = .alive
         activeDeathClipID = nil
@@ -1284,11 +1287,41 @@ final class JockRetargetTestController {
             distanceToUserXZ: distance
         )
 
+        logSimplifiedBodySnapshotSourceIfNeeded(
+            halfSize: halfSize,
+            sizeMeters: box.sizeMeters
+        )
+
         #if DEBUG
         MainActorSnapshotDebugAssertions.assertValueOnlySnapshot(snapshot)
         #endif
 
         return snapshot
+    }
+
+    private func logSimplifiedBodySnapshotSourceIfNeeded(
+        halfSize: SIMD3<Float>,
+        sizeMeters: SIMD3<Float>
+    ) {
+        guard RuntimeDiagnostics.hordeRuntimeSummariesEnabled,
+              !hasLoggedSimplifiedBodySnapshotSource else {
+            return
+        }
+
+        hasLoggedSimplifiedBodySnapshotSource = true
+
+        print(
+            """
+            [CrowdBlocker] value snapshot built from simplified body box
+              enemyID: \(hordeID.uuidString)
+              characterID: \(enemySeparationCharacterID)
+              halfWidth: \(halfSize.x)
+              halfDepth: \(halfSize.z)
+              height: \(sizeMeters.y)
+              source: character_attributes.body_collision
+              fullGeometryUsed: false
+            """
+        )
     }
 
     func makeEnemyBrainSnapshot(
@@ -1306,8 +1339,13 @@ final class JockRetargetTestController {
             isHitReacting: isHitReactingForSnapshot,
             isAttacking: isAttackOrCombatActiveForCrowdSteering,
             attackAnchorUserPosition: attackAnchorUserPosition,
+            closeRangeDelayRemaining: closeRangeDelayRemainingForSnapshot,
             crowdSteerAngleRadians: crowdSteering.steerAngleRadians,
-            attackProximityMeters: attackConfiguration.attackProximityMeters
+            attackEnabled: attackConfiguration.enabled && playerAttackEnabled,
+            attackProximityMeters: attackConfiguration.attackProximityMeters,
+            resumeFollowDistanceMeters: attackConfiguration.resumeFollowDistanceMeters,
+            aggressiveDelayMinSeconds: attackConfiguration.aggressiveDelayMinSeconds,
+            aggressiveDelayMaxSeconds: attackConfiguration.aggressiveDelayMaxSeconds
         )
 
         #if DEBUG
@@ -1347,6 +1385,14 @@ final class JockRetargetTestController {
         }
 
         return false
+    }
+
+    private var closeRangeDelayRemainingForSnapshot: TimeInterval? {
+        if case .closeRangeReady(let delayRemaining) = combatState {
+            return delayRemaining
+        }
+
+        return nil
     }
 
     private func yawRadiansForCurrentRoot() -> Float {
@@ -1480,6 +1526,64 @@ final class JockRetargetTestController {
         )
     }
 
+    func applyEnemyBrainCommand(
+        _ command: EnemyBrainCommand
+    ) {
+        guard lifecycleState == .alive,
+              combatState != .dead else {
+            return
+        }
+
+        switch command {
+        case .enterCloseRangeReady(let enemyID, let anchor, let delay):
+            guard enemyID == hordeID else { return }
+            guard case .normal = combatState else { return }
+            guard !isInNonInterruptibleCombatState else { return }
+
+            attackAnchorUserPosition = anchor
+            enterCloseRangeReady(
+                delay: delay
+            )
+
+        case .setCloseRangeDelay(let enemyID, let delay):
+            guard enemyID == hordeID else { return }
+
+            if case .closeRangeReady = combatState {
+                combatState = .closeRangeReady(
+                    delayRemaining: delay
+                )
+            }
+
+        case .startAttack(let enemyID, let anchor):
+            guard enemyID == hordeID else { return }
+            guard case .closeRangeReady = combatState else { return }
+
+            if let anchor {
+                attackAnchorUserPosition = anchor
+            }
+
+            startAttackIfPossible()
+
+        case .exitCloseRangeToFollow(let enemyID):
+            guard enemyID == hordeID else { return }
+            guard case .closeRangeReady = combatState else { return }
+
+            exitCloseRangeToFollow()
+
+        case .clearAttackAnchor(let enemyID):
+            guard enemyID == hordeID else { return }
+            guard case .attacking = combatState else { return }
+
+            attackAnchorUserPosition = nil
+
+        case .advanceActiveAttackElapsed(let enemyID, let delta):
+            guard enemyID == hordeID else { return }
+            advanceActiveAttackElapsed(
+                delta
+            )
+        }
+    }
+
     func initializeCrowdSteering() {
         let phase = TimeInterval(hordeSpawnIndex % 11) * 0.017
 
@@ -1599,7 +1703,9 @@ final class JockRetargetTestController {
             )
 
         let goal = validateEnemyBodyRay(
-            selfEnemy: self,
+            selfEnemyID: hordeID,
+            selfSpawnIndex: hordeSpawnIndex,
+            selfIsAttacking: isAttackOrCombatActiveForCrowdSteering,
             originWorld: rayOrigin,
             directionWorld: directToUser,
             length: goalRayLength,
@@ -1608,7 +1714,9 @@ final class JockRetargetTestController {
         )
 
         let forward = validateEnemyBodyRay(
-            selfEnemy: self,
+            selfEnemyID: hordeID,
+            selfSpawnIndex: hordeSpawnIndex,
+            selfIsAttacking: isAttackOrCombatActiveForCrowdSteering,
             originWorld: rayOrigin,
             directionWorld: currentForward,
             length: forwardRayLength,
@@ -2136,7 +2244,9 @@ final class JockRetargetTestController {
 
         if followDemoState != .inactive,
            currentHeadPosition != nil {
-            if let timingProfiler {
+            if enemyBrainCommandDriven {
+                // Enemy brain decisions are supplied by the off-main Horde brain engine.
+            } else if let timingProfiler {
                 timingProfiler.measure("enemy.attack_update") {
                     updateAttackMode(
                         deltaTime: dt,
@@ -3169,7 +3279,9 @@ final class JockRetargetTestController {
         ) >= HordeCrowdSteeringSettings.userMoveBreakAttackMeters
     }
 
-    private func enterCloseRangeReady() {
+    private func enterCloseRangeReady(
+        delay explicitDelay: TimeInterval? = nil
+    ) {
         guard followDemoState != .inactive else { return }
 
         if let latestHeadPosition,
@@ -3186,7 +3298,7 @@ final class JockRetargetTestController {
 
         playFollowIdle(allowDuringCombat: true)
 
-        let delay = attackConfiguration.randomAggressiveDelay()
+        let delay = explicitDelay ?? attackConfiguration.randomAggressiveDelay()
 
         combatState = .closeRangeReady(
             delayRemaining: delay
@@ -3199,6 +3311,18 @@ final class JockRetargetTestController {
               proximity: \(attackConfiguration.attackProximityMeters)
             """
         )
+    }
+
+    private func advanceActiveAttackElapsed(
+        _ delta: TimeInterval
+    ) {
+        guard case .attacking = combatState,
+              var attack = activeAttack else {
+            return
+        }
+
+        attack.elapsedSeconds += delta
+        activeAttack = attack
     }
 
     private func exitCloseRangeToFollow() {
