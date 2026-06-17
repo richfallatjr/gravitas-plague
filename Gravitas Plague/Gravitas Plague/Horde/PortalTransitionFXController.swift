@@ -3,7 +3,7 @@ import RealityKit
 import UIKit
 import simd
 
-struct PortalFXSegment {
+struct PortalFXSegment: Sendable {
     let index: Int
     let a: SIMD3<Float>
     let b: SIMD3<Float>
@@ -12,6 +12,16 @@ struct PortalFXSegment {
     let length: Float
     let isBottom: Bool
     let birthRate: Float
+}
+
+private struct PortalFXSpawnSample: Sendable {
+    let position: SIMD3<Float>
+    let velocity: SIMD3<Float>
+    let life: Float
+}
+
+private struct PortalEmissionFrameOutput: Sendable {
+    let spawnSamples: [PortalFXSpawnSample]
 }
 
 @MainActor
@@ -177,13 +187,15 @@ final class PortalTransitionFXController {
         if let timingProfiler {
             timingProfiler.measure("portal.fx.emit") {
                 emit(
-                    deltaTime: deltaTime
+                    deltaTime: deltaTime,
+                    timingProfiler: timingProfiler
                 )
             }
 
             timingProfiler.measure("portal.ember.update") {
                 emberPool?.update(
-                    deltaTime: deltaTime
+                    deltaTime: deltaTime,
+                    timingProfiler: timingProfiler
                 )
             }
         } else {
@@ -391,11 +403,40 @@ private extension PortalTransitionFXController {
 
 private extension PortalTransitionFXController {
     func emit(
-        deltaTime: Float
+        deltaTime: Float,
+        timingProfiler: TimingProfiler? = nil
     ) {
-        guard let emberPool,
+        let output: PortalEmissionFrameOutput
+
+        if let timingProfiler {
+            output = timingProfiler.measure("portal.fx.emit.plan") {
+                planEmission(
+                    deltaTime: deltaTime
+                )
+            }
+            timingProfiler.measure("portal.fx.emit.apply") {
+                applyEmission(
+                    output
+                )
+            }
+        } else {
+            output = planEmission(
+                deltaTime: deltaTime
+            )
+            applyEmission(
+                output
+            )
+        }
+    }
+
+    func planEmission(
+        deltaTime: Float
+    ) -> PortalEmissionFrameOutput {
+        guard emberPool != nil,
               !segments.isEmpty else {
-            return
+            return PortalEmissionFrameOutput(
+                spawnSamples: []
+            )
         }
 
         emissionAccumulator += PortalFXDefaults.emberBirthRatePerDoor * deltaTime
@@ -403,20 +444,41 @@ private extension PortalTransitionFXController {
         let emitCount = Int(emissionAccumulator)
 
         guard emitCount > 0 else {
-            return
+            return PortalEmissionFrameOutput(
+                spawnSamples: []
+            )
         }
 
         emissionAccumulator -= Float(emitCount)
+
+        var samples: [PortalFXSpawnSample] = []
+        samples.reserveCapacity(emitCount)
 
         for _ in 0..<emitCount {
             guard let segment = chooseEmissionSegment() else {
                 continue
             }
 
-            let spawn = makeSpawnSample(
-                segment: segment
+            samples.append(
+                makeSpawnSample(
+                    segment: segment
+                )
             )
+        }
 
+        return PortalEmissionFrameOutput(
+            spawnSamples: samples
+        )
+    }
+
+    func applyEmission(
+        _ output: PortalEmissionFrameOutput
+    ) {
+        guard let emberPool else {
+            return
+        }
+
+        for spawn in output.spawnSamples {
             emberPool.spawn(
                 position: spawn.position,
                 velocity: spawn.velocity,
@@ -449,15 +511,9 @@ private extension PortalTransitionFXController {
         return segments.last
     }
 
-    struct SpawnSample {
-        let position: SIMD3<Float>
-        let velocity: SIMD3<Float>
-        let life: Float
-    }
-
     func makeSpawnSample(
         segment: PortalFXSegment
-    ) -> SpawnSample {
+    ) -> PortalFXSpawnSample {
         let t = Float.random(in: 0...1)
         let base = segment.a + (segment.b - segment.a) * t
 
@@ -537,7 +593,7 @@ private extension PortalTransitionFXController {
 
         let surfaceOffset = portalNormalLocal * Float.random(in: 0.00...0.012)
 
-        return SpawnSample(
+        return PortalFXSpawnSample(
             position: base + surfaceOffset,
             velocity: direction * speed,
             life: life

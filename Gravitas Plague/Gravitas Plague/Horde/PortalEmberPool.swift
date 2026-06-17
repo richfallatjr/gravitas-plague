@@ -2,6 +2,27 @@ import Foundation
 import RealityKit
 import simd
 
+private enum PortalEmberMaterialPhase: Sendable {
+    case birth
+    case hot
+    case red
+    case dark
+}
+
+private struct PortalEmberFrameUpdate: Sendable {
+    let index: Int
+    let active: Bool
+    let position: SIMD3<Float>
+    let orientation: simd_quatf
+    let size: Float
+    let materialPhase: PortalEmberMaterialPhase
+    let materialIndex: Int
+}
+
+private struct PortalEmberFrameOutput: Sendable {
+    let updates: [PortalEmberFrameUpdate]
+}
+
 struct PortalEmber {
     var entity: ModelEntity
     var active: Bool = false
@@ -11,6 +32,10 @@ struct PortalEmber {
 
     var position: SIMD3<Float> = .zero
     var velocity: SIMD3<Float> = .zero
+    var orientation = simd_quatf(
+        angle: 0,
+        axis: SIMD3<Float>(0, 1, 0)
+    )
 
     var startSize: Float = 0.008
     var endSize: Float = 0.003
@@ -92,6 +117,10 @@ final class PortalEmberPool {
         ember.life = life
         ember.position = position
         ember.velocity = velocity
+        ember.orientation = simd_quatf(
+            angle: 0,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
         ember.startSize = Float.random(
             in: PortalFXDefaults.emberStartSizeMetersMin...PortalFXDefaults.emberStartSizeMetersMax
         )
@@ -114,6 +143,7 @@ final class PortalEmberPool {
         ember.spinRadiansPerSecond = Float.random(in: -4.0...4.0)
 
         ember.entity.position = position
+        ember.entity.orientation = ember.orientation
         ember.entity.scale = SIMD3<Float>(
             repeating: ember.startSize
         )
@@ -128,7 +158,42 @@ final class PortalEmberPool {
     func update(
         deltaTime: Float
     ) {
-        let resources = PortalFXSharedResources.shared
+        let output = step(
+            deltaTime: deltaTime
+        )
+
+        apply(
+            output
+        )
+    }
+
+    func update(
+        deltaTime: Float,
+        timingProfiler: TimingProfiler?
+    ) {
+        if let timingProfiler {
+            let output = timingProfiler.measure("portal.ember.step") {
+                step(
+                    deltaTime: deltaTime
+                )
+            }
+
+            timingProfiler.measure("portal.ember.apply") {
+                apply(
+                    output
+                )
+            }
+        } else {
+            update(
+                deltaTime: deltaTime
+            )
+        }
+    }
+
+    private func step(
+        deltaTime: Float
+    ) -> PortalEmberFrameOutput {
+        var updates: [PortalEmberFrameUpdate] = []
 
         for index in embers.indices {
             guard embers[index].active else {
@@ -144,20 +209,29 @@ final class PortalEmberPool {
 
             if t >= 1 {
                 embers[index].active = false
-                embers[index].entity.isEnabled = false
+                updates.append(
+                    PortalEmberFrameUpdate(
+                        index: index,
+                        active: false,
+                        position: embers[index].position,
+                        orientation: embers[index].orientation,
+                        size: embers[index].endSize,
+                        materialPhase: .dark,
+                        materialIndex: embers[index].darkMaterialIndex
+                    )
+                )
                 continue
             }
 
             embers[index].velocity.y += 0.18 * deltaTime
             embers[index].position += embers[index].velocity * deltaTime
-            embers[index].entity.position = embers[index].position
 
             let spin = embers[index].spinRadiansPerSecond * deltaTime
-            embers[index].entity.orientation =
+            embers[index].orientation =
                 simd_quatf(
                     angle: spin,
                     axis: SIMD3<Float>(0, 1, 0)
-                ) * embers[index].entity.orientation
+                ) * embers[index].orientation
 
             let size = mix(
                 embers[index].startSize,
@@ -165,31 +239,59 @@ final class PortalEmberPool {
                 t
             )
 
-            embers[index].entity.scale = SIMD3<Float>(
-                repeating: size
+            let material = materialPhaseAndIndex(
+                for: embers[index],
+                normalizedAge: t
             )
 
-            switch t {
-            case ..<0.18:
-                embers[index].entity.model?.materials = [
-                    resources.emberBirthMaterials[embers[index].birthMaterialIndex]
-                ]
+            updates.append(
+                PortalEmberFrameUpdate(
+                    index: index,
+                    active: true,
+                    position: embers[index].position,
+                    orientation: embers[index].orientation,
+                    size: size,
+                    materialPhase: material.phase,
+                    materialIndex: material.index
+                )
+            )
+        }
 
-            case ..<0.50:
-                embers[index].entity.model?.materials = [
-                    resources.emberHotMaterials[embers[index].hotMaterialIndex]
-                ]
+        return PortalEmberFrameOutput(
+            updates: updates
+        )
+    }
 
-            case ..<0.84:
-                embers[index].entity.model?.materials = [
-                    resources.emberRedMaterials[embers[index].redMaterialIndex]
-                ]
+    private func apply(
+        _ output: PortalEmberFrameOutput
+    ) {
+        let resources = PortalFXSharedResources.shared
 
-            default:
-                embers[index].entity.model?.materials = [
-                    resources.emberDarkMaterials[embers[index].darkMaterialIndex]
-                ]
+        for update in output.updates {
+            guard embers.indices.contains(update.index) else {
+                continue
             }
+
+            let entity = embers[update.index].entity
+
+            guard update.active else {
+                entity.isEnabled = false
+                continue
+            }
+
+            entity.position = update.position
+            entity.orientation = update.orientation
+            entity.scale = SIMD3<Float>(
+                repeating: update.size
+            )
+            entity.model?.materials = [
+                material(
+                    resources: resources,
+                    phase: update.materialPhase,
+                    index: update.materialIndex
+                )
+            ]
+            entity.isEnabled = true
         }
     }
 
@@ -210,5 +312,61 @@ final class PortalEmberPool {
         _ t: Float
     ) -> Float {
         a + (b - a) * t
+    }
+
+    private func materialPhaseAndIndex(
+        for ember: PortalEmber,
+        normalizedAge t: Float
+    ) -> (phase: PortalEmberMaterialPhase, index: Int) {
+        switch t {
+        case ..<0.18:
+            return (.birth, ember.birthMaterialIndex)
+        case ..<0.50:
+            return (.hot, ember.hotMaterialIndex)
+        case ..<0.84:
+            return (.red, ember.redMaterialIndex)
+        default:
+            return (.dark, ember.darkMaterialIndex)
+        }
+    }
+
+    private func material(
+        resources: PortalFXSharedResources,
+        phase: PortalEmberMaterialPhase,
+        index: Int
+    ) -> RealityKit.Material {
+        switch phase {
+        case .birth:
+            return material(
+                in: resources.emberBirthMaterials,
+                at: index
+            )
+        case .hot:
+            return material(
+                in: resources.emberHotMaterials,
+                at: index
+            )
+        case .red:
+            return material(
+                in: resources.emberRedMaterials,
+                at: index
+            )
+        case .dark:
+            return material(
+                in: resources.emberDarkMaterials,
+                at: index
+            )
+        }
+    }
+
+    private func material(
+        in materials: [RealityKit.Material],
+        at index: Int
+    ) -> RealityKit.Material {
+        guard materials.indices.contains(index) else {
+            return materials[0]
+        }
+
+        return materials[index]
     }
 }
