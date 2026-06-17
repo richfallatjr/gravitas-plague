@@ -55,6 +55,7 @@ struct EnemyBrainSnapshot: Sendable, Identifiable {
     let isAttacking: Bool
     let attackAnchorUserPosition: SIMD3<Float>?
     let crowdSteerAngleRadians: Float
+    let attackProximityMeters: Float
 }
 
 struct PortalRuntimeSnapshot: Sendable, Identifiable {

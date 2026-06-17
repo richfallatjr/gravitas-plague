@@ -44,6 +44,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let enemyBodySeparationResolver = HordeEnemyBodySeparationResolver()
     private let instructionHUD = PlagueHeadTrackedInstructionHUD()
     private let timingProfiler = TimingProfiler(label: "main_actor_shell")
+    private let hordeSimulationEngine = HordeSimulationEngine()
 
     private var architectureFrameIndex = 0
     private var latestFrameClockSnapshot: FrameClockSnapshot?
@@ -51,6 +52,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var latestEnemyBodySnapshots: [EnemyBodySnapshot] = []
     private var latestEnemyBrainSnapshots: [EnemyBrainSnapshot] = []
     private var latestPortalRuntimeSnapshots: [PortalRuntimeSnapshot] = []
+    private var pendingHordeSimulationCommands: HordeSimulationCommands?
+    private var hordeSimulationInFlight = false
+    private var hordeSimulationTask: Task<Void, Never>?
 
     @Published private(set) var isPlayerDeathSequenceActive = false
 
@@ -614,6 +618,92 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
     }
 
+    private func applyCompletedHordeSimulationCommandsIfAvailable() {
+        guard let commands = pendingHordeSimulationCommands else {
+            return
+        }
+
+        pendingHordeSimulationCommands = nil
+
+        timingProfiler.measure("simulation.apply") {
+            for command in commands.steering {
+                guard let enemy = hordeEnemyControllersByID[command.enemyID] else {
+                    continue
+                }
+
+                enemy.applyCrowdSteeringCommand(command)
+            }
+
+            for command in commands.separation {
+                guard let enemy = hordeEnemyControllersByID[command.enemyID] else {
+                    continue
+                }
+
+                enemy.applyEnemySeparationCorrection(
+                    command.correctionWorld
+                )
+            }
+        }
+    }
+
+    private func submitHordeSimulationIfIdle() {
+        guard !hordeSimulationInFlight,
+              let frame = latestFrameClockSnapshot,
+              let player = latestPlayerPoseSnapshot else {
+            return
+        }
+
+        let enemyBodies = latestEnemyBodySnapshots
+        let enemyBrains = latestEnemyBrainSnapshots
+
+        guard !enemyBodies.isEmpty,
+              !enemyBrains.isEmpty else {
+            return
+        }
+
+        hordeSimulationInFlight = true
+
+        let engine = hordeSimulationEngine
+
+        hordeSimulationTask = Task { [weak self] in
+            let commands = await engine.stepCrowd(
+                frame: frame,
+                player: player,
+                enemies: enemyBodies,
+                brain: enemyBrains
+            )
+
+            await MainActor.run { [weak self] in
+                guard let self else {
+                    return
+                }
+
+                guard !Task.isCancelled else {
+                    self.hordeSimulationInFlight = false
+                    self.hordeSimulationTask = nil
+                    return
+                }
+
+                self.pendingHordeSimulationCommands = commands
+                self.hordeSimulationInFlight = false
+                self.hordeSimulationTask = nil
+            }
+        }
+    }
+
+    private func resetHordeSimulationPipeline() {
+        hordeSimulationTask?.cancel()
+        hordeSimulationTask = nil
+        hordeSimulationInFlight = false
+        pendingHordeSimulationCommands = nil
+
+        let engine = hordeSimulationEngine
+
+        Task {
+            await engine.reset()
+        }
+    }
+
     func tick(at date: Date) {
         let tickStart = TimingProfiler.now()
         let deltaTime: Float
@@ -675,6 +765,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         #endif
 
         if hordeBenchmarkRunning {
+            applyCompletedHordeSimulationCommandsIfAvailable()
+
             if let pose = currentPose {
                 timingProfiler.measure("portal.ingress.update") {
                     updatePortalIngressControllers(
@@ -691,7 +783,15 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 )
             }
 
-            let crowdSnapshots: [HordeEnemyCollisionSnapshot]
+            for controller in hordeEnemyControllersByID.values {
+                timingProfiler.measure("enemy.update") {
+                    controller.update(
+                        deltaTime: deltaTime,
+                        currentHeadPosition: currentHeadPosition,
+                        timingProfiler: timingProfiler
+                    )
+                }
+            }
 
             if let pose = currentPose {
                 latestEnemyBodySnapshots = timingProfiler.measure("snapshot.enemy_body_value") {
@@ -708,37 +808,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     capturePortalRuntimeSnapshots()
                 }
 
-                crowdSnapshots = timingProfiler.measure("snapshot.enemy_body_legacy") {
-                    buildCrowdSnapshots(
-                        enemies: Array(hordeEnemyControllersByID.values),
-                        headsetPosition: pose.headPosition
-                    )
-                }
+                submitHordeSimulationIfIdle()
             } else {
                 latestEnemyBodySnapshots = []
                 latestEnemyBrainSnapshots = []
                 latestPortalRuntimeSnapshots = []
-                crowdSnapshots = []
-            }
-
-            for controller in hordeEnemyControllersByID.values {
-                controller.updateCrowdSnapshots(crowdSnapshots)
-                timingProfiler.measure("enemy.update") {
-                    controller.update(
-                        deltaTime: deltaTime,
-                        currentHeadPosition: currentHeadPosition,
-                        timingProfiler: timingProfiler
-                    )
-                }
-            }
-
-            if let pose = currentPose {
-                timingProfiler.measure("body.separation") {
-                    enemyBodySeparationResolver.resolve(
-                        enemies: Array(hordeEnemyControllersByID.values),
-                        headsetPosition: pose.headPosition
-                    )
-                }
             }
 
             #if DEBUG
@@ -1167,20 +1241,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
             switch ingress.phase {
             case .realWorldFollowing:
-                if let controller = hordeEnemyControllersByID[enemyID] {
-                    let snapshots = buildCrowdSnapshots(
-                        enemies: Array(hordeEnemyControllersByID.values),
-                        headsetPosition: playerWorldPosition
-                    )
-
-                    controller.updateCrowdSnapshots(snapshots)
-                    controller.solveCrowdSteering(
-                        headsetPosition: playerWorldPosition,
-                        snapshots: snapshots,
-                        reason: "portal_exit_initial"
-                    )
-                }
-
                 finishedIDs.append(enemyID)
 
             case .failed:
@@ -1378,6 +1438,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         pendingNextBenchmarkWaveTask = nil
         hordeRoomScanCompletionTask?.cancel()
         hordeRoomScanCompletionTask = nil
+        resetHordeSimulationPipeline()
 
         hordeBenchmarkRunning = false
         hordeRuntimePhase = .idle
@@ -2329,6 +2390,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         activeHordeEnemyIDs.removeAll()
         dyingHordeEnemyIDs.removeAll()
         corpseHordeEnemyIDs.removeAll()
+        resetHordeSimulationPipeline()
         hordeBenchmarkRunning = false
         hordeRuntimePhase = .playerDead
         audioController.stopDemoAudio()

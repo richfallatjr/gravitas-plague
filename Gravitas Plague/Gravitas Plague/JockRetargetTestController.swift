@@ -1306,7 +1306,8 @@ final class JockRetargetTestController {
             isHitReacting: isHitReactingForSnapshot,
             isAttacking: isAttackOrCombatActiveForCrowdSteering,
             attackAnchorUserPosition: attackAnchorUserPosition,
-            crowdSteerAngleRadians: crowdSteering.steerAngleRadians
+            crowdSteerAngleRadians: crowdSteering.steerAngleRadians,
+            attackProximityMeters: attackConfiguration.attackProximityMeters
         )
 
         #if DEBUG
@@ -1448,6 +1449,35 @@ final class JockRetargetTestController {
         _ snapshots: [HordeEnemyCollisionSnapshot]
     ) {
         latestCrowdSnapshots = snapshots
+    }
+
+    func applyCrowdSteeringCommand(
+        _ command: EnemySteeringCommand
+    ) {
+        guard command.enemyID == hordeID,
+              enemyCollisionState == .active,
+              !isDeadForHordeCollision else {
+            return
+        }
+
+        crowdSteering = command.state
+    }
+
+    func applyEnemySeparationCorrection(
+        _ correction: SIMD3<Float>
+    ) {
+        guard enemyBodyCollisionParticipant,
+              !isDeadForHordeCollision,
+              bodyCollisionBox?.enabled == true else {
+            return
+        }
+
+        let current = rootEntity.position(relativeTo: nil)
+
+        rootEntity.setPosition(
+            current + correction,
+            relativeTo: nil
+        )
     }
 
     func initializeCrowdSteering() {
@@ -3904,20 +3934,6 @@ final class JockRetargetTestController {
 
         guard clampedStep > 0.00001 else {
             return true
-        }
-
-        if let activeTimingProfiler {
-            activeTimingProfiler.measure("crowd.steering") {
-                updateCrowdSteeringIfNeeded(
-                    deltaTime: latestFrameDeltaTime,
-                    headsetPosition: headPosition
-                )
-            }
-        } else {
-            updateCrowdSteeringIfNeeded(
-                deltaTime: latestFrameDeltaTime,
-                headsetPosition: headPosition
-            )
         }
 
         let movementDirection = crowdLocomotionDirection(

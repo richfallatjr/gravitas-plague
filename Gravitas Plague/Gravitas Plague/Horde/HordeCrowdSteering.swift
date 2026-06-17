@@ -1,13 +1,13 @@
 import Foundation
 import simd
 
-enum HordeCrowdSteeringMode: String {
+enum HordeCrowdSteeringMode: String, Sendable {
     case directToUser
     case flanking
     case reGoalToUser
 }
 
-struct HordeCrowdSteeringState {
+struct HordeCrowdSteeringState: Sendable {
     var mode: HordeCrowdSteeringMode = .directToUser
     var steerAngleRadians: Float = 0
     var lockedRotateSign: Float = 0
@@ -32,7 +32,7 @@ enum HordeCrowdSteeringSettings {
     static let rightOfWayDistanceEpsilon: Float = 0.05
 }
 
-struct HordeCrowdRayValidation {
+struct HordeCrowdRayValidation: Sendable {
     let blocked: Bool
     let debugBlockerName: String?
 }
