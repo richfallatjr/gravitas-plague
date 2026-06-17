@@ -2231,13 +2231,10 @@ final class JockRetargetTestController {
         let dt = TimeInterval(deltaTime)
 
         if externalMotionDriven {
-            if let timingProfiler {
-                timingProfiler.measure("jock_runtime_driver.update") {
-                    driver?.update(deltaTime: dt)
-                }
-            } else {
-                driver?.update(deltaTime: dt)
-            }
+            driver?.update(
+                deltaTime: dt,
+                timingProfiler: timingProfiler
+            )
             updateCharacterAudioEmitterWorldPosition()
             return
         }
@@ -2268,13 +2265,10 @@ final class JockRetargetTestController {
             )
         }
 
-        if let timingProfiler {
-            timingProfiler.measure("jock_runtime_driver.update") {
-                driver?.update(deltaTime: dt)
-            }
-        } else {
-            driver?.update(deltaTime: dt)
-        }
+        driver?.update(
+            deltaTime: dt,
+            timingProfiler: timingProfiler
+        )
         updateCharacterAudioEmitterWorldPosition()
 
         if followDemoState != .inactive,

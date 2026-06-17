@@ -379,6 +379,22 @@ final class JockRuntimeDriver {
         }
     }
 
+    private struct LocomotionApplicationRequest {
+        let clip: JockAnimClip
+        let time: TimeInterval
+        let didWrap: Bool
+        let locomotionPolicy: JockClipLocomotionPolicy
+    }
+
+    private struct RuntimeFrameOutput {
+        var jointTransforms: [Transform]?
+        var visualOffset: simd_quatf?
+        var resetRootToFrozenOrigin = false
+        var locomotionRequest: LocomotionApplicationRequest?
+        var runtimeOverrideToCommit: JockRuntimeClipOverride?
+        var completedClip: JockAnimClip?
+    }
+
     private weak var modelEntity: ModelEntity?
     private weak var locomotionRootEntity: Entity?
     private weak var visualOffsetEntity: Entity?
@@ -724,168 +740,322 @@ final class JockRuntimeDriver {
     }
 
     func update(deltaTime: TimeInterval) {
+        updateInternal(
+            deltaTime: deltaTime,
+            timingProfiler: nil
+        )
+    }
+
+    func update(
+        deltaTime: TimeInterval,
+        timingProfiler: TimingProfiler?
+    ) {
+        if let timingProfiler {
+            timingProfiler.measure("jock_runtime_driver.update") {
+                updateInternal(
+                    deltaTime: deltaTime,
+                    timingProfiler: timingProfiler
+                )
+            }
+        } else {
+            updateInternal(
+                deltaTime: deltaTime,
+                timingProfiler: nil
+            )
+        }
+    }
+
+    private func updateInternal(
+        deltaTime: TimeInterval,
+        timingProfiler: TimingProfiler?
+    ) {
         guard let modelEntity else { return }
 
+        let frameOutput: RuntimeFrameOutput?
+
+        if let timingProfiler {
+            frameOutput = timingProfiler.measure("jock_runtime_driver.sample") {
+                sampleRuntimeFrame(
+                    deltaTime: deltaTime
+                )
+            }
+        } else {
+            frameOutput = sampleRuntimeFrame(
+                deltaTime: deltaTime
+            )
+        }
+
+        guard let frameOutput else {
+            return
+        }
+
+        if let timingProfiler {
+            timingProfiler.measure("jock_runtime_driver.apply") {
+                applyRuntimeFrameOutput(
+                    frameOutput,
+                    on: modelEntity
+                )
+            }
+        } else {
+            applyRuntimeFrameOutput(
+                frameOutput,
+                on: modelEntity
+            )
+        }
+    }
+
+    private func sampleRuntimeFrame(
+        deltaTime: TimeInterval
+    ) -> RuntimeFrameOutput? {
         let clampedDelta = max(0, min(deltaTime, 0.1))
 
         switch state {
         case .stopped:
-            return
+            return nil
 
         case .transitioningToClip:
-            transitionElapsed += clampedDelta
-
-            let alpha = transitionDuration > 0
-                ? Float(min(transitionElapsed / transitionDuration, 1.0))
-                : 1.0
-
-            let blendedPose = JockPoseMath.blendTransforms(
-                from: transitionFromPose,
-                to: transitionToPose,
-                alpha: alpha
-            )
-
-            let finalPose = applyActiveSubAnimations(
-                to: blendedPose,
+            return sampleTransitionToClipFrame(
                 deltaTime: clampedDelta
             )
-            setJointTransforms(finalPose, on: modelEntity)
-
-            let visualOffset = simd_slerp(
-                transitionFromVisualOffset,
-                transitionToVisualOffset,
-                alpha
-            )
-
-            visualOffsetEntity?.orientation = visualOffset
-
-            if let activeClip,
-               activeClip.locomotion.isEnabled,
-               shouldApplyLocomotionDuringTransition(activeClip) {
-                let transitionClipTime = min(
-                    transitionElapsed,
-                    activeClip.timing.durationSeconds
-                )
-
-                applyLocomotionFromFrozenOrigin(
-                    activeClip,
-                    at: transitionClipTime,
-                    didWrap: false
-                )
-            } else {
-                locomotionRootEntity?.position = frozenClipRootPosition
-                locomotionRootEntity?.orientation = frozenClipRootOrientation
-            }
-
-            if alpha >= 1.0 {
-                playbackTime = 0
-                currentPlaybackTime = 0
-                state = .playing
-            }
 
         case .transitioningToBase:
-            transitionElapsed += clampedDelta
-
-            let alpha = transitionDuration > 0
-                ? Float(min(transitionElapsed / transitionDuration, 1.0))
-                : 1.0
-
-            let blendedPose = JockPoseMath.blendTransforms(
-                from: transitionFromPose,
-                to: transitionToPose,
-                alpha: alpha
-            )
-
-            let finalPose = applyActiveSubAnimations(
-                to: blendedPose,
+            return sampleTransitionToBaseFrame(
                 deltaTime: clampedDelta
             )
-            setJointTransforms(finalPose, on: modelEntity)
 
-            let visualOffset = simd_slerp(
+        case .playing:
+            return samplePlayingFrame(
+                deltaTime: clampedDelta
+            )
+        }
+    }
+
+    private func sampleTransitionToClipFrame(
+        deltaTime: TimeInterval
+    ) -> RuntimeFrameOutput {
+        transitionElapsed += deltaTime
+
+        let alpha = transitionDuration > 0
+            ? Float(min(transitionElapsed / transitionDuration, 1.0))
+            : 1.0
+
+        let blendedPose = JockPoseMath.blendTransforms(
+            from: transitionFromPose,
+            to: transitionToPose,
+            alpha: alpha
+        )
+
+        let finalPose = applyActiveSubAnimations(
+            to: blendedPose,
+            deltaTime: deltaTime
+        )
+
+        let visualOffset = simd_slerp(
+            transitionFromVisualOffset,
+            transitionToVisualOffset,
+            alpha
+        )
+
+        var output = RuntimeFrameOutput(
+            jointTransforms: finalPose,
+            visualOffset: visualOffset
+        )
+
+        if let activeClip,
+           activeClip.locomotion.isEnabled,
+           shouldApplyLocomotionDuringTransition(activeClip) {
+            output.locomotionRequest = LocomotionApplicationRequest(
+                clip: activeClip,
+                time: min(
+                    transitionElapsed,
+                    activeClip.timing.durationSeconds
+                ),
+                didWrap: false,
+                locomotionPolicy: activeLocomotionPolicy
+            )
+        } else {
+            output.resetRootToFrozenOrigin = true
+        }
+
+        if alpha >= 1.0 {
+            playbackTime = 0
+            currentPlaybackTime = 0
+            state = .playing
+        }
+
+        return output
+    }
+
+    private func sampleTransitionToBaseFrame(
+        deltaTime: TimeInterval
+    ) -> RuntimeFrameOutput {
+        transitionElapsed += deltaTime
+
+        let alpha = transitionDuration > 0
+            ? Float(min(transitionElapsed / transitionDuration, 1.0))
+            : 1.0
+
+        let blendedPose = JockPoseMath.blendTransforms(
+            from: transitionFromPose,
+            to: transitionToPose,
+            alpha: alpha
+        )
+
+        let finalPose = applyActiveSubAnimations(
+            to: blendedPose,
+            deltaTime: deltaTime
+        )
+
+        let output = RuntimeFrameOutput(
+            jointTransforms: finalPose,
+            visualOffset: simd_slerp(
                 transitionFromVisualOffset,
                 transitionToVisualOffset,
                 alpha
             )
+        )
 
-            visualOffsetEntity?.orientation = visualOffset
+        if alpha >= 1.0 {
+            state = .stopped
+            activeClip = nil
+            currentActiveClipID = nil
+            currentPlaybackTime = 0
+            activeRuntimeOverride = .identity
+            activeLocomotionPolicy = .useClipLocomotion
+            resetFrozenLocomotionState()
+        }
 
-            if alpha >= 1.0 {
-                state = .stopped
-                activeClip = nil
-                currentActiveClipID = nil
-                currentPlaybackTime = 0
-                activeRuntimeOverride = .identity
-                activeLocomotionPolicy = .useClipLocomotion
-                resetFrozenLocomotionState()
+        return output
+    }
+
+    private func samplePlayingFrame(
+        deltaTime: TimeInterval
+    ) -> RuntimeFrameOutput? {
+        guard let activeClip else {
+            state = .stopped
+            currentActiveClipID = nil
+            currentPlaybackTime = 0
+            return nil
+        }
+
+        let previousTime = playbackTime
+        playbackTime += deltaTime
+        currentPlaybackTime = playbackTime
+
+        let duration = max(activeClip.timing.durationSeconds, 0.001)
+
+        if loopCurrentClip {
+            var didWrap = false
+
+            if playbackTime >= duration {
+                playbackTime = playbackTime.truncatingRemainder(dividingBy: duration)
+                currentPlaybackTime = playbackTime
+                didWrap = playbackTime < previousTime
             }
 
-        case .playing:
-            guard let activeClip else {
-                state = .stopped
-                currentActiveClipID = nil
-                currentPlaybackTime = 0
-                return
-            }
+            return sampleActiveClipFrame(
+                activeClip,
+                at: playbackTime,
+                deltaTime: deltaTime,
+                didWrap: didWrap
+            )
+        }
 
-            let previousTime = playbackTime
-            playbackTime += clampedDelta
+        if playbackTime >= duration {
+            playbackTime = duration
             currentPlaybackTime = playbackTime
 
-            let duration = max(activeClip.timing.durationSeconds, 0.001)
+            var output = sampleActiveClipFrame(
+                activeClip,
+                at: playbackTime,
+                deltaTime: deltaTime,
+                didWrap: false
+            )
 
-            if loopCurrentClip {
-                var didWrap = false
+            output.runtimeOverrideToCommit = activeRuntimeOverride
+            output.completedClip = activeClip
 
-                if playbackTime >= duration {
-                    playbackTime = playbackTime.truncatingRemainder(dividingBy: duration)
-                    currentPlaybackTime = playbackTime
-                    didWrap = playbackTime < previousTime
-                }
+            state = .stopped
+            self.activeClip = nil
+            currentActiveClipID = nil
+            currentPlaybackTime = 0
+            activeRuntimeOverride = .identity
+            activeLocomotionPolicy = .useClipLocomotion
 
-                let basePose = sampleClipPose(activeClip, at: playbackTime)
-                let finalPose = applyActiveSubAnimations(
-                    to: basePose,
-                    deltaTime: clampedDelta
-                )
-                setJointTransforms(finalPose, on: modelEntity)
-                applyLocomotionFromFrozenOrigin(activeClip, at: playbackTime, didWrap: didWrap)
+            return output
+        }
 
-            } else {
-                if playbackTime >= duration {
-                    playbackTime = duration
-                    currentPlaybackTime = playbackTime
+        return sampleActiveClipFrame(
+            activeClip,
+            at: playbackTime,
+            deltaTime: deltaTime,
+            didWrap: false
+        )
+    }
 
-                    let basePose = sampleClipPose(activeClip, at: playbackTime)
-                    let finalPose = applyActiveSubAnimations(
-                        to: basePose,
-                        deltaTime: clampedDelta
-                    )
-                    setJointTransforms(finalPose, on: modelEntity)
-                    applyLocomotionFromFrozenOrigin(activeClip, at: playbackTime, didWrap: false)
+    private func sampleActiveClipFrame(
+        _ clip: JockAnimClip,
+        at time: TimeInterval,
+        deltaTime: TimeInterval,
+        didWrap: Bool
+    ) -> RuntimeFrameOutput {
+        let basePose = sampleClipPose(
+            clip,
+            at: time
+        )
+        let finalPose = applyActiveSubAnimations(
+            to: basePose,
+            deltaTime: deltaTime
+        )
 
-                    commitRuntimeOverrideAtClipCompletion()
+        return RuntimeFrameOutput(
+            jointTransforms: finalPose,
+            locomotionRequest: LocomotionApplicationRequest(
+                clip: clip,
+                time: time,
+                didWrap: didWrap,
+                locomotionPolicy: activeLocomotionPolicy
+            )
+        )
+    }
 
-                    state = .stopped
-                    let completedClip = activeClip
-                    self.activeClip = nil
-                    currentActiveClipID = nil
-                    currentPlaybackTime = 0
-                    activeRuntimeOverride = .identity
-                    activeLocomotionPolicy = .useClipLocomotion
+    private func applyRuntimeFrameOutput(
+        _ output: RuntimeFrameOutput,
+        on modelEntity: ModelEntity
+    ) {
+        if let jointTransforms = output.jointTransforms {
+            setJointTransforms(
+                jointTransforms,
+                on: modelEntity
+            )
+        }
 
-                    onClipCompleted?(completedClip)
-                    return
-                }
+        if let visualOffset = output.visualOffset {
+            visualOffsetEntity?.orientation = visualOffset
+        }
 
-                let basePose = sampleClipPose(activeClip, at: playbackTime)
-                let finalPose = applyActiveSubAnimations(
-                    to: basePose,
-                    deltaTime: clampedDelta
-                )
-                setJointTransforms(finalPose, on: modelEntity)
-                applyLocomotionFromFrozenOrigin(activeClip, at: playbackTime, didWrap: false)
-            }
+        if output.resetRootToFrozenOrigin {
+            locomotionRootEntity?.position = frozenClipRootPosition
+            locomotionRootEntity?.orientation = frozenClipRootOrientation
+        }
+
+        if let locomotionRequest = output.locomotionRequest {
+            applyLocomotionFromFrozenOrigin(
+                locomotionRequest.clip,
+                at: locomotionRequest.time,
+                didWrap: locomotionRequest.didWrap,
+                locomotionPolicy: locomotionRequest.locomotionPolicy
+            )
+        }
+
+        if let runtimeOverride = output.runtimeOverrideToCommit {
+            commitRuntimeOverrideAtClipCompletion(
+                runtimeOverride
+            )
+        }
+
+        if let completedClip = output.completedClip {
+            onClipCompleted?(completedClip)
         }
     }
 
@@ -2946,9 +3116,12 @@ final class JockRuntimeDriver {
     private func applyLocomotionFromFrozenOrigin(
         _ clip: JockAnimClip,
         at time: TimeInterval,
-        didWrap: Bool
+        didWrap: Bool,
+        locomotionPolicy: JockClipLocomotionPolicy? = nil
     ) {
-        guard activeLocomotionPolicy == .useClipLocomotion else {
+        let policy = locomotionPolicy ?? activeLocomotionPolicy
+
+        guard policy == .useClipLocomotion else {
             return
         }
 
@@ -3100,8 +3273,10 @@ final class JockRuntimeDriver {
         return wasConsumed
     }
 
-    private func commitRuntimeOverrideAtClipCompletion() {
-        guard activeRuntimeOverride.commitRootYawOnCompletion else {
+    private func commitRuntimeOverrideAtClipCompletion(
+        _ runtimeOverride: JockRuntimeClipOverride
+    ) {
+        guard runtimeOverride.commitRootYawOnCompletion else {
             return
         }
 
@@ -3109,20 +3284,20 @@ final class JockRuntimeDriver {
             return
         }
 
-        let delta = activeRuntimeOverride.rootYawDeltaOrientation
+        let delta = runtimeOverride.rootYawDeltaOrientation
 
         // Same conceptual layer as locomotion yaw: the root owns accumulated heading.
         root.orientation = delta * root.orientation
 
         visualOffsetEntity?.orientation =
-            activeRuntimeOverride.exitVisualOffsetOrientation
+            runtimeOverride.exitVisualOffsetOrientation
 
         print(
             """
             [Gravitas Virtual Root] Clip completion committed root yaw
-              entryHeading: \(activeRuntimeOverride.entryHeadingDegrees)
-              exitHeading: \(activeRuntimeOverride.exitHeadingDegrees)
-              yawDelta: \(activeRuntimeOverride.yawDeltaDegrees)
+              entryHeading: \(runtimeOverride.entryHeadingDegrees)
+              exitHeading: \(runtimeOverride.exitHeadingDegrees)
+              yawDelta: \(runtimeOverride.yawDeltaDegrees)
             """
         )
     }
