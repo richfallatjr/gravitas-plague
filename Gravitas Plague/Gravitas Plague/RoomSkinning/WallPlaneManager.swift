@@ -4,6 +4,16 @@ import Foundation
 import RealityKit
 import simd
 
+private func roomSkinningPlaneLog(
+    _ message: @autoclosure () -> String
+) {
+    guard RuntimeDiagnostics.roomSkinningPlaneLogsEnabled else {
+        return
+    }
+
+    print(message())
+}
+
 enum FloorLockRequirement {
     case optional
     case required
@@ -31,13 +41,13 @@ final class WallPlaneManager: ObservableObject {
     }
 
     func beginScanning() {
-        print("[RoomSkinning] wall plane manager scanning")
+        roomSkinningPlaneLog("[RoomSkinning] wall plane manager scanning")
     }
 
     func stop() {
         wallCandidates.removeAll()
         floorCandidates.removeAll()
-        print("[RoomSkinning] plane detection stopped")
+        roomSkinningPlaneLog("[RoomSkinning] plane detection stopped")
     }
 
     func handlePlaneAnchorUpdate(
@@ -55,7 +65,7 @@ final class WallPlaneManager: ObservableObject {
 
                 wallCandidates[wall.id] = wall
 
-                print(
+                roomSkinningPlaneLog(
                     """
                     [RoomSkinning] wall candidate found id=\(wall.id)
                       anchorID: \(wall.anchorID)
@@ -71,7 +81,7 @@ final class WallPlaneManager: ObservableObject {
 
                 floorCandidates[floor.id] = floor
 
-                print(
+                roomSkinningPlaneLog(
                     """
                     [RoomSkinning] floor candidate found id=\(floor.id)
                       anchorID: \(floor.anchorID)
@@ -91,7 +101,7 @@ final class WallPlaneManager: ObservableObject {
             }) {
                 wallCandidates.removeValue(forKey: removed.key)
 
-                print(
+                roomSkinningPlaneLog(
                     """
                     [RoomSkinning] wall candidate removed
                       id: \(removed.key)
@@ -105,7 +115,7 @@ final class WallPlaneManager: ObservableObject {
             }) {
                 floorCandidates.removeValue(forKey: removed.key)
 
-                print(
+                roomSkinningPlaneLog(
                     """
                     [RoomSkinning] floor candidate removed
                       id: \(removed.key)
@@ -178,7 +188,7 @@ final class WallPlaneManager: ObservableObject {
             lastUpdated: Date()
         )
 
-        print(
+        roomSkinningPlaneLog(
             """
             [RoomSkinning] wall basis from plane extent
               candidateID: \(candidate.id)
@@ -254,7 +264,7 @@ final class WallPlaneManager: ObservableObject {
         )
 
         guard semantic == .floor else {
-            print(
+            roomSkinningPlaneLog(
                 """
                 [RoomSkinning] rejected non-floor horizontal plane
                   semantic: \(semantic.rawValue)
@@ -320,7 +330,7 @@ final class WallPlaneManager: ObservableObject {
             lastUpdated: Date()
         )
 
-        print(
+        roomSkinningPlaneLog(
             """
             [RoomSkinning] usable floor candidate
               id: \(floor.id)
@@ -350,7 +360,7 @@ final class WallPlaneManager: ObservableObject {
         )
 
         guard upDot > 0.75 else {
-            print(
+            roomSkinningPlaneLog(
                 """
                 [RoomSkinning] horizontal plane rejected
                   reason: normal_not_up
@@ -369,7 +379,7 @@ final class WallPlaneManager: ObservableObject {
         }
 
         if center.y > viewerY - 0.25 {
-            print(
+            roomSkinningPlaneLog(
                 """
                 [RoomSkinning] horizontal plane classified ceiling
                   centerY: \(center.y)
@@ -380,7 +390,7 @@ final class WallPlaneManager: ObservableObject {
             return .ceiling
         }
 
-        print(
+        roomSkinningPlaneLog(
             """
             [RoomSkinning] horizontal plane classified highSurface
               centerY: \(center.y)
@@ -473,7 +483,7 @@ final class WallPlaneManager: ObservableObject {
             right = -right
         }
 
-        print(
+        roomSkinningPlaneLog(
             """
             [RoomSkinning] derived wall basis
               upIndex: \(upIndex)
@@ -548,7 +558,7 @@ final class WallPlaneManager: ObservableObject {
         let best = scored.max { $0.1 < $1.1 }?.0
 
         if let best {
-            print(
+            roomSkinningPlaneLog(
                 """
                 [RoomSkinning] best wall selected id=\(best.id)
                   size: \(String(format: "%.2f", best.width)) x \(String(format: "%.2f", best.height))
@@ -626,7 +636,7 @@ final class WallPlaneManager: ObservableObject {
             }
 
             guard floor.worldY < viewerY - 0.85 else {
-                print(
+                roomSkinningPlaneLog(
                     """
                     [PortalDoor] rejected floor candidate above viewer threshold
                       floorY: \(floor.worldY)
@@ -639,7 +649,7 @@ final class WallPlaneManager: ObservableObject {
 
             if let wall {
                 guard floor.worldY < wall.center.y - 0.35 else {
-                    print(
+                    roomSkinningPlaneLog(
                         """
                         [PortalDoor] rejected floor candidate above wall center
                           floorY: \(floor.worldY)
@@ -655,7 +665,7 @@ final class WallPlaneManager: ObservableObject {
         }
 
         guard !candidates.isEmpty else {
-            print(
+            roomSkinningPlaneLog(
                 """
                 [PortalDoor] no usable floor candidates
                   totalHorizontalFloorsTracked: \(floorCandidates.count)
@@ -689,7 +699,7 @@ final class WallPlaneManager: ObservableObject {
 
         let chosen = sorted[0]
 
-        print(
+        roomSkinningPlaneLog(
             """
             [PortalDoor] best floor candidate selected
               floorID: \(chosen.id)
@@ -747,7 +757,7 @@ final class WallPlaneManager: ObservableObject {
                         + resolved.height * 0.5
                         + resolved.bottomClearance
 
-                    print(
+                    roomSkinningPlaneLog(
                         """
                         [PortalDoor] floor lock optional fallback to wall lower extent
                           wallID: \(resolved.wallID)
@@ -762,7 +772,7 @@ final class WallPlaneManager: ObservableObject {
                     )
 
                 case .required:
-                    print(
+                    roomSkinningPlaneLog(
                         """
                         [PortalDoor] ERROR required floor lock failed
                           wallID: \(resolved.wallID)
@@ -780,7 +790,7 @@ final class WallPlaneManager: ObservableObject {
                 doorHeight: resolved.height,
                 bottomClearance: resolved.bottomClearance
             ) else {
-                print(
+                roomSkinningPlaneLog(
                     """
                     [PortalDoor] ERROR could not solve floor localY
                       wallID: \(resolved.wallID)
@@ -794,7 +804,7 @@ final class WallPlaneManager: ObservableObject {
             resolved.floorAnchorID = floor.id
             resolved.floorWorldY = floor.worldY
 
-            print(
+            roomSkinningPlaneLog(
                 """
                 [PortalDoor] floor lock resolved
                   wallID: \(resolved.wallID)
@@ -868,7 +878,7 @@ final class WallPlaneManager: ObservableObject {
             "\(value)"
         } ?? "nil"
 
-        print(
+        roomSkinningPlaneLog(
             """
             [PortalDoor] wall-local floor-aware transform rebuilt
               wallID: \(resolved.wallID)

@@ -199,6 +199,10 @@ private extension HordeEnemyBodySeparationResolver {
         characterID: String,
         correction: SIMD3<Float>
     ) {
+        guard RuntimeDiagnostics.hordeRuntimeSummariesEnabled else {
+            return
+        }
+
         correctionsSinceSummary += 1
         maxCorrectionMagnitudeSinceSummary = max(
             maxCorrectionMagnitudeSinceSummary,

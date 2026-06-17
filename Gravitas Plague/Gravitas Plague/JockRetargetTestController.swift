@@ -1663,6 +1663,10 @@ final class JockRetargetTestController {
     private func printCrowdSteeringDebug(
         _ message: String
     ) {
+        guard RuntimeDiagnostics.hordeRuntimeSummariesEnabled else {
+            return
+        }
+
         let now = TimingProfiler.now()
 
         guard now - lastCrowdSteeringLogTime >= 1.0 else {
@@ -3949,6 +3953,10 @@ final class JockRetargetTestController {
         distance: Float,
         step: Float
     ) {
+        guard RuntimeDiagnostics.hordeRuntimeSummariesEnabled else {
+            return
+        }
+
         followLocomotionFramesSinceLog += 1
 
         let now = TimingProfiler.now()
@@ -3962,7 +3970,7 @@ final class JockRetargetTestController {
         print(
             """
             [Gravitas Follow] locomotion summary
-              enemyID: \(hordeBenchmarkID?.uuidString ?? "nil")
+              enemyID: \(hordeID.uuidString)
               frames: \(followLocomotionFramesSinceLog)
               rawForward: \(rawForward)
               signedForward: \(signedForward)

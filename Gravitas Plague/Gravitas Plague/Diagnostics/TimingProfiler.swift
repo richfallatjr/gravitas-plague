@@ -1,5 +1,11 @@
 import Foundation
 
+enum RuntimeDiagnostics {
+    static let timingProfilerSummariesEnabled = false
+    static let roomSkinningPlaneLogsEnabled = false
+    static let hordeRuntimeSummariesEnabled = false
+}
+
 final class TimingProfiler {
     struct Metric {
         var totalSeconds: TimeInterval = 0
@@ -101,6 +107,11 @@ final class TimingProfiler {
         }
 
         lastSummaryTime = now
+
+        guard RuntimeDiagnostics.timingProfilerSummariesEnabled || force else {
+            metrics.removeAll()
+            return
+        }
 
         let sortedMetrics = metrics.sorted {
             if $0.value.totalSeconds == $1.value.totalSeconds {

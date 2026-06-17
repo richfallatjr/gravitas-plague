@@ -90,6 +90,16 @@ final class GravitasDemoAudioController {
         fileExtension: "mp3"
     )
 
+    private let satanActedFile = BundleAudioFile(
+        fileName: "satan-acted",
+        fileExtension: "mp3"
+    )
+
+    private let satanLatinFile = BundleAudioFile(
+        fileName: "satan-latin",
+        fileExtension: "mp3"
+    )
+
     private let punchFile = BundleAudioFile(
         fileName: "face-punch_mixdown",
         fileExtension: "wav"
@@ -123,12 +133,16 @@ final class GravitasDemoAudioController {
     private var dadBreathingResource: AudioFileResource?
     private var emergencyBeepResource: AudioFileResource?
     private var emergencyBroadcastResource: AudioFileResource?
+    private var satanActedResource: AudioFileResource?
+    private var satanLatinResource: AudioFileResource?
     private var spatialResourcesByKey: [String: AudioFileResource] = [:]
 
     private var radioStaticController: AudioPlaybackController?
     private var dadBreathingController: AudioPlaybackController?
     private var emergencyBeepController: AudioPlaybackController?
     private var emergencyBroadcastController: AudioPlaybackController?
+    private var satanActedController: AudioPlaybackController?
+    private var satanLatinController: AudioPlaybackController?
     private var portalOneShotControllers: [AudioPlaybackController] = []
     private var hostAudioSourcesByID: [UUID: HostAudioSource] = [:]
     private var activeSpatialOneShotsByID: [UUID: ActiveSpatialOneShot] = [:]
@@ -254,6 +268,16 @@ final class GravitasDemoAudioController {
 
         emergencyBroadcastResource = makeOptionalSpatialResource(
             file: emergencyBroadcastFile,
+            shouldLoop: false
+        )
+
+        satanActedResource = makeOptionalSpatialResource(
+            file: satanActedFile,
+            shouldLoop: false
+        )
+
+        satanLatinResource = makeOptionalSpatialResource(
+            file: satanLatinFile,
             shouldLoop: false
         )
 
@@ -1199,42 +1223,100 @@ final class GravitasDemoAudioController {
         guard isDemoAudioActive else { return }
 
         guard let emergencyBeepResource,
+              let satanActedResource,
+              let satanLatinResource,
               let emergencyBroadcastResource else {
             print("[Gravitas Audio] Emergency resources missing.")
             return
         }
 
+        await playRadioBroadcastClip(
+            resource: satanActedResource,
+            file: satanActedFile,
+            controller: \.satanActedController,
+            volume: 0.78
+        )
+
+        await sleepEmergencyBreakIfActive()
+
+        await playRadioBroadcastClip(
+            resource: satanLatinResource,
+            file: satanLatinFile,
+            controller: \.satanLatinController,
+            volume: 0.78
+        )
+
+        await sleepEmergencyBreakIfActive()
+
+        await playEmergencyBeep(
+            resource: emergencyBeepResource
+        )
+
+        await sleepEmergencyBeatIfActive()
+
+        await playRadioBroadcastClip(
+            resource: emergencyBroadcastResource,
+            file: emergencyBroadcastFile,
+            controller: \.emergencyBroadcastController,
+            volume: 0.78
+        )
+
+        print("[Gravitas Audio] Spatial emergency sequence finished: satan acted -> satan latin -> beep -> broadcast.")
+    }
+
+    private func playEmergencyBeep(
+        resource: AudioFileResource
+    ) async {
+        guard isDemoAudioActive else { return }
+
         emergencyBeepController?.stop()
-        emergencyBeepController = radioAudioEntity.playAudio(emergencyBeepResource)
+        emergencyBeepController = radioAudioEntity.playAudio(resource)
         emergencyBeepController?.gain = Double(emergencyBeepDecibels)
 
-        let beepDuration = durationSeconds(for: emergencyBeepFile)
+        let duration = durationSeconds(for: emergencyBeepFile)
 
-        if beepDuration > 0 {
+        if duration > 0 {
             try? await Task.sleep(
-                nanoseconds: UInt64(beepDuration * 1_000_000_000)
+                nanoseconds: UInt64(duration * 1_000_000_000)
             )
         }
+    }
+
+    private func playRadioBroadcastClip(
+        resource: AudioFileResource,
+        file: BundleAudioFile,
+        controller: ReferenceWritableKeyPath<GravitasDemoAudioController, AudioPlaybackController?>,
+        volume: Float
+    ) async {
+        guard isDemoAudioActive else { return }
+
+        self[keyPath: controller]?.stop()
+        self[keyPath: controller] = radioAudioEntity.playAudio(resource)
+        self[keyPath: controller]?.gain = decibels(linearVolume: volume)
+
+        let duration = durationSeconds(for: file)
+
+        if duration > 0 {
+            try? await Task.sleep(
+                nanoseconds: UInt64(duration * 1_000_000_000)
+            )
+        }
+    }
+
+    private func sleepEmergencyBeatIfActive() async {
+        guard isDemoAudioActive else { return }
 
         try? await Task.sleep(
             nanoseconds: UInt64(emergencyBeatDelaySeconds * 1_000_000_000)
         )
+    }
 
+    private func sleepEmergencyBreakIfActive() async {
         guard isDemoAudioActive else { return }
 
-        emergencyBroadcastController?.stop()
-        emergencyBroadcastController = radioAudioEntity.playAudio(emergencyBroadcastResource)
-        emergencyBroadcastController?.gain = decibels(linearVolume: 0.78)
-
-        let broadcastDuration = durationSeconds(for: emergencyBroadcastFile)
-
-        if broadcastDuration > 0 {
-            try? await Task.sleep(
-                nanoseconds: UInt64(broadcastDuration * 1_000_000_000)
-            )
-        }
-
-        print("[Gravitas Audio] Spatial emergency sequence finished: beep completed -> beat -> broadcast completed.")
+        try? await Task.sleep(
+            nanoseconds: UInt64(emergencyBreakAfterBroadcastSeconds * 1_000_000_000)
+        )
     }
 
     private func stopSpatialDemoControllers() {
@@ -1249,6 +1331,12 @@ final class GravitasDemoAudioController {
 
         emergencyBroadcastController?.stop()
         emergencyBroadcastController = nil
+
+        satanActedController?.stop()
+        satanActedController = nil
+
+        satanLatinController?.stop()
+        satanLatinController = nil
 
         for id in Array(hostAudioSourcesByID.keys) {
             stopHostAudioSource(id: id)

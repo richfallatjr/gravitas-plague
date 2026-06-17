@@ -50,7 +50,10 @@ final class RoomTrackingManager: ObservableObject {
         switch update.event {
         case .added, .updated:
             currentRoomID = update.anchor.id
-            print("[RoomSkinning] current room anchor updated id=\(update.anchor.id)")
+
+            if RuntimeDiagnostics.roomSkinningPlaneLogsEnabled {
+                print("[RoomSkinning] current room anchor updated id=\(update.anchor.id)")
+            }
 
         case .removed:
             if currentRoomID == update.anchor.id {
