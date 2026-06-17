@@ -29,6 +29,12 @@ final class PortalEmberPool {
     private var embers: [PortalEmber] = []
     private var nextIndex: Int = 0
 
+    var activeCount: Int {
+        embers.reduce(0) { partialResult, ember in
+            partialResult + (ember.active ? 1 : 0)
+        }
+    }
+
     init(
         root: Entity,
         maxActive: Int

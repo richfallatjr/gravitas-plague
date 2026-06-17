@@ -1,0 +1,772 @@
+Gravitas Plague MainActor Architecture Audit
+============================================
+
+Purpose
+-------
+This file is an architect-facing inventory of what is currently connected to the
+MainActor, why it is there, and where optimization work should start.
+
+Goal for the next architecture phase:
+
+    Make the MainActor a thin shell that owns UI + RealityKit/ARKit side effects,
+    while gameplay decisions, crowd math, placement scoring, animation sampling,
+    parsing, and planning run off-main against immutable snapshots.
+
+Static scan summary
+-------------------
+- Swift source files scanned: 87
+- Direct @MainActor hits: 113
+- Files containing @MainActor: 51
+- Largest MainActor-connected hotspots by file size:
+  - JockRetargetTestController.swift: 3,761 lines
+  - JockRuntimeDriver.swift: 3,144 lines
+  - PlagueImmersiveCoordinator.swift: 2,591 lines
+  - GravitasDemoAudioController.swift: 1,869 lines
+  - HordePortalManager.swift: 1,097 lines
+  - WallPlaneManager.swift: 931 lines
+  - HordePortalInstancedIngressController.swift: 921 lines
+  - RoomSkinningCoordinator.swift: 416 lines
+
+MainActor root causes
+---------------------
+MainActor use is currently driven by four broad constraints:
+
+1. SwiftUI / ObservableObject publication
+   - @Published state must be mutated on the main actor.
+   - SwiftUI views, gestures, window actions, and immersive-space actions hop to
+     MainActor.
+
+2. RealityKit entity graph ownership
+   - Entity / ModelEntity creation, parenting, transform mutation, component
+     mutation, mesh/material setup, audio emitter placement, and visual debug
+     entities are all treated as MainActor-owned in this codebase.
+
+3. ARKit provider/session ownership
+   - World tracking, room tracking, plane detection, and hand tracking classes
+     are currently MainActor classes. Some provider streams already use async
+     loops and then hop back to MainActor for state updates.
+
+4. Historical controller coupling
+   - Several controllers combine pure decision logic, state machines, asset
+     loading, animation sampling, RealityKit mutation, debug logging, and UI
+     callbacks in one @MainActor type. These are the main optimization targets.
+
+Frame loop / runtime path
+-------------------------
+Current primary frame driver:
+
+1. PlagueImmersiveView.swift
+   - Owns a SwiftUI Timer.publish(every: 1/60, on: .main, in: .common).
+   - onReceive(frameTimer) calls PlagueImmersiveCoordinator.tick(at:).
+   - This means the app's main simulation tick is currently explicitly scheduled
+     on the main run loop.
+
+2. PlagueImmersiveCoordinator.tick(at:)
+   - Runs on MainActor because PlagueImmersiveCoordinator is @MainActor.
+   - Reads current spatial pose from PhaseOneSpatialProvider.
+   - Updates room-skinning player pose and wall poster UI.
+   - Updates horde room scan.
+   - Updates portal ingress controllers.
+   - Updates portal FX.
+   - Builds crowd snapshots.
+   - Calls each JockRetargetTestController.update(...).
+   - Applies enemy body separation.
+   - Runs debug integrity checks.
+
+3. JockRetargetTestController.update(...)
+   - Runs on MainActor because JockRetargetTestController is @MainActor.
+   - Updates attack mode.
+   - Updates follow movement state.
+   - Calls JockRuntimeDriver.update(...).
+   - Updates character audio emitter.
+   - Updates punch/hit detection.
+   - Updates attack damage detection.
+
+4. JockRuntimeDriver.update(...)
+   - Runs on MainActor because JockRuntimeDriver is @MainActor.
+   - Samples/blends animation clips.
+   - Applies active sub-animations.
+   - Applies joint transforms to ModelEntity.
+   - Applies locomotion root transform deltas through callback.
+
+This is the biggest optimization issue: the main actor owns both the frame clock
+and most per-frame computation for every active enemy, every portal FX controller,
+collision/steering snapshots, and animation pose application.
+
+MainActor-connected files by domain
+-----------------------------------
+
+UI / session / window shell
+- PlagueDemoSession.swift
+  - @MainActor ObservableObject.
+  - Owns most @Published UI/session state: immersive status, active mode, forest
+    status, room skinning status, portal audio settings, collision debug toggle,
+    wave stats, command envelope.
+  - Should remain a MainActor shell, but command validation and state derivation
+    can be moved into pure reducers.
+
+- PlagueImmersiveView.swift
+  - SwiftUI View.
+  - Owns RealityView setup, gesture handlers, notification handlers, frame timer.
+  - MainActor hops for quit, leaderboard, immersive dismiss/window open.
+  - Major architectural question: replace Timer.publish main-loop simulation with
+    a smaller main apply phase fed by background simulation results.
+
+- PlagueOperationModePosterMenu.swift
+  - SwiftUI menu and control-window UI.
+  - Uses MainActor tasks and MainActor.run for UI/window actions.
+  - Keep UI on main; move image/load validation and menu hit-zone math off-main
+    if it becomes measurable.
+
+- PlagueWindowAttachmentObserver.swift
+  - UIKit/AppKit bridge with MainActor kill-switch callbacks.
+  - Keep on main.
+
+- DamageSurroundingsTintController.swift
+  - @MainActor ObservableObject.
+  - Published tint state and Task { @MainActor } animation.
+  - Keep on main; low computational risk.
+
+- DeathPresentationController.swift
+  - @MainActor ObservableObject.
+  - Published blackout state and MainActor animation tasks.
+  - Keep on main; low computational risk.
+
+- GameCenter/PlagueGameCenterManager.swift
+  - @MainActor ObservableObject wrapping GameKit UI/auth callbacks.
+  - Keep UI-facing shell on main; network/auth callbacks can produce value
+    snapshots before publishing.
+
+Immersive coordinator / scene composition
+- PlagueImmersiveCoordinator.swift
+  - @MainActor ObservableObject and current central game coordinator.
+  - Owns sceneRoot, headAnchor, horde runtime state, portal manager, room skinning,
+    audio controller, wall poster UI, death presentation hooks, wave lifecycle,
+    horde spawn scheduling, debug toggles, callbacks into session.
+  - MainActor tasks at callback boundaries and delayed wave scheduling.
+  - Candidate split:
+    - MainActor shell: entity parenting, RealityKit component/transform writes,
+      @Published state, callbacks into SwiftUI/session.
+    - Off-main engine: horde wave state, spawn request planning, crowd simulation,
+      collision/separation solve, portal placement scoring, room scan progress,
+      command reduction, debug summary generation.
+
+Spatial / ARKit
+- PhaseOneSpatialProvider.swift
+  - @MainActor.
+  - Owns ARKitSession, WorldTrackingProvider, PlaneDetectionProvider, known plane
+    Y cache, currentPose queries.
+  - Current pose query is called from the main tick.
+  - Candidate split:
+    - Keep ARKit provider/session ownership shell isolated.
+    - Publish immutable SpatialFrame snapshots for off-main consumers.
+    - Consume plane anchor streams off-main if provider APIs allow, then hop only
+      to publish small snapshots.
+
+- RoomSkinning/RoomTrackingManager.swift
+  - @MainActor ObservableObject.
+  - Starts RoomTrackingProvider and consumes anchorUpdates in a Task, then
+    MainActor.run to mutate currentRoomID.
+  - Already close to shell pattern. Can publish room ID snapshots.
+
+- JockHandHitDetector.swift
+  - @MainActor.
+  - Owns ARKitSession and HandTrackingProvider.
+  - Per-update hit evaluation runs on MainActor and is called from each enemy
+    controller update path.
+  - Candidate split:
+    - MainActor/protected shell samples hand anchors.
+    - Off-main HitTestEngine computes velocity/damage/region against immutable
+      face/head hit-zone snapshots.
+
+Room skinning / wall state
+- RoomSkinning/RoomSkinningCoordinator.swift
+  - @MainActor ObservableObject.
+  - Owns room skinning state, status text, purpose, root Entity, wall manager,
+    portal door controller, async tasks.
+  - Uses MainActor.run and Task { @MainActor } around status/state changes.
+  - Candidate split:
+    - Keep Entity mutation and @Published state on main.
+    - Move wall/floor candidate selection, ray intersection, door placement,
+      portal candidate validation, occupancy scoring to pure services.
+
+- RoomSkinning/WallPlaneManager.swift
+  - @MainActor ObservableObject.
+  - Owns wallCandidates and floorCandidates dictionaries.
+  - Likely receives ARKit plane updates and builds RealityKit wall/floor visuals.
+  - Candidate split:
+    - Maintain immutable PlaneCandidateStore off-main.
+    - MainActor applies visual diffs to entities.
+
+- RoomSkinning/PortalDoorController.swift
+  - @MainActor ObservableObject.
+  - Owns portal door state and placement.
+  - Keep state publication/entity mutation on main; make placement math pure.
+
+- RoomSkinning/HordeRoomScanTracker.swift
+  - @MainActor ObservableObject.
+  - Tracks scan progress from head-forward samples.
+  - Strong candidate to become a pure value reducer: input head forward, output
+    scan progress/isComplete.
+
+- RoomSkinning/WallPropOccupancyRegistry.swift
+  - @MainActor.
+  - Stores wall occupancy records.
+  - Candidate to move to an actor or pure value store if queried often by portal
+    placement and poster/prop placement.
+
+Horde runtime / enemy simulation
+- JockRetargetTestController.swift
+  - @MainActor, 3,761 lines.
+  - Owns RealityKit root/model entities, skeleton driver, character audio emitter,
+    combat state, follow state, hit detection, attack/damage, crowd steering,
+    body collision box, lifecycle, death, horde identity, animation clip
+    resolution, and per-frame update.
+  - Highest-priority refactor target.
+  - Candidate split:
+    - MainActor EnemyEntityAdapter:
+      - root/model entity ownership
+      - transforms and joint transform application
+      - clip play commands
+      - audio emitter updates
+      - visual/debug entity setup
+    - Off-main EnemyBrain/EnemySimulation:
+      - lifecycle state
+      - follow state
+      - attack state decision
+      - attack anchor logic
+      - crowd steering angle
+      - hit/corpse state transitions
+      - output a command buffer: set transform, play clip, start/stop attack,
+        damage events, death events
+    - Off-main EnemyMath:
+      - distance checks
+      - ray-vs-OBB validation
+      - separation solve
+      - wave target/follow calculations
+
+- JockRuntimeDriver.swift
+  - @MainActor, 3,144 lines.
+  - Owns clip playback state, transitions, pose blending, sub-animations,
+    locomotion extraction, setJointTransforms on ModelEntity.
+  - Biggest CPU offload opportunity after JockRetargetTestController.
+  - Candidate split:
+    - Off-main AnimationPoseSampler:
+      - clip time advancement
+      - transition alpha
+      - blending
+      - sub-animation overlay math
+      - locomotion delta extraction
+      - output joint transform arrays and root deltas
+    - MainActor AnimationPoseApplier:
+      - apply final joint transforms to ModelEntity
+      - set visual offset entity orientation
+      - invoke RealityKit-only operations
+  - Existing structs such as JockPoseMath, prepared clips, rig maps, and clip data
+    look like natural Sendable-ish inputs once audited.
+
+- BakedInfectedController.swift
+  - @MainActor legacy/alternate infected controller with RealityKit entities.
+  - Keep only if still used; otherwise isolate or remove from runtime.
+
+- HordeCrowdSteering.swift
+  - Only validateEnemyBodyRay is @MainActor because it takes
+    JockRetargetTestController references and calls shouldYieldToEnemy.
+  - Ray/OBB math itself is pure.
+  - Candidate split:
+    - Build pure EnemyCrowdSnapshot values on main.
+    - Off-main CrowdSteeringEngine returns steer angle updates only.
+    - Avoid passing controller references to off-main code.
+
+- HordeEnemyCollisionSnapshot.swift
+  - Snapshot builder is @MainActor because it reads RealityKit transforms and
+    controller state.
+  - Candidate split:
+    - Keep snapshot extraction on main.
+    - Make the snapshot struct fully value-only/Sendable.
+    - All downstream ray/separation work can be off-main.
+
+- HordeEnemyBodySeparationResolver.swift
+  - @MainActor today because it directly moves enemy root entities and reads
+    controller state.
+  - Candidate split:
+    - Off-main SeparationSolver computes corrections from value snapshots.
+    - MainActor applies capped corrections to root entities.
+
+- HordeEnemyBodyCollisionBox.swift
+  - @MainActor because it owns Entity/ModelEntity debug box setup and transform.
+  - Keep on main; feed it value configs and state colors.
+
+Horde portal / FX / ingress
+- HordePortalManager.swift
+  - @MainActor.
+  - Owns portal roots, portal FX, portal audio, portal placement, portal content,
+    backdrop/IBL/glyph/ground disc setup, portal lifecycle.
+  - Candidate split:
+    - Off-main PortalPlacementPlanner:
+      - candidate scoring
+      - wave assignment selection
+      - occupancy tests
+      - floor/wall geometry math
+    - MainActor PortalEntityAdapter:
+      - create/add/remove RealityKit portal entities
+      - apply material/component updates
+      - start/stop audio controllers
+
+- HordePortalInstancedIngressController.swift
+  - @MainActor.
+  - Owns render instance, source/instance skinned models, ingress phases, portal
+    turn logic, crossing transforms, sync instance from source, room visual reveal.
+  - Candidate split:
+    - Keep ModelEntity/source instance access on main.
+    - Move phase timing and desired transform calculation to value state.
+    - MainActor applies transform/visibility and clip commands.
+
+- HordePortalWaveAssignmentPlanner.swift
+  - @MainActor, but likely planner logic.
+  - Strong off-main candidate if it does not need RealityKit state after input
+    snapshots are provided.
+
+- HordePortalBackdropOrientationLock.swift
+  - @MainActor and RealityKit transform work.
+  - Keep on main; math can be pure.
+
+- PortalTransitionFXController.swift
+  - @MainActor.
+  - Owns Entity roots and many per-frame FX updates.
+  - Candidate split:
+    - Off-main FXStateStepper computes segment/ember state.
+    - MainActor applies transforms/material changes to pooled entities.
+
+- PortalEmberPool.swift
+  - @MainActor because it owns ModelEntity pools.
+  - Keep entity pool on main; move spawn/update math off-main.
+
+- PortalGlyphFXController.swift
+  - @MainActor and owns wall/floor roots.
+  - Candidate split: glyph animation math off-main, entity apply on main.
+
+- PortalGlyphLayoutEngine.swift
+  - @MainActor even though much appears to be layout/packing math.
+  - Strong candidate to remove @MainActor if it can stop touching RealityKit
+    types directly or accept value-only inputs.
+
+- PortalGlyphDecalFactory.swift, HordePortalGroundDiscFactory.swift,
+  HordePortalApertureMeshFactory.swift, PortalFXSharedResources.swift,
+  PortalGlyphAssetLibrary.swift, HordeHellscapePortalContentProvider.swift,
+  EnvironmentSpherePortalContentProvider.swift
+  - Mostly entity/material/resource creation and content provider methods.
+  - Keep RealityKit creation/apply on main. Asset validation and layout decisions
+    can be pure/background.
+
+Audio
+- GravitasDemoAudioController.swift
+  - @MainActor, 1,869 lines.
+  - Owns RealityKit audio entities/resources/playback controllers, radio loop,
+    breathing, portal/character SFX.
+  - Candidate split:
+    - MainActor AudioEntityAdapter controls RealityKit audio resources/entities.
+    - Off-main AudioEventRouter chooses events, cooldowns, randomization,
+      voice/clip selection, and queues commands.
+
+- HordePortalAudioController.swift
+  - @MainActor and owns portal emitter/audio playback.
+  - Keep entity playback on main; route decisions off-main.
+
+Forest / splats / rendering
+- PlagueGaussianForestEnvironmentController.swift
+  - @MainActor controller; contains task hops back to MainActor.
+  - Owns environment root, splat root, lighting entity, loading/status callbacks.
+  - Some parsing/streaming support is already value-oriented elsewhere.
+  - Candidate split:
+    - Keep scene graph and status callbacks on main.
+    - Move PLY parsing, chunk planning/decoding, appearance preprocessing, and
+      cache bookkeeping off-main.
+
+- PlagueNativeGaussianSplatRenderer.swift
+  - Has MainActor cache/RealityKit entity creation areas.
+  - Existing parser/chunker code is a good model for off-main value work.
+
+- Rendering/PlagueNativeBloomInstaller.swift
+  - @MainActor and RealityKit component install.
+  - Keep on main.
+
+Data/config/cache
+- CharacterAttributes/CharacterAttributeStore.swift
+  - @MainActor ObservableObject.
+  - Loads/validates sidecar attributes and publishes dictionaries/errors.
+  - Candidate split:
+    - Off-main CharacterAttributeLoader validates/parses JSON.
+    - MainActor store publishes final value map/errors.
+
+- JockSourceRig.swift / JockSourceRigCache
+  - @MainActor cache.
+  - Candidate split if cache resolution loads/parses substantial rig data.
+
+- HordeAttackAnimationCatalogue.swift / AttackAnimationRandomizer
+  - AttackAnimationRandomizer is @MainActor.
+  - Random selection can be pure/off-main if state is moved into enemy simulation.
+
+MainActor task hop inventory
+----------------------------
+Files with explicit Task { @MainActor } or MainActor.run:
+- PlagueImmersiveCoordinator.swift
+  - Callback bridges for hit/damage/death/session events.
+  - Delayed room scan completion.
+  - Wave scheduling.
+  - Death or cleanup follow-up tasks.
+
+- PlagueImmersiveView.swift
+  - Kill switch, leaderboard, window open/dismiss, fatal forest failure.
+
+- PlagueOperationModePosterMenu.swift
+  - Control-window and menu actions.
+
+- RoomSkinningCoordinator.swift
+  - Async ARKit/room skinning state transitions.
+
+- RoomTrackingManager.swift
+  - Anchor update stream hops to mutate currentRoomID.
+
+- DamageSurroundingsTintController.swift / DeathPresentationController.swift
+  - Time-based UI animation tasks.
+
+- GravitasDemoAudioController.swift
+  - Audio task callback back to MainActor.
+
+- JockRetargetTestController.swift
+  - Async load callback/task around controller setup.
+
+- GameCenter/PlagueGameCenterManager.swift
+  - GameKit callback bridging.
+
+- PlagueGaussianForestEnvironmentController.swift
+  - Async forest/splat status or load callbacks.
+
+These are not all bad. The optimization target is not "remove every hop"; it is
+"make each hop apply a small value result rather than execute planning/simulation."
+
+High-value off-main candidates
+------------------------------
+The following are the best first extraction targets because they appear to be
+pure math or state transitions currently coupled to MainActor-owned types:
+
+1. Horde crowd + separation simulation
+   - Current main work:
+     - build crowd snapshots
+     - validate enemy body rays
+     - decide steer angle
+     - solve overlap separation
+     - apply corrections
+   - Proposed split:
+     - MainActor: extract EnemyBodySnapshot values and apply final corrections.
+     - Background: CrowdSteeringEngine + BodySeparationSolver.
+   - Output: [enemyID: steerAngleDelta], [enemyID: correctionVector].
+
+2. Enemy brain / attack state
+   - Current main work:
+     - follow/idle/waiting/attack state machine
+     - attack anchor logic
+     - distance checks
+     - damage window timing
+   - Proposed split:
+     - Background EnemyBrain takes EnemyInputSnapshot + PlayerSnapshot.
+     - MainActor applies commands: play walk, play idle, play attack, set transform,
+       report damage/death events.
+   - Caveat: actual clip playback and joint/entity mutation stay main.
+
+3. JockRuntimeDriver pose sampling
+   - Current main work:
+     - transition blend
+     - pose blend arrays
+     - sub-animation overlay
+     - locomotion delta extraction
+     - joint transform application
+   - Proposed split:
+     - Background pose sampler returns final joint transforms and root delta.
+     - MainActor applies to ModelEntity.
+   - This is likely the biggest CPU win if multiple enemies are active.
+
+4. Portal placement and wave planning
+   - Current main work:
+     - portal creation flow, candidate scoring, assignment, wall/floor/occupancy
+       queries, wave spawn sequencing.
+   - Proposed split:
+     - Background planner consumes value snapshots of room planes, occupancy,
+       player pose, wave index.
+     - MainActor creates entities/audio only after plan is selected.
+
+5. Portal FX state stepping
+   - Current main work:
+     - many Entity/ModelEntity pool updates per portal.
+   - Proposed split:
+     - Background stepper computes transforms/colors/lifetimes.
+     - MainActor applies batched diffs to pooled entities.
+
+6. Room skinning / plane processing
+   - Current main work:
+     - ARKit plane event handling, wall/floor candidate dictionaries, placement
+       scoring, poster/door placement.
+   - Proposed split:
+     - Background geometry reducer maintains candidate values and scores.
+     - MainActor applies visible wall/floor/door changes and publishes status.
+
+7. Audio routing
+   - Current main work:
+     - event selection and RealityKit playback in same large controller.
+   - Proposed split:
+     - Background audio event router chooses what should play.
+     - MainActor audio adapter plays on RealityKit emitters.
+
+Recommended target architecture
+-------------------------------
+
+1. MainActor shell layer
+   Responsibilities:
+   - SwiftUI @Published mutations.
+   - RealityKit Entity/ModelEntity creation, parenting, component changes, and
+     transform application.
+   - ARKit provider/session lifecycle where APIs require main.
+   - Audio playback calls on RealityKit entities.
+   - GameKit/UI/window calls.
+   - Conversion between RealityKit/ARKit live objects and value snapshots.
+
+2. Snapshot layer
+   Create explicit value DTOs for all off-main work:
+   - FrameClockSnapshot
+   - PlayerPoseSnapshot
+   - EnemyRuntimeSnapshot
+   - EnemyBodySnapshot
+   - EnemyAnimationSnapshot
+   - RoomGeometrySnapshot
+   - PortalRuntimeSnapshot
+   - AudioEventSnapshot
+   - HordeWaveSnapshot
+
+   Rules:
+   - No Entity, ModelEntity, Scene, ARKit provider, ObservableObject, closure, or
+     controller references in snapshots.
+   - Prefer Sendable structs.
+   - Store IDs and primitive math values only.
+
+3. Simulation / planner layer
+   Use nonisolated types or actors:
+   - HordeSimulationEngine
+   - EnemyBrainSystem
+   - CrowdSteeringEngine
+   - BodySeparationSolver
+   - PortalPlacementPlanner
+   - PortalFXStepper
+   - AnimationPoseSampler
+   - RoomGeometryReducer
+   - AudioEventRouter
+
+   Inputs: immutable snapshots.
+   Outputs: command buffers / diffs.
+
+4. Main apply layer
+   Apply command buffers on MainActor:
+   - Entity transform diffs.
+   - Animation clip commands.
+   - Joint transform arrays.
+   - Audio commands.
+   - UI/session state mutations.
+   - Debug draw updates.
+
+Suggested per-frame workflow
+----------------------------
+Current:
+
+    Main timer -> Main coordinator tick -> every subsystem computes + mutates.
+
+Target:
+
+    Main frame tick
+    -> capture minimal snapshots from RealityKit/ARKit/controller state
+    -> dispatch snapshot to simulation/planner tasks
+    -> main actor continues only essential visual/audio/UI work
+    -> collect latest completed command buffer
+    -> apply command buffer to RealityKit/ObservableObject state
+
+For real-time gameplay, use last-completed results rather than blocking the main
+thread waiting for every background task. It is better to use a one-frame-old
+steering/collision result than to stall the main actor.
+
+Command buffer examples
+-----------------------
+
+EnemyCommand:
+- setRootTransform(enemyID, position, yaw)
+- playClip(enemyID, clipID, loop, locomotionPolicy)
+- applyJointPose(enemyID, transforms)
+- startAttack(enemyID, attackID)
+- reportPlayerDamage(enemyID, amount, hitPoint)
+- setBodyCollisionEnabled(enemyID, Bool)
+- updateDebugLabel(enemyID, text)
+
+PortalCommand:
+- createPortal(portalPlan)
+- updatePortalFX(portalID, fxDiffs)
+- setPortalAudioGain(portalID, gain)
+- removePortal(portalID)
+
+UICommand:
+- publishStatus(text)
+- recordWaveReached(wave)
+- recordWaveCleared(wave)
+- startDeathPresentation
+
+Risk areas / migration constraints
+----------------------------------
+- RealityKit Entity/ModelEntity values should be treated as MainActor-owned.
+  Do not pass them into background tasks.
+
+- Current enemy snapshots still include controller references:
+  HordeEnemyCollisionSnapshot.controller is convenient but prevents safe off-main
+  use. Introduce a value-only snapshot before moving collision/steering off-main.
+
+- JockRuntimeDriver currently mutates ModelEntity inside the same method that
+  computes pose blending. Split calculation from application before moving work.
+
+- JockRetargetTestController owns too many concerns. Refactor by extracting
+  value engines first, then reducing the controller to an adapter.
+
+- The frame timer is on the main run loop. Even after offloading, a main timer is
+  acceptable only if it captures/applies quickly.
+
+- Logging is heavy in hot paths. Add throttles or debug-only flags before
+  measuring performance. Per-frame print statements can dominate frame time.
+
+- @Published writes in PlagueDemoSession and related ObservableObjects should be
+  coalesced. Frequent per-frame publication will invalidate SwiftUI views.
+
+- Asset loading may already use async APIs, but post-load entity setup and
+  validation often run in MainActor classes. Keep resource/entity construction on
+  main unless verified safe; move parsing/selection/preflight off-main.
+
+Proposed migration order
+------------------------
+
+Phase 0: Instrument before changing architecture
+- Add timing around:
+  - PlagueImmersiveCoordinator.tick
+  - updatePortalIngressControllers
+  - HordePortalManager.updatePortalFX
+  - per-enemy JockRetargetTestController.update
+  - JockRuntimeDriver.update
+  - body snapshot build
+  - crowd steering
+  - body separation
+  - hit detection
+- Track enemy count, portal count, active FX count, and joint count.
+
+Phase 1: Make value snapshots explicit
+- Replace controller-containing snapshots with value-only DTOs.
+- Add Sendable conformance where practical.
+- Keep computation on main initially, but remove Entity/controller references from
+  pure math APIs.
+
+Phase 2: Move crowd/separation off-main
+- Extract CrowdSteeringEngine and BodySeparationSolver.
+- MainActor builds snapshots and applies corrections/steering results.
+- This is a low-risk first offload because logic is already mostly math.
+
+Phase 3: Split enemy brain from entity adapter
+- Extract follow/attack/lifecycle state into EnemyBrainState and EnemyBrainEngine.
+- MainActor controller becomes EnemyEntityAdapter.
+- Preserve existing attack behavior through command outputs.
+
+Phase 4: Split animation sampling from pose application
+- Create AnimationPoseSampler that consumes prepared clip state and returns final
+  transforms/root delta.
+- MainActor applies transforms to ModelEntity.
+- This is a larger change but likely the biggest per-enemy win.
+
+Phase 5: Portal and FX planners
+- Move portal placement/wave planning to a planner actor.
+- Move portal FX stepping math off-main and apply batched diffs on main.
+
+Phase 6: Room skinning/ARKit processing
+- Convert ARKit streams into small snapshots.
+- Move room/wall/floor candidate scoring and occupancy checks off-main.
+
+Definition of "MainActor shell"
+-------------------------------
+The MainActor shell is successful when:
+- PlagueImmersiveCoordinator.tick does not contain domain decisions.
+- JockRetargetTestController does not compute brain/crowd/animation math beyond
+  snapshot capture and command application.
+- JockRuntimeDriver does not blend/sample poses on MainActor, only applies final
+  transforms.
+- Portal managers do not score/planner-search on MainActor.
+- Room skinning managers do not run candidate scoring on MainActor.
+- Off-main engines never see RealityKit Entity, ModelEntity, Scene, ARKitSession,
+  HandTrackingProvider, WorldTrackingProvider, SwiftUI View, ObservableObject, or
+  @Published state.
+
+Immediate architect ticket candidates
+-------------------------------------
+1. Create TimingProfiler and add scoped timings to the current MainActor tick.
+2. Introduce EnemyBodySnapshotValue without controller references.
+3. Move HordeCrowdSteering ray validation to pure off-main functions.
+4. Move HordeEnemyBodySeparationMath/solve to a pure BodySeparationSolver that
+   returns corrections instead of moving entities.
+5. Define EnemyCommand and PortalCommand enums.
+6. Split JockRuntimeDriver.update into samplePose(...) and applyPose(...).
+7. Replace frame log spam in hot paths with throttled debug summaries.
+8. Audit @MainActor annotations file by file and remove from pure factories/math
+   once signatures are RealityKit-free.
+
+Appendix: files containing @MainActor
+-------------------------------------
+- BakedInfectedController.swift
+- CharacterAttributes/CharacterAttributeStore.swift
+- DamageSurroundingsTintController.swift
+- DeathPresentationController.swift
+- GameCenter/PlagueGameCenterManager.swift
+- GravitasDemoAudioController.swift
+- HUD/PlagueHeadTrackedInstructionHUD.swift
+- Horde/HordeCrowdSteering.swift
+- Horde/HordeEnemyBodyCollisionBox.swift
+- Horde/HordeEnemyBodySeparationResolver.swift
+- Horde/HordeEnemyCollisionSnapshot.swift
+- Horde/HordeHellscapePortalContentProvider.swift
+- Horde/HordePortalAudioController.swift
+- Horde/HordePortalBackdropOrientationLock.swift
+- Horde/HordePortalGroundDiscFactory.swift
+- Horde/HordePortalInstancedIngressController.swift
+- Horde/HordePortalManager.swift
+- Horde/HordePortalModels.swift
+- Horde/HordePortalWaveAssignmentPlanner.swift
+- Horde/PortalEmberPool.swift
+- Horde/PortalFXSharedResources.swift
+- Horde/PortalGlyphAssetLibrary.swift
+- Horde/PortalGlyphDecalFactory.swift
+- Horde/PortalGlyphFXController.swift
+- Horde/PortalGlyphLayoutEngine.swift
+- Horde/PortalTransitionFXController.swift
+- HordeAttackAnimationCatalogue.swift
+- JockHandHitDetector.swift
+- JockRetargetTestController.swift
+- JockRuntimeDriver.swift
+- JockSourceRig.swift
+- PhaseOneSpatialProvider.swift
+- PlagueDemoSession.swift
+- PlagueGaussianForestEnvironmentController.swift
+- PlagueImmersiveCoordinator.swift
+- PlagueImmersiveView.swift
+- PlagueNativeGaussianSplatRenderer.swift
+- PlagueOperationModePosterMenu.swift
+- PlagueWindowAttachmentObserver.swift
+- Rendering/PlagueNativeBloomInstaller.swift
+- RoomSkinning/EnvironmentSpherePortalContentProvider.swift
+- RoomSkinning/HordeRoomScanTracker.swift
+- RoomSkinning/PortalContentProvider.swift
+- RoomSkinning/PortalDoorController.swift
+- RoomSkinning/PortalProjectedGroundDiscFactory.swift
+- RoomSkinning/RoomSkinningCoordinator.swift
+- RoomSkinning/RoomTrackingManager.swift
+- RoomSkinning/WallPlaneManager.swift
+- RoomSkinning/WallPropOccupancyRegistry.swift
+- UI/WallMountedPosterUIController.swift
+

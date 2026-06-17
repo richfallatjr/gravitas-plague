@@ -11,6 +11,12 @@ final class HordeEnemyBodySeparationResolver {
         static let tieDistanceEpsilon: Float = 0.05
     }
 
+    private var lastCorrectionSummaryTime: TimeInterval = 0
+    private var correctionsSinceSummary = 0
+    private var maxCorrectionMagnitudeSinceSummary: Float = 0
+    private var lastCorrectedEnemyID: UUID?
+    private var lastCorrectedCharacterID: String?
+
     func resolve(
         enemies: [JockRetargetTestController],
         headsetPosition: SIMD3<Float>
@@ -180,18 +186,52 @@ private extension HordeEnemyBodySeparationResolver {
             )
             #endif
 
-            print(
-                """
-                [EnemySeparation] correction applied
-                  enemyID: \(snapshot.enemyID)
-                  characterID: \(enemy.enemySeparationCharacterID)
-                  correction: \(correction)
-                  attackStateUnchanged: true
-                  animationUnchanged: true
-                  targetUnchanged: user
-                """
+            recordCorrectionSummaryIfNeeded(
+                enemyID: snapshot.enemyID,
+                characterID: enemy.enemySeparationCharacterID,
+                correction: correction
             )
         }
+    }
+
+    func recordCorrectionSummaryIfNeeded(
+        enemyID: UUID,
+        characterID: String,
+        correction: SIMD3<Float>
+    ) {
+        correctionsSinceSummary += 1
+        maxCorrectionMagnitudeSinceSummary = max(
+            maxCorrectionMagnitudeSinceSummary,
+            simd_length(correction)
+        )
+        lastCorrectedEnemyID = enemyID
+        lastCorrectedCharacterID = characterID
+
+        let now = TimingProfiler.now()
+
+        guard now - lastCorrectionSummaryTime >= 1.0 else {
+            return
+        }
+
+        lastCorrectionSummaryTime = now
+
+        print(
+            """
+            [EnemySeparation] correction summary
+              corrections: \(correctionsSinceSummary)
+              lastEnemyID: \(lastCorrectedEnemyID?.uuidString ?? "nil")
+              lastCharacterID: \(lastCorrectedCharacterID ?? "nil")
+              maxCorrection: \(maxCorrectionMagnitudeSinceSummary)
+              attackStateUnchanged: true
+              animationUnchanged: true
+              targetUnchanged: user
+            """
+        )
+
+        correctionsSinceSummary = 0
+        maxCorrectionMagnitudeSinceSummary = 0
+        lastCorrectedEnemyID = nil
+        lastCorrectedCharacterID = nil
     }
 
     func capLength(

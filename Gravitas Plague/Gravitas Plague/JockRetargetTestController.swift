@@ -157,6 +157,11 @@ final class JockRetargetTestController {
 
     private var attackAnchorUserPosition: SIMD3<Float>?
     private var latestCrowdSnapshots: [HordeEnemyCollisionSnapshot] = []
+    private weak var activeTimingProfiler: TimingProfiler?
+    private var lastFollowLocomotionLogTime: TimeInterval = 0
+    private var followLocomotionFramesSinceLog = 0
+    private var lastCrowdSteeringLogTime: TimeInterval = 0
+    private var suppressedCrowdSteeringLogCount = 0
     private var spawnPosition = SIMD3<Float>(0, 0, -3.05)
     private var spawnOrientation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
     private var cameraFacingVisualOffset = simd_quatf(
@@ -1214,6 +1219,149 @@ final class JockRetargetTestController {
         characterAttributes?.characterID ?? characterArchetype.rawValue
     }
 
+    var runtimeJointCountForProfiling: Int {
+        modelEntity?.jointNames.count ?? 0
+    }
+
+    func makeEnemyBodySnapshot(
+        headsetPosition: SIMD3<Float>
+    ) -> EnemyBodySnapshot? {
+        guard enemyBodyCollisionEnabled,
+              enemyBodyCollisionParticipant,
+              enemyCollisionState != .dead,
+              !isDeadForHordeCollision,
+              let box = bodyCollisionBox,
+              box.enabled else {
+            return nil
+        }
+
+        let boxMatrix = box.root.transformMatrix(relativeTo: nil)
+        let center = SIMD3<Float>(
+            boxMatrix.columns.3.x,
+            boxMatrix.columns.3.y,
+            boxMatrix.columns.3.z
+        )
+
+        let rootMatrix = rootEntity.transformMatrix(relativeTo: nil)
+        let rightXZ = normalizeSnapshotAxis2(
+            SIMD2<Float>(
+                rootMatrix.columns.0.x,
+                rootMatrix.columns.0.z
+            ),
+            fallback: SIMD2<Float>(1, 0)
+        )
+        let forwardXZ = normalizeSnapshotAxis2(
+            SIMD2<Float>(
+                rootMatrix.columns.2.x,
+                rootMatrix.columns.2.z
+            ),
+            fallback: SIMD2<Float>(0, 1)
+        )
+
+        let position = rootEntity.position(relativeTo: nil)
+        let halfSize = box.sizeMeters * 0.5
+        let yaw = yawRadiansForCurrentRoot()
+        let distance = crowdDistanceXZ(
+            center,
+            headsetPosition
+        )
+
+        let snapshot = EnemyBodySnapshot(
+            id: hordeID,
+            characterID: enemySeparationCharacterID,
+            spawnIndex: hordeSpawnIndex,
+            isAlive: !isDeadForHordeCollision,
+            isAttacking: isAttackOrCombatActiveForSeparation,
+            position: position,
+            yawRadians: yaw,
+            centerWorld: center,
+            rightXZ: rightXZ,
+            forwardXZ: forwardXZ,
+            halfWidth: halfSize.x,
+            halfDepth: halfSize.z,
+            minY: center.y - halfSize.y,
+            maxY: center.y + halfSize.y,
+            distanceToUserXZ: distance
+        )
+
+        #if DEBUG
+        MainActorSnapshotDebugAssertions.assertValueOnlySnapshot(snapshot)
+        #endif
+
+        return snapshot
+    }
+
+    func makeEnemyBrainSnapshot(
+        headsetPosition: SIMD3<Float>
+    ) -> EnemyBrainSnapshot {
+        let snapshot = EnemyBrainSnapshot(
+            id: hordeID,
+            characterID: enemySeparationCharacterID,
+            spawnIndex: hordeSpawnIndex,
+            state: enemyBrainStateValue,
+            position: rootEntity.position(relativeTo: nil),
+            yawRadians: yawRadiansForCurrentRoot(),
+            health: max(0, hitsToKill - acceptedHitCount),
+            isDead: isDeadForHordeCollision,
+            isHitReacting: isHitReactingForSnapshot,
+            isAttacking: isAttackOrCombatActiveForCrowdSteering,
+            attackAnchorUserPosition: attackAnchorUserPosition,
+            crowdSteerAngleRadians: crowdSteering.steerAngleRadians
+        )
+
+        #if DEBUG
+        MainActorSnapshotDebugAssertions.assertValueOnlySnapshot(snapshot)
+        #endif
+
+        return snapshot
+    }
+
+    private var enemyBrainStateValue: EnemyBrainStateValue {
+        switch combatState {
+        case .dead:
+            return .dead
+        case .hitReaction:
+            return .hitReaction
+        case .attacking:
+            return .attacking
+        case .closeRangeReady:
+            return .closeRangeReady
+        case .normal:
+            switch followDemoState {
+            case .inactive:
+                return .inactive
+            case .idleStopped:
+                return .idleStopped
+            case .waitingToFollow:
+                return .waitingToFollow
+            case .following:
+                return .following
+            }
+        }
+    }
+
+    private var isHitReactingForSnapshot: Bool {
+        if case .hitReaction = combatState {
+            return true
+        }
+
+        return false
+    }
+
+    private func yawRadiansForCurrentRoot() -> Float {
+        let forward = rootEntity.orientation.act(
+            SIMD3<Float>(0, 0, -1)
+        )
+        let flat = PhaseOneMath.normalizedOrFallback(
+            SIMD3<Float>(forward.x, 0, forward.z),
+            fallback: SIMD3<Float>(0, 0, -1)
+        )
+
+        return PhaseOneMath.yawRadiansForNegativeZForward(
+            worldForward: flat
+        )
+    }
+
     func setupEnemyBodyCollisionBoxIfNeeded() {
         guard let attributes = characterAttributes else {
             enemyBodyCollisionEnabled = false
@@ -1447,7 +1595,7 @@ final class JockRetargetTestController {
             crowdSteering.mode = .reGoalToUser
             crowdSteering.lockedRotateSign = 0
 
-            print(
+            printCrowdSteeringDebug(
                 """
                 [CrowdSteering] goal ray clear
                   enemyID: \(hordeID.uuidString)
@@ -1463,7 +1611,7 @@ final class JockRetargetTestController {
         if !forward.blocked {
             crowdSteering.mode = .flanking
 
-            print(
+            printCrowdSteeringDebug(
                 """
                 [CrowdSteering] goal blocked, forward clear
                   enemyID: \(hordeID.uuidString)
@@ -1483,7 +1631,7 @@ final class JockRetargetTestController {
         if crowdSteering.lockedRotateSign == 0 {
             crowdSteering.lockedRotateSign = Bool.random() ? -1 : 1
 
-            print(
+            printCrowdSteeringDebug(
                 """
                 [CrowdSteering] locked rotate sign
                   enemyID: \(hordeID.uuidString)
@@ -1500,7 +1648,7 @@ final class JockRetargetTestController {
         crowdSteering.steerAngleRadians += step
         crowdSteering.mode = .flanking
 
-        print(
+        printCrowdSteeringDebug(
             """
             [CrowdSteering] rotated locomotion
               enemyID: \(hordeID.uuidString)
@@ -1510,6 +1658,28 @@ final class JockRetargetTestController {
               noIdle: true
             """
         )
+    }
+
+    private func printCrowdSteeringDebug(
+        _ message: String
+    ) {
+        let now = TimingProfiler.now()
+
+        guard now - lastCrowdSteeringLogTime >= 1.0 else {
+            suppressedCrowdSteeringLogCount += 1
+            return
+        }
+
+        lastCrowdSteeringLogTime = now
+
+        print(
+            """
+            \(message)
+              suppressedCrowdSteeringLogs: \(suppressedCrowdSteeringLogCount)
+            """
+        )
+
+        suppressedCrowdSteeringLogCount = 0
     }
 
     private func updateCrowdReGoal(
@@ -1904,26 +2074,47 @@ final class JockRetargetTestController {
 
     func update(
         deltaTime: Float,
-        currentHeadPosition: SIMD3<Float>?
+        currentHeadPosition: SIMD3<Float>?,
+        timingProfiler: TimingProfiler? = nil
     ) {
         guard isVisible else { return }
+
+        activeTimingProfiler = timingProfiler
+        defer {
+            activeTimingProfiler = nil
+        }
 
         latestHeadPosition = currentHeadPosition
         latestFrameDeltaTime = deltaTime
         let dt = TimeInterval(deltaTime)
 
         if externalMotionDriven {
-            driver?.update(deltaTime: dt)
+            if let timingProfiler {
+                timingProfiler.measure("jock_runtime_driver.update") {
+                    driver?.update(deltaTime: dt)
+                }
+            } else {
+                driver?.update(deltaTime: dt)
+            }
             updateCharacterAudioEmitterWorldPosition()
             return
         }
 
         if followDemoState != .inactive,
            currentHeadPosition != nil {
-            updateAttackMode(
-                deltaTime: dt,
-                currentHeadPosition: currentHeadPosition
-            )
+            if let timingProfiler {
+                timingProfiler.measure("enemy.attack_update") {
+                    updateAttackMode(
+                        deltaTime: dt,
+                        currentHeadPosition: currentHeadPosition
+                    )
+                }
+            } else {
+                updateAttackMode(
+                    deltaTime: dt,
+                    currentHeadPosition: currentHeadPosition
+                )
+            }
         }
 
         if canUpdateFollowMovement {
@@ -1933,22 +2124,45 @@ final class JockRetargetTestController {
             )
         }
 
-        driver?.update(deltaTime: dt)
+        if let timingProfiler {
+            timingProfiler.measure("jock_runtime_driver.update") {
+                driver?.update(deltaTime: dt)
+            }
+        } else {
+            driver?.update(deltaTime: dt)
+        }
         updateCharacterAudioEmitterWorldPosition()
 
         if followDemoState != .inactive,
            playerAttackEnabled,
            !isInNonInterruptibleCombatState,
            currentHeadPosition != nil {
-            updateHitDetectionIfNeeded(
-                currentTime: Date().timeIntervalSinceReferenceDate
-            )
+            if let timingProfiler {
+                timingProfiler.measure("enemy.hit_detection") {
+                    updateHitDetectionIfNeeded(
+                        currentTime: Date().timeIntervalSinceReferenceDate
+                    )
+                }
+            } else {
+                updateHitDetectionIfNeeded(
+                    currentTime: Date().timeIntervalSinceReferenceDate
+                )
+            }
         }
 
-        updateAttackDamageDetectionIfNeeded(
-            deltaTime: dt,
-            currentHeadPosition: currentHeadPosition
-        )
+        if let timingProfiler {
+            timingProfiler.measure("enemy.attack_damage_update") {
+                updateAttackDamageDetectionIfNeeded(
+                    deltaTime: dt,
+                    currentHeadPosition: currentHeadPosition
+                )
+            }
+        } else {
+            updateAttackDamageDetectionIfNeeded(
+                deltaTime: dt,
+                currentHeadPosition: currentHeadPosition
+            )
+        }
     }
 
     private func handleJockClipCompleted(_ completedClip: JockAnimClip) {
@@ -3677,24 +3891,30 @@ final class JockRetargetTestController {
             remainingSafeTravel
         )
 
-        print(
-            """
-            [Gravitas Follow] locomotion
-              rawForward: \(delta.forwardMeters)
-              signedForward: \(signedAuthoredForward)
-              distance: \(distance)
-              step: \(clampedStep)
-            """
+        recordFollowLocomotionSummaryIfNeeded(
+            rawForward: delta.forwardMeters,
+            signedForward: signedAuthoredForward,
+            distance: distance,
+            step: clampedStep
         )
 
         guard clampedStep > 0.00001 else {
             return true
         }
 
-        updateCrowdSteeringIfNeeded(
-            deltaTime: latestFrameDeltaTime,
-            headsetPosition: headPosition
-        )
+        if let activeTimingProfiler {
+            activeTimingProfiler.measure("crowd.steering") {
+                updateCrowdSteeringIfNeeded(
+                    deltaTime: latestFrameDeltaTime,
+                    headsetPosition: headPosition
+                )
+            }
+        } else {
+            updateCrowdSteeringIfNeeded(
+                deltaTime: latestFrameDeltaTime,
+                headsetPosition: headPosition
+            )
+        }
 
         let movementDirection = crowdLocomotionDirection(
             headsetPosition: headPosition
@@ -3721,6 +3941,37 @@ final class JockRetargetTestController {
         }
 
         return true
+    }
+
+    private func recordFollowLocomotionSummaryIfNeeded(
+        rawForward: Float,
+        signedForward: Float,
+        distance: Float,
+        step: Float
+    ) {
+        followLocomotionFramesSinceLog += 1
+
+        let now = TimingProfiler.now()
+
+        guard now - lastFollowLocomotionLogTime >= 1.0 else {
+            return
+        }
+
+        lastFollowLocomotionLogTime = now
+
+        print(
+            """
+            [Gravitas Follow] locomotion summary
+              enemyID: \(hordeBenchmarkID?.uuidString ?? "nil")
+              frames: \(followLocomotionFramesSinceLog)
+              rawForward: \(rawForward)
+              signedForward: \(signedForward)
+              distance: \(distance)
+              step: \(step)
+            """
+        )
+
+        followLocomotionFramesSinceLog = 0
     }
 
     private func resetRootToDefaultSpawn() {

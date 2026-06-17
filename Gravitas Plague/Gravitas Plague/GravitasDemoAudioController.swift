@@ -143,6 +143,10 @@ final class GravitasDemoAudioController {
     private var isDemoAudioActive = false
 
     private let feetToMeters: Float = 0.3048
+
+    var activeSpatialOneShotCountForProfiling: Int {
+        activeSpatialOneShotsByID.count + portalOneShotControllers.count
+    }
     private let radioDistanceBehindUserFeet: Float = 5.0
     private let hostHeadAudioLocalPosition = SIMD3<Float>(0, 1.45, -0.04)
     private let maxActiveSpatialOneShots = 96

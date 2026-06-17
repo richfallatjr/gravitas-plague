@@ -43,6 +43,14 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let hordeRoomScanTracker = HordeRoomScanTracker()
     private let enemyBodySeparationResolver = HordeEnemyBodySeparationResolver()
     private let instructionHUD = PlagueHeadTrackedInstructionHUD()
+    private let timingProfiler = TimingProfiler(label: "main_actor_shell")
+
+    private var architectureFrameIndex = 0
+    private var latestFrameClockSnapshot: FrameClockSnapshot?
+    private var latestPlayerPoseSnapshot: PlayerPoseSnapshot?
+    private var latestEnemyBodySnapshots: [EnemyBodySnapshot] = []
+    private var latestEnemyBrainSnapshots: [EnemyBrainSnapshot] = []
+    private var latestPortalRuntimeSnapshots: [PortalRuntimeSnapshot] = []
 
     @Published private(set) var isPlayerDeathSequenceActive = false
 
@@ -481,7 +489,133 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
     }
 
+    private func makeFrameClockSnapshot(
+        date: Date,
+        deltaTime: Float
+    ) -> FrameClockSnapshot {
+        let snapshot = FrameClockSnapshot(
+            frameIndex: architectureFrameIndex,
+            time: date.timeIntervalSinceReferenceDate,
+            deltaTime: deltaTime
+        )
+
+        #if DEBUG
+        MainActorSnapshotDebugAssertions.assertValueOnlySnapshot(snapshot)
+        #endif
+
+        return snapshot
+    }
+
+    private func makePlayerPoseSnapshot(
+        from pose: PhaseOneSpawnPose
+    ) -> PlayerPoseSnapshot {
+        let forward = PhaseOneMath.normalizedOrFallback(
+            SIMD3<Float>(pose.headForward.x, 0, pose.headForward.z),
+            fallback: SIMD3<Float>(0, 0, -1)
+        )
+
+        let snapshot = PlayerPoseSnapshot(
+            position: pose.headPosition,
+            forward: forward,
+            yawRadians: PhaseOneMath.yawRadiansForNegativeZForward(
+                worldForward: forward
+            )
+        )
+
+        #if DEBUG
+        MainActorSnapshotDebugAssertions.assertValueOnlySnapshot(snapshot)
+        #endif
+
+        return snapshot
+    }
+
+    private func captureEnemyBodySnapshots(
+        headsetPosition: SIMD3<Float>
+    ) -> [EnemyBodySnapshot] {
+        hordeEnemyControllersByID.values.compactMap {
+            $0.makeEnemyBodySnapshot(
+                headsetPosition: headsetPosition
+            )
+        }
+    }
+
+    private func captureEnemyBrainSnapshots(
+        headsetPosition: SIMD3<Float>
+    ) -> [EnemyBrainSnapshot] {
+        hordeEnemyControllersByID.values.map {
+            $0.makeEnemyBrainSnapshot(
+                headsetPosition: headsetPosition
+            )
+        }
+    }
+
+    private func capturePortalRuntimeSnapshots() -> [PortalRuntimeSnapshot] {
+        hordePortalManager.makePortalRuntimeSnapshots()
+    }
+
+    private func clearArchitectureSnapshots() {
+        latestPlayerPoseSnapshot = nil
+        latestEnemyBodySnapshots = []
+        latestEnemyBrainSnapshots = []
+        latestPortalRuntimeSnapshots = []
+    }
+
+    private func updateTimingProfilerCounters() {
+        timingProfiler.setCounter(
+            "enemy.count",
+            hordeEnemyControllersByID.count
+        )
+        timingProfiler.setCounter(
+            "portal.count",
+            hordePortalManager.portals.count
+        )
+        timingProfiler.setCounter(
+            "portal.fx.transition.count",
+            hordePortalManager.activeTransitionFXCount
+        )
+        timingProfiler.setCounter(
+            "portal.fx.glyph.count",
+            hordePortalManager.activeGlyphFXCount
+        )
+        timingProfiler.setCounter(
+            "portal.fx.active.count",
+            hordePortalManager.activeTransitionFXCount +
+                hordePortalManager.activeGlyphFXCount
+        )
+        timingProfiler.setCounter(
+            "portal.ember.active.count",
+            hordePortalManager.activeEmberCount
+        )
+        timingProfiler.setCounter(
+            "audio.one_shot.active.count",
+            audioController.activeSpatialOneShotCountForProfiling
+        )
+        timingProfiler.setCounter(
+            "joint.count",
+            hordeEnemyControllersByID.values.reduce(0) {
+                $0 + $1.runtimeJointCountForProfiling
+            }
+        )
+        timingProfiler.setCounter(
+            "horde.ingress.active.count",
+            activeIngressControllers.count
+        )
+        timingProfiler.setCounter(
+            "snapshot.enemy_body.count",
+            latestEnemyBodySnapshots.count
+        )
+        timingProfiler.setCounter(
+            "snapshot.enemy_brain.count",
+            latestEnemyBrainSnapshots.count
+        )
+        timingProfiler.setCounter(
+            "snapshot.portal_runtime.count",
+            latestPortalRuntimeSnapshots.count
+        )
+    }
+
     func tick(at date: Date) {
+        let tickStart = TimingProfiler.now()
         let deltaTime: Float
 
         if let lastTickDate {
@@ -492,10 +626,33 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         lastTickDate = date
 
-        let currentPose = spatialProvider.currentPose()
+        architectureFrameIndex += 1
+        latestFrameClockSnapshot = makeFrameClockSnapshot(
+            date: date,
+            deltaTime: deltaTime
+        )
+
+        defer {
+            updateTimingProfilerCounters()
+            timingProfiler.record(
+                "coordinator.tick",
+                startTime: tickStart
+            )
+            timingProfiler.printSummaryIfNeeded()
+        }
+
+        let currentPose = timingProfiler.measure("spatial.current_pose") {
+            spatialProvider.currentPose()
+        }
         let currentHeadPosition = currentPose?.headPosition
 
         if let currentPose {
+            latestPlayerPoseSnapshot = timingProfiler.measure("snapshot.player_pose") {
+                makePlayerPoseSnapshot(
+                    from: currentPose
+                )
+            }
+
             roomSkinningCoordinator.updatePlayerPose(
                 position: currentPose.headPosition,
                 forward: currentPose.headForward
@@ -509,6 +666,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 currentPose: currentPose,
                 date: date
             )
+        } else {
+            clearArchitectureSnapshots()
         }
 
         #if DEBUG
@@ -517,40 +676,69 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         if hordeBenchmarkRunning {
             if let pose = currentPose {
-                updatePortalIngressControllers(
-                    deltaTime: deltaTime,
-                    playerWorldPosition: pose.headPosition
-                )
+                timingProfiler.measure("portal.ingress.update") {
+                    updatePortalIngressControllers(
+                        deltaTime: deltaTime,
+                        playerWorldPosition: pose.headPosition
+                    )
+                }
             }
 
-            hordePortalManager.updatePortalFX(
-                deltaTime: deltaTime
-            )
+            timingProfiler.measure("portal.fx.update") {
+                hordePortalManager.updatePortalFX(
+                    deltaTime: deltaTime,
+                    timingProfiler: timingProfiler
+                )
+            }
 
             let crowdSnapshots: [HordeEnemyCollisionSnapshot]
 
             if let pose = currentPose {
-                crowdSnapshots = buildCrowdSnapshots(
-                    enemies: Array(hordeEnemyControllersByID.values),
-                    headsetPosition: pose.headPosition
-                )
+                latestEnemyBodySnapshots = timingProfiler.measure("snapshot.enemy_body_value") {
+                    captureEnemyBodySnapshots(
+                        headsetPosition: pose.headPosition
+                    )
+                }
+                latestEnemyBrainSnapshots = timingProfiler.measure("snapshot.enemy_brain_value") {
+                    captureEnemyBrainSnapshots(
+                        headsetPosition: pose.headPosition
+                    )
+                }
+                latestPortalRuntimeSnapshots = timingProfiler.measure("snapshot.portal_runtime_value") {
+                    capturePortalRuntimeSnapshots()
+                }
+
+                crowdSnapshots = timingProfiler.measure("snapshot.enemy_body_legacy") {
+                    buildCrowdSnapshots(
+                        enemies: Array(hordeEnemyControllersByID.values),
+                        headsetPosition: pose.headPosition
+                    )
+                }
             } else {
+                latestEnemyBodySnapshots = []
+                latestEnemyBrainSnapshots = []
+                latestPortalRuntimeSnapshots = []
                 crowdSnapshots = []
             }
 
             for controller in hordeEnemyControllersByID.values {
                 controller.updateCrowdSnapshots(crowdSnapshots)
-                controller.update(
-                    deltaTime: deltaTime,
-                    currentHeadPosition: currentHeadPosition
-                )
+                timingProfiler.measure("enemy.update") {
+                    controller.update(
+                        deltaTime: deltaTime,
+                        currentHeadPosition: currentHeadPosition,
+                        timingProfiler: timingProfiler
+                    )
+                }
             }
 
             if let pose = currentPose {
-                enemyBodySeparationResolver.resolve(
-                    enemies: Array(hordeEnemyControllersByID.values),
-                    headsetPosition: pose.headPosition
-                )
+                timingProfiler.measure("body.separation") {
+                    enemyBodySeparationResolver.resolve(
+                        enemies: Array(hordeEnemyControllersByID.values),
+                        headsetPosition: pose.headPosition
+                    )
+                }
             }
 
             #if DEBUG
@@ -573,10 +761,19 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             }
             #endif
         } else {
-            jockRetargetController?.update(
-                deltaTime: deltaTime,
-                currentHeadPosition: currentHeadPosition
-            )
+            latestEnemyBodySnapshots = []
+            latestEnemyBrainSnapshots = []
+            latestPortalRuntimeSnapshots = []
+
+            if let controller = jockRetargetController {
+                timingProfiler.measure("enemy.update.single") {
+                    controller.update(
+                        deltaTime: deltaTime,
+                        currentHeadPosition: currentHeadPosition,
+                        timingProfiler: timingProfiler
+                    )
+                }
+            }
         }
     }
 

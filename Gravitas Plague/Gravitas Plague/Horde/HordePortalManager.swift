@@ -20,6 +20,24 @@ final class HordePortalManager {
     private weak var wallManager: WallPlaneManager?
     private weak var occupancyRegistry: WallPropOccupancyRegistry?
 
+    var activeTransitionFXCount: Int {
+        transitionFXByPortalID.count
+    }
+
+    var activeGlyphFXCount: Int {
+        glyphFXByPortalID.count
+    }
+
+    var activePortalAudioCount: Int {
+        portalAudioByPortalID.count
+    }
+
+    var activeEmberCount: Int {
+        transitionFXByPortalID.values.reduce(0) {
+            $0 + $1.activeEmberCount
+        }
+    }
+
     func install(
         sceneRoot: Entity,
         audioController: GravitasDemoAudioController,
@@ -80,13 +98,45 @@ final class HordePortalManager {
     }
 
     func updatePortalFX(
-        deltaTime: Float
+        deltaTime: Float,
+        timingProfiler: TimingProfiler? = nil
     ) {
         for fx in transitionFXByPortalID.values {
-            fx.update(
-                deltaTime: deltaTime
+            if let timingProfiler {
+                timingProfiler.measure("portal.fx.transition_update") {
+                    fx.update(
+                        deltaTime: deltaTime,
+                        timingProfiler: timingProfiler
+                    )
+                }
+            } else {
+                fx.update(
+                    deltaTime: deltaTime
+                )
+            }
+        }
+    }
+
+    func makePortalRuntimeSnapshots() -> [PortalRuntimeSnapshot] {
+        let snapshots = portals.values.map { portal in
+            PortalRuntimeSnapshot(
+                id: portal.id,
+                waveCreated: portal.waveCreated,
+                wallID: portal.wallID,
+                worldCenter: portal.worldCenter,
+                bearingFromPlayerRadians: portal.bearingFromPlayerRadians,
+                resolvedFloorWorldY: portal.resolvedFloorWorldY,
+                entranceCount: portal.entranceCount
             )
         }
+
+        #if DEBUG
+        if let first = snapshots.first {
+            MainActorSnapshotDebugAssertions.assertValueOnlySnapshot(first)
+        }
+        #endif
+
+        return snapshots
     }
 
     func updatePortalLoopGainDB(

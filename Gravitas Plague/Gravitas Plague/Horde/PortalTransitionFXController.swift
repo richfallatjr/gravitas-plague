@@ -34,6 +34,10 @@ final class PortalTransitionFXController {
 
     private var enabled: Bool = true
 
+    var activeEmberCount: Int {
+        emberPool?.activeCount ?? 0
+    }
+
     init(
         perimeterLocalPoints: [SIMD3<Float>],
         portalNormalLocal: SIMD3<Float> = SIMD3<Float>(0, 0, 1)
@@ -163,18 +167,33 @@ final class PortalTransitionFXController {
     }
 
     func update(
-        deltaTime: Float
+        deltaTime: Float,
+        timingProfiler: TimingProfiler? = nil
     ) {
         guard enabled else {
             return
         }
 
-        emit(
-            deltaTime: deltaTime
-        )
-        emberPool?.update(
-            deltaTime: deltaTime
-        )
+        if let timingProfiler {
+            timingProfiler.measure("portal.fx.emit") {
+                emit(
+                    deltaTime: deltaTime
+                )
+            }
+
+            timingProfiler.measure("portal.ember.update") {
+                emberPool?.update(
+                    deltaTime: deltaTime
+                )
+            }
+        } else {
+            emit(
+                deltaTime: deltaTime
+            )
+            emberPool?.update(
+                deltaTime: deltaTime
+            )
+        }
     }
 
     func setEnabled(
