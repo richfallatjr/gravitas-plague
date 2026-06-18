@@ -70,6 +70,11 @@ final class GravitasDemoAudioController {
         fileExtension: "wav"
     )
 
+    private let hordeMusicBoxFile = BundleAudioFile(
+        fileName: "music-box",
+        fileExtension: "mp3"
+    )
+
     private let radioStaticFile = BundleAudioFile(
         fileName: "Narrow-band-analog",
         fileExtension: "wav"
@@ -118,6 +123,9 @@ final class GravitasDemoAudioController {
     ]
 
     private var backgroundMusicPlayer: AVAudioPlayer?
+    private var hordeMusicBoxPlayer: AVAudioPlayer?
+    private var hordeMusicCurrentSongPlayer: AVAudioPlayer?
+    private var hordeMusicSequenceTask: Task<Void, Never>?
     private var playerDamagePlayersByFileName: [String: AVAudioPlayer] = [:]
     private var lastPlayerDamageFileName: String?
     private var playerDeathPlayersByFileName: [String: AVAudioPlayer] = [:]
@@ -247,6 +255,18 @@ final class GravitasDemoAudioController {
             file: backgroundMusicFile,
             volume: 0.30,
             loopsForever: true
+        )
+
+        hordeMusicBoxPlayer = makeOptionalAVAudioPlayer(
+            file: hordeMusicBoxFile,
+            volume: 0.30,
+            loopsForever: false
+        )
+
+        hordeMusicCurrentSongPlayer = makeOptionalAVAudioPlayer(
+            file: backgroundMusicFile,
+            volume: 0.30,
+            loopsForever: false
         )
 
         radioStaticResource = makeOptionalSpatialResource(
@@ -659,6 +679,75 @@ final class GravitasDemoAudioController {
         controller.stop()
     }
 
+    private func startHordeMusicSequence() {
+        stopHordeMusicSequence()
+
+        backgroundMusicPlayer?.stop()
+        backgroundMusicPlayer?.currentTime = 0
+
+        guard let musicBoxPlayer = hordeMusicBoxPlayer,
+              let currentSongPlayer = hordeMusicCurrentSongPlayer else {
+            print("[Gravitas Audio] ERROR cannot start Horde music sequence; missing music player")
+            return
+        }
+
+        hordeMusicSequenceTask = Task { @MainActor in
+            print("[Gravitas Audio] Started Horde music sequence: music-box -> background loop")
+
+            while !Task.isCancelled {
+                await playHordeMusicTrack(
+                    player: musicBoxPlayer,
+                    file: hordeMusicBoxFile
+                )
+
+                guard !Task.isCancelled else { break }
+
+                await playHordeMusicTrack(
+                    player: currentSongPlayer,
+                    file: backgroundMusicFile
+                )
+            }
+        }
+    }
+
+    private func stopHordeMusicSequence() {
+        hordeMusicSequenceTask?.cancel()
+        hordeMusicSequenceTask = nil
+
+        hordeMusicBoxPlayer?.stop()
+        hordeMusicBoxPlayer?.currentTime = 0
+
+        hordeMusicCurrentSongPlayer?.stop()
+        hordeMusicCurrentSongPlayer?.currentTime = 0
+    }
+
+    private func playHordeMusicTrack(
+        player: AVAudioPlayer,
+        file: BundleAudioFile
+    ) async {
+        guard !Task.isCancelled else { return }
+
+        player.stop()
+        player.currentTime = 0
+        player.numberOfLoops = 0
+        player.play()
+
+        let duration = player.duration > 0
+            ? player.duration
+            : durationSeconds(for: file)
+
+        guard duration > 0 else {
+            return
+        }
+
+        try? await Task.sleep(
+            nanoseconds: UInt64(duration * 1_000_000_000)
+        )
+
+        player.stop()
+        player.currentTime = 0
+    }
+
     func startImmersiveAudio() {
         prepareIfNeeded()
 
@@ -666,6 +755,7 @@ final class GravitasDemoAudioController {
 
         isImmersiveAudioActive = true
 
+        stopHordeMusicSequence()
         backgroundMusicPlayer?.currentTime = 0
         backgroundMusicPlayer?.play()
 
@@ -713,6 +803,7 @@ final class GravitasDemoAudioController {
         }
 
         startRadioStatic()
+        startHordeMusicSequence()
 
         print(
             """
@@ -729,6 +820,7 @@ final class GravitasDemoAudioController {
 
         isDemoAudioActive = false
 
+        stopHordeMusicSequence()
         stopEmergencyBroadcastLoop()
         stopSpatialDemoControllers()
 
@@ -740,6 +832,7 @@ final class GravitasDemoAudioController {
         isImmersiveAudioActive = false
 
         stopEmergencyBroadcastLoop()
+        stopHordeMusicSequence()
 
         backgroundMusicPlayer?.stop()
         backgroundMusicPlayer?.currentTime = 0
