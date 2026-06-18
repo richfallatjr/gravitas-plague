@@ -2,6 +2,47 @@ import Foundation
 import RealityKit
 import simd
 
+private struct PortalGlyphLayoutPlanInput: Sendable {
+    let perimeterLocalPoints: [SIMD3<Float>]
+    let seed: UInt64
+    let library: PortalGlyphAssetLibrarySnapshot
+    let includeFloor: Bool
+}
+
+private struct PortalGlyphLayoutPlan: Sendable {
+    let wallPlacements: [PortalGlyphPlacementDescriptor]
+    let floorPlacements: [PortalGlyphPlacementDescriptor]
+}
+
+private actor PortalGlyphLayoutPlannerEngine {
+    func plan(
+        input: PortalGlyphLayoutPlanInput
+    ) -> PortalGlyphLayoutPlan {
+        let wallPlacements = PortalGlyphLayoutEngine.generateWallPlacements(
+            perimeterPoints: input.perimeterLocalPoints,
+            seed: input.seed,
+            library: input.library
+        )
+
+        let floorPlacements = input.includeFloor
+            ? PortalGlyphLayoutEngine.generateFloorPlacementsFromBottomLine(
+                perimeterPoints: input.perimeterLocalPoints,
+                seed: input.seed,
+                library: input.library
+            )
+            : []
+
+        PortalGlyphLayoutEngine.validateCombinedPortalRules(
+            placements: wallPlacements + floorPlacements
+        )
+
+        return PortalGlyphLayoutPlan(
+            wallPlacements: wallPlacements,
+            floorPlacements: floorPlacements
+        )
+    }
+}
+
 @MainActor
 final class PortalGlyphFXController {
     let wallRoot = Entity()
@@ -9,6 +50,9 @@ final class PortalGlyphFXController {
 
     private var wallEntities: [Entity] = []
     private var floorEntities: [Entity] = []
+    private let layoutPlanner = PortalGlyphLayoutPlannerEngine()
+    private var layoutTask: Task<Void, Never>?
+    private var layoutRevision = 0
 
     private let portalID: UUID
     private let seed: UInt64
@@ -33,16 +77,111 @@ final class PortalGlyphFXController {
         portalWidth: Float
     ) {
         PortalGlyphAssetLibrary.shared.loadIfNeeded()
+        cancelLayoutTask()
         tearDownEntitiesOnly()
 
         let library = PortalGlyphAssetLibrary.shared
+        let librarySnapshot = library.layoutSnapshot
+        let includeFloor = floorY != nil
+        let portalWorldFromLocal = includeFloor
+            ? portalRoot.transformMatrix(relativeTo: nil)
+            : nil
+        let revision = layoutRevision
+        let wallID = portalPlacement.wallID
 
-        let wallPlacements = PortalGlyphLayoutEngine.generateWallPlacements(
-            perimeterPoints: perimeterLocalPoints,
+        if wallRoot.parent == nil {
+            portalRoot.addChild(wallRoot)
+        }
+
+        if includeFloor {
+            if floorRoot.parent == nil {
+                sceneRoot.addChild(floorRoot)
+            }
+
+            if floorRoot.parent === portalRoot {
+                fatalError("[PortalGlyphs] floorRoot incorrectly parented to portalRoot")
+            }
+
+            if floorRoot.parent === wallRoot {
+                fatalError("[PortalGlyphs] floorRoot incorrectly parented to wallRoot")
+            }
+        } else {
+            print(
+                """
+                [PortalGlyphs] floor glyphs skipped
+                  portalID: \(portalID)
+                  reason: missing_detected_floor
+                  action: no_floor_glyphs_on_wall
+                """
+            )
+        }
+
+        let input = PortalGlyphLayoutPlanInput(
+            perimeterLocalPoints: perimeterLocalPoints,
             seed: seed,
-            library: library
+            library: librarySnapshot,
+            includeFloor: includeFloor
         )
-        var floorPlacements: [PortalGlyphPlacement] = []
+
+        let planner = layoutPlanner
+
+        layoutTask = Task { @MainActor [weak self] in
+            let plan = await planner.plan(
+                input: input
+            )
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            self?.apply(
+                plan: plan,
+                revision: revision,
+                floorY: floorY,
+                portalWorldFromLocal: portalWorldFromLocal,
+                wallID: wallID
+            )
+        }
+    }
+
+    private func apply(
+        plan: PortalGlyphLayoutPlan,
+        revision: Int,
+        floorY: Float?,
+        portalWorldFromLocal: simd_float4x4?,
+        wallID: UUID
+    ) {
+        guard revision == layoutRevision else {
+            return
+        }
+
+        layoutTask = nil
+
+        let library = PortalGlyphAssetLibrary.shared
+        let wallPlacements = plan.wallPlacements.compactMap {
+            library.placement(
+                from: $0
+            )
+        }
+        let floorPlacements = plan.floorPlacements.compactMap {
+            library.placement(
+                from: $0
+            )
+        }
+
+        if wallPlacements.count != plan.wallPlacements.count ||
+            floorPlacements.count != plan.floorPlacements.count {
+            print(
+                """
+                [PortalGlyphs] ERROR missing asset while resolving off-main layout
+                  portalID: \(portalID)
+                  expectedWall: \(plan.wallPlacements.count)
+                  resolvedWall: \(wallPlacements.count)
+                  expectedFloor: \(plan.floorPlacements.count)
+                  resolvedFloor: \(floorPlacements.count)
+                """
+            )
+        }
 
         for placement in wallPlacements {
             let entity = PortalGlyphDecalFactory.makeWallGlyph(
@@ -53,21 +192,8 @@ final class PortalGlyphFXController {
             wallEntities.append(entity)
         }
 
-        if wallRoot.parent == nil {
-            portalRoot.addChild(wallRoot)
-        }
-
-        if let floorY {
-            let portalWorldFromLocal = portalRoot.transformMatrix(
-                relativeTo: nil
-            )
-
-            floorPlacements = PortalGlyphLayoutEngine.generateFloorPlacementsFromBottomLine(
-                perimeterPoints: perimeterLocalPoints,
-                seed: seed,
-                library: library
-            )
-
+        if let floorY,
+           let portalWorldFromLocal {
             if floorPlacements.count > 1 {
                 fatalError(
                     """
@@ -98,38 +224,13 @@ final class PortalGlyphFXController {
                 floorRoot.addChild(entity)
                 floorEntities.append(entity)
             }
-
-            if floorRoot.parent == nil {
-                sceneRoot.addChild(floorRoot)
-            }
-
-            if floorRoot.parent === portalRoot {
-                fatalError("[PortalGlyphs] floorRoot incorrectly parented to portalRoot")
-            }
-
-            if floorRoot.parent === wallRoot {
-                fatalError("[PortalGlyphs] floorRoot incorrectly parented to wallRoot")
-            }
-        } else {
-            print(
-                """
-                [PortalGlyphs] floor glyphs skipped
-                  portalID: \(portalID)
-                  reason: missing_detected_floor
-                  action: no_floor_glyphs_on_wall
-                """
-            )
         }
-
-        PortalGlyphLayoutEngine.validateCombinedPortalRules(
-            placements: wallPlacements + floorPlacements
-        )
 
         print(
             """
             [PortalGlyphs] FX built
               portalID: \(portalID)
-              wallID: \(portalPlacement.wallID)
+              wallID: \(wallID)
               wallGlyphs: \(wallEntities.count)
               floorGlyphs: \(floorEntities.count)
               seed: \(seed)
@@ -143,6 +244,7 @@ final class PortalGlyphFXController {
     }
 
     func teardown() {
+        cancelLayoutTask()
         tearDownEntitiesOnly()
         wallRoot.removeFromParent()
         floorRoot.removeFromParent()
@@ -153,6 +255,12 @@ final class PortalGlyphFXController {
               portalID: \(portalID)
             """
         )
+    }
+
+    private func cancelLayoutTask() {
+        layoutTask?.cancel()
+        layoutTask = nil
+        layoutRevision += 1
     }
 
     private func tearDownEntitiesOnly() {

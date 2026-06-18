@@ -4,8 +4,8 @@ import UIKit
 import simd
 
 enum WallPosterAction: String, Codable {
+    case story
     case horde
-    case walkLoop
 }
 
 struct WallPosterUIButtonComponent: Component, Codable {
@@ -47,8 +47,8 @@ struct WallPosterPlacement {
 
 enum WallPosterMetrics {
     static let sourcePixelSize = SIMD2<Float>(
-        1086,
-        1448
+        Float(OperationModePosterLayout.referencePixelWidth),
+        Float(OperationModePosterLayout.referencePixelHeight)
     )
     static let maxHeightMeters: Float = 0.9144
     static let wallMarginMeters: Float = 0.12
@@ -58,20 +58,6 @@ enum WallPosterMetrics {
     }
 
     static let depthOffset: Float = 0.018
-
-    static let hordeRectPixels = SIMD4<Float>(
-        52,
-        1101,
-        490,
-        141
-    )
-
-    static let walkRectPixels = SIMD4<Float>(
-        557,
-        1100,
-        478,
-        143
-    )
 
     static func posterSize(
         for wall: WallCandidate

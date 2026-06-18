@@ -11,50 +11,10 @@ import UIKit
 typealias PlagueMenuPlatformImage = UIImage
 #endif
 
-struct PixelRect: Equatable {
-    let x: CGFloat
-    let y: CGFloat
-    let width: CGFloat
-    let height: CGFloat
-
-    var cgRect: CGRect {
-        CGRect(
-            x: x,
-            y: y,
-            width: width,
-            height: height
-        )
-    }
-}
-
-enum PlagueMenuHitZones {
-    static let sourceSize = CGSize(
-        width: 1086,
-        height: 1448
-    )
-
-    static let horde = PixelRect(
-        x: 52,
-        y: 1101,
-        width: 490,
-        height: 141
-    )
-
-    static let walkLoop = PixelRect(
-        x: 557,
-        y: 1100,
-        width: 478,
-        height: 143
-    )
-}
-
 enum PlagueMenuAssetValidator {
     static func validate() {
         let names = [
-            "plague_menu_ui_clean",
-            "plague_menu_ui_mockup",
-            "plague_menu_horde_button",
-            "plague_menu_walk_button",
+            OperationModePosterLayout.assetName,
             "kill_switch_x",
             "trophy_sticker"
         ]
@@ -321,55 +281,10 @@ struct PlagueOperationModePosterRoot: View {
     }
 }
 
-extension CGRect {
-    static func aspectFitRect(
-        sourceSize: CGSize,
-        in containerSize: CGSize
-    ) -> CGRect {
-        guard sourceSize.width > 0,
-              sourceSize.height > 0,
-              containerSize.width > 0,
-              containerSize.height > 0 else {
-            return .zero
-        }
-
-        let scale = min(
-            containerSize.width / sourceSize.width,
-            containerSize.height / sourceSize.height
-        )
-
-        let displaySize = CGSize(
-            width: sourceSize.width * scale,
-            height: sourceSize.height * scale
-        )
-
-        return CGRect(
-            x: (containerSize.width - displaySize.width) * 0.5,
-            y: (containerSize.height - displaySize.height) * 0.5,
-            width: displaySize.width,
-            height: displaySize.height
-        )
-    }
-}
-
-func mappedPixelRect(
-    _ pixelRect: PixelRect,
-    sourceSize: CGSize,
-    displayedImageRect: CGRect
-) -> CGRect {
-    let scaleX = displayedImageRect.width / sourceSize.width
-    let scaleY = displayedImageRect.height / sourceSize.height
-
-    return CGRect(
-        x: displayedImageRect.minX + pixelRect.x * scaleX,
-        y: displayedImageRect.minY + pixelRect.y * scaleY,
-        width: pixelRect.width * scaleX,
-        height: pixelRect.height * scaleY
-    )
-}
-
 struct PlagueOperationModePosterMenu: View {
     @ObservedObject var session: PlagueDemoSession
+    @ObservedObject private var resources = OperationModePosterResources.shared
+    @ObservedObject private var accessController = OperationModeAccessController.shared
 
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
 
@@ -379,70 +294,175 @@ struct PlagueOperationModePosterMenu: View {
         GeometryReader { proxy in
             let containerSize = proxy.size
 
-            let imageRect = CGRect.aspectFitRect(
-                sourceSize: PlagueMenuHitZones.sourceSize,
-                in: containerSize
+            let sourceSize = CGSize(
+                width: resources.analysis.map {
+                    CGFloat($0.pixelWidth)
+                } ?? OperationModePosterLayout.referencePixelSize.width,
+                height: resources.analysis.map {
+                    CGFloat($0.pixelHeight)
+                } ?? OperationModePosterLayout.referencePixelSize.height
             )
 
-            let hordeRect = mappedPixelRect(
-                PlagueMenuHitZones.horde,
-                sourceSize: PlagueMenuHitZones.sourceSize,
-                displayedImageRect: imageRect
-            )
-
-            let walkRect = mappedPixelRect(
-                PlagueMenuHitZones.walkLoop,
-                sourceSize: PlagueMenuHitZones.sourceSize,
-                displayedImageRect: imageRect
+            let imageRect = PosterCoordinateMapper.aspectFitImageRect(
+                sourceSize: sourceSize,
+                containerSize: containerSize
             )
 
             ZStack(alignment: .topLeading) {
                 Color.black.opacity(0.001)
                     .ignoresSafeArea()
 
-                PlagueMenuPosterImage(
-                    name: "plague_menu_ui_mockup",
-                    containerSize: containerSize
+                posterImage(
+                    imageRect: imageRect
                 )
                 .allowsHitTesting(false)
 
-                PlaguePixelHitButton(
-                    label: "Horde Mode",
-                    rect: hordeRect,
-                    debugColor: .red,
-                    showDebug: showDebugHitRects,
-                    action: {
-                        Task {
-                            await selectOperationMode(.horde)
-                        }
-                    }
-                )
-
-                PlaguePixelHitButton(
-                    label: "Walk Loop",
-                    rect: walkRect,
-                    debugColor: .black,
-                    showDebug: showDebugHitRects,
-                    action: {
-                        Task {
-                            await selectOperationMode(.walkLoop)
-                        }
-                    }
-                )
+                ForEach(OperationModePosterLayout.regions) { region in
+                    modeButton(
+                        region: region,
+                        imageRect: imageRect
+                    )
+                }
             }
             .onAppear {
+                resources.loadIfNeeded()
+                accessController.refresh()
+
                 print(
                     """
                     [PlagueMenu] poster menu appeared
                       container: \(containerSize)
-                      source: \(PlagueMenuHitZones.sourceSize)
+                      source: \(sourceSize)
                       imageRect: \(imageRect)
-                      hordeRect: \(hordeRect)
-                      walkRect: \(walkRect)
+                      storyRect: \(OperationModePosterLayout.storySourceRect)
+                      hordeRect: \(OperationModePosterLayout.hordeSourceRect)
+                      sourceImage: \(OperationModePosterLayout.assetName).\(OperationModePosterLayout.assetExtension)
+                      walkLoopPlayerFacing: false
                     """
                 )
             }
         }
+    }
+
+    @ViewBuilder
+    private func posterImage(
+        imageRect: CGRect
+    ) -> some View {
+        if let image = resources.image {
+            #if os(macOS)
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .frame(
+                    width: imageRect.width,
+                    height: imageRect.height
+                )
+                .position(
+                    x: imageRect.midX,
+                    y: imageRect.midY
+                )
+            #else
+            Image(uiImage: image)
+                .resizable()
+                .interpolation(.high)
+                .frame(
+                    width: imageRect.width,
+                    height: imageRect.height
+                )
+                .position(
+                    x: imageRect.midX,
+                    y: imageRect.midY
+                )
+            #endif
+        } else {
+            ZStack {
+                Color.black
+
+                Text("Missing \(OperationModePosterLayout.assetName).png")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .monospaced()
+            }
+            .frame(
+                width: imageRect.width,
+                height: imageRect.height
+            )
+            .position(
+                x: imageRect.midX,
+                y: imageRect.midY
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func modeButton(
+        region: PosterModeRegion,
+        imageRect: CGRect
+    ) -> some View {
+        let rect = PosterCoordinateMapper.displayRect(
+            normalizedRect: region.normalizedRect,
+            imageRect: imageRect
+        )
+        let availability = accessController.snapshot[region.mode]
+
+        Button {
+            print(
+                """
+                [PlagueMenu] tapped operation mode
+                  mode: \(region.mode.rawValue)
+                  unlocked: \(availability.isUnlocked)
+                """
+            )
+
+            Task {
+                await selectOperationMode(region.mode)
+            }
+        } label: {
+            ZStack {
+                Rectangle()
+                    .fill(
+                        showDebugHitRects
+                            ? Color.red.opacity(0.22)
+                            : Color.clear
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(
+                                showDebugHitRects
+                                    ? Color.red
+                                    : Color.clear,
+                                lineWidth: showDebugHitRects ? 2 : 0
+                            )
+                    )
+
+                if !availability.isUnlocked {
+                    Image(systemName: "lock.fill")
+                        .font(
+                            .system(
+                                size: max(
+                                    14,
+                                    min(rect.width, rect.height) * 0.38
+                                ),
+                                weight: .bold
+                            )
+                        )
+                        .foregroundStyle(resources.lockColor)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!availability.isUnlocked)
+        .contentShape(Rectangle())
+        .frame(
+            width: rect.width,
+            height: rect.height
+        )
+        .position(
+            x: rect.midX,
+            y: rect.midY
+        )
+        .accessibilityLabel(region.mode.displayName)
     }
 
     @MainActor
@@ -747,101 +767,5 @@ struct PlagueForestTopOrnament: View {
         case .closed, .failed:
             return "Enter full immersive forest"
         }
-    }
-}
-
-private struct PlagueMenuPosterImage: View {
-    let name: String
-    let containerSize: CGSize
-
-    var body: some View {
-        Group {
-            #if os(macOS)
-            if let image = PlagueMenuImageLoader.image(named: name) {
-                configured(Image(nsImage: image))
-            } else {
-                missingImageView
-            }
-            #else
-            if let image = PlagueMenuImageLoader.image(named: name) {
-                configured(Image(uiImage: image))
-            } else {
-                missingImageView
-            }
-            #endif
-        }
-    }
-
-    private func configured(
-        _ image: Image
-    ) -> some View {
-        image
-            .resizable()
-            .interpolation(.high)
-            .aspectRatio(
-                PlagueMenuHitZones.sourceSize,
-                contentMode: .fit
-            )
-            .frame(
-                width: containerSize.width,
-                height: containerSize.height,
-                alignment: .center
-            )
-    }
-
-    private var missingImageView: some View {
-        ZStack {
-            Color.black
-
-            Text("Missing \(name).png")
-                .font(.caption)
-                .foregroundStyle(.red)
-                .monospaced()
-        }
-        .frame(
-            width: containerSize.width,
-            height: containerSize.height,
-            alignment: .center
-        )
-    }
-}
-
-struct PlaguePixelHitButton: View {
-    let label: String
-    let rect: CGRect
-    let debugColor: Color
-    let showDebug: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button {
-            print("[PlagueMenu] tapped \(label)")
-            action()
-        } label: {
-            Rectangle()
-                .fill(
-                    showDebug
-                        ? debugColor.opacity(0.25)
-                        : Color.clear
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(
-                            showDebug ? debugColor : Color.clear,
-                            lineWidth: showDebug ? 2 : 0
-                        )
-                )
-        }
-        .buttonStyle(.plain)
-        .contentShape(Rectangle())
-        .frame(
-            width: rect.width,
-            height: rect.height
-        )
-        .position(
-            x: rect.midX,
-            y: rect.midY
-        )
-        .accessibilityLabel(label)
     }
 }

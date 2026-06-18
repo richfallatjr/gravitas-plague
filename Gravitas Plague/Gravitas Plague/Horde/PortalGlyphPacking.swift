@@ -1,6 +1,6 @@
 import simd
 
-struct PortalGlyphOBB {
+struct PortalGlyphOBB: Sendable {
     var center: SIMD2<Float>
     var axisX: SIMD2<Float>
     var axisY: SIMD2<Float>
@@ -75,12 +75,12 @@ func normalizeSafe2(
     return vector / length
 }
 
-enum PortalGlyphPlacementSurface {
+enum PortalGlyphPlacementSurface: Sendable {
     case wall
     case floor
 }
 
-enum PortalGlyphOrientationPolicy: String {
+enum PortalGlyphOrientationPolicy: String, Sendable {
     case followSegment
     case wallYUp
     case floor
@@ -117,6 +117,66 @@ extension PortalGlyphAsset {
     }
 }
 
+struct PortalGlyphAssetDescriptor: Identifiable, Sendable {
+    let id: String
+    let fileName: String
+    let kind: PortalGlyphKind
+    let pixelWidth: Int
+    let pixelHeight: Int
+
+    var aspect: Float {
+        Float(pixelWidth) / Float(max(pixelHeight, 1))
+    }
+
+    func physicalSizeMeters() -> SIMD2<Float> {
+        let widthFeet =
+            Float(pixelWidth) / PortalGlyphFXSettings.pixelsPerFoot
+
+        let heightFeet =
+            Float(pixelHeight) / PortalGlyphFXSettings.pixelsPerFoot
+
+        return SIMD2<Float>(
+            widthFeet * PortalGlyphFXSettings.feetToMeters,
+            heightFeet * PortalGlyphFXSettings.feetToMeters
+        )
+    }
+
+    var allowedSurface: PortalGlyphPlacementSurface {
+        switch kind {
+        case .floor:
+            return .floor
+
+        case .directional, .circle, .free:
+            return .wall
+        }
+    }
+
+    var orientationPolicy: PortalGlyphOrientationPolicy {
+        switch kind {
+        case .directional:
+            return .followSegment
+
+        case .free, .circle:
+            return .wallYUp
+
+        case .floor:
+            return .floor
+        }
+    }
+}
+
+struct PortalGlyphPlacementDescriptor: Sendable {
+    let asset: PortalGlyphAssetDescriptor
+    let surface: PortalGlyphPlacementSurface
+    let center2D: SIMD2<Float>
+    let axisX: SIMD2<Float>
+    let axisY: SIMD2<Float>
+    let size: SIMD2<Float>
+    let rotationRadians: Float
+    let obb: PortalGlyphOBB
+    let sourceSegmentIndex: Int?
+}
+
 struct PortalGlyphPlacement {
     let asset: PortalGlyphAsset
     let surface: PortalGlyphPlacementSurface
@@ -127,4 +187,21 @@ struct PortalGlyphPlacement {
     let rotationRadians: Float
     let obb: PortalGlyphOBB
     let sourceSegmentIndex: Int?
+}
+
+extension PortalGlyphPlacement {
+    init(
+        descriptor: PortalGlyphPlacementDescriptor,
+        asset: PortalGlyphAsset
+    ) {
+        self.asset = asset
+        self.surface = descriptor.surface
+        self.center2D = descriptor.center2D
+        self.axisX = descriptor.axisX
+        self.axisY = descriptor.axisY
+        self.size = descriptor.size
+        self.rotationRadians = descriptor.rotationRadians
+        self.obb = descriptor.obb
+        self.sourceSegmentIndex = descriptor.sourceSegmentIndex
+    }
 }

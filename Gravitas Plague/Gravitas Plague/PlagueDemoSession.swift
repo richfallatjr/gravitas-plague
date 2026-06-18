@@ -55,7 +55,8 @@ enum PlagueUILegacySuppressionKeys {
 final class PlagueDemoSession: ObservableObject {
     static let immersiveSpaceID = PlagueImmersiveSpaceID.forest
 
-    enum PlagueOperationMode: String, Codable, CaseIterable, Identifiable {
+    enum PlagueOperationMode: String, Codable, CaseIterable, Identifiable, Sendable {
+        case story
         case horde
         case walkLoop
 
@@ -63,6 +64,9 @@ final class PlagueDemoSession: ObservableObject {
 
         nonisolated var displayName: String {
             switch self {
+            case .story:
+                return "Story Mode"
+
             case .horde:
                 return "Horde Mode"
 
@@ -186,6 +190,8 @@ final class PlagueDemoSession: ObservableObject {
     @Published private(set) var lifetimeWavesCleared = 0
     @Published private(set) var latestCommand: CommandEnvelope?
 
+    let operationModeAccessController = OperationModeAccessController.shared
+
     private var controlWindowBackgroundIgnoreUntil: Date?
     private var controlWindowBackgroundIgnoreReason: String?
     private var controlWindowDismissedForWallUI = false
@@ -220,6 +226,22 @@ final class PlagueDemoSession: ObservableObject {
     }
 
     func selectOperationMode(_ mode: PlagueOperationMode) {
+        let availability = operationModeAccessController.snapshot[mode]
+
+        guard availability.isUnlocked else {
+            statusMessage = "\(mode.displayName) is locked for this build."
+
+            print(
+                """
+                [PlagueMenu] locked operation mode ignored
+                  mode: \(mode.rawValue)
+                  reason: \(availability.lockReason?.rawValue ?? "unknown")
+                """
+            )
+
+            return
+        }
+
         selectedOperationMode = mode
         isPosterUIVisible = true
 
@@ -233,6 +255,10 @@ final class PlagueDemoSession: ObservableObject {
         )
 
         switch mode {
+        case .story:
+            experienceMode = .story
+            statusMessage = "Story Mode is locked for this build."
+
         case .horde:
             experienceMode = .horde
             startHordeBenchmarkFromPoster()
@@ -249,11 +275,11 @@ final class PlagueDemoSession: ObservableObject {
         print("[WallPosterUI] action tapped \(action.rawValue)")
 
         switch action {
+        case .story:
+            selectOperationMode(.story)
+
         case .horde:
             selectOperationMode(.horde)
-
-        case .walkLoop:
-            selectOperationMode(.walkLoop)
         }
     }
 

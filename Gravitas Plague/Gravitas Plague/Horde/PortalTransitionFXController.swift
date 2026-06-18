@@ -24,6 +24,31 @@ private struct PortalEmissionFrameOutput: Sendable {
     let spawnSamples: [PortalFXSpawnSample]
 }
 
+private struct PortalEmissionPlanInput: Sendable {
+    let segments: [PortalFXSegment]
+    let portalNormalLocal: SIMD3<Float>
+    let apertureCenter: SIMD3<Float>
+    let deltaTime: Float
+}
+
+private struct PortalEmissionCompletedPlan {
+    let revision: Int
+    let output: PortalEmissionFrameOutput
+}
+
+private actor PortalEmissionPlannerEngine {
+    private var emissionAccumulator: Float = 0
+
+    func plan(
+        input: PortalEmissionPlanInput
+    ) -> PortalEmissionFrameOutput {
+        PortalEmissionPlanner.plan(
+            input: input,
+            emissionAccumulator: &emissionAccumulator
+        )
+    }
+}
+
 @MainActor
 final class PortalTransitionFXController {
     let rootEntity = Entity()
@@ -40,7 +65,11 @@ final class PortalTransitionFXController {
     private var jointEntities: [Entity] = []
 
     private var emberPool: PortalEmberPool?
-    private var emissionAccumulator: Float = 0
+    private var emissionPlanner = PortalEmissionPlannerEngine()
+    private var emissionTask: Task<Void, Never>?
+    private var emissionInFlight = false
+    private var completedEmissionPlan: PortalEmissionCompletedPlan?
+    private var emissionRevision = 0
 
     private var enabled: Bool = true
 
@@ -246,7 +275,16 @@ final class PortalTransitionFXController {
         tubeEntities.removeAll()
         jointEntities.removeAll()
         segments.removeAll()
-        emissionAccumulator = 0
+        resetEmissionPlanner()
+    }
+
+    private func resetEmissionPlanner() {
+        emissionTask?.cancel()
+        emissionTask = nil
+        emissionInFlight = false
+        completedEmissionPlan = nil
+        emissionRevision += 1
+        emissionPlanner = PortalEmissionPlannerEngine()
     }
 }
 
@@ -406,68 +444,98 @@ private extension PortalTransitionFXController {
         deltaTime: Float,
         timingProfiler: TimingProfiler? = nil
     ) {
-        let output: PortalEmissionFrameOutput
-
         if let timingProfiler {
-            output = timingProfiler.measure("portal.fx.emit.plan") {
-                planEmission(
+            timingProfiler.measure("portal.fx.emit.apply") {
+                applyCompletedEmissionPlanIfAvailable()
+            }
+
+            timingProfiler.measure("portal.fx.emit.submit") {
+                submitEmissionPlanIfIdle(
                     deltaTime: deltaTime
                 )
             }
-            timingProfiler.measure("portal.fx.emit.apply") {
-                applyEmission(
-                    output
-                )
-            }
         } else {
-            output = planEmission(
+            applyCompletedEmissionPlanIfAvailable()
+            submitEmissionPlanIfIdle(
                 deltaTime: deltaTime
-            )
-            applyEmission(
-                output
             )
         }
     }
 
-    func planEmission(
+    func submitEmissionPlanIfIdle(
         deltaTime: Float
-    ) -> PortalEmissionFrameOutput {
+    ) {
+        guard !emissionInFlight,
+              completedEmissionPlan == nil else {
+            return
+        }
+
         guard emberPool != nil,
               !segments.isEmpty else {
-            return PortalEmissionFrameOutput(
-                spawnSamples: []
-            )
+            return
         }
 
-        emissionAccumulator += PortalFXDefaults.emberBirthRatePerDoor * deltaTime
+        let input = PortalEmissionPlanInput(
+            segments: segments,
+            portalNormalLocal: portalNormalLocal,
+            apertureCenter: apertureCenter(),
+            deltaTime: deltaTime
+        )
+        let revision = emissionRevision
+        let planner = emissionPlanner
 
-        let emitCount = Int(emissionAccumulator)
+        emissionInFlight = true
 
-        guard emitCount > 0 else {
-            return PortalEmissionFrameOutput(
-                spawnSamples: []
+        emissionTask = Task { @MainActor [weak self] in
+            let output = await planner.plan(
+                input: input
             )
-        }
 
-        emissionAccumulator -= Float(emitCount)
-
-        var samples: [PortalFXSpawnSample] = []
-        samples.reserveCapacity(emitCount)
-
-        for _ in 0..<emitCount {
-            guard let segment = chooseEmissionSegment() else {
-                continue
+            guard !Task.isCancelled else {
+                return
             }
 
-            samples.append(
-                makeSpawnSample(
-                    segment: segment
-                )
+            self?.receiveEmissionPlan(
+                output,
+                revision: revision
             )
         }
+    }
 
-        return PortalEmissionFrameOutput(
-            spawnSamples: samples
+    func receiveEmissionPlan(
+        _ output: PortalEmissionFrameOutput,
+        revision: Int
+    ) {
+        emissionInFlight = false
+        emissionTask = nil
+
+        guard revision == emissionRevision else {
+            return
+        }
+
+        guard !output.spawnSamples.isEmpty else {
+            return
+        }
+
+        completedEmissionPlan = PortalEmissionCompletedPlan(
+            revision: revision,
+            output: output
+        )
+    }
+
+    func applyCompletedEmissionPlanIfAvailable() {
+        guard let completedEmissionPlan else {
+            return
+        }
+
+        self.completedEmissionPlan = nil
+
+        guard completedEmissionPlan.revision == emissionRevision else {
+            return
+        }
+
+        applyEmission(
+            completedEmissionPlan.output
         )
     }
 
@@ -487,7 +555,79 @@ private extension PortalTransitionFXController {
         }
     }
 
-    func chooseEmissionSegment() -> PortalFXSegment? {
+    func makeSpawnSample(
+        segment: PortalFXSegment
+    ) -> PortalFXSpawnSample {
+        PortalEmissionPlanner.makeSpawnSample(
+            segment: segment,
+            portalNormalLocal: portalNormalLocal,
+            apertureCenter: apertureCenter()
+        )
+    }
+
+    func apertureCenter() -> SIMD3<Float> {
+        guard !perimeterLocalPoints.isEmpty else {
+            return .zero
+        }
+
+        let sum = perimeterLocalPoints.reduce(SIMD3<Float>.zero) {
+            $0 + $1
+        }
+
+        return sum / Float(perimeterLocalPoints.count)
+    }
+}
+
+private enum PortalEmissionPlanner {
+    static func plan(
+        input: PortalEmissionPlanInput,
+        emissionAccumulator: inout Float
+    ) -> PortalEmissionFrameOutput {
+        guard !input.segments.isEmpty else {
+            return PortalEmissionFrameOutput(
+                spawnSamples: []
+            )
+        }
+
+        emissionAccumulator += PortalFXDefaults.emberBirthRatePerDoor * input.deltaTime
+
+        let emitCount = Int(emissionAccumulator)
+
+        guard emitCount > 0 else {
+            return PortalEmissionFrameOutput(
+                spawnSamples: []
+            )
+        }
+
+        emissionAccumulator -= Float(emitCount)
+
+        var samples: [PortalFXSpawnSample] = []
+        samples.reserveCapacity(emitCount)
+
+        for _ in 0..<emitCount {
+            guard let segment = chooseEmissionSegment(
+                input.segments
+            ) else {
+                continue
+            }
+
+            samples.append(
+                makeSpawnSample(
+                    segment: segment,
+                    portalNormalLocal: input.portalNormalLocal,
+                    apertureCenter: input.apertureCenter
+                )
+            )
+        }
+
+        return PortalEmissionFrameOutput(
+            spawnSamples: samples
+        )
+    }
+
+    static func chooseEmissionSegment(
+        _ segments: [PortalFXSegment]
+    ) -> PortalFXSegment? {
         let totalRate = segments.reduce(Float(0)) {
             $0 + $1.birthRate
         }
@@ -511,14 +651,17 @@ private extension PortalTransitionFXController {
         return segments.last
     }
 
-    func makeSpawnSample(
-        segment: PortalFXSegment
+    static func makeSpawnSample(
+        segment: PortalFXSegment,
+        portalNormalLocal: SIMD3<Float>,
+        apertureCenter: SIMD3<Float>
     ) -> PortalFXSpawnSample {
         let t = Float.random(in: 0...1)
         let base = segment.a + (segment.b - segment.a) * t
 
         let wallOut = wallPlaneDirectionAwayFromAperture(
-            segment: segment
+            segment: segment,
+            apertureCenter: apertureCenter
         )
 
         let tangent = segment.direction
@@ -600,14 +743,13 @@ private extension PortalTransitionFXController {
         )
     }
 
-    func wallPlaneDirectionAwayFromAperture(
-        segment: PortalFXSegment
+    static func wallPlaneDirectionAwayFromAperture(
+        segment: PortalFXSegment,
+        apertureCenter: SIMD3<Float>
     ) -> SIMD3<Float> {
-        let center = apertureCenter()
-
         var radial = SIMD3<Float>(
-            segment.midpoint.x - center.x,
-            segment.midpoint.y - center.y,
+            segment.midpoint.x - apertureCenter.x,
+            segment.midpoint.y - apertureCenter.y,
             0
         )
 
@@ -618,18 +760,6 @@ private extension PortalTransitionFXController {
         }
 
         return radial
-    }
-
-    func apertureCenter() -> SIMD3<Float> {
-        guard !perimeterLocalPoints.isEmpty else {
-            return .zero
-        }
-
-        let sum = perimeterLocalPoints.reduce(SIMD3<Float>.zero) {
-            $0 + $1
-        }
-
-        return sum / Float(perimeterLocalPoints.count)
     }
 }
 

@@ -1,13 +1,12 @@
 import Foundation
 import simd
 
-@MainActor
 enum PortalGlyphLayoutEngine {
     static func generateWallPlacements(
         perimeterPoints: [SIMD3<Float>],
         seed: UInt64,
-        library: PortalGlyphAssetLibrary
-    ) -> [PortalGlyphPlacement] {
+        library: PortalGlyphAssetLibrarySnapshot
+    ) -> [PortalGlyphPlacementDescriptor] {
         var rng = SeededRNG(seed: seed)
         let allSegments = buildPerimeterSegments(
             perimeterPoints
@@ -19,7 +18,7 @@ enum PortalGlyphLayoutEngine {
             $0.kind == .bottomFloorOnly
         }
 
-        var placements: [PortalGlyphPlacement] = []
+        var placements: [PortalGlyphPlacementDescriptor] = []
         var occupied: [PortalGlyphOBB] = []
         var context = PortalGlyphLayoutContext()
 
@@ -207,8 +206,8 @@ enum PortalGlyphLayoutEngine {
     static func generateFloorPlacementsFromBottomLine(
         perimeterPoints: [SIMD3<Float>],
         seed: UInt64,
-        library: PortalGlyphAssetLibrary
-    ) -> [PortalGlyphPlacement] {
+        library: PortalGlyphAssetLibrarySnapshot
+    ) -> [PortalGlyphPlacementDescriptor] {
         var rng = SeededRNG(seed: seed ^ 0xF100D)
         var context = PortalGlyphLayoutContext()
 
@@ -312,7 +311,7 @@ enum PortalGlyphSegmentKind: String {
 
 extension PortalGlyphLayoutEngine {
     static func validateCombinedPortalRules(
-        placements: [PortalGlyphPlacement]
+        placements: [PortalGlyphPlacementDescriptor]
     ) {
         validateNonDirectionalUniqueness(
             placements: placements
@@ -391,7 +390,7 @@ private struct PortalGlyphLayoutContext {
     }
 
     func canUse(
-        _ asset: PortalGlyphAsset,
+        _ asset: PortalGlyphAssetDescriptor,
         segmentIndex: Int?
     ) -> Bool {
         switch asset.kind {
@@ -411,7 +410,7 @@ private struct PortalGlyphLayoutContext {
     }
 
     mutating func markUsed(
-        _ asset: PortalGlyphAsset,
+        _ asset: PortalGlyphAssetDescriptor,
         segmentIndex: Int?
     ) {
         switch asset.kind {
@@ -433,12 +432,12 @@ private extension PortalGlyphLayoutEngine {
     static func placeOneGlyphOnSegment(
         segment: GlyphSegment,
         allWallSegments: [GlyphSegment],
-        library: PortalGlyphAssetLibrary,
+        library: PortalGlyphAssetLibrarySnapshot,
         occupied: [PortalGlyphOBB],
         context: PortalGlyphLayoutContext,
         rng: inout SeededRNG,
         preferDirectional: Bool
-    ) -> PortalGlyphPlacement? {
+    ) -> PortalGlyphPlacementDescriptor? {
         guard context.hasCapacityOnLine(
             segment.index
         ) else {
@@ -468,7 +467,7 @@ private extension PortalGlyphLayoutEngine {
                 continue
             }
 
-            let placement: PortalGlyphPlacement?
+            let placement: PortalGlyphPlacementDescriptor?
 
             switch asset.kind {
             case .directional:
@@ -508,11 +507,11 @@ private extension PortalGlyphLayoutEngine {
 
     static func candidateAssetsForSegment(
         segmentIndex: Int,
-        library: PortalGlyphAssetLibrary,
+        library: PortalGlyphAssetLibrarySnapshot,
         context: PortalGlyphLayoutContext,
         rng: inout SeededRNG,
         preferDirectional: Bool
-    ) -> [PortalGlyphAsset] {
+    ) -> [PortalGlyphAssetDescriptor] {
         let usedDirectionalOnThisLine =
             context.usedDirectionalAssetIDsBySegmentIndex[segmentIndex] ?? []
 
@@ -526,7 +525,7 @@ private extension PortalGlyphLayoutEngine {
             !context.usedNonDirectionalAssetIDs.contains($0.id)
         }
 
-        var ordered: [PortalGlyphAsset] = []
+        var ordered: [PortalGlyphAssetDescriptor] = []
 
         if preferDirectional {
             ordered.append(
@@ -581,9 +580,9 @@ private extension PortalGlyphLayoutEngine {
     }
 
     static func shuffled(
-        _ input: [PortalGlyphAsset],
+        _ input: [PortalGlyphAssetDescriptor],
         rng: inout SeededRNG
-    ) -> [PortalGlyphAsset] {
+    ) -> [PortalGlyphAssetDescriptor] {
         var result = input
 
         guard result.count > 1 else {
@@ -609,11 +608,11 @@ private extension PortalGlyphLayoutEngine {
 private extension PortalGlyphLayoutEngine {
     static func generateSingleCirclePlacement(
         wallSegments: [GlyphSegment],
-        library: PortalGlyphAssetLibrary,
+        library: PortalGlyphAssetLibrarySnapshot,
         occupied: [PortalGlyphOBB],
         context: inout PortalGlyphLayoutContext,
         rng: inout SeededRNG
-    ) -> PortalGlyphPlacement? {
+    ) -> PortalGlyphPlacementDescriptor? {
         guard context.circleGlyphCount < PortalGlyphFXSettings.maxCircleGlyphsPerPortal else {
             return nil
         }
@@ -697,12 +696,12 @@ private extension PortalGlyphLayoutEngine {
     }
 
     static func placeWallGlyph(
-        asset: PortalGlyphAsset,
+        asset: PortalGlyphAssetDescriptor,
         segment: GlyphSegment,
         allWallSegments: [GlyphSegment],
         occupied: [PortalGlyphOBB],
         rng: inout SeededRNG
-    ) -> PortalGlyphPlacement? {
+    ) -> PortalGlyphPlacementDescriptor? {
         guard asset.kind != .floor else {
             fatalError("[PortalGlyphs] floor asset sent to wall placer")
         }
@@ -734,14 +733,14 @@ private extension PortalGlyphLayoutEngine {
     }
 
     static func placeCircleGlyph(
-        asset: PortalGlyphAsset,
+        asset: PortalGlyphAssetDescriptor,
         segments: [GlyphSegment],
         occupied: [PortalGlyphOBB],
         rng: inout SeededRNG,
         maxDistance: Float,
         attempts: Int,
         passLabel: String
-    ) -> PortalGlyphPlacement? {
+    ) -> PortalGlyphPlacementDescriptor? {
         guard asset.kind == .circle else {
             fatalError(
                 """
@@ -757,7 +756,7 @@ private extension PortalGlyphLayoutEngine {
         let axisY = PortalGlyphWallAxes.yUp
         let angle = PortalGlyphWallAxes.yUpRotationRadians
 
-        var best: PortalGlyphPlacement?
+        var best: PortalGlyphPlacementDescriptor?
         var bestScore = Float.greatestFiniteMagnitude
 
         for _ in 0..<attempts {
@@ -848,7 +847,7 @@ private extension PortalGlyphLayoutEngine {
 
             if score < bestScore {
                 bestScore = score
-                best = PortalGlyphPlacement(
+                best = PortalGlyphPlacementDescriptor(
                     asset: asset,
                     surface: .wall,
                     center2D: center,
@@ -880,11 +879,11 @@ private extension PortalGlyphLayoutEngine {
     }
 
     static func placeDirectionalGlyphOnBorder(
-        asset: PortalGlyphAsset,
+        asset: PortalGlyphAssetDescriptor,
         segment: GlyphSegment,
         occupied: [PortalGlyphOBB],
         rng: inout SeededRNG
-    ) -> PortalGlyphPlacement? {
+    ) -> PortalGlyphPlacementDescriptor? {
         guard asset.kind == .directional else {
             fatalError(
                 """
@@ -896,7 +895,7 @@ private extension PortalGlyphLayoutEngine {
         }
 
         let size = asset.physicalSizeMeters()
-        var best: PortalGlyphPlacement?
+        var best: PortalGlyphPlacementDescriptor?
         var bestScore = Float.greatestFiniteMagnitude
 
         for _ in 0..<PortalGlyphFXSettings.candidateAttemptsPerGlyph {
@@ -1000,7 +999,7 @@ private extension PortalGlyphLayoutEngine {
 
             if score < bestScore {
                 bestScore = score
-                best = PortalGlyphPlacement(
+                best = PortalGlyphPlacementDescriptor(
                     asset: asset,
                     surface: .wall,
                     center2D: center,
@@ -1029,12 +1028,12 @@ private extension PortalGlyphLayoutEngine {
     }
 
     static func placeGeneralGlyphNearBorder(
-        asset: PortalGlyphAsset,
+        asset: PortalGlyphAssetDescriptor,
         segment: GlyphSegment,
         allWallSegments: [GlyphSegment],
         occupied: [PortalGlyphOBB],
         rng: inout SeededRNG
-    ) -> PortalGlyphPlacement? {
+    ) -> PortalGlyphPlacementDescriptor? {
         if let strict = placeGeneralGlyphNearBorderPass(
             asset: asset,
             segment: segment,
@@ -1074,7 +1073,7 @@ private extension PortalGlyphLayoutEngine {
     }
 
     static func placeGeneralGlyphNearBorderPass(
-        asset: PortalGlyphAsset,
+        asset: PortalGlyphAssetDescriptor,
         segment: GlyphSegment,
         allWallSegments: [GlyphSegment],
         occupied: [PortalGlyphOBB],
@@ -1082,7 +1081,7 @@ private extension PortalGlyphLayoutEngine {
         maxDistance: Float,
         attempts: Int,
         passLabel: String
-    ) -> PortalGlyphPlacement? {
+    ) -> PortalGlyphPlacementDescriptor? {
         guard asset.kind == .free else {
             fatalError(
                 """
@@ -1098,7 +1097,7 @@ private extension PortalGlyphLayoutEngine {
         let axisY = PortalGlyphWallAxes.yUp
         let rotation = PortalGlyphWallAxes.yUpRotationRadians
 
-        var best: PortalGlyphPlacement?
+        var best: PortalGlyphPlacementDescriptor?
         var bestScore = Float.greatestFiniteMagnitude
 
         for _ in 0..<attempts {
@@ -1204,7 +1203,7 @@ private extension PortalGlyphLayoutEngine {
 
             if score < bestScore {
                 bestScore = score
-                best = PortalGlyphPlacement(
+                best = PortalGlyphPlacementDescriptor(
                     asset: asset,
                     surface: .wall,
                     center2D: center,
@@ -1234,10 +1233,10 @@ private extension PortalGlyphLayoutEngine {
     }
 
     static func makeSingleFloorGlyphPlacement(
-        asset: PortalGlyphAsset,
+        asset: PortalGlyphAssetDescriptor,
         bottomSegment: GlyphSegment,
         rng: inout SeededRNG
-    ) -> PortalGlyphPlacement {
+    ) -> PortalGlyphPlacementDescriptor {
         guard asset.kind == .floor else {
             fatalError(
                 """
@@ -1290,7 +1289,7 @@ private extension PortalGlyphLayoutEngine {
             halfSize: size * 0.5
         )
 
-        return PortalGlyphPlacement(
+        return PortalGlyphPlacementDescriptor(
             asset: asset,
             surface: .floor,
             center2D: center,
@@ -1304,7 +1303,7 @@ private extension PortalGlyphLayoutEngine {
     }
 
     static func validateLineBudgets(
-        placements: [PortalGlyphPlacement],
+        placements: [PortalGlyphPlacementDescriptor],
         wallSegments: [GlyphSegment]
     ) {
         let wallSegmentIDs = Set(
@@ -1373,7 +1372,7 @@ private extension PortalGlyphLayoutEngine {
     }
 
     static func validateNonDirectionalUniqueness(
-        placements: [PortalGlyphPlacement]
+        placements: [PortalGlyphPlacementDescriptor]
     ) {
         let nonDirectional = placements.filter {
             $0.asset.kind == .free ||
@@ -1395,7 +1394,7 @@ private extension PortalGlyphLayoutEngine {
     }
 
     static func validateAspectPreserved(
-        placements: [PortalGlyphPlacement]
+        placements: [PortalGlyphPlacementDescriptor]
     ) {
         for placement in placements {
             let expected = placement.asset.physicalSizeMeters()
@@ -1422,7 +1421,7 @@ private extension PortalGlyphLayoutEngine {
     }
 
     static func validateWallGlyphOrientationRules(
-        placements: [PortalGlyphPlacement]
+        placements: [PortalGlyphPlacementDescriptor]
     ) {
         for placement in placements where placement.surface == .wall {
             switch placement.asset.kind {

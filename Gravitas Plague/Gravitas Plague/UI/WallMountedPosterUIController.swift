@@ -463,26 +463,27 @@ private extension WallMountedPosterUIController {
         currentPosterSize = newSize
         root.isEnabled = true
 
-        let texture = try? TextureResource.load(
-            named: "plague_menu_ui_mockup"
-        )
+        OperationModePosterResources.shared.loadIfNeeded()
 
-        var material = PhysicallyBasedMaterial()
+        var material = UnlitMaterial()
 
-        if let texture {
-            material.baseColor = .init(
+        if let texture = OperationModePosterResources.shared.posterTexture {
+            material.color = .init(
+                tint: .white,
                 texture: .init(texture)
             )
         } else {
-            material.baseColor = .init(
+            material.color = .init(
                 tint: .darkGray
             )
 
-            print("[WallPosterUI] ERROR missing plague_menu_ui_mockup texture")
+            print(
+                """
+                [WallPosterUI] ERROR missing operation mode poster texture
+                  texture: \(OperationModePosterLayout.assetName).\(OperationModePosterLayout.assetExtension)
+                """
+            )
         }
-
-        material.roughness = .init(floatLiteral: 0.82)
-        material.metallic = .init(floatLiteral: 0.0)
 
         let poster = ModelEntity(
             mesh: .generatePlane(
@@ -499,20 +500,16 @@ private extension WallMountedPosterUIController {
         root.addChild(poster)
         posterEntity = poster
 
-        addButtonHitTarget(
-            rectPixels: WallPosterMetrics.hordeRectPixels,
+        addModeHitTarget(
+            region: OperationModePosterLayout.storyRegion,
             posterWidth: width,
-            posterHeight: height,
-            action: .horde,
-            name: "WallPosterButton_Horde"
+            posterHeight: height
         )
 
-        addButtonHitTarget(
-            rectPixels: WallPosterMetrics.walkRectPixels,
+        addModeHitTarget(
+            region: OperationModePosterLayout.hordeRegion,
             posterWidth: width,
-            posterHeight: height,
-            action: .walkLoop,
-            name: "WallPosterButton_WalkLoop"
+            posterHeight: height
         )
 
         addWallStickerButtons(
@@ -523,12 +520,13 @@ private extension WallMountedPosterUIController {
         print(
             """
             [WallPosterUI] RealityKit poster panel created
-              texture: plague_menu_ui_mockup
+              texture: \(OperationModePosterLayout.assetName).\(OperationModePosterLayout.assetExtension)
               widthMeters: \(width)
               heightMeters: \(height)
               maxHeightInches: \(WallPosterMetrics.maxHeightMeters / 0.0254)
               occupancyPaddingMeters: \(WallPosterPlacementTuning.occupancyPaddingMeters)
-              physicallyBasedMaterial: true
+              material: unlit
+              walkLoopPlayerFacing: false
             """
         )
     }
@@ -638,37 +636,44 @@ private extension WallMountedPosterUIController {
         )
     }
 
-    func addButtonHitTarget(
-        rectPixels: SIMD4<Float>,
+    func addModeHitTarget(
+        region: PosterModeRegion,
         posterWidth: Float,
-        posterHeight: Float,
-        action: WallPosterAction,
-        name: String
+        posterHeight: Float
     ) {
-        let source = WallPosterMetrics.sourcePixelSize
-        let rectX = rectPixels.x
-        let rectY = rectPixels.y
-        let rectW = rectPixels.z
-        let rectH = rectPixels.w
-        let centerPixelX = rectX + rectW * 0.5
-        let centerPixelY = rectY + rectH * 0.5
-        let localX = (centerPixelX / source.x - 0.5) * posterWidth
-        let localY = (0.5 - centerPixelY / source.y) * posterHeight
-        let width = rectW / source.x * posterWidth
-        let height = rectH / source.y * posterHeight
+        guard let action = WallPosterAction(
+            rawValue: region.mode.rawValue
+        ) else {
+            print(
+                """
+                [WallPosterUI] ERROR no wall action for poster mode
+                  mode: \(region.mode.rawValue)
+                """
+            )
+            return
+        }
+
+        let availability = OperationModeAccessController.shared.snapshot[
+            region.mode
+        ]
+        let mapped = PosterCoordinateMapper.realityKitRect(
+            normalizedRect: region.normalizedRect,
+            posterWidthMeters: posterWidth,
+            posterHeightMeters: posterHeight
+        )
 
         let hit = ModelEntity(
             mesh: .generatePlane(
-                width: width,
-                height: height
+                width: mapped.size.x,
+                height: mapped.size.y
             ),
             materials: [makeInvisibleHitMaterial()]
         )
 
-        hit.name = name
+        hit.name = "WallPosterButton_\(region.mode.rawValue)"
         hit.position = SIMD3<Float>(
-            localX,
-            localY,
+            mapped.center.x,
+            mapped.center.y,
             0.012
         )
         hit.components.set(
@@ -676,23 +681,150 @@ private extension WallMountedPosterUIController {
                 actionRawValue: action.rawValue
             )
         )
-        hit.components.set(InputTargetComponent())
+
+        if availability.isUnlocked {
+            hit.components.set(InputTargetComponent())
+        }
+
         hit.generateCollisionShapes(recursive: true)
 
         root.addChild(hit)
         buttonEntities.append(hit)
 
+        if !availability.isUnlocked {
+            addProgrammaticLockIcon(
+                center: mapped.center,
+                regionSize: mapped.size,
+                mode: region.mode
+            )
+        }
+
         print(
             """
             [WallPosterUI] button hit target created
-              name: \(name)
+              name: \(hit.name)
               action: \(action.rawValue)
-              localX: \(localX)
-              localY: \(localY)
-              width: \(width)
-              height: \(height)
+              unlocked: \(availability.isUnlocked)
+              localX: \(mapped.center.x)
+              localY: \(mapped.center.y)
+              width: \(mapped.size.x)
+              height: \(mapped.size.y)
               posterWidth: \(posterWidth)
               posterHeight: \(posterHeight)
+            """
+        )
+    }
+
+    func addProgrammaticLockIcon(
+        center: SIMD2<Float>,
+        regionSize: SIMD2<Float>,
+        mode: PlagueDemoSession.PlagueOperationMode
+    ) {
+        let color = OperationModePosterResources.shared.lockUIColor
+        var material = UnlitMaterial()
+        material.color = .init(
+            tint: color
+        )
+
+        let root = Entity()
+        root.name = "WallPosterLock_\(mode.rawValue)"
+        root.position = SIMD3<Float>(
+            center.x,
+            center.y,
+            0.019
+        )
+
+        let bodyWidth = max(
+            0.018,
+            regionSize.x * 0.12
+        )
+        let bodyHeight = max(
+            0.012,
+            regionSize.y * 0.22
+        )
+        let barThickness = max(
+            0.004,
+            min(bodyWidth, bodyHeight) * 0.18
+        )
+
+        func makeBar(
+            name: String,
+            width: Float,
+            height: Float,
+            position: SIMD3<Float>
+        ) -> ModelEntity {
+            let entity = ModelEntity(
+                mesh: .generatePlane(
+                    width: width,
+                    height: height
+                ),
+                materials: [material]
+            )
+
+            entity.name = name
+            entity.position = position
+            entity.components.remove(InputTargetComponent.self)
+            entity.components.remove(CollisionComponent.self)
+
+            return entity
+        }
+
+        let body = makeBar(
+            name: "WallPosterLockBody_\(mode.rawValue)",
+            width: bodyWidth,
+            height: bodyHeight,
+            position: .zero
+        )
+
+        let shackleY = bodyHeight * 0.58
+        let shackleSideX = bodyWidth * 0.32
+        let shackleHeight = bodyHeight * 0.82
+
+        let top = makeBar(
+            name: "WallPosterLockTop_\(mode.rawValue)",
+            width: bodyWidth * 0.64,
+            height: barThickness,
+            position: SIMD3<Float>(
+                0,
+                shackleY + shackleHeight * 0.5,
+                0.001
+            )
+        )
+        let left = makeBar(
+            name: "WallPosterLockLeft_\(mode.rawValue)",
+            width: barThickness,
+            height: shackleHeight,
+            position: SIMD3<Float>(
+                -shackleSideX,
+                shackleY,
+                0.001
+            )
+        )
+        let right = makeBar(
+            name: "WallPosterLockRight_\(mode.rawValue)",
+            width: barThickness,
+            height: shackleHeight,
+            position: SIMD3<Float>(
+                shackleSideX,
+                shackleY,
+                0.001
+            )
+        )
+
+        root.addChild(top)
+        root.addChild(left)
+        root.addChild(right)
+        root.addChild(body)
+
+        self.root.addChild(root)
+        buttonEntities.append(root)
+
+        print(
+            """
+            [WallPosterUI] lock icon created
+              mode: \(mode.rawValue)
+              color: \(color)
+              source: sampled_darkest_opaque_pixel
             """
         )
     }

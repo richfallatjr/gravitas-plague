@@ -176,7 +176,7 @@ final class PortalEmberPool {
     private let root: Entity
     private var embers: [PortalEmber] = []
     private var nextIndex: Int = 0
-    private let simulationEngine = PortalEmberSimulationEngine()
+    private var simulationEngine = PortalEmberSimulationEngine()
     private var simulationTask: Task<Void, Never>?
     private var simulationInFlight = false
     private var completedSimulation: PortalEmberCompletedSimulation?
@@ -335,18 +335,20 @@ final class PortalEmberPool {
 
         simulationInFlight = true
 
-        simulationTask = Task { [weak self] in
+        simulationTask = Task { @MainActor [weak self] in
             let output = await engine.step(
                 states: states,
                 deltaTime: deltaTime
             )
 
-            await MainActor.run { [weak self] in
-                self?.receiveSimulation(
-                    output,
-                    revision: revision
-                )
+            guard !Task.isCancelled else {
+                return
             }
+
+            self?.receiveSimulation(
+                output,
+                revision: revision
+            )
         }
     }
 
@@ -435,6 +437,7 @@ final class PortalEmberPool {
         simulationInFlight = false
         completedSimulation = nil
         stateRevision += 1
+        simulationEngine = PortalEmberSimulationEngine()
 
         root.children.removeAll()
         embers.removeAll()

@@ -5,7 +5,7 @@ import RealityKit
 import simd
 import UIKit
 
-enum PortalGlyphKind: String {
+enum PortalGlyphKind: String, Sendable {
     case directional
     case floor
     case circle
@@ -28,7 +28,25 @@ struct PortalGlyphAsset: Identifiable {
     }
 }
 
+struct PortalGlyphAssetLibrarySnapshot: Sendable {
+    let all: [PortalGlyphAssetDescriptor]
+    let directional: [PortalGlyphAssetDescriptor]
+    let floor: [PortalGlyphAssetDescriptor]
+    let circle: [PortalGlyphAssetDescriptor]
+    let free: [PortalGlyphAssetDescriptor]
+}
+
 extension PortalGlyphAsset {
+    var layoutDescriptor: PortalGlyphAssetDescriptor {
+        PortalGlyphAssetDescriptor(
+            id: id,
+            fileName: fileName,
+            kind: kind,
+            pixelWidth: pixelWidth,
+            pixelHeight: pixelHeight
+        )
+    }
+
     func physicalSizeMeters() -> SIMD2<Float> {
         let widthFeet =
             Float(pixelWidth) / PortalGlyphFXSettings.pixelsPerFoot
@@ -76,6 +94,7 @@ final class PortalGlyphAssetLibrary {
     private(set) var free: [PortalGlyphAsset] = []
 
     private var didLoad = false
+    private var assetByID: [String: PortalGlyphAsset] = [:]
 
     private init() {}
 
@@ -138,6 +157,11 @@ final class PortalGlyphAssetLibrary {
             floor = loaded.filter { $0.kind == .floor }
             circle = loaded.filter { $0.kind == .circle }
             free = loaded.filter { $0.kind == .free }
+            assetByID = Dictionary(
+                uniqueKeysWithValues: loaded.map {
+                    ($0.id, $0)
+                }
+            )
 
             print(
                 """
@@ -168,6 +192,37 @@ final class PortalGlyphAssetLibrary {
                 """
             )
         }
+    }
+
+    var layoutSnapshot: PortalGlyphAssetLibrarySnapshot {
+        PortalGlyphAssetLibrarySnapshot(
+            all: all.map(\.layoutDescriptor),
+            directional: directional.map(\.layoutDescriptor),
+            floor: floor.map(\.layoutDescriptor),
+            circle: circle.map(\.layoutDescriptor),
+            free: free.map(\.layoutDescriptor)
+        )
+    }
+
+    func asset(
+        id: String
+    ) -> PortalGlyphAsset? {
+        assetByID[id]
+    }
+
+    func placement(
+        from descriptor: PortalGlyphPlacementDescriptor
+    ) -> PortalGlyphPlacement? {
+        guard let asset = asset(
+            id: descriptor.asset.id
+        ) else {
+            return nil
+        }
+
+        return PortalGlyphPlacement(
+            descriptor: descriptor,
+            asset: asset
+        )
     }
 
     private func loadAsset(
