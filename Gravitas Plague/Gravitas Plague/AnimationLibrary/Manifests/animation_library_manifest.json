@@ -587,7 +587,7 @@
     {
       "clip_id": "left_hook_01",
       "display_name": "Left hook 01",
-      "relative_path": "Clips/HitReact/charged-slash-left.jockanim.json",
+      "relative_path": "Clips/HitReact/left_hook_01.jockanim.json",
       "rig_id": "GravitasMeshyBiped24",
       "rig_version": "001",
       "pose_mode": "absoluteLocal",
@@ -622,7 +622,7 @@
       "source_character_id": "robot_biped",
       "source_skeleton_hash": "b1f44d95e8416746503e89c5e86090af96c45854e8ea6a8b408b3ff336877961",
       "source_rig_relative_path": "Rigs/SourceRigs/robot_biped_b1f44d95e841.source_rig.json",
-      "updated_at": "2026-06-11T19:00:10.373049+00:00"
+      "updated_at": "2026-06-17T00:00:00.000000+00:00"
     },
     {
       "clip_id": "mocap_test_01",

@@ -113,7 +113,7 @@ struct JockHitReactionConfiguration: Equatable {
         faceCenterHeightMeters: 1.45,
         faceZoneRadiusMeters: 0.18,
         faceSideOffsetMeters: 0.13,
-        maxHitDistanceMeters: 0.24,
+        maxHitDistanceMeters: 0.40,
 
         lightVelocityThreshold: 0.55,
         mediumVelocityThreshold: 1.05,

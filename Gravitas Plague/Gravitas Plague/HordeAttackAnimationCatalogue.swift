@@ -41,7 +41,7 @@ enum HordeAttackAnimationCatalogue {
         if valid.count != allAttackClipIDs.count {
             print(
                 """
-                [AttackCatalogue] ERROR expected 4 valid attack clips, found \(valid.count)
+                [AttackCatalogue] ERROR expected \(allAttackClipIDs.count) valid attack clips, found \(valid.count)
                   requested: \(allAttackClipIDs.joined(separator: ", "))
                   valid: \(valid.joined(separator: ", "))
                 """
@@ -70,8 +70,11 @@ final class AttackAnimationRandomizer {
         )
 
         let available = validAttackClipIDs.compactMap { clipID -> ResolvedAttackAnimationClip? in
-            guard let clip = clipsByID[clipID],
-                  clip.clipID == clipID else {
+            guard let clip = clipsByID[clipID] else {
+                return nil
+            }
+
+            guard clip.clipID == clipID else {
                 return nil
             }
 
@@ -157,7 +160,7 @@ enum RequiredAttackAnimationClipValidator {
                 """
                 [AttackCatalogue] ERROR missing required attack clips
                   missing: \(missing.joined(separator: ", "))
-                  expectedTotal: 4
+                  expectedTotal: \(clipIDs.count)
                 """
             )
         }
