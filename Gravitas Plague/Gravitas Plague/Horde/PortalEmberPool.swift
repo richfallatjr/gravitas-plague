@@ -20,11 +20,11 @@ private struct PortalEmberFrameUpdate: Sendable {
 }
 
 private struct PortalEmberFrameOutput: Sendable {
+    let nextStates: [PortalEmberParticleState]
     let updates: [PortalEmberFrameUpdate]
 }
 
-struct PortalEmber {
-    var entity: ModelEntity
+private struct PortalEmberParticleState: Sendable {
     var active: Bool = false
 
     var age: Float = 0
@@ -48,15 +48,143 @@ struct PortalEmber {
     var spinRadiansPerSecond: Float = 0
 }
 
+private struct PortalEmberCompletedSimulation {
+    let revision: Int
+    let output: PortalEmberFrameOutput
+}
+
+private actor PortalEmberSimulationEngine {
+    func step(
+        states: [PortalEmberParticleState],
+        deltaTime: Float
+    ) -> PortalEmberFrameOutput {
+        PortalEmberSimulationStepper.step(
+            states: states,
+            deltaTime: deltaTime
+        )
+    }
+}
+
+private enum PortalEmberSimulationStepper {
+    static func step(
+        states: [PortalEmberParticleState],
+        deltaTime: Float
+    ) -> PortalEmberFrameOutput {
+        var nextStates = states
+        var updates: [PortalEmberFrameUpdate] = []
+
+        for index in nextStates.indices {
+            guard nextStates[index].active else {
+                continue
+            }
+
+            nextStates[index].age += deltaTime
+
+            let t = nextStates[index].age / max(
+                nextStates[index].life,
+                0.001
+            )
+
+            if t >= 1 {
+                nextStates[index].active = false
+                updates.append(
+                    PortalEmberFrameUpdate(
+                        index: index,
+                        active: false,
+                        position: nextStates[index].position,
+                        orientation: nextStates[index].orientation,
+                        size: nextStates[index].endSize,
+                        materialPhase: .dark,
+                        materialIndex: nextStates[index].darkMaterialIndex
+                    )
+                )
+                continue
+            }
+
+            nextStates[index].velocity.y += 0.18 * deltaTime
+            nextStates[index].position += nextStates[index].velocity * deltaTime
+
+            let spin = nextStates[index].spinRadiansPerSecond * deltaTime
+            nextStates[index].orientation =
+                simd_quatf(
+                    angle: spin,
+                    axis: SIMD3<Float>(0, 1, 0)
+                ) * nextStates[index].orientation
+
+            let size = mix(
+                nextStates[index].startSize,
+                nextStates[index].endSize,
+                t
+            )
+
+            let material = materialPhaseAndIndex(
+                for: nextStates[index],
+                normalizedAge: t
+            )
+
+            updates.append(
+                PortalEmberFrameUpdate(
+                    index: index,
+                    active: true,
+                    position: nextStates[index].position,
+                    orientation: nextStates[index].orientation,
+                    size: size,
+                    materialPhase: material.phase,
+                    materialIndex: material.index
+                )
+            )
+        }
+
+        return PortalEmberFrameOutput(
+            nextStates: nextStates,
+            updates: updates
+        )
+    }
+
+    private static func mix(
+        _ a: Float,
+        _ b: Float,
+        _ t: Float
+    ) -> Float {
+        a + (b - a) * t
+    }
+
+    private static func materialPhaseAndIndex(
+        for ember: PortalEmberParticleState,
+        normalizedAge t: Float
+    ) -> (phase: PortalEmberMaterialPhase, index: Int) {
+        switch t {
+        case ..<0.18:
+            return (.birth, ember.birthMaterialIndex)
+        case ..<0.50:
+            return (.hot, ember.hotMaterialIndex)
+        case ..<0.84:
+            return (.red, ember.redMaterialIndex)
+        default:
+            return (.dark, ember.darkMaterialIndex)
+        }
+    }
+}
+
+private struct PortalEmber {
+    var entity: ModelEntity
+    var state = PortalEmberParticleState()
+}
+
 @MainActor
 final class PortalEmberPool {
     private let root: Entity
     private var embers: [PortalEmber] = []
     private var nextIndex: Int = 0
+    private let simulationEngine = PortalEmberSimulationEngine()
+    private var simulationTask: Task<Void, Never>?
+    private var simulationInFlight = false
+    private var completedSimulation: PortalEmberCompletedSimulation?
+    private var stateRevision = 0
 
     var activeCount: Int {
         embers.reduce(0) { partialResult, ember in
-            partialResult + (ember.active ? 1 : 0)
+            partialResult + (ember.state.active ? 1 : 0)
         }
     }
 
@@ -102,6 +230,8 @@ final class PortalEmberPool {
         velocity: SIMD3<Float>,
         life: Float
     ) {
+        applyCompletedSimulationIfAvailable()
+
         guard !embers.isEmpty else {
             return
         }
@@ -112,58 +242,56 @@ final class PortalEmberPool {
 
         var ember = embers[index]
 
-        ember.active = true
-        ember.age = 0
-        ember.life = life
-        ember.position = position
-        ember.velocity = velocity
-        ember.orientation = simd_quatf(
+        ember.state.active = true
+        ember.state.age = 0
+        ember.state.life = life
+        ember.state.position = position
+        ember.state.velocity = velocity
+        ember.state.orientation = simd_quatf(
             angle: 0,
             axis: SIMD3<Float>(0, 1, 0)
         )
-        ember.startSize = Float.random(
+        ember.state.startSize = Float.random(
             in: PortalFXDefaults.emberStartSizeMetersMin...PortalFXDefaults.emberStartSizeMetersMax
         )
-        ember.endSize = Float.random(
+        ember.state.endSize = Float.random(
             in: PortalFXDefaults.emberEndSizeMetersMin...PortalFXDefaults.emberEndSizeMetersMax
         )
 
-        ember.birthMaterialIndex = Int.random(
+        ember.state.birthMaterialIndex = Int.random(
             in: 0..<resources.emberBirthMaterials.count
         )
-        ember.hotMaterialIndex = Int.random(
+        ember.state.hotMaterialIndex = Int.random(
             in: 0..<resources.emberHotMaterials.count
         )
-        ember.redMaterialIndex = Int.random(
+        ember.state.redMaterialIndex = Int.random(
             in: 0..<resources.emberRedMaterials.count
         )
-        ember.darkMaterialIndex = Int.random(
+        ember.state.darkMaterialIndex = Int.random(
             in: 0..<resources.emberDarkMaterials.count
         )
-        ember.spinRadiansPerSecond = Float.random(in: -4.0...4.0)
+        ember.state.spinRadiansPerSecond = Float.random(in: -4.0...4.0)
 
         ember.entity.position = position
-        ember.entity.orientation = ember.orientation
+        ember.entity.orientation = ember.state.orientation
         ember.entity.scale = SIMD3<Float>(
-            repeating: ember.startSize
+            repeating: ember.state.startSize
         )
         ember.entity.model?.materials = [
-            resources.emberBirthMaterials[ember.birthMaterialIndex]
+            resources.emberBirthMaterials[ember.state.birthMaterialIndex]
         ]
         ember.entity.isEnabled = true
 
         embers[index] = ember
+        stateRevision += 1
     }
 
     func update(
         deltaTime: Float
     ) {
-        let output = step(
+        applyCompletedSimulationIfAvailable()
+        submitSimulationIfIdle(
             deltaTime: deltaTime
-        )
-
-        apply(
-            output
         )
     }
 
@@ -172,15 +300,13 @@ final class PortalEmberPool {
         timingProfiler: TimingProfiler?
     ) {
         if let timingProfiler {
-            let output = timingProfiler.measure("portal.ember.step") {
-                step(
-                    deltaTime: deltaTime
-                )
+            timingProfiler.measure("portal.ember.apply") {
+                applyCompletedSimulationIfAvailable()
             }
 
-            timingProfiler.measure("portal.ember.apply") {
-                apply(
-                    output
+            timingProfiler.measure("portal.ember.submit") {
+                submitSimulationIfIdle(
+                    deltaTime: deltaTime
                 )
             }
         } else {
@@ -190,76 +316,78 @@ final class PortalEmberPool {
         }
     }
 
-    private func step(
+    private func submitSimulationIfIdle(
         deltaTime: Float
-    ) -> PortalEmberFrameOutput {
-        var updates: [PortalEmberFrameUpdate] = []
-
-        for index in embers.indices {
-            guard embers[index].active else {
-                continue
-            }
-
-            embers[index].age += deltaTime
-
-            let t = embers[index].age / max(
-                embers[index].life,
-                0.001
-            )
-
-            if t >= 1 {
-                embers[index].active = false
-                updates.append(
-                    PortalEmberFrameUpdate(
-                        index: index,
-                        active: false,
-                        position: embers[index].position,
-                        orientation: embers[index].orientation,
-                        size: embers[index].endSize,
-                        materialPhase: .dark,
-                        materialIndex: embers[index].darkMaterialIndex
-                    )
-                )
-                continue
-            }
-
-            embers[index].velocity.y += 0.18 * deltaTime
-            embers[index].position += embers[index].velocity * deltaTime
-
-            let spin = embers[index].spinRadiansPerSecond * deltaTime
-            embers[index].orientation =
-                simd_quatf(
-                    angle: spin,
-                    axis: SIMD3<Float>(0, 1, 0)
-                ) * embers[index].orientation
-
-            let size = mix(
-                embers[index].startSize,
-                embers[index].endSize,
-                t
-            )
-
-            let material = materialPhaseAndIndex(
-                for: embers[index],
-                normalizedAge: t
-            )
-
-            updates.append(
-                PortalEmberFrameUpdate(
-                    index: index,
-                    active: true,
-                    position: embers[index].position,
-                    orientation: embers[index].orientation,
-                    size: size,
-                    materialPhase: material.phase,
-                    materialIndex: material.index
-                )
-            )
+    ) {
+        guard !simulationInFlight,
+              completedSimulation == nil else {
+            return
         }
 
-        return PortalEmberFrameOutput(
-            updates: updates
+        let states = embers.map(\.state)
+
+        guard states.contains(where: \.active) else {
+            return
+        }
+
+        let revision = stateRevision
+        let engine = simulationEngine
+
+        simulationInFlight = true
+
+        simulationTask = Task { [weak self] in
+            let output = await engine.step(
+                states: states,
+                deltaTime: deltaTime
+            )
+
+            await MainActor.run { [weak self] in
+                self?.receiveSimulation(
+                    output,
+                    revision: revision
+                )
+            }
+        }
+    }
+
+    private func receiveSimulation(
+        _ output: PortalEmberFrameOutput,
+        revision: Int
+    ) {
+        simulationInFlight = false
+        simulationTask = nil
+
+        guard revision == stateRevision else {
+            return
+        }
+
+        completedSimulation = PortalEmberCompletedSimulation(
+            revision: revision,
+            output: output
         )
+    }
+
+    private func applyCompletedSimulationIfAvailable() {
+        guard let completedSimulation else {
+            return
+        }
+
+        self.completedSimulation = nil
+
+        guard completedSimulation.revision == stateRevision,
+              completedSimulation.output.nextStates.count == embers.count else {
+            return
+        }
+
+        for index in embers.indices {
+            embers[index].state = completedSimulation.output.nextStates[index]
+        }
+
+        apply(
+            completedSimulation.output
+        )
+
+        stateRevision += 1
     }
 
     private func apply(
@@ -302,32 +430,14 @@ final class PortalEmberPool {
     }
 
     func teardown() {
+        simulationTask?.cancel()
+        simulationTask = nil
+        simulationInFlight = false
+        completedSimulation = nil
+        stateRevision += 1
+
         root.children.removeAll()
         embers.removeAll()
-    }
-
-    private func mix(
-        _ a: Float,
-        _ b: Float,
-        _ t: Float
-    ) -> Float {
-        a + (b - a) * t
-    }
-
-    private func materialPhaseAndIndex(
-        for ember: PortalEmber,
-        normalizedAge t: Float
-    ) -> (phase: PortalEmberMaterialPhase, index: Int) {
-        switch t {
-        case ..<0.18:
-            return (.birth, ember.birthMaterialIndex)
-        case ..<0.50:
-            return (.hot, ember.hotMaterialIndex)
-        case ..<0.84:
-            return (.red, ember.redMaterialIndex)
-        default:
-            return (.dark, ember.darkMaterialIndex)
-        }
     }
 
     private func material(
