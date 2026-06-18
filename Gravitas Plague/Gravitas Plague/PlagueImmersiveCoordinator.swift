@@ -1781,6 +1781,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         jockRetargetController?.hide()
         audioController.stopPrimaryHostDadBreathing()
+        audioController.startHordeMusicSequence()
 
         await spawnNextHordeWave()
     }

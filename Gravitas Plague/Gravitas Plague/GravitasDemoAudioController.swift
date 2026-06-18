@@ -679,7 +679,7 @@ final class GravitasDemoAudioController {
         controller.stop()
     }
 
-    private func startHordeMusicSequence() {
+    func startHordeMusicSequence() {
         stopHordeMusicSequence()
 
         backgroundMusicPlayer?.stop()
@@ -803,7 +803,6 @@ final class GravitasDemoAudioController {
         }
 
         startRadioStatic()
-        startHordeMusicSequence()
 
         print(
             """
