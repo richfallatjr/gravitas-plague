@@ -32,6 +32,16 @@ enum OperationModePosterLayout {
         height: referencePixelHeight
     )
 
+    static let swiftUIWindowHeight: CGFloat = 1086
+    static let swiftUIWindowWidth: CGFloat =
+        swiftUIWindowHeight *
+        CGFloat(referencePixelWidth / referencePixelHeight)
+
+    static let swiftUIMinimumWindowHeight: CGFloat = 724
+    static let swiftUIMinimumWindowWidth: CGFloat =
+        swiftUIMinimumWindowHeight *
+        CGFloat(referencePixelWidth / referencePixelHeight)
+
     static let storySourceRect = CGRect(
         x: 44,
         y: 1167,

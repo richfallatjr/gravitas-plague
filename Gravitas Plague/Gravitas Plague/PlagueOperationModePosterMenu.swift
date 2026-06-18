@@ -303,15 +303,12 @@ struct PlagueOperationModePosterMenu: View {
                 } ?? OperationModePosterLayout.referencePixelSize.height
             )
 
-            let imageRect = PosterCoordinateMapper.aspectFitImageRect(
-                sourceSize: sourceSize,
-                containerSize: containerSize
+            let imageRect = CGRect(
+                origin: .zero,
+                size: containerSize
             )
 
             ZStack(alignment: .topLeading) {
-                Color.black.opacity(0.001)
-                    .ignoresSafeArea()
-
                 posterImage(
                     imageRect: imageRect
                 )
@@ -334,6 +331,7 @@ struct PlagueOperationModePosterMenu: View {
                       container: \(containerSize)
                       source: \(sourceSize)
                       imageRect: \(imageRect)
+                      windowAspectMatchesPoster: true
                       storyRect: \(OperationModePosterLayout.storySourceRect)
                       hordeRect: \(OperationModePosterLayout.hordeSourceRect)
                       sourceImage: \(OperationModePosterLayout.assetName).\(OperationModePosterLayout.assetExtension)

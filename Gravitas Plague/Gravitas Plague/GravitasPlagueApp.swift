@@ -13,9 +13,16 @@ struct GravitasPlagueApp: App {
     var body: some Scene {
         WindowGroup(id: PlagueWindowID.control) {
             PlagueDemoView(session: demoSession)
-                .frame(minWidth: 543, minHeight: 724)
+                .frame(
+                    width: OperationModePosterLayout.swiftUIWindowWidth,
+                    height: OperationModePosterLayout.swiftUIWindowHeight
+                )
         }
-        .defaultSize(width: 815, height: 1086)
+        .defaultSize(
+            width: OperationModePosterLayout.swiftUIWindowWidth,
+            height: OperationModePosterLayout.swiftUIWindowHeight
+        )
+        .windowResizability(.contentSize)
         .defaultLaunchBehavior(.automatic)
         .restorationBehavior(.disabled)
 
