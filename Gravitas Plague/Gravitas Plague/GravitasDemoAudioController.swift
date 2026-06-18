@@ -710,7 +710,7 @@ final class GravitasDemoAudioController {
         }
     }
 
-    private func stopHordeMusicSequence() {
+    func stopHordeMusicSequence() {
         hordeMusicSequenceTask?.cancel()
         hordeMusicSequenceTask = nil
 
@@ -755,9 +755,10 @@ final class GravitasDemoAudioController {
 
         isImmersiveAudioActive = true
 
-        stopHordeMusicSequence()
-        backgroundMusicPlayer?.currentTime = 0
-        backgroundMusicPlayer?.play()
+        if hordeMusicSequenceTask == nil {
+            backgroundMusicPlayer?.currentTime = 0
+            backgroundMusicPlayer?.play()
+        }
 
         print("[Gravitas Audio] Started global background music.")
     }
@@ -767,7 +768,6 @@ final class GravitasDemoAudioController {
         floorY: Float
     ) {
         prepareIfNeeded()
-        startImmersiveAudio()
 
         configureRadioSourceBehindOriginalUserSpawn(
             spawnPose: spawnPose,
@@ -790,7 +790,6 @@ final class GravitasDemoAudioController {
         floorY: Float
     ) {
         prepareIfNeeded()
-        startImmersiveAudio()
 
         configureRadioSourceBehindOriginalUserSpawn(
             spawnPose: spawnPose,
@@ -819,7 +818,6 @@ final class GravitasDemoAudioController {
 
         isDemoAudioActive = false
 
-        stopHordeMusicSequence()
         stopEmergencyBroadcastLoop()
         stopSpatialDemoControllers()
 

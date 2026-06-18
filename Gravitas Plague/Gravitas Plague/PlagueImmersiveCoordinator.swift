@@ -209,8 +209,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
         roomSkinningCoordinator.startHordeRoomScanOnly()
 
-        audioController.startImmersiveAudio()
-
         spatialProvider.onPlaneAnchorUpdate = { [weak self] update in
             self?.roomSkinningCoordinator.handlePlaneAnchorUpdate(update)
         }
@@ -1807,6 +1805,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeWaitingForFloorPromptShown = false
         hordeRoomScanTracker.cancel()
         instructionHUD.clear()
+        audioController.stopHordeMusicSequence()
         audioController.stopDemoAudio()
         activeIngressControllers.removeAll()
         hordePortalManager.reset()
@@ -2878,6 +2877,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         resetHordeSimulationPipeline()
         hordeBenchmarkRunning = false
         hordeRuntimePhase = .playerDead
+        audioController.stopHordeMusicSequence()
         audioController.stopDemoAudio()
 
         print(
