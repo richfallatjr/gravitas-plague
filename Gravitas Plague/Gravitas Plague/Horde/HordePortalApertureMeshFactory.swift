@@ -121,7 +121,7 @@ enum HordePortalApertureMeshFactory {
 }
 
 enum HordePortalSoftWallFeatherFactory {
-    static let enabled = true
+    static let enabled = false
 
     static func makeFeather(
         profile: HordePortalApertureProfile,

@@ -19,7 +19,9 @@ struct PortalGlyphAsset: Identifiable {
     let kind: PortalGlyphKind
     let pixelWidth: Int
     let pixelHeight: Int
-    let texture: TextureResource
+
+    /// RGB is premultiplied white by alpha. Alpha comes from source PNG luminance.
+    let alphaMaskTexture: TextureResource
 
     var aspect: Float {
         Float(pixelWidth) / Float(max(pixelHeight, 1))
@@ -211,10 +213,25 @@ final class PortalGlyphAssetLibrary {
             )
         }
 
-        let texture = try makeLuminanceMaskTexture(
-            source: source,
-            fileName: url.lastPathComponent
-        )
+        let alphaMaskTexture: TextureResource
+
+        do {
+            alphaMaskTexture = try PortalGlyphMaskTextureCache.shared.textureForMaskPNG(
+                url: url
+            )
+        } catch {
+            print(
+                """
+                [PortalGlyphs] ERROR failed to create alpha mask glyph
+                  file: \(url.lastPathComponent)
+                  action: skip_glyph
+                  fallbackSquare: false
+                  error: \(error.localizedDescription)
+                """
+            )
+
+            throw error
+        }
 
         let fileName = url.lastPathComponent
         let kind = PortalGlyphAssetClassifier.classify(
@@ -228,7 +245,7 @@ final class PortalGlyphAssetLibrary {
             kind: kind,
             pixelWidth: width,
             pixelHeight: height,
-            texture: texture
+            alphaMaskTexture: alphaMaskTexture
         )
 
         let aspect =
@@ -236,157 +253,20 @@ final class PortalGlyphAssetLibrary {
 
         print(
             """
-            [PortalGlyphs] loaded glyph
+            [PortalGlyphs] loaded mask glyph
               file: \(fileName)
               kind: \(kind.rawValue)
               pixels: \(width)x\(height)
               aspect: \(aspect)
               physicalSizeMeters: \(asset.physicalSizeMeters())
               aspectPreserved: true
-              maskRule: white_opaque_black_transparent
-              colorSource: material_constant
+              alphaSource: luminance
+              whiteOpaque: true
+              blackTransparent: true
+              directTextureDisplay: false
             """
         )
 
         return asset
-    }
-
-    private func makeLuminanceMaskTexture(
-        source: CGImageSource,
-        fileName: String
-    ) throws -> TextureResource {
-        guard let image = CGImageSourceCreateImageAtIndex(
-            source,
-            0,
-            nil
-        ) else {
-            throw NSError(
-                domain: "PortalGlyphs",
-                code: 4,
-                userInfo: [
-                    NSLocalizedDescriptionKey: "Could not decode image"
-                ]
-            )
-        }
-
-        let width = image.width
-        let height = image.height
-        let bytesPerPixel = 4
-        let bytesPerRow = width * bytesPerPixel
-        let byteCount = bytesPerRow * height
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-
-        var input = [UInt8](
-            repeating: 0,
-            count: byteCount
-        )
-
-        let inputInfo =
-            CGBitmapInfo.byteOrder32Big.rawValue |
-            CGImageAlphaInfo.premultipliedLast.rawValue
-
-        guard let inputContext = CGContext(
-            data: &input,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: bytesPerRow,
-            space: colorSpace,
-            bitmapInfo: inputInfo
-        ) else {
-            throw NSError(
-                domain: "PortalGlyphs",
-                code: 5,
-                userInfo: [
-                    NSLocalizedDescriptionKey: "Could not create input bitmap context"
-                ]
-            )
-        }
-
-        inputContext.draw(
-            image,
-            in: CGRect(
-                x: 0,
-                y: 0,
-                width: width,
-                height: height
-            )
-        )
-
-        var output = [UInt8](
-            repeating: 0,
-            count: byteCount
-        )
-
-        for offset in stride(
-            from: 0,
-            to: byteCount,
-            by: bytesPerPixel
-        ) {
-            let red = UInt32(input[offset])
-            let green = UInt32(input[offset + 1])
-            let blue = UInt32(input[offset + 2])
-            let sourceAlpha = UInt32(input[offset + 3])
-
-            let luminance =
-                (red * 299 + green * 587 + blue * 114) / 1000
-            let maskAlpha = UInt8(
-                min(
-                    UInt32(255),
-                    luminance * sourceAlpha / 255
-                )
-            )
-
-            output[offset] = 255
-            output[offset + 1] = 255
-            output[offset + 2] = 255
-            output[offset + 3] = maskAlpha
-        }
-
-        let data = Data(output)
-
-        guard let provider = CGDataProvider(
-            data: data as CFData
-        ) else {
-            throw NSError(
-                domain: "PortalGlyphs",
-                code: 6,
-                userInfo: [
-                    NSLocalizedDescriptionKey: "Could not create mask data provider"
-                ]
-            )
-        }
-
-        let outputInfo =
-            CGBitmapInfo.byteOrder32Big.rawValue |
-            CGImageAlphaInfo.last.rawValue
-
-        guard let maskImage = CGImage(
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bitsPerPixel: 32,
-            bytesPerRow: bytesPerRow,
-            space: colorSpace,
-            bitmapInfo: CGBitmapInfo(rawValue: outputInfo),
-            provider: provider,
-            decode: nil,
-            shouldInterpolate: true,
-            intent: .defaultIntent
-        ) else {
-            throw NSError(
-                domain: "PortalGlyphs",
-                code: 7,
-                userInfo: [
-                    NSLocalizedDescriptionKey: "Could not create mask image"
-                ]
-            )
-        }
-
-        return try TextureResource(
-            image: maskImage,
-            withName: "\(fileName)_luminance_mask",
-            options: .init(semantic: .color)
-        )
     }
 }

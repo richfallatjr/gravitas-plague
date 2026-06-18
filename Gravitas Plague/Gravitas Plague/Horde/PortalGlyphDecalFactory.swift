@@ -64,6 +64,9 @@ enum PortalGlyphDecalFactory {
             [PortalGlyphs] wall glyph entity created
               file: \(placement.asset.fileName)
               kind: \(placement.asset.kind.rawValue)
+              material: unlit_alpha_mask
+              blackTransparent: true
+              squareVisibleExpected: false
               sizeMeters: \(placement.size)
               aspect: \(aspect)
               rotationDegrees: \(rotationDegrees)
@@ -164,6 +167,10 @@ enum PortalGlyphDecalFactory {
             """
             [PortalGlyphs] floor glyph entity created
               file: \(placement.asset.fileName)
+              kind: \(placement.asset.kind.rawValue)
+              material: unlit_alpha_mask
+              blackTransparent: true
+              squareVisibleExpected: false
               worldY: \(worldPosition.y)
               floorY: \(floorY)
               lift: \(PortalGlyphFXSettings.floorLift)
@@ -178,33 +185,27 @@ enum PortalGlyphDecalFactory {
     private static func material(
         for asset: PortalGlyphAsset
     ) -> RealityKit.Material {
-        var material = PhysicallyBasedMaterial()
-        material.baseColor = .init(
+        var material = UnlitMaterial()
+        material.color = .init(
             tint: PortalGlyphFXSettings.baseTint,
-            texture: .init(asset.texture)
-        )
-        material.roughness = .init(floatLiteral: 0.86)
-        material.metallic = .init(floatLiteral: 0.0)
-        material.emissiveColor = .init(
-            color: PortalGlyphFXSettings.emissiveTint
-        )
-        material.emissiveIntensity = .init(
-            floatLiteral: PortalGlyphFXSettings.emissiveIntensity
+            texture: .init(asset.alphaMaskTexture)
         )
         material.blending = .transparent(
             opacity: .init(floatLiteral: 1.0)
         )
         material.faceCulling = .none
 
+        // Glyphs are alpha-mask cards. Do not add unmasked glow here
+        // or the full square plane becomes visible.
         print(
             """
-            [PortalFX] retint applied
+            [PortalFX] alpha-mask glyph material applied
               target: glyphs
               hue: \(PortalFXPalette.bloodRedHue)
               saturation: \(PortalFXPalette.bloodRedSaturation)
               brightness: \(PortalFXPalette.bloodRedBrightness)
-              materialEmissiveIntensity: \(PortalGlyphFXSettings.emissiveIntensity)
-              bloom: unchanged_installed
+              material: unlit_alpha_mask
+              emissiveSquareLeak: false
             """
         )
 

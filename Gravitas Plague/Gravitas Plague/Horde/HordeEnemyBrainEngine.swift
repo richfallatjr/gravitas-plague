@@ -123,23 +123,10 @@ private enum EnemyBrainDecisionEngine {
                 ]
             }
 
-            let nextDelay =
-                (enemy.closeRangeDelayRemaining ?? 0) -
-                TimeInterval(frame.deltaTime)
-
-            if nextDelay <= 0 {
-                return [
-                    .startAttack(
-                        enemyID: enemy.id,
-                        attackAnchorUserPosition: enemy.attackAnchorUserPosition
-                    )
-                ]
-            }
-
             return [
-                .setCloseRangeDelay(
+                .startAttack(
                     enemyID: enemy.id,
-                    delaySeconds: nextDelay
+                    attackAnchorUserPosition: enemy.attackAnchorUserPosition
                 )
             ]
 
@@ -154,12 +141,9 @@ private enum EnemyBrainDecisionEngine {
             }
 
             return [
-                .enterCloseRangeReady(
+                .startAttack(
                     enemyID: enemy.id,
-                    attackAnchorUserPosition: player.position,
-                    delaySeconds: randomAggressiveDelay(
-                        enemy: enemy
-                    )
+                    attackAnchorUserPosition: player.position
                 )
             ]
 
@@ -182,11 +166,4 @@ private enum EnemyBrainDecisionEngine {
         ) >= HordeCrowdSteeringSettings.userMoveBreakAttackMeters
     }
 
-    private static func randomAggressiveDelay(
-        enemy: EnemyBrainSnapshot
-    ) -> TimeInterval {
-        Double.random(
-            in: enemy.aggressiveDelayMinSeconds...enemy.aggressiveDelayMaxSeconds
-        )
-    }
 }

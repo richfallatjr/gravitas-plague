@@ -89,6 +89,8 @@ final class JockRetargetTestController {
         schema: "com.gravitas.jock_runtime_clip_overrides.v0",
         clips: [:]
     )
+    private var prewarmedCharacterEntityForLoad: Entity?
+    private var loadedFromHordePrewarm = false
 
     private var hasLoaded = false
     private var isVisible = false
@@ -139,6 +141,9 @@ final class JockRetargetTestController {
     private(set) var hordeSpawnIndex = 0
     private var hitsToKill = Int.random(in: 3...5)
     private var lifecycleState: InfectedLifecycleState = .alive
+    var hordeLifecycleState: HordeEnemyLifecycleState = .portalIngress
+    var didStartDeathLifecycle = false
+    var didFreezeAsCorpse = false
     private var activeDeathClipID: String?
     private var acceptedHitCount: Int = 0
     private var lastHitClipIDBySide: [JockHitSide: String] = [:]
@@ -250,6 +255,35 @@ final class JockRetargetTestController {
         }
     }
 
+    private var isHordeLifecycleManaged: Bool {
+        enemyBrainCommandDriven || rootEntity.name.hasPrefix("Horde")
+    }
+
+    private var isActiveHordeGameplayEnemy: Bool {
+        isHordeLifecycleManaged && hordeLifecycleState.isLivingGameplayEnemy
+    }
+
+    private func guardHordeWalkOrFollowAllowed(
+        reason: String
+    ) -> Bool {
+        guard isHordeLifecycleManaged,
+              !hordeLifecycleState.canPlayWalkOrFollow else {
+            return true
+        }
+
+        print(
+            """
+            [HordeLifecycle] BLOCKED walk/follow request for non-living enemy
+              enemyID: \(hordeID.uuidString)
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              lifecycle: \(hordeLifecycleState.rawValue)
+              reason: \(reason)
+            """
+        )
+
+        return false
+    }
+
     init() {
         rootEntity.name = "Gravitas_JockRetargetTestRoot"
         rootEntity.isEnabled = false
@@ -262,58 +296,145 @@ final class JockRetargetTestController {
         manifest?.clips.filter { $0.approvedForRuntime } ?? []
     }
 
+    func installHordePrewarmedAssets(
+        characterEntity: Entity
+    ) {
+        precondition(!hasLoaded)
+
+        prewarmedCharacterEntityForLoad = characterEntity
+
+        print(
+            """
+            [JockController] installed prewarmed Horde assets
+              characterID: \(characterAttributes?.characterID ?? "unconfigured")
+              entityName: \(characterEntity.name)
+              noEntityLoad: true
+              oldFreshLoadEquivalent: true
+            """
+        )
+    }
+
+    func detachHordePrewarmedCharacterEntityForReuse() -> (
+        characterID: String,
+        entity: Entity
+    )? {
+        guard loadedFromHordePrewarm,
+              let attributes = characterAttributes,
+              let entity = characterEntity else {
+            return nil
+        }
+
+        guard hordeLifecycleState == .cleanedUp else {
+            print(
+                """
+                [HordeLifecycle] ERROR attempted to discard clone before cleanup
+                  enemyID: \(hordeID.uuidString)
+                  characterID: \(attributes.characterID)
+                  lifecycle: \(hordeLifecycleState.rawValue)
+                """
+            )
+
+            return nil
+        }
+
+        resetCloneBeforePoolReturn()
+
+        entity.removeFromParent()
+        characterEntity = nil
+        modelEntity = nil
+        driver = nil
+        adapter = nil
+        skeletonWorldPoseResolver = nil
+        hasLoaded = false
+        loadedFromHordePrewarm = false
+        prewarmedCharacterEntityForLoad = nil
+
+        print(
+            """
+            [JockController] detached dirty Horde gameplay entity for discard
+              characterID: \(attributes.characterID)
+              entityName: \(entity.name)
+            """
+        )
+
+        return (
+            attributes.characterID,
+            entity
+        )
+    }
+
     func loadIfNeeded() async throws {
         guard !hasLoaded else { return }
 
         let attributes = try resolvedCharacterAttributes()
 
-        guard let url = CharacterAssetRegistry.url(
-            attributes: attributes
-        ) else {
+        let loadedEntity: Entity
+
+        if let prewarmedCharacterEntityForLoad {
+            loadedEntity = prewarmedCharacterEntityForLoad
+            self.prewarmedCharacterEntityForLoad = nil
+            loadedFromHordePrewarm = true
+
             print(
                 """
-                [CharacterAssetRegistry] ERROR missing required character asset at load
+                [HordePrewarm] using prewarmed character clone
                   archetype: \(characterArchetype.rawValue)
+                  characterID: \(attributes.characterID)
                   file: \(attributes.asset.usdz)
+                  noEntityLoad: true
+                  noDiskRead: true
+                """
+            )
+        } else {
+            guard let url = CharacterAssetRegistry.url(
+                attributes: attributes
+            ) else {
+                print(
+                    """
+                    [CharacterAssetRegistry] ERROR missing required character asset at load
+                      archetype: \(characterArchetype.rawValue)
+                      file: \(attributes.asset.usdz)
+                      source: character_attributes
+                      noFallback: true
+                    """
+                )
+                throw RetargetError.missingCharacterAsset(characterArchetype)
+            }
+
+            print(
+                """
+                [CharacterAssetRegistry] loading character asset
+                  archetype: \(characterArchetype.rawValue)
+                  characterID: \(attributes.characterID)
+                  file: \(attributes.asset.usdz)
+                  url: \(url.path)
+                  policy: \(attributes.runtime.poseApplicationPolicy.rawValue)
                   source: character_attributes
                   noFallback: true
                 """
             )
-            throw RetargetError.missingCharacterAsset(characterArchetype)
-        }
 
-        print(
-            """
-            [CharacterAssetRegistry] loading character asset
-              archetype: \(characterArchetype.rawValue)
-              characterID: \(attributes.characterID)
-              file: \(attributes.asset.usdz)
-              url: \(url.path)
-              policy: \(attributes.runtime.poseApplicationPolicy.rawValue)
-              source: character_attributes
-              noFallback: true
-            """
-        )
+            do {
+                loadedEntity = try await Entity(contentsOf: url)
+            } catch {
+                print(
+                    """
+                    [CharacterAssetRegistry] ERROR RealityKit failed to load character asset
+                      archetype: \(characterArchetype.rawValue)
+                      file: \(attributes.asset.usdz)
+                      url: \(url.path)
+                      error: \(error)
+                    """
+                )
 
-        let loadedEntity: Entity
-
-        do {
-            loadedEntity = try await Entity(contentsOf: url)
-        } catch {
-            print(
-                """
-                [CharacterAssetRegistry] ERROR RealityKit failed to load character asset
-                  archetype: \(characterArchetype.rawValue)
-                  file: \(attributes.asset.usdz)
-                  url: \(url.path)
-                  error: \(error)
-                """
-            )
-
-            throw error
+                throw error
+            }
         }
 
         loadedEntity.name = "\(attributes.characterID)_loaded_character"
+        let assetSourceDescription = loadedFromHordePrewarm
+            ? "prewarmed_clone"
+            : (CharacterAssetRegistry.url(attributes: attributes)?.path ?? "missing_url")
 
         CharacterRigValidator.validate(
             archetype: characterArchetype,
@@ -326,7 +447,7 @@ final class JockRetargetTestController {
                 [CharacterAssetRegistry] ERROR character asset has no skinned ModelEntity joints
                   archetype: \(characterArchetype.rawValue)
                   file: \(characterArchetype.usdzFileName)
-                  url: \(url.path)
+                  source: \(assetSourceDescription)
                   reason: Runtime requires a skinned ModelEntity with non-empty jointNames. Check the USDZ for a valid UsdSkel Skeleton under a SkelRoot.
                   entityTreeSample:
                 \(loadedEntity.debugTreeSummary(limit: 48))
@@ -618,6 +739,7 @@ final class JockRetargetTestController {
         )
 
         resetRootToDefaultSpawn()
+
     }
 
     func configureHordeIdentity(
@@ -636,6 +758,9 @@ final class JockRetargetTestController {
         enemyBrainCommandDriven = true
         self.hitsToKill = max(1, hitsToKill)
         lifecycleState = .alive
+        hordeLifecycleState = .portalIngress
+        didStartDeathLifecycle = false
+        didFreezeAsCorpse = false
         activeDeathClipID = nil
         acceptedHitCount = 0
         didPlayDeathAudio = false
@@ -683,6 +808,96 @@ final class JockRetargetTestController {
         )
     }
 
+    func prepareFreshHordeSpawn(
+        enemyID: UUID,
+        spawnIndex: Int,
+        hitsToKill: Int,
+        initialLifecycle: HordeEnemyLifecycleState = .portalIngress
+    ) throws {
+        hordeID = enemyID
+        hordeSpawnIndex = spawnIndex
+        self.hitsToKill = max(1, hitsToKill)
+        acceptedHitCount = 0
+
+        hordeLifecycleState = initialLifecycle
+        didStartDeathLifecycle = false
+        didFreezeAsCorpse = false
+
+        lifecycleState = .alive
+        activeDeathClipID = nil
+        didPlayDeathAudio = false
+        attackAnimationRandomizer.reset(enemyID: enemyID)
+
+        resetCombatRuntime()
+        resetHitSelectionMemory()
+        followDemoState = .inactive
+        followDelayElapsed = 0
+        latestHeadPosition = nil
+        playerAttackEnabled = true
+
+        enemyCollisionState = .active
+        enemyBodyCollisionParticipant = false
+        bodyCollisionBox?.setEnabled(false)
+        resetEnemyBodyCollisionRuntime()
+
+        setRootMotionEnabled(true)
+        setExternalMotionDriven(false)
+
+        rootEntity.removeFromParent()
+        rootEntity.transform = Transform()
+        rootEntity.isEnabled = false
+        visualOffsetEntity.transform = Transform()
+        isVisible = false
+
+        #if DEBUG
+        assertNotInDeathStateAfterFreshSpawn()
+        #endif
+
+        print(
+            """
+            [HordeLifecycle] fresh spawn reset complete
+              enemyID: \(enemyID.uuidString)
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              spawnIndex: \(spawnIndex)
+              hitsToKill: \(self.hitsToKill)
+              lifecycle: \(hordeLifecycleState.rawValue)
+              restPoseForced: false
+              oldFreshLoadEquivalent: true
+              locomotionReset: true
+              readyForSceneParenting: true
+            """
+        )
+    }
+
+    #if DEBUG
+    func assertNotInDeathStateAfterFreshSpawn() {
+        if lifecycleState != .alive ||
+            combatState == .dead ||
+            hordeLifecycleState == .dying ||
+            hordeLifecycleState == .corpse ||
+            hordeLifecycleState == .cleanedUp {
+            assertionFailure(
+                """
+                [HordeLifecycle] fresh spawn still has death lifecycle state
+                  enemyID: \(hordeID.uuidString)
+                  lifecycle: \(hordeLifecycleState.rawValue)
+                  infectedLifecycle: \(lifecycleState.rawValue)
+                """
+            )
+        }
+
+        if driver?.isFrozenAsCorpse == true ||
+            driver?.isPlaybackPausedForCorpse == true {
+            assertionFailure(
+                """
+                [HordeLifecycle] fresh spawn runtime still frozen as corpse
+                  enemyID: \(hordeID.uuidString)
+                """
+            )
+        }
+    }
+    #endif
+
     func show() {
         isVisible = true
         rootEntity.isEnabled = true
@@ -695,6 +910,7 @@ final class JockRetargetTestController {
         isPlayingPacingLoop = false
         followDemoState = .inactive
         lifecycleState = .despawned
+        hordeLifecycleState = .cleanedUp
         activeDeathClipID = nil
         resetCombatRuntime()
         resetHitSelectionMemory()
@@ -873,9 +1089,19 @@ final class JockRetargetTestController {
     func playFollowDemo(
         resetBenchmarkState: Bool = true
     ) throws {
+        guard guardHordeWalkOrFollowAllowed(
+            reason: "play_follow_demo"
+        ) else {
+            return
+        }
+
         show()
 
         lifecycleState = .alive
+        if isHordeLifecycleManaged,
+           hordeLifecycleState == .portalIngress {
+            hordeLifecycleState = .active
+        }
         activeDeathClipID = nil
         isPlayingPacingLoop = false
         followDemoState = .idleStopped
@@ -931,7 +1157,20 @@ final class JockRetargetTestController {
             await hitDetector.startIfNeeded()
         }
 
-        playFollowIdle()
+        if isActiveHordeGameplayEnemy {
+            followDemoState = .following
+            playFollowWalk()
+
+            print(
+                """
+                [HordeAnimation] follow started with walk
+                  enemyID: \(hordeID.uuidString)
+                  noIdle: true
+                """
+            )
+        } else {
+            playFollowIdle()
+        }
 
         print(
             """
@@ -971,6 +1210,7 @@ final class JockRetargetTestController {
         rootEntity.isEnabled = false
         playerAttackEnabled = false
         lifecycleState = .despawned
+        hordeLifecycleState = .cleanedUp
         activeDeathClipID = nil
         followDemoState = .inactive
         followDelayElapsed = 0
@@ -1194,7 +1434,9 @@ final class JockRetargetTestController {
     }
 
     var isDeadForHordeCollision: Bool {
-        lifecycleState != .alive || combatState == .dead
+        lifecycleState != .alive ||
+            combatState == .dead ||
+            (isHordeLifecycleManaged && !hordeLifecycleState.isLivingGameplayEnemy)
     }
 
     var isAttackOrCombatActiveForSeparation: Bool {
@@ -1232,6 +1474,7 @@ final class JockRetargetTestController {
         guard enemyBodyCollisionEnabled,
               enemyBodyCollisionParticipant,
               enemyCollisionState != .dead,
+              (!isHordeLifecycleManaged || hordeLifecycleState.isLivingGameplayEnemy),
               !isDeadForHordeCollision,
               let box = bodyCollisionBox,
               box.enabled else {
@@ -1451,14 +1694,19 @@ final class JockRetargetTestController {
         _ enabled: Bool,
         reason: String
     ) {
-        enemyBodyCollisionParticipant = enabled
+        let canParticipate =
+            enabled &&
+            (!isHordeLifecycleManaged || hordeLifecycleState.isLivingGameplayEnemy) &&
+            !isDeadForHordeCollision
 
-        if enabled && !isDeadForHordeCollision {
+        enemyBodyCollisionParticipant = canParticipate
+
+        if canParticipate {
             enemyCollisionState = .active
         }
 
         bodyCollisionBox?.setEnabled(
-            enabled && enemyBodyCollisionEnabled
+            canParticipate && enemyBodyCollisionEnabled
         )
 
         print(
@@ -1466,7 +1714,8 @@ final class JockRetargetTestController {
             [EnemyCollision] participant changed
               enemyID: \(hordeID.uuidString)
               characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
-              enabled: \(enabled)
+              enabled: \(canParticipate)
+              requestedEnabled: \(enabled)
               reason: \(reason)
             """
         )
@@ -1501,6 +1750,7 @@ final class JockRetargetTestController {
         _ command: EnemySteeringCommand
     ) {
         guard command.enemyID == hordeID,
+              hordeLifecycleState == .active,
               enemyCollisionState == .active,
               !isDeadForHordeCollision else {
             return
@@ -1512,7 +1762,8 @@ final class JockRetargetTestController {
     func applyEnemySeparationCorrection(
         _ correction: SIMD3<Float>
     ) {
-        guard enemyBodyCollisionParticipant,
+        guard hordeLifecycleState == .active,
+              enemyBodyCollisionParticipant,
               !isDeadForHordeCollision,
               bodyCollisionBox?.enabled == true else {
             return
@@ -1529,7 +1780,8 @@ final class JockRetargetTestController {
     func applyEnemyBrainCommand(
         _ command: EnemyBrainCommand
     ) {
-        guard lifecycleState == .alive,
+        guard hordeLifecycleState == .active,
+              lifecycleState == .alive,
               combatState != .dead else {
             return
         }
@@ -1541,22 +1793,32 @@ final class JockRetargetTestController {
             guard !isInNonInterruptibleCombatState else { return }
 
             attackAnchorUserPosition = anchor
-            enterCloseRangeReady(
-                delay: delay
-            )
+            if isActiveHordeGameplayEnemy {
+                startAttackIfPossible()
+            } else {
+                enterCloseRangeReady(
+                    delay: delay
+                )
+            }
 
         case .setCloseRangeDelay(let enemyID, let delay):
             guard enemyID == hordeID else { return }
 
             if case .closeRangeReady = combatState {
-                combatState = .closeRangeReady(
-                    delayRemaining: delay
-                )
+                if isActiveHordeGameplayEnemy {
+                    startAttackIfPossible()
+                } else {
+                    combatState = .closeRangeReady(
+                        delayRemaining: delay
+                    )
+                }
             }
 
         case .startAttack(let enemyID, let anchor):
             guard enemyID == hordeID else { return }
-            guard case .closeRangeReady = combatState else { return }
+            if !isActiveHordeGameplayEnemy {
+                guard case .closeRangeReady = combatState else { return }
+            }
 
             if let anchor {
                 attackAnchorUserPosition = anchor
@@ -1912,6 +2174,143 @@ final class JockRetargetTestController {
         )
     }
 
+    func disableHordeSystemsForDeath() {
+        hordeLifecycleState = .dying
+
+        enemyBodyCollisionParticipant = false
+        bodyCollisionBox?.setEnabled(false)
+        enemyCollisionState = .dead
+
+        crowdSteering = HordeCrowdSteeringState()
+        latestCrowdSnapshots.removeAll()
+
+        activeAttack = nil
+        attackAnchorUserPosition = nil
+        playerAttackEnabled = false
+        followDemoState = .inactive
+        followDelayElapsed = 0
+        isPlayingPacingLoop = false
+
+        setRootMotionEnabled(false)
+        setExternalMotionDriven(false)
+
+        driver?.locomotionDeltaHandler = nil
+        hitDetector.stop()
+
+        print(
+            """
+            [HordeLifecycle] death systems disabled
+              enemyID: \(hordeID.uuidString)
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              collision: false
+              attack: false
+              follow: false
+            """
+        )
+    }
+
+    func freezeAsHordeCorpse() {
+        guard hordeLifecycleState == .dying else {
+            return
+        }
+
+        guard !didFreezeAsCorpse else {
+            return
+        }
+
+        didFreezeAsCorpse = true
+        hordeLifecycleState = .corpse
+
+        enemyBodyCollisionParticipant = false
+        bodyCollisionBox?.setEnabled(false)
+        enemyCollisionState = .dead
+
+        stopAllNonDeathRuntimePlaybackButKeepCurrentPose()
+
+        print(
+            """
+            [HordeLifecycle] enemy frozen as corpse
+              enemyID: \(hordeID.uuidString)
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              lifecycle: corpse
+              noFurtherAnimationUpdates: true
+            """
+        )
+    }
+
+    func stopAllNonDeathRuntimePlaybackButKeepCurrentPose() {
+        driver?.freezeCurrentPoseForCorpse()
+        setRootMotionEnabled(false)
+        setExternalMotionDriven(false)
+        driver?.locomotionDeltaHandler = nil
+        hitDetector.stop()
+    }
+
+    func forceCleanupFromHordeScene(
+        reason: String
+    ) {
+        hordeLifecycleState = .cleanedUp
+
+        enemyBodyCollisionParticipant = false
+        bodyCollisionBox?.setEnabled(false)
+        enemyCollisionState = .dead
+
+        playerAttackEnabled = false
+        followDemoState = .inactive
+        activeAttack = nil
+        isPlayingPacingLoop = false
+
+        driver?.locomotionDeltaHandler = nil
+        driver?.stopAllPlaybackForCleanup()
+        hitDetector.stop()
+
+        rootEntity.removeFromParent()
+        rootEntity.isEnabled = false
+        isVisible = false
+
+        print(
+            """
+            [HordeLifecycle] force cleanup from scene
+              enemyID: \(hordeID.uuidString)
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              reason: \(reason)
+              removedFromScene: true
+              lifecycle: cleanedUp
+            """
+        )
+    }
+
+    func resetCloneBeforePoolReturn() {
+        didStartDeathLifecycle = false
+        didFreezeAsCorpse = false
+
+        hordeLifecycleState = .cleanedUp
+        lifecycleState = .despawned
+        activeDeathClipID = nil
+
+        resetCombatRuntime()
+        resetHitSelectionMemory()
+
+        enemyBodyCollisionParticipant = false
+        bodyCollisionBox?.setEnabled(false)
+        enemyCollisionState = .dead
+        crowdSteering = HordeCrowdSteeringState()
+        latestCrowdSnapshots.removeAll()
+
+        rootEntity.transform = Transform()
+        rootEntity.isEnabled = false
+        isVisible = false
+
+        print(
+            """
+            [HordeLifecycle] dirty clone detached for discard
+              characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+              basePoseRestored: false
+              transformReset: true
+            """
+        )
+    }
+
     private func resolvedCharacterAttributes() throws -> CharacterAttributes {
         if let characterAttributes {
             return characterAttributes
@@ -2193,6 +2592,13 @@ final class JockRetargetTestController {
     }
 
     func finishHordePortalIngressAndStartFollow() throws {
+        guard guardHordeWalkOrFollowAllowed(
+            reason: "portal_exit_follow_start"
+        ) else {
+            return
+        }
+
+        hordeLifecycleState = .active
         setExternalMotionDriven(false)
         setRootMotionEnabled(true)
         playerAttackEnabled = true
@@ -2220,6 +2626,38 @@ final class JockRetargetTestController {
         timingProfiler: TimingProfiler? = nil
     ) {
         guard isVisible else { return }
+
+        if isHordeLifecycleManaged {
+            switch hordeLifecycleState {
+            case .corpse, .cleanedUp:
+                print(
+                    """
+                    [HordeLifecycle] BLOCKED update for corpse/cleaned enemy
+                      enemyID: \(hordeID.uuidString)
+                      characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+                      lifecycle: \(hordeLifecycleState.rawValue)
+                    """
+                )
+                return
+
+            case .dying:
+                activeTimingProfiler = timingProfiler
+                defer {
+                    activeTimingProfiler = nil
+                }
+
+                latestFrameDeltaTime = deltaTime
+                driver?.update(
+                    deltaTime: TimeInterval(deltaTime),
+                    timingProfiler: timingProfiler
+                )
+                updateCharacterAudioEmitterWorldPosition()
+                return
+
+            case .portalIngress, .active:
+                break
+            }
+        }
 
         activeTimingProfiler = timingProfiler
         defer {
@@ -2414,9 +2852,14 @@ final class JockRetargetTestController {
             )
 
             if distance <= attackConfiguration.attackProximityMeters {
-                let delay = attackConfiguration.randomAggressiveDelay()
-                playFollowIdle(allowDuringCombat: true)
-                combatState = .closeRangeReady(delayRemaining: delay)
+                if isActiveHordeGameplayEnemy {
+                    combatState = .normal
+                    startAttackIfPossible()
+                } else {
+                    let delay = attackConfiguration.randomAggressiveDelay()
+                    playFollowIdle(allowDuringCombat: true)
+                    combatState = .closeRangeReady(delayRemaining: delay)
+                }
 
                 print("[Gravitas Attack] Escalating after hit reaction at close range.")
                 return
@@ -2429,9 +2872,14 @@ final class JockRetargetTestController {
             self?.consumeFollowLocomotionDelta(delta) ?? true
         }
 
-        followDemoState = .idleStopped
+        followDemoState = isActiveHordeGameplayEnemy ? .following : .idleStopped
         followDelayElapsed = 0
-        playFollowIdle()
+
+        if isActiveHordeGameplayEnemy {
+            playFollowWalk()
+        } else {
+            playFollowIdle()
+        }
     }
 
     private func handleClipCompleted(_ completedClip: JockAnimClip) {
@@ -2800,6 +3248,7 @@ final class JockRetargetTestController {
         onEnemyDeathDisableCollision()
 
         lifecycleState = .dying
+        hordeLifecycleState = .dying
         activeDeathClipID = selectedClipID
         combatState = .dead
         activeAttack = nil
@@ -2873,6 +3322,7 @@ final class JockRetargetTestController {
         playerAttackEnabled = false
         driver?.locomotionDeltaHandler = nil
         hitDetector.stop()
+        freezeAsHordeCorpse()
 
         onBenchmarkEnemyDeathAnimationFinished?(
             hordeID,
@@ -3240,6 +3690,11 @@ final class JockRetargetTestController {
                 return
             }
 
+            if isActiveHordeGameplayEnemy {
+                startAttackIfPossible()
+                return
+            }
+
             let nextDelay = delayRemaining - deltaTime
 
             if nextDelay <= 0 {
@@ -3255,7 +3710,11 @@ final class JockRetargetTestController {
 
             if distance <= attackConfiguration.attackProximityMeters {
                 attackAnchorUserPosition = currentHeadPosition
-                enterCloseRangeReady()
+                if isActiveHordeGameplayEnemy {
+                    startAttackIfPossible()
+                } else {
+                    enterCloseRangeReady()
+                }
             }
         }
     }
@@ -3284,6 +3743,11 @@ final class JockRetargetTestController {
         }
 
         crowdSteering = HordeCrowdSteeringState()
+
+        if isActiveHordeGameplayEnemy {
+            startAttackIfPossible()
+            return
+        }
 
         driver?.locomotionDeltaHandler = nil
 
@@ -3323,18 +3787,32 @@ final class JockRetargetTestController {
         activeAttack = nil
         combatState = .normal
         attackAnchorUserPosition = nil
-        followDemoState = .waitingToFollow
         followDelayElapsed = 0
 
         driver?.locomotionDeltaHandler = { [weak self] delta in
             self?.consumeFollowLocomotionDelta(delta) ?? true
         }
 
+        if isActiveHordeGameplayEnemy {
+            followDemoState = .following
+            playFollowWalk()
+            print("[Gravitas Attack] Player moved out of close range. Horde returning to walk, no idle.")
+            return
+        }
+
+        followDemoState = .waitingToFollow
+
         print("[Gravitas Attack] Player moved out of close range. Returning to follow.")
     }
 
     private func startAttackIfPossible() {
         guard followDemoState != .inactive else { return }
+        guard lifecycleState == .alive,
+              !isInNonInterruptibleCombatState else { return }
+
+        if case .attacking = combatState {
+            return
+        }
 
         if let latestHeadPosition,
            attackAnchorUserPosition == nil {
@@ -3410,6 +3888,8 @@ final class JockRetargetTestController {
               characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
               multipleAttackersAllowed: true
               collisionDoesNotOwnAttack: true
+              willChainUntilUserMoves: true
+              noIdle: true
             """
         )
     }
@@ -3440,17 +3920,32 @@ final class JockRetargetTestController {
         )
 
         if distance <= attackConfiguration.resumeFollowDistanceMeters {
-            let delay = attackConfiguration.randomAggressiveDelay()
-            playFollowIdle(allowDuringCombat: true)
-            combatState = .closeRangeReady(delayRemaining: delay)
+            if isActiveHordeGameplayEnemy {
+                combatState = .normal
+                startAttackIfPossible()
 
-            print(
-                """
-                [Gravitas Attack] Player still in attack band. Returning to CloseRangeReady.
-                  distance: \(String(format: "%.3f", distance))
-                  resumeFollowDistance: \(attackConfiguration.resumeFollowDistanceMeters)
-                """
-            )
+                print(
+                    """
+                    [EnemyAttack] chained attack
+                      enemyID: \(hordeID.uuidString)
+                      characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+                      userMoved: false
+                      noIdle: true
+                    """
+                )
+            } else {
+                let delay = attackConfiguration.randomAggressiveDelay()
+                playFollowIdle(allowDuringCombat: true)
+                combatState = .closeRangeReady(delayRemaining: delay)
+
+                print(
+                    """
+                    [Gravitas Attack] Player still in attack band. Returning to CloseRangeReady.
+                      distance: \(String(format: "%.3f", distance))
+                      resumeFollowDistance: \(attackConfiguration.resumeFollowDistanceMeters)
+                    """
+                )
+            }
         } else {
             exitCloseRangeToFollow()
         }
@@ -3752,6 +4247,22 @@ final class JockRetargetTestController {
             deltaTime: Float(deltaTime)
         )
 
+        if isActiveHordeGameplayEnemy {
+            if horizontalDistance <= attackConfiguration.attackProximityMeters {
+                attackAnchorUserPosition = currentHeadPosition
+                startAttackIfPossible()
+                return
+            }
+
+            if followDemoState != .following {
+                followDemoState = .following
+                followDelayElapsed = 0
+                playFollowWalk()
+            }
+
+            return
+        }
+
         switch followDemoState {
         case .inactive:
             return
@@ -3866,6 +4377,25 @@ final class JockRetargetTestController {
     private func playFollowIdle(
         allowDuringCombat: Bool = false
     ) {
+        if isActiveHordeGameplayEnemy {
+            print(
+                """
+                [HordeAnimation] skipped idle request
+                  enemyID: \(hordeID.uuidString)
+                  characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+                  noIdle: true
+                  allowDuringCombat: \(allowDuringCombat)
+                """
+            )
+            return
+        }
+
+        guard guardHordeWalkOrFollowAllowed(
+            reason: "play_follow_idle"
+        ) else {
+            return
+        }
+
         guard !isActionLocked || allowDuringCombat else {
             print("[Gravitas Follow] Ignored idle request because action is locked.")
             return
@@ -3902,6 +4432,12 @@ final class JockRetargetTestController {
     }
 
     private func playFollowWalk() {
+        guard guardHordeWalkOrFollowAllowed(
+            reason: "play_follow_walk"
+        ) else {
+            return
+        }
+
         guard !isActionLocked else {
             print("[Gravitas Follow] Ignored walk request because action is locked.")
             return
@@ -3939,7 +4475,7 @@ final class JockRetargetTestController {
     }
 
     private func followVisualRuntimeOverride() -> JockRuntimeClipOverride {
-        JockRuntimeClipOverride(
+        return JockRuntimeClipOverride(
             entryHeadingDegrees: -followConfiguration.visualHeadingCorrectionDegrees,
             exitHeadingDegrees: -followConfiguration.visualHeadingCorrectionDegrees,
             commitRootYawOnCompletion: false
@@ -4019,13 +4555,22 @@ final class JockRetargetTestController {
             headPosition: headPosition
         )
 
+        let targetStopDistance = isActiveHordeGameplayEnemy
+            ? attackConfiguration.attackProximityMeters
+            : followConfiguration.stopDistanceMeters
+
         let remainingSafeTravel =
-            distance - followConfiguration.stopDistanceMeters
+            distance - targetStopDistance
 
         guard remainingSafeTravel > 0 else {
-            followDemoState = .idleStopped
-            followDelayElapsed = 0
-            playFollowIdle()
+            if isActiveHordeGameplayEnemy {
+                attackAnchorUserPosition = headPosition
+                startAttackIfPossible()
+            } else {
+                followDemoState = .idleStopped
+                followDelayElapsed = 0
+                playFollowIdle()
+            }
             return true
         }
 
@@ -4073,9 +4618,14 @@ final class JockRetargetTestController {
         )
 
         if clampedStep >= remainingSafeTravel - 0.001 {
-            followDemoState = .idleStopped
-            followDelayElapsed = 0
-            playFollowIdle()
+            if isActiveHordeGameplayEnemy {
+                attackAnchorUserPosition = headPosition
+                startAttackIfPossible()
+            } else {
+                followDemoState = .idleStopped
+                followDelayElapsed = 0
+                playFollowIdle()
+            }
         }
 
         return true

@@ -352,6 +352,15 @@ final class HordePortalManager {
                 )
 
                 root.addChild(feather)
+            } else {
+                print(
+                    """
+                    [HordePortal] decorative border disabled
+                      reason: tube_is_only_portal_border
+                      semiTransparentBorder: false
+                      softWallFeather: false
+                    """
+                )
             }
         } catch {
             print(
@@ -516,6 +525,10 @@ final class HordePortalManager {
         logStrictHordeFloorLockProof(
             placement: placement,
             wall: wall
+        )
+        auditNoUnrequestedPortalBorder(
+            portalRoot: root,
+            portalID: portalID
         )
 
         let worldCenter = SIMD3<Float>(
@@ -1141,6 +1154,46 @@ final class HordePortalManager {
                   action: should_not_happen_for_horde
                 """
             )
+        }
+    }
+
+    private func auditNoUnrequestedPortalBorder(
+        portalRoot: Entity,
+        portalID: UUID
+    ) {
+        let forbiddenNameFragments = [
+            "frame",
+            "border",
+            "feather",
+            "rim",
+            "rift",
+            "outline"
+        ]
+
+        portalRoot.visitRecursively { entity in
+            let lower = entity.name.lowercased()
+
+            let isAllowed =
+                lower.contains("tube") ||
+                lower.contains("glyph") ||
+                lower.contains("portalplane") ||
+                lower.contains("portalworld") ||
+                lower.contains("hellscape") ||
+                lower.contains("ground") ||
+                lower.contains("ember") ||
+                lower.contains("audio")
+
+            if forbiddenNameFragments.contains(where: { lower.contains($0) }),
+               !isAllowed {
+                print(
+                    """
+                    [HordePortal] WARNING possible unrequested border entity
+                      portalID: \(portalID)
+                      entity: \(entity.name)
+                      actionRequired: remove_if_visible_border
+                    """
+                )
+            }
         }
     }
 

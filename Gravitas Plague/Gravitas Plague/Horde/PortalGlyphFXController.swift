@@ -135,7 +135,7 @@ final class PortalGlyphFXController {
               seed: \(seed)
               pixelsPerFoot: \(PortalGlyphFXSettings.pixelsPerFoot)
               noRuntimeScale: true
-              emissiveIntensity: \(PortalGlyphFXSettings.emissiveIntensity)
+              material: unlit_alpha_mask
               grid: false
               shelfRows: false
             """

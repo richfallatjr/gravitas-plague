@@ -468,6 +468,8 @@ final class JockRuntimeDriver {
     private(set) var currentPlaybackTime: TimeInterval = 0
     private(set) var poseApplicationPolicy: JockPoseApplicationPolicy
     private(set) var characterArchetype: PlagueCharacterArchetype
+    private(set) var isPlaybackPausedForCorpse = false
+    private(set) var isFrozenAsCorpse = false
 
     var matchedJointCount: Int {
         skeletonMappingRecords.filter { record in
@@ -688,7 +690,85 @@ final class JockRuntimeDriver {
         activeRuntimeOverride = .identity
         activeLocomotionPolicy = .useClipLocomotion
         activeSubAnimations.removeAll()
+        isPlaybackPausedForCorpse = false
+        isFrozenAsCorpse = false
         resetFrozenLocomotionState()
+    }
+
+    func freezeCurrentPoseForCorpse() {
+        state = .stopped
+        activeClip = nil
+        currentActiveClipID = nil
+        currentPlaybackTime = playbackTime
+        currentJointTransforms = modelEntity?.jointTransforms ?? currentJointTransforms
+        activeRuntimeOverride = .identity
+        activeLocomotionPolicy = .useClipLocomotion
+        activeSubAnimations.removeAll()
+        isPlaybackPausedForCorpse = true
+        isFrozenAsCorpse = true
+        resetFrozenLocomotionState()
+
+        print("[JockRuntime] frozen corpse pose")
+    }
+
+    func stopAllPlaybackForCleanup() {
+        stop()
+    }
+
+    func resetToBasePoseForReuse() {
+        resetForFreshHordeSpawn()
+    }
+
+    func resetForFreshHordeSpawn() {
+        if let modelEntity {
+            setJointTransforms(baseJointTransforms, on: modelEntity)
+        } else {
+            currentJointTransforms = baseJointTransforms
+        }
+
+        visualOffsetEntity?.orientation = simd_quatf(
+            angle: 0,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
+
+        state = .stopped
+        activeClip = nil
+        currentActiveClipID = nil
+        playbackTime = 0
+        currentPlaybackTime = 0
+        loopCurrentClip = false
+
+        transitionElapsed = 0
+        transitionDuration = 5.0 / 24.0
+        transitionFromPose.removeAll()
+        transitionToPose.removeAll()
+        transitionFromVisualOffset = simd_quatf(
+            angle: 0,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
+        transitionToVisualOffset = simd_quatf(
+            angle: 0,
+            axis: SIMD3<Float>(0, 1, 0)
+        )
+
+        activeRuntimeOverride = .identity
+        activeLocomotionPolicy = .useClipLocomotion
+        activeSubAnimations.removeAll()
+        isPlaybackPausedForCorpse = false
+        isFrozenAsCorpse = false
+        resetFrozenLocomotionState()
+
+        print(
+            """
+            [JockRuntime] reset fresh spawn state
+              activeClip: nil
+              transition: nil
+              subAnimations: 0
+              rootMotionZero: true
+              corpseFlags: false
+              noBakedRotation: true
+            """
+        )
     }
 
     func resetPoseWithTransition(

@@ -15,6 +15,14 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         let reason: String
     }
 
+    private struct HordeCorpseRecord {
+        let enemyID: UUID
+        let characterID: String
+        let rootEntity: Entity
+        let controller: JockRetargetTestController
+        let deathTime: TimeInterval
+    }
+
     private enum HordeWaveSpawnState: String {
         case idle
         case spawning
@@ -46,6 +54,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let timingProfiler = TimingProfiler(label: "main_actor_shell")
     private let hordeSimulationEngine = HordeSimulationEngine()
     private let hordeEnemyBrainEngine = HordeEnemyBrainEngine()
+    private let hordePrewarmCoordinator = HordePrewarmCoordinator()
 
     private var architectureFrameIndex = 0
     private var latestFrameClockSnapshot: FrameClockSnapshot?
@@ -104,6 +113,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
     private var jockRetargetController: JockRetargetTestController?
     private var hordeEnemyControllersByID: [UUID: JockRetargetTestController] = [:]
+    private var hordeDyingEnemyControllersByID: [UUID: JockRetargetTestController] = [:]
+    private var hordeCorpseRecordsByID: [UUID: HordeCorpseRecord] = [:]
     private var activeHordeEnemyIDs = Set<UUID>()
     private var dyingHordeEnemyIDs = Set<UUID>()
     private var corpseHordeEnemyIDs = Set<UUID>()
@@ -117,6 +128,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var hordeWaveSpawnState: HordeWaveSpawnState = .idle
     private var hordeSpawnFailures: [HordeSpawnFailureRecord] = []
     private var isSpawningHordeWave = false
+    private var hordePrewarmReady = false
+    private var hordePrewarmTask: Task<Bool, Never>?
     private var hordeScoresSubmittedForCurrentRun = false
     private var hordeWaitingForRoomScan = false
     private var hordeWaitingForFloorPromptShown = false
@@ -497,6 +510,12 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
     }
 
+    private var liveHordeEnemyControllers: [JockRetargetTestController] {
+        hordeEnemyControllersByID.values.filter {
+            $0.hordeLifecycleState.isLivingGameplayEnemy
+        }
+    }
+
     private func makeFrameClockSnapshot(
         date: Date,
         deltaTime: Float
@@ -540,7 +559,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private func captureEnemyBodySnapshots(
         headsetPosition: SIMD3<Float>
     ) -> [EnemyBodySnapshot] {
-        hordeEnemyControllersByID.values.compactMap {
+        liveHordeEnemyControllers.compactMap {
             $0.makeEnemyBodySnapshot(
                 headsetPosition: headsetPosition
             )
@@ -550,7 +569,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private func captureEnemyBrainSnapshots(
         headsetPosition: SIMD3<Float>
     ) -> [EnemyBrainSnapshot] {
-        hordeEnemyControllersByID.values.map {
+        liveHordeEnemyControllers.map {
             $0.makeEnemyBrainSnapshot(
                 headsetPosition: headsetPosition
             )
@@ -571,7 +590,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private func updateTimingProfilerCounters() {
         timingProfiler.setCounter(
             "enemy.count",
-            hordeEnemyControllersByID.count
+            liveHordeEnemyControllers.count
         )
         timingProfiler.setCounter(
             "portal.count",
@@ -600,7 +619,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
         timingProfiler.setCounter(
             "joint.count",
-            hordeEnemyControllersByID.values.reduce(0) {
+            liveHordeEnemyControllers.reduce(0) {
                 $0 + $1.runtimeJointCountForProfiling
             }
         )
@@ -643,11 +662,33 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     continue
                 }
 
+                guard enemy.hordeLifecycleState.isLivingGameplayEnemy else {
+                    print(
+                        """
+                        [HordeLifecycle] skipped steering command for non-living enemy
+                          enemyID: \(command.enemyID)
+                          lifecycle: \(enemy.hordeLifecycleState.rawValue)
+                        """
+                    )
+                    continue
+                }
+
                 enemy.applyCrowdSteeringCommand(command)
             }
 
             for command in commands.separation {
                 guard let enemy = hordeEnemyControllersByID[command.enemyID] else {
+                    continue
+                }
+
+                guard enemy.hordeLifecycleState == .active else {
+                    print(
+                        """
+                        [HordeLifecycle] skipped separation command for non-active enemy
+                          enemyID: \(command.enemyID)
+                          lifecycle: \(enemy.hordeLifecycleState.rawValue)
+                        """
+                    )
                     continue
                 }
 
@@ -680,6 +721,17 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 }
 
                 guard let enemy = hordeEnemyControllersByID[enemyID] else {
+                    continue
+                }
+
+                guard enemy.hordeLifecycleState == .active else {
+                    print(
+                        """
+                        [HordeLifecycle] skipped brain command for non-active enemy
+                          enemyID: \(enemyID)
+                          lifecycle: \(enemy.hordeLifecycleState.rawValue)
+                        """
+                    )
                     continue
                 }
 
@@ -873,6 +925,17 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             }
 
             for controller in hordeEnemyControllersByID.values {
+                guard controller.hordeLifecycleState.isLivingGameplayEnemy else {
+                    print(
+                        """
+                        [HordeLifecycle] ERROR non-living enemy found in active update map
+                          enemyID: \(controller.hordeBenchmarkID.uuidString)
+                          lifecycle: \(controller.hordeLifecycleState.rawValue)
+                        """
+                    )
+                    continue
+                }
+
                 timingProfiler.measure("enemy.update") {
                     controller.update(
                         deltaTime: deltaTime,
@@ -881,6 +944,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     )
                 }
             }
+
+            updateDyingHordeEnemies(
+                deltaTime: deltaTime,
+                currentHeadPosition: currentHeadPosition
+            )
 
             if let pose = currentPose {
                 latestEnemyBodySnapshots = timingProfiler.measure("snapshot.enemy_body_value") {
@@ -908,9 +976,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             #if DEBUG
             if let sceneRoot {
                 for child in sceneRoot.children where child.name.hasPrefix("Horde_") {
-                    let isRegistered = hordeEnemyControllersByID.values.contains { controller in
-                        controller.rootEntity === child
-                    }
+                    let isRegistered = isKnownHordeRootEntity(child)
 
                     if child.isEnabled, !isRegistered {
                         print(
@@ -1070,6 +1136,13 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeSpawnFailures.removeAll()
         isSpawningHordeWave = false
         nextGlobalEnemySpawnIndex = 0
+        hordePrewarmTask?.cancel()
+        hordePrewarmTask = nil
+        hordePrewarmReady = false
+        hordePrewarmCoordinator.releaseAll()
+        scheduleInitialHordePrewarm(
+            reason: "horde_room_scan_started"
+        )
         hordeRoomScanTracker.begin()
         roomSkinningCoordinator.startHordeRoomScanOnly()
 
@@ -1282,6 +1355,166 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
     }
 
+    private func scheduleInitialHordePrewarm(
+        reason: String
+    ) {
+        guard !hordePrewarmReady,
+              hordePrewarmTask == nil else {
+            return
+        }
+
+        hordePrewarmTask = Task { @MainActor [weak self] in
+            guard let self else {
+                return false
+            }
+
+            return await self.performInitialHordePrewarm(
+                reason: reason
+            )
+        }
+    }
+
+    private func ensureInitialHordePrewarmReady(
+        reason: String
+    ) async -> Bool {
+        if hordePrewarmReady {
+            return true
+        }
+
+        if hordePrewarmTask == nil {
+            scheduleInitialHordePrewarm(
+                reason: reason
+            )
+        }
+
+        guard let task = hordePrewarmTask else {
+            return false
+        }
+
+        let result = await task.value
+        hordePrewarmTask = nil
+
+        return result
+    }
+
+    private func performInitialHordePrewarm(
+        reason: String
+    ) async -> Bool {
+        if Task.isCancelled {
+            return false
+        }
+
+        do {
+            let enabledCharacters = try enabledHordeCharacterAttributes()
+
+            hordePrewarmCoordinator.installCharacterAttributes(
+                enabledCharacters
+            )
+
+            let plan = HordePrewarmPlanner.planForInitialHordeStart(
+                enabledCharacters: enabledCharacters,
+                preloadAllEnabledCharacters: true
+            )
+
+            try await hordePrewarmCoordinator.prewarm(
+                plan: plan
+            )
+
+            hordePrewarmReady = true
+
+            print(
+                """
+                [HordePrewarm] initial Horde prewarm complete
+                  reason: \(reason)
+                  preloadedAllEnabledCharacters: true
+                  hordeCanSpawn: true
+                """
+            )
+
+            return true
+        } catch {
+            hordePrewarmReady = false
+
+            print(
+                """
+                [HordePrewarm] ERROR initial Horde prewarm failed
+                  reason: \(reason)
+                  error: \(error.localizedDescription)
+                  fallback: false
+                  hordeCanSpawn: false
+                """
+            )
+
+            return false
+        }
+    }
+
+    private func enabledHordeCharacterAttributes() throws -> [CharacterAttributes] {
+        if !CharacterAttributeStore.shared.isLoaded {
+            try CharacterAttributeStore.shared.loadStrict()
+        }
+
+        return CharacterAttributeStore.shared.attributesByID.values
+            .filter {
+                $0.horde.enabled
+            }
+            .sorted {
+                $0.characterID < $1.characterID
+            }
+    }
+
+    private func attributesByArchetypeForHordeLineup(
+        _ lineup: [PlagueCharacterArchetype]
+    ) throws -> [PlagueCharacterArchetype: CharacterAttributes] {
+        var out: [PlagueCharacterArchetype: CharacterAttributes] = [:]
+
+        for archetype in Set(lineup) {
+            out[archetype] = try CharacterAttributeStore.shared.attributes(
+                for: archetype
+            )
+        }
+
+        return out
+    }
+
+    private func ensureWavePrewarmed(
+        wave: Int,
+        lineup: [PlagueCharacterArchetype]
+    ) async -> Bool {
+        do {
+            let attributesByArchetype = try attributesByArchetypeForHordeLineup(
+                lineup
+            )
+
+            hordePrewarmCoordinator.installCharacterAttributes(
+                Array(attributesByArchetype.values)
+            )
+
+            let plan = HordePrewarmPlanner.planForWave(
+                waveIndex: wave,
+                lineup: lineup,
+                attributesByArchetype: attributesByArchetype
+            )
+
+            try await hordePrewarmCoordinator.prewarm(
+                plan: plan
+            )
+
+            return true
+        } catch {
+            print(
+                """
+                [HordePrewarm] ERROR wave prewarm failed
+                  wave: \(wave)
+                  error: \(error.localizedDescription)
+                  fallback: false
+                """
+            )
+
+            return false
+        }
+    }
+
     private func showInstructionHUD(
         _ text: String
     ) {
@@ -1348,7 +1581,40 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
     }
 
+    private func updateDyingHordeEnemies(
+        deltaTime: Float,
+        currentHeadPosition: SIMD3<Float>?
+    ) {
+        let dyingControllers = Array(hordeDyingEnemyControllersByID.values)
+
+        for controller in dyingControllers {
+            guard hordeDyingEnemyControllersByID[controller.hordeBenchmarkID] != nil else {
+                continue
+            }
+
+            controller.update(
+                deltaTime: deltaTime,
+                currentHeadPosition: currentHeadPosition,
+                timingProfiler: timingProfiler
+            )
+        }
+    }
+
     #if DEBUG
+    private func isKnownHordeRootEntity(
+        _ entity: Entity
+    ) -> Bool {
+        hordeEnemyControllersByID.values.contains { controller in
+            controller.rootEntity === entity
+        } ||
+            hordeDyingEnemyControllersByID.values.contains { controller in
+                controller.rootEntity === entity
+            } ||
+            hordeCorpseRecordsByID.values.contains { record in
+                record.rootEntity === entity
+            }
+    }
+
     private func assertNoVisibleEnemyBeforeFirstPortal() {
         guard !hordePortalSystemReady else {
             return
@@ -1529,6 +1795,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeRoomScanCompletionTask?.cancel()
         hordeRoomScanCompletionTask = nil
         resetHordeSimulationPipeline()
+        hordePrewarmTask?.cancel()
+        hordePrewarmTask = nil
+        hordePrewarmReady = false
+        hordePrewarmCoordinator.releaseAll()
 
         hordeBenchmarkRunning = false
         hordeRuntimePhase = .idle
@@ -1608,6 +1878,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         guard sceneRoot != nil else { return }
 
+        cleanupHordeCorpsesForWaveTransition(
+            reason: "before_spawn_next_wave"
+        )
+        assertNoCorpseInActiveEnemyMap()
+
         guard activeHordeEnemyIDs.isEmpty,
               dyingHordeEnemyIDs.isEmpty else {
             print(
@@ -1640,6 +1915,25 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         let nextWave = hordeCurrentWave + 1
         let lineup = HordeCharacterWaveLineup.lineup(wave: nextWave)
         let spawnCount = lineup.count
+
+        guard await ensureWavePrewarmed(
+            wave: nextWave,
+            lineup: lineup
+        ) else {
+            hordeWaveSpawnState = .failed
+            hordeRuntimePhase = .portalsReady
+
+            print(
+                """
+                [HordeSpawn] blocked because wave prewarm failed
+                  wave: \(nextWave)
+                  fallback: false
+                """
+            )
+
+            return
+        }
+
         let positions = hordeSpawnPositions(
             count: spawnCount,
             spawnPose: spawnPose,
@@ -1843,6 +2137,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 guard hordeBenchmarkRunning,
                       !isPlayerDeathSequenceActive else {
                     controller.hide()
+                    recycleHordePrewarmedAssets(
+                        from: controller
+                    )
                     print(
                         """
                         [Horde] spawn cancelled before reveal
@@ -2032,16 +2329,14 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             for: archetype
         )
 
-        guard CharacterAssetRegistry.url(attributes: attributes) != nil else {
-            throw NSError(
-                domain: "HordeSpawn",
-                code: 404,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Missing character asset \(attributes.asset.usdz)"
-                ]
-            )
-        }
+        let prewarmCheckoutStart = TimingProfiler.now()
+        let prewarmedAssets = try await hordePrewarmCoordinator.checkoutPreparedAssetsForSpawn(
+            characterID: attributes.characterID
+        )
+        timingProfiler.record(
+            "HordeSpawn.checkoutPrewarmedCharacter",
+            startTime: prewarmCheckoutStart
+        )
 
         let controller = JockRetargetTestController()
 
@@ -2061,7 +2356,42 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             )
         }
 
-        try await controller.loadIfNeeded()
+        controller.installHordePrewarmedAssets(
+            characterEntity: prewarmedAssets.characterEntity
+        )
+
+        do {
+            try await controller.loadIfNeeded()
+        } catch {
+            hordePrewarmCoordinator.returnCharacterEntityAfterCleanup(
+                prewarmedAssets.characterEntity,
+                characterID: attributes.characterID,
+                reason: "controller_load_failed"
+            )
+
+            throw error
+        }
+
+        do {
+            try controller.prepareFreshHordeSpawn(
+                enemyID: id,
+                spawnIndex: spawnIndex,
+                hitsToKill: hitsToKill,
+                initialLifecycle: .portalIngress
+            )
+        } catch {
+            hordePrewarmCoordinator.returnCharacterEntityAfterCleanup(
+                prewarmedAssets.characterEntity,
+                characterID: attributes.characterID,
+                reason: "fresh_spawn_rest_pose_failed"
+            )
+
+            throw error
+        }
+
+        #if DEBUG
+        controller.assertNotInDeathStateAfterFreshSpawn()
+        #endif
 
         controller.configureHordeSpawn(
             position: position,
@@ -2143,6 +2473,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             audioController.stopHostAudioSource(id: id)
             controller.hide()
             controller.rootEntity.removeFromParent()
+            recycleHordePrewarmedAssets(
+                from: controller
+            )
             throw error
         }
 
@@ -2195,19 +2528,30 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             root: controller.rootEntity
         )
 
-        let ingress = try HordePortalInstancedIngressController(
-            enemy: controller,
-            portal: portal,
-            sceneRoot: sceneRoot,
-            side: side
-        )
+        do {
+            let ingress = try HordePortalInstancedIngressController(
+                enemy: controller,
+                portal: portal,
+                sceneRoot: sceneRoot,
+                side: side
+            )
 
-        activeIngressControllers[id] = ingress
+            activeIngressControllers[id] = ingress
 
-        controller.update(
-            deltaTime: 1.0 / 60.0,
-            currentHeadPosition: currentHeadPosition
-        )
+            controller.update(
+                deltaTime: 1.0 / 60.0,
+                currentHeadPosition: currentHeadPosition
+            )
+        } catch {
+            activeHordeEnemyIDs.remove(id)
+            hordeEnemyControllersByID.removeValue(forKey: id)
+            controller.hide()
+            controller.rootEntity.removeFromParent()
+            recycleHordePrewarmedAssets(
+                from: controller
+            )
+            throw error
+        }
 
         print(
             """
@@ -2348,11 +2692,55 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private func clearHordeEnemyControllers() {
         for (id, controller) in hordeEnemyControllersByID {
             audioController.stopHostAudioSource(id: id)
-            controller.hide()
-            controller.rootEntity.removeFromParent()
+            controller.forceCleanupFromHordeScene(
+                reason: "clear_live_horde_enemy_controllers"
+            )
+            recycleHordePrewarmedAssets(
+                from: controller
+            )
         }
 
         hordeEnemyControllersByID.removeAll()
+        activeHordeEnemyIDs.removeAll()
+
+        cleanupHordeCorpsesForWaveTransition(
+            reason: "clear_horde_enemy_controllers"
+        )
+    }
+
+    private func recycleHordePrewarmedAssets(
+        from controller: JockRetargetTestController
+    ) {
+        guard controller.hordeLifecycleState == .cleanedUp else {
+            print(
+                """
+                [HordeLifecycle] ERROR attempted to discard clone before cleanup
+                  enemyID: \(controller.hordeBenchmarkID.uuidString)
+                  lifecycle: \(controller.hordeLifecycleState.rawValue)
+                """
+            )
+
+            return
+        }
+
+        guard let reusable = controller.detachHordePrewarmedCharacterEntityForReuse() else {
+            return
+        }
+
+        hordePrewarmCoordinator.returnCharacterEntityAfterCleanup(
+            reusable.entity,
+            characterID: reusable.characterID,
+            reason: "horde_controller_cleanup"
+        )
+
+        print(
+            """
+            [HordeLifecycle] dirty gameplay clone discarded after cleanup
+              enemyID: \(controller.hordeBenchmarkID.uuidString)
+              characterID: \(reusable.characterID)
+              returnedToPool: false
+            """
+        )
     }
 
     @discardableResult
@@ -2473,13 +2861,19 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         for (id, controller) in hordeEnemyControllersByID {
             audioController.stopHostAudioSource(id: id)
             controller.stopForBenchmarkPlayerDeath()
-            controller.rootEntity.removeFromParent()
+            controller.forceCleanupFromHordeScene(
+                reason: "player_death"
+            )
+            recycleHordePrewarmedAssets(
+                from: controller
+            )
         }
 
         hordeEnemyControllersByID.removeAll()
         activeHordeEnemyIDs.removeAll()
-        dyingHordeEnemyIDs.removeAll()
-        corpseHordeEnemyIDs.removeAll()
+        cleanupHordeCorpsesForWaveTransition(
+            reason: "player_death"
+        )
         resetHordeSimulationPipeline()
         hordeBenchmarkRunning = false
         hordeRuntimePhase = .playerDead
@@ -2506,7 +2900,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             return
         }
 
-        guard activeHordeEnemyIDs.contains(id) else {
+        guard activeHordeEnemyIDs.contains(id),
+              let controller = hordeEnemyControllersByID.removeValue(
+                forKey: id
+              ) else {
             print(
                 """
                 [HordeBenchmark] WARNING enemyKilled id not active
@@ -2520,7 +2917,22 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         activeHordeEnemyIDs.remove(id)
         dyingHordeEnemyIDs.insert(id)
+        hordeDyingEnemyControllersByID[id] = controller
+        activeIngressControllers.removeValue(forKey: id)
+        controller.didStartDeathLifecycle = true
+        controller.disableHordeSystemsForDeath()
         audioController.stopCharacterLoopAudio(id: id)
+
+        print(
+            """
+            [HordeLifecycle] enemy moved active -> dying
+              enemyID: \(id)
+              characterID: \(controller.enemySeparationCharacterID)
+              removedFromActiveMap: true
+              collisionDisabled: true
+              followDisabled: true
+            """
+        )
 
         hordeTotalKilled += 1
 
@@ -2535,8 +2947,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               corpses: \(corpseHordeEnemyIDs.count)
               waveState: \(hordeWaveSpawnState.rawValue)
               totalKilled: \(hordeTotalKilled)
+              removedFromActiveMap: true
             """
         )
+
+        assertNoCorpseInActiveEnemyMap()
 
         checkWaveCanEnd(
             wave: wave
@@ -2547,9 +2962,29 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         id: UUID,
         wave: Int
     ) {
-        if dyingHordeEnemyIDs.contains(id) {
+        if let controller = hordeDyingEnemyControllersByID.removeValue(
+            forKey: id
+        ) {
             dyingHordeEnemyIDs.remove(id)
             corpseHordeEnemyIDs.insert(id)
+            controller.freezeAsHordeCorpse()
+
+            hordeCorpseRecordsByID[id] = HordeCorpseRecord(
+                enemyID: id,
+                characterID: controller.enemySeparationCharacterID,
+                rootEntity: controller.rootEntity,
+                controller: controller,
+                deathTime: Date().timeIntervalSinceReferenceDate
+            )
+
+            print(
+                """
+                [HordeLifecycle] dying -> corpse record
+                  enemyID: \(id)
+                  characterID: \(controller.enemySeparationCharacterID)
+                  corpseCount: \(hordeCorpseRecordsByID.count)
+                """
+            )
         } else if !corpseHordeEnemyIDs.contains(id) {
             print(
                 """
@@ -2652,26 +3087,80 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     }
 
     private func clearWaveCorpses() {
-        let ids = corpseHordeEnemyIDs
+        cleanupHordeCorpsesForWaveTransition(
+            reason: "wave_transition"
+        )
+    }
+
+    private func cleanupHordeCorpsesForWaveTransition(
+        reason: String
+    ) {
+        guard !hordeCorpseRecordsByID.isEmpty ||
+            !hordeDyingEnemyControllersByID.isEmpty ||
+            !corpseHordeEnemyIDs.isEmpty ||
+            !dyingHordeEnemyIDs.isEmpty else {
+            return
+        }
 
         print(
             """
-            [HordeBenchmark] clearing wave corpses
-              count: \(ids.count)
-              ids: \(ids.map { $0.uuidString }.joined(separator: ", "))
+            [HordeLifecycle] corpse cleanup starting
+              reason: \(reason)
+              corpseCount: \(hordeCorpseRecordsByID.count)
+              dyingCount: \(hordeDyingEnemyControllersByID.count)
             """
         )
 
-        for id in ids {
-            audioController.stopHostAudioSource(id: id)
-
-            if let controller = hordeEnemyControllersByID.removeValue(forKey: id) {
-                controller.hide()
-                controller.rootEntity.removeFromParent()
-            }
+        for (enemyID, controller) in hordeDyingEnemyControllersByID {
+            audioController.stopHostAudioSource(id: enemyID)
+            activeIngressControllers.removeValue(forKey: enemyID)
+            controller.forceCleanupFromHordeScene(
+                reason: reason
+            )
+            recycleHordePrewarmedAssets(
+                from: controller
+            )
         }
 
+        hordeDyingEnemyControllersByID.removeAll()
+        dyingHordeEnemyIDs.removeAll()
+
+        for (enemyID, record) in hordeCorpseRecordsByID {
+            audioController.stopHostAudioSource(id: enemyID)
+            activeIngressControllers.removeValue(forKey: enemyID)
+            record.controller.forceCleanupFromHordeScene(
+                reason: reason
+            )
+            recycleHordePrewarmedAssets(
+                from: record.controller
+            )
+        }
+
+        hordeCorpseRecordsByID.removeAll()
         corpseHordeEnemyIDs.removeAll()
+
+        print(
+            """
+            [HordeLifecycle] corpse cleanup complete
+              reason: \(reason)
+              corpseCount: \(hordeCorpseRecordsByID.count)
+              dyingCount: \(hordeDyingEnemyControllersByID.count)
+            """
+        )
+    }
+
+    private func assertNoCorpseInActiveEnemyMap() {
+        for (id, controller) in hordeEnemyControllersByID {
+            if !controller.hordeLifecycleState.isLivingGameplayEnemy {
+                assertionFailure(
+                    """
+                    [HordeLifecycle] corpse/dying/cleaned enemy in active map
+                      enemyID: \(id)
+                      lifecycle: \(controller.hordeLifecycleState.rawValue)
+                    """
+                )
+            }
+        }
     }
 
     private func playYouDiedRoomAnchored(
