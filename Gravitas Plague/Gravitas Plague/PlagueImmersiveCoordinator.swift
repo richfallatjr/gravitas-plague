@@ -1640,8 +1640,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         currentPose: PhaseOneSpawnPose,
         date: Date
     ) {
-        if wallPosterUIController.isPlaced {
-            wallPosterUIController.refreshTransformForWallUpdate()
+        if wallPosterUIController.isLocked {
             return
         }
 
@@ -1661,19 +1660,23 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             return
         }
 
-        wallPosterUIController.lockPlacement()
         forestEnvironmentController.applyIBLReceiverRecursively(
             root: wallPosterUIController.root
         )
         onWallPosterUIActiveChanged?(true)
+
+        print(
+            """
+            [WallPosterUI] poster committed
+              futurePlacementTicks: disabled
+            """
+        )
     }
 
     private func prepareWallPosterBeforeHordePortals(
         currentPose: PhaseOneSpawnPose
     ) -> Bool {
-        if wallPosterUIController.isPlaced {
-            wallPosterUIController.lockPlacement()
-
+        if wallPosterUIController.isLocked {
             guard wallPosterUIController.hasRegisteredOccupancy else {
                 print(
                     """
@@ -1711,8 +1714,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
             return false
         }
-
-        wallPosterUIController.lockPlacement()
 
         guard wallPosterUIController.hasRegisteredOccupancy else {
             print(

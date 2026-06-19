@@ -5,13 +5,19 @@ import simd
 
 enum WallPosterPlacementState: String {
     case notPlaced
-    case placed
     case locked
 }
 
 @MainActor
 final class WallMountedPosterUIController: ObservableObject {
+    private struct CommittedWallPosterPlacement {
+        let candidatePlacement: WallPosterPlacement
+        let worldTransform: simd_float4x4
+        let occupancyID: UUID
+    }
+
     private(set) var root = Entity()
+    private let contentRoot = Entity()
     private var posterEntity: ModelEntity?
     private var buttonEntities: [Entity] = []
 
@@ -21,20 +27,29 @@ final class WallMountedPosterUIController: ObservableObject {
 
     private var currentPlacement: WallPosterPlacement?
     private var currentPosterSize: SIMD2<Float>?
-    private var placementState: WallPosterPlacementState = .notPlaced
+    private(set) var placementState: WallPosterPlacementState = .notPlaced
+    private var committedPlacement: CommittedWallPosterPlacement?
     private var lastAppliedPosition: SIMD3<Float>?
     private let posterOccupancyID = UUID()
     private(set) var hasRegisteredOccupancy = false
 
+    var isLocked: Bool {
+        placementState == .locked &&
+            committedPlacement != nil
+    }
+
     var isPlaced: Bool {
-        currentPlacement != nil
+        isLocked
     }
 
     init() {
         WallPosterUIButtonComponent.registerComponent()
         WallPosterKillSwitchComponent.registerComponent()
         WallPosterLeaderboardButtonComponent.registerComponent()
-        root.name = "WallMountedPosterUIRoot"
+        root.name = "WallPosterWorldLockedRoot"
+        contentRoot.name = "WallPosterMutableContentRoot"
+        root.addChild(contentRoot)
+        root.isEnabled = false
     }
 
     func installIfNeeded(
@@ -46,6 +61,10 @@ final class WallMountedPosterUIController: ObservableObject {
         self.wallManager = wallManager
         self.hordePortalManager = hordePortalManager
         self.occupancyRegistry = occupancyRegistry
+
+        if contentRoot.parent == nil {
+            root.addChild(contentRoot)
+        }
 
         if root.parent == nil {
             sceneRoot.addChild(root)
@@ -60,8 +79,14 @@ final class WallMountedPosterUIController: ObservableObject {
         playerForward: SIMD3<Float>,
         force: Bool = false
     ) -> Bool {
-        if !force,
-           placementState == .placed || placementState == .locked {
+        _ = force
+
+        guard !isLocked else {
+            return true
+        }
+
+        guard placementState == .notPlaced,
+              committedPlacement == nil else {
             return false
         }
 
@@ -79,65 +104,92 @@ final class WallMountedPosterUIController: ObservableObject {
             return false
         }
 
-        currentPlacement = placement
-        placementState = .placed
+        guard let transform = worldTransform(
+            for: placement
+        ) else {
+            print(
+                """
+                [WallPosterUI] ERROR could not compute committed world transform
+                  wallID: \(placement.wallID)
+                """
+            )
+            return false
+        }
+
+        root.isEnabled = false
 
         rebuildPosterIfNeeded(
             width: placement.width,
             height: placement.height
         )
-        applyPlacement(placement)
-        registerPosterOccupancy(
+
+        guard let occupancyID = registerPosterOccupancy(
             placement: placement
+        ) else {
+            return false
+        }
+
+        root.setTransformMatrix(
+            transform,
+            relativeTo: nil
         )
+
+        currentPlacement = placement
+        committedPlacement = CommittedWallPosterPlacement(
+            candidatePlacement: placement,
+            worldTransform: transform,
+            occupancyID: occupancyID
+        )
+        placementState = .locked
+        lastAppliedPosition = SIMD3<Float>(
+            transform.columns.3.x,
+            transform.columns.3.y,
+            transform.columns.3.z
+        )
+        root.isEnabled = true
 
         print(
             """
-            [WallPosterUI] wall placement active
+            [WallPosterUI] placement committed permanently
               wallID: \(placement.wallID)
               width: \(placement.width)
               height: \(placement.height)
-              heightMeters: \(placement.height)
               localX: \(placement.localX)
               localY: \(placement.localY)
               depthOffset: \(placement.depthOffset)
+              worldPosition: \(String(describing: lastAppliedPosition))
+              state: locked
+              transformWillRefresh: false
             """
         )
+
+        #if DEBUG
+        assertLockedTransformUnchanged()
+        #endif
 
         return true
     }
 
-    func lockPlacement() {
-        guard let currentPlacement else {
-            return
-        }
-
-        placementState = .locked
-
-        print(
-            """
-            [WallPosterUI] placement locked
-              wallID: \(currentPlacement.wallID)
-              localX: \(currentPlacement.localX)
-              localY: \(currentPlacement.localY)
-              snapsToHead: false
-            """
-        )
-    }
-
-    func refreshTransformForWallUpdate() {
-        guard let placement = currentPlacement else {
-            return
-        }
-
-        applyPlacement(placement)
-    }
-
     func reset() {
-        occupancyRegistry?.unregister(
-            id: posterOccupancyID
+        resetPlacement(
+            reason: "reset"
         )
+    }
 
+    func resetPlacement(
+        reason: String
+    ) {
+        if let committedPlacement {
+            occupancyRegistry?.unregister(
+                id: committedPlacement.occupancyID
+            )
+        } else {
+            occupancyRegistry?.unregister(
+                id: posterOccupancyID
+            )
+        }
+
+        committedPlacement = nil
         currentPlacement = nil
         currentPosterSize = nil
         placementState = .notPlaced
@@ -145,8 +197,47 @@ final class WallMountedPosterUIController: ObservableObject {
         hasRegisteredOccupancy = false
         posterEntity = nil
         buttonEntities.removeAll()
+        contentRoot.children.removeAll()
         root.isEnabled = false
+        root.transform = .identity
+
+        print(
+            """
+            [WallPosterUI] placement explicitly reset
+              reason: \(reason)
+            """
+        )
     }
+
+    #if DEBUG
+    func assertLockedTransformUnchanged(
+        file: StaticString = #fileID,
+        line: UInt = #line
+    ) {
+        guard let committedPlacement else {
+            return
+        }
+
+        let actual = root.transformMatrix(
+            relativeTo: nil
+        )
+
+        guard matricesApproximatelyEqual(
+            actual,
+            committedPlacement.worldTransform
+        ) else {
+            assertionFailure(
+                """
+                [WallPosterUI] LOCKED POSTER TRANSFORM WAS MUTATED.
+                No code may reposition the poster after commit.
+                """,
+                file: file,
+                line: line
+            )
+            return
+        }
+    }
+    #endif
 
     private func choosePlacement(
         wallManager: WallPlaneManager,
@@ -391,7 +482,7 @@ final class WallMountedPosterUIController: ObservableObject {
 private extension WallMountedPosterUIController {
     func registerPosterOccupancy(
         placement: WallPosterPlacement
-    ) {
+    ) -> UUID? {
         guard let occupancyRegistry else {
             hasRegisteredOccupancy = false
 
@@ -402,7 +493,7 @@ private extension WallMountedPosterUIController {
                 """
             )
 
-            return
+            return nil
         }
 
         occupancyRegistry.unregister(
@@ -439,6 +530,8 @@ private extension WallMountedPosterUIController {
               padding: \(WallPosterPlacementTuning.occupancyPaddingMeters)
             """
         )
+
+        return posterOccupancyID
     }
 
     func rebuildPosterIfNeeded(
@@ -453,15 +546,13 @@ private extension WallMountedPosterUIController {
         if let currentPosterSize,
            simd_length(currentPosterSize - newSize) < 0.001,
            posterEntity != nil {
-            root.isEnabled = true
             return
         }
 
-        root.children.removeAll()
+        contentRoot.children.removeAll()
         buttonEntities.removeAll()
         posterEntity = nil
         currentPosterSize = newSize
-        root.isEnabled = true
 
         OperationModePosterResources.shared.loadIfNeeded()
 
@@ -497,7 +588,7 @@ private extension WallMountedPosterUIController {
         poster.components.remove(InputTargetComponent.self)
         poster.components.remove(CollisionComponent.self)
 
-        root.addChild(poster)
+        contentRoot.addChild(poster)
         posterEntity = poster
 
         addModeHitTarget(
@@ -622,7 +713,7 @@ private extension WallMountedPosterUIController {
         sticker.components.set(InputTargetComponent())
         sticker.generateCollisionShapes(recursive: true)
 
-        root.addChild(sticker)
+        contentRoot.addChild(sticker)
 
         print(
             """
@@ -688,7 +779,7 @@ private extension WallMountedPosterUIController {
 
         hit.generateCollisionShapes(recursive: true)
 
-        root.addChild(hit)
+        contentRoot.addChild(hit)
         buttonEntities.append(hit)
 
         if !availability.isUnlocked {
@@ -726,9 +817,9 @@ private extension WallMountedPosterUIController {
             tint: color
         )
 
-        let root = Entity()
-        root.name = "WallPosterLock_\(mode.rawValue)"
-        root.position = SIMD3<Float>(
+        let lockRoot = Entity()
+        lockRoot.name = "WallPosterLock_\(mode.rawValue)"
+        lockRoot.position = SIMD3<Float>(
             center.x,
             center.y,
             0.019
@@ -811,13 +902,13 @@ private extension WallMountedPosterUIController {
             )
         )
 
-        root.addChild(top)
-        root.addChild(left)
-        root.addChild(right)
-        root.addChild(body)
+        lockRoot.addChild(top)
+        lockRoot.addChild(left)
+        lockRoot.addChild(right)
+        lockRoot.addChild(body)
 
-        self.root.addChild(root)
-        buttonEntities.append(root)
+        contentRoot.addChild(lockRoot)
+        buttonEntities.append(lockRoot)
 
         print(
             """
@@ -838,12 +929,12 @@ private extension WallMountedPosterUIController {
         return material
     }
 
-    func applyPlacement(
-        _ placement: WallPosterPlacement
-    ) {
+    func worldTransform(
+        for placement: WallPosterPlacement
+    ) -> simd_float4x4? {
         guard let wallManager,
               let wall = wallManager.wallCandidates[placement.wallID] else {
-            return
+            return nil
         }
 
         let position =
@@ -858,29 +949,9 @@ private extension WallMountedPosterUIController {
         matrix.columns.2 = SIMD4<Float>(wall.normal.x, wall.normal.y, wall.normal.z, 0)
         matrix.columns.3 = SIMD4<Float>(position.x, position.y, position.z, 1)
 
-        root.setTransformMatrix(
-            matrix,
-            relativeTo: nil
-        )
-
-        let shouldLog =
-            lastAppliedPosition.map {
-                simd_length(position - $0) > 0.01
-            } ?? true
-
-        lastAppliedPosition = position
-
-        if shouldLog {
-            print(
-                """
-                [WallPosterUI] wall transform applied
-                  wallID: \(placement.wallID)
-                  position: \(position)
-                  basis: wall_basis
-                """
-            )
-        }
+        return matrix
     }
+
 }
 
 private func normalizeSafe(
@@ -894,3 +965,16 @@ private func normalizeSafe(
 
     return vector / length
 }
+
+#if DEBUG
+private func matricesApproximatelyEqual(
+    _ lhs: simd_float4x4,
+    _ rhs: simd_float4x4,
+    epsilon: Float = 0.0005
+) -> Bool {
+    simd_length(lhs.columns.0 - rhs.columns.0) < epsilon &&
+        simd_length(lhs.columns.1 - rhs.columns.1) < epsilon &&
+        simd_length(lhs.columns.2 - rhs.columns.2) < epsilon &&
+        simd_length(lhs.columns.3 - rhs.columns.3) < epsilon
+}
+#endif
