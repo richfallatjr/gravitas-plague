@@ -1,7 +1,7 @@
 import Foundation
 import simd
 
-enum WallPropOccupancyKind: String, Codable, Hashable {
+enum WallPropOccupancyKind: String, Codable, Hashable, Sendable {
     case wallPoster
     case hordePortal
     case storyPortal
@@ -9,7 +9,7 @@ enum WallPropOccupancyKind: String, Codable, Hashable {
     case other
 }
 
-struct WallLocalRect: Codable, Equatable {
+struct WallLocalRect: Codable, Equatable, Sendable {
     var minX: Float
     var minY: Float
     var maxX: Float
@@ -79,7 +79,7 @@ struct WallLocalRect: Codable, Equatable {
     }
 }
 
-struct WallPropOccupancyRecord: Identifiable, Codable {
+struct WallPropOccupancyRecord: Identifiable, Codable, Sendable {
     let id: UUID
     let wallID: UUID
     let kind: WallPropOccupancyKind

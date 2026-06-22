@@ -14,6 +14,7 @@ final class HordePortalManager {
     private let backdropOrientationLock = HordePortalBackdropOrientationLock(
         baseArtYawDegrees: 0
     )
+    private let placementPlanner = HordePortalPlacementPlannerEngine()
 
     private weak var sceneRoot: Entity?
     private weak var audioController: GravitasDemoAudioController?
@@ -170,7 +171,7 @@ final class HordePortalManager {
             return nil
         }
 
-        guard let candidate = choosePortalPlacement(
+        guard let candidate = await choosePortalPlacement(
             wave: wave,
             spawnIndex: spawnIndex,
             playerPosition: playerPosition,
@@ -190,7 +191,7 @@ final class HordePortalManager {
             return nil
         }
 
-        let wall = candidate.wall
+        let plannedWall = candidate.wall
         var placement = candidate.placement
         let seed = UInt64(wave) ^ UInt64(portalOrder.count * 7919)
         let profile = HordePortalApertureProfile.random(
@@ -241,7 +242,7 @@ final class HordePortalManager {
         )
 
         if occupancyRegistry.hasHardOverlap(
-            wallID: wall.id,
+            wallID: plannedWall.id,
             candidate: finalCandidateRect,
             candidateKind: .hordePortal
         ) {
@@ -250,7 +251,7 @@ final class HordePortalManager {
                 [HordePortal] final portal placement rejected by wall occupancy
                   wave: \(wave)
                   spawnIndex: \(spawnIndex)
-                  wallID: \(wall.id)
+                  wallID: \(plannedWall.id)
                   localX: \(placement.localX)
                   localY: \(placement.localY)
                   rect: \(finalCandidateRect)
@@ -386,6 +387,8 @@ final class HordePortalManager {
             print("[HordePortal] ERROR could not build wall transform")
             return nil
         }
+
+        let wall = wallManager.wallCandidates[placement.wallID] ?? plannedWall
 
         let perimeterPoints = HordePortalApertureMeshFactory.makeBoundary3D(
             profile: profile
@@ -714,7 +717,7 @@ final class HordePortalManager {
         playerPosition: SIMD3<Float>,
         playerForward: SIMD3<Float>,
         excludingPortalIDs: Set<UUID>
-    ) -> HordePortalPlacementCandidate? {
+    ) async -> HordePortalPlacementCandidate? {
         guard let wallManager else {
             return nil
         }
@@ -727,166 +730,33 @@ final class HordePortalManager {
             )
             return nil
         }
-        _ = playerForward
 
         let existingCenters = portals.values.map(\.worldCenter)
         let reservedCenters = portals.values
             .filter { excludingPortalIDs.contains($0.id) }
             .map(\.worldCenter)
+        let walls = Array(wallManager.wallCandidates.values)
+        let floors = Array(wallManager.floorCandidates.values)
+        let occupancyRecords = Array(occupancyRegistry.recordsByID.values)
+        let existingBearings = portals.values.map(\.bearingFromPlayerRadians)
 
-        let walls = wallManager.wallCandidates.values
-            .filter { $0.isLargeEnoughForDefaultDoor }
+        let input = HordePortalPlacementPlanInput(
+            wave: wave,
+            spawnIndex: spawnIndex,
+            playerPosition: playerPosition,
+            playerForward: playerForward,
+            walls: walls,
+            floors: floors,
+            occupancyRecords: occupancyRecords,
+            existingCenters: existingCenters,
+            reservedCenters: reservedCenters,
+            existingPortalBearings: existingBearings,
+            viewerY: wallManager.lastKnownViewerYForPlanning
+        )
 
-        guard !walls.isEmpty else {
-            return nil
-        }
-
-        var candidates: [HordePortalPlacementCandidate] = []
-
-        for wall in walls {
-            guard wallManager.bestFloorCandidate(near: wall) != nil else {
-                print(
-                    """
-                    [HordePortalPlacement] wall skipped
-                      wallID: \(wall.id)
-                      reason: no_verified_floor_near_wall
-                    """
-                )
-                continue
-            }
-
-            for slot in generateWallSlots(
-                wall: wall
-            ) {
-                var placement = slot
-                guard let resolved = wallManager.resolveFloorLockedPlacement(
-                    placement,
-                    requirement: .required
-                ) else {
-                    print("[HordePortal] skipped portal placement: no verified floor")
-                    continue
-                }
-
-                placement = resolved
-                let rect = wallRect(
-                    for: placement
-                )
-
-                let candidateRect = rect.expanded(
-                    by: WallPosterPlacementTuning.portalCandidateExpansionMeters
-                )
-
-                if occupancyRegistry.hasHardOverlap(
-                    wallID: wall.id,
-                    candidate: candidateRect,
-                    candidateKind: .hordePortal
-                ) {
-                    print(
-                        """
-                        [HordePortalPlacement] rejected candidate
-                          wave: \(wave)
-                          spawnIndex: \(spawnIndex)
-                          reason: overlaps_wall_poster_or_existing_portal
-                          wallID: \(wall.id)
-                          localX: \(placement.localX)
-                          localY: \(placement.localY)
-                          rect: \(candidateRect)
-                        """
-                    )
-                    continue
-                }
-
-                guard let transform = wallManager.convertWallLocalToWorldTransform(
-                    placement: placement
-                ) else {
-                    continue
-                }
-
-                let center = SIMD3<Float>(
-                    transform.columns.3.x,
-                    transform.columns.3.y,
-                    transform.columns.3.z
-                )
-
-                let bearing = atan2(
-                    center.x - playerPosition.x,
-                    center.z - playerPosition.z
-                )
-
-                let nearestExisting = nearestDistance(
-                    center,
-                    to: existingCenters
-                )
-                let nearestRegisteredPortal = occupancyRegistry.nearestDistance(
-                    wallID: wall.id,
-                    candidate: rect,
-                    kinds: [.hordePortal]
-                )
-                let posterDistance = occupancyRegistry.nearestDistance(
-                    wallID: wall.id,
-                    candidate: rect,
-                    kinds: [.wallPoster]
-                )
-                let nearestPortalDistance = min(
-                    nearestExisting,
-                    nearestRegisteredPortal
-                )
-                let nearestReserved = nearestDistance(
-                    center,
-                    to: reservedCenters
-                )
-                let bearingGap = nearestExistingPortalBearingGap(
-                    bearing
-                )
-                let spacingOK =
-                    nearestPortalDistance >= HordePortalPlacementTuning.minSpacingMeters &&
-                    nearestReserved >= HordePortalPlacementTuning.minSpacingMeters
-
-                let spacingScore = min(
-                    1,
-                    min(
-                        nearestPortalDistance,
-                        nearestReserved
-                    ) / HordePortalPlacementTuning.preferredSpacingMeters
-                )
-                let posterClearanceScore = min(
-                    1,
-                    posterDistance / 1.0
-                )
-                let angularScore = min(
-                    1,
-                    bearingGap / (.pi / 3)
-                )
-
-                let score =
-                    spacingScore * 3.0 +
-                    posterClearanceScore * 5.0 +
-                    angularScore * 2.0 +
-                    Float.random(in: 0...0.20)
-
-                candidates.append(
-                    HordePortalPlacementCandidate(
-                        wall: wall,
-                        placement: placement,
-                        worldCenter: center,
-                        bearingRadians: bearing,
-                        nearestPortalDistance: nearestPortalDistance,
-                        nearestReservedDistance: nearestReserved,
-                        posterClearanceDistance: posterDistance,
-                        nearestBearingGap: bearingGap,
-                        spacingOK: spacingOK,
-                        score: score
-                    )
-                )
-            }
-        }
-
-        let valid = candidates.filter(\.spacingOK)
-
-        let chosen = (valid.isEmpty ? candidates : valid)
-            .max { lhs, rhs in
-                lhs.score < rhs.score
-            }
+        let chosen = await placementPlanner.choosePlacement(
+            input: input
+        )
 
         if let chosen {
             print(
@@ -912,8 +782,8 @@ final class HordePortalManager {
             print(
                 """
                 [HordePortalPlacement] ERROR no floor-verified portal placement available
-                  walls: \(walls.count)
-                  floors: \(wallManager.floorCandidates.count)
+                  walls: \(walls.filter { $0.isLargeEnoughForDefaultDoor }.count)
+                  floors: \(floors.count)
                   action: keep_scanning_do_not_spawn_air_portal
                 """
             )

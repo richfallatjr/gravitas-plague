@@ -26,6 +26,10 @@ final class WallPlaneManager: ObservableObject {
 
     private var lastKnownViewerPosition = SIMD3<Float>(0, 1.55, 0)
 
+    var lastKnownViewerYForPlanning: Float {
+        lastKnownViewerPosition.y
+    }
+
     func updateViewerPositionForWallSelection(
         _ position: SIMD3<Float>
     ) {
@@ -510,52 +514,16 @@ final class WallPlaneManager: ObservableObject {
         relativeToPlayer playerPosition: SIMD3<Float>,
         playerForward: SIMD3<Float>
     ) -> WallCandidate? {
-        let candidates = wallCandidates.values.filter {
-            $0.isLargeEnoughForDefaultDoor && $0.stabilityScore >= 0.35
+        let result = RoomGeometrySelectionScorer.selectBestWall(
+            request: RoomGeometryWallSelectionRequest(
+                walls: Array(wallCandidates.values),
+                playerPosition: playerPosition,
+                playerForward: playerForward
+            )
+        )
+        let best = result.wallID.flatMap {
+            wallCandidates[$0]
         }
-
-        guard !candidates.isEmpty else {
-            return nil
-        }
-
-        let scored = candidates.map { wall -> (WallCandidate, Float) in
-            let toWall = normalizeSafe(
-                wall.center - playerPosition,
-                fallback: SIMD3<Float>(0, 0, -1)
-            )
-
-            let facesPlayer = max(
-                0,
-                simd_dot(wall.normal, -toWall)
-            )
-
-            let inFront = max(
-                0,
-                simd_dot(playerForward, toWall)
-            )
-
-            let distance = simd_length(wall.center - playerPosition)
-            let distanceScore = max(
-                0,
-                1.0 - abs(distance - 2.0) / 4.0
-            )
-
-            let areaScore = min(
-                1.0,
-                (wall.width * wall.height) / 4.0
-            )
-
-            let score =
-                facesPlayer * 2.0 +
-                inFront * 1.25 +
-                distanceScore * 0.75 +
-                areaScore +
-                wall.stabilityScore
-
-            return (wall, score)
-        }
-
-        let best = scored.max { $0.1 < $1.1 }?.0
 
         if let best {
             roomSkinningPlaneLog(
@@ -629,42 +597,16 @@ final class WallPlaneManager: ObservableObject {
         near wall: WallCandidate? = nil
     ) -> FloorCandidate? {
         let viewerY = lastKnownViewerPosition.y
+        let result = RoomGeometrySelectionScorer.selectBestFloor(
+            request: RoomGeometryFloorSelectionRequest(
+                floors: Array(floorCandidates.values),
+                viewerY: viewerY,
+                wall: wall
+            )
+        )
 
-        let candidates = floorCandidates.values.filter { floor in
-            guard floor.isUsableFloor else {
-                return false
-            }
-
-            guard floor.worldY < viewerY - 0.85 else {
-                roomSkinningPlaneLog(
-                    """
-                    [PortalDoor] rejected floor candidate above viewer threshold
-                      floorY: \(floor.worldY)
-                      viewerY: \(viewerY)
-                      semantic: \(floor.semantic.rawValue)
-                    """
-                )
-                return false
-            }
-
-            if let wall {
-                guard floor.worldY < wall.center.y - 0.35 else {
-                    roomSkinningPlaneLog(
-                        """
-                        [PortalDoor] rejected floor candidate above wall center
-                          floorY: \(floor.worldY)
-                          wallCenterY: \(wall.center.y)
-                          wallID: \(wall.id)
-                        """
-                    )
-                    return false
-                }
-            }
-
-            return true
-        }
-
-        guard !candidates.isEmpty else {
+        guard let floorID = result.floorID,
+              let chosen = floorCandidates[floorID] else {
             roomSkinningPlaneLog(
                 """
                 [PortalDoor] no usable floor candidates
@@ -675,29 +617,6 @@ final class WallPlaneManager: ObservableObject {
             )
             return nil
         }
-
-        let sorted = candidates.sorted { lhs, rhs in
-            if let wall {
-                let lhsDistance = simd_length(lhs.center - wall.center)
-                let rhsDistance = simd_length(rhs.center - wall.center)
-
-                if abs(lhsDistance - rhsDistance) > 0.3 {
-                    return lhsDistance < rhsDistance
-                }
-            }
-
-            if abs(lhs.area - rhs.area) > 0.5 {
-                return lhs.area > rhs.area
-            }
-
-            if abs(lhs.stabilityScore - rhs.stabilityScore) > 0.1 {
-                return lhs.stabilityScore > rhs.stabilityScore
-            }
-
-            return lhs.worldY < rhs.worldY
-        }
-
-        let chosen = sorted[0]
 
         roomSkinningPlaneLog(
             """

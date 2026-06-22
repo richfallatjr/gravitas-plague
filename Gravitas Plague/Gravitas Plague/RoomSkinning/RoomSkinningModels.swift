@@ -2,7 +2,7 @@ import Foundation
 import RealityKit
 import simd
 
-enum RoomSkinningState: String, Codable {
+enum RoomSkinningState: String, Codable, Sendable {
     case idle
     case requestingPermissions
     case scanning
@@ -13,7 +13,7 @@ enum RoomSkinningState: String, Codable {
     case failed
 }
 
-enum PortalDoorState: String, Codable {
+enum PortalDoorState: String, Codable, Sendable {
     case notCreated
     case preview
     case active
@@ -22,7 +22,7 @@ enum PortalDoorState: String, Codable {
     case disabled
 }
 
-struct WallBasis: Equatable {
+struct WallBasis: Equatable, Sendable {
     var center: SIMD3<Float>
     var right: SIMD3<Float>
     var up: SIMD3<Float>
@@ -41,7 +41,7 @@ struct WallBasis: Equatable {
     }
 }
 
-enum PortalHDRIAtmosphere: String, Codable, CaseIterable, Identifiable, Equatable {
+enum PortalHDRIAtmosphere: String, Codable, CaseIterable, Identifiable, Equatable, Sendable {
     case overcast
     case night
 
@@ -102,7 +102,7 @@ enum PortalHDRIAtmosphere: String, Codable, CaseIterable, Identifiable, Equatabl
     }
 }
 
-struct WallCandidate: Identifiable {
+struct WallCandidate: Identifiable, Sendable {
     let id: UUID
     let anchorID: UUID
 
@@ -135,14 +135,14 @@ struct WallCandidate: Identifiable {
     }
 }
 
-enum HorizontalPlaneSemantic: String, Codable {
+enum HorizontalPlaneSemantic: String, Codable, Sendable {
     case floor
     case ceiling
     case highSurface
     case unknown
 }
 
-struct FloorCandidate: Identifiable {
+struct FloorCandidate: Identifiable, Sendable {
     let id: UUID
     let anchorID: UUID
 
@@ -179,7 +179,7 @@ struct PortalDoorHandleComponent: Component, Codable {
     var doorID: String
 }
 
-struct DoorPlacement: Codable, Equatable {
+struct DoorPlacement: Codable, Equatable, Sendable {
     var wallID: UUID
 
     /// X slides horizontally along wallRight.
@@ -230,7 +230,7 @@ struct DoorPlacement: Codable, Equatable {
     }
 }
 
-struct PortalContentContext: Codable, Equatable {
+struct PortalContentContext: Codable, Equatable, Sendable {
     var doorWidth: Float
     var doorHeight: Float
 
@@ -257,7 +257,7 @@ struct PortalContentContext: Codable, Equatable {
     }
 }
 
-struct RoomSkinningRay {
+struct RoomSkinningRay: Sendable {
     var origin: SIMD3<Float>
     var direction: SIMD3<Float>
 }

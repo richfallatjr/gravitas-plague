@@ -395,6 +395,772 @@ final class JockRuntimeDriver {
         var completedClip: JockAnimClip?
     }
 
+    private enum AsyncPoseSamplingPolicy: String, Sendable {
+        case authorAbsoluteLocal
+        case sourceRestDeltaToTargetRest
+    }
+
+    private struct AsyncPoseSampleRequest: @unchecked Sendable {
+        let revision: Int
+        let clipID: String?
+        let policy: AsyncPoseSamplingPolicy
+        let baseJointTransforms: [Transform]
+        let canonicalJointOrder: [String]
+        let parentByCanonicalJoint: [String: String]
+        let runtimeIndexByCanonicalJoint: [String: Int]
+        let ignoreSourceRestRootY: Bool
+        let applyNonRootTranslationDeltas: Bool
+        let maxNonRootTranslationDeltaAsBoneFraction: Float
+        let time: TimeInterval
+        let transitionFromPose: [Transform]?
+        let transitionToPose: [Transform]?
+        let transitionAlpha: Float?
+        let subAnimations: [AsyncSubAnimationSampleRequest]
+    }
+
+    private struct AsyncPoseSampleResult: @unchecked Sendable {
+        let revision: Int
+        let clipID: String?
+        let time: TimeInterval
+        let jointTransforms: [Transform]
+    }
+
+    private struct AsyncPoseSamplingPayload {
+        let clipID: String
+        let policy: AsyncPoseSamplingPolicy
+    }
+
+    private struct AsyncSubAnimationSampleRequest: @unchecked Sendable {
+        let clipID: String
+        let policy: AsyncPoseSamplingPolicy
+        let affectedRuntimeIndices: [Int]
+        let time: TimeInterval
+        let weight: Float
+    }
+
+    private struct AsyncPoseSamplerCachePayload: @unchecked Sendable {
+        let preparedClipsByID: [String: JockPreparedClip]
+        let sourceRestPoseByClipID: [String: SourceRigRestPose]
+    }
+
+    private actor AnimationPoseSampler {
+        private var preparedClipsByID: [String: JockPreparedClip] = [:]
+        private var sourceRestPoseByClipID: [String: SourceRigRestPose] = [:]
+
+        func installCache(
+            _ payload: AsyncPoseSamplerCachePayload
+        ) {
+            preparedClipsByID = payload.preparedClipsByID
+            sourceRestPoseByClipID = payload.sourceRestPoseByClipID
+        }
+
+        func samplePose(
+            request: AsyncPoseSampleRequest
+        ) -> AsyncPoseSampleResult {
+            var transforms: [Transform]
+
+            if let transitionFromPose = request.transitionFromPose,
+               let transitionToPose = request.transitionToPose,
+               let transitionAlpha = request.transitionAlpha {
+                transforms = JockPoseMath.blendTransforms(
+                    from: transitionFromPose,
+                    to: transitionToPose,
+                    alpha: transitionAlpha
+                )
+            } else {
+                guard let clipID = request.clipID,
+                      let preparedClip = preparedClipsByID[clipID] else {
+                    return AsyncPoseSampleResult(
+                        revision: request.revision,
+                        clipID: request.clipID,
+                        time: request.time,
+                        jointTransforms: request.baseJointTransforms
+                    )
+                }
+
+                transforms = sampleClipPose(
+                    policy: request.policy,
+                    preparedClip: preparedClip,
+                    baseJointTransforms: request.baseJointTransforms,
+                    sourceRest: sourceRestPoseByClipID[clipID],
+                    canonicalJointOrder: request.canonicalJointOrder,
+                    parentByCanonicalJoint: request.parentByCanonicalJoint,
+                    runtimeIndexByCanonicalJoint: request.runtimeIndexByCanonicalJoint,
+                    ignoreSourceRestRootY: request.ignoreSourceRestRootY,
+                    applyNonRootTranslationDeltas: request.applyNonRootTranslationDeltas,
+                    maxNonRootTranslationDeltaAsBoneFraction:
+                        request.maxNonRootTranslationDeltaAsBoneFraction,
+                    time: request.time
+                )
+            }
+
+            transforms = applySubAnimations(
+                request.subAnimations,
+                to: transforms,
+                baseJointTransforms: request.baseJointTransforms,
+                canonicalJointOrder: request.canonicalJointOrder,
+                parentByCanonicalJoint: request.parentByCanonicalJoint,
+                runtimeIndexByCanonicalJoint: request.runtimeIndexByCanonicalJoint,
+                ignoreSourceRestRootY: request.ignoreSourceRestRootY,
+                applyNonRootTranslationDeltas: request.applyNonRootTranslationDeltas,
+                maxNonRootTranslationDeltaAsBoneFraction:
+                    request.maxNonRootTranslationDeltaAsBoneFraction
+            )
+
+            return AsyncPoseSampleResult(
+                revision: request.revision,
+                clipID: request.clipID,
+                time: request.time,
+                jointTransforms: transforms
+            )
+        }
+
+        private func sampleClipPose(
+            policy: AsyncPoseSamplingPolicy,
+            preparedClip: JockPreparedClip,
+            baseJointTransforms: [Transform],
+            sourceRest: SourceRigRestPose?,
+            canonicalJointOrder: [String],
+            parentByCanonicalJoint: [String: String],
+            runtimeIndexByCanonicalJoint: [String: Int],
+            ignoreSourceRestRootY: Bool,
+            applyNonRootTranslationDeltas: Bool,
+            maxNonRootTranslationDeltaAsBoneFraction: Float,
+            time: TimeInterval
+        ) -> [Transform] {
+            if time <= 0 {
+                return preparedClip.firstPose
+            }
+
+            if time >= preparedClip.duration {
+                return preparedClip.lastPose
+            }
+
+            switch policy {
+            case .authorAbsoluteLocal:
+                return sampleAuthorAbsoluteLocalUncached(
+                    preparedClip: preparedClip,
+                    baseJointTransforms: baseJointTransforms,
+                    time: time
+                )
+
+            case .sourceRestDeltaToTargetRest:
+                return sampleSourceRestDeltaToTargetRest(
+                    preparedClip: preparedClip,
+                    baseJointTransforms: baseJointTransforms,
+                    sourceRest: sourceRest,
+                    canonicalJointOrder: canonicalJointOrder,
+                    parentByCanonicalJoint: parentByCanonicalJoint,
+                    runtimeIndexByCanonicalJoint: runtimeIndexByCanonicalJoint,
+                    ignoreSourceRestRootY: ignoreSourceRestRootY,
+                    applyNonRootTranslationDeltas: applyNonRootTranslationDeltas,
+                    maxNonRootTranslationDeltaAsBoneFraction:
+                        maxNonRootTranslationDeltaAsBoneFraction,
+                    time: time
+                )
+            }
+        }
+
+        private func applySubAnimations(
+            _ subAnimations: [AsyncSubAnimationSampleRequest],
+            to basePose: [Transform],
+            baseJointTransforms: [Transform],
+            canonicalJointOrder: [String],
+            parentByCanonicalJoint: [String: String],
+            runtimeIndexByCanonicalJoint: [String: Int],
+            ignoreSourceRestRootY: Bool,
+            applyNonRootTranslationDeltas: Bool,
+            maxNonRootTranslationDeltaAsBoneFraction: Float
+        ) -> [Transform] {
+            guard !subAnimations.isEmpty else {
+                return basePose
+            }
+
+            var output = basePose
+
+            for subAnimation in subAnimations {
+                guard subAnimation.weight > 0.0001 else {
+                    continue
+                }
+
+                guard let preparedClip = preparedClipsByID[subAnimation.clipID] else {
+                    continue
+                }
+
+                let subPose = sampleClipPose(
+                    policy: subAnimation.policy,
+                    preparedClip: preparedClip,
+                    baseJointTransforms: baseJointTransforms,
+                    sourceRest: sourceRestPoseByClipID[subAnimation.clipID],
+                    canonicalJointOrder: canonicalJointOrder,
+                    parentByCanonicalJoint: parentByCanonicalJoint,
+                    runtimeIndexByCanonicalJoint: runtimeIndexByCanonicalJoint,
+                    ignoreSourceRestRootY: ignoreSourceRestRootY,
+                    applyNonRootTranslationDeltas: applyNonRootTranslationDeltas,
+                    maxNonRootTranslationDeltaAsBoneFraction:
+                        maxNonRootTranslationDeltaAsBoneFraction,
+                    time: subAnimation.time
+                )
+
+                for runtimeIndex in subAnimation.affectedRuntimeIndices {
+                    guard output.indices.contains(runtimeIndex),
+                          subPose.indices.contains(runtimeIndex) else {
+                        continue
+                    }
+
+                    output[runtimeIndex].translation = JockPoseMath.lerp(
+                        output[runtimeIndex].translation,
+                        subPose[runtimeIndex].translation,
+                        subAnimation.weight
+                    )
+
+                    output[runtimeIndex].scale = JockPoseMath.lerp(
+                        output[runtimeIndex].scale,
+                        subPose[runtimeIndex].scale,
+                        subAnimation.weight
+                    )
+
+                    output[runtimeIndex].rotation = JockPoseMath.slerp(
+                        output[runtimeIndex].rotation,
+                        subPose[runtimeIndex].rotation,
+                        subAnimation.weight
+                    )
+                }
+            }
+
+            return output
+        }
+
+        private func sampleAuthorAbsoluteLocalUncached(
+            preparedClip: JockPreparedClip,
+            baseJointTransforms: [Transform],
+            time: TimeInterval
+        ) -> [Transform] {
+            let clip = preparedClip.clip
+            var output = baseJointTransforms
+
+            for track in preparedClip.tracks {
+                guard output.indices.contains(track.runtimeIndex) else {
+                    continue
+                }
+
+                var transform = output[track.runtimeIndex]
+
+                switch track.channel {
+                case "translation_xyz_additive":
+                    let offset = JockPoseMath.sampleVector3Sorted(
+                        keys: track.keys,
+                        time: time
+                    )
+
+                    if clip.isAdditiveLocal {
+                        transform.translation =
+                            baseJointTransforms[track.runtimeIndex].translation +
+                            offset
+                    } else {
+                        transform.translation = offset
+                    }
+
+                case "rotation_quat_wxyz_additive":
+                    let delta = JockPoseMath.sampleQuaternionWXYZSorted(
+                        keys: track.keys,
+                        time: time
+                    )
+
+                    if clip.isAdditiveLocal {
+                        transform.rotation =
+                            baseJointTransforms[track.runtimeIndex].rotation *
+                            delta
+                    } else {
+                        transform.rotation = delta
+                    }
+
+                case "rotation_euler_xyz_degrees_additive":
+                    let delta = JockPoseMath.sampleEulerXYZDegreesAsQuaternionSorted(
+                        keys: track.keys,
+                        time: time
+                    )
+
+                    if clip.isAdditiveLocal {
+                        transform.rotation =
+                            baseJointTransforms[track.runtimeIndex].rotation *
+                            delta
+                    } else {
+                        transform.rotation = delta
+                    }
+
+                case "translation_xyz_absolute":
+                    transform.translation = JockPoseMath.sampleVector3Sorted(
+                        keys: track.keys,
+                        time: time
+                    )
+
+                case "rotation_quat_wxyz_absolute":
+                    transform.rotation = JockPoseMath.sampleQuaternionWXYZSorted(
+                        keys: track.keys,
+                        time: time
+                    )
+
+                case "scale_xyz_absolute":
+                    transform.scale = JockPoseMath.sampleVector3Sorted(
+                        keys: track.keys,
+                        time: time
+                    )
+
+                default:
+                    continue
+                }
+
+                output[track.runtimeIndex] = transform
+            }
+
+            return output
+        }
+
+        private func sampleSourceRestDeltaToTargetRest(
+            preparedClip: JockPreparedClip,
+            baseJointTransforms: [Transform],
+            sourceRest: SourceRigRestPose?,
+            canonicalJointOrder: [String],
+            parentByCanonicalJoint: [String: String],
+            runtimeIndexByCanonicalJoint: [String: Int],
+            ignoreSourceRestRootY: Bool,
+            applyNonRootTranslationDeltas: Bool,
+            maxNonRootTranslationDeltaAsBoneFraction: Float,
+            time: TimeInterval
+        ) -> [Transform] {
+            guard let sourceRest else {
+                return baseJointTransforms
+            }
+
+            let groupedTracks = preparedTracksByJointAndChannel(
+                preparedClip.tracks
+            )
+            let targetRestLocal = localTransformsByCanonicalJoint(
+                from: baseJointTransforms,
+                runtimeIndexByCanonicalJoint: runtimeIndexByCanonicalJoint
+            )
+            let sourceAnimatedLocal = sampleSourceAnimatedLocalTransforms(
+                sourceRest: sourceRest,
+                groupedTracks: groupedTracks,
+                time: time
+            )
+            let sourceRestGlobals = computeGlobalTransforms(
+                localTransforms: sourceRest.restLocalTransforms,
+                jointOrder: sourceRest.jointOrder,
+                parentByJoint: parentByCanonicalJoint
+            )
+            let sourceAnimatedGlobals = computeGlobalTransforms(
+                localTransforms: sourceAnimatedLocal,
+                jointOrder: sourceRest.jointOrder,
+                parentByJoint: parentByCanonicalJoint
+            )
+            let targetRestGlobals = computeGlobalTransforms(
+                localTransforms: targetRestLocal,
+                jointOrder: canonicalJointOrder,
+                parentByJoint: parentByCanonicalJoint
+            )
+            let sourceHeight = max(
+                bodyHeight(from: sourceRestGlobals),
+                0.001
+            )
+            let targetHeight = max(
+                bodyHeight(from: targetRestGlobals),
+                0.001
+            )
+            let sourceToTargetScale = targetHeight / sourceHeight
+
+            var output = baseJointTransforms
+            var outputGlobals: [String: GlobalJointTransform] = [:]
+
+            for joint in canonicalJointOrder {
+                guard let runtimeIndex = runtimeIndexByCanonicalJoint[joint],
+                      output.indices.contains(runtimeIndex) else {
+                    continue
+                }
+
+                let targetBase = baseJointTransforms[runtimeIndex]
+                var targetOutput = targetBase
+
+                if let sourceRestGlobal = sourceRestGlobals[joint],
+                   let sourceAnimatedGlobal = sourceAnimatedGlobals[joint],
+                   let targetRestGlobal = targetRestGlobals[joint] {
+                    let sourceDeltaGlobalRotation = simd_normalize(
+                        sourceAnimatedGlobal.rotation *
+                            simd_inverse(sourceRestGlobal.rotation)
+                    )
+                    let desiredTargetGlobalRotation = simd_normalize(
+                        sourceDeltaGlobalRotation * targetRestGlobal.rotation
+                    )
+
+                    if let parent = parentByCanonicalJoint[joint],
+                       let parentGlobal = outputGlobals[parent] {
+                        targetOutput.rotation = simd_normalize(
+                            simd_inverse(parentGlobal.rotation) *
+                                desiredTargetGlobalRotation
+                        )
+                    } else {
+                        targetOutput.rotation = desiredTargetGlobalRotation
+                    }
+                }
+
+                if let translationTrack = groupedTracks[joint]?["translation_xyz_absolute"] {
+                    let sampledTranslation = JockPoseMath.sampleVector3Sorted(
+                        keys: translationTrack.keys,
+                        time: time
+                    )
+                    let sourceBaseTranslation =
+                        sourceRest.restLocalTransforms[joint]?.translation ??
+                        sampledTranslation
+                    var rawDelta = sampledTranslation - sourceBaseTranslation
+
+                    if isRootTranslationJoint(joint) {
+                        if ignoreSourceRestRootY {
+                            rawDelta.y = 0
+                        }
+
+                        targetOutput.translation = targetBase.translation +
+                            convertLocalTranslationDelta(
+                                rawDelta,
+                                joint: joint,
+                                sourceRestGlobals: sourceRestGlobals,
+                                targetRestGlobals: targetRestGlobals,
+                                parentByCanonicalJoint: parentByCanonicalJoint,
+                                scale: sourceToTargetScale
+                            )
+                    } else if applyNonRootTranslationDeltas {
+                        let convertedDelta = convertLocalTranslationDelta(
+                            rawDelta,
+                            joint: joint,
+                            sourceRestGlobals: sourceRestGlobals,
+                            targetRestGlobals: targetRestGlobals,
+                            parentByCanonicalJoint: parentByCanonicalJoint,
+                            scale: sourceToTargetScale
+                        )
+                        let clampedDelta = clampNonRootTranslationDeltaIfNeeded(
+                            convertedDelta,
+                            targetBase: targetBase,
+                            maxNonRootTranslationDeltaAsBoneFraction:
+                                maxNonRootTranslationDeltaAsBoneFraction
+                        )
+
+                        targetOutput.translation = targetBase.translation + clampedDelta
+                    } else {
+                        targetOutput.translation = targetBase.translation
+                    }
+                }
+
+                targetOutput.scale = targetBase.scale
+                output[runtimeIndex] = targetOutput
+
+                outputGlobals[joint] = computeSingleGlobalTransform(
+                    joint: joint,
+                    local: targetOutput,
+                    outputGlobals: outputGlobals,
+                    parentByCanonicalJoint: parentByCanonicalJoint
+                )
+            }
+
+            return output
+        }
+
+        private func preparedTracksByJointAndChannel(
+            _ preparedTracks: [JockPreparedTrack]
+        ) -> [String: [String: JockPreparedTrack]] {
+            preparedTracks.reduce(into: [String: [String: JockPreparedTrack]]()) { partial, track in
+                partial[track.joint, default: [:]][track.channel] = track
+            }
+        }
+
+        private func localTransformsByCanonicalJoint(
+            from transforms: [Transform],
+            runtimeIndexByCanonicalJoint: [String: Int]
+        ) -> [String: Transform] {
+            runtimeIndexByCanonicalJoint.reduce(into: [String: Transform]()) { partial, pair in
+                guard transforms.indices.contains(pair.value) else {
+                    return
+                }
+
+                partial[pair.key] = transforms[pair.value]
+            }
+        }
+
+        private func sampleSourceAnimatedLocalTransforms(
+            sourceRest: SourceRigRestPose,
+            groupedTracks: [String: [String: JockPreparedTrack]],
+            time: TimeInterval
+        ) -> [String: Transform] {
+            var locals = sourceRest.restLocalTransforms
+
+            for joint in sourceRest.jointOrder {
+                var transform = locals[joint] ?? Self.identityTransform()
+                let channels = groupedTracks[joint] ?? [:]
+
+                if let track = channels["translation_xyz_absolute"] {
+                    transform.translation = JockPoseMath.sampleVector3Sorted(
+                        keys: track.keys,
+                        time: time
+                    )
+                }
+
+                if let track = channels["rotation_quat_wxyz_absolute"] {
+                    transform.rotation = simd_normalize(
+                        JockPoseMath.sampleQuaternionWXYZSorted(
+                            keys: track.keys,
+                            time: time
+                        )
+                    )
+                }
+
+                if let track = channels["scale_xyz_absolute"] {
+                    transform.scale = JockPoseMath.sampleVector3Sorted(
+                        keys: track.keys,
+                        time: time
+                    )
+                }
+
+                if let track = channels["translation_xyz_additive"] {
+                    transform.translation += JockPoseMath.sampleVector3Sorted(
+                        keys: track.keys,
+                        time: time
+                    )
+                }
+
+                if let track = channels["rotation_quat_wxyz_additive"] {
+                    let delta = JockPoseMath.sampleQuaternionWXYZSorted(
+                        keys: track.keys,
+                        time: time
+                    )
+                    transform.rotation = simd_normalize(
+                        transform.rotation * simd_normalize(delta)
+                    )
+                }
+
+                if let track = channels["rotation_euler_xyz_degrees_additive"] {
+                    let delta = JockPoseMath.sampleEulerXYZDegreesAsQuaternionSorted(
+                        keys: track.keys,
+                        time: time
+                    )
+                    transform.rotation = simd_normalize(
+                        transform.rotation * simd_normalize(delta)
+                    )
+                }
+
+                locals[joint] = transform
+            }
+
+            return locals
+        }
+
+        private func computeGlobalTransforms(
+            localTransforms: [String: Transform],
+            jointOrder: [String],
+            parentByJoint: [String: String]
+        ) -> [String: GlobalJointTransform] {
+            var globalMatrices: [String: simd_float4x4] = [:]
+            var globals: [String: GlobalJointTransform] = [:]
+
+            for joint in jointOrder {
+                let localMatrix = (localTransforms[joint] ?? Self.identityTransform()).matrix
+                let globalMatrix: simd_float4x4
+
+                if let parent = parentByJoint[joint],
+                   let parentMatrix = globalMatrices[parent] {
+                    globalMatrix = parentMatrix * localMatrix
+                } else {
+                    globalMatrix = localMatrix
+                }
+
+                globalMatrices[joint] = globalMatrix
+                globals[joint] = Self.globalJointTransform(
+                    from: globalMatrix
+                )
+            }
+
+            return globals
+        }
+
+        private func computeSingleGlobalTransform(
+            joint: String,
+            local: Transform,
+            outputGlobals: [String: GlobalJointTransform],
+            parentByCanonicalJoint: [String: String]
+        ) -> GlobalJointTransform {
+            let localMatrix = local.matrix
+            let globalMatrix: simd_float4x4
+
+            if let parent = parentByCanonicalJoint[joint],
+               let parentGlobal = outputGlobals[parent] {
+                globalMatrix = Self.matrix(from: parentGlobal) * localMatrix
+            } else {
+                globalMatrix = localMatrix
+            }
+
+            return Self.globalJointTransform(from: globalMatrix)
+        }
+
+        private func convertLocalTranslationDelta(
+            _ delta: SIMD3<Float>,
+            joint: String,
+            sourceRestGlobals: [String: GlobalJointTransform],
+            targetRestGlobals: [String: GlobalJointTransform],
+            parentByCanonicalJoint: [String: String],
+            scale: Float
+        ) -> SIMD3<Float> {
+            guard let parent = parentByCanonicalJoint[joint],
+                  let sourceParent = sourceRestGlobals[parent],
+                  let targetParent = targetRestGlobals[parent] else {
+                return delta * scale
+            }
+
+            let worldDelta = sourceParent.rotation.act(delta)
+            let targetLocalDelta = simd_inverse(targetParent.rotation).act(worldDelta)
+
+            return targetLocalDelta * scale
+        }
+
+        private func clampNonRootTranslationDeltaIfNeeded(
+            _ delta: SIMD3<Float>,
+            targetBase: Transform,
+            maxNonRootTranslationDeltaAsBoneFraction: Float
+        ) -> SIMD3<Float> {
+            let targetBoneLength = max(
+                simd_length(targetBase.translation),
+                0.001
+            )
+            let maxLength = targetBoneLength * maxNonRootTranslationDeltaAsBoneFraction
+            let length = simd_length(delta)
+
+            guard length > maxLength else {
+                return delta
+            }
+
+            let clamped = Self.normalizeSafe(
+                delta,
+                fallback: .zero
+            ) * maxLength
+
+            return clamped
+        }
+
+        private func bodyHeight(
+            from pose: [String: GlobalJointTransform]
+        ) -> Float {
+            guard let hips = pose["Hips"]?.translation else {
+                return 1
+            }
+
+            let head =
+                pose["Head"]?.translation ??
+                pose["neck"]?.translation ??
+                pose["Spine"]?.translation ??
+                hips
+
+            let feet = [
+                pose["LeftFoot"]?.translation,
+                pose["RightFoot"]?.translation,
+                pose["LeftToeBase"]?.translation,
+                pose["RightToeBase"]?.translation
+            ].compactMap { $0 }
+
+            let minY = feet.map(\.y).min() ?? hips.y
+            let maxY = max(
+                head.y,
+                hips.y
+            )
+
+            return max(
+                maxY - minY,
+                0.001
+            )
+        }
+
+        private func isRootTranslationJoint(
+            _ jointName: String
+        ) -> Bool {
+            let lower = jointName.lowercased()
+            return lower == "hips" ||
+                lower == "root" ||
+                lower == "pelvis"
+        }
+
+        private static func identityTransform() -> Transform {
+            Transform(
+                scale: SIMD3<Float>(1, 1, 1),
+                rotation: simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0)),
+                translation: .zero
+            )
+        }
+
+        private static func matrix(
+            from transform: GlobalJointTransform
+        ) -> simd_float4x4 {
+            Transform(
+                scale: transform.scale,
+                rotation: transform.rotation,
+                translation: transform.translation
+            ).matrix
+        }
+
+        private static func globalJointTransform(
+            from matrix: simd_float4x4
+        ) -> GlobalJointTransform {
+            let translation = SIMD3<Float>(
+                matrix.columns.3.x,
+                matrix.columns.3.y,
+                matrix.columns.3.z
+            )
+            let basis = simd_float3x3(
+                SIMD3<Float>(
+                    matrix.columns.0.x,
+                    matrix.columns.0.y,
+                    matrix.columns.0.z
+                ),
+                SIMD3<Float>(
+                    matrix.columns.1.x,
+                    matrix.columns.1.y,
+                    matrix.columns.1.z
+                ),
+                SIMD3<Float>(
+                    matrix.columns.2.x,
+                    matrix.columns.2.y,
+                    matrix.columns.2.z
+                )
+            )
+            let scale = SIMD3<Float>(
+                simd_length(basis.columns.0),
+                simd_length(basis.columns.1),
+                simd_length(basis.columns.2)
+            )
+            let rotationBasis = simd_float3x3(
+                basis.columns.0 / max(scale.x, 0.0001),
+                basis.columns.1 / max(scale.y, 0.0001),
+                basis.columns.2 / max(scale.z, 0.0001)
+            )
+
+            return GlobalJointTransform(
+                translation: translation,
+                rotation: simd_normalize(
+                    simd_quatf(rotationBasis)
+                ),
+                scale: scale
+            )
+        }
+
+        private static func normalizeSafe(
+            _ vector: SIMD3<Float>,
+            fallback: SIMD3<Float>
+        ) -> SIMD3<Float> {
+            let length = simd_length(vector)
+
+            guard length > 0.00001 else {
+                return fallback
+            }
+
+            return vector / length
+        }
+    }
+
     private weak var modelEntity: ModelEntity?
     private weak var locomotionRootEntity: Entity?
     private weak var visualOffsetEntity: Entity?
@@ -405,6 +1171,7 @@ final class JockRuntimeDriver {
     private let skeletonMappingRecords: [JockJointMappingRecord]
     private let canonicalJointOrder: [String]
     private let parentByCanonicalJoint: [String: String]
+    private let runtimeIndexByCanonicalJoint: [String: Int]
 
     private var activeClip: JockAnimClip?
     private var playbackTime: TimeInterval = 0
@@ -441,6 +1208,13 @@ final class JockRuntimeDriver {
     private var activeLocomotionPolicy: JockClipLocomotionPolicy = .useClipLocomotion
     private var activeSubAnimations: [ActiveSubAnimation] = []
     private var preparedClipsByID: [String: JockPreparedClip] = [:]
+    private var sourceRestPoseByClipID: [String: SourceRigRestPose] = [:]
+    private let animationPoseSampler = AnimationPoseSampler()
+    private var asyncPoseTask: Task<Void, Never>?
+    private var asyncPoseInFlight = false
+    private var completedAsyncPoseSample: AsyncPoseSampleResult?
+    private var asyncPoseSamplingRevision = 0
+    private var loggedAsyncPoseSamplingClipIDs = Set<String>()
     private var loggedPreservePolicyClipIDs = Set<String>()
     private var loggedPreserveRotationBasisDiagnostics = Set<String>()
     private var loggedDirectionRetargetPolicyClipIDs = Set<String>()
@@ -502,6 +1276,13 @@ final class JockRuntimeDriver {
         self.parentByCanonicalJoint = Self.buildParentMap(
             jointPaths: adapter.rig.jointPaths
         )
+        self.runtimeIndexByCanonicalJoint = adapter.rig.canonicalLeafNames.reduce(
+            into: [String: Int]()
+        ) { partial, joint in
+            if let index = adapter.runtimeIndex(for: joint) {
+                partial[joint] = index
+            }
+        }
         self.currentJointTransforms = modelEntity.jointTransforms
 
         print(
@@ -546,15 +1327,55 @@ final class JockRuntimeDriver {
 
     func prewarmClips(_ clips: [JockAnimClip]) {
         var prepared: [String: JockPreparedClip] = [:]
+        var sourceRest: [String: SourceRigRestPose] = [:]
 
         for clip in clips {
             let preparedClip = prepareClip(clip)
             prepared[clip.clipID] = preparedClip
+
+            guard effectivePoseApplicationPolicy(for: clip) == .sourceRestDeltaToTargetRest else {
+                continue
+            }
+
+            do {
+                sourceRest[clip.clipID] = try SourceRigRestPoseCache.shared.resolve(
+                    clip: clip,
+                    rig: adapter.rig,
+                    defaultDadUSDZURL: nil
+                )
+            } catch {
+                print(
+                    """
+                    [JockRuntimeDriver] ERROR source-rest async prewarm unavailable
+                      archetype: \(characterArchetype.rawValue)
+                      clip: \(clip.clipID)
+                      error: \(error.localizedDescription)
+                      fallback: synchronous_existing_path
+                    """
+                )
+            }
         }
 
         preparedClipsByID = prepared
+        sourceRestPoseByClipID = sourceRest
 
-        print("[Gravitas Jock] Prewarmed \(preparedClipsByID.count) clips.")
+        let asyncCachePayload = AsyncPoseSamplerCachePayload(
+            preparedClipsByID: prepared,
+            sourceRestPoseByClipID: sourceRest
+        )
+        let animationPoseSampler = animationPoseSampler
+        Task {
+            await animationPoseSampler.installCache(
+                asyncCachePayload
+            )
+        }
+
+        print(
+            """
+            [Gravitas Jock] Prewarmed \(preparedClipsByID.count) clips.
+              asyncSourceRestClips: \(sourceRestPoseByClipID.count)
+            """
+        )
     }
 
     func playClip(
@@ -565,6 +1386,8 @@ final class JockRuntimeDriver {
         runtimeOverride: JockRuntimeClipOverride = .identity
     ) {
         guard let modelEntity else { return }
+
+        invalidateAsyncPoseSampling()
 
         activeClip = clip
         activeRuntimeOverride = runtimeOverride
@@ -654,6 +1477,7 @@ final class JockRuntimeDriver {
         activeSubAnimations.removeAll { existing in
             existing.clip.clipID == clip.clipID
         }
+        invalidateAsyncPoseSampling()
 
         let instance = ActiveSubAnimation(
             id: UUID(),
@@ -682,6 +1506,7 @@ final class JockRuntimeDriver {
     }
 
     func stop() {
+        invalidateAsyncPoseSampling()
         state = .stopped
         activeClip = nil
         currentActiveClipID = nil
@@ -696,6 +1521,7 @@ final class JockRuntimeDriver {
     }
 
     func freezeCurrentPoseForCorpse() {
+        invalidateAsyncPoseSampling()
         state = .stopped
         activeClip = nil
         currentActiveClipID = nil
@@ -720,6 +1546,7 @@ final class JockRuntimeDriver {
     }
 
     func resetForFreshHordeSpawn() {
+        invalidateAsyncPoseSampling()
         if let modelEntity {
             setJointTransforms(baseJointTransforms, on: modelEntity)
         } else {
@@ -779,6 +1606,8 @@ final class JockRuntimeDriver {
     ) {
         guard let modelEntity else { return }
 
+        invalidateAsyncPoseSampling()
+
         state = .transitioningToBase
         transitionElapsed = 0
         transitionFromPose = modelEntity.jointTransforms
@@ -802,6 +1631,8 @@ final class JockRuntimeDriver {
             axis: SIMD3<Float>(0, 1, 0)
         )
     ) {
+        invalidateAsyncPoseSampling()
+
         if let modelEntity {
             setJointTransforms(baseJointTransforms, on: modelEntity)
         } else {
@@ -850,6 +1681,11 @@ final class JockRuntimeDriver {
         timingProfiler: TimingProfiler?
     ) {
         guard let modelEntity else { return }
+
+        applyCompletedAsyncPoseSampleIfNeeded(
+            on: modelEntity,
+            timingProfiler: timingProfiler
+        )
 
         let frameOutput: RuntimeFrameOutput?
 
@@ -919,17 +1755,6 @@ final class JockRuntimeDriver {
             ? Float(min(transitionElapsed / transitionDuration, 1.0))
             : 1.0
 
-        let blendedPose = JockPoseMath.blendTransforms(
-            from: transitionFromPose,
-            to: transitionToPose,
-            alpha: alpha
-        )
-
-        let finalPose = applyActiveSubAnimations(
-            to: blendedPose,
-            deltaTime: deltaTime
-        )
-
         let visualOffset = simd_slerp(
             transitionFromVisualOffset,
             transitionToVisualOffset,
@@ -937,9 +1762,51 @@ final class JockRuntimeDriver {
         )
 
         var output = RuntimeFrameOutput(
-            jointTransforms: finalPose,
+            jointTransforms: nil,
             visualOffset: visualOffset
         )
+
+        var didUseAsyncTransitionSampling = false
+
+        if let activeClip,
+           let payload = asyncPayloadForClip(activeClip) {
+            if canSubmitAsyncPoseSample {
+                if let subAnimationRequests = makeAsyncSubAnimationSampleRequests(
+                    deltaTime: deltaTime
+                ) {
+                    submitAsyncPoseSampleIfIdle(
+                        clip: activeClip,
+                        payload: payload,
+                        time: min(
+                            transitionElapsed,
+                            activeClip.timing.durationSeconds
+                        ),
+                        transitionFromPose: transitionFromPose,
+                        transitionToPose: transitionToPose,
+                        transitionAlpha: alpha,
+                        subAnimations: subAnimationRequests
+                    )
+                    didUseAsyncTransitionSampling = true
+                }
+            } else {
+                didUseAsyncTransitionSampling = true
+            }
+        }
+
+        if !didUseAsyncTransitionSampling {
+            let blendedPose = JockPoseMath.blendTransforms(
+                from: transitionFromPose,
+                to: transitionToPose,
+                alpha: alpha
+            )
+
+            let finalPose = applyActiveSubAnimations(
+                to: blendedPose,
+                deltaTime: deltaTime
+            )
+
+            output.jointTransforms = finalPose
+        }
 
         if let activeClip,
            activeClip.locomotion.isEnabled,
@@ -975,25 +1842,21 @@ final class JockRuntimeDriver {
             ? Float(min(transitionElapsed / transitionDuration, 1.0))
             : 1.0
 
-        let blendedPose = JockPoseMath.blendTransforms(
-            from: transitionFromPose,
-            to: transitionToPose,
-            alpha: alpha
-        )
-
-        let finalPose = applyActiveSubAnimations(
-            to: blendedPose,
-            deltaTime: deltaTime
-        )
-
         let output = RuntimeFrameOutput(
-            jointTransforms: finalPose,
+            jointTransforms: nil,
             visualOffset: simd_slerp(
                 transitionFromVisualOffset,
                 transitionToVisualOffset,
                 alpha
             )
         )
+
+        if canSubmitAsyncPoseSample {
+            submitAsyncTransitionToBaseSampleIfIdle(
+                time: transitionElapsed,
+                transitionAlpha: alpha
+            )
+        }
 
         if alpha >= 1.0 {
             state = .stopped
@@ -1079,6 +1942,33 @@ final class JockRuntimeDriver {
         deltaTime: TimeInterval,
         didWrap: Bool
     ) -> RuntimeFrameOutput {
+        if let payload = asyncPreparedClipForPoseSampling(
+            clip,
+            at: time
+        ) {
+            if canSubmitAsyncPoseSample,
+               let subAnimationRequests = makeAsyncSubAnimationSampleRequests(
+                   deltaTime: deltaTime
+               ) {
+                submitAsyncPoseSampleIfIdle(
+                    clip: clip,
+                    payload: payload,
+                    time: time,
+                    subAnimations: subAnimationRequests
+                )
+            }
+
+            return RuntimeFrameOutput(
+                jointTransforms: nil,
+                locomotionRequest: LocomotionApplicationRequest(
+                    clip: clip,
+                    time: time,
+                    didWrap: didWrap,
+                    locomotionPolicy: activeLocomotionPolicy
+                )
+            )
+        }
+
         let basePose = sampleClipPose(
             clip,
             at: time
@@ -1137,6 +2027,253 @@ final class JockRuntimeDriver {
         if let completedClip = output.completedClip {
             onClipCompleted?(completedClip)
         }
+    }
+
+    private var canSubmitAsyncPoseSample: Bool {
+        !asyncPoseInFlight && completedAsyncPoseSample == nil
+    }
+
+    private func asyncPreparedClipForPoseSampling(
+        _ clip: JockAnimClip,
+        at time: TimeInterval
+    ) -> AsyncPoseSamplingPayload? {
+        guard time < max(clip.timing.durationSeconds, 0.001) else {
+            return nil
+        }
+
+        return asyncPayloadForClip(clip)
+    }
+
+    private func asyncPayloadForClip(
+        _ clip: JockAnimClip
+    ) -> AsyncPoseSamplingPayload? {
+        guard let preparedClip = preparedClipsByID[clip.clipID] else {
+            return nil
+        }
+
+        switch effectivePoseApplicationPolicy(for: clip) {
+        case .authorAbsoluteLocal:
+            return AsyncPoseSamplingPayload(
+                clipID: preparedClip.clipID,
+                policy: .authorAbsoluteLocal
+            )
+
+        case .sourceRestDeltaToTargetRest:
+            guard sourceRestPoseByClipID[clip.clipID] != nil else {
+                return nil
+            }
+
+            return AsyncPoseSamplingPayload(
+                clipID: preparedClip.clipID,
+                policy: .sourceRestDeltaToTargetRest
+            )
+
+        case .preserveTargetSkeleton,
+             .preserveTargetSkeletonDirectionRetarget:
+            return nil
+        }
+    }
+
+    private func makeAsyncSubAnimationSampleRequests(
+        deltaTime: TimeInterval
+    ) -> [AsyncSubAnimationSampleRequest]? {
+        guard !activeSubAnimations.isEmpty else {
+            return []
+        }
+
+        var updatedSubAnimations: [ActiveSubAnimation] = []
+        var requests: [AsyncSubAnimationSampleRequest] = []
+        requests.reserveCapacity(activeSubAnimations.count)
+
+        for var subAnimation in activeSubAnimations {
+            subAnimation.playbackTime += deltaTime
+
+            if subAnimation.isComplete {
+                continue
+            }
+
+            let weight = subAnimation.weight()
+            updatedSubAnimations.append(subAnimation)
+
+            guard weight > 0.0001 else {
+                continue
+            }
+
+            guard let payload = asyncPayloadForClip(subAnimation.clip) else {
+                return nil
+            }
+
+            requests.append(
+                AsyncSubAnimationSampleRequest(
+                    clipID: payload.clipID,
+                    policy: payload.policy,
+                    affectedRuntimeIndices: subAnimation.affectedRuntimeIndices,
+                    time: subAnimation.subClipSampleTime(),
+                    weight: weight
+                )
+            )
+        }
+
+        activeSubAnimations = updatedSubAnimations
+
+        return requests
+    }
+
+    private func submitAsyncPoseSampleIfIdle(
+        clip: JockAnimClip,
+        payload: AsyncPoseSamplingPayload,
+        time: TimeInterval,
+        transitionFromPose: [Transform]? = nil,
+        transitionToPose: [Transform]? = nil,
+        transitionAlpha: Float? = nil,
+        subAnimations: [AsyncSubAnimationSampleRequest] = []
+    ) {
+        guard !asyncPoseInFlight,
+              completedAsyncPoseSample == nil else {
+            return
+        }
+
+        let request = AsyncPoseSampleRequest(
+            revision: asyncPoseSamplingRevision,
+            clipID: payload.clipID,
+            policy: payload.policy,
+            baseJointTransforms: baseJointTransforms,
+            canonicalJointOrder: canonicalJointOrder,
+            parentByCanonicalJoint: parentByCanonicalJoint,
+            runtimeIndexByCanonicalJoint: runtimeIndexByCanonicalJoint,
+            ignoreSourceRestRootY: ignoreSourceRestRootY,
+            applyNonRootTranslationDeltas: applyNonRootTranslationDeltas,
+            maxNonRootTranslationDeltaAsBoneFraction: maxNonRootTranslationDeltaAsBoneFraction,
+            time: time,
+            transitionFromPose: transitionFromPose,
+            transitionToPose: transitionToPose,
+            transitionAlpha: transitionAlpha,
+            subAnimations: subAnimations
+        )
+        let sampler = animationPoseSampler
+
+        asyncPoseInFlight = true
+        asyncPoseTask = Task { @MainActor [weak self] in
+            let result = await sampler.samplePose(
+                request: request
+            )
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            self?.receiveAsyncPoseSample(
+                result
+            )
+        }
+
+        if !loggedAsyncPoseSamplingClipIDs.contains(clip.clipID) {
+            loggedAsyncPoseSamplingClipIDs.insert(clip.clipID)
+
+            print(
+                """
+                [JockRuntimeDriver] async pose sampling enabled
+                  clipID: \(clip.clipID)
+                  policy: \(payload.policy.rawValue)
+                  mainActorAppliesRealityKit: true
+                """
+            )
+        }
+    }
+
+    private func submitAsyncTransitionToBaseSampleIfIdle(
+        time: TimeInterval,
+        transitionAlpha: Float
+    ) {
+        guard canSubmitAsyncPoseSample else {
+            return
+        }
+
+        let request = AsyncPoseSampleRequest(
+            revision: asyncPoseSamplingRevision,
+            clipID: nil,
+            policy: .authorAbsoluteLocal,
+            baseJointTransforms: baseJointTransforms,
+            canonicalJointOrder: canonicalJointOrder,
+            parentByCanonicalJoint: parentByCanonicalJoint,
+            runtimeIndexByCanonicalJoint: runtimeIndexByCanonicalJoint,
+            ignoreSourceRestRootY: ignoreSourceRestRootY,
+            applyNonRootTranslationDeltas: applyNonRootTranslationDeltas,
+            maxNonRootTranslationDeltaAsBoneFraction: maxNonRootTranslationDeltaAsBoneFraction,
+            time: time,
+            transitionFromPose: transitionFromPose,
+            transitionToPose: transitionToPose,
+            transitionAlpha: transitionAlpha,
+            subAnimations: []
+        )
+        let sampler = animationPoseSampler
+
+        asyncPoseInFlight = true
+        asyncPoseTask = Task { @MainActor [weak self] in
+            let result = await sampler.samplePose(
+                request: request
+            )
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            self?.receiveAsyncPoseSample(
+                result
+            )
+        }
+    }
+
+    private func receiveAsyncPoseSample(
+        _ result: AsyncPoseSampleResult
+    ) {
+        asyncPoseInFlight = false
+        asyncPoseTask = nil
+
+        guard result.revision == asyncPoseSamplingRevision else {
+            return
+        }
+
+        completedAsyncPoseSample = result
+    }
+
+    private func applyCompletedAsyncPoseSampleIfNeeded(
+        on modelEntity: ModelEntity,
+        timingProfiler: TimingProfiler?
+    ) {
+        guard let sample = completedAsyncPoseSample else {
+            return
+        }
+
+        completedAsyncPoseSample = nil
+
+        guard sample.revision == asyncPoseSamplingRevision,
+              currentActiveClipID == sample.clipID else {
+            return
+        }
+
+        let apply = {
+            self.setJointTransforms(
+                sample.jointTransforms,
+                on: modelEntity
+            )
+        }
+
+        if let timingProfiler {
+            timingProfiler.measure("jock_runtime_driver.apply_async_pose") {
+                apply()
+            }
+        } else {
+            apply()
+        }
+    }
+
+    private func invalidateAsyncPoseSampling() {
+        asyncPoseTask?.cancel()
+        asyncPoseTask = nil
+        asyncPoseInFlight = false
+        completedAsyncPoseSample = nil
+        asyncPoseSamplingRevision += 1
     }
 
     private func setJointTransforms(
@@ -1506,23 +2643,28 @@ final class JockRuntimeDriver {
     ) -> [Transform] {
         let sourceRest: SourceRigRestPose
 
-        do {
-            sourceRest = try SourceRigRestPoseCache.shared.resolve(
-                clip: clip,
-                rig: adapter.rig,
-                defaultDadUSDZURL: nil
-            )
-        } catch {
-            print(
-                """
-                [JockRuntimeDriver] ERROR source-rest delta retarget unavailable
-                  archetype: \(characterArchetype.rawValue)
-                  clip: \(clip.clipID)
-                  error: \(error.localizedDescription)
-                """
-            )
+        if let cachedSourceRest = sourceRestPoseByClipID[clip.clipID] {
+            sourceRest = cachedSourceRest
+        } else {
+            do {
+                sourceRest = try SourceRigRestPoseCache.shared.resolve(
+                    clip: clip,
+                    rig: adapter.rig,
+                    defaultDadUSDZURL: nil
+                )
+                sourceRestPoseByClipID[clip.clipID] = sourceRest
+            } catch {
+                print(
+                    """
+                    [JockRuntimeDriver] ERROR source-rest delta retarget unavailable
+                      archetype: \(characterArchetype.rawValue)
+                      clip: \(clip.clipID)
+                      error: \(error.localizedDescription)
+                    """
+                )
 
-            return baseJointTransforms
+                return baseJointTransforms
+            }
         }
 
         let groupedTracks = preparedTracksByJointAndChannel(preparedTracks)

@@ -225,7 +225,7 @@ enum HordePortalRequiredClips {
     }
 }
 
-struct HordePortalPlacementCandidate {
+struct HordePortalPlacementCandidate: Sendable {
     let wall: WallCandidate
     let placement: DoorPlacement
     let worldCenter: SIMD3<Float>

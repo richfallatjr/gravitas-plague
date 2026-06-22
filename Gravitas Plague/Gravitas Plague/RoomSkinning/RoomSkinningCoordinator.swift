@@ -24,7 +24,10 @@ final class RoomSkinningCoordinator: ObservableObject {
 
     private weak var sceneRoot: Entity?
 
+    private let geometrySelectionEngine = RoomGeometrySelectionEngine()
     private var monitorTask: Task<Void, Never>?
+    private var wallSelectionTask: Task<Void, Never>?
+    private var wallSelectionRevision = 0
     private var selectedWallID: UUID?
 
     private var lastPlayerPosition = SIMD3<Float>(0, 1.5, 0)
@@ -88,6 +91,7 @@ final class RoomSkinningCoordinator: ObservableObject {
         state = .scanning
         setStatus("Look around your room. Finding a wall...")
         wallManager.beginScanning()
+        cancelWallSelectionTask()
         startCandidateMonitor()
 
         print("[RoomSkinning] scan started")
@@ -111,6 +115,7 @@ final class RoomSkinningCoordinator: ObservableObject {
     func cancelRoomSkinning() {
         monitorTask?.cancel()
         monitorTask = nil
+        cancelWallSelectionTask()
         selectedWallID = nil
         activeDoorHandleDrag = nil
 
@@ -147,33 +152,7 @@ final class RoomSkinningCoordinator: ObservableObject {
 
         switch state {
         case .scanning, .wallCandidateAvailable:
-            guard let wall = wallManager.bestWallCandidate(
-                relativeToPlayer: lastPlayerPosition,
-                playerForward: lastPlayerForward
-            ) else {
-                state = .scanning
-                setStatus("Scanning walls...")
-                return
-            }
-
-            selectedWallID = wall.id
-
-            portalDoorController.createDoorPreview(
-                onWall: wall,
-                wallManager: wallManager
-            )
-
-            state = .doorPreviewVisible
-            setStatus("Door preview ready. Grab the white handle to place.")
-
-            print(
-                """
-                [RoomSkinning] selected wall frozen for door preview
-                  wallID: \(wall.id)
-                  source: best_wall_once_not_head_follow
-                """
-            )
-            print("[RoomSkinning] door preview visible wall=\(wall.id)")
+            submitBestWallSelectionIfNeeded()
 
         case .doorPreviewVisible, .adjustingDoor, .doorConfirmed:
             guard let selectedWallID,
@@ -189,6 +168,103 @@ final class RoomSkinningCoordinator: ObservableObject {
         default:
             return
         }
+    }
+
+    private func submitBestWallSelectionIfNeeded() {
+        guard wallSelectionTask == nil else {
+            return
+        }
+
+        let walls = Array(
+            wallManager.wallCandidates.values
+        )
+
+        guard !walls.isEmpty else {
+            state = .scanning
+            setStatus("Scanning walls...")
+            return
+        }
+
+        let request = RoomGeometryWallSelectionRequest(
+            walls: walls,
+            playerPosition: lastPlayerPosition,
+            playerForward: lastPlayerForward
+        )
+        let revision = wallSelectionRevision
+        let engine = geometrySelectionEngine
+
+        wallSelectionTask = Task { @MainActor [weak self] in
+            let result = await engine.selectBestWall(
+                request: request
+            )
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            self?.applyBestWallSelection(
+                result,
+                revision: revision
+            )
+        }
+    }
+
+    private func applyBestWallSelection(
+        _ result: RoomGeometryWallSelectionResult,
+        revision: Int
+    ) {
+        guard revision == wallSelectionRevision else {
+            return
+        }
+
+        wallSelectionTask = nil
+
+        guard purpose == .storyPlacement else {
+            return
+        }
+
+        guard state == .scanning ||
+              state == .wallCandidateAvailable else {
+            return
+        }
+
+        guard let wallID = result.wallID,
+              let wall = wallManager.wallCandidates[wallID] else {
+            state = .scanning
+            setStatus("Scanning walls...")
+            return
+        }
+
+        selectedWallID = wall.id
+
+        portalDoorController.createDoorPreview(
+            onWall: wall,
+            wallManager: wallManager
+        )
+
+        state = .doorPreviewVisible
+        setStatus("Door preview ready. Grab the white handle to place.")
+
+        let scoreDescription = result.selectedScore.map {
+            String(format: "%.3f", $0)
+        } ?? "nil"
+
+        print(
+            """
+            [RoomSkinning] selected wall frozen for door preview
+              wallID: \(wall.id)
+              source: off_main_room_geometry_selection
+              candidateCount: \(result.candidateCount)
+              score: \(scoreDescription)
+            """
+        )
+        print("[RoomSkinning] door preview visible wall=\(wall.id)")
+    }
+
+    private func cancelWallSelectionTask() {
+        wallSelectionTask?.cancel()
+        wallSelectionTask = nil
+        wallSelectionRevision += 1
     }
 
     func confirmRoomSkinning() {
