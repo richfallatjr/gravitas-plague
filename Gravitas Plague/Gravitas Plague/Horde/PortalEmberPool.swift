@@ -20,7 +20,6 @@ private struct PortalEmberFrameUpdate: Sendable {
 }
 
 private struct PortalEmberFrameOutput: Sendable {
-    let nextStates: [PortalEmberParticleState]
     let updates: [PortalEmberFrameUpdate]
 }
 
@@ -53,23 +52,110 @@ private struct PortalEmberCompletedSimulation {
     let output: PortalEmberFrameOutput
 }
 
-private actor PortalEmberSimulationEngine {
+private struct PortalEmberMaterialCounts: Sendable {
+    let birth: Int
+    let hot: Int
+    let red: Int
+    let dark: Int
+}
+
+private actor PortalFXStepper {
+    private var states: [PortalEmberParticleState]
+    private var nextIndex: Int = 0
+    private let materialCounts: PortalEmberMaterialCounts
+
+    init(
+        capacity: Int,
+        materialCounts: PortalEmberMaterialCounts
+    ) {
+        self.states = Array(
+            repeating: PortalEmberParticleState(),
+            count: capacity
+        )
+        self.materialCounts = materialCounts
+    }
+
+    func reset() {
+        states = Array(
+            repeating: PortalEmberParticleState(),
+            count: states.count
+        )
+        nextIndex = 0
+    }
+
     func step(
-        states: [PortalEmberParticleState],
+        spawnSamples: [PortalFXSpawnSample],
         deltaTime: Float
     ) -> PortalEmberFrameOutput {
-        PortalEmberSimulationStepper.step(
+        for sample in spawnSamples {
+            spawn(sample)
+        }
+
+        let output = PortalEmberSimulationStepper.step(
             states: states,
             deltaTime: deltaTime
+        )
+
+        states = output.nextStates
+
+        return PortalEmberFrameOutput(
+            updates: output.updates
+        )
+    }
+
+    private func spawn(
+        _ sample: PortalFXSpawnSample
+    ) {
+        guard !states.isEmpty else {
+            return
+        }
+
+        let index = nextIndex
+        nextIndex = (nextIndex + 1) % states.count
+
+        states[index] = PortalEmberParticleState(
+            active: true,
+            age: 0,
+            life: sample.life,
+            position: sample.position,
+            velocity: sample.velocity,
+            orientation: simd_quatf(
+                angle: 0,
+                axis: SIMD3<Float>(0, 1, 0)
+            ),
+            startSize: Float.random(
+                in: PortalFXDefaults.emberStartSizeMetersMin...PortalFXDefaults.emberStartSizeMetersMax
+            ),
+            endSize: Float.random(
+                in: PortalFXDefaults.emberEndSizeMetersMin...PortalFXDefaults.emberEndSizeMetersMax
+            ),
+            birthMaterialIndex: Int.random(
+                in: 0..<max(materialCounts.birth, 1)
+            ),
+            hotMaterialIndex: Int.random(
+                in: 0..<max(materialCounts.hot, 1)
+            ),
+            redMaterialIndex: Int.random(
+                in: 0..<max(materialCounts.red, 1)
+            ),
+            darkMaterialIndex: Int.random(
+                in: 0..<max(materialCounts.dark, 1)
+            ),
+            spinRadiansPerSecond: Float.random(in: -4.0...4.0)
         )
     }
 }
 
 private enum PortalEmberSimulationStepper {
+    struct Output: Sendable {
+        let nextStates: [PortalEmberParticleState]
+        let updates: [PortalEmberFrameUpdate]
+    }
+
     static func step(
         states: [PortalEmberParticleState],
         deltaTime: Float
-    ) -> PortalEmberFrameOutput {
+    ) -> Output {
         var nextStates = states
         var updates: [PortalEmberFrameUpdate] = []
 
@@ -135,7 +221,7 @@ private enum PortalEmberSimulationStepper {
             )
         }
 
-        return PortalEmberFrameOutput(
+        return Output(
             nextStates: nextStates,
             updates: updates
         )
@@ -168,23 +254,23 @@ private enum PortalEmberSimulationStepper {
 
 private struct PortalEmber {
     var entity: ModelEntity
-    var state = PortalEmberParticleState()
+    var active: Bool = false
 }
 
 @MainActor
 final class PortalEmberPool {
     private let root: Entity
     private var embers: [PortalEmber] = []
-    private var nextIndex: Int = 0
-    private var simulationEngine = PortalEmberSimulationEngine()
+    private let simulationEngine: PortalFXStepper
     private var simulationTask: Task<Void, Never>?
     private var simulationInFlight = false
     private var completedSimulation: PortalEmberCompletedSimulation?
+    private var pendingSpawnSamples: [PortalFXSpawnSample] = []
     private var stateRevision = 0
 
     var activeCount: Int {
         embers.reduce(0) { partialResult, ember in
-            partialResult + (ember.state.active ? 1 : 0)
+            partialResult + (ember.active ? 1 : 0)
         }
     }
 
@@ -195,6 +281,15 @@ final class PortalEmberPool {
         self.root = root
 
         let resources = PortalFXSharedResources.shared
+        self.simulationEngine = PortalFXStepper(
+            capacity: maxActive,
+            materialCounts: PortalEmberMaterialCounts(
+                birth: resources.emberBirthMaterials.count,
+                hot: resources.emberHotMaterials.count,
+                red: resources.emberRedMaterials.count,
+                dark: resources.emberDarkMaterials.count
+            )
+        )
 
         embers.reserveCapacity(maxActive)
 
@@ -230,60 +325,23 @@ final class PortalEmberPool {
         velocity: SIMD3<Float>,
         life: Float
     ) {
-        applyCompletedSimulationIfAvailable()
+        enqueueSpawns(
+            [
+                PortalFXSpawnSample(
+                    position: position,
+                    velocity: velocity,
+                    life: life
+                )
+            ]
+        )
+    }
 
-        guard !embers.isEmpty else {
-            return
-        }
-
-        let resources = PortalFXSharedResources.shared
-        let index = nextIndex
-        nextIndex = (nextIndex + 1) % embers.count
-
-        var ember = embers[index]
-
-        ember.state.active = true
-        ember.state.age = 0
-        ember.state.life = life
-        ember.state.position = position
-        ember.state.velocity = velocity
-        ember.state.orientation = simd_quatf(
-            angle: 0,
-            axis: SIMD3<Float>(0, 1, 0)
+    func enqueueSpawns(
+        _ samples: [PortalFXSpawnSample]
+    ) {
+        pendingSpawnSamples.append(
+            contentsOf: samples
         )
-        ember.state.startSize = Float.random(
-            in: PortalFXDefaults.emberStartSizeMetersMin...PortalFXDefaults.emberStartSizeMetersMax
-        )
-        ember.state.endSize = Float.random(
-            in: PortalFXDefaults.emberEndSizeMetersMin...PortalFXDefaults.emberEndSizeMetersMax
-        )
-
-        ember.state.birthMaterialIndex = Int.random(
-            in: 0..<resources.emberBirthMaterials.count
-        )
-        ember.state.hotMaterialIndex = Int.random(
-            in: 0..<resources.emberHotMaterials.count
-        )
-        ember.state.redMaterialIndex = Int.random(
-            in: 0..<resources.emberRedMaterials.count
-        )
-        ember.state.darkMaterialIndex = Int.random(
-            in: 0..<resources.emberDarkMaterials.count
-        )
-        ember.state.spinRadiansPerSecond = Float.random(in: -4.0...4.0)
-
-        ember.entity.position = position
-        ember.entity.orientation = ember.state.orientation
-        ember.entity.scale = SIMD3<Float>(
-            repeating: ember.state.startSize
-        )
-        ember.entity.model?.materials = [
-            resources.emberBirthMaterials[ember.state.birthMaterialIndex]
-        ]
-        ember.entity.isEnabled = true
-
-        embers[index] = ember
-        stateRevision += 1
     }
 
     func update(
@@ -324,20 +382,20 @@ final class PortalEmberPool {
             return
         }
 
-        let states = embers.map(\.state)
-
-        guard states.contains(where: \.active) else {
+        guard activeCount > 0 || !pendingSpawnSamples.isEmpty else {
             return
         }
 
         let revision = stateRevision
         let engine = simulationEngine
+        let spawnSamples = pendingSpawnSamples
+        pendingSpawnSamples.removeAll()
 
         simulationInFlight = true
 
         simulationTask = Task { @MainActor [weak self] in
             let output = await engine.step(
-                states: states,
+                spawnSamples: spawnSamples,
                 deltaTime: deltaTime
             )
 
@@ -376,20 +434,13 @@ final class PortalEmberPool {
 
         self.completedSimulation = nil
 
-        guard completedSimulation.revision == stateRevision,
-              completedSimulation.output.nextStates.count == embers.count else {
+        guard completedSimulation.revision == stateRevision else {
             return
-        }
-
-        for index in embers.indices {
-            embers[index].state = completedSimulation.output.nextStates[index]
         }
 
         apply(
             completedSimulation.output
         )
-
-        stateRevision += 1
     }
 
     private func apply(
@@ -406,6 +457,7 @@ final class PortalEmberPool {
 
             guard update.active else {
                 entity.isEnabled = false
+                embers[update.index].active = false
                 continue
             }
 
@@ -422,6 +474,7 @@ final class PortalEmberPool {
                 )
             ]
             entity.isEnabled = true
+            embers[update.index].active = true
         }
     }
 
@@ -436,8 +489,12 @@ final class PortalEmberPool {
         simulationTask = nil
         simulationInFlight = false
         completedSimulation = nil
+        pendingSpawnSamples.removeAll()
         stateRevision += 1
-        simulationEngine = PortalEmberSimulationEngine()
+        let engine = simulationEngine
+        Task {
+            await engine.reset()
+        }
 
         root.children.removeAll()
         embers.removeAll()

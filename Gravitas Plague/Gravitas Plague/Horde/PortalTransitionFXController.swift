@@ -14,7 +14,7 @@ struct PortalFXSegment: Sendable {
     let birthRate: Float
 }
 
-private struct PortalFXSpawnSample: Sendable {
+struct PortalFXSpawnSample: Sendable {
     let position: SIMD3<Float>
     let velocity: SIMD3<Float>
     let life: Float
@@ -542,17 +542,9 @@ private extension PortalTransitionFXController {
     func applyEmission(
         _ output: PortalEmissionFrameOutput
     ) {
-        guard let emberPool else {
-            return
-        }
-
-        for spawn in output.spawnSamples {
-            emberPool.spawn(
-                position: spawn.position,
-                velocity: spawn.velocity,
-                life: spawn.life
-            )
-        }
+        emberPool?.enqueueSpawns(
+            output.spawnSamples
+        )
     }
 
     func makeSpawnSample(
