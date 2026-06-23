@@ -163,6 +163,7 @@ final class JockRetargetTestController {
     var enemyBrainCommandDriven = false
 
     private var attackAnchorUserPosition: SIMD3<Float>?
+    private var latestBrainFollowIntent: EnemyBrainFollowIntent?
     private var latestCrowdSnapshots: [HordeEnemyCollisionSnapshot] = []
     private weak var activeTimingProfiler: TimingProfiler?
     private var lastFollowLocomotionLogTime: TimeInterval = 0
@@ -246,6 +247,7 @@ final class JockRetargetTestController {
         combatState = .normal
         activeAttack = nil
         attackAnchorUserPosition = nil
+        latestBrainFollowIntent = nil
         escalateAfterHitReact = false
         playerExposure = 0
 
@@ -832,6 +834,7 @@ final class JockRetargetTestController {
         resetHitSelectionMemory()
         followDemoState = .inactive
         followDelayElapsed = 0
+        latestBrainFollowIntent = nil
         latestHeadPosition = nil
         playerAttackEnabled = true
 
@@ -1588,7 +1591,12 @@ final class JockRetargetTestController {
             attackProximityMeters: attackConfiguration.attackProximityMeters,
             resumeFollowDistanceMeters: attackConfiguration.resumeFollowDistanceMeters,
             aggressiveDelayMinSeconds: attackConfiguration.aggressiveDelayMinSeconds,
-            aggressiveDelayMaxSeconds: attackConfiguration.aggressiveDelayMaxSeconds
+            aggressiveDelayMaxSeconds: attackConfiguration.aggressiveDelayMaxSeconds,
+            followForwardSign: followConfiguration.followForwardSign,
+            walkDistanceScale: followConfiguration.walkDistanceScale,
+            maxStepMetersPerFrame: followConfiguration.maxStepMetersPerFrame,
+            maxTurnRadiansPerSecond: followConfiguration.maxTurnRadiansPerSecond,
+            facingDeadZoneRadians: followConfiguration.facingDeadZoneRadians
         )
 
         #if DEBUG
@@ -1787,11 +1795,25 @@ final class JockRetargetTestController {
         }
 
         switch command {
+        case .applyFollowIntent(let enemyID, let intent):
+            guard enemyID == hordeID else { return }
+            guard case .normal = combatState else { return }
+
+            latestBrainFollowIntent = intent
+
+            if isActiveHordeGameplayEnemy,
+               followDemoState != .following {
+                followDemoState = .following
+                followDelayElapsed = 0
+                playFollowWalk()
+            }
+
         case .enterCloseRangeReady(let enemyID, let anchor, let delay):
             guard enemyID == hordeID else { return }
             guard case .normal = combatState else { return }
             guard !isInNonInterruptibleCombatState else { return }
 
+            latestBrainFollowIntent = nil
             attackAnchorUserPosition = anchor
             if isActiveHordeGameplayEnemy {
                 startAttackIfPossible()
@@ -1820,6 +1842,8 @@ final class JockRetargetTestController {
                 guard case .closeRangeReady = combatState else { return }
             }
 
+            latestBrainFollowIntent = nil
+
             if let anchor {
                 attackAnchorUserPosition = anchor
             }
@@ -1828,6 +1852,7 @@ final class JockRetargetTestController {
 
         case .exitCloseRangeToFollow(let enemyID):
             guard enemyID == hordeID else { return }
+            latestBrainFollowIntent = nil
             guard case .closeRangeReady = combatState else { return }
 
             exitCloseRangeToFollow()
@@ -1836,6 +1861,7 @@ final class JockRetargetTestController {
             guard enemyID == hordeID else { return }
             guard case .attacking = combatState else { return }
 
+            latestBrainFollowIntent = nil
             attackAnchorUserPosition = nil
 
         case .advanceActiveAttackElapsed(let enemyID, let delta):
@@ -2159,6 +2185,7 @@ final class JockRetargetTestController {
         crowdSteering = HordeCrowdSteeringState()
         attackAnchorUserPosition = nil
         latestCrowdSnapshots.removeAll()
+        latestBrainFollowIntent = nil
 
         setEnemyBodyCollisionParticipant(
             false,
@@ -2183,6 +2210,7 @@ final class JockRetargetTestController {
 
         crowdSteering = HordeCrowdSteeringState()
         latestCrowdSnapshots.removeAll()
+        latestBrainFollowIntent = nil
 
         activeAttack = nil
         attackAnchorUserPosition = nil
@@ -2258,6 +2286,7 @@ final class JockRetargetTestController {
         playerAttackEnabled = false
         followDemoState = .inactive
         activeAttack = nil
+        latestBrainFollowIntent = nil
         isPlayingPacingLoop = false
 
         driver?.locomotionDeltaHandler = nil
@@ -2296,6 +2325,7 @@ final class JockRetargetTestController {
         enemyCollisionState = .dead
         crowdSteering = HordeCrowdSteeringState()
         latestCrowdSnapshots.removeAll()
+        latestBrainFollowIntent = nil
 
         rootEntity.transform = Transform()
         rootEntity.isEnabled = false
@@ -2696,7 +2726,11 @@ final class JockRetargetTestController {
             }
         }
 
-        if canUpdateFollowMovement {
+        if canUpdateFollowMovement,
+           enemyBrainCommandDriven,
+           isActiveHordeGameplayEnemy {
+            updateBrainDrivenHordeFollowIfNeeded()
+        } else if canUpdateFollowMovement {
             updateFollowDemoIfNeeded(
                 deltaTime: dt,
                 currentHeadPosition: currentHeadPosition
@@ -3787,6 +3821,7 @@ final class JockRetargetTestController {
         activeAttack = nil
         combatState = .normal
         attackAnchorUserPosition = nil
+        latestBrainFollowIntent = nil
         followDelayElapsed = 0
 
         driver?.locomotionDeltaHandler = { [weak self] delta in
@@ -3820,6 +3855,7 @@ final class JockRetargetTestController {
         }
 
         crowdSteering = HordeCrowdSteeringState()
+        latestBrainFollowIntent = nil
 
         guard let selectedAttackClipID = pickAnimationClipIDFromAttributes(
             role: "attack",
@@ -4226,6 +4262,20 @@ final class JockRetargetTestController {
         )
     }
 
+    private func updateBrainDrivenHordeFollowIfNeeded() {
+        guard hordeLifecycleState.isLivingGameplayEnemy,
+              followDemoState != .inactive,
+              case .normal = combatState else {
+            return
+        }
+
+        if followDemoState != .following {
+            followDemoState = .following
+            followDelayElapsed = 0
+            playFollowWalk()
+        }
+    }
+
     private func updateFollowDemoIfNeeded(
         deltaTime: TimeInterval,
         currentHeadPosition: SIMD3<Float>?
@@ -4551,16 +4601,23 @@ final class JockRetargetTestController {
             return true
         }
 
-        let distance = horizontalDistanceToUser(
-            headPosition: headPosition
-        )
-
         let targetStopDistance = isActiveHordeGameplayEnemy
             ? attackConfiguration.attackProximityMeters
             : followConfiguration.stopDistanceMeters
 
+        let brainFollowIntent = enemyBrainCommandDriven && isActiveHordeGameplayEnemy
+            ? latestBrainFollowIntent
+            : nil
+
+        let distance =
+            brainFollowIntent?.distanceToUserXZ ??
+            horizontalDistanceToUser(
+                headPosition: headPosition
+            )
+
         let remainingSafeTravel =
-            distance - targetStopDistance
+            brainFollowIntent?.remainingSafeTravelMeters ??
+            (distance - targetStopDistance)
 
         guard remainingSafeTravel > 0 else {
             if isActiveHordeGameplayEnemy {
@@ -4599,14 +4656,23 @@ final class JockRetargetTestController {
             return true
         }
 
-        let movementDirection = crowdLocomotionDirection(
-            headsetPosition: headPosition
-        )
+        let movementDirection =
+            brainFollowIntent?.movementDirectionWorld ??
+            crowdLocomotionDirection(
+                headsetPosition: headPosition
+            )
 
-        steerRootTowardWorldDirection(
-            movementDirection,
-            deltaTime: latestFrameDeltaTime
-        )
+        if let brainFollowIntent {
+            rootEntity.orientation = simd_quatf(
+                angle: brainFollowIntent.nextYawRadians,
+                axis: SIMD3<Float>(0, 1, 0)
+            )
+        } else {
+            steerRootTowardWorldDirection(
+                movementDirection,
+                deltaTime: latestFrameDeltaTime
+            )
+        }
 
         let currentPosition = rootEntity.position(relativeTo: nil)
         var targetPosition = currentPosition + movementDirection * clampedStep

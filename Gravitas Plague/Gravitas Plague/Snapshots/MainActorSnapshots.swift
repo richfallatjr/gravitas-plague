@@ -61,6 +61,11 @@ struct EnemyBrainSnapshot: Sendable, Identifiable {
     let resumeFollowDistanceMeters: Float
     let aggressiveDelayMinSeconds: TimeInterval
     let aggressiveDelayMaxSeconds: TimeInterval
+    let followForwardSign: Float
+    let walkDistanceScale: Float
+    let maxStepMetersPerFrame: Float
+    let maxTurnRadiansPerSecond: Float
+    let facingDeadZoneRadians: Float
 }
 
 struct PortalRuntimeSnapshot: Sendable, Identifiable {

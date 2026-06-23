@@ -709,7 +709,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 let enemyID: UUID
 
                 switch command {
-                case .enterCloseRangeReady(let id, _, _),
+                case .applyFollowIntent(let id, _),
+                     .enterCloseRangeReady(let id, _, _),
                      .setCloseRangeDelay(let id, _),
                      .startAttack(let id, _),
                      .exitCloseRangeToFollow(let id),
@@ -835,10 +836,12 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeBrainInFlight = false
         pendingHordeBrainCommands = nil
 
-        let engine = hordeSimulationEngine
+        let simulationEngine = hordeSimulationEngine
+        let brainEngine = hordeEnemyBrainEngine
 
         Task {
-            await engine.reset()
+            await simulationEngine.reset()
+            await brainEngine.reset()
         }
     }
 
