@@ -3,6 +3,36 @@ import Foundation
 import RealityKit
 import simd
 
+struct JockHandImpactLatch: Sendable, Equatable {
+    private(set) var isArmed = true
+
+    mutating func rearmIfNeeded(
+        distance: Float,
+        radialVelocity: Float,
+        maxHitDistance: Float
+    ) {
+        if distance > maxHitDistance ||
+            radialVelocity >= 0 {
+            isArmed = true
+        }
+    }
+
+    func canAcceptImpact(
+        distance: Float,
+        approachSpeed: Float,
+        maxHitDistance: Float,
+        minimumApproachSpeed: Float
+    ) -> Bool {
+        isArmed &&
+            distance <= maxHitDistance &&
+            approachSpeed >= minimumApproachSpeed
+    }
+
+    mutating func consumeAcceptedImpact() {
+        isArmed = false
+    }
+}
+
 @MainActor
 final class JockHandHitDetector {
     struct HandSample {
@@ -27,8 +57,7 @@ final class JockHandHitDetector {
     private var isRunning = false
 
     private var previousSamples: [HandAnchor.Chirality: HandSample] = [:]
-    private var perHandLastHitTime: [HandAnchor.Chirality: TimeInterval] = [:]
-    private var globalLastHitTime: TimeInterval = -999
+    private var impactStateByHand: [HandAnchor.Chirality: JockHandImpactLatch] = [:]
 
     init(configuration: JockHitReactionConfiguration) {
         self.configuration = configuration
@@ -147,15 +176,6 @@ final class JockHandHitDetector {
             return nil
         }
 
-        if currentTime - globalLastHitTime < configuration.globalHitCooldownSeconds {
-            return nil
-        }
-
-        if let last = perHandLastHitTime[chirality],
-           currentTime - last < configuration.perHandCooldownSeconds {
-            return nil
-        }
-
         let zones = faceZones(
             characterRoot: characterRoot,
             faceCenterWorld: faceCenterWorld
@@ -186,10 +206,41 @@ final class JockHandHitDetector {
             }
         }
 
+        let headToHand = handPosition - faceCenterWorld
+        let radialDistance = simd_length(headToHand)
+
+        guard radialDistance > 0.0001 else {
+            return nil
+        }
+
+        let outwardDirection = headToHand / radialDistance
+        let radialVelocity = simd_dot(
+            velocityVector,
+            outwardDirection
+        )
+        let approachSpeed = -radialVelocity
+
+        var impactState = impactStateByHand[chirality] ?? JockHandImpactLatch()
+
+        defer {
+            impactStateByHand[chirality] = impactState
+        }
+
+        impactState.rearmIfNeeded(
+            distance: radialDistance,
+            radialVelocity: radialVelocity,
+            maxHitDistance: configuration.maxHitDistanceMeters
+        )
+
         let diagnosticHeadRadius = headHitRadiusMeters ?? configuration.faceZoneRadiusMeters
         let acceptedHitRadius = configuration.maxHitDistanceMeters
 
-        guard distance <= acceptedHitRadius else {
+        guard impactState.canAcceptImpact(
+            distance: distance,
+            approachSpeed: approachSpeed,
+            maxHitDistance: acceptedHitRadius,
+            minimumApproachSpeed: configuration.lightVelocityThreshold
+        ) else {
             return nil
         }
 
@@ -219,8 +270,7 @@ final class JockHandHitDetector {
             return nil
         }
 
-        globalLastHitTime = currentTime
-        perHandLastHitTime[chirality] = currentTime
+        impactState.consumeAcceptedImpact()
 
         print(
             """
@@ -266,8 +316,7 @@ final class JockHandHitDetector {
     private func refreshTrackingRuntime() {
         isRunning = false
         previousSamples.removeAll()
-        perHandLastHitTime.removeAll()
-        globalLastHitTime = -999
+        impactStateByHand.removeAll()
         arkitSession = ARKitSession()
         handTrackingProvider = HandTrackingProvider()
     }

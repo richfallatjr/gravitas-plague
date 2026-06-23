@@ -265,6 +265,27 @@ final class JockRetargetTestController {
         isHordeLifecycleManaged && hordeLifecycleState.isLivingGameplayEnemy
     }
 
+    private func canReceivePlayerPunchDamage(
+        currentHeadPosition: SIMD3<Float>?
+    ) -> Bool {
+        guard playerAttackEnabled,
+              currentHeadPosition != nil,
+              rootEntity.isEnabled,
+              lifecycleState == .alive else {
+            return false
+        }
+
+        if case .dead = combatState {
+            return false
+        }
+
+        if isHordeLifecycleManaged {
+            return hordeLifecycleState.isLivingGameplayEnemy
+        }
+
+        return true
+    }
+
     private func guardHordeWalkOrFollowAllowed(
         reason: String
     ) -> Bool {
@@ -2764,10 +2785,9 @@ final class JockRetargetTestController {
         )
         updateCharacterAudioEmitterWorldPosition()
 
-        if followDemoState != .inactive,
-           playerAttackEnabled,
-           !isInNonInterruptibleCombatState,
-           currentHeadPosition != nil {
+        if canReceivePlayerPunchDamage(
+            currentHeadPosition: currentHeadPosition
+        ) {
             if let timingProfiler {
                 timingProfiler.measure("enemy.hit_detection") {
                     updateHitDetectionIfNeeded(
@@ -3141,20 +3161,18 @@ final class JockRetargetTestController {
     private func handleHitEvent(
         _ event: JockHandHitDetector.HitEvent
     ) {
-        guard followDemoState != .inactive else { return }
-
-        guard lifecycleState == .alive else {
+        guard canReceivePlayerPunchDamage(
+            currentHeadPosition: latestHeadPosition
+        ) else {
             print(
                 """
                 [InfectedDamage] ignored hit
                   id: \(hordeID)
                   state: \(lifecycleState.rawValue)
+                  combatState: \(debugHitStatus)
+                  hordeLifecycle: \(hordeLifecycleState.rawValue)
                 """
             )
-            return
-        }
-
-        if case .hitReaction = combatState {
             return
         }
 
@@ -3193,13 +3211,13 @@ final class JockRetargetTestController {
             escalateAfterHitReact = true
         }
 
+        triggerHeadSnapSubAnimation(for: event.side)
+
         if case .attacking = combatState {
             cancelActiveAttackForPlayerHit(
                 isStrongHit: isStrongHit
             )
         }
-
-        triggerHeadSnapSubAnimation(for: event.side)
 
         if shouldDie {
             selectedClipID = pickAnimationClipIDFromAttributes(
@@ -3236,6 +3254,8 @@ final class JockRetargetTestController {
               hordeWave: \(hordeWave)
               hordeSpawnIndex: \(hordeSpawnIndex)
               infectedHitsToKill: \(hitsToKill)
+              temporalCooldown: false
+              hitReactionCanBeInterrupted: true
             """
         )
 

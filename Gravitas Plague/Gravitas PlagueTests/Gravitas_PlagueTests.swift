@@ -150,6 +150,71 @@ final class Gravitas_PlagueTests: XCTestCase {
             accuracy: 0.0001
         )
     }
+
+    func testAlternatingHandsCanHitWithoutCooldown() {
+        var left = TestHandImpactLatch()
+        var right = TestHandImpactLatch()
+
+        XCTAssertTrue(
+            consumeImpact(
+                &left,
+                distance: 0.20,
+                radialVelocity: -1.0
+            )
+        )
+        XCTAssertTrue(
+            consumeImpact(
+                &right,
+                distance: 0.20,
+                radialVelocity: -1.0
+            )
+        )
+    }
+
+    func testSameHandCanHitAgainAfterImmediateRetraction() {
+        var latch = TestHandImpactLatch()
+
+        XCTAssertTrue(
+            consumeImpact(
+                &latch,
+                distance: 0.20,
+                radialVelocity: -1.0
+            )
+        )
+
+        latch.rearmIfNeeded(
+            distance: 0.20,
+            radialVelocity: 0.25,
+            maxHitDistance: 0.40
+        )
+
+        XCTAssertTrue(
+            consumeImpact(
+                &latch,
+                distance: 0.20,
+                radialVelocity: -1.0
+            )
+        )
+    }
+
+    func testContinuousInwardOverlapDoesNotHitEveryFrame() {
+        var latch = TestHandImpactLatch()
+
+        XCTAssertTrue(
+            consumeImpact(
+                &latch,
+                distance: 0.20,
+                radialVelocity: -1.0
+            )
+        )
+        XCTAssertFalse(
+            consumeImpact(
+                &latch,
+                distance: 0.19,
+                radialVelocity: -0.9
+            )
+        )
+    }
 }
 
 private enum TestTranslationScaleError: Error {
@@ -194,4 +259,59 @@ private func sourceRotationUnchangedByTranslationScale(
     _ rotation: simd_quatf
 ) -> simd_quatf {
     rotation
+}
+
+private func consumeImpact(
+    _ latch: inout TestHandImpactLatch,
+    distance: Float,
+    radialVelocity: Float
+) -> Bool {
+    latch.rearmIfNeeded(
+        distance: distance,
+        radialVelocity: radialVelocity,
+        maxHitDistance: 0.40
+    )
+
+    let accepted = latch.canAcceptImpact(
+        distance: distance,
+        approachSpeed: -radialVelocity,
+        maxHitDistance: 0.40,
+        minimumApproachSpeed: 0.55
+    )
+
+    if accepted {
+        latch.consumeAcceptedImpact()
+    }
+
+    return accepted
+}
+
+private struct TestHandImpactLatch {
+    private(set) var isArmed = true
+
+    mutating func rearmIfNeeded(
+        distance: Float,
+        radialVelocity: Float,
+        maxHitDistance: Float
+    ) {
+        if distance > maxHitDistance ||
+            radialVelocity >= 0 {
+            isArmed = true
+        }
+    }
+
+    func canAcceptImpact(
+        distance: Float,
+        approachSpeed: Float,
+        maxHitDistance: Float,
+        minimumApproachSpeed: Float
+    ) -> Bool {
+        isArmed &&
+            distance <= maxHitDistance &&
+            approachSpeed >= minimumApproachSpeed
+    }
+
+    mutating func consumeAcceptedImpact() {
+        isArmed = false
+    }
 }

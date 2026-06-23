@@ -74,9 +74,6 @@ struct JockHitReactionConfiguration: Equatable {
     let hardVelocityThreshold: Float
     let deathVelocityThreshold: Float
 
-    let perHandCooldownSeconds: TimeInterval
-    let globalHitCooldownSeconds: TimeInterval
-
     let knockbackMetersLight: Float
     let knockbackMetersMedium: Float
     let knockbackMetersHard: Float
@@ -119,9 +116,6 @@ struct JockHitReactionConfiguration: Equatable {
         mediumVelocityThreshold: 1.05,
         hardVelocityThreshold: 2.25,
         deathVelocityThreshold: 999.0,
-
-        perHandCooldownSeconds: 0.45,
-        globalHitCooldownSeconds: 0.65,
 
         knockbackMetersLight: 0.08,
         knockbackMetersMedium: 0.18,
