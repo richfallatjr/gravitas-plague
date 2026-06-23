@@ -135,6 +135,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var hordeWaitingForFloorPromptShown = false
     private var hordeRoomScanCompletionTask: Task<Void, Never>?
     private var activeIngressControllers: [UUID: HordePortalInstancedIngressController] = [:]
+    private var retainedPortalMirrorControllersByEnemyID: [UUID: HordePortalInstancedIngressController] = [:]
     private var lastWallPosterPlacementAttempt: Date?
 
     private var lastTickDate: Date?
@@ -626,6 +627,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             activeIngressControllers.count
         )
         timingProfiler.setCounter(
+            "horde.portal_mirror.retained.count",
+            retainedPortalMirrorControllersByEnemyID.count
+        )
+        timingProfiler.setCounter(
             "snapshot.enemy_body.count",
             latestEnemyBodySnapshots.count
         )
@@ -951,6 +956,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 currentHeadPosition: currentHeadPosition
             )
 
+            timingProfiler.measure("portal_mirror.visibility_update") {
+                syncAllPortalMirrorsAfterEnemyAnimations()
+            }
+
             if let pose = currentPose {
                 latestEnemyBodySnapshots = timingProfiler.measure("snapshot.enemy_body_value") {
                     captureEnemyBodySnapshots(
@@ -1123,7 +1132,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         pendingNextBenchmarkWaveTask?.cancel()
         pendingNextBenchmarkWaveTask = nil
         clearHordeEnemyControllers()
-        activeIngressControllers.removeAll()
+        cleanupAllPortalMirrors(
+            reason: "horde_room_scan_started"
+        )
         hordePortalManager.reset()
         activeHordeEnemyIDs.removeAll()
         dyingHordeEnemyIDs.removeAll()
@@ -1535,6 +1546,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         playerWorldPosition: SIMD3<Float>
     ) {
         var finishedIDs: [UUID] = []
+        var retainedIDs: [UUID] = []
+        var failedIDs: [UUID] = []
 
         for (enemyID, ingress) in activeIngressControllers {
             ingress.update(
@@ -1565,9 +1578,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
             switch ingress.phase {
             case .realWorldFollowing:
+                retainedIDs.append(enemyID)
                 finishedIDs.append(enemyID)
 
             case .failed:
+                failedIDs.append(enemyID)
                 finishedIDs.append(enemyID)
 
             case .walkingParallelInsidePortal,
@@ -1577,9 +1592,107 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             }
         }
 
+        for enemyID in retainedIDs {
+            guard let ingress = activeIngressControllers[enemyID],
+                  ingress.portalMirrorRetainedAfterExit else {
+                continue
+            }
+
+            retainedPortalMirrorControllersByEnemyID[enemyID] = ingress
+        }
+
+        for enemyID in failedIDs {
+            activeIngressControllers[enemyID]?.cleanupPortalMirror(
+                reason: "portal_ingress_failed"
+            )
+        }
+
         for enemyID in finishedIDs {
             activeIngressControllers.removeValue(forKey: enemyID)
         }
+    }
+
+    private func syncAllPortalMirrorsAfterEnemyAnimations() {
+        for ingress in activeIngressControllers.values {
+            ingress.updatePortalMirrorAfterSourceAnimation()
+        }
+
+        for ingress in retainedPortalMirrorControllersByEnemyID.values {
+            ingress.updatePortalMirrorAfterSourceAnimation()
+        }
+
+        let allMirrorControllers =
+            Array(activeIngressControllers.values) +
+            Array(retainedPortalMirrorControllersByEnemyID.values)
+
+        let visibleCount = allMirrorControllers.filter {
+            $0.portalMirrorVisibilityState == .visiblePortalSideOrCrossing
+        }.count
+
+        let hiddenRetainedCount = allMirrorControllers.filter {
+            $0.portalMirrorVisibilityState == .hiddenRoomSideRetained
+        }.count
+
+        timingProfiler.setCounter(
+            "portal_mirror.visible_or_crossing.count",
+            visibleCount
+        )
+        timingProfiler.setCounter(
+            "portal_mirror.hidden_retained.count",
+            hiddenRetainedCount
+        )
+    }
+
+    private func cleanupPortalMirror(
+        enemyID: UUID,
+        reason: String
+    ) {
+        if let ingress = activeIngressControllers.removeValue(
+            forKey: enemyID
+        ) {
+            ingress.cleanupPortalMirror(
+                reason: reason
+            )
+        }
+
+        if let ingress = retainedPortalMirrorControllersByEnemyID.removeValue(
+            forKey: enemyID
+        ) {
+            ingress.cleanupPortalMirror(
+                reason: reason
+            )
+        }
+    }
+
+    private func retainPortalMirrorForEnemyIfNeeded(
+        enemyID: UUID
+    ) {
+        guard let ingress = activeIngressControllers.removeValue(
+            forKey: enemyID
+        ) else {
+            return
+        }
+
+        retainedPortalMirrorControllersByEnemyID[enemyID] = ingress
+    }
+
+    private func cleanupAllPortalMirrors(
+        reason: String
+    ) {
+        for ingress in activeIngressControllers.values {
+            ingress.cleanupPortalMirror(
+                reason: reason
+            )
+        }
+
+        for ingress in retainedPortalMirrorControllersByEnemyID.values {
+            ingress.cleanupPortalMirror(
+                reason: reason
+            )
+        }
+
+        activeIngressControllers.removeAll()
+        retainedPortalMirrorControllersByEnemyID.removeAll()
     }
 
     private func updateDyingHordeEnemies(
@@ -1763,7 +1876,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         pendingNextBenchmarkWaveTask?.cancel()
         pendingNextBenchmarkWaveTask = nil
         clearHordeEnemyControllers()
-        activeIngressControllers.removeAll()
+        cleanupAllPortalMirrors(
+            reason: "start_horde_benchmark"
+        )
         activeHordeEnemyIDs.removeAll()
         dyingHordeEnemyIDs.removeAll()
         corpseHordeEnemyIDs.removeAll()
@@ -1811,7 +1926,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         instructionHUD.clear()
         audioController.stopHordeMusicSequence()
         audioController.stopDemoAudio()
-        activeIngressControllers.removeAll()
+        cleanupAllPortalMirrors(
+            reason: "stop_horde_benchmark"
+        )
         hordePortalManager.reset()
         clearHordeEnemyControllers()
         activeHordeEnemyIDs.removeAll()
@@ -2696,6 +2813,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private func clearHordeEnemyControllers() {
         for (id, controller) in hordeEnemyControllersByID {
             audioController.stopHostAudioSource(id: id)
+            cleanupPortalMirror(
+                enemyID: id,
+                reason: "clear_live_horde_enemy_controllers"
+            )
             controller.forceCleanupFromHordeScene(
                 reason: "clear_live_horde_enemy_controllers"
             )
@@ -2864,6 +2985,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private func clearHordeEnemiesAfterDeathBlackout() {
         for (id, controller) in hordeEnemyControllersByID {
             audioController.stopHostAudioSource(id: id)
+            cleanupPortalMirror(
+                enemyID: id,
+                reason: "player_death"
+            )
             controller.stopForBenchmarkPlayerDeath()
             controller.forceCleanupFromHordeScene(
                 reason: "player_death"
@@ -2923,7 +3048,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         activeHordeEnemyIDs.remove(id)
         dyingHordeEnemyIDs.insert(id)
         hordeDyingEnemyControllersByID[id] = controller
-        activeIngressControllers.removeValue(forKey: id)
+        retainPortalMirrorForEnemyIfNeeded(
+            enemyID: id
+        )
         controller.didStartDeathLifecycle = true
         controller.disableHordeSystemsForDeath()
         audioController.stopCharacterLoopAudio(id: id)
@@ -3118,7 +3245,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         for (enemyID, controller) in hordeDyingEnemyControllersByID {
             audioController.stopHostAudioSource(id: enemyID)
-            activeIngressControllers.removeValue(forKey: enemyID)
+            cleanupPortalMirror(
+                enemyID: enemyID,
+                reason: reason
+            )
             controller.forceCleanupFromHordeScene(
                 reason: reason
             )
@@ -3132,7 +3262,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         for (enemyID, record) in hordeCorpseRecordsByID {
             audioController.stopHostAudioSource(id: enemyID)
-            activeIngressControllers.removeValue(forKey: enemyID)
+            cleanupPortalMirror(
+                enemyID: enemyID,
+                reason: reason
+            )
             record.controller.forceCleanupFromHordeScene(
                 reason: reason
             )

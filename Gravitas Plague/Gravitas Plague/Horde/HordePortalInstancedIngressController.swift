@@ -19,50 +19,110 @@ enum HordePortalIngressDepth {
     }
 }
 
+enum PortalRenderMirrorVisibilityState: String {
+    case visiblePortalSideOrCrossing
+    case hiddenRoomSideRetained
+    case cleanedUp
+}
+
+struct PortalRenderMirrorVisibilityPolicy {
+    let showAtOrBelowRoomSideDistance: Float
+    let hideAtOrAboveRoomSideDistance: Float
+
+    static func make(
+        bodySizeMeters: SIMD3<Float>
+    ) -> Self {
+        let interactionRadius = max(
+            bodySizeMeters.x,
+            bodySizeMeters.y,
+            bodySizeMeters.z
+        ) * 0.5
+
+        return Self(
+            showAtOrBelowRoomSideDistance: interactionRadius + 0.05,
+            hideAtOrAboveRoomSideDistance: interactionRadius + 0.30
+        )
+    }
+}
+
+struct HordePortalPlaneDescriptor {
+    let pointWorld: SIMD3<Float>
+    let roomNormalWorld: SIMD3<Float>
+
+    func signedRoomSideDistance(
+        worldPosition: SIMD3<Float>
+    ) -> Float {
+        simd_dot(
+            worldPosition - pointWorld,
+            roomNormalWorld
+        )
+    }
+}
+
 @MainActor
-final class HordePortalRenderInstance {
+final class HordePortalSkinnedRenderMirror {
     let id = UUID()
     let sourceEnemyID: UUID
+    let portalID: UUID
     let rootEntity: Entity
 
     private weak var source: JockRetargetTestController?
+    private weak var sourceRoot: Entity?
     private weak var sourceSkinnedModel: ModelEntity?
-    private weak var instanceSkinnedModel: ModelEntity?
+    private weak var portalWorldRoot: Entity?
+    private weak var mirrorSkinnedModel: ModelEntity?
+    private let portalPlane: HordePortalPlaneDescriptor
+    private let visibilityPolicy: PortalRenderMirrorVisibilityPolicy
+    private(set) var visibilityState: PortalRenderMirrorVisibilityState = .visiblePortalSideOrCrossing
+    private var hasCleanedUp = false
     private var lastSyncLogTime: CFTimeInterval = 0
 
     init(
         source: JockRetargetTestController,
-        portalWorldRoot: Entity
+        portalID: UUID,
+        portalWorldRoot: Entity,
+        portalPlane: HordePortalPlaneDescriptor,
+        bodySizeMeters: SIMD3<Float>
     ) throws {
         self.source = source
         self.sourceEnemyID = source.hordeBenchmarkID
+        self.portalID = portalID
+        self.sourceRoot = source.rootEntity
+        self.portalWorldRoot = portalWorldRoot
+        self.portalPlane = portalPlane
+        self.visibilityPolicy = .make(
+            bodySizeMeters: bodySizeMeters
+        )
 
         let instance = source.rootEntity.clone(
             recursive: true
         )
-        instance.name = "PortalRenderInstance_\(sourceEnemyID.uuidString.prefix(8))"
+        instance.name = "PortalSkinnedMirror_\(sourceEnemyID.uuidString.prefix(8))"
         self.rootEntity = instance
 
         Self.stripGameplayComponentsRecursively(instance)
         Self.stripAudioComponentsRecursively(instance)
 
         self.sourceSkinnedModel = source.skinnedModelEntityForPortalInstance()
-        self.instanceSkinnedModel = Self.firstSkinnedModelEntity(
+        self.mirrorSkinnedModel = Self.firstSkinnedModelEntity(
             in: instance
         )
 
         portalWorldRoot.addChild(instance)
+        syncCompletePoseAndTransform()
         rootEntity.isEnabled = true
 
         print(
             """
-            [HordePortalInstance] created
+            [HordePortalMirror] created
               sourceEnemyID: \(sourceEnemyID)
-              instanceID: \(id)
+              mirrorID: \(id)
+              portalID: \(portalID)
               sourceHasSkinnedModel: \(sourceSkinnedModel != nil)
-              instanceHasSkinnedModel: \(instanceSkinnedModel != nil)
+              mirrorHasSkinnedModel: \(mirrorSkinnedModel != nil)
               parent: portalWorldRoot
               resourceSharingIntent: true
+              backend: resource_sharing_skinned_render_mirror
               secondController: false
               secondAnimationClock: false
               enabledFromStart: true
@@ -72,9 +132,9 @@ final class HordePortalRenderInstance {
 
         print(
             """
-            [HordePortalInstance] audio stripped from render instance
+            [HordePortalMirror] audio stripped from render mirror
               sourceEnemyID: \(sourceEnemyID)
-              instanceID: \(id)
+              mirrorID: \(id)
             """
         )
     }
@@ -84,9 +144,125 @@ final class HordePortalRenderInstance {
         worldOrientation: simd_quatf,
         portalWorldRoot: Entity
     ) {
+        guard !hasCleanedUp,
+              let source else {
+            return
+        }
+
+        syncCompletePoseAndTransform()
+
+        let now = CACurrentMediaTime()
+        if now - lastSyncLogTime >= 1.0 {
+            lastSyncLogTime = now
+
+            print(
+                """
+                [HordePortalMirror] synced from source
+                  sourceEnemyID: \(sourceEnemyID)
+                  mirrorID: \(id)
+                  portalID: \(portalID)
+                  worldPosition: \(worldPosition)
+                  noIndependentAnimation: true
+                """
+            )
+        }
+    }
+
+    func updateAfterSourceAnimationApplied(
+        sourceBodyCenterWorld: SIMD3<Float>
+    ) {
+        guard !hasCleanedUp else {
+            return
+        }
+
+        let signedDistance = portalPlane.signedRoomSideDistance(
+            worldPosition: sourceBodyCenterWorld
+        )
+
+        switch visibilityState {
+        case .visiblePortalSideOrCrossing:
+            syncCompletePoseAndTransform()
+
+            if signedDistance >= visibilityPolicy.hideAtOrAboveRoomSideDistance {
+                rootEntity.isEnabled = false
+                visibilityState = .hiddenRoomSideRetained
+
+                print(
+                    """
+                    [HordePortalMirror] hidden but retained
+                      sourceEnemyID: \(sourceEnemyID)
+                      mirrorID: \(id)
+                      portalID: \(portalID)
+                      signedRoomDistance: \(signedDistance)
+                      returnedToPool: false
+                    """
+                )
+            }
+
+        case .hiddenRoomSideRetained:
+            syncRootTransformOnly()
+
+            if signedDistance <= visibilityPolicy.showAtOrBelowRoomSideDistance {
+                syncCompletePoseAndTransform()
+                rootEntity.isEnabled = true
+                visibilityState = .visiblePortalSideOrCrossing
+
+                print(
+                    """
+                    [HordePortalMirror] re-enabled for fallback
+                      sourceEnemyID: \(sourceEnemyID)
+                      mirrorID: \(id)
+                      portalID: \(portalID)
+                      signedRoomDistance: \(signedDistance)
+                      poseSyncedBeforeReveal: true
+                    """
+                )
+            }
+
+        case .cleanedUp:
+            break
+        }
+    }
+
+    func syncVisibleDuringIngress() {
+        guard !hasCleanedUp else {
+            return
+        }
+
+        syncCompletePoseAndTransform()
+        rootEntity.isEnabled = true
+        visibilityState = .visiblePortalSideOrCrossing
+    }
+
+    func cleanup(
+        reason: String
+    ) {
+        guard !hasCleanedUp else {
+            return
+        }
+
+        hasCleanedUp = true
+        visibilityState = .cleanedUp
+        rootEntity.isEnabled = false
+        rootEntity.removeFromParent()
+
+        print(
+            """
+            [HordePortalMirror] cleaned up
+              sourceEnemyID: \(sourceEnemyID)
+              mirrorID: \(id)
+              portalID: \(portalID)
+              reason: \(reason)
+            """
+        )
+    }
+
+    private func syncCompletePoseAndTransform() {
         guard let source else {
             return
         }
+
+        syncRootTransformOnly()
 
         Self.copyChildTransforms(
             from: source.rootEntity,
@@ -95,49 +271,28 @@ final class HordePortalRenderInstance {
         )
 
         if let sourceSkinnedModel,
-           let instanceSkinnedModel {
-            instanceSkinnedModel.jointTransforms = sourceSkinnedModel.jointTransforms
-        }
-
-        let localPosition = portalWorldRoot.convert(
-            position: worldPosition,
-            from: nil
-        )
-
-        rootEntity.position = localPosition
-
-        let portalWorldOrientation = portalWorldRoot.orientation(
-            relativeTo: nil
-        )
-
-        rootEntity.orientation =
-            simd_inverse(portalWorldOrientation) * worldOrientation
-
-        let now = CACurrentMediaTime()
-        if now - lastSyncLogTime >= 1.0 {
-            lastSyncLogTime = now
-
-            print(
-                """
-                [HordePortalInstance] synced from source
-                  sourceEnemyID: \(sourceEnemyID)
-                  instanceID: \(id)
-                  worldPosition: \(worldPosition)
-                  noIndependentAnimation: true
-                """
-            )
+           let mirrorSkinnedModel {
+            mirrorSkinnedModel.jointTransforms = sourceSkinnedModel.jointTransforms
         }
     }
 
-    func removeAfterExit() {
-        rootEntity.removeFromParent()
+    private func syncRootTransformOnly() {
+        guard let sourceRoot,
+              let portalWorldRoot else {
+            return
+        }
 
-        print(
-            """
-            [HordePortalInstance] removed after exit
-              sourceEnemyID: \(sourceEnemyID)
-              instanceID: \(id)
-            """
+        let sourceWorldMatrix = sourceRoot.transformMatrix(
+            relativeTo: nil
+        )
+
+        let portalWorldMatrix = portalWorldRoot.transformMatrix(
+            relativeTo: nil
+        )
+
+        rootEntity.setTransformMatrix(
+            simd_inverse(portalWorldMatrix) * sourceWorldMatrix,
+            relativeTo: portalWorldRoot
         )
     }
 
@@ -209,6 +364,8 @@ final class HordePortalRenderInstance {
     }
 }
 
+typealias HordePortalRenderInstance = HordePortalSkinnedRenderMirror
+
 @MainActor
 final class HordePortalInstancedIngressController {
     enum Phase: String {
@@ -227,7 +384,7 @@ final class HordePortalInstancedIngressController {
         static let roomVisualEnableZ: Float =
             -roomVisualEnableDistanceFeet * feetToMeters
 
-        static let removePortalInstanceZ: Float = 0.45
+        static let exitCompleteZ: Float = 0.45
     }
 
     let enemyID: UUID
@@ -266,7 +423,7 @@ final class HordePortalInstancedIngressController {
 
     private var roomVisualHasBeenEnabled = false
     private var roomVisualRevealEventPending = false
-    private var portalInstanceHasBeenRemoved = false
+    private(set) var portalMirrorRetainedAfterExit = false
 
     init(
         enemy: JockRetargetTestController,
@@ -391,7 +548,7 @@ final class HordePortalInstancedIngressController {
     }
 }
 
-private extension HordePortalInstancedIngressController {
+extension HordePortalInstancedIngressController {
     func setup() throws {
         guard let sceneRoot else {
             phase = .failed
@@ -413,7 +570,7 @@ private extension HordePortalInstancedIngressController {
         enemy.rootEntity.isEnabled = false
         roomVisualHasBeenEnabled = false
         roomVisualRevealEventPending = false
-        portalInstanceHasBeenRemoved = false
+        portalMirrorRetainedAfterExit = false
         enemy.setCombatEnabled(false)
         enemy.setRootMotionEnabled(false)
         enemy.setExternalMotionDriven(true)
@@ -430,7 +587,12 @@ private extension HordePortalInstancedIngressController {
 
         portalInstance = try HordePortalRenderInstance(
             source: enemy,
-            portalWorldRoot: portal.portalWorldRoot
+            portalID: portalID,
+            portalWorldRoot: portal.portalWorldRoot,
+            portalPlane: Self.portalPlaneDescriptor(
+                portalRoot: portal.root
+            ),
+            bodySizeMeters: enemy.portalMirrorBodySizeMeters()
         )
         portalInstance?.rootEntity.isEnabled = true
 
@@ -636,7 +798,7 @@ private extension HordePortalInstancedIngressController {
 
         updateRoomVisualRevealIfNeeded()
 
-        if portalLocalPosition.z >= IngressRevealThresholds.removePortalInstanceZ {
+        if portalLocalPosition.z >= IngressRevealThresholds.exitCompleteZ {
             finishExit(
                 playerWorldPosition: playerWorldPosition
             )
@@ -828,11 +990,8 @@ private extension HordePortalInstancedIngressController {
         )
         enemy.lockRootToFloorY(floorY)
 
-        if portalInstanceHasBeenRemoved == false {
-            portalInstance?.removeAfterExit()
-            portalInstance = nil
-            portalInstanceHasBeenRemoved = true
-        }
+        portalMirrorRetainedAfterExit = true
+        updatePortalMirrorAfterSourceAnimation()
 
         do {
             try enemy.finishHordePortalIngressAndStartFollow()
@@ -857,13 +1016,42 @@ private extension HordePortalInstancedIngressController {
               enemyID: \(enemyID)
               portalID: \(portalID)
               roomVisualWasEnabledNearAperture: \(roomVisualHasBeenEnabled)
-              portalInstanceRemovedAfterFullyOut: true
+              portalMirrorRetainedAfterExit: true
+              portalMirrorDestroyed: false
               noFade: true
               animationRestartedAtReveal: false
               noDuplicateTurn: true
               combatEnabled: true
             """
         )
+    }
+
+    func updatePortalMirrorAfterSourceAnimation() {
+        guard let portalInstance else {
+            return
+        }
+
+        guard phase == .realWorldFollowing else {
+            portalInstance.syncVisibleDuringIngress()
+            return
+        }
+
+        portalInstance.updateAfterSourceAnimationApplied(
+            sourceBodyCenterWorld: enemy.currentSimplifiedBodyCenterWorld()
+        )
+    }
+
+    var portalMirrorVisibilityState: PortalRenderMirrorVisibilityState? {
+        portalInstance?.visibilityState
+    }
+
+    func cleanupPortalMirror(
+        reason: String
+    ) {
+        portalInstance?.cleanup(
+            reason: reason
+        )
+        portalInstance = nil
     }
 
     static func yawOnlyOrientation(
@@ -916,6 +1104,37 @@ private extension HordePortalInstancedIngressController {
         return simd_quatf(
             from: HordePortalLocalAxes.characterForward,
             to: flat
+        )
+    }
+
+    static func portalPlaneDescriptor(
+        portalRoot: Entity
+    ) -> HordePortalPlaneDescriptor {
+        let point = portalRoot.convert(
+            position: .zero,
+            to: nil
+        )
+
+        let normalTarget = portalRoot.convert(
+            position: HordePortalLocalAxes.outToRoom,
+            to: nil
+        )
+
+        var normal = SIMD3<Float>(
+            normalTarget.x - point.x,
+            normalTarget.y - point.y,
+            normalTarget.z - point.z
+        )
+
+        if simd_length(normal) < 0.001 {
+            normal = HordePortalLocalAxes.outToRoom
+        } else {
+            normal = simd_normalize(normal)
+        }
+
+        return HordePortalPlaneDescriptor(
+            pointWorld: point,
+            roomNormalWorld: normal
         )
     }
 }

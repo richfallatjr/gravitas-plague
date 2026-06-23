@@ -2433,6 +2433,27 @@ final class JockRetargetTestController {
         modelEntity
     }
 
+    func currentSimplifiedBodyCenterWorld() -> SIMD3<Float> {
+        guard let bodyCollisionBox else {
+            return rootEntity.position(
+                relativeTo: nil
+            )
+        }
+
+        return bodyCollisionBox.root.position(
+            relativeTo: nil
+        )
+    }
+
+    func portalMirrorBodySizeMeters() -> SIMD3<Float> {
+        bodyCollisionBox?.sizeMeters ??
+            SIMD3<Float>(
+                0.6096,
+                1.524,
+                0.6096
+            )
+    }
+
     func forceOneAnimationTickIfAvailable() {
         forceAnimationTickIfAvailable(
             deltaTime: 1.0 / 60.0
