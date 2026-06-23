@@ -54,6 +54,49 @@ struct GlobalJointTransform {
     let scale: SIMD3<Float>
 }
 
+private struct RetargetJointTranslationScaleMap {
+    let scaleByJoint: [String: Float]
+
+    func exactScale(
+        for joint: String
+    ) throws -> Float {
+        guard let scale = scaleByJoint[joint] else {
+            throw RetargetTranslationScaleError.missingJointScale(
+                joint: joint
+            )
+        }
+
+        return scale
+    }
+}
+
+private enum RetargetTranslationScaleError: Error, CustomStringConvertible {
+    case missingSourceRestJoint(joint: String)
+    case missingTargetRestJoint(joint: String)
+    case invalidSourceBoneLength(joint: String, length: Float)
+    case invalidTargetBoneLength(joint: String, length: Float)
+    case missingJointScale(joint: String)
+
+    var description: String {
+        switch self {
+        case .missingSourceRestJoint(let joint):
+            return "Missing source rest transform for \(joint)"
+
+        case .missingTargetRestJoint(let joint):
+            return "Missing target rest transform for \(joint)"
+
+        case .invalidSourceBoneLength(let joint, let length):
+            return "Invalid source bone length for \(joint): \(length)"
+
+        case .invalidTargetBoneLength(let joint, let length):
+            return "Invalid target bone length for \(joint): \(length)"
+
+        case .missingJointScale(let joint):
+            return "Missing translation scale for \(joint)"
+        }
+    }
+}
+
 @MainActor
 final class SourceRigRestPoseCache {
     static let shared = SourceRigRestPoseCache()
@@ -453,9 +496,8 @@ final class JockRuntimeDriver {
     private var preserveTargetJointRotationCorrections: [String: JockJointRotationCorrection] = [:]
     private let directionRetargetIterations = 10
     private let directionRetargetDiagnosticFrames: Set<Int> = [0, 30, 60]
-    private let applyNonRootTranslationDeltas = false
+    private let applyNonRootTranslationDeltas = true
     private let ignoreSourceRestRootY = true
-    private let maxNonRootTranslationDeltaAsBoneFraction: Float = 0.35
     private let preserveRotationDiagnosticJoints: Set<String> = [
         "Hips",
         "Spine02",
@@ -538,7 +580,8 @@ final class JockRuntimeDriver {
                 [JockRuntimeDriver] source-rest delta defaults
                   applyNonRootTranslationDeltas: \(applyNonRootTranslationDeltas)
                   ignoreRootY: \(ignoreSourceRestRootY)
-                  maxNonRootTranslationDeltaAsBoneFraction: \(maxNonRootTranslationDeltaAsBoneFraction)
+                  nonRootTranslationScale: exact_parent_to_joint_length_ratio
+                  nonRootTranslationClamp: false
                 """
             )
         }
@@ -1568,6 +1611,32 @@ final class JockRuntimeDriver {
             groupedTracks: groupedTracks
         )
 
+        let translatedNonRootJoints = translatedNonRootJoints(
+            in: groupedTracks
+        )
+        let jointTranslationScales: RetargetJointTranslationScaleMap
+
+        do {
+            jointTranslationScales = try makeJointTranslationScaleMap(
+                translatedNonRootJoints: translatedNonRootJoints,
+                sourceRestLocal: sourceRest.restLocalTransforms,
+                targetRestLocal: targetRestLocal
+            )
+        } catch {
+            print(
+                """
+                [JockRuntimeDriver] ERROR exact joint translation scale validation failed
+                  archetype: \(characterArchetype.rawValue)
+                  clip: \(clip.clipID)
+                  error: \(String(describing: error))
+                  globalHeightFallback: false
+                  clampFallback: false
+                """
+            )
+
+            return baseJointTransforms
+        }
+
         var output = baseJointTransforms
         var outputGlobals: [String: GlobalJointTransform] = [:]
 
@@ -1602,7 +1671,16 @@ final class JockRuntimeDriver {
                 }
             }
 
-            if let translationTrack = groupedTracks[joint]?["translation_xyz_absolute"] {
+            let tracks = groupedTracks[joint] ?? [:]
+            let hasAbsoluteTranslation =
+                tracks["translation_xyz_absolute"] != nil
+            let hasAdditiveTranslation =
+                tracks["translation_xyz_additive"] != nil
+            let hasTranslation =
+                hasAbsoluteTranslation || hasAdditiveTranslation
+
+            if let translationTrack = tracks["translation_xyz_absolute"],
+               isRootTranslationJoint(joint) {
                 let sampledTranslation = JockPoseMath.sampleVector3Sorted(
                     keys: translationTrack.keys,
                     time: time
@@ -1612,37 +1690,17 @@ final class JockRuntimeDriver {
                     sampledTranslation
                 var rawDelta = sampledTranslation - sourceBaseTranslation
 
-                if isRootTranslationJoint(joint) {
-                    if ignoreSourceRestRootY {
-                        rawDelta.y = 0
-                    }
+                if ignoreSourceRestRootY {
+                    rawDelta.y = 0
+                }
 
-                    targetOutput.translation = targetBase.translation +
-                        convertLocalTranslationDelta(
-                            rawDelta,
-                            joint: joint,
-                            sourceRestGlobals: sourceRestGlobals,
-                            targetRestGlobals: targetRestGlobals,
-                            scale: sourceToTargetScale
-                        )
-                } else if applyNonRootTranslationDeltas {
-                    let convertedDelta = convertLocalTranslationDelta(
+                targetOutput.translation = targetBase.translation +
+                    convertLocalTranslationDeltaToTargetBasis(
                         rawDelta,
                         joint: joint,
                         sourceRestGlobals: sourceRestGlobals,
-                        targetRestGlobals: targetRestGlobals,
-                        scale: sourceToTargetScale
-                    )
-                    let clampedDelta = clampNonRootTranslationDeltaIfNeeded(
-                        convertedDelta,
-                        joint: joint,
-                        targetBase: targetBase
-                    )
-
-                    targetOutput.translation = targetBase.translation + clampedDelta
-                } else {
-                    targetOutput.translation = targetBase.translation
-                }
+                        targetRestGlobals: targetRestGlobals
+                    ) * sourceToTargetScale
 
                 logSourceRestDeltaJointDiagnosticsIfNeeded(
                     clip: clip,
@@ -1657,6 +1715,65 @@ final class JockRuntimeDriver {
                     targetRestGlobal: targetRestGlobals[joint],
                     finalLocalRotation: targetOutput.rotation
                 )
+            } else if hasTranslation,
+                      !isRootTranslationJoint(joint),
+                      applyNonRootTranslationDeltas {
+                do {
+                    guard let sourceRestTransform = sourceRest.restLocalTransforms[joint] else {
+                        throw RetargetTranslationScaleError.missingSourceRestJoint(
+                            joint: joint
+                        )
+                    }
+
+                    let sourceBaseTranslation = sourceRestTransform.translation
+                    let sourceAnimatedTranslation =
+                        sourceAnimatedLocal[joint]?.translation ??
+                        sourceBaseTranslation
+                    let sourceLocalDelta =
+                        sourceAnimatedTranslation - sourceBaseTranslation
+                    let targetBasisDelta = convertLocalTranslationDeltaToTargetBasis(
+                        sourceLocalDelta,
+                        joint: joint,
+                        sourceRestGlobals: sourceRestGlobals,
+                        targetRestGlobals: targetRestGlobals
+                    )
+                    let exactJointMultiplier = try jointTranslationScales.exactScale(
+                        for: joint
+                    )
+                    let retargetedDelta =
+                        targetBasisDelta * exactJointMultiplier
+
+                    targetOutput.translation =
+                        targetBase.translation + retargetedDelta
+
+                    logSourceRestDeltaJointDiagnosticsIfNeeded(
+                        clip: clip,
+                        joint: joint,
+                        sourceBaseTranslation: sourceBaseTranslation,
+                        sampledTranslation: sourceAnimatedTranslation,
+                        rawDelta: sourceLocalDelta,
+                        targetBaseTranslation: targetBase.translation,
+                        finalTargetTranslation: targetOutput.translation,
+                        sourceRestGlobal: sourceRestGlobals[joint],
+                        sourceAnimatedGlobal: sourceAnimatedGlobals[joint],
+                        targetRestGlobal: targetRestGlobals[joint],
+                        finalLocalRotation: targetOutput.rotation
+                    )
+                } catch {
+                    print(
+                        """
+                        [JockRuntimeDriver] ERROR exact non-root translation retarget failed
+                          archetype: \(characterArchetype.rawValue)
+                          clip: \(clip.clipID)
+                          joint: \(joint)
+                          error: \(String(describing: error))
+                          globalHeightFallback: false
+                          clampFallback: false
+                        """
+                    )
+
+                    return baseJointTransforms
+                }
             }
 
             targetOutput.scale = targetBase.scale
@@ -1875,57 +1992,100 @@ final class JockRuntimeDriver {
         return Self.globalJointTransform(from: globalMatrix)
     }
 
-    private func convertLocalTranslationDelta(
+    private func translatedNonRootJoints(
+        in groupedTracks: [String: [String: JockPreparedTrack]]
+    ) -> Set<String> {
+        Set(
+            groupedTracks.compactMap { joint, tracks -> String? in
+                guard !isRootTranslationJoint(joint) else {
+                    return nil
+                }
+
+                let hasAbsolute =
+                    tracks["translation_xyz_absolute"] != nil
+                let hasAdditive =
+                    tracks["translation_xyz_additive"] != nil
+
+                return hasAbsolute || hasAdditive ? joint : nil
+            }
+        )
+    }
+
+    private func makeJointTranslationScaleMap(
+        translatedNonRootJoints: Set<String>,
+        sourceRestLocal: [String: Transform],
+        targetRestLocal: [String: Transform]
+    ) throws -> RetargetJointTranslationScaleMap {
+        var scaleByJoint: [String: Float] = [:]
+        scaleByJoint.reserveCapacity(
+            translatedNonRootJoints.count
+        )
+
+        for joint in translatedNonRootJoints {
+            precondition(
+                !isRootTranslationJoint(joint),
+                "Root/Hips must not enter the per-joint translation multiplier map: \(joint)"
+            )
+
+            guard let sourceRest = sourceRestLocal[joint] else {
+                throw RetargetTranslationScaleError.missingSourceRestJoint(
+                    joint: joint
+                )
+            }
+
+            guard let targetRest = targetRestLocal[joint] else {
+                throw RetargetTranslationScaleError.missingTargetRestJoint(
+                    joint: joint
+                )
+            }
+
+            let sourceBoneLength = simd_length(
+                sourceRest.translation
+            )
+            let targetBoneLength = simd_length(
+                targetRest.translation
+            )
+
+            guard sourceBoneLength > 0.0001 else {
+                throw RetargetTranslationScaleError.invalidSourceBoneLength(
+                    joint: joint,
+                    length: sourceBoneLength
+                )
+            }
+
+            guard targetBoneLength > 0.0001 else {
+                throw RetargetTranslationScaleError.invalidTargetBoneLength(
+                    joint: joint,
+                    length: targetBoneLength
+                )
+            }
+
+            scaleByJoint[joint] = targetBoneLength / sourceBoneLength
+        }
+
+        return RetargetJointTranslationScaleMap(
+            scaleByJoint: scaleByJoint
+        )
+    }
+
+    private func convertLocalTranslationDeltaToTargetBasis(
         _ delta: SIMD3<Float>,
         joint: String,
         sourceRestGlobals: [String: GlobalJointTransform],
-        targetRestGlobals: [String: GlobalJointTransform],
-        scale: Float
+        targetRestGlobals: [String: GlobalJointTransform]
     ) -> SIMD3<Float> {
         guard let parent = parentByCanonicalJoint[joint],
               let sourceParent = sourceRestGlobals[parent],
               let targetParent = targetRestGlobals[parent] else {
-            return delta * scale
-        }
-
-        let worldDelta = sourceParent.rotation.act(delta)
-        let targetLocalDelta = simd_inverse(targetParent.rotation).act(worldDelta)
-
-        return targetLocalDelta * scale
-    }
-
-    private func clampNonRootTranslationDeltaIfNeeded(
-        _ delta: SIMD3<Float>,
-        joint: String,
-        targetBase: Transform
-    ) -> SIMD3<Float> {
-        let targetBoneLength = max(
-            simd_length(targetBase.translation),
-            0.001
-        )
-        let maxLength = targetBoneLength * maxNonRootTranslationDeltaAsBoneFraction
-        let length = simd_length(delta)
-
-        guard length > maxLength else {
             return delta
         }
 
-        let clamped = Self.normalizeSafe(
-            delta,
-            fallback: .zero
-        ) * maxLength
-
-        print(
-            """
-            [JockRuntimeDriver] source-rest delta non-root translation clamped
-              archetype: \(characterArchetype.rawValue)
-              joint: \(joint)
-              originalLength: \(length)
-              maxLength: \(maxLength)
-            """
+        let worldDelta = sourceParent.rotation.act(delta)
+        return simd_inverse(
+            targetParent.rotation
+        ).act(
+            worldDelta
         )
-
-        return clamped
     }
 
     private func bodyHeight(
