@@ -393,7 +393,7 @@ final class PortalEmberPool {
 
         simulationInFlight = true
 
-        simulationTask = Task { @MainActor [weak self] in
+        simulationTask = Task.detached(priority: .userInitiated) { [weak self, engine, spawnSamples, deltaTime, revision] in
             let output = await engine.step(
                 spawnSamples: spawnSamples,
                 deltaTime: deltaTime
@@ -403,10 +403,12 @@ final class PortalEmberPool {
                 return
             }
 
-            self?.receiveSimulation(
-                output,
-                revision: revision
-            )
+            await MainActor.run {
+                self?.receiveSimulation(
+                    output,
+                    revision: revision
+                )
+            }
         }
     }
 

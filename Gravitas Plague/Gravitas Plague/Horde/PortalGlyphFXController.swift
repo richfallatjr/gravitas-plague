@@ -125,7 +125,7 @@ final class PortalGlyphFXController {
 
         let planner = layoutPlanner
 
-        layoutTask = Task { @MainActor [weak self] in
+        layoutTask = Task.detached(priority: .userInitiated) { [weak self, planner, input, revision, floorY, portalWorldFromLocal, wallID] in
             let plan = await planner.plan(
                 input: input
             )
@@ -134,13 +134,15 @@ final class PortalGlyphFXController {
                 return
             }
 
-            self?.apply(
-                plan: plan,
-                revision: revision,
-                floorY: floorY,
-                portalWorldFromLocal: portalWorldFromLocal,
-                wallID: wallID
-            )
+            await MainActor.run {
+                self?.apply(
+                    plan: plan,
+                    revision: revision,
+                    floorY: floorY,
+                    portalWorldFromLocal: portalWorldFromLocal,
+                    wallID: wallID
+                )
+            }
         }
     }
 

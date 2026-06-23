@@ -486,7 +486,7 @@ private extension PortalTransitionFXController {
 
         emissionInFlight = true
 
-        emissionTask = Task { @MainActor [weak self] in
+        emissionTask = Task.detached(priority: .userInitiated) { [weak self, planner, input, revision] in
             let output = await planner.plan(
                 input: input
             )
@@ -495,10 +495,12 @@ private extension PortalTransitionFXController {
                 return
             }
 
-            self?.receiveEmissionPlan(
-                output,
-                revision: revision
-            )
+            await MainActor.run {
+                self?.receiveEmissionPlan(
+                    output,
+                    revision: revision
+                )
+            }
         }
     }
 
