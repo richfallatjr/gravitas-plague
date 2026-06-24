@@ -3,36 +3,6 @@ import Foundation
 import RealityKit
 import simd
 
-struct JockHandImpactLatch: Sendable, Equatable {
-    private(set) var isArmed = true
-
-    mutating func rearmIfNeeded(
-        distance: Float,
-        radialVelocity: Float,
-        maxHitDistance: Float
-    ) {
-        if distance > maxHitDistance ||
-            radialVelocity >= 0 {
-            isArmed = true
-        }
-    }
-
-    func canAcceptImpact(
-        distance: Float,
-        approachSpeed: Float,
-        maxHitDistance: Float,
-        minimumApproachSpeed: Float
-    ) -> Bool {
-        isArmed &&
-            distance <= maxHitDistance &&
-            approachSpeed >= minimumApproachSpeed
-    }
-
-    mutating func consumeAcceptedImpact() {
-        isArmed = false
-    }
-}
-
 @MainActor
 final class JockHandHitDetector {
     struct HandSample {
@@ -57,7 +27,6 @@ final class JockHandHitDetector {
     private var isRunning = false
 
     private var previousSamples: [HandAnchor.Chirality: HandSample] = [:]
-    private var impactStateByHand: [HandAnchor.Chirality: JockHandImpactLatch] = [:]
 
     init(configuration: JockHitReactionConfiguration) {
         self.configuration = configuration
@@ -206,41 +175,10 @@ final class JockHandHitDetector {
             }
         }
 
-        let headToHand = handPosition - faceCenterWorld
-        let radialDistance = simd_length(headToHand)
-
-        guard radialDistance > 0.0001 else {
-            return nil
-        }
-
-        let outwardDirection = headToHand / radialDistance
-        let radialVelocity = simd_dot(
-            velocityVector,
-            outwardDirection
-        )
-        let approachSpeed = -radialVelocity
-
-        var impactState = impactStateByHand[chirality] ?? JockHandImpactLatch()
-
-        defer {
-            impactStateByHand[chirality] = impactState
-        }
-
-        impactState.rearmIfNeeded(
-            distance: radialDistance,
-            radialVelocity: radialVelocity,
-            maxHitDistance: configuration.maxHitDistanceMeters
-        )
-
         let diagnosticHeadRadius = headHitRadiusMeters ?? configuration.faceZoneRadiusMeters
         let acceptedHitRadius = configuration.maxHitDistanceMeters
 
-        guard impactState.canAcceptImpact(
-            distance: distance,
-            approachSpeed: approachSpeed,
-            maxHitDistance: acceptedHitRadius,
-            minimumApproachSpeed: configuration.lightVelocityThreshold
-        ) else {
+        guard distance <= acceptedHitRadius else {
             return nil
         }
 
@@ -269,8 +207,6 @@ final class JockHandHitDetector {
         guard approachDot > requiredApproachDot else {
             return nil
         }
-
-        impactState.consumeAcceptedImpact()
 
         print(
             """
@@ -316,7 +252,6 @@ final class JockHandHitDetector {
     private func refreshTrackingRuntime() {
         isRunning = false
         previousSamples.removeAll()
-        impactStateByHand.removeAll()
         arkitSession = ARKitSession()
         handTrackingProvider = HandTrackingProvider()
     }

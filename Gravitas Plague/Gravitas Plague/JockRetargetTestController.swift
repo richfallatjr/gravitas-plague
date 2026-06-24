@@ -154,6 +154,8 @@ final class JockRetargetTestController {
     private var hasLoggedCharacterAudioEmitterMissingJoint = false
     private var hasLoggedSimplifiedBodySnapshotSource = false
     private var didPlayDeathAudio = false
+    private static let enemyDamageCooldownSeconds: TimeInterval = 0.25
+    private var lastDamageAcceptedAtBySourceID: [UUID: TimeInterval] = [:]
 
     var enemyCollisionState: HordeEnemyCollisionState = .active
     var enemyBodyCollisionEnabled = false
@@ -254,7 +256,34 @@ final class JockRetargetTestController {
         if resetHitCount {
             acceptedHitCount = 0
             didPlayDeathAudio = false
+            clearEnemyDamageCooldown()
         }
+    }
+
+    private func clearEnemyDamageCooldown(
+        sourceID: UUID? = nil
+    ) {
+        if let sourceID {
+            lastDamageAcceptedAtBySourceID.removeValue(forKey: sourceID)
+        } else {
+            lastDamageAcceptedAtBySourceID.removeAll()
+        }
+    }
+
+    private func shouldAcceptEnemyDamage(
+        sourceID: UUID,
+        now: TimeInterval
+    ) -> (accepted: Bool, elapsedSinceAcceptedDamage: TimeInterval?) {
+        guard let lastDamageTime = lastDamageAcceptedAtBySourceID[sourceID] else {
+            return (true, nil)
+        }
+
+        let elapsed = now - lastDamageTime
+
+        return (
+            elapsed >= Self.enemyDamageCooldownSeconds,
+            elapsed
+        )
     }
 
     private var isHordeLifecycleManaged: Bool {
@@ -786,6 +815,7 @@ final class JockRetargetTestController {
         didFreezeAsCorpse = false
         activeDeathClipID = nil
         acceptedHitCount = 0
+        clearEnemyDamageCooldown()
         didPlayDeathAudio = false
         attackAnimationRandomizer.reset(enemyID: id)
         hasLoggedHeadHitZoneBuild = false
@@ -841,6 +871,7 @@ final class JockRetargetTestController {
         hordeSpawnIndex = spawnIndex
         self.hitsToKill = max(1, hitsToKill)
         acceptedHitCount = 0
+        clearEnemyDamageCooldown()
 
         hordeLifecycleState = initialLifecycle
         didStartDeathLifecycle = false
@@ -3192,12 +3223,22 @@ final class JockRetargetTestController {
             )
         }
 
-        acceptedHitCount += 1
+        let now = CACurrentMediaTime()
+        let damageGate = shouldAcceptEnemyDamage(
+            sourceID: hordeID,
+            now: now
+        )
+        let acceptedDamageHitCount = damageGate.accepted
+            ? acceptedHitCount + 1
+            : acceptedHitCount
+        let shouldDie =
+            damageGate.accepted &&
+            acceptedDamageHitCount >= hitsToKill
+
         onPunchHit?(
             event.region
         )
 
-        let shouldDie = acceptedHitCount >= hitsToKill
         let finalDamage: JockHitDamageLevel = shouldDie
             ? .death
             : event.damageLevel
@@ -3236,6 +3277,29 @@ final class JockRetargetTestController {
 
         driver?.locomotionDeltaHandler = nil
 
+        if damageGate.accepted {
+            lastDamageAcceptedAtBySourceID[hordeID] = now
+            acceptedHitCount = acceptedDamageHitCount
+
+            print(
+                """
+                [EnemyDamage] accepted
+                  sourceID: \(hordeID)
+                  cooldownSeconds: \(String(format: "%.2f", Self.enemyDamageCooldownSeconds))
+                """
+            )
+        } else {
+            print(
+                """
+                [EnemyDamage] suppressed duplicate
+                  sourceID: \(hordeID)
+                  elapsedSinceAcceptedDamage: \(String(format: "%.3f", damageGate.elapsedSinceAcceptedDamage ?? 0))
+                  cooldownSeconds: \(String(format: "%.2f", Self.enemyDamageCooldownSeconds))
+                  feedbackPreserved: true
+                """
+            )
+        }
+
         print(
             """
             [Gravitas Hit] Registered face hit
@@ -3254,7 +3318,7 @@ final class JockRetargetTestController {
               hordeWave: \(hordeWave)
               hordeSpawnIndex: \(hordeSpawnIndex)
               infectedHitsToKill: \(hitsToKill)
-              temporalCooldown: false
+              temporalCooldown: \(damageGate.accepted ? "accepted_damage" : "suppressed_damage_only")
               hitReactionCanBeInterrupted: true
             """
         )
@@ -3321,6 +3385,7 @@ final class JockRetargetTestController {
         }
 
         onEnemyDeathDisableCollision()
+        clearEnemyDamageCooldown(sourceID: killedID)
 
         lifecycleState = .dying
         hordeLifecycleState = .dying

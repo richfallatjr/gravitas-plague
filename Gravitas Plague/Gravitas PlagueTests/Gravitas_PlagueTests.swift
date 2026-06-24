@@ -151,69 +151,74 @@ final class Gravitas_PlagueTests: XCTestCase {
         )
     }
 
-    func testAlternatingHandsCanHitWithoutCooldown() {
-        var left = TestHandImpactLatch()
-        var right = TestHandImpactLatch()
+    func testEnemyDamageCooldownIsPerSource() {
+        var gate = TestEnemyDamageCooldownGate()
+        let enemyA = UUID()
+        let enemyB = UUID()
 
         XCTAssertTrue(
-            consumeImpact(
-                &left,
-                distance: 0.20,
-                radialVelocity: -1.0
-            )
-        )
-        XCTAssertTrue(
-            consumeImpact(
-                &right,
-                distance: 0.20,
-                radialVelocity: -1.0
-            )
-        )
-    }
-
-    func testSameHandCanHitAgainAfterImmediateRetraction() {
-        var latch = TestHandImpactLatch()
-
-        XCTAssertTrue(
-            consumeImpact(
-                &latch,
-                distance: 0.20,
-                radialVelocity: -1.0
-            )
-        )
-
-        latch.rearmIfNeeded(
-            distance: 0.20,
-            radialVelocity: 0.25,
-            maxHitDistance: 0.40
-        )
-
-        XCTAssertTrue(
-            consumeImpact(
-                &latch,
-                distance: 0.20,
-                radialVelocity: -1.0
-            )
-        )
-    }
-
-    func testContinuousInwardOverlapDoesNotHitEveryFrame() {
-        var latch = TestHandImpactLatch()
-
-        XCTAssertTrue(
-            consumeImpact(
-                &latch,
-                distance: 0.20,
-                radialVelocity: -1.0
+            gate.acceptDamageIfAllowed(
+                sourceID: enemyA,
+                now: 10.0
             )
         )
         XCTAssertFalse(
-            consumeImpact(
-                &latch,
-                distance: 0.19,
-                radialVelocity: -0.9
+            gate.acceptDamageIfAllowed(
+                sourceID: enemyA,
+                now: 10.10
             )
         )
+        XCTAssertTrue(
+            gate.acceptDamageIfAllowed(
+                sourceID: enemyB,
+                now: 10.10
+            )
+        )
+    }
+
+    func testEnemyDamageCooldownAllowsDamageAtWindowBoundary() {
+        var gate = TestEnemyDamageCooldownGate()
+        let enemy = UUID()
+
+        XCTAssertTrue(
+            gate.acceptDamageIfAllowed(
+                sourceID: enemy,
+                now: 5.0
+            )
+        )
+        XCTAssertFalse(
+            gate.acceptDamageIfAllowed(
+                sourceID: enemy,
+                now: 5.249
+            )
+        )
+        XCTAssertTrue(
+            gate.acceptDamageIfAllowed(
+                sourceID: enemy,
+                now: 5.25
+            )
+        )
+    }
+
+    func testSuppressedEnemyDamageDoesNotIncrementAcceptedHitCount() {
+        var gate = TestEnemyDamageCooldownGate()
+        let enemy = UUID()
+        var acceptedHitCount = 0
+        var feedbackCount = 0
+
+        for now in [1.0, 1.05, 1.10] {
+            feedbackCount += 1
+
+            if gate.acceptDamageIfAllowed(
+                sourceID: enemy,
+                now: now
+            ) {
+                acceptedHitCount += 1
+            }
+        }
+
+        XCTAssertEqual(feedbackCount, 3)
+        XCTAssertEqual(acceptedHitCount, 1)
     }
 }
 
@@ -261,57 +266,20 @@ private func sourceRotationUnchangedByTranslationScale(
     rotation
 }
 
-private func consumeImpact(
-    _ latch: inout TestHandImpactLatch,
-    distance: Float,
-    radialVelocity: Float
-) -> Bool {
-    latch.rearmIfNeeded(
-        distance: distance,
-        radialVelocity: radialVelocity,
-        maxHitDistance: 0.40
-    )
+private struct TestEnemyDamageCooldownGate {
+    private let cooldownSeconds: TimeInterval = 0.25
+    private var lastDamageAcceptedAtBySourceID: [UUID: TimeInterval] = [:]
 
-    let accepted = latch.canAcceptImpact(
-        distance: distance,
-        approachSpeed: -radialVelocity,
-        maxHitDistance: 0.40,
-        minimumApproachSpeed: 0.55
-    )
-
-    if accepted {
-        latch.consumeAcceptedImpact()
-    }
-
-    return accepted
-}
-
-private struct TestHandImpactLatch {
-    private(set) var isArmed = true
-
-    mutating func rearmIfNeeded(
-        distance: Float,
-        radialVelocity: Float,
-        maxHitDistance: Float
-    ) {
-        if distance > maxHitDistance ||
-            radialVelocity >= 0 {
-            isArmed = true
-        }
-    }
-
-    func canAcceptImpact(
-        distance: Float,
-        approachSpeed: Float,
-        maxHitDistance: Float,
-        minimumApproachSpeed: Float
+    mutating func acceptDamageIfAllowed(
+        sourceID: UUID,
+        now: TimeInterval
     ) -> Bool {
-        isArmed &&
-            distance <= maxHitDistance &&
-            approachSpeed >= minimumApproachSpeed
-    }
+        if let lastDamageTime = lastDamageAcceptedAtBySourceID[sourceID],
+           now - lastDamageTime < cooldownSeconds {
+            return false
+        }
 
-    mutating func consumeAcceptedImpact() {
-        isArmed = false
+        lastDamageAcceptedAtBySourceID[sourceID] = now
+        return true
     }
 }
