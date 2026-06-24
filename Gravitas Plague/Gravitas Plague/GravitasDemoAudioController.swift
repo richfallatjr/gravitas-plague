@@ -76,6 +76,34 @@ final class GravitasDemoAudioController {
         let playbackController: AudioPlaybackController
     }
 
+    private enum EnemyHitImpactAudioGateDecision {
+        case eligible(sourceID: UUID, elapsed: TimeInterval?)
+        case suppressed(sourceID: UUID, elapsed: TimeInterval)
+        case missingSourceID
+    }
+
+    private enum CharacterImpactPlaybackResult {
+        case started(playbackID: UUID)
+        case notPlayed(reason: String)
+
+        var didStart: Bool {
+            if case .started = self {
+                return true
+            }
+
+            return false
+        }
+
+        var reason: String {
+            switch self {
+            case .started:
+                return "started"
+            case .notPlayed(let reason):
+                return reason
+            }
+        }
+    }
+
     private let backgroundMusicFile = BundleAudioFile(
         fileName: "GravitasPlagueBackgroundLoop",
         fileExtension: "wav"
@@ -166,6 +194,8 @@ final class GravitasDemoAudioController {
     private var hostAudioSourcesByID: [UUID: HostAudioSource] = [:]
     private var activeSpatialOneShotsByID: [UUID: ActiveSpatialOneShot] = [:]
     private var activeCharacterVocalBySourceID: [UUID: ActiveCharacterVocal] = [:]
+    private static let enemyHitImpactAudioCooldownSeconds: TimeInterval = 0.15
+    private var lastImpactAudioStartedAtBySourceID: [UUID: TimeInterval] = [:]
 
     private var emergencyBroadcastTask: Task<Void, Never>?
 
@@ -462,6 +492,8 @@ final class GravitasDemoAudioController {
         guard var source = hostAudioSourcesByID.removeValue(forKey: id) else {
             return
         }
+
+        lastImpactAudioStartedAtBySourceID.removeValue(forKey: id)
 
         source.loopStartTask?.cancel()
         source.loopStartTask = nil
@@ -872,6 +904,7 @@ final class GravitasDemoAudioController {
         stopPortalOneShotControllers()
         stopActiveSpatialOneShots()
         stopActiveCharacterVocals()
+        clearEnemyHitImpactAudioCooldownState()
 
         print("[Gravitas Audio] Stopped all audio.")
     }
@@ -899,10 +932,124 @@ final class GravitasDemoAudioController {
         prepareIfNeeded()
         _ = enemyID
 
-        playFacePunchContactSoundIfNeeded(
-            archetype: archetype,
-            hitRegion: hitRegion,
-            sourceID: sourceID
+        switch evaluateEnemyHitImpactAudioCooldown(sourceID: sourceID) {
+        case .missingSourceID:
+            logEnemyImpactAudioNotPlayed(
+                sourceID: nil,
+                reason: "missingSourceID"
+            )
+
+        case let .suppressed(sourceID: resolvedSourceID, elapsed: elapsed):
+            logEnemyImpactAudioSuppressed(
+                sourceID: resolvedSourceID,
+                elapsed: elapsed
+            )
+
+        case let .eligible(sourceID: resolvedSourceID, elapsed: _):
+            let playbackResult = playFacePunchContactSoundIfNeeded(
+                archetype: archetype,
+                hitRegion: hitRegion,
+                sourceID: resolvedSourceID
+            )
+
+            guard playbackResult.didStart else {
+                logEnemyImpactAudioNotPlayed(
+                    sourceID: resolvedSourceID,
+                    reason: playbackResult.reason
+                )
+                return
+            }
+
+            lastImpactAudioStartedAtBySourceID[resolvedSourceID] = CACurrentMediaTime()
+
+            logEnemyImpactAudioAccepted(
+                sourceID: resolvedSourceID
+            )
+        }
+    }
+
+    private func evaluateEnemyHitImpactAudioCooldown(
+        sourceID: UUID?,
+        now: TimeInterval = CACurrentMediaTime()
+    ) -> EnemyHitImpactAudioGateDecision {
+        guard let sourceID else {
+            return .missingSourceID
+        }
+
+        guard let lastStartedAt = lastImpactAudioStartedAtBySourceID[sourceID] else {
+            return .eligible(
+                sourceID: sourceID,
+                elapsed: nil
+            )
+        }
+
+        let elapsed = max(
+            0,
+            now - lastStartedAt
+        )
+
+        guard elapsed >= Self.enemyHitImpactAudioCooldownSeconds else {
+            return .suppressed(
+                sourceID: sourceID,
+                elapsed: elapsed
+            )
+        }
+
+        return .eligible(
+            sourceID: sourceID,
+            elapsed: elapsed
+        )
+    }
+
+    private func clearEnemyHitImpactAudioCooldownState() {
+        lastImpactAudioStartedAtBySourceID.removeAll(
+            keepingCapacity: true
+        )
+    }
+
+    private func logEnemyImpactAudioAccepted(
+        sourceID: UUID
+    ) {
+        print(
+            """
+            [EnemyImpactAudio] accepted
+              sourceID: \(sourceID.uuidString)
+              cooldownSeconds: \(String(format: "%.2f", Self.enemyHitImpactAudioCooldownSeconds))
+              channel: faceHitImpact
+              policy: cooldownPerSource
+            """
+        )
+    }
+
+    private func logEnemyImpactAudioSuppressed(
+        sourceID: UUID,
+        elapsed: TimeInterval
+    ) {
+        print(
+            """
+            [EnemyImpactAudio] suppressed duplicate
+              sourceID: \(sourceID.uuidString)
+              elapsedSinceImpactAudio: \(String(format: "%.3f", elapsed))
+              cooldownSeconds: \(String(format: "%.2f", Self.enemyHitImpactAudioCooldownSeconds))
+              hitReactionPreserved: true
+              damageVocalPreserved: true
+              damageMutationUnaffected: true
+            """
+        )
+    }
+
+    private func logEnemyImpactAudioNotPlayed(
+        sourceID: UUID?,
+        reason: String
+    ) {
+        print(
+            """
+            [EnemyImpactAudio] not played
+              sourceID: \(sourceID?.uuidString ?? "nil")
+              reason: \(reason)
+              cooldownCommitted: false
+              globalFallbackUsed: false
+            """
         )
     }
 
@@ -944,9 +1091,9 @@ final class GravitasDemoAudioController {
         archetype: PlagueCharacterArchetype,
         hitRegion: InfectedHitRegion,
         sourceID: UUID?
-    ) {
+    ) -> CharacterImpactPlaybackResult {
         guard hitRegion == .head else {
-            return
+            return .notPlayed(reason: "nonHeadRegion")
         }
 
         let attributes: CharacterAttributes
@@ -964,7 +1111,7 @@ final class GravitasDemoAudioController {
                   noFallback: true
                 """
             )
-            return
+            return .notPlayed(reason: "characterAttributesUnavailable")
         }
 
         let sound: SoundRef
@@ -983,7 +1130,7 @@ final class GravitasDemoAudioController {
                   noFallback: true
                 """
             )
-            return
+            return .notPlayed(reason: "noAuthoredFile")
         }
 
         let file = BundleAudioFile(sound)
@@ -993,16 +1140,33 @@ final class GravitasDemoAudioController {
             characterID: attributes.characterID,
             context: "face punch contact"
         ) else {
-            return
+            return .notPlayed(reason: "missingAudioFile")
         }
 
-        _ = playConcurrentCharacterSpatialOneShot(
+        guard let sourceID else {
+            return .notPlayed(reason: "missingSourceID")
+        }
+
+        guard let source = hostAudioSourcesByID[sourceID] else {
+            return .notPlayed(reason: "missingHostSource")
+        }
+
+        guard source.usesResolvedHeadAnchor,
+              source.headEntity.parent != nil else {
+            return .notPlayed(reason: "unresolvedEmitter")
+        }
+
+        guard let playbackID = playConcurrentCharacterSpatialOneShot(
             file: file,
             characterID: attributes.characterID,
             role: "face_hits",
             sourceID: sourceID,
             volumeDB: sound.volumeDB ?? Float(decibels(linearVolume: 0.95))
-        )
+        ) else {
+            return .notPlayed(reason: "playbackFailed")
+        }
+
+        return .started(playbackID: playbackID)
     }
 
     private func playCharacterAudioBankReplacingVocal(

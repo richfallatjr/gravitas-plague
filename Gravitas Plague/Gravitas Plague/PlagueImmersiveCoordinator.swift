@@ -41,6 +41,79 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         case playerDead
     }
 
+    private enum HordeWaveRules {
+        static let maxConcurrentCombatants = 6
+        static let replacementCorpseCleanupDelaySeconds: TimeInterval = 4.0
+
+        static func initialLineup(
+            wave: Int
+        ) -> [PlagueCharacterArchetype] {
+            let normalizedWave = max(0, wave)
+
+            if normalizedWave <= maxConcurrentCombatants {
+                return HordeCharacterWaveLineup.lineup(
+                    wave: normalizedWave
+                )
+            }
+
+            let baselineSix = HordeCharacterWaveLineup.lineup(
+                wave: maxConcurrentCombatants
+            )
+
+            assert(
+                baselineSix.count == maxConcurrentCombatants,
+                "Wave 6 must contain the canonical six-character roster"
+            )
+
+            return Array(
+                baselineSix.prefix(maxConcurrentCombatants)
+            )
+        }
+
+        static func replacementBudget(
+            wave: Int
+        ) -> Int {
+            max(
+                0,
+                wave - maxConcurrentCombatants
+            )
+        }
+    }
+
+    private struct HordeDeathReplacementRequest {
+        let runID: UUID
+        let waveGeneration: UUID
+        let deadEnemyID: UUID
+        let replacementEnemyID: UUID
+        let wave: Int
+        let archetype: PlagueCharacterArchetype
+        let replacementSpawnIndex: Int
+    }
+
+    private struct HordeWaveDeathReplacementState {
+        let runID: UUID
+        let generation: UUID
+        let wave: Int
+        let replacementBudget: Int
+
+        var consumedReplacementCount = 0
+        var successfulReplacementCount = 0
+        var failedReplacementCount = 0
+        var deathIDsThatConsumedToken = Set<UUID>()
+        var queuedRequests: [HordeDeathReplacementRequest] = []
+        var inFlightRequest: HordeDeathReplacementRequest?
+        var reservedReplacementEnemyIDs = Set<UUID>()
+        var corpseIDsEligibleForReplacementCleanup = Set<UUID>()
+
+        var hasReplacementRemaining: Bool {
+            consumedReplacementCount < replacementBudget
+        }
+
+        var pendingReplacementCount: Int {
+            reservedReplacementEnemyIDs.count
+        }
+    }
+
     private let spatialProvider = PhaseOneSpatialProvider()
     private let audioController = GravitasDemoAudioController()
     private let forestEnvironmentController = PlagueGaussianForestEnvironmentController()
@@ -125,6 +198,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var hordeTotalSpawned = 0
     private var hordeTotalKilled = 0
     private var nextGlobalEnemySpawnIndex = 0
+    private var currentHordeRunID = UUID()
     private var hordeWaveSpawnState: HordeWaveSpawnState = .idle
     private var hordeSpawnFailures: [HordeSpawnFailureRecord] = []
     private var isSpawningHordeWave = false
@@ -136,6 +210,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var hordeRoomScanCompletionTask: Task<Void, Never>?
     private var activeIngressControllers: [UUID: HordePortalInstancedIngressController] = [:]
     private var retainedPortalMirrorControllersByEnemyID: [UUID: HordePortalInstancedIngressController] = [:]
+    private var hordeDeathReplacementState: HordeWaveDeathReplacementState?
+    private var hordeReplacementPumpTask: Task<Void, Never>?
+    private var hordeReplacementPumpID: UUID?
+    private var hordeReplacementCorpseCleanupTasksByEnemyID: [UUID: Task<Void, Never>] = [:]
     private var lastWallPosterPlacementAttempt: Date?
 
     private var lastTickDate: Date?
@@ -1131,6 +1209,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeRoomScanCompletionTask = nil
         pendingNextBenchmarkWaveTask?.cancel()
         pendingNextBenchmarkWaveTask = nil
+        resetHordeDeathReplacementRuntime(
+            reason: "horde_room_scan_started"
+        )
         clearHordeEnemyControllers()
         cleanupAllPortalMirrors(
             reason: "horde_room_scan_started"
@@ -1695,6 +1776,214 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         retainedPortalMirrorControllersByEnemyID.removeAll()
     }
 
+    private func authoritativeLivingOrIngressEnemyIDs() -> Set<UUID> {
+        var ids = activeHordeEnemyIDs
+        ids.formUnion(activeIngressControllers.keys)
+
+        for (id, controller) in hordeEnemyControllersByID
+            where controller.hordeLifecycleState.isLivingGameplayEnemy {
+            ids.insert(id)
+        }
+
+        return ids
+    }
+
+    private func authoritativeLivingOrIngressEnemyCount() -> Int {
+        authoritativeLivingOrIngressEnemyIDs().count
+    }
+
+    private func assertHordeReplacementInvariants(
+        context: StaticString
+    ) {
+        #if DEBUG
+        guard let state = hordeDeathReplacementState else {
+            return
+        }
+
+        assert(
+            state.consumedReplacementCount >= 0,
+            "\(context)"
+        )
+        assert(
+            state.consumedReplacementCount <= state.replacementBudget,
+            "Replacement budget exceeded: \(context)"
+        )
+
+        let queuedIDs = Set(
+            state.queuedRequests.map(\.replacementEnemyID)
+        )
+
+        assert(
+            queuedIDs.isSubset(of: state.reservedReplacementEnemyIDs),
+            "Queued replacement lacks a reserved slot: \(context)"
+        )
+
+        if let inFlightID = state.inFlightRequest?.replacementEnemyID {
+            assert(
+                state.reservedReplacementEnemyIDs.contains(inFlightID),
+                "In-flight replacement lacks a reserved slot: \(context)"
+            )
+        }
+
+        assert(
+            state.successfulReplacementCount + state.failedReplacementCount <=
+                state.consumedReplacementCount,
+            "Replacement outcome count is invalid: \(context)"
+        )
+
+        assert(
+            authoritativeLivingOrIngressEnemyCount() + state.pendingReplacementCount <=
+                HordeWaveRules.maxConcurrentCombatants,
+            "Six-combatant capacity exceeded: \(context)"
+        )
+        #endif
+    }
+
+    private func resetHordeDeathReplacementRuntime(
+        reason: String
+    ) {
+        hordeReplacementPumpTask?.cancel()
+        hordeReplacementPumpTask = nil
+        hordeReplacementPumpID = nil
+
+        for task in hordeReplacementCorpseCleanupTasksByEnemyID.values {
+            task.cancel()
+        }
+        hordeReplacementCorpseCleanupTasksByEnemyID.removeAll()
+
+        if let state = hordeDeathReplacementState {
+            print(
+                """
+                [HordeReplacement] runtime reset
+                  reason: \(reason)
+                  runID: \(state.runID)
+                  generation: \(state.generation)
+                  wave: \(state.wave)
+                  queued: \(state.queuedRequests.count)
+                  inFlight: \(state.inFlightRequest != nil)
+                  reserved: \(state.pendingReplacementCount)
+                  consumed: \(state.consumedReplacementCount)/\(state.replacementBudget)
+                  successful: \(state.successfulReplacementCount)
+                  failed: \(state.failedReplacementCount)
+                """
+            )
+        }
+
+        hordeDeathReplacementState = nil
+    }
+
+    private func isCurrentReplacementRequest(
+        _ request: HordeDeathReplacementRequest
+    ) -> Bool {
+        guard !Task.isCancelled,
+              hordeBenchmarkRunning,
+              !isPlayerDeathSequenceActive,
+              hordePortalSystemReady,
+              let state = hordeDeathReplacementState else {
+            return false
+        }
+
+        return state.runID == request.runID &&
+            state.generation == request.waveGeneration &&
+            state.wave == request.wave &&
+            state.reservedReplacementEnemyIDs.contains(
+                request.replacementEnemyID
+            )
+    }
+
+    private func ensureHordeReplacementPumpRunning() {
+        guard hordeReplacementPumpTask == nil,
+              let state = hordeDeathReplacementState,
+              !state.queuedRequests.isEmpty else {
+            return
+        }
+
+        let pumpID = UUID()
+        let runID = state.runID
+        let generation = state.generation
+
+        hordeReplacementPumpID = pumpID
+
+        hordeReplacementPumpTask = Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
+            await self.drainHordeReplacementQueue(
+                pumpID: pumpID,
+                runID: runID,
+                generation: generation
+            )
+        }
+    }
+
+    private func drainHordeReplacementQueue(
+        pumpID: UUID,
+        runID: UUID,
+        generation: UUID
+    ) async {
+        while !Task.isCancelled {
+            guard hordeReplacementPumpID == pumpID,
+                  var state = hordeDeathReplacementState,
+                  state.runID == runID,
+                  state.generation == generation,
+                  hordeBenchmarkRunning,
+                  !isPlayerDeathSequenceActive else {
+                break
+            }
+
+            guard state.inFlightRequest == nil else {
+                assertionFailure("[HordeReplacement] replacement pump found existing in-flight request")
+                break
+            }
+
+            guard !state.queuedRequests.isEmpty else {
+                break
+            }
+
+            let request = state.queuedRequests.removeFirst()
+            state.inFlightRequest = request
+            hordeDeathReplacementState = state
+
+            print(
+                """
+                [HordeReplacement] replacement build started
+                  runID: \(request.runID)
+                  generation: \(request.waveGeneration)
+                  wave: \(request.wave)
+                  deadEnemyID: \(request.deadEnemyID)
+                  replacementEnemyID: \(request.replacementEnemyID)
+                  archetype: \(request.archetype.rawValue)
+                  spawnIndex: \(request.replacementSpawnIndex)
+                  queueDepth: \(state.queuedRequests.count)
+                  reservedCount: \(state.pendingReplacementCount)
+                """
+            )
+
+            assertHordeReplacementInvariants(
+                context: "drainHordeReplacementQueue_start"
+            )
+
+            await spawnDeathReplacementThroughPortal(
+                request
+            )
+
+            checkWaveCanEnd(
+                wave: request.wave
+            )
+        }
+
+        if hordeReplacementPumpID == pumpID {
+            hordeReplacementPumpTask = nil
+            hordeReplacementPumpID = nil
+
+            if let state = hordeDeathReplacementState,
+               !state.queuedRequests.isEmpty {
+                ensureHordeReplacementPumpRunning()
+            }
+        }
+    }
+
     private func updateDyingHordeEnemies(
         deltaTime: Float,
         currentHeadPosition: SIMD3<Float>?
@@ -1875,6 +2164,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         pendingNextBenchmarkWaveTask?.cancel()
         pendingNextBenchmarkWaveTask = nil
+        resetHordeDeathReplacementRuntime(
+            reason: "start_horde_benchmark"
+        )
+        currentHordeRunID = UUID()
         clearHordeEnemyControllers()
         cleanupAllPortalMirrors(
             reason: "start_horde_benchmark"
@@ -1916,6 +2209,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordePrewarmTask?.cancel()
         hordePrewarmTask = nil
         hordePrewarmReady = false
+        resetHordeDeathReplacementRuntime(
+            reason: "stop_horde_benchmark"
+        )
         hordePrewarmCoordinator.releaseAll()
 
         hordeBenchmarkRunning = false
@@ -2034,8 +2330,37 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
 
         let nextWave = hordeCurrentWave + 1
-        let lineup = HordeCharacterWaveLineup.lineup(wave: nextWave)
+        resetHordeDeathReplacementRuntime(
+            reason: "starting_wave_\(nextWave)"
+        )
+
+        let waveGeneration = UUID()
+        let lineup = HordeWaveRules.initialLineup(
+            wave: nextWave
+        )
         let spawnCount = lineup.count
+
+        hordeDeathReplacementState = HordeWaveDeathReplacementState(
+            runID: currentHordeRunID,
+            generation: waveGeneration,
+            wave: nextWave,
+            replacementBudget: HordeWaveRules.replacementBudget(
+                wave: nextWave
+            )
+        )
+
+        print(
+            """
+            [HordeReplacement] wave rules initialized
+              runID: \(currentHordeRunID)
+              generation: \(waveGeneration)
+              wave: \(nextWave)
+              initialSpawnCount: \(spawnCount)
+              replacementBudget: \(HordeWaveRules.replacementBudget(wave: nextWave))
+              maxConcurrentCombatants: \(HordeWaveRules.maxConcurrentCombatants)
+              replacementBuildConcurrency: 1
+            """
+        )
 
         guard await ensureWavePrewarmed(
             wave: nextWave,
@@ -2706,6 +3031,462 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
     }
 
+    private func enqueueDeathReplacementIfNeeded(
+        deadEnemyID: UUID,
+        deadController: JockRetargetTestController,
+        wave: Int
+    ) {
+        guard hordeBenchmarkRunning,
+              !isPlayerDeathSequenceActive,
+              var state = hordeDeathReplacementState,
+              state.runID == currentHordeRunID,
+              state.wave == wave,
+              state.hasReplacementRemaining else {
+            return
+        }
+
+        guard !state.deathIDsThatConsumedToken.contains(deadEnemyID) else {
+            print(
+                """
+                [HordeReplacement] duplicate death ignored
+                  wave: \(wave)
+                  deadEnemyID: \(deadEnemyID)
+                  reason: token_already_consumed_for_death
+                """
+            )
+            return
+        }
+
+        let occupiedOrReserved =
+            authoritativeLivingOrIngressEnemyCount() +
+            state.pendingReplacementCount
+
+        guard occupiedOrReserved < HordeWaveRules.maxConcurrentCombatants else {
+            assertionFailure("Death replacement had no available combatant vacancy")
+
+            print(
+                """
+                [HordeReplacement] ERROR replacement not queued
+                  wave: \(wave)
+                  deadEnemyID: \(deadEnemyID)
+                  reason: no_combatant_vacancy_after_death
+                  livingOrIngress: \(authoritativeLivingOrIngressEnemyCount())
+                  reserved: \(state.pendingReplacementCount)
+                """
+            )
+            return
+        }
+
+        let replacementEnemyID = UUID()
+        let replacementSpawnIndex = nextGlobalEnemySpawnIndex
+        nextGlobalEnemySpawnIndex += 1
+
+        let request = HordeDeathReplacementRequest(
+            runID: state.runID,
+            waveGeneration: state.generation,
+            deadEnemyID: deadEnemyID,
+            replacementEnemyID: replacementEnemyID,
+            wave: wave,
+            archetype: deadController.archetype,
+            replacementSpawnIndex: replacementSpawnIndex
+        )
+
+        state.consumedReplacementCount += 1
+        state.deathIDsThatConsumedToken.insert(deadEnemyID)
+        state.reservedReplacementEnemyIDs.insert(replacementEnemyID)
+        state.corpseIDsEligibleForReplacementCleanup.insert(deadEnemyID)
+        state.queuedRequests.append(request)
+
+        hordeDeathReplacementState = state
+
+        print(
+            """
+            [HordeReplacement] replacement queued
+              runID: \(state.runID)
+              generation: \(state.generation)
+              wave: \(wave)
+              deadEnemyID: \(deadEnemyID)
+              archetype: \(deadController.archetype.rawValue)
+              replacementEnemyID: \(replacementEnemyID)
+              consumed: \(state.consumedReplacementCount)/\(state.replacementBudget)
+              queueDepth: \(state.queuedRequests.count)
+              reservedCount: \(state.pendingReplacementCount)
+              cleanupDeadCorpseAfterDelay: true
+            """
+        )
+
+        assertHordeReplacementInvariants(
+            context: "enqueueDeathReplacementIfNeeded"
+        )
+
+        ensureHordeReplacementPumpRunning()
+    }
+
+    private func spawnDeathReplacementThroughPortal(
+        _ request: HordeDeathReplacementRequest
+    ) async {
+        var stagedController: JockRetargetTestController?
+        var registrationSucceeded = false
+
+        do {
+            guard isCurrentReplacementRequest(request) else {
+                cancelOrFailStaleReplacementRequest(
+                    request,
+                    stage: "initial_validation"
+                )
+                return
+            }
+
+            let spawnPose = spatialProvider.currentPoseOrFallback()
+            let attributes = try CharacterAttributeStore.shared.attributes(
+                for: request.archetype
+            )
+            let hitsToKill = attributes.horde.hitsToKill.random()
+
+            guard await ensureWavePrewarmed(
+                wave: request.wave,
+                lineup: [request.archetype]
+            ) else {
+                throw NSError(
+                    domain: "HordeReplacement",
+                    code: 501,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "Replacement prewarm failed"
+                    ]
+                )
+            }
+
+            guard isCurrentReplacementRequest(request) else {
+                cancelOrFailStaleReplacementRequest(
+                    request,
+                    stage: "after_prewarm"
+                )
+                return
+            }
+
+            let assignment = try await portalAssignmentForDeathReplacement(
+                request,
+                spawnPose: spawnPose
+            )
+
+            guard isCurrentReplacementRequest(request) else {
+                cancelOrFailStaleReplacementRequest(
+                    request,
+                    stage: "after_portal_assignment"
+                )
+                return
+            }
+
+            guard let portal = hordePortalManager.portals[assignment.portalID] else {
+                throw NSError(
+                    domain: "HordeReplacement",
+                    code: 502,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Assigned replacement portal missing \(assignment.portalID)."
+                    ]
+                )
+            }
+
+            let spawnPosition = portal.root.position(relativeTo: nil)
+
+            let controller = try await createLoadedHordeEnemyController(
+                id: request.replacementEnemyID,
+                archetype: request.archetype,
+                position: spawnPosition,
+                wave: request.wave,
+                spawnIndex: request.replacementSpawnIndex,
+                hitsToKill: hitsToKill,
+                playerHeadPosition: spawnPose.headPosition
+            )
+
+            stagedController = controller
+
+            guard isCurrentReplacementRequest(request) else {
+                cleanupStagedReplacementController(
+                    controller,
+                    enemyID: request.replacementEnemyID,
+                    reason: "replacement_request_stale_after_controller_create"
+                )
+                stagedController = nil
+                cancelOrFailStaleReplacementRequest(
+                    request,
+                    stage: "after_controller_create"
+                )
+                return
+            }
+
+            try registerHordeEnemyForInstancedPortalIngress(
+                controller: controller,
+                id: request.replacementEnemyID,
+                archetype: request.archetype,
+                wave: request.wave,
+                spawnIndex: request.replacementSpawnIndex,
+                portal: portal,
+                side: assignment.side,
+                assignmentKind: assignment.assignmentKind,
+                currentHeadPosition: spatialProvider.currentPose()?.headPosition ?? spawnPose.headPosition
+            )
+
+            registrationSucceeded = true
+            stagedController = nil
+
+            completeDeathReplacementRequest(
+                request,
+                portalID: portal.id,
+                side: assignment.side
+            )
+        } catch {
+            if !registrationSucceeded,
+               let stagedController {
+                cleanupStagedReplacementController(
+                    stagedController,
+                    enemyID: request.replacementEnemyID,
+                    reason: "replacement_spawn_failed"
+                )
+            }
+
+            failDeathReplacementRequestIfCurrent(
+                request,
+                stage: "spawn_transaction",
+                error: error
+            )
+        }
+    }
+
+    private func portalAssignmentForDeathReplacement(
+        _ request: HordeDeathReplacementRequest,
+        spawnPose: PhaseOneSpawnPose
+    ) async throws -> HordePortalAssignment {
+        let maxAttempts = 8
+        let retryDelayNanoseconds: UInt64 = 100_000_000
+
+        for attempt in 1...maxAttempts {
+            guard isCurrentReplacementRequest(request) else {
+                throw NSError(
+                    domain: "HordeReplacement",
+                    code: 503,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Replacement request became stale before portal assignment."
+                    ]
+                )
+            }
+
+            let assignments = await HordePortalWaveAssignmentPlanner(
+                portalManager: hordePortalManager
+            )
+            .buildAssignmentsForWave(
+                wave: request.wave,
+                spawnRequests: [
+                    (
+                        id: request.replacementEnemyID,
+                        archetype: request.archetype
+                    )
+                ],
+                playerPosition: spawnPose.headPosition,
+                playerForward: spawnPose.headForward
+            )
+
+            if let assignment = assignments.first {
+                return assignment
+            }
+
+            guard attempt < maxAttempts else {
+                break
+            }
+
+            print(
+                """
+                [HordeReplacement] portal assignment waiting
+                  runID: \(request.runID)
+                  generation: \(request.waveGeneration)
+                  wave: \(request.wave)
+                  replacementEnemyID: \(request.replacementEnemyID)
+                  archetype: \(request.archetype.rawValue)
+                  attempt: \(attempt)
+                  maxAttempts: \(maxAttempts)
+                """
+            )
+
+            try await Task.sleep(
+                nanoseconds: retryDelayNanoseconds
+            )
+        }
+
+        throw NSError(
+            domain: "HordeReplacement",
+            code: 504,
+            userInfo: [
+                NSLocalizedDescriptionKey:
+                    "No portal available for replacement after bounded retry."
+            ]
+        )
+    }
+
+    private func completeDeathReplacementRequest(
+        _ request: HordeDeathReplacementRequest,
+        portalID: UUID,
+        side: HordePortalEntranceSide
+    ) {
+        guard var state = hordeDeathReplacementState,
+              state.runID == request.runID,
+              state.generation == request.waveGeneration,
+              state.wave == request.wave else {
+            print(
+                """
+                [HordeReplacement] request cancelled as stale
+                  stage: complete_after_registration
+                  wave: \(request.wave)
+                  replacementEnemyID: \(request.replacementEnemyID)
+                """
+            )
+            return
+        }
+
+        state.successfulReplacementCount += 1
+        state.inFlightRequest = nil
+        state.reservedReplacementEnemyIDs.remove(
+            request.replacementEnemyID
+        )
+        hordeDeathReplacementState = state
+
+        hordePortalManager.markEntranceUsed(
+            portalID: portalID
+        )
+        hordeTotalSpawned += 1
+
+        print(
+            """
+            [HordeReplacement] replacement registered through portal
+              runID: \(request.runID)
+              generation: \(request.waveGeneration)
+              wave: \(request.wave)
+              deadEnemyID: \(request.deadEnemyID)
+              replacementEnemyID: \(request.replacementEnemyID)
+              archetype: \(request.archetype.rawValue)
+              spawnIndex: \(request.replacementSpawnIndex)
+              portalID: \(portalID)
+              side: \(side.rawValue)
+              successful: \(state.successfulReplacementCount)
+              reservedCount: \(state.pendingReplacementCount)
+              usesNormalPortalIngress: true
+            """
+        )
+
+        assertHordeReplacementInvariants(
+            context: "completeDeathReplacementRequest"
+        )
+    }
+
+    private func failDeathReplacementRequestIfCurrent(
+        _ request: HordeDeathReplacementRequest,
+        stage: String,
+        error: Error
+    ) {
+        guard var state = hordeDeathReplacementState,
+              state.runID == request.runID,
+              state.generation == request.waveGeneration,
+              state.wave == request.wave,
+              state.reservedReplacementEnemyIDs.contains(request.replacementEnemyID) else {
+            print(
+                """
+                [HordeReplacement] request cancelled as stale
+                  stage: \(stage)
+                  wave: \(request.wave)
+                  replacementEnemyID: \(request.replacementEnemyID)
+                  error: \(error.localizedDescription)
+                """
+            )
+            return
+        }
+
+        state.failedReplacementCount += 1
+        state.inFlightRequest = nil
+        state.reservedReplacementEnemyIDs.remove(
+            request.replacementEnemyID
+        )
+        hordeDeathReplacementState = state
+
+        hordeSpawnFailures.append(
+            HordeSpawnFailureRecord(
+                wave: request.wave,
+                spawnIndex: request.replacementSpawnIndex,
+                archetype: request.archetype,
+                reason: "Replacement spawn failed at \(stage): \(error.localizedDescription)"
+            )
+        )
+
+        if hordeWaveSpawnState == .active {
+            hordeWaveSpawnState = .degraded
+        }
+
+        print(
+            """
+            [HordeReplacement] replacement failed
+              runID: \(request.runID)
+              generation: \(request.waveGeneration)
+              wave: \(request.wave)
+              deadEnemyID: \(request.deadEnemyID)
+              replacementEnemyID: \(request.replacementEnemyID)
+              archetype: \(request.archetype.rawValue)
+              spawnIndex: \(request.replacementSpawnIndex)
+              stage: \(stage)
+              error: \(error.localizedDescription)
+              failed: \(state.failedReplacementCount)
+              reservedCount: \(state.pendingReplacementCount)
+              retry: false
+            """
+        )
+
+        assertHordeReplacementInvariants(
+            context: "failDeathReplacementRequestIfCurrent"
+        )
+    }
+
+    private func cancelOrFailStaleReplacementRequest(
+        _ request: HordeDeathReplacementRequest,
+        stage: String
+    ) {
+        let error = NSError(
+            domain: "HordeReplacement",
+            code: 505,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Replacement request is stale at \(stage)."
+            ]
+        )
+
+        failDeathReplacementRequestIfCurrent(
+            request,
+            stage: stage,
+            error: error
+        )
+    }
+
+    private func cleanupStagedReplacementController(
+        _ controller: JockRetargetTestController,
+        enemyID: UUID,
+        reason: String
+    ) {
+        audioController.stopHostAudioSource(
+            id: enemyID
+        )
+        cleanupPortalMirror(
+            enemyID: enemyID,
+            reason: reason
+        )
+        activeHordeEnemyIDs.remove(enemyID)
+        hordeEnemyControllersByID.removeValue(
+            forKey: enemyID
+        )
+        controller.forceCleanupFromHordeScene(
+            reason: reason
+        )
+        recycleHordePrewarmedAssets(
+            from: controller
+        )
+    }
+
     private func handleHordeSpawnFailure(
         _ record: HordeSpawnFailureRecord
     ) {
@@ -2811,6 +3592,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     }
 
     private func clearHordeEnemyControllers() {
+        resetHordeDeathReplacementRuntime(
+            reason: "clear_horde_enemy_controllers"
+        )
+
         for (id, controller) in hordeEnemyControllersByID {
             audioController.stopHostAudioSource(id: id)
             cleanupPortalMirror(
@@ -2914,6 +3699,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
         pendingNextBenchmarkWaveTask?.cancel()
         pendingNextBenchmarkWaveTask = nil
+        resetHordeDeathReplacementRuntime(
+            reason: "player_death"
+        )
         jockRetargetController?.setPlayerAttackEnabled(false)
 
         for controller in hordeEnemyControllersByID.values {
@@ -3085,6 +3873,12 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         assertNoCorpseInActiveEnemyMap()
 
+        enqueueDeathReplacementIfNeeded(
+            deadEnemyID: id,
+            deadController: controller,
+            wave: wave
+        )
+
         checkWaveCanEnd(
             wave: wave
         )
@@ -3117,6 +3911,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                   corpseCount: \(hordeCorpseRecordsByID.count)
                 """
             )
+
+            scheduleReplacementCorpseCleanupIfNeeded(
+                enemyID: id,
+                wave: wave
+            )
         } else if !corpseHordeEnemyIDs.contains(id) {
             print(
                 """
@@ -3147,6 +3946,106 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
     }
 
+    private func scheduleReplacementCorpseCleanupIfNeeded(
+        enemyID: UUID,
+        wave: Int
+    ) {
+        guard var state = hordeDeathReplacementState,
+              state.runID == currentHordeRunID,
+              state.wave == wave,
+              state.corpseIDsEligibleForReplacementCleanup.remove(enemyID) != nil else {
+            return
+        }
+
+        let runID = state.runID
+        let generation = state.generation
+
+        hordeDeathReplacementState = state
+
+        hordeReplacementCorpseCleanupTasksByEnemyID[enemyID]?.cancel()
+
+        let task = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(
+                    nanoseconds: UInt64(
+                        HordeWaveRules.replacementCorpseCleanupDelaySeconds *
+                            1_000_000_000
+                    )
+                )
+            } catch {
+                return
+            }
+
+            guard let self,
+                  let currentState = self.hordeDeathReplacementState,
+                  currentState.runID == runID,
+                  currentState.generation == generation,
+                  currentState.wave == wave else {
+                return
+            }
+
+            self.cleanupSingleHordeCorpse(
+                enemyID: enemyID,
+                reason: "replacement_spawn_memory_cap"
+            )
+        }
+
+        hordeReplacementCorpseCleanupTasksByEnemyID[enemyID] = task
+
+        print(
+            """
+            [HordeReplacement] corpse cleanup scheduled
+              wave: \(wave)
+              enemyID: \(enemyID)
+              delaySeconds: \(HordeWaveRules.replacementCorpseCleanupDelaySeconds)
+              cleanupOnlyThisCorpse: true
+            """
+        )
+    }
+
+    @MainActor
+    private func cleanupSingleHordeCorpse(
+        enemyID: UUID,
+        reason: String
+    ) {
+        hordeReplacementCorpseCleanupTasksByEnemyID[enemyID]?.cancel()
+        hordeReplacementCorpseCleanupTasksByEnemyID.removeValue(
+            forKey: enemyID
+        )
+
+        guard let record = hordeCorpseRecordsByID.removeValue(
+            forKey: enemyID
+        ) else {
+            corpseHordeEnemyIDs.remove(enemyID)
+            return
+        }
+
+        corpseHordeEnemyIDs.remove(enemyID)
+        audioController.stopHostAudioSource(
+            id: enemyID
+        )
+        cleanupPortalMirror(
+            enemyID: enemyID,
+            reason: reason
+        )
+        record.controller.forceCleanupFromHordeScene(
+            reason: reason
+        )
+        recycleHordePrewarmedAssets(
+            from: record.controller
+        )
+
+        print(
+            """
+            [HordeReplacement] corpse cleaned
+              enemyID: \(enemyID)
+              characterID: \(record.characterID)
+              reason: \(reason)
+              otherCorpsesUnaffected: true
+            """
+        )
+    }
+
     private func checkWaveCanEnd(
         wave: Int
     ) {
@@ -3157,14 +4056,28 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             return
         }
 
-        guard activeHordeEnemyIDs.isEmpty,
-              dyingHordeEnemyIDs.isEmpty else {
+        let pendingReplacementCount: Int
+
+        if let state = hordeDeathReplacementState,
+           state.runID == currentHordeRunID,
+           state.wave == wave {
+            pendingReplacementCount = state.pendingReplacementCount
+        } else {
+            pendingReplacementCount = 0
+        }
+
+        let livingOrIngressCount = authoritativeLivingOrIngressEnemyCount()
+
+        guard livingOrIngressCount == 0,
+              dyingHordeEnemyIDs.isEmpty,
+              pendingReplacementCount == 0 else {
             print(
                 """
                 [HordeBenchmark] wave not clear yet
                   wave: \(wave)
-                  active: \(activeHordeEnemyIDs.count)
+                  livingOrIngress: \(livingOrIngressCount)
                   dying: \(dyingHordeEnemyIDs.count)
+                  pendingReplacements: \(pendingReplacementCount)
                   corpses: \(corpseHordeEnemyIDs.count)
                   waveState: \(hordeWaveSpawnState.rawValue)
                 """
@@ -3260,17 +4173,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeDyingEnemyControllersByID.removeAll()
         dyingHordeEnemyIDs.removeAll()
 
-        for (enemyID, record) in hordeCorpseRecordsByID {
-            audioController.stopHostAudioSource(id: enemyID)
-            cleanupPortalMirror(
+        for enemyID in Array(hordeCorpseRecordsByID.keys) {
+            cleanupSingleHordeCorpse(
                 enemyID: enemyID,
                 reason: reason
-            )
-            record.controller.forceCleanupFromHordeScene(
-                reason: reason
-            )
-            recycleHordePrewarmedAssets(
-                from: record.controller
             )
         }
 
