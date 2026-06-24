@@ -65,6 +65,17 @@ final class GravitasDemoAudioController {
         let playbackController: AudioPlaybackController
     }
 
+    private struct ActiveCharacterVocal {
+        let id: UUID
+        let sourceID: UUID
+        let characterID: String
+        let role: String
+        let file: String
+        let startedAt: TimeInterval
+        let expectedEndTime: TimeInterval
+        let playbackController: AudioPlaybackController
+    }
+
     private let backgroundMusicFile = BundleAudioFile(
         fileName: "GravitasPlagueBackgroundLoop",
         fileExtension: "wav"
@@ -154,6 +165,7 @@ final class GravitasDemoAudioController {
     private var portalOneShotControllers: [AudioPlaybackController] = []
     private var hostAudioSourcesByID: [UUID: HostAudioSource] = [:]
     private var activeSpatialOneShotsByID: [UUID: ActiveSpatialOneShot] = [:]
+    private var activeCharacterVocalBySourceID: [UUID: ActiveCharacterVocal] = [:]
 
     private var emergencyBroadcastTask: Task<Void, Never>?
 
@@ -167,7 +179,9 @@ final class GravitasDemoAudioController {
     private let feetToMeters: Float = 0.3048
 
     var activeSpatialOneShotCountForProfiling: Int {
-        activeSpatialOneShotsByID.count + portalOneShotControllers.count
+        activeSpatialOneShotsByID.count +
+            portalOneShotControllers.count +
+            activeCharacterVocalBySourceID.count
     }
     private let radioDistanceBehindUserFeet: Float = 5.0
     private let hostHeadAudioLocalPosition = SIMD3<Float>(0, 1.45, -0.04)
@@ -461,6 +475,24 @@ final class GravitasDemoAudioController {
                 [PlagueAudio] character loop stopped
                   archetype: \(source.archetype.rawValue)
                   enemyID: \(id.uuidString)
+                """
+            )
+        }
+
+        if let vocal = activeCharacterVocalBySourceID.removeValue(
+            forKey: id
+        ) {
+            vocal.playbackController.stop()
+
+            print(
+                """
+                [CharacterAudio] stopped character vocal for source cleanup
+                  channel: characterVocal
+                  policy: replacePerSource
+                  sourceID: \(id.uuidString)
+                  characterID: \(vocal.characterID)
+                  role: \(vocal.role)
+                  file: \(vocal.file)
                 """
             )
         }
@@ -839,6 +871,7 @@ final class GravitasDemoAudioController {
         stopPlayerDeathPlayers()
         stopPortalOneShotControllers()
         stopActiveSpatialOneShots()
+        stopActiveCharacterVocals()
 
         print("[Gravitas Audio] Stopped all audio.")
     }
@@ -881,7 +914,7 @@ final class GravitasDemoAudioController {
         _ = enemyID
         prepareIfNeeded()
 
-        playCharacterAudioBankOneShot(
+        playCharacterAudioBankReplacingVocal(
             archetype: archetype,
             sourceID: sourceID,
             role: "damage_hits",
@@ -898,7 +931,7 @@ final class GravitasDemoAudioController {
         _ = enemyID
         prepareIfNeeded()
 
-        playCharacterAudioBankOneShot(
+        playCharacterAudioBankReplacingVocal(
             archetype: archetype,
             sourceID: sourceID,
             role: "death",
@@ -972,7 +1005,7 @@ final class GravitasDemoAudioController {
         )
     }
 
-    private func playCharacterAudioBankOneShot(
+    private func playCharacterAudioBankReplacingVocal(
         archetype: PlagueCharacterArchetype,
         sourceID: UUID,
         role: String,
@@ -1038,7 +1071,7 @@ final class GravitasDemoAudioController {
             return
         }
 
-        _ = playConcurrentCharacterSpatialOneShot(
+        _ = playReplacingCharacterVocal(
             file: file,
             characterID: attributes.characterID,
             role: role,
@@ -1528,6 +1561,24 @@ final class GravitasDemoAudioController {
         activeSpatialOneShotsByID.removeAll()
     }
 
+    private func stopActiveCharacterVocals() {
+        for vocal in activeCharacterVocalBySourceID.values {
+            vocal.playbackController.stop()
+        }
+
+        if !activeCharacterVocalBySourceID.isEmpty {
+            print(
+                """
+                [CharacterAudio] stopped active character vocals
+                  channel: characterVocal
+                  stopped: \(activeCharacterVocalBySourceID.count)
+                """
+            )
+        }
+
+        activeCharacterVocalBySourceID.removeAll()
+    }
+
     private func configureAudioSession() throws {
         let session = AVAudioSession.sharedInstance()
 
@@ -1878,6 +1929,9 @@ final class GravitasDemoAudioController {
             """
             [CharacterAudio] one-shot requested
               id: \(id?.uuidString ?? "nil")
+              channel: impact
+              policy: concurrent
+              sourceID: \(sourceID.uuidString)
               characterID: \(characterID)
               role: \(role)
               file: \(file.fullName)
@@ -1895,7 +1949,154 @@ final class GravitasDemoAudioController {
         return id
     }
 
+    @discardableResult
+    private func playReplacingCharacterVocal(
+        file: BundleAudioFile,
+        characterID: String,
+        role: String,
+        sourceID: UUID,
+        volumeDB: Float
+    ) -> UUID? {
+        prepareIfNeeded()
+
+        guard let source = hostAudioSourcesByID[sourceID] else {
+            print(
+                """
+                [CharacterAudio] ERROR missing head audio emitter
+                  channel: characterVocal
+                  policy: replacePerSource
+                  sourceID: \(sourceID.uuidString)
+                  characterID: \(characterID)
+                  role: \(role)
+                  file: \(file.fullName)
+                  noFallback: true
+                  global: false
+                """
+            )
+            return nil
+        }
+
+        guard source.usesResolvedHeadAnchor else {
+            print(
+                """
+                [CharacterAudio] ERROR head audio anchor unresolved
+                  channel: characterVocal
+                  policy: replacePerSource
+                  sourceID: \(sourceID.uuidString)
+                  characterID: \(characterID)
+                  role: \(role)
+                  file: \(file.fullName)
+                  noFallback: true
+                  global: false
+                """
+            )
+            return nil
+        }
+
+        guard source.headEntity.parent != nil else {
+            print(
+                """
+                [CharacterAudio] ERROR character vocal emitter is not in scene
+                  channel: characterVocal
+                  policy: replacePerSource
+                  sourceID: \(sourceID.uuidString)
+                  characterID: \(characterID)
+                  role: \(role)
+                  file: \(file.fullName)
+                  emitter: \(source.headEntity.name)
+                  fallback: false
+                """
+            )
+            return nil
+        }
+
+        guard bundleURL(for: file) != nil else {
+            print(
+                """
+                [CharacterAudio] ERROR missing character vocal
+                  channel: characterVocal
+                  policy: replacePerSource
+                  sourceID: \(sourceID.uuidString)
+                  characterID: \(characterID)
+                  role: \(role)
+                  file: \(file.fullName)
+                  fallback: false
+                """
+            )
+            return nil
+        }
+
+        pruneFinishedCharacterVocals()
+
+        guard let resource = spatialResource(
+            for: file,
+            shouldLoop: false
+        ) else {
+            print(
+                """
+                [CharacterAudio] ERROR failed loading character vocal
+                  channel: characterVocal
+                  policy: replacePerSource
+                  sourceID: \(sourceID.uuidString)
+                  characterID: \(characterID)
+                  role: \(role)
+                  file: \(file.fullName)
+                  fallback: false
+                """
+            )
+            return nil
+        }
+
+        let previous = activeCharacterVocalBySourceID.removeValue(
+            forKey: sourceID
+        )
+
+        previous?.playbackController.stop()
+
+        let controller = source.headEntity.playAudio(resource)
+        controller.gain = Double(volumeDB)
+
+        let id = UUID()
+        let now = CACurrentMediaTime()
+        let duration = estimatedDurationSeconds(
+            for: file,
+            fallback: 3.0
+        )
+
+        activeCharacterVocalBySourceID[sourceID] = ActiveCharacterVocal(
+            id: id,
+            sourceID: sourceID,
+            characterID: characterID,
+            role: role,
+            file: file.fullName,
+            startedAt: now,
+            expectedEndTime: now + duration + 0.25,
+            playbackController: controller
+        )
+
+        print(
+            """
+            [CharacterAudio] replacing vocal started
+              channel: characterVocal
+              policy: replacePerSource
+              sourceID: \(sourceID.uuidString)
+              characterID: \(characterID)
+              role: \(role)
+              file: \(file.fullName)
+              replacedExisting: \(previous != nil)
+              previousRole: \(previous?.role ?? "none")
+              previousFile: \(previous?.file ?? "none")
+              activeCharacterVocals: \(activeCharacterVocalBySourceID.count)
+              multiCharacterLayeringAllowed: true
+            """
+        )
+
+        return id
+    }
+
     private func pruneFinishedSpatialOneShots() {
+        pruneFinishedCharacterVocals()
+
         let now = CACurrentMediaTime()
         let expired = activeSpatialOneShotsByID.values.filter {
             $0.expectedEndTime <= now
@@ -1913,6 +2114,30 @@ final class GravitasDemoAudioController {
                 [Gravitas Audio] pruned finished spatial one-shots
                   removed: \(expired.count)
                   activeRemaining: \(activeSpatialOneShotsByID.count)
+                """
+            )
+        }
+    }
+
+    private func pruneFinishedCharacterVocals() {
+        let now = CACurrentMediaTime()
+        let expiredSourceIDs = activeCharacterVocalBySourceID.compactMap { sourceID, vocal in
+            vocal.expectedEndTime <= now ? sourceID : nil
+        }
+
+        for sourceID in expiredSourceIDs {
+            activeCharacterVocalBySourceID.removeValue(
+                forKey: sourceID
+            )
+        }
+
+        if !expiredSourceIDs.isEmpty {
+            print(
+                """
+                [CharacterAudio] pruned finished character vocals
+                  channel: characterVocal
+                  removed: \(expiredSourceIDs.count)
+                  activeRemaining: \(activeCharacterVocalBySourceID.count)
                 """
             )
         }
