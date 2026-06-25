@@ -3,6 +3,8 @@ import Darwin
 import Foundation
 import RealityKit
 import SwiftUI
+import UIKit
+import simd
 
 struct PlagueImmersiveView: View {
     @ObservedObject var session: PlagueDemoSession
@@ -12,6 +14,8 @@ struct PlagueImmersiveView: View {
     @StateObject private var coordinator = PlagueImmersiveCoordinator()
     @StateObject private var damageTintController = DamageSurroundingsTintController()
     @StateObject private var deathPresentationController = DeathPresentationController()
+    @State private var youDiedWorldAnchor: AnchorEntity?
+    @State private var youDiedWorldCardPresenter = YouDiedWorldCardPresenter()
 
     private let frameTimer = Timer.publish(
         every: 1.0 / 60.0,
@@ -27,6 +31,36 @@ struct PlagueImmersiveView: View {
             )
             content.add(sceneRoot)
             content.add(coordinator.makeHeadAnchor())
+
+            let youDiedWorldAnchor = AnchorEntity(
+                world: SIMD3<Float>(0, 0, 0)
+            )
+            youDiedWorldAnchor.name = "YouDiedWorldAnchor"
+            content.add(youDiedWorldAnchor)
+            self.youDiedWorldAnchor = youDiedWorldAnchor
+
+            youDiedWorldCardPresenter.bind(
+                worldAnchor: youDiedWorldAnchor
+            )
+
+            let presenter = youDiedWorldCardPresenter
+
+            coordinator.onYouDiedWorldCardRequested = { originFromDevice in
+                Task { @MainActor in
+                    await presenter.show(
+                        originFromDevice: originFromDevice,
+                        textureName: "you_died",
+                        width: 1.0,
+                        distanceMeters: 1.5
+                    )
+                }
+            }
+
+            coordinator.onYouDiedWorldCardCleanupRequested = {
+                Task { @MainActor in
+                    presenter.remove()
+                }
+            }
         } update: { _ in }
         .gesture(
             DragGesture(minimumDistance: 0)
@@ -146,6 +180,7 @@ struct PlagueImmersiveView: View {
             }
             coordinator.onPlayerDeathStarted = {
                 damageTintController.reset()
+
                 session.handlePlayerDeathUI(
                     openWindow: openWindow
                 )
@@ -196,6 +231,10 @@ struct PlagueImmersiveView: View {
             )
         }
         .onDisappear {
+            coordinator.onYouDiedWorldCardCleanupRequested?()
+            coordinator.onYouDiedWorldCardRequested = nil
+            coordinator.onYouDiedWorldCardCleanupRequested = nil
+
             damageTintController.reset()
             deathPresentationController.reset()
             coordinator.shutdown()

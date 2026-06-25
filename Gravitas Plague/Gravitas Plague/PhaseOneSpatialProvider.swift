@@ -119,6 +119,22 @@ final class PhaseOneSpatialProvider {
         )
     }
 
+    func currentTrackedDeviceTransform() -> simd_float4x4? {
+        guard isRunning else { return nil }
+
+        guard let deviceAnchor = worldTrackingProvider.queryDeviceAnchor(
+            atTimestamp: CACurrentMediaTime()
+        ) else {
+            return nil
+        }
+
+        guard deviceAnchor.isTracked else {
+            return nil
+        }
+
+        return deviceAnchor.originFromAnchorTransform
+    }
+
     func resolvedFloorY(
         for pose: PhaseOneSpawnPose,
         fallbackHeadToFloorOffset: Float,

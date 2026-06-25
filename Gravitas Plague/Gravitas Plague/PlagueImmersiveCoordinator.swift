@@ -146,6 +146,12 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
     var onPlayerDamaged: ((Int) -> Void)?
     var onPlayerDeathStarted: (() -> Void)?
+    @MainActor
+    var onYouDiedWorldCardRequested: ((simd_float4x4) -> Void)?
+
+    @MainActor
+    var onYouDiedWorldCardCleanupRequested: (() -> Void)?
+
     var onForestAtmosphereFatalFailure: ((Error) -> Void)? {
         didSet {
             forestEnvironmentController.onStrictAtmosphereFailure = onForestAtmosphereFatalFailure
@@ -179,10 +185,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
     private var sceneRoot: AnchorEntity?
     private var headAnchor: AnchorEntity?
-    private var youDiedRunning = false
-    private var youDiedRig: Entity?
-    private var youDiedLogo: ModelEntity?
-    private var youDiedAlpha: Float = 0.0
 
     private var jockRetargetController: JockRetargetTestController?
     private var hordeEnemyControllersByID: [UUID: JockRetargetTestController] = [:]
@@ -233,10 +235,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let benchmarkNextWaveDelaySeconds: TimeInterval = 1.20
     private let hordePlayerHitLimitPerWave = 3
     private let hordeSpawnRadiusMeters: Float = 2.45
-    private let YOU_DIED_FORWARD_M: Float = 1.25
-    private let YOU_DIED_Y_OFFSET_M: Float = 7.0 * 0.3048
-    private let YOU_DIED_WIDTH_M: Float = 1.70
-    private let YOU_DIED_HEIGHT_M: Float = 0.84
 
     func makeSceneRoot(
         initialAtmosphere: PlagueForestAtmosphere,
@@ -1096,6 +1094,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     }
 
     func shutdown() {
+        onYouDiedWorldCardCleanupRequested?()
         stopHordeBenchmark()
         roomSkinningCoordinator.cancelRoomSkinning()
         jockRetargetController?.hide()
@@ -3718,6 +3717,27 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
 
         let deathAudioDuration = audioController.playRandomPlayerDeathAndReturnDuration()
+        let youDiedOriginFromDevice = spatialProvider.currentTrackedDeviceTransform()
+
+        if let youDiedOriginFromDevice {
+            print(
+                """
+                [YouDied] sampled device pose
+                  reason: player_death_accepted
+                  fallbackUsed: false
+                  originFromDeviceColumnW: \(youDiedOriginFromDevice.columns.3)
+                """
+            )
+        } else {
+            print(
+                """
+                [YouDied] failed: no tracked device pose at player death
+                  reason: player_death_accepted
+                  fallbackUsed: false
+                """
+            )
+        }
+
         onPlayerDeathStarted?()
         showInstructionHUD(
             "You died. The breach remains."
@@ -3728,14 +3748,28 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
             self.clearHordeEnemiesAfterDeathBlackout()
 
-            if let sceneRoot = self.sceneRoot,
-               let headAnchor = self.headAnchor {
-                self.playYouDiedRoomAnchored(
-                    world: sceneRoot,
-                    head: headAnchor
-                )
+            if let youDiedOriginFromDevice {
+                if let onYouDiedWorldCardRequested = self.onYouDiedWorldCardRequested {
+                    onYouDiedWorldCardRequested(
+                        youDiedOriginFromDevice
+                    )
+                } else {
+                    print(
+                        """
+                        [YouDied] failed: presenter callback unavailable
+                          reason: final_dark
+                          fallbackUsed: false
+                        """
+                    )
+                }
             } else {
-                print("[PlagueDeath] Cannot show you_died.png; missing world or head anchor.")
+                print(
+                    """
+                    [YouDied] skipped world card
+                      reason: missing_sampled_device_pose
+                      fallbackUsed: false
+                    """
+                )
             }
 
             print("[PlagueDeath] final dark reached; horde cleared; you_died shown after cleanup.")
@@ -3751,11 +3785,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             guard isPlayerDeathSequenceActive else { return }
 
             deathPresentationController?.fadeBackUp(duration: 1.25)
-            await fadeYouDiedAlpha(
-                to: 0.0,
-                duration: 0.30
-            )
-            cleanupYouDied()
 
             print("[PlagueDeath] lights coming back up.")
         }
@@ -3767,7 +3796,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         isPlayerDeathSequenceActive = false
         jockRetargetController?.setPlayerAttackEnabled(true)
         deathPresentationController?.reset()
-        cleanupYouDied()
+        onYouDiedWorldCardCleanupRequested?()
     }
 
     private func clearHordeEnemiesAfterDeathBlackout() {
@@ -4207,127 +4236,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
     }
 
-    private func playYouDiedRoomAnchored(
-        world: AnchorEntity,
-        head: AnchorEntity
-    ) {
-        guard !youDiedRunning else {
-            print("[PlagueDeath] you_died already running.")
-            return
-        }
-
-        cleanupYouDied()
-        youDiedRunning = true
-
-        let headMatrix = head.transformMatrix(relativeTo: world)
-        let headPosition = head.position(relativeTo: world)
-
-        var forward = -SIMD3<Float>(
-            headMatrix.columns.2.x,
-            headMatrix.columns.2.y,
-            headMatrix.columns.2.z
-        )
-
-        if simd_length(forward) < 0.0001 {
-            forward = SIMD3<Float>(0, 0, -1)
-        } else {
-            forward = simd_normalize(forward)
-        }
-
-        let targetPosition = headPosition +
-            forward * YOU_DIED_FORWARD_M +
-            SIMD3<Float>(0, YOU_DIED_Y_OFFSET_M, 0)
-
-        let rig = Entity()
-        rig.name = "YouDiedRig"
-        rig.position = targetPosition
-
-        let directionToHead = PhaseOneMath.normalizedOrFallback(
-            headPosition - targetPosition,
-            fallback: SIMD3<Float>(0, 0, 1)
-        )
-        let upWorld = SIMD3<Float>(0, 1, 0)
-        var right = simd_cross(upWorld, directionToHead)
-        if simd_length_squared(right) < 1e-6 {
-            right = SIMD3<Float>(1, 0, 0)
-        }
-        right = simd_normalize(right)
-        let up = simd_normalize(simd_cross(directionToHead, right))
-        let rotation = simd_float3x3(
-            columns: (
-                right,
-                up,
-                directionToHead
-            )
-        )
-        rig.orientation = simd_quatf(rotation)
-
-        guard let texture = loadYouDiedTexture() else {
-            print("[PlagueDeath] ERROR: could not load you_died.png")
-            youDiedRunning = false
-            return
-        }
-
-        let material = makeYouDiedMaterialFromDarkMatterPattern(
-            texture: texture,
-            alpha: 0.0
-        )
-
-        let imageSize = loadYouDiedImageSize()
-        let aspect = max(
-            0.01,
-            (imageSize?.width ?? 1672) / max(1, imageSize?.height ?? 941)
-        )
-        let heightMeters = YOU_DIED_HEIGHT_M
-        let widthMeters = min(
-            YOU_DIED_WIDTH_M,
-            heightMeters * Float(aspect)
-        )
-
-        let imageEntity = ModelEntity(
-            mesh: .generatePlane(
-                width: widthMeters,
-                height: heightMeters
-            ),
-            materials: [material]
-        )
-
-        imageEntity.name = "you_died.png"
-        imageEntity.position = .zero
-
-        rig.addChild(imageEntity)
-        world.addChild(rig)
-
-        youDiedRig = rig
-        youDiedLogo = imageEntity
-        youDiedAlpha = 0.0
-
-        print(
-            """
-            [PlagueDeath] you_died room anchored
-              world: \(world.name)
-              head: \(head.name)
-              rigParent: \(rig.parent?.name ?? "nil")
-              logoParent: \(imageEntity.parent?.name ?? "nil")
-              headPosition: \(headPosition)
-              rigPosition: \(targetPosition)
-              forward: \(forward)
-              distanceFromHead: \(simd_length(targetPosition - headPosition))
-              width: \(widthMeters)
-              height: \(heightMeters)
-            """
-        )
-
-        dumpYouDiedDiagnostic()
-
-        Task { @MainActor in
-            await fadeYouDiedAlpha(
-                to: 1.0,
-                duration: 0.20
-            )
-        }
-    }
-
     private func validateDeathPresentationAssets() {
         if Bundle.main.url(
             forResource: "you_died",
@@ -4335,139 +4243,5 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         ) == nil {
             print("[PlagueDeath] WARNING you_died.png not found in main bundle")
         }
-    }
-
-    private func loadYouDiedTexture() -> TextureResource? {
-        if let url = Bundle.main.url(
-            forResource: "you_died",
-            withExtension: "png"
-        ) {
-            print("[PlagueDeath] found you_died.png in bundle: \(url.path)")
-        } else {
-            print("[PlagueDeath] WARNING: Bundle.main cannot find you_died.png")
-        }
-
-        if let texture = try? TextureResource.load(named: "you_died") {
-            print("[PlagueDeath] loaded TextureResource named you_died")
-            return texture
-        }
-
-        if let texture = try? TextureResource.load(named: "you_died.png") {
-            print("[PlagueDeath] loaded TextureResource named you_died.png")
-            return texture
-        }
-
-        print("[PlagueDeath] ERROR: TextureResource.load failed for you_died and you_died.png")
-        return nil
-    }
-
-    private func loadYouDiedImageSize() -> CGSize? {
-        if let image = UIImage(named: "you_died") {
-            return image.size
-        }
-
-        guard let url = Bundle.main.url(
-            forResource: "you_died",
-            withExtension: "png"
-        ),
-              let image = UIImage(contentsOfFile: url.path) else {
-            return nil
-        }
-
-        return image.size
-    }
-
-    private func makeYouDiedMaterialFromDarkMatterPattern(
-        texture: TextureResource,
-        alpha: Float
-    ) -> UnlitMaterial {
-        let alpha = max(0, min(1, alpha))
-
-        var material = UnlitMaterial()
-        material.color = .init(
-            tint: UIColor.white.withAlphaComponent(CGFloat(alpha)),
-            texture: .init(texture)
-        )
-        material.blending = .transparent(opacity: .init(floatLiteral: max(0.001, alpha)))
-
-        return material
-    }
-
-    private func setYouDiedAlpha(
-        _ alpha: Float
-    ) {
-        youDiedAlpha = max(0, min(1, alpha))
-
-        guard let logo = youDiedLogo,
-              var material = logo.model?.materials.first as? UnlitMaterial else {
-            print("[PlagueDeath] setYouDiedAlpha ignored: no logo material")
-            return
-        }
-
-        let texture = material.color.texture
-
-        material.color = .init(
-            tint: UIColor.white.withAlphaComponent(CGFloat(youDiedAlpha)),
-            texture: texture
-        )
-        material.blending = .transparent(opacity: .init(floatLiteral: max(0.001, youDiedAlpha)))
-
-        logo.model?.materials = [material]
-
-        print("[PlagueDeath] you_died alpha set: \(youDiedAlpha)")
-    }
-
-    private func fadeYouDiedAlpha(
-        to target: Float,
-        duration: TimeInterval
-    ) async {
-        let start = youDiedAlpha
-        let startTime = CACurrentMediaTime()
-
-        while !Task.isCancelled {
-            let elapsed = CACurrentMediaTime() - startTime
-            let progress = min(1.0, elapsed / max(duration, 0.001))
-            let eased = Float(progress * progress * (3.0 - 2.0 * progress))
-            let value = start + (target - start) * eased
-
-            setYouDiedAlpha(value)
-
-            if progress >= 1.0 {
-                break
-            }
-
-            try? await Task.sleep(nanoseconds: 16_000_000)
-        }
-    }
-
-    private func cleanupYouDied() {
-        youDiedLogo?.removeFromParent()
-        youDiedLogo = nil
-
-        youDiedRig?.removeFromParent()
-        youDiedRig = nil
-
-        youDiedAlpha = 0.0
-        youDiedRunning = false
-
-        print("[PlagueDeath] you_died cleaned up")
-    }
-
-    private func dumpYouDiedDiagnostic() {
-        print(
-            """
-            [PlagueDeath] you_died diagnostic
-              youDiedRunning: \(youDiedRunning)
-              hasRig: \(youDiedRig != nil)
-              hasLogo: \(youDiedLogo != nil)
-              rigParent: \(youDiedRig?.parent?.name ?? "nil")
-              logoParent: \(youDiedLogo?.parent?.name ?? "nil")
-              logoIsEnabled: \(youDiedLogo?.isEnabled ?? false)
-              logoPosition: \(youDiedLogo?.position ?? .zero)
-              rigPosition: \(youDiedRig?.position ?? .zero)
-              alpha: \(youDiedAlpha)
-              materialCount: \(youDiedLogo?.model?.materials.count ?? 0)
-            """
-        )
     }
 }
