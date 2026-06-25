@@ -1,7 +1,7 @@
 {
   "schema": "com.gravitas.jockanim.v0",
-  "clip_id": "hit_hard_left_01",
-  "display_name": "Hit hard left 01",
+  "clip_id": "hit_medium_left_02",
+  "display_name": "Hit medium left 02",
   "rig_id": "GravitasMeshyBiped24",
   "rig_version": "001",
   "pose_mode": "absoluteLocal",

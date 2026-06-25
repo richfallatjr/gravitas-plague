@@ -76,6 +76,11 @@
     },
     "attack": [
       {
+        "clip_id": "charged-slash-left",
+        "weight": 1.0,
+        "loop": false
+      },
+      {
         "clip_id": "charged-slash-right",
         "weight": 1.0,
         "loop": false
@@ -93,12 +98,42 @@
     ],
     "damage": [
       {
+        "clip_id": "hit_light_left_01",
+        "weight": 1.0,
+        "loop": false
+      },
+      {
+        "clip_id": "hit_light_right_01",
+        "weight": 1.0,
+        "loop": false
+      },
+      {
         "clip_id": "hit_medium_left_01",
         "weight": 1.0,
         "loop": false
       },
       {
+        "clip_id": "hit_medium_left_02",
+        "weight": 1.0,
+        "loop": false
+      },
+      {
         "clip_id": "hit_medium_right_01",
+        "weight": 1.0,
+        "loop": false
+      },
+      {
+        "clip_id": "hit_medium_right_02",
+        "weight": 1.0,
+        "loop": false
+      },
+      {
+        "clip_id": "hit_hard_left_01",
+        "weight": 1.0,
+        "loop": false
+      },
+      {
+        "clip_id": "hit_hard_right_01",
         "weight": 1.0,
         "loop": false
       }
