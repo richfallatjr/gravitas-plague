@@ -393,6 +393,7 @@ final class HordePortalInstancedIngressController {
 
     private let enemy: JockRetargetTestController
     private let portal: HordePortal
+    private let mirrorRetentionPolicy: HordePortalMirrorRetentionPolicy
     private var portalInstance: HordePortalRenderInstance?
     private weak var sceneRoot: Entity?
 
@@ -429,10 +430,12 @@ final class HordePortalInstancedIngressController {
         enemy: JockRetargetTestController,
         portal: HordePortal,
         sceneRoot: Entity,
-        side: HordePortalEntranceSide
+        side: HordePortalEntranceSide,
+        mirrorRetentionPolicy: HordePortalMirrorRetentionPolicy = .retainAfterExit
     ) throws {
         self.enemy = enemy
         self.portal = portal
+        self.mirrorRetentionPolicy = mirrorRetentionPolicy
         self.sceneRoot = sceneRoot
         self.side = side
         self.enemyID = enemy.hordeBenchmarkID
@@ -990,7 +993,7 @@ extension HordePortalInstancedIngressController {
         )
         enemy.lockRootToFloorY(floorY)
 
-        portalMirrorRetainedAfterExit = true
+        portalMirrorRetainedAfterExit = shouldRetainPortalMirrorAfterExit
         updatePortalMirrorAfterSourceAnimation()
 
         do {
@@ -1016,8 +1019,9 @@ extension HordePortalInstancedIngressController {
               enemyID: \(enemyID)
               portalID: \(portalID)
               roomVisualWasEnabledNearAperture: \(roomVisualHasBeenEnabled)
-              portalMirrorRetainedAfterExit: true
-              portalMirrorDestroyed: false
+              portalMirrorRetainedAfterExit: \(portalMirrorRetainedAfterExit)
+              portalMirrorWillDestroyAfterExit: \(shouldDestroyPortalMirrorAfterExit)
+              mirrorRetentionPolicy: \(portalMirrorRetentionPolicyName)
               noFade: true
               animationRestartedAtReveal: false
               noDuplicateTurn: true
@@ -1045,6 +1049,18 @@ extension HordePortalInstancedIngressController {
         portalInstance?.visibilityState
     }
 
+    var shouldRetainPortalMirrorAfterExit: Bool {
+        mirrorRetentionPolicy == .retainAfterExit
+    }
+
+    var shouldDestroyPortalMirrorAfterExit: Bool {
+        mirrorRetentionPolicy == .destroyAfterExit
+    }
+
+    var portalMirrorRetentionPolicyName: String {
+        mirrorRetentionPolicy.rawValue
+    }
+
     func cleanupPortalMirror(
         reason: String
     ) {
@@ -1052,6 +1068,7 @@ extension HordePortalInstancedIngressController {
             reason: reason
         )
         portalInstance = nil
+        portalMirrorRetainedAfterExit = false
     }
 
     static func yawOnlyOrientation(

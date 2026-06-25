@@ -707,6 +707,26 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             retainedPortalMirrorControllersByEnemyID.count
         )
         timingProfiler.setCounter(
+            "portal_mirror.active_ingress.count",
+            activeIngressControllers.count
+        )
+        timingProfiler.setCounter(
+            "portal_mirror.retained.count",
+            retainedPortalMirrorControllersByEnemyID.count
+        )
+        timingProfiler.setCounter(
+            "portal_mirror.retention_cutoff_wave",
+            HordePortalMirrorOptimizationSettings.retainMirrorsThroughWave
+        )
+        let destroysAfterExitForCurrentWave =
+            HordePortalMirrorOptimizationSettings.retentionPolicy(
+                forWave: hordeCurrentWave
+            ) == .destroyAfterExit
+        timingProfiler.setCounter(
+            "portal_mirror.destroy_after_exit_enabled",
+            destroysAfterExitForCurrentWave ? 1 : 0
+        )
+        timingProfiler.setCounter(
             "snapshot.enemy_body.count",
             latestEnemyBodySnapshots.count
         )
@@ -1627,6 +1647,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     ) {
         var finishedIDs: [UUID] = []
         var retainedIDs: [UUID] = []
+        var destroyedAfterExitIDs: [UUID] = []
         var failedIDs: [UUID] = []
 
         for (enemyID, ingress) in activeIngressControllers {
@@ -1658,7 +1679,40 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
             switch ingress.phase {
             case .realWorldFollowing:
-                retainedIDs.append(enemyID)
+                if ingress.shouldRetainPortalMirrorAfterExit {
+                    retainedIDs.append(enemyID)
+
+                    print(
+                        """
+                        [HordePortalMirror] retained after ingress exit
+                          enemyID: \(enemyID)
+                          policy: \(ingress.portalMirrorRetentionPolicyName)
+                          retainedFallback: true
+                        """
+                    )
+                } else {
+                    retainedPortalMirrorControllersByEnemyID.removeValue(
+                        forKey: enemyID
+                    )
+
+                    ingress.cleanupPortalMirror(
+                        reason: "mirror_destroyed_after_ingress_wave_cap"
+                    )
+
+                    destroyedAfterExitIDs.append(enemyID)
+
+                    print(
+                        """
+                        [HordePortalMirror] destroyed after ingress exit
+                          enemyID: \(enemyID)
+                          policy: \(ingress.portalMirrorRetentionPolicyName)
+                          reason: high_wave_memory_cap
+                          gameplayEnemyStillAlive: true
+                          retainedFallback: false
+                        """
+                    )
+                }
+
                 finishedIDs.append(enemyID)
 
             case .failed:
@@ -1673,8 +1727,27 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
 
         for enemyID in retainedIDs {
-            guard let ingress = activeIngressControllers[enemyID],
-                  ingress.portalMirrorRetainedAfterExit else {
+            guard let ingress = activeIngressControllers[enemyID] else {
+                continue
+            }
+
+            guard ingress.shouldRetainPortalMirrorAfterExit else {
+                assertionFailure(
+                    "A destroy-after-exit portal mirror reached the retained transfer path."
+                )
+
+                ingress.cleanupPortalMirror(
+                    reason: "destroy_policy_rejected_from_retained_transfer"
+                )
+
+                retainedPortalMirrorControllersByEnemyID.removeValue(
+                    forKey: enemyID
+                )
+
+                continue
+            }
+
+            guard ingress.portalMirrorRetainedAfterExit else {
                 continue
             }
 
@@ -1690,6 +1763,69 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         for enemyID in finishedIDs {
             activeIngressControllers.removeValue(forKey: enemyID)
         }
+
+        #if DEBUG
+        for enemyID in destroyedAfterExitIDs {
+            assert(
+                activeIngressControllers[enemyID] == nil,
+                "Finished high-wave ingress controller remained active."
+            )
+
+            assert(
+                retainedPortalMirrorControllersByEnemyID[enemyID] == nil,
+                "High-wave mirror controller was incorrectly retained."
+            )
+        }
+        #endif
+    }
+
+    private func enforcePortalMirrorRetentionPolicy(
+        forWave wave: Int
+    ) {
+        let policy =
+            HordePortalMirrorOptimizationSettings.retentionPolicy(
+                forWave: wave
+            )
+
+        guard policy == .destroyAfterExit else {
+            return
+        }
+
+        guard !retainedPortalMirrorControllersByEnemyID.isEmpty else {
+            return
+        }
+
+        let retainedControllers =
+            retainedPortalMirrorControllersByEnemyID
+
+        retainedPortalMirrorControllersByEnemyID.removeAll(
+            keepingCapacity: false
+        )
+
+        for (enemyID, ingress) in retainedControllers {
+            ingress.cleanupPortalMirror(
+                reason: "retained_mirror_purged_at_wave_cutoff"
+            )
+
+            print(
+                """
+                [HordePortalMirror] earlier retained mirror purged
+                  currentWave: \(wave)
+                  enemyID: \(enemyID)
+                  gameplayEnemyStillAlive: true
+                  retainedFallback: false
+                """
+            )
+        }
+
+        print(
+            """
+            [HordePortalMirror] retained mirror wave cap enforced
+              currentWave: \(wave)
+              retainMirrorsThroughWave: \(HordePortalMirrorOptimizationSettings.retainMirrorsThroughWave)
+              mirrorsPurged: \(retainedControllers.count)
+            """
+        )
     }
 
     private func syncAllPortalMirrorsAfterEnemyAnimations() {
@@ -2329,6 +2465,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
 
         let nextWave = hordeCurrentWave + 1
+        enforcePortalMirrorRetentionPolicy(
+            forWave: nextWave
+        )
         resetHordeDeathReplacementRuntime(
             reason: "starting_wave_\(nextWave)"
         )
@@ -2974,14 +3113,30 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
 
         do {
+            let mirrorRetentionPolicy =
+                HordePortalMirrorOptimizationSettings.retentionPolicy(
+                    forWave: wave
+                )
+
             let ingress = try HordePortalInstancedIngressController(
                 enemy: controller,
                 portal: portal,
                 sceneRoot: sceneRoot,
-                side: side
+                side: side,
+                mirrorRetentionPolicy: mirrorRetentionPolicy
             )
 
             activeIngressControllers[id] = ingress
+
+            print(
+                """
+                [HordePortalMirror] retention policy selected
+                  wave: \(wave)
+                  retainMirrorsThroughWave: \(HordePortalMirrorOptimizationSettings.retainMirrorsThroughWave)
+                  enemyID: \(id)
+                  policy: \(mirrorRetentionPolicy.rawValue)
+                """
+            )
 
             controller.update(
                 deltaTime: 1.0 / 60.0,
