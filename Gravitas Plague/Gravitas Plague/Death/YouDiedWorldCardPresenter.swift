@@ -19,7 +19,9 @@ final class YouDiedWorldCardPresenter {
         originFromDevice: simd_float4x4,
         textureName: String = "you_died",
         width: Float = 1.0,
-        distanceMeters: Float = 1.5
+        distanceMeters: Float = 1.5,
+        verticalLiftMeters: Float = 0.6096,
+        xTiltDegrees: Float = 20
     ) async {
         guard let worldAnchor else {
             print("[YouDied] failed: world anchor unavailable")
@@ -88,10 +90,16 @@ final class YouDiedWorldCardPresenter {
             )
         )
         let originFromCard = originFromDevice * deviceFromCard
+        let deviceBillboardTilt = simd_float4x4.rotationX(
+            degrees: xTiltDegrees
+        )
+        let originFromTiltedCard = originFromCard * deviceBillboardTilt
+        var liftedOriginFromCard = originFromTiltedCard
+        liftedOriginFromCard.columns.3.y += verticalLiftMeters
 
         worldAnchor.addChild(card)
         card.setTransformMatrix(
-            originFromCard,
+            liftedOriginFromCard,
             relativeTo: nil
         )
 
@@ -102,6 +110,8 @@ final class YouDiedWorldCardPresenter {
             """
             [YouDied] world card shown
               distanceFromHeadset: \(distanceMeters)
+              verticalLiftMeters: \(verticalLiftMeters)
+              xTiltDegrees: \(xTiltDegrees)
               parentIsWorldAnchor: \(card.parent === worldAnchor)
               worldPosition: \(card.position(relativeTo: nil))
               followsHeadset: false
@@ -128,6 +138,21 @@ final class YouDiedWorldCardPresenter {
 }
 
 private extension simd_float4x4 {
+    static func rotationX(
+        degrees: Float
+    ) -> simd_float4x4 {
+        let radians = degrees * .pi / 180
+        let cosine = cos(radians)
+        let sine = sin(radians)
+
+        return simd_float4x4(
+            SIMD4<Float>(1, 0, 0, 0),
+            SIMD4<Float>(0, cosine, sine, 0),
+            SIMD4<Float>(0, -sine, cosine, 0),
+            SIMD4<Float>(0, 0, 0, 1)
+        )
+    }
+
     static func translation(
         _ translation: SIMD3<Float>
     ) -> simd_float4x4 {
