@@ -3,6 +3,182 @@ import Foundation
 import ImageIO
 import RealityKit
 
+actor CharacterReflectionMaskPreprocessor {
+    static let shared = CharacterReflectionMaskPreprocessor()
+
+    struct PreparedMask: Sendable {
+        let sourceName: String
+        let width: Int
+        let height: Int
+        let rgbData: Data
+        let darkPixelCount: Int
+    }
+
+    private var preparedByPath: [String: PreparedMask] = [:]
+
+    func prepare(
+        url: URL
+    ) throws -> PreparedMask {
+        let key = url.path
+
+        if let cached = preparedByPath[key] {
+            return cached
+        }
+
+        guard let source = CGImageSourceCreateWithURL(
+            url as CFURL,
+            nil
+        ) else {
+            throw NSError(
+                domain: "CharacterReflectionMask",
+                code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Could not create image source for \(url.lastPathComponent)"
+                ]
+            )
+        }
+
+        guard let sourceImage = CGImageSourceCreateImageAtIndex(
+            source,
+            0,
+            nil
+        ) else {
+            throw NSError(
+                domain: "CharacterReflectionMask",
+                code: 2,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Could not decode \(url.lastPathComponent)"
+                ]
+            )
+        }
+
+        let prepared = try makeLuminanceMaskPixels(
+            sourceImage,
+            sourceName: url.lastPathComponent
+        )
+
+        preparedByPath[key] = prepared
+
+        print(
+            """
+            [CharacterReflectionMask] luminance mask prepared
+              source: \(prepared.sourceName)
+              pixels: \(prepared.width)x\(prepared.height)
+              darkPixelsLTE16: \(prepared.darkPixelCount)
+              rgbOnlyMask: true
+              alphaChannel: false
+              preprocessingActor: true
+            """
+        )
+
+        return prepared
+    }
+
+    private func makeLuminanceMaskPixels(
+        _ sourceImage: CGImage,
+        sourceName: String
+    ) throws -> PreparedMask {
+        let width = sourceImage.width
+        let height = sourceImage.height
+
+        guard width > 0, height > 0 else {
+            throw NSError(
+                domain: "CharacterReflectionMask",
+                code: 3,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Invalid image dimensions for \(sourceName)"
+                ]
+            )
+        }
+
+        var sourcePixels = [UInt8](
+            repeating: 0,
+            count: width * height * 4
+        )
+
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+
+        guard let sourceContext = CGContext(
+            data: &sourcePixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            throw NSError(
+                domain: "CharacterReflectionMask",
+                code: 4,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Could not create source context for \(sourceName)"
+                ]
+            )
+        }
+
+        sourceContext.draw(
+            sourceImage,
+            in: CGRect(
+                x: 0,
+                y: 0,
+                width: width,
+                height: height
+            )
+        )
+
+        var outputPixels = [UInt8](
+            repeating: 0,
+            count: width * height * 3
+        )
+
+        var darkPixelCount = 0
+
+        for i in 0..<(width * height) {
+            let p = i * 4
+
+            let r = Float(sourcePixels[p + 0])
+            let g = Float(sourcePixels[p + 1])
+            let b = Float(sourcePixels[p + 2])
+
+            let luminanceFloat =
+                0.2126 * r +
+                0.7152 * g +
+                0.0722 * b
+
+            let luminance = UInt8(
+                max(
+                    0,
+                    min(
+                        255,
+                        Int(luminanceFloat.rounded())
+                    )
+                )
+            )
+
+            if luminance <= 16 {
+                darkPixelCount += 1
+            }
+
+            let outputIndex = i * 3
+            outputPixels[outputIndex + 0] = luminance
+            outputPixels[outputIndex + 1] = luminance
+            outputPixels[outputIndex + 2] = luminance
+        }
+
+        return PreparedMask(
+            sourceName: sourceName,
+            width: width,
+            height: height,
+            rgbData: Data(outputPixels),
+            darkPixelCount: darkPixelCount
+        )
+    }
+}
+
 @MainActor
 enum CharacterReflectionMaskApplier {
     struct Report: Sendable {
@@ -76,7 +252,7 @@ enum CharacterReflectionMaskApplier {
         let textureResource: TextureResource
 
         do {
-            textureResource = try loadScalarTexture(
+            textureResource = try await loadScalarTexture(
                 url: sidecarURL,
                 name: expectedSidecarName
             )
@@ -276,42 +452,16 @@ private extension CharacterReflectionMaskApplier {
     static func loadScalarTexture(
         url: URL,
         name: String
-    ) throws -> TextureResource {
-        guard let source = CGImageSourceCreateWithURL(
-            url as CFURL,
-            nil
-        ) else {
-            throw NSError(
-                domain: "CharacterReflectionMask",
-                code: 1,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Could not create image source for \(url.lastPathComponent)"
-                ]
-            )
-        }
-
-        guard let sourceImage = CGImageSourceCreateImageAtIndex(
-            source,
-            0,
-            nil
-        ) else {
-            throw NSError(
-                domain: "CharacterReflectionMask",
-                code: 2,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Could not decode \(url.lastPathComponent)"
-                ]
-            )
-        }
-
-        let image = try makeLuminanceMaskImage(
-            sourceImage,
-            sourceName: url.lastPathComponent
+    ) async throws -> TextureResource {
+        let prepared = try await CharacterReflectionMaskPreprocessor.shared.prepare(
+            url: url
         )
 
-        return try TextureResource(
+        let image = try makeLuminanceMaskImage(
+            prepared
+        )
+
+        return try await TextureResource(
             image: image,
             withName: name,
             options: .init(semantic: .scalar)
@@ -319,11 +469,10 @@ private extension CharacterReflectionMaskApplier {
     }
 
     static func makeLuminanceMaskImage(
-        _ sourceImage: CGImage,
-        sourceName: String
+        _ prepared: CharacterReflectionMaskPreprocessor.PreparedMask
     ) throws -> CGImage {
-        let width = sourceImage.width
-        let height = sourceImage.height
+        let width = prepared.width
+        let height = prepared.height
 
         guard width > 0, height > 0 else {
             throw NSError(
@@ -331,87 +480,13 @@ private extension CharacterReflectionMaskApplier {
                 code: 3,
                 userInfo: [
                     NSLocalizedDescriptionKey:
-                        "Invalid image dimensions for \(sourceName)"
+                        "Invalid image dimensions for \(prepared.sourceName)"
                 ]
             )
         }
-
-        var sourcePixels = [UInt8](
-            repeating: 0,
-            count: width * height * 4
-        )
 
         let colorSpace = CGColorSpaceCreateDeviceRGB()
-
-        guard let sourceContext = CGContext(
-            data: &sourcePixels,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: width * 4,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
-            throw NSError(
-                domain: "CharacterReflectionMask",
-                code: 4,
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Could not create source context for \(sourceName)"
-                ]
-            )
-        }
-
-        sourceContext.draw(
-            sourceImage,
-            in: CGRect(
-                x: 0,
-                y: 0,
-                width: width,
-                height: height
-            )
-        )
-
-        var outputPixels = [UInt8](
-            repeating: 0,
-            count: width * height * 3
-        )
-
-        var darkPixelCount = 0
-
-        for i in 0..<(width * height) {
-            let p = i * 4
-
-            let r = Float(sourcePixels[p + 0])
-            let g = Float(sourcePixels[p + 1])
-            let b = Float(sourcePixels[p + 2])
-
-            let luminanceFloat =
-                0.2126 * r +
-                0.7152 * g +
-                0.0722 * b
-
-            let luminance = UInt8(
-                max(
-                    0,
-                    min(
-                        255,
-                        Int(luminanceFloat.rounded())
-                    )
-                )
-            )
-
-            if luminance <= 16 {
-                darkPixelCount += 1
-            }
-
-            let outputIndex = i * 3
-            outputPixels[outputIndex + 0] = luminance
-            outputPixels[outputIndex + 1] = luminance
-            outputPixels[outputIndex + 2] = luminance
-        }
-
-        let outputData = Data(outputPixels) as CFData
+        let outputData = prepared.rgbData as CFData
 
         guard let outputProvider = CGDataProvider(data: outputData) else {
             throw NSError(
@@ -419,7 +494,7 @@ private extension CharacterReflectionMaskApplier {
                 code: 5,
                 userInfo: [
                     NSLocalizedDescriptionKey:
-                        "Could not create output data provider for \(sourceName)"
+                        "Could not create output data provider for \(prepared.sourceName)"
                 ]
             )
         }
@@ -444,21 +519,10 @@ private extension CharacterReflectionMaskApplier {
                 code: 6,
                 userInfo: [
                     NSLocalizedDescriptionKey:
-                        "Could not create luminance mask image for \(sourceName)"
+                        "Could not create luminance mask image for \(prepared.sourceName)"
                 ]
             )
         }
-
-        print(
-            """
-            [CharacterReflectionMask] luminance mask prepared
-              source: \(sourceName)
-              pixels: \(width)x\(height)
-              darkPixelsLTE16: \(darkPixelCount)
-              rgbOnlyMask: true
-              alphaChannel: false
-            """
-        )
 
         return outputImage
     }
