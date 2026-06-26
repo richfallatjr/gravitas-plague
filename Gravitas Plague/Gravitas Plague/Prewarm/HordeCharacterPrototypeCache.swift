@@ -123,6 +123,13 @@ final class HordeCharacterPrototypeCache {
         let prototype = try await Entity(
             contentsOf: url
         )
+
+        await CharacterReflectionMaskApplier.apply(
+            to: prototype,
+            assetURL: url,
+            reason: "horde_prototype_load"
+        )
+
         prototype.name = "HORDE_PROTOTYPE_\(characterID)"
         prototype.removeFromParent()
         prototype.isEnabled = false

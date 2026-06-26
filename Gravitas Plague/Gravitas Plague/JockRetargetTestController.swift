@@ -468,6 +468,12 @@ final class JockRetargetTestController {
 
             do {
                 loadedEntity = try await Entity(contentsOf: url)
+
+                await CharacterReflectionMaskApplier.apply(
+                    to: loadedEntity,
+                    assetURL: url,
+                    reason: "direct_character_load"
+                )
             } catch {
                 print(
                     """

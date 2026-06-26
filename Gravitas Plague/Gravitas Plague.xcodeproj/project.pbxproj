@@ -47,6 +47,8 @@
 		8E1A10612FCD000100000001 /* Gravitas Plague/PortalGlyphs in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10602FCD000100000001 /* Gravitas Plague/PortalGlyphs */; };
 		8E1A10622FCD000100000001 /* ../music-box.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10632FCD000100000001 /* ../music-box.mp3 */; };
 		8E1A10642FCD000100000001 /* ../user-interface.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10652FCD000100000001 /* ../user-interface.png */; };
+		8E1A10672FCD000100000001 /* ../neighbor_biped_ior.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10662FCD000100000001 /* ../neighbor_biped_ior.png */; };
+		8E1A10692FCD000100000001 /* ../dad_biped_ior.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10682FCD000100000001 /* ../dad_biped_ior.png */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -110,6 +112,8 @@
 		8E1A10602FCD000100000001 /* Gravitas Plague/PortalGlyphs */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Gravitas Plague/PortalGlyphs"; sourceTree = SOURCE_ROOT; };
 		8E1A10632FCD000100000001 /* ../music-box.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "../music-box.mp3"; sourceTree = SOURCE_ROOT; };
 		8E1A10652FCD000100000001 /* ../user-interface.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../user-interface.png"; sourceTree = SOURCE_ROOT; };
+		8E1A10662FCD000100000001 /* ../neighbor_biped_ior.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../neighbor_biped_ior.png"; sourceTree = SOURCE_ROOT; };
+		8E1A10682FCD000100000001 /* ../dad_biped_ior.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../dad_biped_ior.png"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -198,10 +202,12 @@
 				8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */,
 				8E1A10062FCD000100000001 /* ../unstable-walk.usdz */,
 				8E1A10122FCD000100000001 /* ../dad_biped.usdz */,
+				8E1A10682FCD000100000001 /* ../dad_biped_ior.png */,
 				8E1A10312FCD000100000001 /* ../spouse_biped.usdz */,
 				8E1A10332FCD000100000001 /* ../biker_biped.usdz */,
 				8E1A10352FCD000100000001 /* ../grandma_biped.usdz */,
 				8E1A102F2FCD000100000001 /* ../neighbor_biped.usdz */,
+				8E1A10662FCD000100000001 /* ../neighbor_biped_ior.png */,
 				8E1A103F2FCD000100000001 /* ../robot_biped.usdz */,
 				8E1A10372FCD000100000001 /* ../plague_menu_ui_clean.png */,
 				8E1A10392FCD000100000001 /* ../plague_menu_ui_mockup.png */,
@@ -365,10 +371,12 @@
 				8E1A100E2FCD000100000001 /* ../idle-turn-right-02.usdz in Resources */,
 				8E1A10032FCD000100000001 /* ../unstable-walk.usdz in Resources */,
 				8E1A10112FCD000100000001 /* ../dad_biped.usdz in Resources */,
+				8E1A10692FCD000100000001 /* ../dad_biped_ior.png in Resources */,
 				8E1A10302FCD000100000001 /* ../spouse_biped.usdz in Resources */,
 				8E1A10322FCD000100000001 /* ../biker_biped.usdz in Resources */,
 				8E1A10342FCD000100000001 /* ../grandma_biped.usdz in Resources */,
 				8E1A102E2FCD000100000001 /* ../neighbor_biped.usdz in Resources */,
+				8E1A10672FCD000100000001 /* ../neighbor_biped_ior.png in Resources */,
 				8E1A103E2FCD000100000001 /* ../robot_biped.usdz in Resources */,
 				8E1A10362FCD000100000001 /* ../plague_menu_ui_clean.png in Resources */,
 				8E1A10382FCD000100000001 /* ../plague_menu_ui_mockup.png in Resources */,
