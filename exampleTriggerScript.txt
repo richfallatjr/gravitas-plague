@@ -1,0 +1,116 @@
+
+
+
+prologue: {
+    [
+        music: ambientHorrorLoop01.mp3
+        dayNightUI,
+        roomSkinFlow,
+        wallPlace: {
+            [
+                posterUI,
+                door01,
+                window01,
+                crankRadioShelf,
+                walkieTalkieShelf,
+                hamRadioGeneratorBundle
+            ]
+        },
+        fadeOut,
+        worldSpaceGraphic: {
+            title: "Prologue"
+        },
+        fadeIn,
+        triggerOn: crankRadioShelf,
+        crankRadio: {
+            button: playPauseIcon,
+            action: emergencyBroadcastLoop.mp3
+        }
+        hud: {
+            text: "Turn the crank radio on.",
+            wait: 120 # seconds
+        },
+        triggerOn: hamRadio,
+        hamRadio: {
+            button: emptyBatteryIcon,
+            action: voicePrompt01
+        },
+        triggerOn: generator,
+        generator: {
+            button: fuelIcon,
+            action: voicePrompt02
+        },
+        checkpoint,
+        triggerOn: walkieTalkie,
+        walkieTalkie: {
+            button: talkIcon,
+            action: voicePrompt03
+            repeat: 15 # seconds
+            hud: {
+                text: "Pinch and hold to talk. Release to send."
+            },
+        },
+        triggerOff: walkieTalkie,
+        walkieTalkie: {
+            action: voiceScript01
+        },
+        playerDialogue: {
+            action: voiceScript02
+        },
+        walkieTalkie: {
+            action: voiceScript03
+        },
+        triggerOn: walkieTalkie,
+        triggerOn: door01,
+        door01: {
+            button: openDoorIcon,
+            action: {
+                triggerOff: walkieTalkie,
+                portalSpawn: grandma_biped,
+                music: combatMusicLoop01.mp3
+                walkieTalkie: {
+                    action: voiceScript04 # no more push animation we kill the enemy
+                }
+            }
+        },
+        door01: {
+            button: closeDoorIcon,
+            action: closeDoorAnimation
+        },
+        triggerOn: walkieTalkie,
+        window01: {
+            action: {
+                animation: dad_biped
+            }
+        },
+        triggerOff: walkieTalkie,
+        playerDialogue: {
+            action: voiceScript05  # Dad, Dad! Hey dad is that you?
+        },
+        walkieTalkie: {
+            action: voiceScript06 # Big Mike Rich don't go out there
+        },
+        playerDialogue: {
+            action: voiceScript07  # I might need that antigen now
+        },
+        walkieTalkie: {
+            action: voiceScript08 # man are you sure about that
+        },
+        triggerOn: walkieTalkie,
+        triggerOn: door01,
+        door01: {
+            button: openDoorIcon,
+            action: {
+                animation: door01_open
+            }
+        },
+        fadeOut,
+        worldSpaceGraphic: {
+            title: "Gravitas Plague"
+        },
+        unlockedUI: {
+            hordeMode,
+            episode1 # links to app store purchase
+        }
+    ]
+}
