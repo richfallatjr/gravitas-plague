@@ -3,6 +3,13 @@ import RealityKit
 
 @MainActor
 enum HordeGroundingOcclusionInstaller {
+    /// Flip this to true to re-enable Apple's GroundingShadowComponent path.
+    /// Kept centralized so perf testing can disable the whole feature without
+    /// changing room, portal, or enemy spawn code.
+    private static let groundingShadowsEnabled = false
+
+    private static var disabledLogKeys = Set<String>()
+
     /// Installs RealityKit's built-in grounding receiver on the actual skinned
     /// room/floor geometry. This does not add lights, fake geometry, or custom
     /// occlusion receiver materials.
@@ -11,6 +18,20 @@ enum HordeGroundingOcclusionInstaller {
         on roomGeometryRoot: Entity,
         reason: String
     ) -> Int {
+        guard groundingShadowsEnabled else {
+            logDisabledOnce(
+                key: "room_receivers_\(reason)",
+                """
+                [HordeGroundingOcclusion] disabled room receiver install
+                  reason: \(reason)
+                  root: \(roomGeometryRoot.name)
+                  groundingShadowsEnabled: false
+                """
+            )
+
+            return 0
+        }
+
         var receiverCount = 0
 
         visitRecursively(roomGeometryRoot) { entity in
@@ -66,6 +87,20 @@ enum HordeGroundingOcclusionInstaller {
         characterID: String,
         reason: String
     ) -> Int {
+        guard groundingShadowsEnabled else {
+            logDisabledOnce(
+                key: "zombie_casters_\(reason)",
+                """
+                [HordeGroundingOcclusion] disabled zombie caster install
+                  reason: \(reason)
+                  characterID: \(characterID)
+                  groundingShadowsEnabled: false
+                """
+            )
+
+            return 0
+        }
+
         var casterCount = 0
 
         visitRecursively(zombieRoot) { entity in
@@ -150,5 +185,17 @@ enum HordeGroundingOcclusionInstaller {
         for child in entity.children {
             visitRecursively(child, body)
         }
+    }
+
+    private static func logDisabledOnce(
+        key: String,
+        _ message: String
+    ) {
+        guard !disabledLogKeys.contains(key) else {
+            return
+        }
+
+        disabledLogKeys.insert(key)
+        print(message)
     }
 }

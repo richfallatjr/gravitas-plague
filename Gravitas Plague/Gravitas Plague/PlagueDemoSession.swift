@@ -468,6 +468,19 @@ final class PlagueDemoSession: ObservableObject {
     }
 
     @MainActor
+    func showGameCenterLeaderboards(
+        openWindow: OpenWindowAction
+    ) {
+        PlagueGameCenterManager.shared.authenticateIfNeeded()
+
+        openWindow(
+            id: PlagueWindowID.leaderboards
+        )
+
+        print("[GameCenter] leaderboards window opened from SwiftUI menu")
+    }
+
+    @MainActor
     func setWallPosterUIInactiveIfAllowed() {
         guard !swiftUIControlWindowSuppressedForCurrentRun else {
             wallPosterUIActive = true

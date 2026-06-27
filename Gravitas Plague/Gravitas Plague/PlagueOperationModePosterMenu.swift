@@ -546,6 +546,7 @@ struct SuppressedControlWindowAutoDismiss: View {
 struct PlagueRoomSkinningTopOrnament: View {
     @ObservedObject var session: PlagueDemoSession
 
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
 
@@ -553,11 +554,13 @@ struct PlagueRoomSkinningTopOrnament: View {
         HStack(spacing: 10) {
             if !session.wallPosterUIActive {
                 Button {
-                    session.showGameCenterLeaderboards()
+                    session.showGameCenterLeaderboards(
+                        openWindow: openWindow
+                    )
                 } label: {
                     Image(systemName: "trophy.fill")
                         .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.25))
+                        .foregroundStyle(.white)
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
