@@ -1631,18 +1631,45 @@ final class JockRetargetTestController {
     func makeEnemyBrainSnapshot(
         headsetPosition: SIMD3<Float>
     ) -> EnemyBrainSnapshot {
+        let bodySize =
+            characterAttributes?.bodyCollision.sizeMeters ??
+            bodyCollisionBox?.sizeMeters ??
+            SIMD3<Float>(0.6, 1.7, 0.6)
+
+        let bodyRadius = max(
+            bodySize.x,
+            bodySize.z
+        ) * 0.5
+
+        let probes = characterAttributes?.bodyCollision.probes
+
         let snapshot = EnemyBrainSnapshot(
             id: hordeID,
             characterID: enemySeparationCharacterID,
             spawnIndex: hordeSpawnIndex,
             state: enemyBrainStateValue,
+            isActiveHordeLifecycle: hordeLifecycleState == .active,
             position: rootEntity.position(relativeTo: nil),
             yawRadians: yawRadiansForCurrentRoot(),
+            bodyRadiusMeters: bodyRadius,
+            probeForwardLengthMeters: probes?.scaled(
+                probes?.forwardLength,
+                default: 1.2
+            ) ?? 1.2,
+            probeSideLengthMeters: probes?.scaled(
+                probes?.sideLength,
+                default: 1.0
+            ) ?? 1.0,
+            probeFloorDropMeters: probes?.scaled(
+                probes?.floorDrop,
+                default: 0.75
+            ) ?? 0.75,
             health: max(0, hitsToKill - acceptedHitCount),
             isDead: isDeadForHordeCollision,
             isHitReacting: isHitReactingForSnapshot,
             isAttacking: isAttackOrCombatActiveForCrowdSteering,
             attackAnchorUserPosition: attackAnchorUserPosition,
+            attackAnchorBreakDistanceMeters: HordeCrowdSteeringSettings.userMoveBreakAttackMeters,
             closeRangeDelayRemaining: closeRangeDelayRemainingForSnapshot,
             crowdSteerAngleRadians: crowdSteering.steerAngleRadians,
             attackEnabled: attackConfiguration.enabled && playerAttackEnabled,
@@ -4732,6 +4759,10 @@ final class JockRetargetTestController {
             (distance - targetStopDistance)
 
         guard remainingSafeTravel > 0 else {
+            if brainFollowIntent != nil {
+                return true
+            }
+
             if isActiveHordeGameplayEnemy {
                 attackAnchorUserPosition = headPosition
                 startAttackIfPossible()
@@ -4794,6 +4825,13 @@ final class JockRetargetTestController {
             targetPosition,
             relativeTo: nil
         )
+
+        if let brainFollowIntent {
+            latestBrainFollowIntent = brainFollowIntent.consumingTravel(
+                clampedStep
+            )
+            return true
+        }
 
         if clampedStep >= remainingSafeTravel - 0.001 {
             if isActiveHordeGameplayEnemy {

@@ -47,13 +47,19 @@ struct EnemyBrainSnapshot: Sendable, Identifiable {
     let characterID: String
     let spawnIndex: Int
     let state: EnemyBrainStateValue
+    let isActiveHordeLifecycle: Bool
     let position: SIMD3<Float>
     let yawRadians: Float
+    let bodyRadiusMeters: Float
+    let probeForwardLengthMeters: Float
+    let probeSideLengthMeters: Float
+    let probeFloorDropMeters: Float
     let health: Int
     let isDead: Bool
     let isHitReacting: Bool
     let isAttacking: Bool
     let attackAnchorUserPosition: SIMD3<Float>?
+    let attackAnchorBreakDistanceMeters: Float
     let closeRangeDelayRemaining: TimeInterval?
     let crowdSteerAngleRadians: Float
     let attackEnabled: Bool

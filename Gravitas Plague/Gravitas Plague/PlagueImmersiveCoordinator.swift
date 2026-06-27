@@ -141,6 +141,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var pendingHordeBrainCommands: HordeEnemyBrainCommands?
     private var hordeBrainInFlight = false
     private var hordeBrainTask: Task<Void, Never>?
+    private var lastHordeBrainSubmitTime: TimeInterval = 0
+    private var forceNextHordeBrainSubmit = false
 
     @Published private(set) var isPlayerDeathSequenceActive = false
 
@@ -885,8 +887,22 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
     }
 
-    private func submitHordeBrainIfIdle() {
-        guard !hordeBrainInFlight,
+    private func submitHordeBrainIfIdle(
+        now: TimeInterval,
+        force: Bool = false
+    ) {
+        guard hordeBenchmarkRunning,
+              !hordeBrainInFlight else {
+            return
+        }
+
+        let elapsed = now - lastHordeBrainSubmitTime
+        let shouldSubmit =
+            force ||
+            forceNextHordeBrainSubmit ||
+            elapsed >= HordeEnemyBrainSettings.decisionIntervalSeconds
+
+        guard shouldSubmit,
               let frame = latestFrameClockSnapshot,
               let player = latestPlayerPoseSnapshot else {
             return
@@ -898,16 +914,22 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             return
         }
 
+        let bodyObstacles = latestEnemyBodySnapshots
+        let request = EnemyBrainBatchRequest(
+            frame: frame,
+            player: player,
+            enemies: enemyBrains,
+            bodyObstacles: bodyObstacles
+        )
+
+        forceNextHordeBrainSubmit = false
+        lastHordeBrainSubmitTime = now
         hordeBrainInFlight = true
 
         let engine = hordeEnemyBrainEngine
 
         hordeBrainTask = Task { [weak self] in
-            let commands = await engine.step(
-                frame: frame,
-                player: player,
-                enemies: enemyBrains
-            )
+            let commands = await engine.step(request)
 
             await MainActor.run { [weak self] in
                 guard let self else {
@@ -936,6 +958,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         hordeBrainTask = nil
         hordeBrainInFlight = false
         pendingHordeBrainCommands = nil
+        lastHordeBrainSubmitTime = 0
+        forceNextHordeBrainSubmit = false
 
         let simulationEngine = hordeSimulationEngine
         let brainEngine = hordeEnemyBrainEngine
@@ -1072,7 +1096,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 }
 
                 submitHordeSimulationIfIdle()
-                submitHordeBrainIfIdle()
+                submitHordeBrainIfIdle(
+                    now: CACurrentMediaTime()
+                )
             } else {
                 latestEnemyBodySnapshots = []
                 latestEnemyBrainSnapshots = []
@@ -1692,6 +1718,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
             switch ingress.phase {
             case .realWorldFollowing:
+                forceNextHordeBrainSubmit = true
+
                 if ingress.shouldRetainPortalMirrorAfterExit {
                     retainedIDs.append(enemyID)
 
@@ -3066,6 +3094,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             try controller.playFollowDemo(
                 resetBenchmarkState: false
             )
+
+            forceNextHordeBrainSubmit = true
 
             controller.update(
                 deltaTime: 1.0 / 60.0,
