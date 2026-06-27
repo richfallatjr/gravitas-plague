@@ -6,8 +6,8 @@ enum HordePortalMirrorRetentionPolicy: String, Sendable {
 }
 
 enum HordePortalMirrorOptimizationSettings {
-    /// Inclusive cutoff. Waves 1...5 retain mirrors; wave 6+ destroys them after ingress.
-    static let retainMirrorsThroughWave: Int = 5
+    /// Inclusive cutoff. Waves 1...3 retain mirrors; wave 4+ destroys them after ingress.
+    static let retainMirrorsThroughWave: Int = 3
 
     static func retentionPolicy(
         forWave wave: Int
