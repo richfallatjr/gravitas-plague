@@ -102,6 +102,10 @@ final class HordePortalSkinnedRenderMirror {
 
         Self.stripGameplayComponentsRecursively(instance)
         Self.stripAudioComponentsRecursively(instance)
+        HordeGroundingOcclusionInstaller.removeGroundingComponents(
+            from: instance,
+            reason: "portal_render_mirror_must_not_participate_in_room_grounding"
+        )
 
         self.sourceSkinnedModel = source.skinnedModelEntityForPortalInstance()
         self.mirrorSkinnedModel = Self.firstSkinnedModelEntity(

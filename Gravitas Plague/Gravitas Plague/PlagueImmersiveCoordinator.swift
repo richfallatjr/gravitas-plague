@@ -1325,6 +1325,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             return
         }
 
+        installHordeRoomGroundingReceivers(
+            reason: "horde_room_scan_floor_verified"
+        )
+
         hordeWaitingForRoomScan = false
         hordeWaitingForFloorPromptShown = false
         hordeRuntimePhase = .creatingFirstPortal
@@ -1638,6 +1642,15 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         instructionHUD.show(
             text,
             on: headAnchor
+        )
+    }
+
+    private func installHordeRoomGroundingReceivers(
+        reason: String
+    ) {
+        HordeGroundingOcclusionInstaller.installRoomReceivers(
+            on: roomSkinningCoordinator.root,
+            reason: reason
         )
     }
 
@@ -3033,6 +3046,13 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             root: controller.rootEntity
         )
 
+        HordeGroundingOcclusionInstaller.installZombieCasters(
+            on: controller.rootEntity,
+            enemyID: id,
+            characterID: controller.enemySeparationCharacterID,
+            reason: "real_horde_enemy_registered"
+        )
+
         let audioStartDelay = TimeInterval.random(in: 0...1)
         audioController.attachHostAudioSource(
             id: id,
@@ -3110,6 +3130,13 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         forestEnvironmentController.applyIBLReceiverRecursively(
             root: controller.rootEntity
+        )
+
+        HordeGroundingOcclusionInstaller.installZombieCasters(
+            on: controller.rootEntity,
+            enemyID: id,
+            characterID: controller.enemySeparationCharacterID,
+            reason: "real_horde_enemy_registered"
         )
 
         do {

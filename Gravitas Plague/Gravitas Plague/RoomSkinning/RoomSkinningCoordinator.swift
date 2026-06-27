@@ -289,6 +289,11 @@ final class RoomSkinningCoordinator: ObservableObject {
             state = .doorConfirmed
             setStatus("Portal door placed.")
 
+            HordeGroundingOcclusionInstaller.installRoomReceivers(
+                on: root,
+                reason: "room_skinning_committed"
+            )
+
             print("[RoomSkinning] room skinning confirmed")
         }
     }
@@ -336,6 +341,11 @@ final class RoomSkinningCoordinator: ObservableObject {
 
         state = .doorConfirmed
         setStatus("Door placement locked.")
+
+        HordeGroundingOcclusionInstaller.installRoomReceivers(
+            on: root,
+            reason: "room_skinning_door_placement_confirmed"
+        )
 
         print("[RoomSkinning] door placement confirmed")
     }

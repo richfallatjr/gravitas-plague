@@ -112,8 +112,8 @@
 		8E1A10602FCD000100000001 /* Gravitas Plague/PortalGlyphs */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Gravitas Plague/PortalGlyphs"; sourceTree = SOURCE_ROOT; };
 		8E1A10632FCD000100000001 /* ../music-box.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = "../music-box.mp3"; sourceTree = SOURCE_ROOT; };
 		8E1A10652FCD000100000001 /* ../user-interface.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../user-interface.png"; sourceTree = SOURCE_ROOT; };
-		8E1A10662FCD000100000001 /* ../neighbor_biped_ior.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../neighbor_biped_ior.png"; sourceTree = SOURCE_ROOT; };
-		8E1A10682FCD000100000001 /* ../dad_biped_ior.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../dad_biped_ior.png"; sourceTree = SOURCE_ROOT; };
+		8E1A10662FCD000100000001 /* ../neighbor_biped_ior.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../neighbor_biped_ior.png; sourceTree = SOURCE_ROOT; };
+		8E1A10682FCD000100000001 /* ../dad_biped_ior.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../dad_biped_ior.png; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -616,7 +616,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Gravitas Plague/Gravitas_Plague.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -633,7 +633,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.0;
+				MARKETING_VERSION = 3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "GravitasDiscover.Gravitas-Plague";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -654,7 +654,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Gravitas Plague/Gravitas_Plague.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 21;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -671,7 +671,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.0;
+				MARKETING_VERSION = 3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "GravitasDiscover.Gravitas-Plague";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
