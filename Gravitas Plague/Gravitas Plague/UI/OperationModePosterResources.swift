@@ -214,6 +214,7 @@ final class OperationModePosterResources: ObservableObject {
 
 enum OperationModeLockReason: String, Sendable {
     case storyLockedForCurrentBuild
+    case hordeLockedForDistribution
 }
 
 struct OperationModeAvailability: Sendable, Equatable {
@@ -260,16 +261,24 @@ final class OperationModeAccessController: ObservableObject {
     static let shared = OperationModeAccessController()
 
     @Published private(set) var snapshot = OperationModeAccessSnapshot(
-        story: .locked(.storyLockedForCurrentBuild),
-        horde: .unlocked
+        story: PlagueFeatureFlags.unlockStoryMode
+            ? .unlocked
+            : .locked(.storyLockedForCurrentBuild),
+        horde: PlagueFeatureFlags.unlockHordeMode
+            ? .unlocked
+            : .locked(.hordeLockedForDistribution)
     )
 
     private init() {}
 
     func refresh() {
         snapshot = OperationModeAccessSnapshot(
-            story: .locked(.storyLockedForCurrentBuild),
-            horde: .unlocked
+            story: PlagueFeatureFlags.unlockStoryMode
+                ? .unlocked
+                : .locked(.storyLockedForCurrentBuild),
+            horde: PlagueFeatureFlags.unlockHordeMode
+                ? .unlocked
+                : .locked(.hordeLockedForDistribution)
         )
     }
 }

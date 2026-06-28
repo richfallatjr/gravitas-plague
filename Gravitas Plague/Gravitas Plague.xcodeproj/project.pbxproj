@@ -49,6 +49,11 @@
 		8E1A10642FCD000100000001 /* ../user-interface.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10652FCD000100000001 /* ../user-interface.png */; };
 		8E1A10672FCD000100000001 /* ../neighbor_biped_ior.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10662FCD000100000001 /* ../neighbor_biped_ior.png */; };
 		8E1A10692FCD000100000001 /* ../dad_biped_ior.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10682FCD000100000001 /* ../dad_biped_ior.png */; };
+		8E2B20012FCE000100000001 /* MLXAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = 8E2B20062FCE000100000001 /* MLXAudioTTS */; };
+		8E2B20022FCE000100000001 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8E2B20072FCE000100000001 /* MLXAudioCore */; };
+		8E2B20032FCE000100000001 /* Turing in Resources */ = {isa = PBXBuildFile; fileRef = 8E2B20042FCE000100000001 /* Turing */; };
+		8E2B20082FCE000100000001 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 8E2B200A2FCE000100000001 /* MLX */; };
+		8E2B200C2FCE000100000001 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 8E2B200E2FCE000100000001 /* MLXLMCommon */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -114,6 +119,7 @@
 		8E1A10652FCD000100000001 /* ../user-interface.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../user-interface.png"; sourceTree = SOURCE_ROOT; };
 		8E1A10662FCD000100000001 /* ../neighbor_biped_ior.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../neighbor_biped_ior.png; sourceTree = SOURCE_ROOT; };
 		8E1A10682FCD000100000001 /* ../dad_biped_ior.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../dad_biped_ior.png; sourceTree = SOURCE_ROOT; };
+		8E2B20042FCE000100000001 /* Turing */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Turing; path = TuringResources/Turing; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -142,6 +148,10 @@
 				8E1A10092FCD000100000001 /* ARKit.framework in Frameworks */,
 				8E1A100A2FCD000100000001 /* RealityKit.framework in Frameworks */,
 				8E1A104E2FCD000100000001 /* GameKit.framework in Frameworks */,
+				8E2B20082FCE000100000001 /* MLX in Frameworks */,
+				8E2B200C2FCE000100000001 /* MLXLMCommon in Frameworks */,
+				8E2B20022FCE000100000001 /* MLXAudioCore in Frameworks */,
+				8E2B20012FCE000100000001 /* MLXAudioTTS in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -220,6 +230,7 @@
 				8E1A104C2FCD000100000001 /* ../kill_switch_x.png */,
 				8E1A10512FCD000100000001 /* ../trophy_sticker.png */,
 				8E1A10652FCD000100000001 /* ../user-interface.png */,
+				8E2B20042FCE000100000001 /* Turing */,
 				8E1A10602FCD000100000001 /* Gravitas Plague/PortalGlyphs */,
 				8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */,
 				8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */,
@@ -261,6 +272,10 @@
 			);
 			name = "Gravitas Plague";
 			packageProductDependencies = (
+				8E2B20062FCE000100000001 /* MLXAudioTTS */,
+				8E2B20072FCE000100000001 /* MLXAudioCore */,
+				8E2B200A2FCE000100000001 /* MLX */,
+				8E2B200E2FCE000100000001 /* MLXLMCommon */,
 			);
 			productName = "Gravitas Plague";
 			productReference = 2D78FE302FCCF44A0063708B /* Gravitas Plague.app */;
@@ -349,6 +364,11 @@
 			);
 			mainGroup = 2D78FE272FCCF44A0063708B;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8E2B20052FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */,
+				8E2B20092FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-swift" */,
+				8E2B200D2FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2D78FE312FCCF44A0063708B /* Products */;
 			projectDirPath = "";
@@ -391,6 +411,7 @@
 				8E1A10642FCD000100000001 /* ../user-interface.png in Resources */,
 				8E1A10612FCD000100000001 /* Gravitas Plague/PortalGlyphs in Resources */,
 				8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */,
+				8E2B20032FCE000100000001 /* Turing in Resources */,
 				8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav in Resources */,
 				8E1A10622FCD000100000001 /* ../music-box.mp3 in Resources */,
 				8E1A10142FCD000100000001 /* ../Narrow-band-analog.wav in Resources */,
@@ -811,6 +832,56 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		8E2B20052FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Blaizzy/mlx-audio-swift.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+		8E2B20092FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.30.6;
+			};
+		};
+		8E2B200D2FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 3.31.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8E2B20062FCE000100000001 /* MLXAudioTTS */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8E2B20052FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
+			productName = MLXAudioTTS;
+		};
+		8E2B20072FCE000100000001 /* MLXAudioCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8E2B20052FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
+			productName = MLXAudioCore;
+		};
+		8E2B200A2FCE000100000001 /* MLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8E2B20092FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLX;
+		};
+		8E2B200E2FCE000100000001 /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8E2B200D2FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLMCommon;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 2D78FE282FCCF44A0063708B /* Project object */;
 }

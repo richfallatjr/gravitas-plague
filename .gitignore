@@ -16,3 +16,7 @@
 *.ply
 *.exr
 !hellscape_01.exr
+Tools/Turing/.venv/
+Gravitas Plague/TuringResources/Turing/Models/**/.cache/
+Gravitas Plague/TuringResources/Turing/Models/
+Gravitas Plague/TuringResources/Turing/SpeechTokenizer/

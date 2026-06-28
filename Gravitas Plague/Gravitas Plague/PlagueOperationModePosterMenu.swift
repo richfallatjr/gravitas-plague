@@ -339,6 +339,13 @@ struct PlagueOperationModePosterMenu: View {
                     """
                 )
             }
+            .sheet(
+                isPresented: $session.isStoryEpisodePickerPresented
+            ) {
+                TuringEpisodePickerView(
+                    session: session
+                )
+            }
         }
     }
 
@@ -467,6 +474,14 @@ struct PlagueOperationModePosterMenu: View {
     private func selectOperationMode(
         _ mode: PlagueDemoSession.PlagueOperationMode
     ) async {
+        if mode == .story,
+           PlagueFeatureFlags.showStoryEpisodePicker,
+           session.immersiveSpaceStatus == .closed {
+            print("[PlagueMenu] opening Story picker without immersive room")
+            session.selectOperationMode(mode)
+            return
+        }
+
         guard session.immersiveSpaceStatus != .opening else {
             return
         }

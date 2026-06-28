@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "foundation": {
+    "maxParallelRequests": 4,
+    "maxChunkTokens": 2000,
+    "aggregateBudgetTokens": 1250,
+    "perChunkMetadataOverheadCharacters": 120
+  },
+  "tts": {
+    "modelID": "qwen3-tts-12hz-1.7b-base-4bit",
+    "synthesisMode": "sequential",
+    "targetSegmentSecondsMin": 3.0,
+    "targetSegmentSecondsMax": 5.0,
+    "maxSegmentsBeforeSplit": 5,
+    "requireGPU": true,
+    "allowCPUFallback": false,
+    "language": "English",
+    "sampleRate": 24000,
+    "temperature": 0.7,
+    "topP": 0.95,
+    "maxTokens": 4096
+  },
+  "debug": {
+    "enableMemoryMetrics": true,
+    "soakTestIterations": 20,
+    "maxPostWarmupGrowthMB": 300
+  }
+}

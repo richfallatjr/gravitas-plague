@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "models": [
+    {
+      "id": "qwen3-tts-12hz-1.7b-base-4bit",
+      "displayName": "Qwen3 TTS 12Hz 1.7B Base 4-bit MLX",
+      "sourceRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+      "sourceRevision": "37e955a1deb861c088ae5f3a67043185f3d1a60c",
+      "resourcePath": "Turing/Models/Qwen3TTS/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+      "tokenizerResourcePath": "Turing/SpeechTokenizer/Qwen3-TTS-Tokenizer-12Hz",
+      "modelRevision": "37e955a1deb861c088ae5f3a67043185f3d1a60c",
+      "tokenizerRevision": "37e955a1deb861c088ae5f3a67043185f3d1a60c:speech_tokenizer",
+      "quantization": "4bit",
+      "license": "apache-2.0",
+      "checksumManifest": "Turing/Models/Qwen3TTS/Qwen3-TTS-12Hz-1.7B-Base-4bit/checksums.sha256"
+    }
+  ]
+}

@@ -19,6 +19,10 @@ enum PlagueExperienceMode: String, Codable {
 }
 
 enum PlagueFeatureFlags {
+    static let unlockStoryMode = true
+    static let unlockHordeMode = true
+    static let showStoryEpisodePicker = true
+    static let defaultStoryEpisodeID = TuringEpisodeID.prologue
     static let showStoryRoomSkinningControls = false
     static let showForestDayNightToggle = false
     static let showDebugTestDoor = false
@@ -103,6 +107,7 @@ final class PlagueDemoSession: ObservableObject {
         case enterRoomSkinningDoorAdjustment
         case confirmRoomSkinningDoorAdjustment
         case cancelRoomSkinning
+        case startStoryEpisode(TuringEpisodeID)
         case updatePortalHDRIAtmosphere(PortalHDRIAtmosphere)
         case updatePortalLoopGainDB(Float)
         case updateEnemyCollisionDebugVisible(Bool)
@@ -121,6 +126,8 @@ final class PlagueDemoSession: ObservableObject {
     @Published var immersiveSpaceStatus: ImmersiveSpaceStatus = .closed
     @Published var activeMode: ActiveMode = .none
     @Published var selectedOperationMode: PlagueOperationMode?
+    @Published var isStoryEpisodePickerPresented = false
+    @Published var selectedStoryEpisodeID: TuringEpisodeID?
     @Published var experienceMode: PlagueExperienceMode = .horde
     @Published var isPosterUIVisible = true
     @Published var isQuitting = false
@@ -257,7 +264,16 @@ final class PlagueDemoSession: ObservableObject {
         switch mode {
         case .story:
             experienceMode = .story
-            statusMessage = "Story Mode is locked for this build."
+            activeMode = .none
+            statusMessage = "Select a Story episode."
+
+            if PlagueFeatureFlags.showStoryEpisodePicker {
+                isStoryEpisodePickerPresented = true
+            } else {
+                startStoryEpisode(
+                    PlagueFeatureFlags.defaultStoryEpisodeID
+                )
+            }
 
         case .horde:
             experienceMode = .horde
@@ -324,6 +340,8 @@ final class PlagueDemoSession: ObservableObject {
         isPosterUIVisible = true
         activeMode = .none
         statusMessage = "Select operation mode."
+        isStoryEpisodePickerPresented = false
+        selectedStoryEpisodeID = nil
 
         print(
             """
@@ -573,6 +591,7 @@ final class PlagueDemoSession: ObservableObject {
     }
 
     func startHordeBenchmarkFromPoster() {
+        isStoryEpisodePickerPresented = false
         selectedOperationMode = .horde
         isPosterUIVisible = true
         activeMode = .jockRetargetTest
@@ -585,6 +604,7 @@ final class PlagueDemoSession: ObservableObject {
     }
 
     func startWalkLoopFromPoster() {
+        isStoryEpisodePickerPresented = false
         selectedOperationMode = .walkLoop
         isPosterUIVisible = true
         activeMode = .jockRetargetTest
@@ -605,11 +625,48 @@ final class PlagueDemoSession: ObservableObject {
         send(.closeDemo)
 
         selectedOperationMode = nil
+        selectedStoryEpisodeID = nil
+        isStoryEpisodePickerPresented = false
         isPosterUIVisible = true
         activeMode = .none
         statusMessage = "Select operation mode."
 
         print("[PlagueMenu] returned to operation menu")
+    }
+
+    func startStoryEpisode(
+        _ episodeID: TuringEpisodeID
+    ) {
+        guard let episode = TuringEpisodeCatalog.descriptor(for: episodeID),
+              episode.isUnlocked else {
+            statusMessage = "Story episode is locked."
+
+            print(
+                """
+                [TuringStory] locked or missing episode ignored
+                  episodeID: \(episodeID.rawValue)
+                """
+            )
+            return
+        }
+
+        selectedOperationMode = .story
+        selectedStoryEpisodeID = episodeID
+        isStoryEpisodePickerPresented = false
+        experienceMode = .story
+        activeMode = .none
+        statusMessage = "Starting \(episode.title)."
+        resetPlayerDeathState()
+        send(.startStoryEpisode(episodeID))
+
+        print(
+            """
+            [TuringStory] episode requested
+              episodeID: \(episodeID.rawValue)
+              title: \(episode.title)
+              hordeEntryPoint: false
+            """
+        )
     }
 
     func toggleForestAtmosphere() {
@@ -899,6 +956,8 @@ final class PlagueDemoSession: ObservableObject {
         forestImmersiveState = .closing
         forestImmersiveStatus = "Closing mixed room scene..."
         activeMode = .none
+        selectedStoryEpisodeID = nil
+        isStoryEpisodePickerPresented = false
         send(.prepareForUserQuitOrClose)
         send(.cancelRoomSkinning)
         cancelRuntimeTasksForQuit()

@@ -1,0 +1,15 @@
+[
+  {
+    "voiceScript": {
+      "id": "prologue.radio.001",
+      "speaker": "radio_host",
+      "voiceID": "phase0_ryan_dev",
+      "emotion": "urgent",
+      "text": "If you can hear this, keep the radio close. The walls are listening now.",
+      "target": {
+        "kind": "prop",
+        "id": "prologue_wall_radio"
+      }
+    }
+  }
+]

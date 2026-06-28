@@ -551,6 +551,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         case .cancelRoomSkinning:
             roomSkinningCoordinator.cancelRoomSkinning()
 
+        case .startStoryEpisode(let episodeID):
+            startStoryEpisode(episodeID)
+
         case .updatePortalHDRIAtmosphere(let atmosphere):
             roomSkinningCoordinator.updatePortalContentAtmosphere(atmosphere)
 
@@ -560,6 +563,37 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         case .updateEnemyCollisionDebugVisible(let visible):
             setEnemyCollisionDebugVisible(visible)
         }
+    }
+
+    private func startStoryEpisode(
+        _ episodeID: TuringEpisodeID
+    ) {
+        if hordeBenchmarkRunning {
+            stopHordeBenchmark()
+        }
+
+        guard let episode = TuringEpisodeCatalog.descriptor(for: episodeID) else {
+            print(
+                """
+                [TuringStory] ERROR missing episode descriptor
+                  episodeID: \(episodeID.rawValue)
+                """
+            )
+            return
+        }
+
+        roomSkinningCoordinator.cancelRoomSkinning()
+
+        print(
+            """
+            [TuringStory] starting episode placeholder
+              episodeID: \(episodeID.rawValue)
+              title: \(episode.title)
+              script: \(episode.scriptResourcePath)
+              activeHordeStopped: true
+              runtimeReady: false
+            """
+        )
     }
 
     func setEnemyCollisionDebugVisible(

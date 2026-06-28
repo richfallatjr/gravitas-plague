@@ -1,0 +1,2 @@
+Gravitas[[:space:]]Plague/TuringResources/Turing/Models/**/*.safetensors filter=lfs diff=lfs merge=lfs -text
+Gravitas[[:space:]]Plague/TuringResources/Turing/SpeechTokenizer/**/* filter=lfs diff=lfs merge=lfs -text

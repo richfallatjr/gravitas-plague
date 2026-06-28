@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "voices": [
+    {
+      "id": "phase0_ryan_dev",
+      "kind": "library",
+      "resourcePath": "qwen-preset:Ryan",
+      "revision": "qwen3-base-preset-ryan-v1"
+    },
+    {
+      "id": "phase0_aiden_dev",
+      "kind": "library",
+      "resourcePath": "qwen-preset:Aiden",
+      "revision": "qwen3-base-preset-aiden-v1"
+    }
+  ]
+}
