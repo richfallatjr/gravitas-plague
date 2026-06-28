@@ -3,20 +3,23 @@ import Foundation
 actor TuringDebugHarness {
     private let scheduler: QwenTTSSequentialScheduler
     private let voices: TuringVoiceRegistry
+    private let smokeText: String
 
     init(
         scheduler: QwenTTSSequentialScheduler,
-        voices: TuringVoiceRegistry
+        voices: TuringVoiceRegistry,
+        smokeText: String
     ) {
         self.scheduler = scheduler
         self.voices = voices
+        self.smokeText = smokeText
     }
 
     func generatePhase0Line() async throws -> TuringRenderedSegment {
-        let voice = try await voices.voice(id: "phase0_ryan_dev")
+        let voice = try await voices.voice(id: "qwen_phase0_default")
         let segment = TuringSpeechSegment(
-            text: "If you can hear this, keep the radio close.",
-            emotion: "urgent, low radio warning"
+            text: smokeText,
+            emotion: "phase0_audio_only_smoke"
         )
 
         return try await scheduler.render(
@@ -42,6 +45,7 @@ enum TuringRuntimeFactory {
         let model = try await modelRegistry.model(id: config.tts.modelID)
         let host = QwenMLXAudioModelHost(
             descriptor: model,
+            runtime: config,
             bundle: bundle
         )
 
@@ -65,6 +69,7 @@ enum TuringRuntimeFactory {
                 sampleRate: config.tts.sampleRate,
                 temperature: config.tts.temperature,
                 topP: config.tts.topP,
+                repetitionPenalty: config.tts.repetitionPenalty,
                 maxTokens: config.tts.maxTokens,
                 seed: nil
             )
@@ -72,7 +77,8 @@ enum TuringRuntimeFactory {
 
         return TuringDebugHarness(
             scheduler: scheduler,
-            voices: voiceRegistry
+            voices: voiceRegistry,
+            smokeText: config.debug.phase0SmokeText
         )
     }
 }

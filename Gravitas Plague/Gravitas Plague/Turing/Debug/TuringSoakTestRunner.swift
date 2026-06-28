@@ -21,7 +21,7 @@ actor TuringSoakTestRunner {
     func run(
         iterations: Int
     ) async throws -> TuringSoakTestResult {
-        let voice = try await voices.voice(id: "phase0_ryan_dev")
+        let voice = try await voices.voice(id: "qwen_phase0_default")
         var outputURLs: [URL] = []
         var failedCount = 0
 

@@ -592,6 +592,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               script: \(episode.scriptResourcePath)
               activeHordeStopped: true
               runtimeReady: false
+              qwenSmokeAutoRun: false
             """
         )
     }

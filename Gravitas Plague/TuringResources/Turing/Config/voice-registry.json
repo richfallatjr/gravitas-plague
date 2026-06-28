@@ -1,17 +1,18 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
+  "activeVoiceID": "qwen_phase0_default",
   "voices": [
     {
-      "id": "phase0_ryan_dev",
+      "id": "qwen_phase0_default",
+      "displayName": "Qwen Phase 0 Default",
       "kind": "library",
-      "resourcePath": "qwen-preset:Ryan",
-      "revision": "qwen3-base-preset-ryan-v1"
-    },
-    {
-      "id": "phase0_aiden_dev",
-      "kind": "library",
-      "resourcePath": "qwen-preset:Aiden",
-      "revision": "qwen3-base-preset-aiden-v1"
+      "revision": "builtin-default-v1",
+      "resourcePath": null,
+      "qwenVoiceArgument": null,
+      "refAudioPath": null,
+      "refText": null,
+      "phase0RuntimeAllowed": true,
+      "notes": "No cloning. No reference audio. Base model smoke generation uses voice=nil, refAudio=nil, refText=nil."
     }
   ]
 }

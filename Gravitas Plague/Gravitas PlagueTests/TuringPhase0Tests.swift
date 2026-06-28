@@ -8,33 +8,45 @@ final class TuringPhase0Tests: XCTestCase {
             resourcePath: "Turing/Config/turing-runtime.json"
         )
 
-        XCTAssertEqual(config.schemaVersion, 1)
-        XCTAssertEqual(config.tts.modelID, "qwen3-tts-12hz-1.7b-base-4bit")
+        XCTAssertEqual(config.schemaVersion, 3)
+        XCTAssertEqual(config.tts.modelID, "qwen3-tts-12hz-0.6b-base-8bit")
         XCTAssertFalse(config.tts.allowCPUFallback)
         XCTAssertTrue(config.tts.requireGPU)
+        XCTAssertTrue(config.tts.phase0AudioOnly)
+        XCTAssertEqual(config.tts.voiceArgumentPolicy, .baseNilOnly)
+        XCTAssertEqual(config.tts.refAudioPolicy, .phase0NilOnly)
+        XCTAssertEqual(config.tts.refTextPolicy, .phase0NilOnly)
     }
 
     func testTuringModelRegistryPreservesPinnedRevision() async throws {
         let registry = try TuringModelRegistry()
-        let model = try await registry.model(id: "qwen3-tts-12hz-1.7b-base-4bit")
+        let model = try await registry.model(id: "qwen3-tts-12hz-0.6b-base-8bit")
 
-        XCTAssertEqual(model.quantization, "4bit")
+        XCTAssertEqual(model.quantization, "8bit")
+        XCTAssertEqual(model.modelType, "qwen3_tts")
+        XCTAssertTrue(model.phase0RuntimeAllowed)
+        XCTAssertTrue(model.requiresGPU)
+        XCTAssertFalse(model.allowCPUFallback)
         XCTAssertEqual(
             model.modelRevision,
-            "37e955a1deb861c088ae5f3a67043185f3d1a60c"
+            "50f45ef0047cde7e84c2ef04326acb8ada2436a7"
         )
         XCTAssertEqual(
             model.tokenizerRevision,
-            "37e955a1deb861c088ae5f3a67043185f3d1a60c:speech_tokenizer"
+            "50f45ef0047cde7e84c2ef04326acb8ada2436a7:speech_tokenizer"
         )
     }
 
     func testTuringVoiceRegistryFindsPhase0Voice() async throws {
         let registry = try TuringVoiceRegistry()
-        let voice = try await registry.voice(id: "phase0_ryan_dev")
+        let voice = try await registry.voice(id: "qwen_phase0_default")
 
         XCTAssertEqual(voice.kind, .library)
-        XCTAssertEqual(voice.resourcePath, "qwen-preset:Ryan")
+        XCTAssertNil(voice.resourcePath)
+        XCTAssertNil(voice.qwenVoiceArgument)
+        XCTAssertNil(voice.refAudioPath)
+        XCTAssertNil(voice.refText)
+        XCTAssertTrue(voice.phase0RuntimeAllowed)
     }
 
     func testTuringAudioCacheKeyChangesForIdentityFields() async throws {
@@ -43,9 +55,13 @@ final class TuringPhase0Tests: XCTestCase {
         let cache = TuringAudioCache(rootURL: root)
         let segment = TuringSpeechSegment(text: "hello", emotion: "urgent")
         let voice = TuringVoiceDescriptor(
-            id: "phase0_ryan_dev",
+            id: "qwen_phase0_default",
             kind: .library,
-            resourcePath: "qwen-preset:Ryan",
+            resourcePath: nil,
+            qwenVoiceArgument: nil,
+            refAudioPath: nil,
+            refText: nil,
+            phase0RuntimeAllowed: true,
             revision: "voice-a"
         )
         let settings = QwenGenerationSettings(
@@ -53,7 +69,7 @@ final class TuringPhase0Tests: XCTestCase {
             sampleRate: 24000,
             temperature: 0.7,
             topP: 0.95,
-            maxTokens: 4096,
+            maxTokens: 512,
             seed: nil
         )
 
@@ -81,6 +97,10 @@ final class TuringPhase0Tests: XCTestCase {
                 id: voice.id,
                 kind: voice.kind,
                 resourcePath: voice.resourcePath,
+                qwenVoiceArgument: voice.qwenVoiceArgument,
+                refAudioPath: voice.refAudioPath,
+                refText: voice.refText,
+                phase0RuntimeAllowed: voice.phase0RuntimeAllowed,
                 revision: "voice-b"
             ),
             model: baseHost,
@@ -206,9 +226,9 @@ final class TuringPhase0Tests: XCTestCase {
 }
 
 private actor TestQwenHost: QwenTTSModelHost {
-    let modelID = "qwen3-tts-12hz-1.7b-base-4bit"
+    let modelID = "qwen3-tts-12hz-0.6b-base-8bit"
     let modelRevision: String
-    let quantization = "4bit"
+    let quantization = "8bit"
     let tokenizerRevision = "tokenizer-a"
 
     private(set) var sessionCreateCount = 0
@@ -223,14 +243,18 @@ private actor TestQwenHost: QwenTTSModelHost {
         sampleRate: 24000,
         temperature: 0.7,
         topP: 0.95,
-        maxTokens: 4096,
+        maxTokens: 512,
         seed: nil
     )
 
     static let voice = TuringVoiceDescriptor(
-        id: "phase0_ryan_dev",
+        id: "qwen_phase0_default",
         kind: .library,
-        resourcePath: "qwen-preset:Ryan",
+        resourcePath: nil,
+        qwenVoiceArgument: nil,
+        refAudioPath: nil,
+        refText: nil,
+        phase0RuntimeAllowed: true,
         revision: "voice-a"
     )
 

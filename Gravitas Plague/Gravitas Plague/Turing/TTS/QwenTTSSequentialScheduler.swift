@@ -48,12 +48,15 @@ actor QwenTTSSequentialScheduler {
 
         let session = try await host.makeSession()
         do {
+            try Task.checkCancellation()
             let waveform = try await session.synthesize(
                 text: segment.text,
                 emotion: segment.emotion,
                 voice: voice,
                 settings: settings
             )
+            try Task.checkCancellation()
+
             let file = try await fileWriter.write(
                 waveform: waveform,
                 cacheKey: key
@@ -67,8 +70,19 @@ actor QwenTTSSequentialScheduler {
                 durationSeconds: file.durationSeconds,
                 cacheKey: key
             )
+        } catch is CancellationError {
+            await session.releaseTransientState()
+            try? await fileWriter.removeTemporaryFile(
+                forCacheKey: key
+            )
+            throw TuringRuntimeError.qwenSynthesisFailed(
+                "Qwen synthesis cancelled and cleaned up."
+            )
         } catch {
             await session.releaseTransientState()
+            try? await fileWriter.removeTemporaryFile(
+                forCacheKey: key
+            )
             throw error
         }
     }

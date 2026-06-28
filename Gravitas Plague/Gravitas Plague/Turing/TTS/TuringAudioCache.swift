@@ -29,6 +29,7 @@ actor TuringAudioCache {
             sampleRate: settings.sampleRate,
             temperature: settings.temperature,
             topP: settings.topP,
+            repetitionPenalty: settings.repetitionPenalty,
             maxTokens: settings.maxTokens,
             seed: settings.seed,
             radioTreatmentID: radioTreatment?.id,
@@ -95,6 +96,7 @@ struct TuringAudioCacheIdentity: Codable, Sendable, Hashable {
     let sampleRate: Int
     let temperature: Double
     let topP: Double
+    let repetitionPenalty: Double
     let maxTokens: Int
     let seed: UInt64?
     let radioTreatmentID: String?

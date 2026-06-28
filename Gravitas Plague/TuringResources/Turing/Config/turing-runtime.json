@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "foundation": {
     "maxParallelRequests": 4,
     "maxChunkTokens": 2000,
@@ -7,22 +7,26 @@
     "perChunkMetadataOverheadCharacters": 120
   },
   "tts": {
-    "modelID": "qwen3-tts-12hz-1.7b-base-4bit",
+    "modelID": "qwen3-tts-12hz-0.6b-base-8bit",
     "synthesisMode": "sequential",
+    "phase0AudioOnly": true,
     "targetSegmentSecondsMin": 3.0,
     "targetSegmentSecondsMax": 5.0,
     "maxSegmentsBeforeSplit": 5,
     "requireGPU": true,
     "allowCPUFallback": false,
     "language": "English",
-    "sampleRate": 24000,
+    "maxTokens": 512,
     "temperature": 0.7,
-    "topP": 0.95,
-    "maxTokens": 4096
+    "topP": 0.9,
+    "repetitionPenalty": 1.05,
+    "voiceArgumentPolicy": "baseNilOnly",
+    "refAudioPolicy": "phase0NilOnly",
+    "refTextPolicy": "phase0NilOnly"
   },
   "debug": {
     "enableMemoryMetrics": true,
     "soakTestIterations": 20,
-    "maxPostWarmupGrowthMB": 300
+    "phase0SmokeText": "Turing Phase Zero is generating this line locally through Qwen and MLX."
   }
 }

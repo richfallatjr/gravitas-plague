@@ -730,6 +730,116 @@ final class GravitasDemoAudioController {
         )
     }
 
+    @discardableResult
+    func playGeneratedTuringSpatialAudio(
+        fileURL: URL,
+        at entity: Entity,
+        volumeDB: Float = -6.0,
+        label: String = "turing_phase0_qwen"
+    ) -> UUID? {
+        prepareIfNeeded()
+
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            print(
+                """
+                [TuringTTS] ERROR generated WAV missing before playback
+                  file: \(fileURL.path)
+                  fallback: false
+                """
+            )
+            return nil
+        }
+
+        guard entity.parent != nil else {
+            print(
+                """
+                [TuringTTS] ERROR generated WAV spatial emitter is not in scene
+                  file: \(fileURL.lastPathComponent)
+                  label: \(label)
+                  fallback: false
+                """
+            )
+            return nil
+        }
+
+        pruneFinishedSpatialOneShots()
+
+        if activeSpatialOneShotsByID.count >= maxActiveSpatialOneShots {
+            pruneOldestSpatialOneShot()
+        }
+
+        do {
+            let configuration = AudioFileResource.Configuration(
+                loadingStrategy: .preload,
+                shouldLoop: false
+            )
+            let resource = try AudioFileResource.load(
+                contentsOf: fileURL,
+                configuration: configuration
+            )
+
+            entity.components.set(SpatialAudioComponent())
+
+            let controller = entity.playAudio(resource)
+            controller.gain = Double(volumeDB)
+
+            let id = UUID()
+            let now = CACurrentMediaTime()
+            let duration = estimatedDurationSeconds(
+                for: fileURL,
+                fallback: 3.0
+            )
+
+            activeSpatialOneShotsByID[id] = ActiveSpatialOneShot(
+                id: id,
+                label: label,
+                file: fileURL.lastPathComponent,
+                startedAt: now,
+                expectedEndTime: now + duration + 0.25,
+                emitterName: entity.name,
+                playbackController: controller
+            )
+
+            print(
+                """
+                [TuringTTS] generated WAV spatial playback started
+                  id: \(id.uuidString)
+                  file: \(fileURL.lastPathComponent)
+                  label: \(label)
+                  emitter: \(entity.name)
+                  durationSeconds: \(duration)
+                  spatial: true
+                """
+            )
+
+            return id
+        } catch {
+            print(
+                """
+                [TuringTTS] ERROR generated WAV spatial playback failed
+                  file: \(fileURL.path)
+                  error: \(error.localizedDescription)
+                  fallback: false
+                """
+            )
+            return nil
+        }
+    }
+
+    @discardableResult
+    func playGeneratedTuringAtRadioSource(
+        fileURL: URL,
+        volumeDB: Float = -6.0,
+        label: String = "turing_phase0_qwen"
+    ) -> UUID? {
+        playGeneratedTuringSpatialAudio(
+            fileURL: fileURL,
+            at: radioAudioEntity,
+            volumeDB: volumeDB,
+            label: label
+        )
+    }
+
     func setLoopGainDB(
         _ controller: AudioPlaybackController,
         gainDB: Float
@@ -2328,6 +2438,21 @@ final class GravitasDemoAudioController {
             return fallback
         }
 
+        let asset = AVURLAsset(url: url)
+        let seconds = CMTimeGetSeconds(asset.duration)
+
+        guard seconds.isFinite,
+              seconds > 0 else {
+            return fallback
+        }
+
+        return seconds
+    }
+
+    private func estimatedDurationSeconds(
+        for url: URL,
+        fallback: TimeInterval
+    ) -> TimeInterval {
         let asset = AVURLAsset(url: url)
         let seconds = CMTimeGetSeconds(asset.duration)
 

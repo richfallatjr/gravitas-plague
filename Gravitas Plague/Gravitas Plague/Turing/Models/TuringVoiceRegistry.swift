@@ -2,18 +2,49 @@ import Foundation
 
 struct TuringVoiceDescriptor: Codable, Sendable, Hashable, Identifiable {
     let id: String
+    let displayName: String?
     let kind: Kind
-    let resourcePath: String
+    let resourcePath: String?
     let revision: String?
+    let qwenVoiceArgument: String?
+    let refAudioPath: String?
+    let refText: String?
+    let phase0RuntimeAllowed: Bool?
+    let notes: String?
 
     enum Kind: String, Codable, Sendable {
         case library
         case cloned
     }
+
+    init(
+        id: String,
+        displayName: String? = nil,
+        kind: Kind,
+        resourcePath: String?,
+        revision: String?,
+        qwenVoiceArgument: String? = nil,
+        refAudioPath: String? = nil,
+        refText: String? = nil,
+        phase0RuntimeAllowed: Bool? = nil,
+        notes: String? = nil
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.kind = kind
+        self.resourcePath = resourcePath
+        self.revision = revision
+        self.qwenVoiceArgument = qwenVoiceArgument
+        self.refAudioPath = refAudioPath
+        self.refText = refText
+        self.phase0RuntimeAllowed = phase0RuntimeAllowed
+        self.notes = notes
+    }
 }
 
-struct TuringVoiceRegistryPayload: Codable, Sendable {
+struct TuringVoiceRegistryPayload: Decodable, Sendable {
     let schemaVersion: Int
+    let activeVoiceID: String?
     let voices: [TuringVoiceDescriptor]
 }
 
@@ -27,7 +58,7 @@ actor TuringVoiceRegistry {
             bundle: bundle
         )
 
-        guard payload.schemaVersion == 1 else {
+        guard payload.schemaVersion == 3 else {
             throw TuringRuntimeError.invalidConfig(
                 "Unsupported voice-registry schemaVersion \(payload.schemaVersion)."
             )

@@ -19,7 +19,7 @@ actor TuringAudioFileWriter {
     func write(
         waveform: QwenWaveform,
         cacheKey: String
-    ) throws -> TuringAudioCacheFile {
+    ) async throws -> TuringAudioCacheFile {
         guard !waveform.samples.isEmpty else {
             throw TuringRuntimeError.qwenSynthesisFailed(
                 "Qwen returned an empty waveform."
@@ -37,8 +37,16 @@ actor TuringAudioFileWriter {
         )
 
         let wavURL = rootURL.appendingPathComponent("\(cacheKey).wav")
+        let tempURL = rootURL.appendingPathComponent("\(cacheKey).tmp.wav")
         let metadataURL = rootURL.appendingPathComponent("\(cacheKey).json")
-        let frameCount = AVAudioFrameCount(waveform.samples.count)
+        let sanitized = waveform.samples.map { sample -> Float in
+            guard sample.isFinite else {
+                return 0
+            }
+
+            return max(-1, min(1, sample))
+        }
+        let frameCount = AVAudioFrameCount(sanitized.count)
 
         guard let format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -55,22 +63,34 @@ actor TuringAudioFileWriter {
         }
 
         buffer.frameLength = frameCount
-        waveform.samples.withUnsafeBufferPointer { source in
+        sanitized.withUnsafeBufferPointer { source in
             if let base = source.baseAddress,
                let channel = buffer.floatChannelData?[0] {
-                channel.update(from: base, count: waveform.samples.count)
+                channel.update(from: base, count: sanitized.count)
             }
         }
 
+        if FileManager.default.fileExists(atPath: tempURL.path) {
+            try FileManager.default.removeItem(at: tempURL)
+        }
+
         let audioFile = try AVAudioFile(
-            forWriting: wavURL,
+            forWriting: tempURL,
             settings: format.settings,
             commonFormat: format.commonFormat,
             interleaved: format.isInterleaved
         )
         try audioFile.write(from: buffer)
 
-        let duration = Double(waveform.samples.count) / Double(waveform.sampleRate)
+        if FileManager.default.fileExists(atPath: wavURL.path) {
+            try FileManager.default.removeItem(at: wavURL)
+        }
+        try FileManager.default.moveItem(
+            at: tempURL,
+            to: wavURL
+        )
+
+        let duration = Double(sanitized.count) / Double(waveform.sampleRate)
         let metadata = TuringAudioFileMetadata(
             schemaVersion: 1,
             fileName: wavURL.lastPathComponent,
@@ -95,6 +115,15 @@ actor TuringAudioFileWriter {
             sampleRate: waveform.sampleRate,
             channelCount: waveform.channelCount
         )
+    }
+
+    func removeTemporaryFile(
+        forCacheKey cacheKey: String
+    ) async throws {
+        let tempURL = rootURL.appendingPathComponent("\(cacheKey).tmp.wav")
+        if FileManager.default.fileExists(atPath: tempURL.path) {
+            try FileManager.default.removeItem(at: tempURL)
+        }
     }
 }
 

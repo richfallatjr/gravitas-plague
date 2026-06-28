@@ -1,18 +1,44 @@
 {
-  "schemaVersion": 1,
-  "models": [
+  "schemaVersion": 3,
+  "activeModelID": "qwen3-tts-12hz-0.6b-base-8bit",
+  "qwenModels": [
+    {
+      "id": "qwen3-tts-12hz-0.6b-base-8bit",
+      "displayName": "Qwen3-TTS 12Hz 0.6B Base 8-bit Phase 0",
+      "huggingFaceRepo": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit",
+      "revision": "50f45ef0047cde7e84c2ef04326acb8ada2436a7",
+      "resourcePath": "Turing/Models/Qwen3TTS/Qwen3-TTS-12Hz-0.6B-Base-8bit",
+      "modelType": "qwen3_tts",
+      "family": "qwen3-tts-12hz-base",
+      "parameterClass": "0.6B",
+      "quantization": "8bit",
+      "swiftSupportStatus": "documented",
+      "phase0RuntimeAllowed": true,
+      "requiresGPU": true,
+      "allowCPUFallback": false,
+      "voiceArgumentPolicy": "baseNilOnly",
+      "refAudioPolicy": "phase0NilOnly",
+      "refTextPolicy": "phase0NilOnly",
+      "customVoiceAllowed": false,
+      "voiceDesignAllowed": false,
+      "cloneProfilesAllowed": false,
+      "requiresMetalCanaryPass": true,
+      "metalCanaryStatus": "notRun",
+      "notes": "Phase 0 proves local Qwen/MLX audio generation only. No cloning, VoiceDesign, CustomVoice, reference audio, or .plaguevoice profiles."
+    }
+  ],
+  "blockedModels": [
     {
       "id": "qwen3-tts-12hz-1.7b-base-4bit",
-      "displayName": "Qwen3 TTS 12Hz 1.7B Base 4-bit MLX",
-      "sourceRepository": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit",
-      "sourceRevision": "37e955a1deb861c088ae5f3a67043185f3d1a60c",
-      "resourcePath": "Turing/Models/Qwen3TTS/Qwen3-TTS-12Hz-1.7B-Base-4bit",
-      "tokenizerResourcePath": "Turing/SpeechTokenizer/Qwen3-TTS-Tokenizer-12Hz",
-      "modelRevision": "37e955a1deb861c088ae5f3a67043185f3d1a60c",
-      "tokenizerRevision": "37e955a1deb861c088ae5f3a67043185f3d1a60c:speech_tokenizer",
-      "quantization": "4bit",
-      "license": "apache-2.0",
-      "checksumManifest": "Turing/Models/Qwen3TTS/Qwen3-TTS-12Hz-1.7B-Base-4bit/checksums.sha256"
+      "reason": "Current device log aborts inside Metal validation during generate(). Do not include in Phase 0 app resources."
+    },
+    {
+      "id": "qwen3-tts-12hz-1.7b-voicedesign-bf16",
+      "reason": "VoiceDesign is a later macOS-authoring phase, not Phase 0 headset smoke."
+    },
+    {
+      "id": "qwen3-tts-12hz-1.7b-customvoice-bf16",
+      "reason": "CustomVoice/cloning is a later phase, not Phase 0 headset smoke."
     }
   ]
 }

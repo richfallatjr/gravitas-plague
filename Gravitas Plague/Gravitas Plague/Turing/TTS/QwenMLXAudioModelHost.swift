@@ -15,23 +15,24 @@ actor QwenMLXAudioModelHost: QwenTTSModelHost {
     let modelRevision: String
     let quantization: String
     let tokenizerRevision: String
-    let sourceRepository: String
 
     private let descriptor: TuringModelDescriptor
+    private let runtime: TuringRuntimeConfig
     private let bundle: Bundle
     private var loadedModel: (any SpeechGenerationModel)?
 
     init(
         descriptor: TuringModelDescriptor,
+        runtime: TuringRuntimeConfig,
         bundle: Bundle = .main
     ) {
         self.descriptor = descriptor
+        self.runtime = runtime
         self.bundle = bundle
         modelID = descriptor.id
         modelRevision = descriptor.modelRevision
         quantization = descriptor.quantization
         tokenizerRevision = descriptor.tokenizerRevision
-        sourceRepository = descriptor.sourceRepository
     }
 
     func assertGPUAvailable() async throws {
@@ -50,6 +51,10 @@ actor QwenMLXAudioModelHost: QwenTTSModelHost {
     }
 
     func loadIfNeeded() async throws {
+        try QwenPhase0CompatibilityGate.validate(
+            model: descriptor,
+            runtime: runtime.tts
+        )
         try await assertGPUAvailable()
         if loadedModel != nil {
             return
@@ -68,16 +73,27 @@ actor QwenMLXAudioModelHost: QwenTTSModelHost {
         let modelDescriptor = descriptor
 
         do {
-            let modelBox = try await Task.detached(priority: .userInitiated) {
-                try await Device.withDefaultDevice(.gpu) {
+            let modelBox = try await Task.detached(
+                priority: .userInitiated
+            ) { () async throws -> TuringUncheckedSendableBox<any SpeechGenerationModel> in
+                return try await Device.withDefaultDevice(.gpu) { () async throws -> TuringUncheckedSendableBox<any SpeechGenerationModel> in
                     let loadableModelRoot = try Self.writableModelRootIfNeeded(
                         bundledModelRoot: modelRoot,
                         descriptor: modelDescriptor
                     )
 
+                    print(
+                        """
+                        [TuringTTS] loading Qwen Phase 0 model
+                          modelID: \(modelDescriptor.id)
+                          quantization: \(modelDescriptor.quantization)
+                          path: \(loadableModelRoot.path)
+                        """
+                    )
+
                     let model = try await TTS.loadModel(
                         modelRepo: loadableModelRoot.path,
-                        modelType: "qwen3_tts"
+                        modelType: modelDescriptor.modelType
                     )
                     return TuringUncheckedSendableBox(value: model)
                 }
@@ -160,22 +176,18 @@ actor QwenMLXAudioModelHost: QwenTTSModelHost {
         }
 
         return QwenMLXAudioSynthesisSession(
-            model: loadedModel,
-            sourceRepository: sourceRepository
+            model: loadedModel
         )
     }
 }
 
 struct QwenMLXAudioSynthesisSession: QwenTTSSynthesisSession, @unchecked Sendable {
     private let modelBox: TuringUncheckedSendableBox<any SpeechGenerationModel>
-    private let sourceRepository: String
 
     init(
-        model: any SpeechGenerationModel,
-        sourceRepository: String
+        model: any SpeechGenerationModel
     ) {
         modelBox = TuringUncheckedSendableBox(value: model)
-        self.sourceRepository = sourceRepository
     }
 
     func synthesize(
@@ -192,34 +204,43 @@ struct QwenMLXAudioSynthesisSession: QwenTTSSynthesisSession, @unchecked Sendabl
         }
 
         let modelBox = modelBox
-        let sourceRepository = sourceRepository
 
-        return try await Task.detached(priority: .userInitiated) {
-            try await Device.withDefaultDevice(.gpu) {
+        return try await Task.detached(
+            priority: .userInitiated
+        ) { () async throws -> QwenWaveform in
+            try QwenPhase0CompatibilityGate.validateGenerateRequest(
+                text: trimmed,
+                voiceArgument: nil,
+                refAudioWasProvided: false,
+                refText: nil,
+                settings: settings
+            )
+
+            return try await Device.withDefaultDevice(.gpu) { () async throws -> QwenWaveform in
                 let model = modelBox.value
                 var generationParameters = model.defaultGenerationParameters
                 generationParameters.maxTokens = settings.maxTokens
                 generationParameters.temperature = Float(settings.temperature)
                 generationParameters.topP = Float(settings.topP)
-                let voiceArgument = QwenVoiceArgumentBuilder.voiceArgument(
-                    voice: voice,
-                    emotion: emotion,
-                    sourceRepository: sourceRepository
-                )
+                generationParameters.repetitionPenalty = Float(settings.repetitionPenalty)
+                _ = voice
+                _ = emotion
 
                 print(
                     """
-                    [TuringTTS] Qwen generation starting
+                    [TuringTTS] Qwen Phase 0 generation starting
                       textCharacters: \(trimmed.count)
                       language: \(settings.language)
                       maxTokens: \(settings.maxTokens)
-                      voiceArgument: \(voiceArgument ?? "nil")
+                      voiceArgument: nil
+                      refAudio: nil
+                      refText: nil
                     """
                 )
 
                 let audio = try await model.generate(
                     text: trimmed,
-                    voice: voiceArgument,
+                    voice: nil,
                     refAudio: nil,
                     refText: nil,
                     language: settings.language,
@@ -227,10 +248,15 @@ struct QwenMLXAudioSynthesisSession: QwenTTSSynthesisSession, @unchecked Sendabl
                 )
 
                 let samples = audio.asArray(Float.self)
+                guard samples.isEmpty == false else {
+                    throw TuringRuntimeError.qwenSynthesisFailed(
+                        "Qwen returned an empty waveform."
+                    )
+                }
 
                 print(
                     """
-                    [TuringTTS] Qwen generation finished
+                    [TuringTTS] Qwen Phase 0 generation finished
                       sampleCount: \(samples.count)
                       sampleRate: \(model.sampleRate)
                     """
@@ -249,35 +275,6 @@ struct QwenMLXAudioSynthesisSession: QwenTTSSynthesisSession, @unchecked Sendabl
         Memory.clearCache()
     }
 }
-
-enum QwenVoiceArgumentBuilder {
-    nonisolated static func voiceArgument(
-        voice: TuringVoiceDescriptor,
-        emotion: String,
-        sourceRepository: String
-    ) -> String? {
-        let lowerSource = sourceRepository.lowercased()
-        guard lowerSource.contains("customvoice") ||
-              lowerSource.contains("voicedesign") else {
-            return nil
-        }
-
-        guard voice.resourcePath.hasPrefix("qwen-preset:") else {
-            return nil
-        }
-
-        let preset = String(
-            voice.resourcePath.dropFirst("qwen-preset:".count)
-        )
-        let trimmedEmotion = emotion.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
-
-        return trimmedEmotion.isEmpty
-            ? preset
-            : "\(preset), \(trimmedEmotion)"
-    }
-}
 #else
 import Foundation
 
@@ -289,8 +286,10 @@ actor QwenMLXAudioModelHost: QwenTTSModelHost {
 
     init(
         descriptor: TuringModelDescriptor,
+        runtime: TuringRuntimeConfig,
         bundle: Bundle = .main
     ) {
+        _ = runtime
         _ = bundle
         modelID = descriptor.id
         modelRevision = descriptor.modelRevision
