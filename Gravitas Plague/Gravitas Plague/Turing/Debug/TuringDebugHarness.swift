@@ -2,32 +2,85 @@ import Foundation
 
 actor TuringDebugHarness {
     private let scheduler: QwenTTSSequentialScheduler
-    private let voices: TuringVoiceRegistry
-    private let smokeText: String
+    private let smokeRequest: QwenPhase0SmokeRequest
+    private let model: TuringModelDescriptor
+    private let canaryStore: QwenPhase0CanaryStore
 
     init(
         scheduler: QwenTTSSequentialScheduler,
-        voices: TuringVoiceRegistry,
-        smokeText: String
+        smokeRequest: QwenPhase0SmokeRequest,
+        model: TuringModelDescriptor,
+        canaryStore: QwenPhase0CanaryStore
     ) {
         self.scheduler = scheduler
-        self.voices = voices
-        self.smokeText = smokeText
+        self.smokeRequest = smokeRequest
+        self.model = model
+        self.canaryStore = canaryStore
     }
 
     func generatePhase0Line() async throws -> TuringRenderedSegment {
-        let voice = try await voices.voice(id: "qwen_phase0_default")
-        let segment = TuringSpeechSegment(
-            text: smokeText,
-            emotion: "phase0_audio_only_smoke"
+        let report = try await canaryStore.load()
+        guard report?.matches(
+            model: model,
+            smokeRequest: smokeRequest
+        ) == true else {
+            throw TuringRuntimeError.qwenModelLoadFailed(
+                "Generate + Play disabled: Qwen Phase 0 canary has not passed for this model/package/build tuple."
+            )
+        }
+
+        return try await scheduler.renderPhase0BareBaseSmoke(
+            request: smokeRequest
+        )
+    }
+
+    func loadCanaryReport() async throws -> QwenPhase0CanaryReport? {
+        try await canaryStore.load()
+    }
+
+    func canaryPassedForActiveTuple() async throws -> Bool {
+        try await canaryStore.load()?.matches(
+            model: model,
+            smokeRequest: smokeRequest
+        ) == true
+    }
+
+    func runPhase0NativeCanary() async throws -> TuringRenderedSegment {
+        let baseReport = QwenPhase0CanaryIdentity.makeReport(
+            model: model,
+            smokeRequest: smokeRequest
         )
 
-        return try await scheduler.render(
-            segment: segment,
-            segmentIndex: 0,
-            voice: voice,
-            radioTreatment: nil
-        )
+        do {
+            try await canaryStore.markStarted(
+                .fullGenerate,
+                report: baseReport
+            )
+
+            let rendered = try await scheduler.renderPhase0BareBaseSmoke(
+                request: smokeRequest
+            )
+
+            try await canaryStore.markCompleted(.writeWav)
+            try await canaryStore.markPassed(finalStage: .writeWav)
+
+            print(
+                """
+                [TuringTTS] Qwen Phase 0 canary passed
+                  lastCompletedStage: writeWav
+                  durationSeconds: \(rendered.durationSeconds)
+                  file: \(rendered.fileURL.path)
+                """
+            )
+
+            return rendered
+        } catch {
+            try? await canaryStore.markFailed(
+                stage: .fullGenerate,
+                error: error
+            )
+            throw error
+        }
     }
 }
 
@@ -41,7 +94,6 @@ enum TuringRuntimeFactory {
             bundle: bundle
         )
         let modelRegistry = try TuringModelRegistry(bundle: bundle)
-        let voiceRegistry = try TuringVoiceRegistry(bundle: bundle)
         let model = try await modelRegistry.model(id: config.tts.modelID)
         let host = QwenMLXAudioModelHost(
             descriptor: model,
@@ -77,8 +129,18 @@ enum TuringRuntimeFactory {
 
         return TuringDebugHarness(
             scheduler: scheduler,
-            voices: voiceRegistry,
-            smokeText: config.debug.phase0SmokeText
+            smokeRequest: QwenPhase0SmokeRequest(
+                text: config.debug.phase0SmokeText,
+                language: config.tts.language,
+                maxTokens: config.tts.maxTokens,
+                temperature: Float(config.tts.temperature),
+                topP: Float(config.tts.topP),
+                repetitionPenalty: Float(config.tts.repetitionPenalty)
+            ),
+            model: model,
+            canaryStore: try QwenPhase0CanaryStore(
+                url: QwenPhase0CanaryStore.defaultURL()
+            )
         )
     }
 }

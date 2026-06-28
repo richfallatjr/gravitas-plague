@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_ARG="${ROOT:-$(pwd)}"
+if [[ $# -gt 0 ]]; then
+  exec "$SCRIPT_DIR/install_qwen_phase0_one_active_model.sh" "$@"
+else
+  exec "$SCRIPT_DIR/install_qwen_phase0_one_active_model.sh" \
+    --root "$ROOT_ARG" \
+    --variant 8bit
+fi
+
 # Turing Phase 0 Qwen audio-only asset installer.
 # Installs exactly one runtime model for visionOS:
 #   mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit
@@ -213,7 +223,7 @@ cat > "$CONFIG_ROOT/model-registry.json" <<JSON
       "cloneProfilesAllowed": false,
       "requiresMetalCanaryPass": true,
       "metalCanaryStatus": "notRun",
-      "notes": "Phase 0 proves local Qwen/MLX audio generation only. No cloning, VoiceDesign, CustomVoice, reference audio, or .plaguevoice profiles."
+      "notes": "Phase 0 proves local Qwen/MLX audio generation using bare Base smoke only: voice=nil, refAudio=nil, refText=nil."
     }
   ],
   "blockedModels": [
@@ -244,6 +254,7 @@ cat > "$CONFIG_ROOT/turing-runtime.json" <<JSON
   },
   "tts": {
     "modelID": "$MODEL_REGISTRY_ID",
+    "generationMode": "bareBaseSmoke",
     "synthesisMode": "sequential",
     "phase0AudioOnly": true,
     "targetSegmentSecondsMin": 3.0,
@@ -254,8 +265,8 @@ cat > "$CONFIG_ROOT/turing-runtime.json" <<JSON
     "language": "English",
     "maxTokens": 512,
     "temperature": 0.7,
-    "topP": 0.9,
-    "repetitionPenalty": 1.05,
+    "topP": 1.0,
+    "repetitionPenalty": 1.0,
     "voiceArgumentPolicy": "baseNilOnly",
     "refAudioPolicy": "phase0NilOnly",
     "refTextPolicy": "phase0NilOnly"
@@ -263,7 +274,7 @@ cat > "$CONFIG_ROOT/turing-runtime.json" <<JSON
   "debug": {
     "enableMemoryMetrics": true,
     "soakTestIterations": 20,
-    "phase0SmokeText": "Turing Phase Zero is generating this line locally through Qwen and MLX."
+    "phase0SmokeText": "Hello from Qwen3-TTS."
   }
 }
 JSON
@@ -283,7 +294,7 @@ cat > "$CONFIG_ROOT/voice-registry.json" <<JSON
       "refAudioPath": null,
       "refText": null,
       "phase0RuntimeAllowed": true,
-      "notes": "No cloning. No reference audio. Base model smoke generation uses voice=nil, refAudio=nil, refText=nil."
+      "notes": "No cloning. No reference audio. Phase 0 bare Base smoke forwards voice=nil, refAudio=nil, and refText=nil."
     }
   ]
 }

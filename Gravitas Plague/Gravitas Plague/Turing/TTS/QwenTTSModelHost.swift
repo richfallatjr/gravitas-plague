@@ -8,6 +8,9 @@ protocol QwenTTSModelHost: Sendable {
 
     func loadIfNeeded() async throws
     func assertGPUAvailable() async throws
+    func generatePhase0BareBaseSmoke(
+        _ request: QwenPhase0SmokeRequest
+    ) async throws -> QwenWaveform
     func makeSession() async throws -> QwenTTSSynthesisSession
 }
 

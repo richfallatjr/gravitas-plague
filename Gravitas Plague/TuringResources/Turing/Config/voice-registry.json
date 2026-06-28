@@ -6,13 +6,13 @@
       "id": "qwen_phase0_default",
       "displayName": "Qwen Phase 0 Default",
       "kind": "library",
-      "revision": "builtin-default-v1",
+      "revision": "1eccf1cb2519b5a4e8a95b5f0544f3303568164f",
       "resourcePath": null,
       "qwenVoiceArgument": null,
       "refAudioPath": null,
       "refText": null,
       "phase0RuntimeAllowed": true,
-      "notes": "No cloning. No reference audio. Base model smoke generation uses voice=nil, refAudio=nil, refText=nil."
+      "notes": "No cloning. No reference audio. Phase 0 bare Base smoke forwards voice=nil, refAudio=nil, and refText=nil."
     }
   ]
 }

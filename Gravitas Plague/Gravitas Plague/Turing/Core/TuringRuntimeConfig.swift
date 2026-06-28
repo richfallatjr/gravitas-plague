@@ -15,6 +15,7 @@ struct TuringRuntimeConfig: Codable, Sendable, Equatable {
 
     struct TTSConfig: Codable, Sendable, Equatable {
         let modelID: String
+        let generationMode: String
         let synthesisMode: String
         let phase0AudioOnly: Bool
         let targetSegmentSecondsMin: Double
@@ -34,6 +35,7 @@ struct TuringRuntimeConfig: Codable, Sendable, Equatable {
 
         enum VoiceArgumentPolicy: String, Codable, Sendable {
             case baseNilOnly
+            case basePresetOnly
         }
 
         enum RefAudioPolicy: String, Codable, Sendable {
@@ -46,6 +48,7 @@ struct TuringRuntimeConfig: Codable, Sendable, Equatable {
 
         enum CodingKeys: String, CodingKey {
             case modelID
+            case generationMode
             case synthesisMode
             case phase0AudioOnly
             case targetSegmentSecondsMin
@@ -67,6 +70,10 @@ struct TuringRuntimeConfig: Codable, Sendable, Equatable {
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             modelID = try container.decode(String.self, forKey: .modelID)
+            generationMode = try container.decodeIfPresent(
+                String.self,
+                forKey: .generationMode
+            ) ?? "bareBaseSmoke"
             synthesisMode = try container.decode(String.self, forKey: .synthesisMode)
             phase0AudioOnly = try container.decodeIfPresent(Bool.self, forKey: .phase0AudioOnly) ?? false
             targetSegmentSecondsMin = try container.decodeIfPresent(Double.self, forKey: .targetSegmentSecondsMin) ?? 3.0
@@ -114,7 +121,7 @@ struct TuringRuntimeConfig: Codable, Sendable, Equatable {
             soakTestIterations = try container.decode(Int.self, forKey: .soakTestIterations)
             maxPostWarmupGrowthMB = try container.decodeIfPresent(Int.self, forKey: .maxPostWarmupGrowthMB) ?? 300
             phase0SmokeText = try container.decodeIfPresent(String.self, forKey: .phase0SmokeText)
-                ?? "Turing Phase Zero is generating this line locally through Qwen and MLX."
+                ?? "Hello from Qwen3-TTS."
         }
     }
 }

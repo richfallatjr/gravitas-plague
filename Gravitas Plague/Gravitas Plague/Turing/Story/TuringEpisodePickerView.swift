@@ -5,6 +5,7 @@ struct TuringEpisodePickerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     @State private var openingEpisodeID: TuringEpisodeID?
+    @State private var selectedEpisodeID: TuringEpisodeID? = .prologue
 
     private let episodes = TuringEpisodeCatalog.developmentEpisodes
 
@@ -33,10 +34,15 @@ struct TuringEpisodePickerView: View {
 
             Divider()
 
-            TuringPrologueDebugView()
+            if selectedEpisodeID == .prologue {
+                TuringPrologueDebugView()
+            }
         }
         .padding(24)
         .frame(minWidth: 520)
+        .onAppear {
+            selectPhase0DebugEpisodeIfNeeded()
+        }
     }
 
     private func episodeButton(
@@ -63,6 +69,10 @@ struct TuringEpisodePickerView: View {
                 if openingEpisodeID == episode.id {
                     ProgressView()
                         .controlSize(.small)
+                } else if selectedEpisodeID == episode.id {
+                    Text("Selected")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
                 } else if !episode.isUnlocked {
                     Image(systemName: "lock.fill")
                         .foregroundStyle(.secondary)
@@ -80,6 +90,12 @@ struct TuringEpisodePickerView: View {
         _ episode: TuringEpisodeDescriptor
     ) async {
         guard episode.isUnlocked else {
+            return
+        }
+
+        if PlagueFeatureFlags.phase0PrologueRunsInSwiftUIPickerOnly,
+           episode.id == .prologue {
+            selectPhase0DebugEpisodeIfNeeded()
             return
         }
 
@@ -138,5 +154,31 @@ struct TuringEpisodePickerView: View {
             episode.id
         )
         dismiss()
+    }
+
+    @MainActor
+    private func selectPhase0DebugEpisodeIfNeeded() {
+        guard let episode = TuringEpisodeCatalog.descriptor(for: .prologue),
+              episode.isUnlocked else {
+            return
+        }
+
+        selectedEpisodeID = episode.id
+        session.selectedOperationMode = .story
+        session.selectedStoryEpisodeID = episode.id
+        session.experienceMode = .story
+        session.activeMode = .none
+        session.statusMessage = "Run the Prologue Qwen Phase 0 canary."
+        session.isStoryEpisodePickerPresented = true
+
+        print(
+            """
+            [TuringStory] Prologue Phase 0 debug controls active
+              episodeID: \(episode.id.rawValue)
+              immersiveStarted: false
+              qwenSmokeAutoRun: false
+              useRunCanaryButton: true
+            """
+        )
     }
 }

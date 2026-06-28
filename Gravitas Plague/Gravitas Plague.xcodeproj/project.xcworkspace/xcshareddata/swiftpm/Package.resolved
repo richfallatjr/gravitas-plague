@@ -11,15 +11,6 @@
       }
     },
     {
-      "identity" : "mlx-audio-swift",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/Blaizzy/mlx-audio-swift.git",
-      "state" : {
-        "branch" : "main",
-        "revision" : "3cfa97201572e438eece2036299383834473253f"
-      }
-    },
-    {
       "identity" : "mlx-swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ml-explore/mlx-swift.git",

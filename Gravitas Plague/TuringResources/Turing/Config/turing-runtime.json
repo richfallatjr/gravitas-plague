@@ -7,7 +7,8 @@
     "perChunkMetadataOverheadCharacters": 120
   },
   "tts": {
-    "modelID": "qwen3-tts-12hz-0.6b-base-8bit",
+    "modelID": "qwen3-tts-12hz-0.6b-base-bf16",
+    "generationMode": "bareBaseSmoke",
     "synthesisMode": "sequential",
     "phase0AudioOnly": true,
     "targetSegmentSecondsMin": 3.0,
@@ -16,10 +17,10 @@
     "requireGPU": true,
     "allowCPUFallback": false,
     "language": "English",
-    "maxTokens": 512,
-    "temperature": 0.7,
-    "topP": 0.9,
-    "repetitionPenalty": 1.05,
+    "maxTokens": 96,
+    "temperature": 0.0,
+    "topP": 1.0,
+    "repetitionPenalty": 1.0,
     "voiceArgumentPolicy": "baseNilOnly",
     "refAudioPolicy": "phase0NilOnly",
     "refTextPolicy": "phase0NilOnly"
@@ -27,6 +28,6 @@
   "debug": {
     "enableMemoryMetrics": true,
     "soakTestIterations": 20,
-    "phase0SmokeText": "Turing Phase Zero is generating this line locally through Qwen and MLX."
+    "phase0SmokeText": "Hello from Qwen3-TTS."
   }
 }

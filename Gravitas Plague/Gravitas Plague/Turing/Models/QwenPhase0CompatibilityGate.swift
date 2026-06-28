@@ -1,7 +1,14 @@
 import Foundation
 
 enum QwenPhase0CompatibilityGate {
-    static let allowedModelID = "qwen3-tts-12hz-0.6b-base-8bit"
+    static let allowedModelIDs: Set<String> = [
+        "qwen3-tts-12hz-0.6b-base-8bit",
+        "qwen3-tts-12hz-0.6b-base-bf16"
+    ]
+    static let allowedQuantizations: Set<String> = [
+        "8bit",
+        "bf16"
+    ]
 
     static func validate(
         model: TuringModelDescriptor,
@@ -13,9 +20,9 @@ enum QwenPhase0CompatibilityGate {
             )
         }
 
-        guard model.id == allowedModelID else {
+        guard allowedModelIDs.contains(model.id) else {
             throw TuringRuntimeError.qwenModelLoadFailed(
-                "Phase 0 may run only \(allowedModelID), got \(model.id)."
+                "Phase 0 may run only 0.6B Base Qwen3-TTS models, got \(model.id)."
             )
         }
 
@@ -25,9 +32,9 @@ enum QwenPhase0CompatibilityGate {
             )
         }
 
-        guard model.quantization == "8bit" else {
+        guard allowedQuantizations.contains(model.quantization) else {
             throw TuringRuntimeError.qwenModelLoadFailed(
-                "Phase 0 requires 0.6B Base 8-bit. Got quantization: \(model.quantization)."
+                "Phase 0 requires 0.6B Base 8-bit or bf16. Got quantization: \(model.quantization)."
             )
         }
 
@@ -44,10 +51,16 @@ enum QwenPhase0CompatibilityGate {
             throw TuringRuntimeError.qwenGPUUnavailable
         }
 
+        guard runtime.generationMode == QwenPhase0GenerationContract.requiredGenerationMode else {
+            throw TuringRuntimeError.qwenModelLoadFailed(
+                "Phase 0 requires bareBaseSmoke generation mode."
+            )
+        }
+
         guard runtime.voiceArgumentPolicy == .baseNilOnly,
               model.voiceArgumentPolicy == "baseNilOnly" else {
             throw TuringRuntimeError.qwenModelLoadFailed(
-                "Phase 0 Base model must use voice=nil."
+                "Phase 0 bare Base smoke must pass voice nil."
             )
         }
 
@@ -82,9 +95,12 @@ enum QwenPhase0CompatibilityGate {
             )
         }
 
-        guard voiceArgument == nil else {
+        if let voiceArgument = voiceArgument?.trimmingCharacters(in: .whitespacesAndNewlines),
+           voiceArgument.isEmpty == false {
             throw TuringRuntimeError.qwenSynthesisFailed(
-                "Phase 0 Base generation must call Qwen with voice=nil."
+                QwenPhase0GenerationContract.ContractError
+                    .voiceArgumentForbidden(voiceArgument)
+                    .localizedDescription
             )
         }
 
@@ -104,6 +120,13 @@ enum QwenPhase0CompatibilityGate {
         guard (1...512).contains(settings.maxTokens) else {
             throw TuringRuntimeError.qwenSynthesisFailed(
                 "Phase 0 maxTokens must be 1...512. Got \(settings.maxTokens)."
+            )
+        }
+
+        guard settings.topP == 1.0,
+              settings.repetitionPenalty == 1.0 else {
+            throw TuringRuntimeError.qwenSynthesisFailed(
+                "Phase 0 smoke uses the simplest Qwen sampler path: topP=1.0 and repetitionPenalty=1.0."
             )
         }
     }

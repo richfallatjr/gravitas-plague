@@ -1,0 +1,530 @@
+Turing Phase 0 Qwen3-TTS Metal Assert - Architect Handoff
+Generated: 2026-06-27
+
+Summary
+The Phase 0 Qwen smoke path now reaches the smallest documented Base-model call shape:
+
+  model: qwen3-tts-12hz-0.6b-base-8bit
+  checkpointKind: base
+  quantization: 8bit
+  generationMode: bareBaseSmoke
+  text: "Hello from Qwen3-TTS."
+  language: English
+  generationParameters: package_default
+  voiceArgument: nil
+  refAudio: nil
+  refText: nil
+
+The model loads successfully. The process aborts only after generation starts:
+
+  Loaded speech tokenizer decoder
+  Loaded speaker encoder
+  Loaded Qwen3-TTS model (base)
+  [TuringTTS] Qwen Phase 0 generation starting
+    generationMode: bareBaseSmoke
+    textCharacters: 21
+    language: English
+    generationParameters: package_default
+    voiceArgument: nil
+    refAudio: nil
+    refText: nil
+  -[MTLDebugComputeCommandEncoder setBytes:length:attributeStride:atIndex:], line 387:
+  error 'bytes argument cannot be nil.'
+  failed assertion `bytes argument cannot be nil.'
+
+This is not a thrown Swift error. It is a process-aborting Metal validation assertion while MLX is encoding a compute command. A do/catch, retry loop, scheduler cleanup, or fallback path cannot recover once this command is encoded.
+
+Current Important Conclusion
+The earlier app-side suspects are no longer supported by the latest log:
+
+1. It is not Ryan.
+   The log says `voiceArgument: nil`.
+
+2. It is not reference audio/text.
+   The log says `refAudio: nil` and `refText: nil`.
+
+3. It is not our sampler overrides.
+   The log says `generationParameters: package_default`.
+
+4. It is not missing prompt text.
+   The log says `textCharacters: 21`, matching "Hello from Qwen3-TTS."
+
+5. It is not Prologue wall skinning.
+   The assert occurs after `Loaded Qwen3-TTS model (base)` and before WAV output/playback.
+
+The remaining problem is at the native `mlx-audio-swift` Qwen3TTS generation boundary, or in the model/package/device compatibility tuple.
+
+Current App Entry Path
+The current debug route is:
+
+  TuringEpisodePickerView
+  -> TuringPrologueDebugView
+  -> TuringRuntimeFactory.makeDebugHarness()
+  -> TuringDebugHarness.generatePhase0Line()
+  -> QwenTTSSequentialScheduler.renderPhase0BareBaseSmoke(...)
+  -> QwenMLXAudioModelHost.generatePhase0BareBaseSmoke(...)
+  -> TTS.loadModel(...)
+  -> model.generate(text:voice:nil,refAudio:nil,refText:nil,language:)
+  -> Metal assert
+
+Relevant app files:
+
+  Gravitas Plague/Gravitas Plague/Turing/Debug/TuringPrologueDebugView.swift
+  Gravitas Plague/Gravitas Plague/Turing/Debug/TuringDebugHarness.swift
+  Gravitas Plague/Gravitas Plague/Turing/TTS/QwenTTSSequentialScheduler.swift
+  Gravitas Plague/Gravitas Plague/Turing/TTS/QwenMLXAudioModelHost.swift
+  Gravitas Plague/Gravitas Plague/Turing/TTS/QwenPhase0SmokeRequest.swift
+  Gravitas Plague/Gravitas Plague/Turing/TTS/QwenPhase0GenerationContract.swift
+  Gravitas Plague/Gravitas Plague/Turing/Models/QwenPhase0CompatibilityGate.swift
+  Gravitas Plague/TuringResources/Turing/Config/turing-runtime.json
+  Gravitas Plague/TuringResources/Turing/Config/model-registry.json
+  Gravitas Plague/TuringResources/Turing/Config/voice-registry.json
+
+Pinned package/model facts from this repo:
+
+  mlx-audio-swift revision: 3cfa97201572e438eece2036299383834473253f
+  mlx-swift version: 0.31.4
+  mlx-swift-lm version: 3.31.3
+  model repo: mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit
+  model revision: 50f45ef0047cde7e84c2ef04326acb8ada2436a7
+  local runtime model ID: qwen3-tts-12hz-0.6b-base-8bit
+
+The app is already using the README-style overload through the `SpeechGenerationModel` extension:
+
+  let audio = try await model.generate(
+      text: trimmed,
+      voice: nil,
+      refAudio: nil,
+      refText: nil,
+      language: request.language
+  )
+
+That extension forwards to the concrete model with `generationParameters ?? defaultGenerationParameters`.
+
+Why the Current Crash Is Serious
+Metal validation is catching MLX encoding a nil bytes pointer:
+
+  setBytes:length:attributeStride:atIndex:
+  bytes argument cannot be nil
+
+That usually means the framework attempted to encode an empty/invalid host-side buffer, invalid scalar argument, or malformed tensor-derived argument into a compute pipeline. The app cannot catch this from outside the package because the assertion aborts the process.
+
+Likely Root Cause Areas
+These should be investigated in order.
+
+1. mlx-audio-swift Qwen3TTS generation path is not canaried on visionOS for this exact tuple.
+
+   The README documents the model, but the device proves load succeeds and generate aborts. Treat this as a model/package/device canary failure until the exact MLX operation is isolated.
+
+2. Qwen3TTS sampleToken / suppress-token path.
+
+   In the pinned package, Qwen3TTS.sampleToken always applies suppress-token logic before sampling. Even with package defaults, nil voice, and nil refs, this path is still active.
+
+   The suspect operation is around code shaped like:
+
+     let suppressArr = MLXArray(suppress.map { Int32($0) }).reshaped(1, -1)
+     let negInf = MLXArray.full(
+         [1, suppress.count],
+         values: MLXArray(-Float.infinity),
+         dtype: logitsSlice.dtype
+     )
+     logitsSlice = putAlong(
+         logitsSlice,
+         suppressArr,
+         values: negInf,
+         axis: -1
+     )
+
+   If `suppress` is empty, malformed, wrong dtype, or contains out-of-range token IDs, this could plausibly reach an invalid Metal argument. The package needs instrumentation before this operation.
+
+3. Prompt preparation shapes.
+
+   Qwen3TTS prompt preparation slices token embeddings with assumptions about minimum token count and special-token layout. The README text should be valid, but the canary must log actual token count, embedding shape, and every slice bound before the first talker forward pass.
+
+4. Quantized 8-bit op compatibility.
+
+   The previous 4-bit model asserted. The current 0.6B 8-bit model also asserts during generate. That points either to a shared Qwen generation operation or to quantized-kernel compatibility on this device/OS/package combination.
+
+5. Staged writable model cache.
+
+   The app stages the bundled model to:
+
+     Library/Caches/TuringWritableModels/qwen3-tts-12hz-0.6b-base-8bit-50f45ef0047cde7e84c2ef04326acb8ada2436a7
+
+   This exists because the package may need a writable tokenizer/model directory. The cache must be keyed by model revision, tokenizer revision, package revision, app build, and runtime schema. If any of those change, the staged directory must be purged and rebuilt.
+
+6. Package revision mismatch.
+
+   The app is pinned to a specific `mlx-audio-swift` main revision. The architect should test whether a newer package revision fixes Qwen3TTS on visionOS, but only after creating a canary that records exact package revisions.
+
+Non-Fixes
+Do not spend more time on these as primary fixes:
+
+1. Adding refText.
+   In this package, refText belongs to reference conditioning when refAudio is also present. Phase 0 is Base smoke and must keep refAudio/refText nil.
+
+2. Reintroducing Ryan/Aiden.
+   The current nil voice path still asserts. Named voices are a later canary variant, not the base fix.
+
+3. Disabling Metal API Validation.
+   That would hide the invalid encode. It would not prove generated audio is correct.
+
+4. Adding catch/retry around model.generate.
+   The process aborts before Swift can recover.
+
+5. Falling back to system TTS, prerecorded audio, Python, PyTorch, or CPU.
+   Phase 0 is explicitly Swift + MLX + local model + GPU.
+
+Robust Fix Architecture
+The architect should stop treating the app wrapper as the diagnostic surface. The app has narrowed the request to the minimal documented Base call. The next layer is package/model canary and instrumentation.
+
+Required robust path:
+
+1. Make Story runtime refuse to call Qwen unless a native canary has passed for this exact tuple:
+
+   - model ID
+   - model revision
+   - quantization
+   - tokenizer revision
+   - mlx-audio-swift revision
+   - mlx-swift version
+   - mlx-swift-lm version
+   - app build
+   - device class
+   - OS version
+   - Metal validation state
+
+2. Keep the debug button explicit:
+
+   - "Run Qwen Canary" may crash while this is unresolved.
+   - "Generate + Play Qwen Line" should remain disabled unless the canary passed.
+
+3. Persist a crash breadcrumb before every native canary stage.
+
+   Because a Metal assert kills the process, the app cannot write a normal failure report after the crash. It must write `lastStartedStage` before each stage and clear/update it only after the stage completes. On next launch, if a previous run died with an uncleared stage, the app can report:
+
+     previousCanaryRunLikelyAssertedAtStage: sampleFirstToken
+
+4. Locally patch or fork mlx-audio-swift for diagnostics.
+
+   The app wrapper cannot inspect internal MLX tensors. Add instrumentation inside Qwen3TTS.swift and, if necessary, MLX operation boundaries.
+
+5. Split canary generation into stages instead of one public model.generate call.
+
+   Required stages:
+
+   - assetIntegrity
+   - loadModel
+   - preparePrompt
+   - prefill
+   - sampleFirstToken
+   - decodeOneChunk
+   - fullGenerate
+
+6. Add tensor preflight around likely failing operations.
+
+   Log shape, dtype, ndim, token counts, and branch settings before:
+
+   - tokenizer encode
+   - text embedding
+   - tts embeddings
+   - codec prefill / codec embedding
+   - instruction embedding, if any
+   - inputEmbedsInit construction
+   - talker forward pass
+   - sampleToken
+   - putAlong
+   - categorical
+   - decodeChunk
+
+App-Side Code For Canary State
+Add a report model like this:
+
+  enum QwenPhase0CanaryStage: String, Codable, Sendable {
+      case assetIntegrity
+      case loadModel
+      case preparePrompt
+      case prefill
+      case sampleFirstToken
+      case decodeOneChunk
+      case fullGenerate
+  }
+
+  enum QwenPhase0CanaryStatus: String, Codable, Sendable {
+      case notRun
+      case passed
+      case failedSwiftError
+      case failedPreviousProcessAssert
+  }
+
+  struct QwenPhase0CanaryReport: Codable, Sendable {
+      let status: QwenPhase0CanaryStatus
+      let lastCompletedStage: QwenPhase0CanaryStage?
+      let lastStartedStage: QwenPhase0CanaryStage?
+      let modelID: String
+      let modelRevision: String
+      let quantization: String
+      let tokenizerRevision: String
+      let mlxAudioSwiftRevision: String
+      let mlxSwiftVersion: String
+      let mlxSwiftLMVersion: String
+      let appBuild: String
+      let osVersion: String
+      let deviceName: String
+      let metalValidationEnabled: Bool
+      let smokeText: String
+      let language: String
+      let voiceArgument: String?
+      let refAudio: String?
+      let refText: String?
+      let failureSummary: String?
+      let createdAt: Date
+  }
+
+Runtime gate:
+
+  enum QwenPhase0RuntimeGate {
+      static func validateCanary(
+          report: QwenPhase0CanaryReport?,
+          descriptor: TuringModelDescriptor,
+          expectedPackageRevision: String,
+          appBuild: String,
+          osVersion: String
+      ) throws {
+          guard let report else {
+              throw TuringRuntimeError.qwenModelLoadFailed(
+                  "Qwen Phase 0 canary has not passed on this device/build."
+              )
+          }
+
+          guard report.status == .passed else {
+              throw TuringRuntimeError.qwenModelLoadFailed(
+                  "Qwen Phase 0 canary is \(report.status.rawValue). Last started stage: \(report.lastStartedStage?.rawValue ?? "nil")."
+              )
+          }
+
+          guard report.modelID == descriptor.id,
+                report.modelRevision == descriptor.modelRevision,
+                report.quantization == descriptor.quantization,
+                report.tokenizerRevision == descriptor.tokenizerRevision,
+                report.mlxAudioSwiftRevision == expectedPackageRevision,
+                report.appBuild == appBuild,
+                report.osVersion == osVersion else {
+              throw TuringRuntimeError.qwenModelLoadFailed(
+                  "Qwen Phase 0 canary does not match the active model/package/build tuple."
+              )
+          }
+      }
+  }
+
+Crash breadcrumb store:
+
+  actor QwenPhase0CanaryStore {
+      private let url: URL
+
+      init(url: URL) {
+          self.url = url
+      }
+
+      func markStarted(
+          _ stage: QwenPhase0CanaryStage,
+          report: QwenPhase0CanaryReport
+      ) throws {
+          let updated = QwenPhase0CanaryReport(
+              status: report.status,
+              lastCompletedStage: report.lastCompletedStage,
+              lastStartedStage: stage,
+              modelID: report.modelID,
+              modelRevision: report.modelRevision,
+              quantization: report.quantization,
+              tokenizerRevision: report.tokenizerRevision,
+              mlxAudioSwiftRevision: report.mlxAudioSwiftRevision,
+              mlxSwiftVersion: report.mlxSwiftVersion,
+              mlxSwiftLMVersion: report.mlxSwiftLMVersion,
+              appBuild: report.appBuild,
+              osVersion: report.osVersion,
+              deviceName: report.deviceName,
+              metalValidationEnabled: report.metalValidationEnabled,
+              smokeText: report.smokeText,
+              language: report.language,
+              voiceArgument: report.voiceArgument,
+              refAudio: report.refAudio,
+              refText: report.refText,
+              failureSummary: report.failureSummary,
+              createdAt: report.createdAt
+          )
+
+          let data = try JSONEncoder().encode(updated)
+          try data.write(to: url, options: [.atomic])
+      }
+  }
+
+On app launch:
+
+  If the last report has:
+
+    status != .passed
+    lastStartedStage != nil
+    lastCompletedStage != lastStartedStage
+
+  then display/log:
+
+    [TuringTTS] previous Qwen canary likely hit process assert
+      lastStartedStage: sampleFirstToken
+      lastCompletedStage: prefill
+
+Package-Side Instrumentation Code
+Inside the local package override, add helpers like:
+
+  private func qwenDebugTensor(
+      _ name: String,
+      _ array: MLXArray,
+      stage: String
+  ) {
+      print("""
+      [QwenCanaryTensor] \(stage).\(name)
+        shape: \(array.shape)
+        ndim: \(array.ndim)
+        dtype: \(array.dtype)
+      """)
+  }
+
+  private func qwenValidateNonEmptyTensor(
+      _ name: String,
+      _ array: MLXArray,
+      stage: String
+  ) throws {
+      guard array.ndim > 0,
+            array.shape.contains(0) == false else {
+          throw AudioGenerationError.invalidInput(
+              "Invalid empty tensor at \(stage).\(name): shape=\(array.shape), dtype=\(array.dtype)"
+          )
+      }
+  }
+
+Before putAlong:
+
+  private func qwenValidatePutAlongInputs(
+      target: MLXArray,
+      indices: MLXArray,
+      values: MLXArray,
+      axis: Int,
+      stage: String
+  ) throws {
+      try qwenValidateNonEmptyTensor("putAlong.target", target, stage: stage)
+      try qwenValidateNonEmptyTensor("putAlong.indices", indices, stage: stage)
+      try qwenValidateNonEmptyTensor("putAlong.values", values, stage: stage)
+
+      guard indices.dtype == .int32 || indices.dtype == .int64 else {
+          throw AudioGenerationError.invalidInput(
+              "putAlong indices must be integer at \(stage), got \(indices.dtype)"
+          )
+      }
+
+      print("""
+      [QwenCanaryTensor] putAlong preflight
+        stage: \(stage)
+        targetShape: \(target.shape)
+        indicesShape: \(indices.shape)
+        valuesShape: \(values.shape)
+        axis: \(axis)
+      """)
+  }
+
+Then wrap the suspected operation:
+
+  try qwenValidatePutAlongInputs(
+      target: logitsSlice,
+      indices: suppressArr,
+      values: negInf,
+      axis: -1,
+      stage: "sampleFirstToken.suppress"
+  )
+
+  logitsSlice = putAlong(
+      logitsSlice,
+      suppressArr,
+      values: negInf,
+      axis: -1
+  )
+
+If the Swift preflight throws before Metal, the app can report the actual invalid tensor instead of aborting.
+
+Canary Variants To Run
+Run these in a diagnostic-only UI, not as production Story flow:
+
+1. README exact:
+
+   text: "Hello from Qwen3-TTS."
+   voice: nil
+   refAudio: nil
+   refText: nil
+   language: English
+   generationParameters: package_default
+
+2. Max-token one:
+
+   same as above, but maxTokens: 1
+
+   Purpose: isolate whether the first token/sample stage is enough to assert.
+
+3. Greedy one-token:
+
+   temperature: 0
+   topP: 1.0
+   repetitionPenalty: 1.0
+   maxTokens: 1
+
+   Purpose: see whether stochastic sampling/categorical is involved.
+
+4. Full default:
+
+   same as README exact.
+
+   Purpose: validate real audio output only after earlier stages are proven.
+
+Writable Model Cache Fix
+The staged model cache should include package identity, not just model revision.
+
+Current observed staged path:
+
+  TuringWritableModels/qwen3-tts-12hz-0.6b-base-8bit-50f45ef0047cde7e84c2ef04326acb8ada2436a7
+
+Preferred:
+
+  TuringWritableModels/
+    qwen3-tts-12hz-0.6b-base-8bit/
+      model-50f45ef0047cde7e84c2ef04326acb8ada2436a7/
+        tokenizer-50f45ef0047cde7e84c2ef04326acb8ada2436a7-speech_tokenizer/
+          mlx-audio-swift-3cfa97201572e438eece2036299383834473253f/
+            mlx-swift-0.31.4/
+              app-BUILD/
+
+If any field changes, purge and recopy the staged model directory.
+
+Asset Checks
+Before loadModel, verify and log:
+
+  model.safetensors exists and size > 0
+  config.json exists and decodes
+  generation_config.json exists if expected
+  tokenizer_config.json exists if expected
+  vocab/merges/tokenizer files exist as expected by package
+  speech_tokenizer assets exist
+  checksums match
+  no 4-bit model files are present anywhere under TuringResources
+
+Acceptance Criteria
+This is not fixed until all are true:
+
+1. Device canary reaches `fullGenerate` with Metal API Validation enabled.
+2. Canary records exact model/package/device/build identity.
+3. Story runtime refuses to call Qwen when canary is missing, failed, stale, or for a different package/model tuple.
+4. README exact canary writes a non-empty WAV.
+5. Generated WAV plays through the existing app audio path.
+6. No Python, PyTorch, system TTS, prerecorded fallback, CPU fallback, or silent failure path is introduced.
+7. The 4-bit model remains deleted from disk and absent from app resources.
+8. If a future assert happens, next app launch reports the last started canary stage.
+
+Bottom Line
+The app has now narrowed the request to the documented Base-model nil-voice/nil-reference/package-default call, and the process still asserts in Metal. The correct next move is package-level Qwen3TTS/MLX instrumentation plus a staged canary gate, not more app-level parameter tweaking.

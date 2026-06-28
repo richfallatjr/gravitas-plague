@@ -28,6 +28,9 @@ struct TuringModelDescriptor: Codable, Sendable, Hashable, Identifiable {
     var sourceRevision: String { revision }
     var modelRevision: String { revision }
     var tokenizerRevision: String { "\(revision):speech_tokenizer" }
+    var checkpointKind: String {
+        family.hasSuffix("-base") ? "base" : family
+    }
 }
 
 struct TuringModelRegistryPayload: Decodable, Sendable {

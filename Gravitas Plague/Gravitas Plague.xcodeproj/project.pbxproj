@@ -365,7 +365,7 @@
 			mainGroup = 2D78FE272FCCF44A0063708B;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				8E2B20052FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */,
+				8E2B20052FCE000100000001 /* XCLocalSwiftPackageReference "Vendor/mlx-audio-swift-turing" */,
 				8E2B20092FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-swift" */,
 				8E2B200D2FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
 			);
@@ -833,15 +833,14 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		8E2B20052FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/Blaizzy/mlx-audio-swift.git";
-			requirement = {
-				branch = main;
-				kind = branch;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		8E2B20052FCE000100000001 /* XCLocalSwiftPackageReference "Vendor/mlx-audio-swift-turing" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "Vendor/mlx-audio-swift-turing";
 		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
 		8E2B20092FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/ml-explore/mlx-swift.git";
@@ -863,12 +862,12 @@
 /* Begin XCSwiftPackageProductDependency section */
 		8E2B20062FCE000100000001 /* MLXAudioTTS */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 8E2B20052FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
+			package = 8E2B20052FCE000100000001 /* XCLocalSwiftPackageReference "Vendor/mlx-audio-swift-turing" */;
 			productName = MLXAudioTTS;
 		};
 		8E2B20072FCE000100000001 /* MLXAudioCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 8E2B20052FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */;
+			package = 8E2B20052FCE000100000001 /* XCLocalSwiftPackageReference "Vendor/mlx-audio-swift-turing" */;
 			productName = MLXAudioCore;
 		};
 		8E2B200A2FCE000100000001 /* MLX */ = {

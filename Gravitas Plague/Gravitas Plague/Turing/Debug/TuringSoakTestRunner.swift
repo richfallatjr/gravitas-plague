@@ -8,34 +8,31 @@ struct TuringSoakTestResult: Sendable, Hashable {
 
 actor TuringSoakTestRunner {
     private let scheduler: QwenTTSSequentialScheduler
-    private let voices: TuringVoiceRegistry
 
     init(
-        scheduler: QwenTTSSequentialScheduler,
-        voices: TuringVoiceRegistry
+        scheduler: QwenTTSSequentialScheduler
     ) {
         self.scheduler = scheduler
-        self.voices = voices
     }
 
     func run(
         iterations: Int
     ) async throws -> TuringSoakTestResult {
-        let voice = try await voices.voice(id: "qwen_phase0_default")
         var outputURLs: [URL] = []
         var failedCount = 0
 
         for index in 0..<iterations {
             do {
-                let segment = TuringSpeechSegment(
+                let request = QwenPhase0SmokeRequest(
                     text: "Phase zero soak line \(index).",
-                    emotion: "neutral radio test"
+                    language: "English",
+                    maxTokens: 96,
+                    temperature: 0.0,
+                    topP: 1.0,
+                    repetitionPenalty: 1.0
                 )
-                let rendered = try await scheduler.render(
-                    segment: segment,
-                    segmentIndex: index,
-                    voice: voice,
-                    radioTreatment: nil
+                let rendered = try await scheduler.renderPhase0BareBaseSmoke(
+                    request: request
                 )
                 outputURLs.append(rendered.fileURL)
             } catch is CancellationError {

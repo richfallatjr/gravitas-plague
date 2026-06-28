@@ -71,6 +71,7 @@ actor QwenMLXAudioModelHost: QwenTTSModelHost {
             )
         }
         let modelDescriptor = descriptor
+        let runtimeConfig = runtime
 
         do {
             let modelBox = try await Task.detached(
@@ -86,8 +87,13 @@ actor QwenMLXAudioModelHost: QwenTTSModelHost {
                         """
                         [TuringTTS] loading Qwen Phase 0 model
                           modelID: \(modelDescriptor.id)
+                          checkpointKind: \(modelDescriptor.checkpointKind)
                           quantization: \(modelDescriptor.quantization)
+                          generationMode: \(runtimeConfig.tts.generationMode)
                           path: \(loadableModelRoot.path)
+                          expectedLocalPackageOverride: qwen3tts_phase0_host_sampler_breadcrumbs_forced
+                          expectedHostSafeSamplerForced: true
+                          expectedBreadcrumbsForced: true
                         """
                     )
 
@@ -135,6 +141,11 @@ actor QwenMLXAudioModelHost: QwenTTSModelHost {
             isDirectory: true
         )
 
+        try purgeInactiveWritableQwenModels(
+            cacheRoot: cacheRoot,
+            activeStagedRoot: stagedRoot
+        )
+
         let stagedWeights = stagedRoot.appendingPathComponent("model.safetensors")
         if FileManager.default.fileExists(atPath: stagedWeights.path) {
             return stagedRoot
@@ -167,6 +178,44 @@ actor QwenMLXAudioModelHost: QwenTTSModelHost {
         return stagedRoot
     }
 
+    nonisolated private static func purgeInactiveWritableQwenModels(
+        cacheRoot: URL,
+        activeStagedRoot: URL
+    ) throws {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: cacheRoot.path) else {
+            return
+        }
+
+        let entries = try fileManager.contentsOfDirectory(
+            at: cacheRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        for entry in entries {
+            let values = try entry.resourceValues(
+                forKeys: [.isDirectoryKey]
+            )
+
+            guard values.isDirectory == true,
+                  entry.lastPathComponent.hasPrefix("qwen3-tts-"),
+                  entry.standardizedFileURL != activeStagedRoot.standardizedFileURL else {
+                continue
+            }
+
+            try fileManager.removeItem(at: entry)
+
+            print(
+                """
+                [TuringTTS] purged inactive writable Qwen model
+                  path: \(entry.path)
+                  activeModelCache: \(activeStagedRoot.lastPathComponent)
+                """
+            )
+        }
+    }
+
     func makeSession() async throws -> QwenTTSSynthesisSession {
         try await loadIfNeeded()
         guard let loadedModel else {
@@ -178,6 +227,112 @@ actor QwenMLXAudioModelHost: QwenTTSModelHost {
         return QwenMLXAudioSynthesisSession(
             model: loadedModel
         )
+    }
+
+    func generatePhase0BareBaseSmoke(
+        _ request: QwenPhase0SmokeRequest
+    ) async throws -> QwenWaveform {
+        try Task.checkCancellation()
+        try await assertGPUAvailable()
+        try await loadIfNeeded()
+
+        guard let loadedModel else {
+            throw TuringRuntimeError.qwenModelLoadFailed(
+                "Loaded model handle is missing before Phase 0 generation."
+            )
+        }
+
+        let modelBox = TuringUncheckedSendableBox(value: loadedModel)
+        let modelDescriptor = descriptor
+        let runtimeConfig = runtime
+
+        return try await Task.detached(
+            priority: .userInitiated
+        ) { () async throws -> QwenWaveform in
+            try QwenPhase0GenerationContract.validateBeforeGenerate(
+                request: request,
+                modelID: modelDescriptor.id,
+                checkpointKind: modelDescriptor.checkpointKind,
+                quantization: modelDescriptor.quantization,
+                generationMode: runtimeConfig.tts.generationMode,
+                voiceArgument: nil,
+                hasRefAudio: false,
+                refText: nil,
+                requireGPU: runtimeConfig.tts.requireGPU,
+                allowCPUFallback: runtimeConfig.tts.allowCPUFallback,
+                isMainActor: false
+            )
+
+            return try await Device.withDefaultDevice(.gpu) { () async throws -> QwenWaveform in
+                let model = modelBox.value
+                var generationParameters = model.defaultGenerationParameters
+                generationParameters.maxTokens = request.maxTokens
+                generationParameters.temperature = request.temperature
+                generationParameters.topP = request.topP
+                generationParameters.repetitionPenalty = request.repetitionPenalty
+
+                let trimmed = request.text.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
+
+                print(
+                    """
+                    [TuringTTS] Qwen Phase 0 canary starting
+                      modelID: \(modelDescriptor.id)
+                      modelRevision: \(modelDescriptor.modelRevision)
+                      quantization: \(modelDescriptor.quantization)
+                      packageBaseRevision: 3cfa97201572e438eece2036299383834473253f
+                      localPackagePatch: qwen3tts_phase0_host_sampler_breadcrumbs_forced
+                      samplerMode: hostSafeGreedy
+                      generationMode: bareBaseSmoke
+                      textCharacters: \(trimmed.count)
+                      language: \(request.language)
+                      maxTokens: \(request.maxTokens)
+                      temperature: \(request.temperature)
+                      topP: \(request.topP)
+                      repetitionPenalty: \(request.repetitionPenalty)
+                      voiceArgument: nil
+                      refAudio: nil
+                      refText: nil
+                    """
+                )
+
+                let audio = try await model.generate(
+                    text: trimmed,
+                    voice: nil,
+                    refAudio: nil,
+                    refText: nil,
+                    language: request.language,
+                    generationParameters: generationParameters
+                )
+
+                let samples = audio.asArray(Float.self)
+                guard samples.isEmpty == false else {
+                    throw TuringRuntimeError.qwenSynthesisFailed(
+                        "Qwen returned an empty waveform."
+                    )
+                }
+
+                let durationSeconds = Double(samples.count) / Double(model.sampleRate)
+
+                print(
+                    """
+                    [TuringTTS] Qwen Phase 0 canary generation finished
+                      sampleCount: \(samples.count)
+                      sampleRate: \(model.sampleRate)
+                      durationSeconds: \(durationSeconds)
+                    """
+                )
+
+                Memory.clearCache()
+
+                return QwenWaveform(
+                    samples: samples,
+                    sampleRate: model.sampleRate,
+                    channelCount: 1
+                )
+            }
+        }.value
     }
 }
 
@@ -204,13 +359,14 @@ struct QwenMLXAudioSynthesisSession: QwenTTSSynthesisSession, @unchecked Sendabl
         }
 
         let modelBox = modelBox
+        let qwenVoiceArgument = voice.qwenVoiceArgument
 
         return try await Task.detached(
             priority: .userInitiated
         ) { () async throws -> QwenWaveform in
             try QwenPhase0CompatibilityGate.validateGenerateRequest(
                 text: trimmed,
-                voiceArgument: nil,
+                voiceArgument: qwenVoiceArgument,
                 refAudioWasProvided: false,
                 refText: nil,
                 settings: settings
@@ -229,10 +385,14 @@ struct QwenMLXAudioSynthesisSession: QwenTTSSynthesisSession, @unchecked Sendabl
                 print(
                     """
                     [TuringTTS] Qwen Phase 0 generation starting
+                      generationMode: bareBaseSmoke
                       textCharacters: \(trimmed.count)
                       language: \(settings.language)
                       maxTokens: \(settings.maxTokens)
-                      voiceArgument: nil
+                      temperature: \(settings.temperature)
+                      topP: \(settings.topP)
+                      repetitionPenalty: \(settings.repetitionPenalty)
+                      voiceArgument: \(qwenVoiceArgument ?? "nil")
                       refAudio: nil
                       refText: nil
                     """
@@ -299,6 +459,15 @@ actor QwenMLXAudioModelHost: QwenTTSModelHost {
 
     func assertGPUAvailable() async throws {
         throw TuringRuntimeError.qwenGPUUnavailable
+    }
+
+    func generatePhase0BareBaseSmoke(
+        _ request: QwenPhase0SmokeRequest
+    ) async throws -> QwenWaveform {
+        _ = request
+        throw TuringRuntimeError.qwenModelLoadFailed(
+            "MLXAudioTTS/MLXAudioCore/MLX are not available in this build."
+        )
     }
 
     func loadIfNeeded() async throws {

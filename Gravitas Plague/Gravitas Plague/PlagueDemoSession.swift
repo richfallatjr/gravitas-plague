@@ -23,6 +23,7 @@ enum PlagueFeatureFlags {
     static let unlockHordeMode = true
     static let showStoryEpisodePicker = true
     static let defaultStoryEpisodeID = TuringEpisodeID.prologue
+    static let phase0PrologueRunsInSwiftUIPickerOnly = true
     static let showStoryRoomSkinningControls = false
     static let showForestDayNightToggle = false
     static let showDebugTestDoor = false
@@ -645,6 +646,28 @@ final class PlagueDemoSession: ObservableObject {
                 """
                 [TuringStory] locked or missing episode ignored
                   episodeID: \(episodeID.rawValue)
+                """
+            )
+            return
+        }
+
+        if PlagueFeatureFlags.phase0PrologueRunsInSwiftUIPickerOnly,
+           episodeID == .prologue {
+            selectedOperationMode = .story
+            selectedStoryEpisodeID = episodeID
+            isStoryEpisodePickerPresented = true
+            experienceMode = .story
+            activeMode = .none
+            statusMessage = "Prologue Qwen Phase 0 controls are ready."
+            resetPlayerDeathState()
+
+            print(
+                """
+                [TuringStory] Prologue routed to SwiftUI Phase 0 controls
+                  episodeID: \(episodeID.rawValue)
+                  title: \(episode.title)
+                  immersivePlaceholderStarted: false
+                  qwenControlsVisible: true
                 """
             )
             return

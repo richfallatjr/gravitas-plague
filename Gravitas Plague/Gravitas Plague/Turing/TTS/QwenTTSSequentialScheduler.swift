@@ -18,6 +18,45 @@ actor QwenTTSSequentialScheduler {
         self.settings = settings
     }
 
+    func renderPhase0BareBaseSmoke(
+        request: QwenPhase0SmokeRequest
+    ) async throws -> TuringRenderedSegment {
+        try Task.checkCancellation()
+
+        let key = try await cache.phase0BareBaseSmokeKey(
+            request: request,
+            model: host,
+            sampleRate: settings.sampleRate
+        )
+
+        if let cached = try await cache.lookup(key: key) {
+            return TuringRenderedSegment(
+                segmentIndex: 0,
+                fileURL: cached.fileURL,
+                durationSeconds: cached.durationSeconds,
+                cacheKey: key
+            )
+        }
+
+        let waveform = try await host.generatePhase0BareBaseSmoke(
+            request
+        )
+        try Task.checkCancellation()
+
+        let file = try await fileWriter.write(
+            waveform: waveform,
+            cacheKey: key
+        )
+        try await cache.store(file: file, key: key)
+
+        return TuringRenderedSegment(
+            segmentIndex: 0,
+            fileURL: file.fileURL,
+            durationSeconds: file.durationSeconds,
+            cacheKey: key
+        )
+    }
+
     func render(
         segment: TuringSpeechSegment,
         segmentIndex: Int,

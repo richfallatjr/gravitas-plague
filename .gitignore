@@ -1,5 +1,7 @@
 *.usdz
 *.wav
+.DS_Store
+*.xcuserstate
 !Gravitas Plague/Gravitas Plague/Audio/portal-spawn-*.wav
 !Gravitas Plague/Gravitas Plague/Audio/dad-damaged-*.wav
 !Gravitas Plague/Gravitas Plague/Audio/dad-death-*.wav
@@ -17,7 +19,18 @@
 *.exr
 !hellscape_01.exr
 Tools/Turing/.venv/
+.venv-hf/
 .venv-hf-turing-phase0/
+
+# Local Qwen/Hugging Face model payloads are installed on disk for device testing,
+# but must not be committed or backed up through Git.
 Gravitas Plague/TuringResources/Turing/Models/**/.cache/
 Gravitas Plague/TuringResources/Turing/Models/
 Gravitas Plague/TuringResources/Turing/SpeechTokenizer/
+*.safetensors
+*.gguf
+*.ckpt
+
+# Local Swift package override for Qwen Phase 0 experiments. Do not commit the
+# full upstream package checkout; commit the project pin/setup patch instead.
+Vendor/mlx-audio-swift-turing/

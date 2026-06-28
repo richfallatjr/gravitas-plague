@@ -13,9 +13,12 @@ final class TuringPhase0Tests: XCTestCase {
         XCTAssertFalse(config.tts.allowCPUFallback)
         XCTAssertTrue(config.tts.requireGPU)
         XCTAssertTrue(config.tts.phase0AudioOnly)
+        XCTAssertEqual(config.tts.generationMode, "bareBaseSmoke")
         XCTAssertEqual(config.tts.voiceArgumentPolicy, .baseNilOnly)
         XCTAssertEqual(config.tts.refAudioPolicy, .phase0NilOnly)
         XCTAssertEqual(config.tts.refTextPolicy, .phase0NilOnly)
+        XCTAssertEqual(config.tts.topP, 1.0)
+        XCTAssertEqual(config.tts.repetitionPenalty, 1.0)
     }
 
     func testTuringModelRegistryPreservesPinnedRevision() async throws {
@@ -49,6 +52,204 @@ final class TuringPhase0Tests: XCTestCase {
         XCTAssertTrue(voice.phase0RuntimeAllowed)
     }
 
+    func testBareBaseSmokeAcceptsNilVoiceNilReferenceInputs() throws {
+        XCTAssertNoThrow(
+            try QwenPhase0GenerationContract.validateBeforeGenerate(
+                request: QwenPhase0SmokeRequest(text: "Hello from Qwen3-TTS."),
+                modelID: "qwen3-tts-12hz-0.6b-base-8bit",
+                checkpointKind: "base",
+                quantization: "8bit",
+                generationMode: "bareBaseSmoke",
+                voiceArgument: nil,
+                hasRefAudio: false,
+                refText: nil,
+                requireGPU: true,
+                allowCPUFallback: false,
+                isMainActor: false
+            )
+        )
+    }
+
+    func testBareBaseSmokeRejectsRyanBeforeModelLoad() {
+        XCTAssertThrowsPhase0ContractError(
+            .voiceArgumentForbidden("Ryan")
+        ) {
+            try QwenPhase0GenerationContract.validateBeforeGenerate(
+                request: QwenPhase0SmokeRequest(text: "Hello from Qwen3-TTS."),
+                modelID: "qwen3-tts-12hz-0.6b-base-8bit",
+                checkpointKind: "base",
+                quantization: "8bit",
+                generationMode: "bareBaseSmoke",
+                voiceArgument: "Ryan",
+                hasRefAudio: false,
+                refText: nil,
+                requireGPU: true,
+                allowCPUFallback: false,
+                isMainActor: false
+            )
+        }
+    }
+
+    func testBareBaseSmokeRejectsAidenBeforeModelLoad() {
+        XCTAssertThrowsPhase0ContractError(
+            .voiceArgumentForbidden("Aiden")
+        ) {
+            try QwenPhase0GenerationContract.validateBeforeGenerate(
+                request: QwenPhase0SmokeRequest(text: "Hello from Qwen3-TTS."),
+                modelID: "qwen3-tts-12hz-0.6b-base-8bit",
+                checkpointKind: "base",
+                quantization: "8bit",
+                generationMode: "bareBaseSmoke",
+                voiceArgument: "Aiden",
+                hasRefAudio: false,
+                refText: nil,
+                requireGPU: true,
+                allowCPUFallback: false,
+                isMainActor: false
+            )
+        }
+    }
+
+    func testBareBaseSmokeRejectsReferenceTextBeforeModelLoad() {
+        XCTAssertThrowsPhase0ContractError(
+            .refTextForbidden("reference transcript")
+        ) {
+            try QwenPhase0GenerationContract.validateBeforeGenerate(
+                request: QwenPhase0SmokeRequest(text: "Hello from Qwen3-TTS."),
+                modelID: "qwen3-tts-12hz-0.6b-base-8bit",
+                checkpointKind: "base",
+                quantization: "8bit",
+                generationMode: "bareBaseSmoke",
+                voiceArgument: nil,
+                hasRefAudio: false,
+                refText: "reference transcript",
+                requireGPU: true,
+                allowCPUFallback: false,
+                isMainActor: false
+            )
+        }
+    }
+
+    func testBareBaseSmokeRejectsReferenceAudioBeforeModelLoad() {
+        XCTAssertThrowsPhase0ContractError(
+            .refAudioForbidden
+        ) {
+            try QwenPhase0GenerationContract.validateBeforeGenerate(
+                request: QwenPhase0SmokeRequest(text: "Hello from Qwen3-TTS."),
+                modelID: "qwen3-tts-12hz-0.6b-base-8bit",
+                checkpointKind: "base",
+                quantization: "8bit",
+                generationMode: "bareBaseSmoke",
+                voiceArgument: nil,
+                hasRefAudio: true,
+                refText: nil,
+                requireGPU: true,
+                allowCPUFallback: false,
+                isMainActor: false
+            )
+        }
+    }
+
+    func testBareBaseSmokeRejectsCustomVoiceModelBeforeModelLoad() {
+        XCTAssertThrowsPhase0ContractError(
+            .invalidCheckpointKind("custom_voice")
+        ) {
+            try QwenPhase0GenerationContract.validateBeforeGenerate(
+                request: QwenPhase0SmokeRequest(text: "Hello from Qwen3-TTS."),
+                modelID: "qwen3-tts-12hz-0.6b-base-8bit",
+                checkpointKind: "custom_voice",
+                quantization: "8bit",
+                generationMode: "bareBaseSmoke",
+                voiceArgument: nil,
+                hasRefAudio: false,
+                refText: nil,
+                requireGPU: true,
+                allowCPUFallback: false,
+                isMainActor: false
+            )
+        }
+    }
+
+    func testBareBaseSmokeRejectsVoiceDesignModelBeforeModelLoad() {
+        XCTAssertThrowsPhase0ContractError(
+            .invalidModelID("qwen3-tts-12hz-1.7b-voicedesign-bf16")
+        ) {
+            try QwenPhase0GenerationContract.validateBeforeGenerate(
+                request: QwenPhase0SmokeRequest(text: "Hello from Qwen3-TTS."),
+                modelID: "qwen3-tts-12hz-1.7b-voicedesign-bf16",
+                checkpointKind: "voice_design",
+                quantization: "bf16",
+                generationMode: "bareBaseSmoke",
+                voiceArgument: nil,
+                hasRefAudio: false,
+                refText: nil,
+                requireGPU: true,
+                allowCPUFallback: false,
+                isMainActor: false
+            )
+        }
+    }
+
+    func testBareBaseSmokeRejectsCPUFallbackEnabled() {
+        XCTAssertThrowsPhase0ContractError(
+            .cpuFallbackForbidden
+        ) {
+            try QwenPhase0GenerationContract.validateBeforeGenerate(
+                request: QwenPhase0SmokeRequest(text: "Hello from Qwen3-TTS."),
+                modelID: "qwen3-tts-12hz-0.6b-base-8bit",
+                checkpointKind: "base",
+                quantization: "8bit",
+                generationMode: "bareBaseSmoke",
+                voiceArgument: nil,
+                hasRefAudio: false,
+                refText: nil,
+                requireGPU: true,
+                allowCPUFallback: true,
+                isMainActor: false
+            )
+        }
+    }
+
+    func testBareBaseSmokeRejectsMainActorGenerationFlag() {
+        XCTAssertThrowsPhase0ContractError(
+            .mainActorForbidden
+        ) {
+            try QwenPhase0GenerationContract.validateBeforeGenerate(
+                request: QwenPhase0SmokeRequest(text: "Hello from Qwen3-TTS."),
+                modelID: "qwen3-tts-12hz-0.6b-base-8bit",
+                checkpointKind: "base",
+                quantization: "8bit",
+                generationMode: "bareBaseSmoke",
+                voiceArgument: nil,
+                hasRefAudio: false,
+                refText: nil,
+                requireGPU: true,
+                allowCPUFallback: false,
+                isMainActor: true
+            )
+        }
+    }
+
+    func testBareBaseSmokeRejectsEmptyText() {
+        XCTAssertThrowsPhase0ContractError(
+            .emptyText
+        ) {
+            try QwenPhase0GenerationContract.validateBeforeGenerate(
+                request: QwenPhase0SmokeRequest(text: " "),
+                modelID: "qwen3-tts-12hz-0.6b-base-8bit",
+                checkpointKind: "base",
+                quantization: "8bit",
+                generationMode: "bareBaseSmoke",
+                voiceArgument: nil,
+                hasRefAudio: false,
+                refText: nil,
+                requireGPU: true,
+                allowCPUFallback: false,
+                isMainActor: false
+            )
+        }
+    }
+
     func testTuringAudioCacheKeyChangesForIdentityFields() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -68,7 +269,8 @@ final class TuringPhase0Tests: XCTestCase {
             language: "English",
             sampleRate: 24000,
             temperature: 0.7,
-            topP: 0.95,
+            topP: 1.0,
+            repetitionPenalty: 1.0,
             maxTokens: 512,
             seed: nil
         )
@@ -175,6 +377,34 @@ final class TuringPhase0Tests: XCTestCase {
         XCTAssertEqual(await host.sessionCreateCount, 2)
     }
 
+    func testSchedulerPhase0BareBaseSmokeUsesHostPathWithoutVoice() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let host = TestQwenHost(modelRevision: "model-a")
+        let scheduler = QwenTTSSequentialScheduler(
+            host: host,
+            cache: TuringAudioCache(rootURL: root),
+            fileWriter: TuringAudioFileWriter(rootURL: root),
+            settings: TestQwenHost.settings
+        )
+        let request = QwenPhase0SmokeRequest(
+            text: "Hello from Qwen3-TTS."
+        )
+
+        _ = try await scheduler.renderPhase0BareBaseSmoke(
+            request: request
+        )
+
+        XCTAssertEqual(await host.phase0GenerateCount, 1)
+        XCTAssertEqual(await host.lastPhase0Request, request)
+
+        _ = try await scheduler.renderPhase0BareBaseSmoke(
+            request: request
+        )
+
+        XCTAssertEqual(await host.phase0GenerateCount, 1)
+    }
+
     func testFailedSynthesisReleasesTransientState() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -235,6 +465,8 @@ private actor TestQwenHost: QwenTTSModelHost {
     private(set) var currentConcurrentSyntheses = 0
     private(set) var maxConcurrentSyntheses = 0
     private(set) var releaseCount = 0
+    private(set) var phase0GenerateCount = 0
+    private(set) var lastPhase0Request: QwenPhase0SmokeRequest?
 
     private let shouldFailSynthesis: Bool
 
@@ -242,7 +474,8 @@ private actor TestQwenHost: QwenTTSModelHost {
         language: "English",
         sampleRate: 24000,
         temperature: 0.7,
-        topP: 0.95,
+        topP: 1.0,
+        repetitionPenalty: 1.0,
         maxTokens: 512,
         seed: nil
     )
@@ -269,6 +502,22 @@ private actor TestQwenHost: QwenTTSModelHost {
     func loadIfNeeded() async throws {}
 
     func assertGPUAvailable() async throws {}
+
+    func generatePhase0BareBaseSmoke(
+        _ request: QwenPhase0SmokeRequest
+    ) async throws -> QwenWaveform {
+        try beginSynthesis()
+        phase0GenerateCount += 1
+        lastPhase0Request = request
+        try await Task.sleep(nanoseconds: 10_000_000)
+        endSynthesis()
+
+        return QwenWaveform(
+            samples: Array(repeating: 0.05, count: 240),
+            sampleRate: 24000,
+            channelCount: 1
+        )
+    }
 
     func makeSession() async throws -> QwenTTSSynthesisSession {
         sessionCreateCount += 1
@@ -319,6 +568,22 @@ private struct TestQwenSession: QwenTTSSynthesisSession {
 
     func releaseTransientState() async {
         await host.recordRelease()
+    }
+}
+
+private func XCTAssertThrowsPhase0ContractError(
+    _ expected: QwenPhase0GenerationContract.ContractError,
+    _ expression: () throws -> Void,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    do {
+        try expression()
+        XCTFail("Expected Phase 0 contract error.", file: file, line: line)
+    } catch let error as QwenPhase0GenerationContract.ContractError {
+        XCTAssertEqual(error, expected, file: file, line: line)
+    } catch {
+        XCTFail("Expected \(expected), got \(error).", file: file, line: line)
     }
 }
 

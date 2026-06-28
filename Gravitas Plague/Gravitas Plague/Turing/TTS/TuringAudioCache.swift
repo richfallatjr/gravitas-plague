@@ -8,6 +8,35 @@ actor TuringAudioCache {
         self.rootURL = rootURL
     }
 
+    func phase0BareBaseSmokeKey(
+        request: QwenPhase0SmokeRequest,
+        model: QwenTTSModelHost,
+        sampleRate: Int
+    ) throws -> String {
+        let payload = TuringPhase0BareBaseSmokeCacheIdentity(
+            schemaVersion: 1,
+            generationMode: QwenPhase0GenerationContract.requiredGenerationMode,
+            modelID: model.modelID,
+            modelRevision: model.modelRevision,
+            quantization: model.quantization,
+            tokenizerRevision: model.tokenizerRevision,
+            text: request.text,
+            language: request.language,
+            sampleRate: sampleRate,
+            temperature: Double(request.temperature),
+            topP: Double(request.topP),
+            repetitionPenalty: Double(request.repetitionPenalty),
+            maxTokens: request.maxTokens
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(payload)
+        return SHA256.hash(data: data)
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
     func key(
         segment: TuringSpeechSegment,
         voice: TuringVoiceDescriptor,
@@ -56,10 +85,30 @@ actor TuringAudioCache {
         let data = try Data(contentsOf: metadataURL)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let metadata = try decoder.decode(
-            TuringAudioFileMetadata.self,
-            from: data
-        )
+        let metadata: TuringAudioFileMetadata
+
+        do {
+            metadata = try decoder.decode(
+                TuringAudioFileMetadata.self,
+                from: data
+            )
+        } catch {
+            try? FileManager.default.removeItem(at: wavURL)
+            try? FileManager.default.removeItem(at: metadataURL)
+
+            print(
+                """
+                [TuringTTS] purged invalid audio cache entry
+                  key: \(key)
+                  wav: \(wavURL.path)
+                  metadata: \(metadataURL.path)
+                  error: \(error.localizedDescription)
+                  regenerate: true
+                """
+            )
+
+            return nil
+        }
 
         return TuringAudioCacheFile(
             fileURL: wavURL,
@@ -101,4 +150,20 @@ struct TuringAudioCacheIdentity: Codable, Sendable, Hashable {
     let seed: UInt64?
     let radioTreatmentID: String?
     let radioTreatmentRevision: String?
+}
+
+struct TuringPhase0BareBaseSmokeCacheIdentity: Codable, Sendable, Hashable {
+    let schemaVersion: Int
+    let generationMode: String
+    let modelID: String
+    let modelRevision: String
+    let quantization: String
+    let tokenizerRevision: String
+    let text: String
+    let language: String
+    let sampleRate: Int
+    let temperature: Double
+    let topP: Double
+    let repetitionPenalty: Double
+    let maxTokens: Int
 }

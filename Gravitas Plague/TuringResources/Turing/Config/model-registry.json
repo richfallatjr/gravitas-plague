@@ -1,18 +1,18 @@
 {
   "schemaVersion": 3,
-  "activeModelID": "qwen3-tts-12hz-0.6b-base-8bit",
+  "activeModelID": "qwen3-tts-12hz-0.6b-base-bf16",
   "qwenModels": [
     {
-      "id": "qwen3-tts-12hz-0.6b-base-8bit",
-      "displayName": "Qwen3-TTS 12Hz 0.6B Base 8-bit Phase 0",
-      "huggingFaceRepo": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-8bit",
-      "revision": "50f45ef0047cde7e84c2ef04326acb8ada2436a7",
-      "resourcePath": "Turing/Models/Qwen3TTS/Qwen3-TTS-12Hz-0.6B-Base-8bit",
+      "id": "qwen3-tts-12hz-0.6b-base-bf16",
+      "displayName": "Qwen3-TTS 12Hz 0.6B Base bf16 Phase 0",
+      "huggingFaceRepo": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16",
+      "revision": "1eccf1cb2519b5a4e8a95b5f0544f3303568164f",
+      "resourcePath": "Turing/Models/Qwen3TTS/Qwen3-TTS-12Hz-0.6B-Base-bf16",
       "modelType": "qwen3_tts",
       "family": "qwen3-tts-12hz-base",
       "parameterClass": "0.6B",
-      "quantization": "8bit",
-      "swiftSupportStatus": "documented",
+      "quantization": "bf16",
+      "swiftSupportStatus": "phase0_local_package_override_required",
       "phase0RuntimeAllowed": true,
       "requiresGPU": true,
       "allowCPUFallback": false,
@@ -24,7 +24,7 @@
       "cloneProfilesAllowed": false,
       "requiresMetalCanaryPass": true,
       "metalCanaryStatus": "notRun",
-      "notes": "Phase 0 proves local Qwen/MLX audio generation only. No cloning, VoiceDesign, CustomVoice, reference audio, or .plaguevoice profiles."
+      "notes": "Phase 0 proves local Qwen/MLX audio generation using the vendored mlx-audio-swift Turing host-safe sampler patch. Bare Base smoke only: voice=nil, refAudio=nil, refText=nil."
     }
   ],
   "blockedModels": [
