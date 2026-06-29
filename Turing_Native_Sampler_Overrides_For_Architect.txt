@@ -1,0 +1,217 @@
+Turing native sampler recovery - override list for architect
+
+Context
+This list describes the overrides that were restored to the native-sampler
+working tuple. It does not describe the later concrete-renderer/package-entrypoint
+experiments, which should stay out of the active path.
+
+1. Swift package override
+
+The project overrides the remote MLXAudio package with a local checkout:
+
+  Vendor/mlx-audio-swift-turing
+
+Pinned package revision:
+
+  3cfa97201572e438eece2036299383834473253f
+
+The Xcode project resolves MLXAudio from that local folder, not from the remote
+package main branch.
+
+Reason:
+The Qwen fix is inside the package source. The app should still call the public
+model.generate(...) API.
+
+2. Qwen3TTS sampler patch inside local package
+
+File:
+
+  Vendor/mlx-audio-swift-turing/Sources/MLXAudioTTS/Models/Qwen3TTS/Qwen3TTS.swift
+
+Patch symbols added:
+
+  turingPhase0UseHostSafeSampler
+  turingPhase0ForceGreedyHostSampler
+  sampleTokenHostSafe
+  applyHostTopP
+  hostArgmax
+  hostSample
+
+Behavior:
+
+  - On visionOS, turingPhase0UseHostSafeSampler returns true.
+  - sampleToken(...) routes into sampleTokenHostSafe(...).
+  - The host sampler avoids the upstream sampler's putAlong/categorical path.
+  - It still uses the normal Qwen forward/code-predictor/decoder path.
+
+Important:
+There should be no special app-facing Qwen package entrypoint. The sampler patch
+is internal to Qwen3TTS.swift.
+
+3. App Qwen host uses public generate
+
+File:
+
+  Gravitas Plague/Gravitas Plague/Turing/TTS/QwenMLXAudioModelHost.swift
+
+The active render path calls:
+
+  model.generate(
+      text: trimmed,
+      voice: nil,
+      refAudio: nil,
+      refText: nil,
+      language: request.language,
+      generationParameters: generationParameters
+  )
+
+Blocked/removed from active path:
+
+  turingGenerateBareBaseBF16HostSafeV1
+  appTuringGenerateBareBaseBF16HostSafeV1
+  generateCanaryProvenBareBaseBF16
+  QwenCanaryProvenBareBaseRenderer
+  TuringQwen3TTSPatchInfo as a runtime gate
+  TuringQwenBareBaseBF16Request
+  expectedHostSafeSamplerForced
+  expectedBreadcrumbsForced
+
+4. Canary identity override
+
+File:
+
+  Gravitas Plague/Gravitas Plague/Turing/TTS/QwenPhase0CanaryReport.swift
+
+Active identity:
+
+  packageBaseRevision = 3cfa97201572e438eece2036299383834473253f
+  localPackagePatch = qwen3tts_phase0_host_sampler
+  samplerMode = hostSafeGreedy
+
+This is what the canary report uses to decide whether a previous canary pass
+matches the active runtime tuple.
+
+5. Runtime token/segment limits
+
+File:
+
+  Gravitas Plague/TuringResources/Turing/Config/turing-runtime.json
+
+Active Qwen limits:
+
+  maxTokens = 96
+  maxQwenInputTokens = 96
+
+Active voiceScript timing:
+
+  tts.targetSegmentSeconds = 4.0
+  tts.targetSegmentSecondsMin = 3.0
+  tts.targetSegmentSecondsMax = 5.0
+  voiceScript.targetSegmentSeconds = 4.0
+  voiceScript.maxSegmentSeconds = 5.0
+
+Reason:
+The recovered tuple intentionally avoids 512-token generation and long 10-15
+second chunks.
+
+6. Foundation voiceScript prompt timing
+
+File:
+
+  Gravitas Plague/TuringResources/Turing/Prompts/voiceScript_exactSegmentation.txt
+
+Prompt now targets:
+
+  targetSeconds = 4.0
+  maxSeconds = 5.0
+
+It also tells Foundation to keep each chunk within the 96-token Qwen input budget.
+
+7. Foundation repair schema timing
+
+File:
+
+  Gravitas Plague/Gravitas Plague/Turing/Foundation/FoundationVoiceScriptServices.swift
+
+Schema timing was aligned with the prompt:
+
+  targetSeconds = 4.0
+  maxSeconds = 5.0
+
+Reason:
+Repair responses must not drift back to the old 12/15-second schema.
+
+8. Canary bypasses WAV cache
+
+Files:
+
+  Gravitas Plague/Gravitas Plague/Turing/Debug/TuringDebugHarness.swift
+  Gravitas Plague/Gravitas Plague/Turing/TTS/QwenTTSSequentialScheduler.swift
+
+The canary calls renderPhase0BareBaseSmoke(..., bypassCache: true).
+
+Reason:
+Run Qwen Canary must prove native generation. It must not pass by replaying an
+old cached WAV.
+
+Generate + Play may still use the normal cache after a matching canary passes.
+
+9. Phase 1 Qwen button gated by canary
+
+File:
+
+  Gravitas Plague/Gravitas Plague/Turing/Debug/TuringPrologueDebugView.swift
+
+The Phase 1 voiceScript button is disabled until canaryPassed is true.
+
+Foundation-only probe may remain available because it does not call Qwen.
+
+10. Phase 1 still routes through the canary Qwen helper
+
+File:
+
+  Gravitas Plague/Gravitas Plague/Turing/TTS/QwenTTSSequentialScheduler.swift
+
+Phase 1 segment rendering builds a QwenPhase0SmokeRequest with:
+
+  text = segment.text
+  maxTokens = min(settings.maxTokens, 96)
+  voice = nil
+  refAudio = nil
+  refText = nil
+
+Then it calls the same app host generatePhase0BareBaseSmoke(...) path.
+
+11. Recovery artifacts and backup folders
+
+The recovery script created:
+
+  TuringRecoveryArtifacts/native-sampler-recover-20260629-015539
+  Vendor/mlx-audio-swift-turing.pre-recovery-20260629-015539
+
+These are backups/snapshots, not active runtime code.
+
+12. Things that should not be reintroduced
+
+Do not reintroduce:
+
+  - Concrete package entrypoint wrappers
+  - Special app-side Qwen renderers
+  - Canary-proven renderer abstraction
+  - Host sampler rewrites beyond the supplied patch
+  - Lazy argMax workaround
+  - Extra sampler breadcrumbs/diagnostic flushes
+  - 512 maxTokens
+  - 10-15 second Qwen chunks
+  - refAudio/refText/voice cloning in this recovery path
+
+Verification command
+
+Run:
+
+  bash /Users/richardfallat/Downloads/audit_turing_native_sampler_working_tuple.sh \
+    /Users/richardfallat/Projects/dev/gravitas-plague
+
+Current result at time of writing:
+
+  Audit passed. Run the Qwen canary on device before Phase 1.

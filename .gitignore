@@ -31,6 +31,6 @@ Gravitas Plague/TuringResources/Turing/SpeechTokenizer/
 *.gguf
 *.ckpt
 
-# Local Swift package override for Qwen Phase 0 experiments. Do not commit the
-# full upstream package checkout; commit the project pin/setup patch instead.
-Vendor/mlx-audio-swift-turing/
+# Local recovery snapshots may contain package copies and diffs.
+TuringRecoveryArtifacts/
+TuringResearchArtifacts/
