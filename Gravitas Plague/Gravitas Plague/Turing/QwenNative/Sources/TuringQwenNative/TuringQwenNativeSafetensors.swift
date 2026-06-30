@@ -95,7 +95,47 @@ struct TuringQwenNativeSafetensorsIndex: Sendable {
 struct TuringQwenNativeFloatTensor: Sendable {
     let name: String
     let shape: [Int]
-    let values: [Float]
+    private let storage: Storage
+
+    init(
+        name: String,
+        shape: [Int],
+        values: [Float]
+    ) {
+        self.name = name
+        self.shape = shape
+        self.storage = .float32Values(values)
+    }
+
+    init(
+        name: String,
+        shape: [Int],
+        rawData: Data,
+        dtype: RawDType
+    ) {
+        self.name = name
+        self.shape = shape
+        self.storage = .rawData(rawData, dtype: dtype)
+    }
+
+    enum RawDType: Sendable {
+        case bfloat16
+        case float32
+
+        var mlxDType: DType {
+            switch self {
+            case .bfloat16:
+                return .bfloat16
+            case .float32:
+                return .float32
+            }
+        }
+    }
+
+    private enum Storage: Sendable {
+        case float32Values([Float])
+        case rawData(Data, dtype: RawDType)
+    }
 }
 
 struct TuringQwenNativeSafetensorsReader: Sendable {
@@ -128,7 +168,8 @@ struct TuringQwenNativeSafetensorsReader: Sendable {
         return TuringQwenNativeFloatTensor(
             name: name,
             shape: metadata.shape,
-            values: try decodeFloat32(data, dtype: metadata.dtype, name: name)
+            rawData: data,
+            dtype: try rawDType(for: metadata.dtype, name: name)
         )
     }
 
@@ -252,6 +293,22 @@ struct TuringQwenNativeSafetensorsReader: Sendable {
         }
     }
 
+    private func rawDType(
+        for dtype: String,
+        name: String
+    ) throws -> TuringQwenNativeFloatTensor.RawDType {
+        switch dtype {
+        case "BF16":
+            return .bfloat16
+        case "F32":
+            return .float32
+        default:
+            throw TuringQwenNativeError.invalidSafetensors(
+                "Unsupported tensor dtype \(dtype) for \(name)."
+            )
+        }
+    }
+
     private func decodeFloat32(
         _ data: Data,
         dtype: String,
@@ -302,6 +359,11 @@ struct TuringQwenNativeSafetensorsReader: Sendable {
 
 extension TuringQwenNativeFloatTensor {
     func mlxArray() -> MLXArray {
-        MLXArray(values, shape)
+        switch storage {
+        case .float32Values(let values):
+            return MLXArray(values, shape)
+        case .rawData(let data, let dtype):
+            return MLXArray(data, shape, dtype: dtype.mlxDType)
+        }
     }
 }
