@@ -15,6 +15,7 @@
 !Gravitas Plague/Gravitas Plague/Audio/neighbor-death-*.wav
 !Gravitas Plague/Gravitas Plague/Audio/robot-damaged-*.wav
 !Gravitas Plague/Gravitas Plague/Audio/robot-death-*.wav
+!Gravitas Plague/Gravitas Plague/Turing/QwenNative/Reference/Golden/**/reference-output.wav
 *.ply
 *.exr
 !hellscape_01.exr
@@ -34,3 +35,7 @@ Gravitas Plague/TuringResources/Turing/SpeechTokenizer/
 # Local recovery snapshots may contain package copies and diffs.
 TuringRecoveryArtifacts/
 TuringResearchArtifacts/
+
+# Re-clonable official source reference; commit the lock, hashes, scripts, and
+# generated fixtures instead of a nested git checkout.
+ExternalReference/

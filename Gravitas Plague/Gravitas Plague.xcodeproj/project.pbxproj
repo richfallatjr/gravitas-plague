@@ -49,11 +49,8 @@
 		8E1A10642FCD000100000001 /* ../user-interface.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10652FCD000100000001 /* ../user-interface.png */; };
 		8E1A10672FCD000100000001 /* ../neighbor_biped_ior.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10662FCD000100000001 /* ../neighbor_biped_ior.png */; };
 		8E1A10692FCD000100000001 /* ../dad_biped_ior.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10682FCD000100000001 /* ../dad_biped_ior.png */; };
-		8E2B20012FCE000100000001 /* MLXAudioTTS in Frameworks */ = {isa = PBXBuildFile; productRef = 8E2B20062FCE000100000001 /* MLXAudioTTS */; };
-		8E2B20022FCE000100000001 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = 8E2B20072FCE000100000001 /* MLXAudioCore */; };
 		8E2B20032FCE000100000001 /* Turing in Resources */ = {isa = PBXBuildFile; fileRef = 8E2B20042FCE000100000001 /* Turing */; };
-		8E2B20082FCE000100000001 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 8E2B200A2FCE000100000001 /* MLX */; };
-		8E2B200C2FCE000100000001 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = 8E2B200E2FCE000100000001 /* MLXLMCommon */; };
+		8E3C30102FCF100100000001 /* TuringQwenNative in Frameworks */ = {isa = PBXBuildFile; productRef = 8E3C30122FCF100100000001 /* TuringQwenNative */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -122,9 +119,22 @@
 		8E2B20042FCE000100000001 /* Turing */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Turing; path = TuringResources/Turing; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		8E3C30202FCF200100000001 /* Exceptions for "Gravitas Plague" folder in "Gravitas Plague" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				"Turing/QwenNative",
+			);
+			target = 2D78FE2F2FCCF44A0063708B /* Gravitas Plague */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		2D78FE322FCCF44A0063708B /* Gravitas Plague */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				8E3C30202FCF200100000001 /* Exceptions for "Gravitas Plague" folder in "Gravitas Plague" target */,
+			);
 			path = "Gravitas Plague";
 			sourceTree = "<group>";
 		};
@@ -148,10 +158,7 @@
 				8E1A10092FCD000100000001 /* ARKit.framework in Frameworks */,
 				8E1A100A2FCD000100000001 /* RealityKit.framework in Frameworks */,
 				8E1A104E2FCD000100000001 /* GameKit.framework in Frameworks */,
-				8E2B20082FCE000100000001 /* MLX in Frameworks */,
-				8E2B200C2FCE000100000001 /* MLXLMCommon in Frameworks */,
-				8E2B20022FCE000100000001 /* MLXAudioCore in Frameworks */,
-				8E2B20012FCE000100000001 /* MLXAudioTTS in Frameworks */,
+				8E3C30102FCF100100000001 /* TuringQwenNative in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -272,10 +279,7 @@
 			);
 			name = "Gravitas Plague";
 			packageProductDependencies = (
-				8E2B20062FCE000100000001 /* MLXAudioTTS */,
-				8E2B20072FCE000100000001 /* MLXAudioCore */,
-				8E2B200A2FCE000100000001 /* MLX */,
-				8E2B200E2FCE000100000001 /* MLXLMCommon */,
+				8E3C30122FCF100100000001 /* TuringQwenNative */,
 			);
 			productName = "Gravitas Plague";
 			productReference = 2D78FE302FCCF44A0063708B /* Gravitas Plague.app */;
@@ -365,9 +369,7 @@
 			mainGroup = 2D78FE272FCCF44A0063708B;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				8E2B20052FCE000100000001 /* XCLocalSwiftPackageReference "../Vendor/mlx-audio-swift-turing" */,
-				8E2B20092FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-swift" */,
-				8E2B200D2FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+				8E3C30112FCF100100000001 /* XCLocalSwiftPackageReference "Gravitas Plague/Turing/QwenNative" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2D78FE312FCCF44A0063708B /* Products */;
@@ -834,51 +836,17 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		8E2B20052FCE000100000001 /* XCLocalSwiftPackageReference "../Vendor/mlx-audio-swift-turing" */ = {
+		8E3C30112FCF100100000001 /* XCLocalSwiftPackageReference "Gravitas Plague/Turing/QwenNative" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = "../Vendor/mlx-audio-swift-turing";
+			relativePath = "Gravitas Plague/Turing/QwenNative";
 		};
 /* End XCLocalSwiftPackageReference section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		8E2B20092FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ml-explore/mlx-swift.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.30.6;
-			};
-		};
-		8E2B200D2FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 3.31.3;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
 /* Begin XCSwiftPackageProductDependency section */
-		8E2B20062FCE000100000001 /* MLXAudioTTS */ = {
+		8E3C30122FCF100100000001 /* TuringQwenNative */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 8E2B20052FCE000100000001 /* XCLocalSwiftPackageReference "../Vendor/mlx-audio-swift-turing" */;
-			productName = MLXAudioTTS;
-		};
-		8E2B20072FCE000100000001 /* MLXAudioCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 8E2B20052FCE000100000001 /* XCLocalSwiftPackageReference "../Vendor/mlx-audio-swift-turing" */;
-			productName = MLXAudioCore;
-		};
-		8E2B200A2FCE000100000001 /* MLX */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 8E2B20092FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-swift" */;
-			productName = MLX;
-		};
-		8E2B200E2FCE000100000001 /* MLXLMCommon */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 8E2B200D2FCE000100000001 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
-			productName = MLXLMCommon;
+			package = 8E3C30112FCF100100000001 /* XCLocalSwiftPackageReference "Gravitas Plague/Turing/QwenNative" */;
+			productName = TuringQwenNative;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -17,6 +17,7 @@ struct PortalFXSegment: Sendable {
 struct PortalFXSpawnSample: Sendable {
     let position: SIMD3<Float>
     let velocity: SIMD3<Float>
+    let sideAcceleration: SIMD3<Float>
     let life: Float
 }
 
@@ -659,7 +660,9 @@ private enum PortalEmissionPlanner {
         )
 
         let tangent = segment.direction
-        let tangentJitter = tangent * Float.random(in: -0.30...0.30)
+        let tangentJitter = tangent * Float.random(
+            in: PortalFXDefaults.emberTangentJitterMin...PortalFXDefaults.emberTangentJitterMax
+        )
 
         let upwardJitter = SIMD3<Float>(
             0,
@@ -677,7 +680,7 @@ private enum PortalEmissionPlanner {
         if segment.isBottom {
             direction = portalFXNormalizeSafe(
                 PortalFXDefaults.portalLocalUp +
-                    tangentJitter * 0.20 +
+                    tangentJitter * PortalFXDefaults.bottomEmberTangentScale +
                     wallOut * 0.15 +
                     normalLeak,
                 fallback: SIMD3<Float>(0, 1, 0)
@@ -720,9 +723,29 @@ private enum PortalEmissionPlanner {
             )
         }
 
-        let speed = Float.random(
+        let baseSpeed = Float.random(
             in: PortalFXDefaults.emberSpeedMetersPerSecondMin...PortalFXDefaults.emberSpeedMetersPerSecondMax
         )
+
+        let extraSpeedAmount = Float.random(
+            in: PortalFXDefaults.emberSpeedExtraAmountMin...PortalFXDefaults.emberSpeedExtraAmountMax
+        )
+
+        let speedMultiplier = 1.0 + extraSpeedAmount
+
+        let speed = baseSpeed * speedMultiplier
+
+        let sideAccelerationScale: Float =
+            segment.isBottom
+                ? PortalFXDefaults.bottomEmberTangentScale
+                : 1.0
+
+        let sideAcceleration =
+            tangent *
+            Float.random(
+                in: -PortalFXDefaults.emberSideAccelerationMetersPerSecond2...PortalFXDefaults.emberSideAccelerationMetersPerSecond2
+            ) *
+            sideAccelerationScale
 
         let life = Float.random(
             in: PortalFXDefaults.emberLifeSecondsMin...PortalFXDefaults.emberLifeSecondsMax
@@ -733,6 +756,7 @@ private enum PortalEmissionPlanner {
         return PortalFXSpawnSample(
             position: base + surfaceOffset,
             velocity: direction * speed,
+            sideAcceleration: sideAcceleration,
             life: life
         )
     }

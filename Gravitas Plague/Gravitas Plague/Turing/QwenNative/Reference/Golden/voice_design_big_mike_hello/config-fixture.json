@@ -1,0 +1,491 @@
+{
+  "config": {
+    "architectures": [
+      "Qwen3TTSForConditionalGeneration"
+    ],
+    "assistant_token_id": 77091,
+    "im_end_token_id": 151645,
+    "im_start_token_id": 151644,
+    "model_type": "qwen3_tts",
+    "talker_config": {
+      "attention_bias": false,
+      "attention_dropout": 0,
+      "code_predictor_config": {
+        "_name_or_path": "",
+        "add_cross_attention": false,
+        "architectures": null,
+        "attention_bias": false,
+        "attention_dropout": 0,
+        "bad_words_ids": null,
+        "begin_suppress_tokens": null,
+        "bos_token_id": null,
+        "chunk_size_feed_forward": 0,
+        "cross_attention_hidden_size": null,
+        "decoder_start_token_id": null,
+        "diversity_penalty": 0.0,
+        "do_sample": false,
+        "dtype": null,
+        "early_stopping": false,
+        "encoder_no_repeat_ngram_size": 0,
+        "eos_token_id": null,
+        "exponential_decay_length_penalty": null,
+        "finetuning_task": null,
+        "forced_bos_token_id": null,
+        "forced_eos_token_id": null,
+        "head_dim": 128,
+        "hidden_act": "silu",
+        "hidden_size": 1024,
+        "id2label": {
+          "0": "LABEL_0",
+          "1": "LABEL_1"
+        },
+        "initializer_range": 0.02,
+        "intermediate_size": 3072,
+        "is_decoder": false,
+        "is_encoder_decoder": false,
+        "label2id": {
+          "LABEL_0": 0,
+          "LABEL_1": 1
+        },
+        "layer_types": [
+          "full_attention",
+          "full_attention",
+          "full_attention",
+          "full_attention",
+          "full_attention"
+        ],
+        "length_penalty": 1.0,
+        "max_length": 20,
+        "max_position_embeddings": 65536,
+        "max_window_layers": 28,
+        "min_length": 0,
+        "model_type": "qwen3_tts_talker_code_predictor",
+        "no_repeat_ngram_size": 0,
+        "num_attention_heads": 16,
+        "num_beam_groups": 1,
+        "num_beams": 1,
+        "num_code_groups": 16,
+        "num_hidden_layers": 5,
+        "num_key_value_heads": 8,
+        "num_return_sequences": 1,
+        "output_attentions": false,
+        "output_hidden_states": false,
+        "output_scores": false,
+        "pad_token_id": null,
+        "prefix": null,
+        "problem_type": null,
+        "pruned_heads": {},
+        "remove_invalid_values": false,
+        "repetition_penalty": 1.0,
+        "return_dict": true,
+        "return_dict_in_generate": false,
+        "rms_norm_eps": 1e-06,
+        "rope_scaling": null,
+        "rope_theta": 1000000,
+        "sep_token_id": null,
+        "sliding_window": null,
+        "suppress_tokens": null,
+        "task_specific_params": null,
+        "temperature": 1.0,
+        "tf_legacy_loss": false,
+        "tie_encoder_decoder": false,
+        "tie_word_embeddings": false,
+        "tokenizer_class": null,
+        "top_k": 50,
+        "top_p": 1.0,
+        "torchscript": false,
+        "typical_p": 1.0,
+        "use_bfloat16": false,
+        "use_cache": true,
+        "use_sliding_window": false,
+        "vocab_size": 2048
+      },
+      "codec_bos_id": 2149,
+      "codec_eos_token_id": 2150,
+      "codec_language_id": {
+        "chinese": 2055,
+        "english": 2050,
+        "french": 2061,
+        "german": 2053,
+        "italian": 2070,
+        "japanese": 2058,
+        "korean": 2064,
+        "portuguese": 2071,
+        "russian": 2069,
+        "spanish": 2054
+      },
+      "codec_nothink_id": 2155,
+      "codec_pad_id": 2148,
+      "codec_think_bos_id": 2156,
+      "codec_think_eos_id": 2157,
+      "codec_think_id": 2154,
+      "head_dim": 128,
+      "hidden_act": "silu",
+      "hidden_size": 2048,
+      "initializer_range": 0.02,
+      "intermediate_size": 6144,
+      "max_position_embeddings": 32768,
+      "model_type": "qwen3_tts_talker",
+      "num_attention_heads": 16,
+      "num_code_groups": 16,
+      "num_hidden_layers": 28,
+      "num_key_value_heads": 8,
+      "position_id_per_seconds": 13,
+      "rms_norm_eps": 1e-06,
+      "rope_scaling": {
+        "interleaved": true,
+        "mrope_section": [
+          24,
+          20,
+          20
+        ],
+        "rope_type": "default",
+        "type": "default"
+      },
+      "rope_theta": 1000000,
+      "sliding_window": null,
+      "spk_id": {},
+      "spk_is_dialect": {},
+      "text_hidden_size": 2048,
+      "text_vocab_size": 151936,
+      "use_cache": true,
+      "use_sliding_window": false,
+      "vocab_size": 3072
+    },
+    "tokenizer_type": "qwen3_tts_tokenizer_12hz",
+    "transformers_version": "4.57.3",
+    "tts_bos_token_id": 151672,
+    "tts_eos_token_id": 151673,
+    "tts_model_size": "1b7",
+    "tts_model_type": "voice_design",
+    "tts_pad_token_id": 151671
+  },
+  "generationConfig": {
+    "do_sample": true,
+    "max_new_tokens": 8192,
+    "repetition_penalty": 1.05,
+    "subtalker_dosample": true,
+    "subtalker_temperature": 0.9,
+    "subtalker_top_k": 50,
+    "subtalker_top_p": 1.0,
+    "temperature": 0.9,
+    "top_k": 50,
+    "top_p": 1.0
+  },
+  "tokenizerConfig": {
+    "add_bos_token": false,
+    "add_prefix_space": false,
+    "added_tokens_decoder": {
+      "151643": {
+        "content": "<|endoftext|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151644": {
+        "content": "<|im_start|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151645": {
+        "content": "<|im_end|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151646": {
+        "content": "<|object_ref_start|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151647": {
+        "content": "<|object_ref_end|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151648": {
+        "content": "<|box_start|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151649": {
+        "content": "<|box_end|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151650": {
+        "content": "<|quad_start|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151651": {
+        "content": "<|quad_end|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151652": {
+        "content": "<|vision_start|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151653": {
+        "content": "<|vision_end|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151654": {
+        "content": "<|vision_pad|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151655": {
+        "content": "<|image_pad|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151656": {
+        "content": "<|video_pad|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151657": {
+        "content": "<tool_call>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": false
+      },
+      "151658": {
+        "content": "</tool_call>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": false
+      },
+      "151659": {
+        "content": "<|fim_prefix|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": false
+      },
+      "151660": {
+        "content": "<|fim_middle|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": false
+      },
+      "151661": {
+        "content": "<|fim_suffix|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": false
+      },
+      "151662": {
+        "content": "<|fim_pad|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": false
+      },
+      "151663": {
+        "content": "<|repo_name|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": false
+      },
+      "151664": {
+        "content": "<|file_sep|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": false
+      },
+      "151665": {
+        "content": "<tool_response>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": false
+      },
+      "151666": {
+        "content": "</tool_response>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": false
+      },
+      "151667": {
+        "content": "<think>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": false
+      },
+      "151668": {
+        "content": "</think>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": false
+      },
+      "151669": {
+        "content": "<|audio_start|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151670": {
+        "content": "<|audio_end|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151671": {
+        "content": "<tts_pad>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151672": {
+        "content": "<tts_text_bos>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151673": {
+        "content": "<tts_text_eod>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151674": {
+        "content": "<tts_text_bos_single>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      },
+      "151675": {
+        "content": "<|audio_pad|>",
+        "lstrip": false,
+        "normalized": false,
+        "rstrip": false,
+        "single_word": false,
+        "special": true
+      }
+    },
+    "additional_special_tokens": [
+      "<|im_start|>",
+      "<|im_end|>",
+      "<|object_ref_start|>",
+      "<|object_ref_end|>",
+      "<|box_start|>",
+      "<|box_end|>",
+      "<|quad_start|>",
+      "<|quad_end|>",
+      "<|vision_start|>",
+      "<|vision_end|>",
+      "<|vision_pad|>",
+      "<|image_pad|>",
+      "<|video_pad|>",
+      "<|audio_start|>",
+      "<|audio_end|>",
+      "<tts_pad>",
+      "<tts_text_bos>",
+      "<tts_text_bos_single>",
+      "<|audio_pad|>"
+    ],
+    "audio_bos_token": "<|audio_start|>",
+    "audio_eos_token": "<|audio_end|>",
+    "audio_token": "<|audio_pad|>",
+    "bos_token": null,
+    "clean_up_tokenization_spaces": false,
+    "eos_token": "<|im_end|>",
+    "errors": "replace",
+    "extra_special_tokens": {
+      "audio_bos_token": "<|audio_start|>",
+      "audio_eos_token": "<|audio_end|>",
+      "audio_token": "<|audio_pad|>",
+      "image_token": "<|image_pad|>",
+      "video_token": "<|video_pad|>",
+      "vision_bos_token": "<|vision_start|>",
+      "vision_eos_token": "<|vision_end|>"
+    },
+    "image_token": "<|image_pad|>",
+    "model_max_length": 131072,
+    "pad_token": "<|endoftext|>",
+    "split_special_tokens": false,
+    "tokenizer_class": "Qwen2Tokenizer",
+    "unk_token": null,
+    "video_token": "<|video_pad|>",
+    "vision_bos_token": "<|vision_start|>",
+    "vision_eos_token": "<|vision_end|>"
+  }
+}

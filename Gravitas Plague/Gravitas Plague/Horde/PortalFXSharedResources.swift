@@ -13,8 +13,8 @@ enum PortalFXDefaults {
     static let tubeEmissiveIntensity: Float = 0.6
     static let bloomTargetStrength: Float = 1.0
 
-    /// Was 1000/sec. New first pass is ~1/16.7 density.
-    static let emberBirthRatePerDoor: Float = 60.0
+    /// Was 1000/sec. Current pass halves prior 60/sec density.
+    static let emberBirthRatePerDoor: Float = 30.0
 
     /// Still visually travels around 2-3 feet, but slower and more varied.
     static let emberTravelDistanceFeet: Float = 2.25
@@ -27,6 +27,26 @@ enum PortalFXDefaults {
     /// About half previous speed, with variance.
     static let emberSpeedMetersPerSecondMin: Float = 0.22
     static let emberSpeedMetersPerSecondMax: Float = 0.44
+
+    /// Continuous per-ember extra speed amount.
+    ///
+    /// 0.0 means baseline/current authored ember speed.
+    /// 1.0 means 100% extra speed, so final speed is 2x baseline.
+    ///
+    /// Final multiplier is:
+    ///     1.0 + random(0.0...1.0)
+    static let emberSpeedExtraAmountMin: Float = 0.0
+    static let emberSpeedExtraAmountMax: Float = 1.0
+
+    /// Launch-direction side jitter along the portal segment tangent.
+    static let emberTangentJitterMin: Float = -0.75
+    static let emberTangentJitterMax: Float = 0.75
+
+    /// Protect bottom/floor embers from excessive sideways spray.
+    static let bottomEmberTangentScale: Float = 0.30
+
+    /// Ongoing side acceleration in meters / second^2.
+    static let emberSideAccelerationMetersPerSecond2: Float = 0.14
 
     static let emberStartSizeMetersMin: Float = 0.0045
     static let emberStartSizeMetersMax: Float = 0.010

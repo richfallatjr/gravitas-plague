@@ -20,6 +20,17 @@ actor TuringAudioFileWriter {
         waveform: QwenWaveform,
         cacheKey: String
     ) async throws -> TuringAudioCacheFile {
+        let wavURL = rootURL.appendingPathComponent("\(cacheKey).wav")
+        return try await write(
+            waveform: waveform,
+            explicitFileURL: wavURL
+        )
+    }
+
+    func write(
+        waveform: QwenWaveform,
+        explicitFileURL wavURL: URL
+    ) async throws -> TuringAudioCacheFile {
         guard !waveform.samples.isEmpty else {
             throw TuringRuntimeError.qwenSynthesisFailed(
                 "Qwen returned an empty waveform."
@@ -32,13 +43,15 @@ actor TuringAudioFileWriter {
         }
 
         try FileManager.default.createDirectory(
-            at: rootURL,
+            at: wavURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
 
-        let wavURL = rootURL.appendingPathComponent("\(cacheKey).wav")
-        let tempURL = rootURL.appendingPathComponent("\(cacheKey).tmp.wav")
-        let metadataURL = rootURL.appendingPathComponent("\(cacheKey).json")
+        let tempURL = wavURL.deletingLastPathComponent()
+            .appendingPathComponent("\(wavURL.deletingPathExtension().lastPathComponent).tmp.wav")
+        let metadataURL = wavURL
+            .deletingPathExtension()
+            .appendingPathExtension("json")
         let sanitized = waveform.samples.map { sample -> Float in
             guard sample.isFinite else {
                 return 0
@@ -121,6 +134,16 @@ actor TuringAudioFileWriter {
         forCacheKey cacheKey: String
     ) async throws {
         let tempURL = rootURL.appendingPathComponent("\(cacheKey).tmp.wav")
+        if FileManager.default.fileExists(atPath: tempURL.path) {
+            try FileManager.default.removeItem(at: tempURL)
+        }
+    }
+
+    func removeTemporaryFile(
+        forExplicitFileURL fileURL: URL
+    ) async throws {
+        let tempURL = fileURL.deletingLastPathComponent()
+            .appendingPathComponent("\(fileURL.deletingPathExtension().lastPathComponent).tmp.wav")
         if FileManager.default.fileExists(atPath: tempURL.path) {
             try FileManager.default.removeItem(at: tempURL)
         }

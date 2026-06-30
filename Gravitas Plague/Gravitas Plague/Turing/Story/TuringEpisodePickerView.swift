@@ -6,6 +6,9 @@ struct TuringEpisodePickerView: View {
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     @State private var openingEpisodeID: TuringEpisodeID?
     @State private var selectedEpisodeID: TuringEpisodeID? = .prologue
+#if DEBUG || GR_TURING_DIAGNOSTICS
+    @State private var qwenNativeHelloRunning = false
+#endif
 
     private let episodes = TuringEpisodeCatalog.developmentEpisodes
 
@@ -32,17 +35,40 @@ struct TuringEpisodePickerView: View {
                 }
             }
 
-            Divider()
+#if DEBUG || GR_TURING_DIAGNOSTICS
+            if PlagueFeatureFlags.showQwenHelloWorldInEpisodePicker {
+                Divider()
+                    .padding(.vertical, 4)
 
-            if selectedEpisodeID == .prologue {
-                TuringPrologueDebugView()
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Qwen Model Check")
+                        .font(.headline)
+
+                    Text("Runs the in-repo TuringQwenNative VoiceDesign canary directly from the episode picker.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    knownQwenButton(
+                        title: "Run Native Qwen Hello World",
+                        runningTitle: "Running Native Qwen Hello World...",
+                        isRunning: qwenNativeHelloRunning
+                    ) {
+                        qwenNativeHelloRunning = true
+
+                        Task.detached(priority: .userInitiated) {
+                            await TuringNativeQwenHelloWorldCanary.run()
+                            await MainActor.run {
+                                qwenNativeHelloRunning = false
+                            }
+                        }
+                    }
+                }
             }
+#endif
+
         }
         .padding(24)
         .frame(minWidth: 520)
-        .onAppear {
-            selectPhase0DebugEpisodeIfNeeded()
-        }
     }
 
     private func episodeButton(
@@ -85,6 +111,41 @@ struct TuringEpisodePickerView: View {
         .disabled(!episode.isUnlocked || openingEpisodeID != nil)
     }
 
+#if DEBUG || GR_TURING_DIAGNOSTICS
+    private func knownQwenButton(
+        title: String,
+        runningTitle: String,
+        isRunning: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            guard isRunning == false else {
+                return
+            }
+
+            action()
+        } label: {
+            HStack(spacing: 8) {
+                if isRunning {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+
+                Text(
+                    isRunning
+                        ? runningTitle
+                        : title
+                )
+            }
+        }
+        .buttonStyle(.bordered)
+        .disabled(
+            isRunning ||
+            qwenNativeHelloRunning
+        )
+    }
+#endif
+
     @MainActor
     private func openImmersiveIfNeededAndStart(
         _ episode: TuringEpisodeDescriptor
@@ -95,7 +156,7 @@ struct TuringEpisodePickerView: View {
 
         if PlagueFeatureFlags.phase0PrologueRunsInSwiftUIPickerOnly,
            episode.id == .prologue {
-            selectPhase0DebugEpisodeIfNeeded()
+            selectedEpisodeID = episode.id
             return
         }
 
@@ -156,29 +217,4 @@ struct TuringEpisodePickerView: View {
         dismiss()
     }
 
-    @MainActor
-    private func selectPhase0DebugEpisodeIfNeeded() {
-        guard let episode = TuringEpisodeCatalog.descriptor(for: .prologue),
-              episode.isUnlocked else {
-            return
-        }
-
-        selectedEpisodeID = episode.id
-        session.selectedOperationMode = .story
-        session.selectedStoryEpisodeID = episode.id
-        session.experienceMode = .story
-        session.activeMode = .none
-        session.statusMessage = "Run the Prologue Qwen Phase 0 canary."
-        session.isStoryEpisodePickerPresented = true
-
-        print(
-            """
-            [TuringStory] Prologue Phase 0 debug controls active
-              episodeID: \(episode.id.rawValue)
-              immersiveStarted: false
-              qwenSmokeAutoRun: false
-              useRunCanaryButton: true
-            """
-        )
-    }
 }

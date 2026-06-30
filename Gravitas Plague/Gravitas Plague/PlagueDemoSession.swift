@@ -25,6 +25,7 @@ enum PlagueFeatureFlags {
     static let defaultStoryEpisodeID = TuringEpisodeID.prologue
     static let phase0PrologueRunsInSwiftUIPickerOnly = true
     static let showStoryRoomSkinningControls = false
+    static let showQwenHelloWorldInEpisodePicker = true
     static let showForestDayNightToggle = false
     static let showDebugTestDoor = false
 }

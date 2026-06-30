@@ -82,6 +82,35 @@ actor TuringDebugHarness {
             throw error
         }
     }
+
+    func cleanupRenderedSegment(
+        _ rendered: TuringRenderedSegment,
+        reason: String
+    ) async {
+        await scheduler.deleteTransientRenderedSegment(
+            rendered,
+            reason: reason
+        )
+    }
+
+    func cleanupTransientAudio(
+        reason: String
+    ) async {
+        await scheduler.cleanupTransientAudio(
+            reason: reason
+        )
+    }
+
+    func runNoCacheMemorySoak(
+        iterations: Int
+    ) async throws -> TuringSoakTestResult {
+        let runner = TuringSoakTestRunner(
+            scheduler: scheduler
+        )
+        return try await runner.run(
+            iterations: iterations
+        )
+    }
 }
 
 enum TuringRuntimeFactory {
@@ -101,21 +130,30 @@ enum TuringRuntimeFactory {
             bundle: bundle
         )
 
-        let cacheRoot = try FileManager.default.url(
-            for: .cachesDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
+        let transientRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "TuringTransientAudio",
+                isDirectory: true
+            )
+        let transientFiles = TuringTransientAudioFileStore(
+            rootURL: transientRoot
         )
-        .appendingPathComponent(
-            "TuringAudioCache",
-            isDirectory: true
+        await transientFiles.cleanupAll(
+            reason: "appLaunch"
         )
+
+        let transientWriterRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "TuringTransientAudioWriter",
+                isDirectory: true
+            )
 
         let scheduler = QwenTTSSequentialScheduler(
             host: host,
-            cache: TuringAudioCache(rootURL: cacheRoot),
-            fileWriter: TuringAudioFileWriter(rootURL: cacheRoot),
+            fileWriter: TuringAudioFileWriter(rootURL: transientWriterRoot),
+            transientFiles: transientFiles,
+            memoryProbe: TuringMemoryFootprintProbe(),
+            cleanup: TuringQwenTransientCleanup(),
             settings: QwenGenerationSettings(
                 language: config.tts.language,
                 sampleRate: config.tts.sampleRate,

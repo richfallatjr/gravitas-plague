@@ -1,0 +1,17 @@
+{
+  "referencePath": "/Users/richardfallat/Projects/dev/gravitas-plague/ExternalReference/Qwen3-TTS-official",
+  "repoURL": "https://github.com/QwenLM/Qwen3-TTS.git",
+  "resolvedCommit": "022e286b98fbec7e1e916cb940cdf532cd9f488e",
+  "schemaVersion": 1,
+  "sourceFileSHA256": {
+    "README.md": "51f4497e70e9ae024b10ee4bbcb470366f10592edeab56c58d2194ba2dadb745",
+    "examples/test_model_12hz_voice_design.py": "6d770da93ca10bb8c769c56d36a4b19ad215ac904f9c4b947c368bbff632978f",
+    "pyproject.toml": "3e82fcb21b9d48bba789a7c0a2c2dcb88ad60c4d297d60ae4575ee3eb4e4d5aa",
+    "qwen_tts/core/models/configuration_qwen3_tts.py": "f52867f14fde06a416dd14864d503ce6d13d0a08d5f5da30191e1c80c13f5d18",
+    "qwen_tts/core/models/modeling_qwen3_tts.py": "25c42656bcf810f06ef6bc1839bd7083f3c8cfedac3a147c4060b4262b1c96a0",
+    "qwen_tts/core/tokenizer_12hz/configuration_qwen3_tts_tokenizer_v2.py": "9e30c24394b00cb0366d7da3482b7436468acc1cd3da1a6fe614a1d34653a5e3",
+    "qwen_tts/core/tokenizer_12hz/modeling_qwen3_tts_tokenizer_v2.py": "844e8dd8c0182ef9c6463c874631c22ef3c5a4fd1899dd657016164cc5379628",
+    "qwen_tts/inference/qwen3_tts_model.py": "e1da450732857c1f5fe3e36ebab85db2f6dc6a48caaff6973f463384e30275e4",
+    "qwen_tts/inference/qwen3_tts_tokenizer.py": "ac2d855022a1bd21d33ab7b267ec952eef71f81d3f8d969a306139ff1a929515"
+  }
+}

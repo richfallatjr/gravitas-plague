@@ -41,8 +41,13 @@ struct QwenWaveform: Sendable, Hashable {
 
 struct TuringRenderedSegment: Sendable, Hashable {
     let segmentIndex: Int
+    let renderID: String
     let fileURL: URL
     let durationSeconds: TimeInterval
+    let isTransient: Bool
+    let sampleRate: Int
+    let channelCount: Int
+    @available(*, deprecated, message: "Generated Qwen WAV cache removed; use renderID.")
     let cacheKey: String
 }
 

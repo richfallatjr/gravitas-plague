@@ -31,6 +31,7 @@ private struct PortalEmberParticleState: Sendable {
 
     var position: SIMD3<Float> = .zero
     var velocity: SIMD3<Float> = .zero
+    var sideAcceleration: SIMD3<Float> = .zero
     var orientation = simd_quatf(
         angle: 0,
         axis: SIMD3<Float>(0, 1, 0)
@@ -119,6 +120,7 @@ private actor PortalFXStepper {
             life: sample.life,
             position: sample.position,
             velocity: sample.velocity,
+            sideAcceleration: sample.sideAcceleration,
             orientation: simd_quatf(
                 angle: 0,
                 axis: SIMD3<Float>(0, 1, 0)
@@ -187,6 +189,7 @@ private enum PortalEmberSimulationStepper {
                 continue
             }
 
+            nextStates[index].velocity += nextStates[index].sideAcceleration * deltaTime
             nextStates[index].velocity.y += 0.18 * deltaTime
             nextStates[index].position += nextStates[index].velocity * deltaTime
 
@@ -330,6 +333,7 @@ final class PortalEmberPool {
                 PortalFXSpawnSample(
                     position: position,
                     velocity: velocity,
+                    sideAcceleration: .zero,
                     life: life
                 )
             ]

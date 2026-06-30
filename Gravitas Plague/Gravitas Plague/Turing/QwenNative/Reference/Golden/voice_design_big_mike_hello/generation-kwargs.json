@@ -1,0 +1,15 @@
+{
+  "fixtureA": {
+    "do_sample": false,
+    "max_new_tokens": 8,
+    "repetition_penalty": 1.0,
+    "subtalker_dosample": false,
+    "subtalker_temperature": 0.0,
+    "subtalker_top_k": 1,
+    "subtalker_top_p": 1.0,
+    "temperature": 0.0,
+    "top_k": 1,
+    "top_p": 1.0
+  },
+  "productDefaultsSource": "official _merge_generate_kwargs + generation_config.json"
+}

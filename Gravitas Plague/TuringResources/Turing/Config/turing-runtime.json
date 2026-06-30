@@ -7,8 +7,8 @@
     "perChunkMetadataOverheadCharacters": 120
   },
   "tts": {
-    "modelID": "qwen3-tts-12hz-0.6b-base-bf16",
-    "generationMode": "bareBaseSmoke",
+    "modelID": "qwen3-tts-12hz-1.7b-voicedesign-bf16",
+    "generationMode": "nativeVoiceDesignSmoke",
     "synthesisMode": "sequential",
     "phase0AudioOnly": true,
     "targetSegmentSecondsMin": 3.0,
@@ -21,13 +21,14 @@
     "temperature": 0.0,
     "topP": 1.0,
     "repetitionPenalty": 1.0,
-    "voiceArgumentPolicy": "baseNilOnly",
-    "refAudioPolicy": "phase0NilOnly",
-    "refTextPolicy": "phase0NilOnly"
+    "voiceArgumentPolicy": "voiceDesignInstructionRequired",
+    "defaultSpeaker": null,
+    "refAudioPolicy": "forbidden",
+    "refTextPolicy": "forbidden"
   },
   "debug": {
     "enableMemoryMetrics": true,
     "soakTestIterations": 20,
-    "phase0SmokeText": "Hello from Qwen3-TTS."
+    "phase0SmokeText": "THE GRAVITAS PLAGUE SPREADS"
   }
 }

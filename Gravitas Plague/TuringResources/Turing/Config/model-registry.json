@@ -1,44 +1,45 @@
 {
   "schemaVersion": 3,
-  "activeModelID": "qwen3-tts-12hz-0.6b-base-bf16",
+  "activeModelID": "qwen3-tts-12hz-1.7b-voicedesign-bf16",
   "qwenModels": [
     {
-      "id": "qwen3-tts-12hz-0.6b-base-bf16",
-      "displayName": "Qwen3-TTS 12Hz 0.6B Base bf16 Phase 0",
-      "huggingFaceRepo": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16",
-      "revision": "1eccf1cb2519b5a4e8a95b5f0544f3303568164f",
-      "resourcePath": "Turing/Models/Qwen3TTS/Qwen3-TTS-12Hz-0.6B-Base-bf16",
+      "id": "qwen3-tts-12hz-1.7b-voicedesign-bf16",
+      "displayName": "Qwen3-TTS 12Hz 1.7B VoiceDesign bf16",
+      "huggingFaceRepo": "mlx-community/Qwen3-TTS-12Hz-1.7B-VoiceDesign-bf16",
+      "revision": "installed-local",
+      "resourcePath": "Turing/Models/Qwen3TTS/Qwen3-TTS-12Hz-1.7B-VoiceDesign-bf16",
       "modelType": "qwen3_tts",
-      "family": "qwen3-tts-12hz-base",
-      "parameterClass": "0.6B",
+      "family": "qwen3-tts-12hz-voicedesign",
+      "parameterClass": "1.7B",
       "quantization": "bf16",
-      "swiftSupportStatus": "phase0_local_package_override_required",
+      "swiftSupportStatus": "in_repo_native_port_required",
       "phase0RuntimeAllowed": true,
       "requiresGPU": true,
       "allowCPUFallback": false,
-      "voiceArgumentPolicy": "baseNilOnly",
-      "refAudioPolicy": "phase0NilOnly",
-      "refTextPolicy": "phase0NilOnly",
+      "voiceArgumentPolicy": "voiceDesignInstructionRequired",
+      "defaultSpeaker": null,
+      "refAudioPolicy": "forbidden",
+      "refTextPolicy": "forbidden",
       "customVoiceAllowed": false,
-      "voiceDesignAllowed": false,
+      "voiceDesignAllowed": true,
       "cloneProfilesAllowed": false,
       "requiresMetalCanaryPass": true,
       "metalCanaryStatus": "notRun",
-      "notes": "Phase 0 proves local Qwen/MLX audio generation using the vendored mlx-audio-swift Turing host-safe sampler patch. Bare Base smoke only: voice=nil, refAudio=nil, refText=nil."
+      "notes": "Active local model for the in-repo TuringQwenNative VoiceDesign canary. Model payload is intentionally ignored by Git."
     }
   ],
   "blockedModels": [
     {
+      "id": "qwen3-tts-12hz-0.6b-base-bf16",
+      "reason": "Removed from bundled resources. The active path is the 1.7B VoiceDesign bf16 model for the native source-truth canary."
+    },
+    {
+      "id": "qwen3-tts-12hz-0.6b-customvoice-bf16",
+      "reason": "Removed from bundled resources. CustomVoice/Ryan package experiments were replaced by the in-repo VoiceDesign native port path."
+    },
+    {
       "id": "qwen3-tts-12hz-1.7b-base-4bit",
       "reason": "Current device log aborts inside Metal validation during generate(). Do not include in Phase 0 app resources."
-    },
-    {
-      "id": "qwen3-tts-12hz-1.7b-voicedesign-bf16",
-      "reason": "VoiceDesign is a later macOS-authoring phase, not Phase 0 headset smoke."
-    },
-    {
-      "id": "qwen3-tts-12hz-1.7b-customvoice-bf16",
-      "reason": "CustomVoice/cloning is a later phase, not Phase 0 headset smoke."
     }
   ]
 }

@@ -1,0 +1,1164 @@
+{
+  "codePredictorCalls": [],
+  "generationKwargs": {
+    "do_sample": false,
+    "max_new_tokens": 8,
+    "repetition_penalty": 1.0,
+    "subtalker_dosample": false,
+    "subtalker_temperature": 0.0,
+    "subtalker_top_k": 1,
+    "subtalker_top_p": 1.0,
+    "temperature": 0.0,
+    "top_k": 1,
+    "top_p": 1.0
+  },
+  "inputIds": [
+    {
+      "device": "cpu",
+      "dtype": "int64",
+      "numel": 10,
+      "shape": [
+        1,
+        10
+      ],
+      "values": [
+        [
+          151644,
+          77091,
+          198,
+          9707,
+          1879,
+          151645,
+          198,
+          151644,
+          77091,
+          198
+        ]
+      ]
+    }
+  ],
+  "instructIds": [
+    {
+      "device": "cpu",
+      "dtype": "int64",
+      "numel": 116,
+      "shape": [
+        1,
+        116
+      ],
+      "values": [
+        [
+          151644,
+          872,
+          198,
+          32,
+          5099,
+          2220,
+          371,
+          550,
+          5235,
+          3693,
+          883,
+          448,
+          264,
+          3460,
+          11,
+          44345,
+          6961,
+          9362,
+          11,
+          1075,
+          264,
+          21583,
+          7770,
+          8964,
+          81673,
+          13,
+          18183,
+          15138,
+          56981,
+          11,
+          8811,
+          714,
+          14071,
+          11486,
+          11,
+          8205,
+          41523,
+          11,
+          264,
+          23947,
+          6821,
+          11,
+          8592,
+          4482,
+          714,
+          24514,
+          13,
+          77054,
+          11,
+          28119,
+          11,
+          19227,
+          11,
+          323,
+          37583,
+          44345,
+          13,
+          32500,
+          6277,
+          11,
+          4741,
+          33780,
+          11,
+          1482,
+          4763,
+          7616,
+          13,
+          2806,
+          43361,
+          11,
+          537,
+          65233,
+          11,
+          537,
+          264,
+          8887,
+          5353,
+          261,
+          13,
+          1260,
+          21191,
+          1075,
+          264,
+          1931,
+          9565,
+          4460,
+          311,
+          2506,
+          806,
+          1850,
+          4238,
+          13675,
+          13,
+          81277,
+          11,
+          36824,
+          25407,
+          10434,
+          504,
+          4231,
+          11,
+          1379,
+          11,
+          323,
+          2588,
+          5382,
+          26,
+          3347,
+          11,
+          24020,
+          11,
+          323,
+          3738,
+          13,
+          151645,
+          198
+        ]
+      ]
+    }
+  ],
+  "talkerForwardCalls": [
+    {
+      "args": [],
+      "hasPastKeyValues": true,
+      "hiddenStatesLast": {
+        "repr": "None"
+      },
+      "kwargs": {
+        "attention_mask": {
+          "device": "cpu",
+          "dtype": "int64",
+          "numel": 128,
+          "shape": [
+            1,
+            128
+          ],
+          "values": [
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ]
+        },
+        "input_ids": {
+          "repr": "None"
+        },
+        "inputs_embeds": {
+          "device": "cpu",
+          "dtype": "float32",
+          "numel": 262144,
+          "shape": [
+            1,
+            128,
+            2048
+          ]
+        },
+        "output_hidden_states": {
+          "repr": "True"
+        },
+        "return_dict": {
+          "repr": "True"
+        },
+        "subtalker_dosample": {
+          "repr": "False"
+        },
+        "subtalker_temperature": {
+          "repr": "0.0"
+        },
+        "subtalker_top_k": {
+          "repr": "1"
+        },
+        "subtalker_top_p": {
+          "repr": "1.0"
+        },
+        "trailing_text_hidden": {
+          "device": "cpu",
+          "dtype": "float32",
+          "numel": 2048,
+          "shape": [
+            1,
+            1,
+            2048
+          ]
+        },
+        "tts_pad_embed": {
+          "device": "cpu",
+          "dtype": "float32",
+          "numel": 2048,
+          "shape": [
+            1,
+            1,
+            2048
+          ]
+        },
+        "use_cache": {
+          "repr": "True"
+        }
+      },
+      "logits": {
+        "device": "cpu",
+        "dtype": "float32",
+        "numel": 393216,
+        "shape": [
+          1,
+          128,
+          3072
+        ]
+      }
+    },
+    {
+      "args": [],
+      "hasPastKeyValues": true,
+      "hiddenStatesLast": {
+        "device": "cpu",
+        "dtype": "int64",
+        "numel": 16,
+        "shape": [
+          1,
+          16
+        ],
+        "values": [
+          [
+            1221,
+            1052,
+            1512,
+            159,
+            790,
+            1069,
+            1701,
+            832,
+            1190,
+            87,
+            226,
+            276,
+            1363,
+            844,
+            215,
+            783
+          ]
+        ]
+      },
+      "kwargs": {
+        "attention_mask": {
+          "device": "cpu",
+          "dtype": "int64",
+          "numel": 129,
+          "shape": [
+            1,
+            129
+          ],
+          "values": [
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ]
+        },
+        "generation_step": {
+          "repr": "0"
+        },
+        "input_ids": {
+          "device": "cpu",
+          "dtype": "int64",
+          "numel": 1,
+          "shape": [
+            1,
+            1
+          ],
+          "values": [
+            [
+              1221
+            ]
+          ]
+        },
+        "inputs_embeds": {
+          "repr": "None"
+        },
+        "output_hidden_states": {
+          "repr": "True"
+        },
+        "past_hidden": {
+          "device": "cpu",
+          "dtype": "float32",
+          "numel": 2048,
+          "shape": [
+            1,
+            1,
+            2048
+          ]
+        },
+        "return_dict": {
+          "repr": "True"
+        },
+        "subtalker_dosample": {
+          "repr": "False"
+        },
+        "subtalker_temperature": {
+          "repr": "0.0"
+        },
+        "subtalker_top_k": {
+          "repr": "1"
+        },
+        "subtalker_top_p": {
+          "repr": "1.0"
+        },
+        "trailing_text_hidden": {
+          "device": "cpu",
+          "dtype": "float32",
+          "numel": 2048,
+          "shape": [
+            1,
+            1,
+            2048
+          ]
+        },
+        "tts_pad_embed": {
+          "device": "cpu",
+          "dtype": "float32",
+          "numel": 2048,
+          "shape": [
+            1,
+            1,
+            2048
+          ]
+        },
+        "use_cache": {
+          "repr": "True"
+        }
+      },
+      "logits": {
+        "device": "cpu",
+        "dtype": "float32",
+        "numel": 3072,
+        "shape": [
+          1,
+          1,
+          3072
+        ]
+      }
+    },
+    {
+      "args": [],
+      "hasPastKeyValues": true,
+      "hiddenStatesLast": {
+        "device": "cpu",
+        "dtype": "int64",
+        "numel": 16,
+        "shape": [
+          1,
+          16
+        ],
+        "values": [
+          [
+            1175,
+            1423,
+            357,
+            1311,
+            1628,
+            504,
+            15,
+            122,
+            1948,
+            1693,
+            1489,
+            373,
+            747,
+            324,
+            20,
+            23
+          ]
+        ]
+      },
+      "kwargs": {
+        "attention_mask": {
+          "device": "cpu",
+          "dtype": "int64",
+          "numel": 130,
+          "shape": [
+            1,
+            130
+          ],
+          "values": [
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ]
+        },
+        "generation_step": {
+          "repr": "1"
+        },
+        "input_ids": {
+          "device": "cpu",
+          "dtype": "int64",
+          "numel": 1,
+          "shape": [
+            1,
+            1
+          ],
+          "values": [
+            [
+              1175
+            ]
+          ]
+        },
+        "inputs_embeds": {
+          "repr": "None"
+        },
+        "output_hidden_states": {
+          "repr": "True"
+        },
+        "past_hidden": {
+          "device": "cpu",
+          "dtype": "float32",
+          "numel": 2048,
+          "shape": [
+            1,
+            1,
+            2048
+          ]
+        },
+        "return_dict": {
+          "repr": "True"
+        },
+        "subtalker_dosample": {
+          "repr": "False"
+        },
+        "subtalker_temperature": {
+          "repr": "0.0"
+        },
+        "subtalker_top_k": {
+          "repr": "1"
+        },
+        "subtalker_top_p": {
+          "repr": "1.0"
+        },
+        "trailing_text_hidden": {
+          "device": "cpu",
+          "dtype": "float32",
+          "numel": 2048,
+          "shape": [
+            1,
+            1,
+            2048
+          ]
+        },
+        "tts_pad_embed": {
+          "device": "cpu",
+          "dtype": "float32",
+          "numel": 2048,
+          "shape": [
+            1,
+            1,
+            2048
+          ]
+        },
+        "use_cache": {
+          "repr": "True"
+        }
+      },
+      "logits": {
+        "device": "cpu",
+        "dtype": "float32",
+        "numel": 3072,
+        "shape": [
+          1,
+          1,
+          3072
+        ]
+      }
+    },
+    {
+      "args": [],
+      "hasPastKeyValues": true,
+      "hiddenStatesLast": {
+        "device": "cpu",
+        "dtype": "int64",
+        "numel": 16,
+        "shape": [
+          1,
+          16
+        ],
+        "values": [
+          [
+            2026,
+            289,
+            171,
+            1619,
+            867,
+            1793,
+            472,
+            1063,
+            1937,
+            767,
+            535,
+            1008,
+            1743,
+            282,
+            653,
+            1853
+          ]
+        ]
+      },
+      "kwargs": {
+        "attention_mask": {
+          "device": "cpu",
+          "dtype": "int64",
+          "numel": 131,
+          "shape": [
+            1,
+            131
+          ],
+          "values": [
+            [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          ]
+        },
+        "generation_step": {
+          "repr": "2"
+        },
+        "input_ids": {
+          "device": "cpu",
+          "dtype": "int64",
+          "numel": 1,
+          "shape": [
+            1,
+            1
+          ],
+          "values": [
+            [
+              2026
+            ]
+          ]
+        },
+        "inputs_embeds": {
+          "repr": "None"
+        },
+        "output_hidden_states": {
+          "repr": "True"
+        },
+        "past_hidden": {
+          "device": "cpu",
+          "dtype": "float32",
+          "numel": 2048,
+          "shape": [
+            1,
+            1,
+            2048
+          ]
+        },
+        "return_dict": {
+          "repr": "True"
+        },
+        "subtalker_dosample": {
+          "repr": "False"
+        },
+        "subtalker_temperature": {
+          "repr": "0.0"
+        },
+        "subtalker_top_k": {
+          "repr": "1"
+        },
+        "subtalker_top_p": {
+          "repr": "1.0"
+        },
+        "trailing_text_hidden": {
+          "device": "cpu",
+          "dtype": "float32",
+          "numel": 2048,
+          "shape": [
+            1,
+            1,
+            2048
+          ]
+        },
+        "tts_pad_embed": {
+          "device": "cpu",
+          "dtype": "float32",
+          "numel": 2048,
+          "shape": [
+            1,
+            1,
+            2048
+          ]
+        },
+        "use_cache": {
+          "repr": "True"
+        }
+      },
+      "logits": {
+        "device": "cpu",
+        "dtype": "float32",
+        "numel": 3072,
+        "shape": [
+          1,
+          1,
+          3072
+        ]
+      }
+    }
+  ]
+}
