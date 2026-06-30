@@ -1,0 +1,58 @@
+{
+  "allowFallback": false,
+  "allowPrerecordedDialoguePlayback": false,
+  "characterID": "big_mike",
+  "displayName": "Broadcast Reading \u2014 Lazy",
+  "kind": "baseCloneReferenceVariant",
+  "language": "english",
+  "performance": {
+    "allowedContexts": [
+      "broadcast",
+      "exposition",
+      "safe_room",
+      "reading_official_text"
+    ],
+    "blockedContexts": [
+      "combat",
+      "panic",
+      "stealth_whisper",
+      "grief"
+    ],
+    "energy": "low",
+    "intensity": 3,
+    "pace": "slow_measured",
+    "selectionHint": "Use when Big Mike is reading or reacting to official information with a tired, dry, unimpressed tone, protective underneath.",
+    "tags": [
+      "broadcast",
+      "reading",
+      "lazy",
+      "unimpressed",
+      "dry",
+      "protective"
+    ],
+    "tone": "broadcast reading, lazy, dry, unimpressed, protective underneath",
+    "volume": "low_medium"
+  },
+  "qwenArtifacts": {
+    "manifestSHA256": "919f67157cb620d3078137fad49d2eba33fef3229658aaed2f212d65333fe90c",
+    "mode": "icl",
+    "path": "qwen_artifacts/clone_prompt_manifest.json",
+    "safetensorsSHA256": "9c2c1375ec48cbfc3ad8036c2475f851d56672d0c015f417c6bdb6d41ceb7d69",
+    "status": "ready"
+  },
+  "reference": {
+    "channels": 1,
+    "normalizedAudioPath": "ref_audio/normalized/ref_24000_mono.wav",
+    "normalizedAudioSHA256": "3c1b165841a6fa1712c8d42fcd56291fff8f8928455e8f24bbe684a34c9b101f",
+    "normalizedFormat": "wav_float32_le",
+    "originalAudioPath": "ref_audio/original/big-mike-clone-reading.mp3",
+    "originalAudioSHA256": "f6c9ccf017b6a54abca02fca0aa124db17749ca56b1ea5293289e8d74f43e1cc",
+    "sampleRate": 24000,
+    "textPath": "ref_text.txt",
+    "textSHA256": "3de8f21f66806989c126feeb6e74248fd951652ae1a05ba96aa3d5b35d7d3eef"
+  },
+  "schemaVersion": 1,
+  "sourceProvider": "elevenlabs",
+  "variantID": "broadcast_reading_lazy",
+  "voiceID": "big_mike_base_clone_v1"
+}

@@ -1,34 +1,40 @@
 {
-  "schemaVersion": 3,
-  "foundation": {
-    "maxParallelRequests": 4,
-    "maxChunkTokens": 2000,
-    "aggregateBudgetTokens": 1250,
-    "perChunkMetadataOverheadCharacters": 120
-  },
-  "tts": {
-    "modelID": "qwen3-tts-12hz-1.7b-voicedesign-bf16",
-    "generationMode": "nativeVoiceDesignSmoke",
-    "synthesisMode": "sequential",
-    "phase0AudioOnly": true,
-    "targetSegmentSecondsMin": 3.0,
-    "targetSegmentSecondsMax": 5.0,
-    "maxSegmentsBeforeSplit": 5,
-    "requireGPU": true,
-    "allowCPUFallback": false,
-    "language": "English",
-    "maxTokens": 96,
-    "temperature": 0.0,
-    "topP": 1.0,
-    "repetitionPenalty": 1.0,
-    "voiceArgumentPolicy": "voiceDesignInstructionRequired",
-    "defaultSpeaker": null,
-    "refAudioPolicy": "forbidden",
-    "refTextPolicy": "forbidden"
-  },
   "debug": {
     "enableMemoryMetrics": true,
-    "soakTestIterations": 20,
-    "phase0SmokeText": "THE GRAVITAS PLAGUE SPREADS"
+    "phase0SmokeText": "THE GRAVITAS PLAGUE SPREADS",
+    "soakTestIterations": 20
+  },
+  "foundation": {
+    "aggregateBudgetTokens": 1250,
+    "maxChunkTokens": 2000,
+    "maxParallelRequests": 4,
+    "perChunkMetadataOverheadCharacters": 120
+  },
+  "schemaVersion": 3,
+  "tts": {
+    "allowCPUFallback": false,
+    "allowRuntimeDownloads": false,
+    "allowRuntimeRefAudioEncoding": false,
+    "checkpointKind": "base",
+    "defaultSpeaker": null,
+    "generationMode": "nativeVoiceDesignSmoke",
+    "language": "English",
+    "maxSegmentsBeforeSplit": 5,
+    "maxTokens": 96,
+    "modelID": "qwen3-tts-12hz-1.7b-base-4bit",
+    "phase0AudioOnly": true,
+    "quantization": "4bit",
+    "refAudioPolicy": "forbidden",
+    "refTextPolicy": "forbidden",
+    "repetitionPenalty": 1.0,
+    "requireGPU": true,
+    "runtimeMode": "baseClone",
+    "synthesisMode": "sequential",
+    "targetSegmentSecondsMax": 5.0,
+    "targetSegmentSecondsMin": 3.0,
+    "temperature": 0.0,
+    "topP": 1.0,
+    "voiceArgumentPolicy": "voiceDesignInstructionRequired",
+    "weightBackend": "mlx4bit"
   }
 }

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "voiceID": "big_mike_base_clone_v1",
+  "characterID": "big_mike",
+  "defaultVariantID": "broadcast_reading_lazy",
+  "variants": [
+    {
+      "variantID": "broadcast_reading_lazy",
+      "description": "Use when Big Mike is reading or reacting to official information with a tired, dry, unimpressed tone, protective underneath.",
+      "tags": [
+        "broadcast",
+        "reading",
+        "lazy",
+        "unimpressed",
+        "dry",
+        "protective"
+      ],
+      "intensity": 3,
+      "pace": "slow_measured",
+      "energy": "low",
+      "allowedContexts": [
+        "broadcast",
+        "exposition",
+        "safe_room",
+        "reading_official_text"
+      ],
+      "blockedContexts": [
+        "combat",
+        "panic",
+        "stealth_whisper",
+        "grief"
+      ]
+    }
+  ]
+}

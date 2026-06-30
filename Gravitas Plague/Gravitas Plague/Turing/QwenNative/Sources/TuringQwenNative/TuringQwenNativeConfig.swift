@@ -3,11 +3,16 @@ import Foundation
 public struct TuringQwenNativeConfig: Decodable, Sendable {
     public let modelType: String
     public let ttsModelType: String
+    public var ttsModelFamily: TuringQwenNativeTTSModelType? {
+        TuringQwenNativeTTSModelType(rawValue: ttsModelType)
+    }
     public let ttsModelSize: String?
     public let tokenizerType: String?
     public let ttsBosTokenID: Int
     public let ttsEosTokenID: Int
     public let ttsPadTokenID: Int
+    public let quantization: Quantization?
+    public let speakerEncoderConfig: SpeakerEncoderConfig?
     public let talkerConfig: TalkerConfig
 
     enum CodingKeys: String, CodingKey {
@@ -18,7 +23,37 @@ public struct TuringQwenNativeConfig: Decodable, Sendable {
         case ttsBosTokenID = "tts_bos_token_id"
         case ttsEosTokenID = "tts_eos_token_id"
         case ttsPadTokenID = "tts_pad_token_id"
+        case quantization
+        case speakerEncoderConfig = "speaker_encoder_config"
         case talkerConfig = "talker_config"
+    }
+
+    public enum TuringQwenNativeTTSModelType: String, Codable, Sendable {
+        case voiceDesign = "voice_design"
+        case base = "base"
+        case customVoice = "custom_voice"
+    }
+
+    public struct Quantization: Decodable, Sendable {
+        public let groupSize: Int
+        public let bits: Int
+        public let mode: String
+
+        enum CodingKeys: String, CodingKey {
+            case groupSize = "group_size"
+            case bits
+            case mode
+        }
+    }
+
+    public struct SpeakerEncoderConfig: Decodable, Sendable {
+        public let sampleRate: Int?
+        public let encDim: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case sampleRate = "sample_rate"
+            case encDim = "enc_dim"
+        }
     }
 
     public struct TalkerConfig: Decodable, Sendable {
@@ -101,8 +136,10 @@ public struct TuringQwenNativeConfig: Decodable, Sendable {
         guard config.modelType == "qwen3_tts" else {
             throw TuringQwenNativeError.invalidConfig("model_type must be qwen3_tts, got \(config.modelType)")
         }
-        guard config.ttsModelType == "voice_design" else {
-            throw TuringQwenNativeError.invalidConfig("tts_model_type must be voice_design, got \(config.ttsModelType)")
+        guard config.ttsModelFamily == .voiceDesign ||
+              config.ttsModelFamily == .base ||
+              config.ttsModelFamily == .customVoice else {
+            throw TuringQwenNativeError.invalidConfig("Unsupported tts_model_type: \(config.ttsModelType)")
         }
         guard config.tokenizerType == nil || config.tokenizerType == "qwen3_tts_tokenizer_12hz" else {
             throw TuringQwenNativeError.invalidConfig("Unexpected tokenizer_type: \(config.tokenizerType ?? "nil")")
@@ -112,6 +149,44 @@ public struct TuringQwenNativeConfig: Decodable, Sendable {
         }
 
         return config
+    }
+
+    public func validateBaseCloneRuntime() throws {
+        guard ttsModelFamily == .base else {
+            throw TuringQwenNativeError.invalidConfig(
+                "tts_model_type must be base for Base clone runtime, got \(ttsModelType)"
+            )
+        }
+        guard let quantization else {
+            throw TuringQwenNativeError.invalidConfig("Base clone runtime requires quantization metadata.")
+        }
+        guard quantization.bits == 4,
+              quantization.groupSize == 64,
+              quantization.mode == "affine" else {
+            throw TuringQwenNativeError.invalidConfig(
+                "Base clone runtime requires affine 4-bit group_size 64 quantization, got bits=\(quantization.bits) group_size=\(quantization.groupSize) mode=\(quantization.mode)."
+            )
+        }
+        guard talkerConfig.numCodeGroups == 16 else {
+            throw TuringQwenNativeError.invalidConfig(
+                "Base clone runtime requires 16 code groups, got \(talkerConfig.numCodeGroups)."
+            )
+        }
+        guard talkerConfig.codecLanguageID["english"] != nil else {
+            throw TuringQwenNativeError.invalidConfig("Missing english codec language ID.")
+        }
+        guard talkerConfig.codecBosID >= 0,
+              talkerConfig.codecEosTokenID >= 0,
+              ttsBosTokenID >= 0,
+              ttsEosTokenID >= 0,
+              ttsPadTokenID >= 0 else {
+            throw TuringQwenNativeError.invalidConfig("Base clone runtime requires codec/tts BOS/EOS/PAD token IDs.")
+        }
+        guard speakerEncoderConfig?.sampleRate == 24_000 else {
+            throw TuringQwenNativeError.invalidConfig(
+                "Base clone profile artifacts must come from 24 kHz speaker encoder input."
+            )
+        }
     }
 }
 

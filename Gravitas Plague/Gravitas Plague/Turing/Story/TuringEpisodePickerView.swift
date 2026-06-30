@@ -49,112 +49,33 @@ struct TuringEpisodePickerView: View {
 
                     memoryBudgetReadout
 
-                    Text("Runs the in-repo TuringQwenNative canary directly from the episode picker.")
+                    Text("Runs the in-repo TuringQwenNative Base clone runtime directly from the episode picker.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    Text("Row budget: 1 row is ~0.08s. Useful speech needs at least \(TuringNativeQwenVoiceDesignCanaryPreset.minimumUsefulSpeechRows) rows (~\(String(format: "%.1f", TuringNativeQwenVoiceDesignCanaryPreset.minimumUsefulSpeechSeconds))s).")
+                    Text("Requires the Big Mike Base clone profile. No runtime reference-audio encoding and no design-prompt fallback.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
                     knownQwenButton(
-                        title: "Probe Native Qwen Row Budget - 1 Row",
-                        runningTitle: "Probing 1 Row...",
-                        preset: .rowBudgetProbe1,
-                        prominence: .standard
-                    )
-
-                    knownQwenButton(
-                        title: "Probe Native Qwen Row Budget - 2 Rows",
-                        runningTitle: "Probing 2 Rows...",
-                        preset: .rowBudgetProbe2,
-                        prominence: .prominent
-                    )
-
-                    knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Short Dynamic Debug 4 Rows",
-                        runningTitle: "Probing 4 Rows...",
-                        preset: .rowBudgetProbe4,
-                        prominence: .standard
-                    )
-
-                    knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Short Dynamic Performance 8 Rows",
-                        runningTitle: "Running Short Performance 8 Rows...",
-                        preset: .bigMikeShortDynamicPerformance8,
-                        prominence: .prominent
-                    )
-
-                    knownQwenButton(
-                        title: "Probe Native Qwen Row Budget - 8 Rows",
-                        runningTitle: "Probing 8 Rows...",
-                        preset: .rowBudgetProbe8,
-                        prominence: .standard
-                    )
-
-                    knownQwenButton(
-                        title: "Probe Native Qwen Row Budget - 16 Rows",
-                        runningTitle: "Probing 16 Rows...",
-                        preset: .rowBudgetProbe16,
-                        prominence: .standard
-                    )
-
-                    knownQwenButton(
-                        title: "Probe Native Qwen Row Budget - 24 Rows",
-                        runningTitle: "Probing 24 Rows...",
-                        preset: .rowBudgetProbe24,
-                        prominence: .standard
-                    )
-
-                    knownQwenButton(
-                        title: "Probe Native Qwen Row Budget - 32 Rows",
-                        runningTitle: "Probing 32 Rows...",
-                        preset: .rowBudgetProbe32,
-                        prominence: .standard
-                    )
-
-                    knownQwenButton(
-                        title: "Probe Native Qwen Row Budget - 40 Rows",
-                        runningTitle: "Probing 40 Rows...",
-                        preset: .rowBudgetProbe40,
-                        prominence: .prominent
-                    )
-
-                    knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Short Dynamic",
-                        runningTitle: "Running Big Mike Short Dynamic...",
+                        title: "Run Native Qwen - Big Mike Base Clone Short",
+                        runningTitle: "Running Base Clone Short...",
                         preset: .bigMikeShortDynamic,
-                        prominence: .standard,
-                        isEnabled: false
-                    )
-
-                    knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Broadcast Segment 1 Dynamic",
-                        runningTitle: "Running Broadcast Segment 1 Dynamic...",
-                        preset: .bigMikeBroadcastSegment1Dynamic,
-                        prominence: .standard,
-                        isEnabled: false
-                    )
-
-                    knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Broadcast Segment 1 Dynamic Performance",
-                        runningTitle: "Running Broadcast Segment 1 Performance...",
-                        preset: .bigMikeBroadcastSegment1DynamicPerformance,
                         prominence: .prominent
                     )
 
                     knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Broadcast Longform Dynamic",
-                        runningTitle: "Running Broadcast Longform Dynamic...",
+                        title: "Run Native Qwen - Big Mike Base Clone Broadcast Segment 1",
+                        runningTitle: "Running Base Clone Segment 1...",
+                        preset: .bigMikeBroadcastSegment1Dynamic,
+                        prominence: .prominent
+                    )
+
+                    knownQwenButton(
+                        title: "Run Native Qwen - Big Mike Base Clone Longform",
+                        runningTitle: "Running Base Clone Longform...",
                         preset: .bigMikeBroadcastLongformDynamic,
                         prominence: .prominent
-                    )
-
-                    knownQwenButton(
-                        title: "Run Native Qwen - Fixture Decode",
-                        runningTitle: "Running Fixture Decode...",
-                        preset: .fixtureDecode,
-                        prominence: .standard
                     )
                 }
             }
@@ -229,8 +150,8 @@ struct TuringEpisodePickerView: View {
             qwenNativeRunningPreset = preset
             memorySnapshot = TuringMemoryBudgetProbe.log(
                 label: "beforeQwenGenerate",
-                activeQwenModelID: "qwen3-tts-12hz-1.7b-voicedesign-bf16",
-                quantization: "bf16"
+                activeQwenModelID: "qwen3-tts-12hz-1.7b-base-4bit",
+                quantization: "4bit"
             )
 
             Task.detached(priority: .userInitiated) {

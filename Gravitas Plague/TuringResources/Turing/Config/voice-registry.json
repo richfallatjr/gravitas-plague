@@ -1,18 +1,26 @@
 {
+  "activeDefaultVoiceID": "big_mike_base_clone_v1",
+  "activeVoiceID": "big_mike_base_clone_v1",
   "schemaVersion": 3,
-  "activeVoiceID": "qwen_phase0_default",
   "voices": [
     {
-      "id": "qwen_phase0_default",
-      "displayName": "Qwen Phase 0 Default",
-      "kind": "library",
-      "revision": "1eccf1cb2519b5a4e8a95b5f0544f3303568164f",
-      "resourcePath": null,
-      "qwenVoiceArgument": null,
-      "refAudioPath": null,
-      "refText": null,
-      "phase0RuntimeAllowed": true,
-      "notes": "No cloning. No reference audio. Phase 0 bare Base smoke forwards voice=nil, refAudio=nil, and refText=nil."
+      "allowFallback": false,
+      "displayName": "Big Mike",
+      "enabled": true,
+      "id": "big_mike_base_clone_v1",
+      "kind": "baseCloneProfile",
+      "language": "english",
+      "modelID": "qwen3-tts-12hz-1.7b-base-4bit",
+      "profileKind": "qwenBaseCloneReferenceProfile",
+      "profilePath": "Turing/Voices/Cloned/BigMike/BaseClone/big_mike_base_clone_v1.qwenclone",
+      "runtimeMode": "baseClone",
+      "speakerID": "big_mike",
+      "voiceID": "big_mike_base_clone_v1",
+      "characterID": "big_mike",
+      "resourcePath": "Turing/Voices/Cloned/BigMike/BaseClone/big_mike_base_clone_v1.qwenclone",
+      "revision": "sha256:aca7c44463fe84b1c251479bccb284086b08e06bba075e13f3739ae3cbd3b2e8",
+      "defaultVariantID": "broadcast_reading_lazy",
+      "selectionCatalogPath": "selection-catalog.json"
     }
   ]
 }

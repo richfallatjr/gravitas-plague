@@ -2,6 +2,10 @@
 *.wav
 .DS_Store
 *.xcuserstate
+**/xcuserdata/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
 !Gravitas Plague/Gravitas Plague/Audio/portal-spawn-*.wav
 !Gravitas Plague/Gravitas Plague/Audio/dad-damaged-*.wav
 !Gravitas Plague/Gravitas Plague/Audio/dad-death-*.wav
@@ -20,6 +24,9 @@
 *.exr
 !hellscape_01.exr
 Tools/Turing/.venv/
+Tools/TuringVoicePackager/.venv-qwenclone/
+.venv-qwen-authoring/
+.venv-hf-qwen-base4bit/
 .venv-hf/
 .venv-hf-turing-phase0/
 **/.build/
@@ -29,13 +36,20 @@ Tools/Turing/.venv/
 Gravitas Plague/TuringResources/Turing/Models/**/.cache/
 Gravitas Plague/TuringResources/Turing/Models/
 Gravitas Plague/TuringResources/Turing/SpeechTokenizer/
+Authoring/Models/
 *.safetensors
+!Gravitas Plague/TuringResources/Turing/Voices/Cloned/**/*.safetensors
+!Gravitas Plague/TuringResources/Turing/Voices/Cloned/**/*.wav
 *.gguf
 *.ckpt
 
 # Local recovery snapshots may contain package copies and diffs.
 TuringRecoveryArtifacts/
 TuringResearchArtifacts/
+TuringModelSwapArtifacts/
+
+# Local source copy; the committed .qwenclone profile contains its packaged copy.
+/big-mike-clone-reading.mp3
 
 # Re-clonable official source reference; commit the lock, hashes, scripts, and
 # generated fixtures instead of a nested git checkout.

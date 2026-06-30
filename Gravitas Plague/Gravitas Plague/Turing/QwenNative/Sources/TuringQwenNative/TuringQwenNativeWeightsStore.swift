@@ -26,6 +26,10 @@ struct TuringQwenNativeWeightsStore: @unchecked Sendable {
         return array
     }
 
+    func optional(_ key: String) -> MLXArray? {
+        arraysByKey[key]
+    }
+
     func requireRows(
         _ key: String,
         rows: [Int]

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "profileKind": "qwenBaseCloneReferenceProfile",
+  "voiceID": "big_mike_base_clone_v1",
+  "characterID": "big_mike",
+  "displayName": "Big Mike",
+  "modelFamily": "qwen3-tts-base",
+  "modelID": "qwen3-tts-12hz-1.7b-base-4bit",
+  "quantization": "4bit",
+  "language": "english",
+  "defaultVariantID": "broadcast_reading_lazy",
+  "allowFallback": false,
+  "allowRuntimeRefAudioEncoding": true,
+  "allowPrerecordedDialoguePlayback": false,
+  "sourceProvider": "elevenlabs",
+  "createdBy": "Tools/TuringVoicePackager/turing_voicepackager_mvp.py",
+  "revision": "sha256:aca7c44463fe84b1c251479bccb284086b08e06bba075e13f3739ae3cbd3b2e8",
+  "variants": [
+    {
+      "variantID": "broadcast_reading_lazy",
+      "path": "variants/broadcast_reading_lazy/variant.json"
+    }
+  ]
+}
