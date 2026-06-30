@@ -47,11 +47,11 @@ struct TuringQwenNativeCodePredictorResolvedConfig {
 }
 
 struct TuringQwenNativeCodePredictorProjectionWeights {
-    let smallToMTPProjectionWeight: MLXArray
+    let smallToMTPProjectionWeight: TuringQwenNativeLinearWeight
     let smallToMTPProjectionBias: MLXArray
 
     init(resolver: TuringQwenNativeWeightResolver) throws {
-        self.smallToMTPProjectionWeight = try resolver.tensor(
+        self.smallToMTPProjectionWeight = try resolver.linear(
             "talker.code_predictor.small_to_mtp_projection.weight"
         )
         self.smallToMTPProjectionBias = try resolver.tensor(
@@ -65,7 +65,7 @@ struct TuringQwenNativeCodePredictorResolvedWeights {
     let projectionWeights: TuringQwenNativeCodePredictorProjectionWeights
     let layerWeights: [TuringQwenNativeCodePredictorLayerWeights]
     let normWeight: MLXArray
-    let lmHeadWeights: [MLXArray]
+    let lmHeadWeights: [TuringQwenNativeLinearWeight]
     let talkerCodecEmbeddingWeight: MLXArray
     let codePredictorCodecEmbeddingWeights: [MLXArray]
 
@@ -89,7 +89,7 @@ struct TuringQwenNativeCodePredictorResolvedWeights {
         }
         self.normWeight = try resolver.tensor("talker.code_predictor.model.norm.weight")
         self.lmHeadWeights = try (0..<(resolvedConfig.numCodeGroups - 1)).map {
-            try resolver.tensor("talker.code_predictor.lm_head.\($0).weight")
+            try resolver.linear("talker.code_predictor.lm_head.\($0).weight")
         }
         self.talkerCodecEmbeddingWeight = try resolver.tensor(
             "talker.model.codec_embedding.weight"
@@ -186,13 +186,13 @@ struct TuringQwenNativeCodePredictorLayerWeights {
     let postAttentionLayerNormWeight: MLXArray
     let qNormWeight: MLXArray
     let kNormWeight: MLXArray
-    let qProjWeight: MLXArray
-    let kProjWeight: MLXArray
-    let vProjWeight: MLXArray
-    let oProjWeight: MLXArray
-    let gateProjWeight: MLXArray
-    let upProjWeight: MLXArray
-    let downProjWeight: MLXArray
+    let qProjWeight: TuringQwenNativeLinearWeight
+    let kProjWeight: TuringQwenNativeLinearWeight
+    let vProjWeight: TuringQwenNativeLinearWeight
+    let oProjWeight: TuringQwenNativeLinearWeight
+    let gateProjWeight: TuringQwenNativeLinearWeight
+    let upProjWeight: TuringQwenNativeLinearWeight
+    let downProjWeight: TuringQwenNativeLinearWeight
 
     init(
         resolver: TuringQwenNativeWeightResolver,
@@ -203,13 +203,13 @@ struct TuringQwenNativeCodePredictorLayerWeights {
         self.postAttentionLayerNormWeight = try resolver.tensor("\(prefix).post_attention_layernorm.weight")
         self.qNormWeight = try resolver.tensor("\(prefix).self_attn.q_norm.weight")
         self.kNormWeight = try resolver.tensor("\(prefix).self_attn.k_norm.weight")
-        self.qProjWeight = try resolver.tensor("\(prefix).self_attn.q_proj.weight")
-        self.kProjWeight = try resolver.tensor("\(prefix).self_attn.k_proj.weight")
-        self.vProjWeight = try resolver.tensor("\(prefix).self_attn.v_proj.weight")
-        self.oProjWeight = try resolver.tensor("\(prefix).self_attn.o_proj.weight")
-        self.gateProjWeight = try resolver.tensor("\(prefix).mlp.gate_proj.weight")
-        self.upProjWeight = try resolver.tensor("\(prefix).mlp.up_proj.weight")
-        self.downProjWeight = try resolver.tensor("\(prefix).mlp.down_proj.weight")
+        self.qProjWeight = try resolver.linear("\(prefix).self_attn.q_proj.weight")
+        self.kProjWeight = try resolver.linear("\(prefix).self_attn.k_proj.weight")
+        self.vProjWeight = try resolver.linear("\(prefix).self_attn.v_proj.weight")
+        self.oProjWeight = try resolver.linear("\(prefix).self_attn.o_proj.weight")
+        self.gateProjWeight = try resolver.linear("\(prefix).mlp.gate_proj.weight")
+        self.upProjWeight = try resolver.linear("\(prefix).mlp.up_proj.weight")
+        self.downProjWeight = try resolver.linear("\(prefix).mlp.down_proj.weight")
     }
 }
 
@@ -570,7 +570,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         weights: TuringQwenNativeWeightsStore
     ) throws -> MLXArray {
         let resolver = TuringQwenNativeWeightResolver(store: weights)
-        let lmHeadWeight = try resolver.tensor("talker.code_predictor.lm_head.\(lmHeadIndex).weight")
+        let lmHeadWeight = try resolver.linear("talker.code_predictor.lm_head.\(lmHeadIndex).weight")
         return linear(lastHidden, weight: lmHeadWeight)
     }
 
@@ -595,17 +595,17 @@ enum TuringQwenNativeCodePredictorForwardRunner {
 
     private static func linear(
         _ value: MLXArray,
-        weight: MLXArray
+        weight: TuringQwenNativeLinearWeight
     ) -> MLXArray {
-        matmul(value, weight.T)
+        weight.apply(value)
     }
 
     private static func linear(
         _ value: MLXArray,
-        weight: MLXArray,
+        weight: TuringQwenNativeLinearWeight,
         bias: MLXArray
     ) -> MLXArray {
-        matmul(value, weight.T) + bias
+        weight.apply(value) + bias
     }
 
     private static func causalMask(

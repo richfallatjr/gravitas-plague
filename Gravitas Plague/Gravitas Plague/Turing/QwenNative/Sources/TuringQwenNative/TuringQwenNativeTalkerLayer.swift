@@ -17,7 +17,7 @@ struct TuringQwenNativeTalkerForwardOutput {
 struct TuringQwenNativeTalkerResolvedWeights {
     let layers: [TuringQwenNativeTalkerLayerWeights]
     let finalNormWeight: MLXArray
-    let codecHeadWeight: MLXArray
+    let codecHeadWeight: TuringQwenNativeLinearWeight
 
     init(
         config: TuringQwenNativeConfig,
@@ -31,7 +31,7 @@ struct TuringQwenNativeTalkerResolvedWeights {
             )
         }
         self.finalNormWeight = try resolver.tensor("talker.model.norm.weight")
-        self.codecHeadWeight = try resolver.tensor("talker.codec_head.weight")
+        self.codecHeadWeight = try resolver.linear("talker.codec_head.weight")
     }
 }
 
@@ -187,7 +187,7 @@ enum TuringQwenNativeTalkerForwardRunner {
     ) throws -> MLXArray {
         let codecHeadWeight = try TuringQwenNativeWeightResolver(
             store: weightsStore
-        ).tensor("talker.codec_head.weight")
+        ).linear("talker.codec_head.weight")
         return codecHeadLogits(
             finalLastHiddenState: finalLastHiddenState,
             codecHeadWeight: codecHeadWeight,
@@ -197,7 +197,7 @@ enum TuringQwenNativeTalkerForwardRunner {
 
     static func codecHeadLogits(
         finalLastHiddenState: MLXArray,
-        codecHeadWeight: MLXArray,
+        codecHeadWeight: TuringQwenNativeLinearWeight,
         performanceMode: TuringQwenNativePerformanceMode = .diagnostic
     ) -> MLXArray {
         let start = Date()
@@ -598,9 +598,9 @@ enum TuringQwenNativeTalkerForwardRunner {
 
     private static func linear(
         _ value: MLXArray,
-        weight: MLXArray
+        weight: TuringQwenNativeLinearWeight
     ) -> MLXArray {
-        matmul(value, weight.T)
+        weight.apply(value)
     }
 
     private static func causalMask(
@@ -708,13 +708,13 @@ struct TuringQwenNativeTalkerLayerWeights {
     let postAttentionLayerNormWeight: MLXArray
     let qNormWeight: MLXArray
     let kNormWeight: MLXArray
-    let qProjWeight: MLXArray
-    let kProjWeight: MLXArray
-    let vProjWeight: MLXArray
-    let oProjWeight: MLXArray
-    let gateProjWeight: MLXArray
-    let upProjWeight: MLXArray
-    let downProjWeight: MLXArray
+    let qProjWeight: TuringQwenNativeLinearWeight
+    let kProjWeight: TuringQwenNativeLinearWeight
+    let vProjWeight: TuringQwenNativeLinearWeight
+    let oProjWeight: TuringQwenNativeLinearWeight
+    let gateProjWeight: TuringQwenNativeLinearWeight
+    let upProjWeight: TuringQwenNativeLinearWeight
+    let downProjWeight: TuringQwenNativeLinearWeight
 
     init(
         resolver: TuringQwenNativeWeightResolver,
@@ -725,12 +725,12 @@ struct TuringQwenNativeTalkerLayerWeights {
         self.postAttentionLayerNormWeight = try resolver.tensor("\(prefix).post_attention_layernorm.weight")
         self.qNormWeight = try resolver.tensor("\(prefix).self_attn.q_norm.weight")
         self.kNormWeight = try resolver.tensor("\(prefix).self_attn.k_norm.weight")
-        self.qProjWeight = try resolver.tensor("\(prefix).self_attn.q_proj.weight")
-        self.kProjWeight = try resolver.tensor("\(prefix).self_attn.k_proj.weight")
-        self.vProjWeight = try resolver.tensor("\(prefix).self_attn.v_proj.weight")
-        self.oProjWeight = try resolver.tensor("\(prefix).self_attn.o_proj.weight")
-        self.gateProjWeight = try resolver.tensor("\(prefix).mlp.gate_proj.weight")
-        self.upProjWeight = try resolver.tensor("\(prefix).mlp.up_proj.weight")
-        self.downProjWeight = try resolver.tensor("\(prefix).mlp.down_proj.weight")
+        self.qProjWeight = try resolver.linear("\(prefix).self_attn.q_proj.weight")
+        self.kProjWeight = try resolver.linear("\(prefix).self_attn.k_proj.weight")
+        self.vProjWeight = try resolver.linear("\(prefix).self_attn.v_proj.weight")
+        self.oProjWeight = try resolver.linear("\(prefix).self_attn.o_proj.weight")
+        self.gateProjWeight = try resolver.linear("\(prefix).mlp.gate_proj.weight")
+        self.upProjWeight = try resolver.linear("\(prefix).mlp.up_proj.weight")
+        self.downProjWeight = try resolver.linear("\(prefix).mlp.down_proj.weight")
     }
 }

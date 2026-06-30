@@ -3,6 +3,20 @@ import Foundation
 import AVFoundation
 import TuringQwenNative
 
+enum TuringNativeQwenRunResult: Sendable {
+    case succeeded(String)
+    case failed(String)
+
+    var pickerStatus: String {
+        switch self {
+        case .succeeded(let message):
+            return message
+        case .failed(let message):
+            return "Failed: \(message)"
+        }
+    }
+}
+
 enum TuringNativeQwenHelloWorldCanary {
     private static let expectedModelFolderName = "Qwen3-TTS-12Hz-1.7B-Base-4bit"
     private static let activeModelID = "qwen3-tts-12hz-1.7b-base-4bit"
@@ -46,7 +60,7 @@ enum TuringNativeQwenHelloWorldCanary {
 
     static func run(
         preset: TuringNativeQwenVoiceDesignCanaryPreset = .bigMikeShortDynamic
-    ) async {
+    ) async -> TuringNativeQwenRunResult {
         let input = preset.input
 
         do {
@@ -138,6 +152,7 @@ enum TuringNativeQwenHelloWorldCanary {
             TuringMemoryBudgetProbe.log(label: "afterQwenUnload")
 
             print("[TuringQwenNativeBaseClone] playback finished")
+            return .succeeded("Finished \(preset.rawValue)")
         } catch {
             stopQwenFiller(reason: "qwenBaseCloneRunFailed")
             TuringMemoryBudgetProbe.log(label: "afterTransientCleanup")
@@ -147,6 +162,83 @@ enum TuringNativeQwenHelloWorldCanary {
             [TuringQwenNativeBaseClone] failed
               error: \(error.localizedDescription)
             """)
+            return .failed(error.localizedDescription)
+        }
+    }
+
+    static func runBaseCloneRuntimePreflight(
+        preset: TuringNativeQwenVoiceDesignCanaryPreset = .bigMikeShortDynamic
+    ) async -> TuringNativeQwenRunResult {
+        let input = preset.input
+
+        do {
+            print("""
+            [TuringQwenNativeBaseClone] runtime preflight requested
+              implementation: in_repo_turing_qwen_native
+              preset: \(preset.rawValue)
+              modelID: \(activeModelID)
+              runtimeMode: \(activeRuntimeMode)
+              quantization: \(activeQuantization)
+              voiceID: big_mike_base_clone_v1
+              textUTF16: \(input.spokenText.utf16.count)
+              runtimeRefAudioUsed: false
+              runtimeRefTextUsed: false
+              precomputedCloneArtifacts: true
+              modelForwardStarted: false
+              playbackStarted: false
+              episodePickerButton: true
+            """)
+
+            let modelRoot = try locateBundledBaseCloneModel()
+            let cloneProfile = try loadBundledBigMikeCloneProfile()
+
+            TuringMemoryBudgetProbe.log(
+                label: "beforeQwenPreflightStage",
+                activeQwenModelID: activeModelID,
+                quantization: activeQuantization
+            )
+            let stagedRoot = try stageWritableModel(from: modelRoot)
+            TuringMemoryBudgetProbe.log(
+                label: "afterQwenPreflightStage",
+                activeQwenModelID: activeModelID,
+                quantization: activeQuantization
+            )
+
+            let engine = try TuringQwenNativeBaseCloneEngine(
+                modelRoot: stagedRoot,
+                trace: .stdout(prefix: "[TuringQwenNativeBaseClone]")
+            )
+            let prompt = TuringQwenNativeBaseClonePrompt(
+                text: input.spokenText,
+                language: input.language,
+                cloneProfile: cloneProfile
+            )
+            let report = try await engine.preflightBaseClone(prompt: prompt)
+
+            print("""
+            [TuringQwenNativeBaseClone] runtime preflight finished
+              status: passed
+              voiceID: \(report.voiceID)
+              variantID: \(report.variantID)
+              targetTokenCount: \(report.targetTokenCount)
+              referenceRows: \(report.referenceRowCount)
+              codebookCount: \(report.codebookCount)
+              speakerEmbeddingShape: [\(report.speakerEmbeddingCount)]
+              modelForwardStarted: false
+              playbackStarted: false
+            """)
+
+            TuringMemoryBudgetProbe.log(label: "afterQwenPreflight")
+            TuringMemoryBudgetProbe.log(label: "afterTransientCleanup")
+            return .succeeded("Preflight passed: Big Mike clone artifacts are ready")
+        } catch {
+            TuringMemoryBudgetProbe.log(label: "afterTransientCleanup")
+
+            print("""
+            [TuringQwenNativeBaseClone] runtime preflight failed
+              error: \(error.localizedDescription)
+            """)
+            return .failed(error.localizedDescription)
         }
     }
 
@@ -201,7 +293,9 @@ enum TuringNativeQwenHelloWorldCanary {
         let prompt = TuringQwenNativeBaseClonePrompt(
             text: segment,
             language: preset.input.language,
-            cloneProfile: cloneProfile
+            cloneProfile: cloneProfile,
+            maxNewRows: preset.maxNewTokens(for: segment),
+            performanceMode: preset.performanceMode
         )
 
         print("""
