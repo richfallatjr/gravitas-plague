@@ -14,6 +14,27 @@ struct TuringQwenNativeTalkerForwardOutput {
     let kvCache: TuringQwenNativeKVCache
 }
 
+struct TuringQwenNativeTalkerResolvedWeights {
+    let layers: [TuringQwenNativeTalkerLayerWeights]
+    let finalNormWeight: MLXArray
+    let codecHeadWeight: MLXArray
+
+    init(
+        config: TuringQwenNativeConfig,
+        weightsStore: TuringQwenNativeWeightsStore
+    ) throws {
+        let resolver = TuringQwenNativeWeightResolver(store: weightsStore)
+        self.layers = try (0..<config.talkerConfig.numHiddenLayers).map {
+            try TuringQwenNativeTalkerLayerWeights(
+                resolver: resolver,
+                layerIndex: $0
+            )
+        }
+        self.finalNormWeight = try resolver.tensor("talker.model.norm.weight")
+        self.codecHeadWeight = try resolver.tensor("talker.codec_head.weight")
+    }
+}
+
 private struct TuringQwenNativeTalkerLayerForwardResult {
     let hiddenStates: MLXArray
     let cacheLayer: TuringQwenNativeKVCache.Layer
@@ -54,7 +75,8 @@ enum TuringQwenNativeTalkerForwardRunner {
         promptInputs: TuringQwenNativeTalkerPromptInputs,
         config: TuringQwenNativeConfig,
         weightsStore: TuringQwenNativeWeightsStore,
-        maxNewRows: Int
+        maxNewRows: Int,
+        resolvedWeights: TuringQwenNativeTalkerResolvedWeights? = nil
     ) throws -> TuringQwenNativeTalkerForwardOutput {
         try runFullForward(
             inputsEmbeds: promptInputs.inputsEmbeds,
@@ -63,6 +85,7 @@ enum TuringQwenNativeTalkerForwardRunner {
             config: config,
             weightsStore: weightsStore,
             maxNewRows: maxNewRows,
+            resolvedWeights: resolvedWeights,
             logLabel: "prompt"
         )
     }
@@ -74,9 +97,13 @@ enum TuringQwenNativeTalkerForwardRunner {
         config: TuringQwenNativeConfig,
         weightsStore: TuringQwenNativeWeightsStore,
         maxNewRows: Int,
+        resolvedWeights: TuringQwenNativeTalkerResolvedWeights? = nil,
         logLabel: String
     ) throws -> TuringQwenNativeTalkerForwardOutput {
-        let weightsResolver = TuringQwenNativeWeightResolver(store: weightsStore)
+        let resolved = try resolvedWeights ?? TuringQwenNativeTalkerResolvedWeights(
+            config: config,
+            weightsStore: weightsStore
+        )
         var hidden = inputsEmbeds
         var cacheLayers: [TuringQwenNativeKVCache.Layer] = []
         cacheLayers.reserveCapacity(config.talkerConfig.numHiddenLayers)
@@ -98,14 +125,10 @@ enum TuringQwenNativeTalkerForwardRunner {
 
         for layerIndex in 0..<config.talkerConfig.numHiddenLayers {
             let layerStart = Date()
-            let weights = try TuringQwenNativeTalkerLayerWeights(
-                resolver: weightsResolver,
-                layerIndex: layerIndex
-            )
 
             let layerResult = try runDecoderLayer(
                 hiddenStates: hidden,
-                weights: weights,
+                weights: resolved.layers[layerIndex],
                 config: config.talkerConfig,
                 sequenceLength: sequenceLength,
                 layerIndex: layerIndex,
@@ -126,10 +149,9 @@ enum TuringQwenNativeTalkerForwardRunner {
         }
 
         let finalNormStart = Date()
-        let finalNormWeight = try weightsResolver.tensor("talker.model.norm.weight")
         let finalHidden = rmsNorm(
             hidden,
-            weight: finalNormWeight,
+            weight: resolved.finalNormWeight,
             eps: Float(config.talkerConfig.rmsNormEps)
         )
         eval(finalHidden)
@@ -160,19 +182,38 @@ enum TuringQwenNativeTalkerForwardRunner {
 
     static func codecHeadLogits(
         finalLastHiddenState: MLXArray,
-        weightsStore: TuringQwenNativeWeightsStore
+        weightsStore: TuringQwenNativeWeightsStore,
+        performanceMode: TuringQwenNativePerformanceMode = .diagnostic
     ) throws -> MLXArray {
-        let start = Date()
         let codecHeadWeight = try TuringQwenNativeWeightResolver(
             store: weightsStore
         ).tensor("talker.codec_head.weight")
+        return codecHeadLogits(
+            finalLastHiddenState: finalLastHiddenState,
+            codecHeadWeight: codecHeadWeight,
+            performanceMode: performanceMode
+        )
+    }
+
+    static func codecHeadLogits(
+        finalLastHiddenState: MLXArray,
+        codecHeadWeight: MLXArray,
+        performanceMode: TuringQwenNativePerformanceMode = .diagnostic
+    ) -> MLXArray {
+        let start = Date()
         let logits = linear(finalLastHiddenState, weight: codecHeadWeight)
-        eval(logits)
-        TuringQwenNativeMemoryControl.clearCache(label: "talker.codecHead")
-        print("""
-        [TuringQwenNative] talker codec head completed
-          seconds: \(String(format: "%.3f", Date().timeIntervalSince(start)))
-        """)
+        if performanceMode.shouldForceEveryEval {
+            eval(logits)
+        }
+        if performanceMode.shouldClearMLXCacheEveryRow {
+            TuringQwenNativeMemoryControl.clearCache(label: "talker.codecHead")
+        }
+        if performanceMode.shouldLogFullTokenRows {
+            print("""
+            [TuringQwenNative] talker codec head completed
+              seconds: \(String(format: "%.3f", Date().timeIntervalSince(start)))
+            """)
+        }
         return logits
     }
 
@@ -180,20 +221,26 @@ enum TuringQwenNativeTalkerForwardRunner {
         inputEmbedding: MLXArray,
         previousState: TuringQwenNativeTalkerGenerationState,
         config: TuringQwenNativeConfig,
-        weightsStore: TuringQwenNativeWeightsStore
+        weightsStore: TuringQwenNativeWeightsStore,
+        resolvedWeights: TuringQwenNativeTalkerResolvedWeights? = nil,
+        codePredictorWeights: TuringQwenNativeCodePredictorResolvedWeights? = nil,
+        performanceMode: TuringQwenNativePerformanceMode = .diagnostic
     ) throws -> TuringQwenNativeGeneratedStepOutput {
+        let stepStart = Date()
         guard inputEmbedding.shape == [1, 1, config.talkerConfig.hiddenSize] else {
             throw TuringQwenNativeError.invalidConfig(
                 "Expected one-step talker input embedding [1, 1, \(config.talkerConfig.hiddenSize)], got \(inputEmbedding.shape)."
             )
         }
 
-        print("""
-        [TuringQwenNative] forwardOneStep started
-          position: \(previousState.position)
-          kvCacheLayers: \(previousState.kvCache.layers.count)
-          kvCacheMaterialized: \(previousState.kvCache.usesMaterializedLayerState)
-        """)
+        if performanceMode.shouldLogFullTokenRows {
+            print("""
+            [TuringQwenNative] forwardOneStep started
+              position: \(previousState.position)
+              kvCacheLayers: \(previousState.kvCache.layers.count)
+              kvCacheMaterialized: \(previousState.kvCache.usesMaterializedLayerState)
+            """)
+        }
 
         guard previousState.kvCache.layers.count == config.talkerConfig.numHiddenLayers,
               previousState.kvCache.usesMaterializedLayerState else {
@@ -202,55 +249,65 @@ enum TuringQwenNativeTalkerForwardRunner {
             )
         }
 
-        let weightsResolver = TuringQwenNativeWeightResolver(store: weightsStore)
+        let resolved = try resolvedWeights ?? TuringQwenNativeTalkerResolvedWeights(
+            config: config,
+            weightsStore: weightsStore
+        )
         var hidden = inputEmbedding
         var nextCacheLayers: [TuringQwenNativeKVCache.Layer] = []
         nextCacheLayers.reserveCapacity(config.talkerConfig.numHiddenLayers)
 
         for layerIndex in 0..<config.talkerConfig.numHiddenLayers {
-            let weights = try TuringQwenNativeTalkerLayerWeights(
-                resolver: weightsResolver,
-                layerIndex: layerIndex
-            )
             let layerResult = try runDecoderLayerOneStep(
                 hiddenStates: hidden,
                 previousCacheLayer: previousState.kvCache.layers[layerIndex],
-                weights: weights,
+                weights: resolved.layers[layerIndex],
                 config: config.talkerConfig,
                 layerIndex: layerIndex,
-                position: previousState.position
+                position: previousState.position,
+                performanceMode: performanceMode
             )
             hidden = layerResult.hiddenStates
             nextCacheLayers.append(layerResult.cacheLayer)
-            eval(hidden)
-            TuringQwenNativeMemoryControl.clearCache(
-                label: "talker.generatedStep.\(previousState.position).layer.\(layerIndex)"
-            )
+            if performanceMode.shouldForceEveryEval {
+                eval(hidden)
+            }
+            if performanceMode.shouldClearMLXCacheEveryRow {
+                TuringQwenNativeMemoryControl.clearCache(
+                    label: "talker.generatedStep.\(previousState.position).layer.\(layerIndex)"
+                )
+            }
         }
 
-        let finalNormWeight = try weightsResolver.tensor("talker.model.norm.weight")
         let finalLastHiddenState = rmsNorm(
             hidden,
-            weight: finalNormWeight,
+            weight: resolved.finalNormWeight,
             eps: Float(config.talkerConfig.rmsNormEps)
         )
-        eval(finalLastHiddenState)
-        let logits = try codecHeadLogits(
+        if performanceMode.shouldForceEveryEval {
+            eval(finalLastHiddenState)
+        }
+        let logits = codecHeadLogits(
             finalLastHiddenState: finalLastHiddenState,
-            weightsStore: weightsStore
+            codecHeadWeight: resolved.codecHeadWeight,
+            performanceMode: performanceMode
         )
         let firstCodecToken = try TuringQwenNativeCodecSampler.selectFirstCodecToken(
             logits: logits,
             sequenceLength: 1,
             vocabSize: config.talkerConfig.vocabSize
         ).tokenID
+        let codePredictorStart = Date()
         let codeGroup = try TuringQwenNativeCodePredictor.generateCodeGroup(
             firstCodecToken: firstCodecToken,
             talkerLastHiddenState: finalLastHiddenState,
             config: config,
             weightsStore: weightsStore,
-            expectedFixtureRowIndex: nil
+            expectedFixtureRowIndex: nil,
+            resolvedWeights: codePredictorWeights,
+            performanceMode: performanceMode
         )
+        let codePredictorSeconds = Date().timeIntervalSince(codePredictorStart)
         let nextPosition = previousState.position + 1
         let attentionMask = MLXArray(
             int64: Array(repeating: 1, count: nextPosition),
@@ -267,18 +324,30 @@ enum TuringQwenNativeTalkerForwardRunner {
             generatedCodeGroups: previousState.generatedCodeGroups + [codeGroup.tokenIDs]
         )
 
-        print("""
-        [TuringQwenNative] forwardOneStep finished
-          position: \(nextPosition)
-          firstCodecToken: \(firstCodecToken)
-          tokenIDs: \(codeGroup.tokenIDs)
-        """)
+        if performanceMode.shouldLogFullTokenRows {
+            print("""
+            [TuringQwenNative] forwardOneStep finished
+              position: \(nextPosition)
+              firstCodecToken: \(firstCodecToken)
+              tokenIDs: \(codeGroup.tokenIDs)
+            """)
+        } else if nextPosition % performanceMode.rowCheckpointStride == 0 {
+            print("""
+            [TuringQwenNativePerf] forwardOneStep checkpoint
+              position: \(nextPosition)
+              firstCodecToken: \(firstCodecToken)
+            codePredictorKVCache: oneStep
+            """)
+        }
+        let totalStepSeconds = Date().timeIntervalSince(stepStart)
 
         return TuringQwenNativeGeneratedStepOutput(
             step: nextPosition,
             firstCodecToken: firstCodecToken,
             codeGroup: codeGroup.tokenIDs,
             talkerLastHiddenState: finalLastHiddenState,
+            talkerStepSeconds: max(0, totalStepSeconds - codePredictorSeconds),
+            codePredictorSeconds: codePredictorSeconds,
             stop: false,
             state: nextState
         )
@@ -329,7 +398,8 @@ enum TuringQwenNativeTalkerForwardRunner {
         weights: TuringQwenNativeTalkerLayerWeights,
         config: TuringQwenNativeConfig.TalkerConfig,
         layerIndex: Int,
-        position: Int
+        position: Int,
+        performanceMode: TuringQwenNativePerformanceMode
     ) throws -> TuringQwenNativeTalkerLayerForwardResult {
         let residual = hiddenStates
         let normalized = rmsNorm(
@@ -344,7 +414,8 @@ enum TuringQwenNativeTalkerForwardRunner {
             weights: weights,
             config: config,
             layerIndex: layerIndex,
-            position: position
+            position: position,
+            performanceMode: performanceMode
         )
         let afterAttention = residual + attentionResult.hiddenStates
 
@@ -440,7 +511,8 @@ enum TuringQwenNativeTalkerForwardRunner {
         weights: TuringQwenNativeTalkerLayerWeights,
         config: TuringQwenNativeConfig.TalkerConfig,
         layerIndex: Int,
-        position: Int
+        position: Int,
+        performanceMode: TuringQwenNativePerformanceMode
     ) throws -> TuringQwenNativeTalkerLayerForwardResult {
         let hiddenSize = config.hiddenSize
         let headDim = config.headDim
@@ -478,7 +550,8 @@ enum TuringQwenNativeTalkerForwardRunner {
             layer: previousCacheLayer,
             newKeys: keyStates,
             newValues: valueStates,
-            layerIndex: layerIndex
+            layerIndex: layerIndex,
+            performanceMode: performanceMode
         )
         let repeatedKeyStates = repeatKeyValueHeads(
             updatedCacheLayer.activeKeys,
@@ -630,7 +703,7 @@ enum TuringQwenNativeTalkerForwardRunner {
     }
 }
 
-private struct TuringQwenNativeTalkerLayerWeights {
+struct TuringQwenNativeTalkerLayerWeights {
     let inputLayerNormWeight: MLXArray
     let postAttentionLayerNormWeight: MLXArray
     let qNormWeight: MLXArray

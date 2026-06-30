@@ -72,10 +72,17 @@ struct TuringEpisodePickerView: View {
                     )
 
                     knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Short Dynamic Memory 4 Rows",
+                        title: "Run Native Qwen - Big Mike Short Dynamic Debug 4 Rows",
                         runningTitle: "Probing 4 Rows...",
                         preset: .rowBudgetProbe4,
                         prominence: .standard
+                    )
+
+                    knownQwenButton(
+                        title: "Run Native Qwen - Big Mike Short Dynamic Performance 8 Rows",
+                        runningTitle: "Running Short Performance 8 Rows...",
+                        preset: .bigMikeShortDynamicPerformance8,
+                        prominence: .prominent
                     )
 
                     knownQwenButton(
@@ -125,15 +132,22 @@ struct TuringEpisodePickerView: View {
                         title: "Run Native Qwen - Big Mike Broadcast Segment 1 Dynamic",
                         runningTitle: "Running Broadcast Segment 1 Dynamic...",
                         preset: .bigMikeBroadcastSegment1Dynamic,
-                        prominence: .standard
+                        prominence: .standard,
+                        isEnabled: false
+                    )
+
+                    knownQwenButton(
+                        title: "Run Native Qwen - Big Mike Broadcast Segment 1 Dynamic Performance",
+                        runningTitle: "Running Broadcast Segment 1 Performance...",
+                        preset: .bigMikeBroadcastSegment1DynamicPerformance,
+                        prominence: .prominent
                     )
 
                     knownQwenButton(
                         title: "Run Native Qwen - Big Mike Broadcast Longform Dynamic",
                         runningTitle: "Running Broadcast Longform Dynamic...",
                         preset: .bigMikeBroadcastLongformDynamic,
-                        prominence: .standard,
-                        isEnabled: false
+                        prominence: .prominent
                     )
 
                     knownQwenButton(

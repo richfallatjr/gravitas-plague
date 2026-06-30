@@ -8,10 +8,76 @@ enum TuringNativeQwenHelloWorldCanary {
     private static let activeModelID = "qwen3-tts-12hz-1.7b-voicedesign-bf16"
     private static let activeQuantization = "bf16"
 
+    private actor LongformRenderReadiness {
+        private var ready = false
+
+        func markReady() {
+            ready = true
+        }
+
+        func isReady() -> Bool {
+            ready
+        }
+    }
+
+    @MainActor
+    private static let qwenComputeFillerBridge: BigMikeSegmentGapFillerBridge = {
+        var configuration = BigMikeFillerLoopController.Configuration()
+        configuration.maxConsecutiveClips = 0
+        configuration.maxContinuousSeconds = 90.0
+        let loop = BigMikeFillerLoopController(configuration: configuration)
+        return BigMikeSegmentGapFillerBridge(loop: loop)
+    }()
+
+    @MainActor
+    private static func startQwenComputeFiller(segmentIndex: Int, reason: String) {
+        print("""
+        [TuringQwenNativeCompute] compute filler starting
+          segmentIndex: \(segmentIndex)
+          reason: \(reason)
+        """)
+        qwenComputeFillerBridge.segmentEndedWaitingForNext(segmentIndex: segmentIndex)
+    }
+
+    @MainActor
+    private static func stopQwenComputeFiller(segmentIndex: Int, reason: String) {
+        print("""
+        [TuringQwenNativeCompute] compute filler stopping
+          segmentIndex: \(segmentIndex)
+          reason: \(reason)
+        """)
+        qwenComputeFillerBridge.nextRealSegmentReady(segmentIndex: segmentIndex)
+    }
+
+    @MainActor
+    private static func startLongformGapFiller(previousSegmentIndex: Int, nextSegmentIndex: Int) {
+        print("""
+        [TuringQwenNativeLongform] next segment late; filler bridge starting
+          previousSegmentIndex: \(previousSegmentIndex)
+          nextSegmentIndex: \(nextSegmentIndex)
+        """)
+        qwenComputeFillerBridge.segmentEndedWaitingForNext(segmentIndex: previousSegmentIndex)
+    }
+
+    @MainActor
+    private static func stopLongformGapFillerForReadySegment(nextSegmentIndex: Int) {
+        print("""
+        [TuringQwenNativeLongform] next segment ready; filler bridge stopping
+          nextSegmentIndex: \(nextSegmentIndex)
+        """)
+        qwenComputeFillerBridge.nextRealSegmentReady(segmentIndex: nextSegmentIndex)
+    }
+
+    @MainActor
+    private static func stopQwenFiller(reason: String) {
+        qwenComputeFillerBridge.playbackStopped(reason: reason)
+    }
+
     static func run(
         preset: TuringNativeQwenVoiceDesignCanaryPreset = .bigMikeShortDynamic
     ) async {
         let input = preset.input
+        let requestedRows = preset.maxNewTokens(for: input.spokenText)
 
         do {
             print("""
@@ -23,8 +89,11 @@ enum TuringNativeQwenHelloWorldCanary {
               textUTF16: \(input.spokenText.utf16.count)
               instructUTF16: \(input.instruction.utf16.count)
               estimatedCombinedTokens: \(input.estimatedCombinedTokens)
-              maxNewTokens: \(preset.maxNewTokens)
-              estimatedAudioSeconds: \(String(format: "%.3f", preset.estimatedAudioSeconds))
+              maxNewTokens: \(requestedRows)
+              generationMode: \(preset.performanceMode == .performance ? "dynamicPerformance" : "dynamicDebug")
+              performanceMode: \(preset.performanceMode.rawValue)
+              estimatedAudioSeconds: \(String(format: "%.3f", TuringNativeQwenVoiceDesignCanaryPreset.estimatedAudioSeconds(rows: requestedRows)))
+              rowBudgetMode: \(preset.usesDynamicRowCeiling ? "textLengthCeiling" : "fixedDiagnostic")
               minimumUsefulRows: \(TuringNativeQwenVoiceDesignCanaryPreset.minimumUsefulSpeechRows)
               usefulForSegmentation: \(preset.isUsefulSpeechLength)
               spokenText:
@@ -77,11 +146,19 @@ enum TuringNativeQwenHelloWorldCanary {
                     engine: engine
                 )
             } else {
+                startQwenComputeFiller(
+                    segmentIndex: 0,
+                    reason: "singleClipComputeStarted"
+                )
                 let audio = try await renderSingleClip(
                     preset: preset,
                     input: input,
                     engine: engine,
                     segmentIndex: 0
+                )
+                stopQwenComputeFiller(
+                    segmentIndex: 0,
+                    reason: "singleClipReadyForPlayback"
                 )
 
                 print("""
@@ -114,6 +191,7 @@ enum TuringNativeQwenHelloWorldCanary {
 
             print("[TuringQwenNativeHello] playback finished")
         } catch {
+            stopQwenFiller(reason: "qwenNativeRunFailed")
             TuringMemoryBudgetProbe.log(label: "afterTransientCleanup")
             TuringMemoryBudgetProbe.log(label: "afterQwenUnload")
 
@@ -139,11 +217,13 @@ enum TuringNativeQwenHelloWorldCanary {
             )
         }
 
+        let maxNewTokens = preset.maxNewTokens(for: input.spokenText)
         return try await engine.generateVoiceDesignDynamic(
             text: input.spokenText,
             instruct: input.instruction,
-            maxNewTokens: preset.maxNewTokens,
-            memoryLabel: "\(preset.rawValue).segment.\(segmentIndex)"
+            maxNewTokens: maxNewTokens,
+            memoryLabel: "\(preset.rawValue).segment.\(segmentIndex)",
+            performanceMode: preset.performanceMode
         )
     }
 
@@ -156,50 +236,125 @@ enum TuringNativeQwenHelloWorldCanary {
         [TuringQwenNativeHello] longform dynamic started
           preset: \(preset.rawValue)
           segmentCount: \(preset.segments.count)
+          rowBudgetMode: textLengthCeiling
+          maximumDynamicRows: \(TuringNativeQwenVoiceDesignCanaryPreset.maximumDynamicSpeechRows)
           fixtureRowsUsed: false
         """)
 
-        for (index, segment) in preset.segments.enumerated() {
-            let input = TuringNativeQwenVoiceDesignCanaryInput(
-                voiceID: baseInput.voiceID,
-                language: baseInput.language,
-                spokenText: segment,
-                instruction: baseInput.instruction
-            )
+        guard let firstSegment = preset.segments.first else {
+            return
+        }
+
+        var nextSegmentIndex = 0
+        startQwenComputeFiller(
+            segmentIndex: nextSegmentIndex,
+            reason: "longformInitialSegmentComputeStarted"
+        )
+        var readyAudio = try await renderLongformSegment(
+            preset: preset,
+            baseInput: baseInput,
+            segment: firstSegment,
+            segmentIndex: nextSegmentIndex,
+            engine: engine
+        )
+        stopQwenComputeFiller(
+            segmentIndex: nextSegmentIndex,
+            reason: "longformInitialSegmentReadyForPlayback"
+        )
+        nextSegmentIndex += 1
+
+        var playbackIndex = 0
+        while playbackIndex < preset.segments.count {
+            let audioForPlayback = readyAudio
+            let currentSegmentIndex = playbackIndex
+            let renderAheadSegmentIndex = nextSegmentIndex
+
+            let renderReadiness: LongformRenderReadiness?
+            let renderAheadTask: Task<TuringQwenNativeAudio, Error>?
+            if renderAheadSegmentIndex < preset.segments.count {
+                let readiness = LongformRenderReadiness()
+                renderReadiness = readiness
+                renderAheadTask = Task {
+                    do {
+                        let audio = try await renderLongformSegment(
+                            preset: preset,
+                            baseInput: baseInput,
+                            segment: preset.segments[renderAheadSegmentIndex],
+                            segmentIndex: renderAheadSegmentIndex,
+                            engine: engine
+                        )
+                        await readiness.markReady()
+                        return audio
+                    } catch {
+                        await readiness.markReady()
+                        throw error
+                    }
+                }
+            } else {
+                renderReadiness = nil
+                renderAheadTask = nil
+            }
 
             print("""
-            [TuringQwenNativeHello] longform segment render started
-              segmentIndex: \(index)
-              textUTF16: \(segment.utf16.count)
-              fixtureRowsUsed: false
+            [TuringQwenNativeLongform] real segment playback started
+              segmentIndex: \(currentSegmentIndex)
+              sampleCount: \(audioForPlayback.samples.count)
+              sampleRate: \(audioForPlayback.sampleRate)
+              durationSeconds: \(String(format: "%.3f", audioForPlayback.durationSeconds))
+              computeAhead: \(renderAheadTask != nil)
             """)
 
-            let audio = try await renderSingleClip(
-                preset: preset,
-                input: input,
-                engine: engine,
-                segmentIndex: index
-            )
+            let playbackTask = Task {
+                try await TuringQwenNativeMemoryPlayer.shared.play(
+                    samples: audioForPlayback.samples,
+                    sampleRate: audioForPlayback.sampleRate
+                )
+            }
 
-            print("""
-            [TuringQwenNativeHello] longform segment playback started
-              segmentIndex: \(index)
-              sampleCount: \(audio.samples.count)
-              sampleRate: \(audio.sampleRate)
-              durationSeconds: \(String(format: "%.3f", audio.durationSeconds))
-            """)
+            do {
+                try await playbackTask.value
+            } catch {
+                renderAheadTask?.cancel()
+                stopQwenFiller(reason: "playbackFailed.segment\(currentSegmentIndex)")
+                throw error
+            }
 
-            try await TuringQwenNativeMemoryPlayer.shared.play(
-                samples: audio.samples,
-                sampleRate: audio.sampleRate
-            )
+            var fillerStarted = false
+            if let renderReadiness, await renderReadiness.isReady() == false {
+                fillerStarted = true
+                startLongformGapFiller(
+                    previousSegmentIndex: currentSegmentIndex,
+                    nextSegmentIndex: renderAheadSegmentIndex
+                )
+            }
 
             TuringMemoryBudgetProbe.log(
-                label: "afterLongformSegment.\(index)",
+                label: "afterLongformSegment.\(currentSegmentIndex)",
                 activeQwenModelID: activeModelID,
                 quantization: activeQuantization
             )
+
+            guard let renderAheadTask else {
+                break
+            }
+
+            do {
+                readyAudio = try await renderAheadTask.value
+                if fillerStarted {
+                    stopLongformGapFillerForReadySegment(nextSegmentIndex: renderAheadSegmentIndex)
+                }
+            } catch {
+                if fillerStarted {
+                    stopQwenFiller(reason: "renderFailed.segment\(renderAheadSegmentIndex)")
+                }
+                throw error
+            }
+
+            playbackIndex += 1
+            nextSegmentIndex += 1
         }
+
+        stopQwenFiller(reason: "longformComplete")
 
         print("""
         [TuringQwenNativeHello] longform dynamic finished
@@ -207,6 +362,37 @@ enum TuringNativeQwenHelloWorldCanary {
           segmentCount: \(preset.segments.count)
           fixtureRowsUsed: false
         """)
+    }
+
+    private static func renderLongformSegment(
+        preset: TuringNativeQwenVoiceDesignCanaryPreset,
+        baseInput: TuringNativeQwenVoiceDesignCanaryInput,
+        segment: String,
+        segmentIndex: Int,
+        engine: TuringQwenNativeVoiceDesignEngine
+    ) async throws -> TuringQwenNativeAudio {
+        let input = TuringNativeQwenVoiceDesignCanaryInput(
+            voiceID: baseInput.voiceID,
+            language: baseInput.language,
+            spokenText: segment,
+            instruction: baseInput.instruction
+        )
+
+        print("""
+        [TuringQwenNativeHello] longform segment render started
+          segmentIndex: \(segmentIndex)
+          textUTF16: \(segment.utf16.count)
+          maxNewTokens: \(preset.maxNewTokens(for: segment))
+          rowBudgetMode: textLengthCeiling
+          fixtureRowsUsed: false
+        """)
+
+        return try await renderSingleClip(
+            preset: preset,
+            input: input,
+            engine: engine,
+            segmentIndex: segmentIndex
+        )
     }
 
     private static func locateBundledVoiceDesignModel() throws -> URL {

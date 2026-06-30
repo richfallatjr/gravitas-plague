@@ -3,7 +3,8 @@ import MLX
 
 public enum TuringQwenNativeGenerationMode: Sendable, Equatable {
     case fixtureDecode(rows: [[Int]])
-    case dynamic(maxNewRows: Int)
+    case dynamicDebug(maxNewRows: Int)
+    case dynamicPerformance(maxNewRows: Int)
 }
 
 public struct TuringQwenNativeAudioMetrics: Sendable, Codable {
@@ -32,6 +33,8 @@ struct TuringQwenNativeGeneratedStepOutput {
     let firstCodecToken: Int
     let codeGroup: [Int]
     let talkerLastHiddenState: MLXArray
+    let talkerStepSeconds: Double
+    let codePredictorSeconds: Double
     let stop: Bool
     let state: TuringQwenNativeTalkerGenerationState
 }
@@ -42,10 +45,16 @@ enum TuringQwenNativeStopReason: String {
 }
 
 enum TuringQwenNativeSampler {
+    static func greedyTokenArray(
+        from logits: MLXArray
+    ) throws -> MLXArray {
+        logits[0, 0].argMax(keepDims: true)
+    }
+
     static func greedyToken(
         from logits: MLXArray
     ) throws -> Int {
-        logits.argMax().item(Int.self)
+        try greedyTokenArray(from: logits).item(Int.self)
     }
 }
 

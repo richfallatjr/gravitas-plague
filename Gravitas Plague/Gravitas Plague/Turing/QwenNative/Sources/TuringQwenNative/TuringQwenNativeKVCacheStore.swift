@@ -37,15 +37,18 @@ enum TuringQwenNativeKVCacheStore {
         keyStates: MLXArray,
         valueStates: MLXArray,
         maxNewRows: Int,
-        layerIndex: Int
+        layerIndex: Int,
+        performanceMode: TuringQwenNativePerformanceMode = .diagnostic
     ) throws -> TuringQwenNativeKVCache.Layer {
         let materializedKeys = try TuringQwenNativeMaterializer.ownedCacheTensor(
             keyStates,
-            label: "layer\(layerIndex).prompt.key"
+            label: "layer\(layerIndex).prompt.key",
+            performanceMode: performanceMode
         )
         let materializedValues = try TuringQwenNativeMaterializer.ownedCacheTensor(
             valueStates,
-            label: "layer\(layerIndex).prompt.value"
+            label: "layer\(layerIndex).prompt.value",
+            performanceMode: performanceMode
         )
         let logicalLength = materializedKeys.dim(2)
         let capacity = logicalLength + max(maxNewRows, 1) + 8
@@ -59,7 +62,9 @@ enum TuringQwenNativeKVCacheStore {
         )
         keys[0..., 0..., 0..<logicalLength, 0...] = materializedKeys
         values[0..., 0..., 0..<logicalLength, 0...] = materializedValues
-        eval(keys, values)
+        if performanceMode.shouldForceEveryEval {
+            eval(keys, values)
+        }
 
         return TuringQwenNativeKVCache.Layer(
             keys: keys,
@@ -73,15 +78,18 @@ enum TuringQwenNativeKVCacheStore {
         layer: TuringQwenNativeKVCache.Layer,
         newKeys: MLXArray,
         newValues: MLXArray,
-        layerIndex: Int
+        layerIndex: Int,
+        performanceMode: TuringQwenNativePerformanceMode = .diagnostic
     ) throws -> TuringQwenNativeKVCache.Layer {
         let materializedNewKeys = try TuringQwenNativeMaterializer.ownedCacheTensor(
             newKeys,
-            label: "layer\(layerIndex).step.key"
+            label: "layer\(layerIndex).step.key",
+            performanceMode: performanceMode
         )
         let materializedNewValues = try TuringQwenNativeMaterializer.ownedCacheTensor(
             newValues,
-            label: "layer\(layerIndex).step.value"
+            label: "layer\(layerIndex).step.value",
+            performanceMode: performanceMode
         )
         let nextLength = layer.logicalLength + 1
         guard nextLength <= layer.capacity else {
@@ -94,7 +102,9 @@ enum TuringQwenNativeKVCacheStore {
         var values = layer.values
         keys[0..., 0..., layer.logicalLength..<nextLength, 0...] = materializedNewKeys
         values[0..., 0..., layer.logicalLength..<nextLength, 0...] = materializedNewValues
-        eval(keys, values)
+        if performanceMode.shouldForceEveryEval {
+            eval(keys, values)
+        }
 
         return TuringQwenNativeKVCache.Layer(
             keys: keys,

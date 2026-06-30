@@ -4,7 +4,8 @@ import MLX
 enum TuringQwenNativeMaterializer {
     static func ownedCacheTensor(
         _ array: MLXArray,
-        label: String
+        label: String,
+        performanceMode: TuringQwenNativePerformanceMode = .diagnostic
     ) throws -> MLXArray {
         guard array.shape.contains(0) == false else {
             throw TuringQwenNativeError.invalidConfig(
@@ -12,7 +13,9 @@ enum TuringQwenNativeMaterializer {
             )
         }
 
-        eval(array)
+        if performanceMode.shouldForceEveryEval {
+            eval(array)
+        }
         return array
     }
 }

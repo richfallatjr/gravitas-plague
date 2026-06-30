@@ -1,5 +1,6 @@
 #if DEBUG || GR_TURING_DIAGNOSTICS
 import Foundation
+import TuringQwenNative
 
 struct TuringNativeQwenVoiceDesignCanaryInput: Sendable {
     let voiceID: String
@@ -23,7 +24,9 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
     case rowBudgetProbe40
     case fixtureDecode
     case bigMikeShortDynamic
+    case bigMikeShortDynamicPerformance8
     case bigMikeBroadcastSegment1Dynamic
+    case bigMikeBroadcastSegment1DynamicPerformance
     case bigMikeBroadcastLongformDynamic
 
     // Legacy aliases kept for older local audit/debug scripts.
@@ -71,7 +74,7 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
         }
     }
 
-    var maxNewTokens: Int {
+    private var fixedRowBudget: Int? {
         switch self {
         case .rowBudgetProbe1:
             return 1
@@ -80,6 +83,8 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
         case .rowBudgetProbe4:
             return 4
         case .rowBudgetProbe8:
+            return 8
+        case .bigMikeShortDynamicPerformance8:
             return 8
         case .rowBudgetProbe16:
             return 16
@@ -92,19 +97,47 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
         case .fixtureDecode,
              .sourceTruthHelloWorldFixture:
             return 7
-        case .bigMikeShortDynamic,
-             .bigMikeHello:
-            return 16
-        case .bigMikeBroadcastSegment1Dynamic:
-            return 40
         case .bigMikeBroadcastLongformDynamic,
-             .bigMikeBroadcast450:
-            return 20
+             .bigMikeBroadcast450,
+             .bigMikeBroadcastSegment1DynamicPerformance,
+             .bigMikeBroadcastSegment1Dynamic,
+             .bigMikeShortDynamic,
+             .bigMikeHello:
+            return nil
         }
     }
 
+    var maxNewTokens: Int {
+        maxNewTokens(for: input.spokenText)
+    }
+
+    var usesDynamicRowCeiling: Bool {
+        fixedRowBudget == nil
+    }
+
+    func maxNewTokens(
+        for spokenText: String
+    ) -> Int {
+        if let fixedRowBudget {
+            return fixedRowBudget
+        }
+
+        return Self.dynamicRowCeiling(for: spokenText)
+    }
+
     var estimatedAudioSeconds: Double {
-        Double(maxNewTokens) * 1920.0 / 24_000.0
+        Self.estimatedAudioSeconds(rows: maxNewTokens)
+    }
+
+    var performanceMode: TuringQwenNativePerformanceMode {
+        switch self {
+        case .bigMikeShortDynamicPerformance8,
+             .bigMikeBroadcastSegment1Dynamic,
+             .bigMikeBroadcastSegment1DynamicPerformance:
+            return .performance
+        default:
+            return .diagnostic
+        }
     }
 
     var isUsefulSpeechLength: Bool {
@@ -113,7 +146,35 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
 
     static let secondsPerGeneratedRow = 1920.0 / 24_000.0
     static let minimumUsefulSpeechRows = 38
+    static let maximumDynamicSpeechRows = 64
+    static let dynamicRowHeadroom = 8
+    static let estimatedCharactersPerSecond = 14.0
     static let minimumUsefulSpeechSeconds = Double(minimumUsefulSpeechRows) * secondsPerGeneratedRow
+
+    static func estimatedAudioSeconds(
+        rows: Int
+    ) -> Double {
+        Double(rows) * secondsPerGeneratedRow
+    }
+
+    static func dynamicRowCeiling(
+        for spokenText: String
+    ) -> Int {
+        let trimmedCharacterCount = max(
+            1,
+            spokenText
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .utf16
+                .count
+        )
+        let estimatedSeconds = Double(trimmedCharacterCount) / estimatedCharactersPerSecond
+        let estimatedRows = Int(ceil(estimatedSeconds / secondsPerGeneratedRow)) + dynamicRowHeadroom
+
+        return min(
+            max(estimatedRows, minimumUsefulSpeechRows),
+            maximumDynamicSpeechRows
+        )
+    }
 
     var segments: [String] {
         switch self {
@@ -152,6 +213,7 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
             )
 
         case .bigMikeShortDynamic,
+             .bigMikeShortDynamicPerformance8,
              .bigMikeHello:
             return TuringNativeQwenVoiceDesignCanaryInput(
                 voiceID: "big_mike_vd_v1",
@@ -160,7 +222,8 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
                 instruction: Self.bigMikeVoiceDNA + "\n\n" + Self.bigMikeHelloPerformance
             )
 
-        case .bigMikeBroadcastSegment1Dynamic:
+        case .bigMikeBroadcastSegment1Dynamic,
+             .bigMikeBroadcastSegment1DynamicPerformance:
             return TuringNativeQwenVoiceDesignCanaryInput(
                 voiceID: "big_mike_vd_v1",
                 language: "english",
@@ -182,17 +245,17 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
     private static let bigMikeVoiceDNA = #"""
 Voice ID: BIG_MIKE_VD_V1.
 
-Male, mid-forties, Black American. Large grounded presence like a retired college football lineman. Low male pitch 2/7. Vocal weight 6/7. Chest resonance 6/7. Brightness 2/7. Warmth 5/7. Warm gravel 5/7. Slight lived-in rasp 3/7. Breath 4/7: heavy but controlled. Nasality 1/7. Articulation 5/7: clear but casual. Pace 3/7: measured, unhurried, a little lazy. Regional edge 3/7: subtle Baltimore. Energy 3/7: restrained, unimpressed, protective underneath. Streetwise, intelligent, tired, emotionally grounded. Former military, former athlete, security guard. Real neighbor voice, not polished, theatrical, announcer-like, villainous, or cartoonish. Keep this identity.
+African American male, mid-forties. Black American voice identity. Large grounded presence like a retired college football lineman. Low male pitch 2/7. Vocal weight 6/7. Chest resonance 6/7. Brightness 2/7. Warmth 5/7. Warm gravel 5/7. Slight lived-in rasp 3/7. Breath 4/7: heavy but controlled. Nasality 1/7. Articulation 5/7: clear but casual. Pace 3/7: measured, unhurried, a little lazy. Regional edge 4/7: Black American Baltimore city voice with a subtle urban accent. Energy 3/7: restrained, unimpressed, protective underneath. Streetwise, intelligent, tired, emotionally grounded. Former military, former athlete, security guard. Real African American neighbor voice, not polished, theatrical, announcer-like, villainous, nerdy, white, or cartoonish. Keep the Black American male identity stable.
 """#
 
     private static let bigMikeHelloPerformance = #"""
 Performance:
-Casual radio check. Tired, dry, lazy, low voice, warm gravel, not performing, not shouting. Keep BIG_MIKE_VD_V1 stable; change delivery only.
+Casual radio check from an African American male neighbor. Tired, dry, lazy, low voice, warm gravel, subtle urban Baltimore accent, not performing, not shouting. Keep BIG_MIKE_VD_V1 as a Black American male voice; change delivery only.
 """#
 
     private static let bigMikeBroadcastPerformance = #"""
 Performance:
-Reading to Rich like, “Rich, listen to this shit.” Tired, lazy, unimpressed, a little disgusted by official wording. Protective underneath, not panicked. Low volume, dry delivery, heavy breath, restrained intensity, no shouting. Keep BIG_MIKE_VD_V1 stable; change delivery only.
+Reading to Rich like, “Rich, listen to this shit.” African American male delivery, Black American Baltimore city voice, subtle urban accent. Tired, lazy, unimpressed, a little disgusted by official wording. Protective underneath, not panicked. Low volume, dry delivery, heavy breath, restrained intensity, no shouting. Keep BIG_MIKE_VD_V1 as a Black American male voice; change delivery only.
 """#
 
     private static let bigMikeHelloText = #"""
@@ -226,16 +289,22 @@ If speech fails, do not negotiate.
 """#
 
     private static let bigMikeBroadcastRuntimeSegments = [
-        "Rich, listen to this shit. The Gravitas Plague spreads.",
-        "Officials are warning residents to stay indoors after new cases were confirmed across the city.",
+        "Rich, listen to this shit.",
+        "The Gravitas Plague spreads.",
+        "Officials are warning residents to stay indoors.",
+        "New cases were confirmed across the city.",
         "Doctors say the illness attacks the brain’s fear response.",
         "Early victims may seem confused, sleepless, or strangely calm.",
-        "Later symptoms include cloudy eyes, broken speech, fixation on movement, and sudden violence.",
+        "Later symptoms include cloudy eyes and broken speech.",
+        "They fixate on movement and turn violent without warning.",
         "One hospital worker said, ‘They look awake, but unreachable.’",
-        "The infected are not dead. They are living hosts with severe brain damage.",
-        "Residents are advised to lock doors, avoid aggressive animals, and report any bite or fluid exposure immediately.",
+        "The infected are not dead.",
+        "They are living hosts with severe brain damage.",
+        "Residents are advised to lock doors and avoid aggressive animals.",
+        "Report any bite or fluid exposure immediately.",
         "If someone you know appears infected, do not open the door.",
-        "If the eyes cloud, isolate. If speech fails, do not negotiate."
+        "If the eyes cloud, isolate.",
+        "If speech fails, do not negotiate."
     ]
 }
 #endif

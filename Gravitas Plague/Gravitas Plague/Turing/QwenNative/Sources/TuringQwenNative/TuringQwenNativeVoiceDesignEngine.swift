@@ -31,6 +31,8 @@ public actor TuringQwenNativeVoiceDesignEngine {
     private let config: TuringQwenNativeConfig
     private let tensorIndex: TuringQwenNativeSafetensorsIndex
     private let weightsStore: TuringQwenNativeWeightsStore
+    private let talkerWeights: TuringQwenNativeTalkerResolvedWeights
+    private let codePredictorWeights: TuringQwenNativeCodePredictorResolvedWeights
 
     public init(
         modelRoot: URL,
@@ -74,13 +76,28 @@ public actor TuringQwenNativeVoiceDesignEngine {
             try Self.validateWeightMap(loadedTensorIndex)
         }
 
-        self.weightsStore = try Self.withStage(
+        let loadedWeightsStore = try Self.withStage(
             .weightMapValidate,
             trace: trace,
             breadcrumbs: breadcrumbs
         ) {
             try TuringQwenNativeWeightsStore(modelRoot: modelRoot)
         }
+        self.weightsStore = loadedWeightsStore
+        self.talkerWeights = try TuringQwenNativeTalkerResolvedWeights(
+            config: config,
+            weightsStore: loadedWeightsStore
+        )
+        self.codePredictorWeights = try TuringQwenNativeCodePredictorResolvedWeights(
+            config: config,
+            weightsStore: loadedWeightsStore
+        )
+        print("""
+        [TuringQwenNative] hot path weights resolved
+          talkerLayerCount: \(config.talkerConfig.numHiddenLayers)
+          codePredictorLayerCount: \(codePredictorWeights.config.numHiddenLayers)
+          runtimePerStepWeightLookup: false
+        """)
     }
 
     public static var sourceTruthFixtureRows: [[Int]] {
@@ -127,7 +144,8 @@ public actor TuringQwenNativeVoiceDesignEngine {
         text: String,
         instruct: String,
         maxNewTokens: Int,
-        memoryLabel: String
+        memoryLabel: String,
+        performanceMode: TuringQwenNativePerformanceMode = .diagnostic
     ) async throws -> TuringQwenNativeAudio {
         try await generateVoiceDesign(
             text: text,
@@ -135,7 +153,8 @@ public actor TuringQwenNativeVoiceDesignEngine {
             language: "english",
             maxNewTokens: maxNewTokens,
             seed: 0,
-            memoryLabel: memoryLabel
+            memoryLabel: memoryLabel,
+            performanceMode: performanceMode
         )
     }
 
@@ -152,7 +171,8 @@ public actor TuringQwenNativeVoiceDesignEngine {
             language: language,
             maxNewTokens: maxNewTokens,
             seed: seed,
-            memoryLabel: "legacy"
+            memoryLabel: "legacy",
+            performanceMode: .diagnostic
         )
     }
 
@@ -162,15 +182,21 @@ public actor TuringQwenNativeVoiceDesignEngine {
         language: String,
         maxNewTokens: Int,
         seed: UInt64,
-        memoryLabel: String
+        memoryLabel: String,
+        performanceMode: TuringQwenNativePerformanceMode
     ) async throws -> TuringQwenNativeAudio {
+        let renderStart = Date()
+        let generationModeLabel = performanceMode == .performance
+            ? "dynamicPerformance"
+            : "dynamicDebug"
         rowBudgetRecorder.started(
             targetRows: maxNewTokens,
             memoryLabel: memoryLabel
         )
         print("""
         [TuringQwenNative] dynamic generation started
-          mode: dynamic
+          mode: \(generationModeLabel)
+          performanceMode: \(performanceMode.rawValue)
           textUTF16: \(text.utf16.count)
           instructUTF16: \(voiceDescription.utf16.count)
           maxNewRows: \(maxNewTokens)
@@ -179,6 +205,7 @@ public actor TuringQwenNativeVoiceDesignEngine {
           memoryLabel: \(memoryLabel)
           residentWeights: true
           kvCacheMode: appendPreallocated
+          codePredictorKVCache: oneStep
           runtimePerStepFileIO: false
         """)
         TuringQwenNativeMemoryProbe.log(stage: "beforePrompt")
@@ -280,7 +307,8 @@ public actor TuringQwenNativeVoiceDesignEngine {
                 promptInputs: talkerPromptInputs,
                 config: config,
                 weightsStore: weightsStore,
-                maxNewRows: maxNewTokens
+                maxNewRows: maxNewTokens,
+                resolvedWeights: talkerWeights
             )
             breadcrumbs.completed(.talkerAllLayersEval)
             trace.stageCompleted(.talkerAllLayersEval)
@@ -301,16 +329,20 @@ public actor TuringQwenNativeVoiceDesignEngine {
           kvCacheLayers: \(config.talkerConfig.numHiddenLayers)
           graphRetainedInCache: false
         """)
-        TuringQwenNativeMemoryProbe.log(stage: "afterInitialForward")
-        TuringQwenNativeMemoryControl.clearCache(label: "afterTalkerForward")
+        if performanceMode.shouldLogFullTokenRows {
+            TuringQwenNativeMemoryProbe.log(stage: "afterInitialForward")
+        }
+        if performanceMode.shouldClearMLXCacheEveryRow {
+            TuringQwenNativeMemoryControl.clearCache(label: "afterTalkerForward")
+        }
 
         breadcrumbs.started(.talkerCodecHeadEval)
         trace.stageStarted(.talkerCodecHeadEval)
         let logits: MLXArray
         do {
-            logits = try TuringQwenNativeTalkerForwardRunner.codecHeadLogits(
+            logits = TuringQwenNativeTalkerForwardRunner.codecHeadLogits(
                 finalLastHiddenState: talkerOutput.finalLastHiddenState,
-                weightsStore: weightsStore
+                codecHeadWeight: talkerWeights.codecHeadWeight
             )
             breadcrumbs.completed(.talkerCodecHeadEval)
             trace.stageCompleted(.talkerCodecHeadEval)
@@ -352,19 +384,22 @@ public actor TuringQwenNativeVoiceDesignEngine {
         breadcrumbs.started(.codePredictorCodebookEval)
         trace.stageStarted(.codePredictorCodebookEval)
         let generatedCodebook: [[Int]]
+        let codePredictorStart = Date()
         do {
             generatedCodebook = try generateDynamicCodebook(
                 initialFirstCodecToken: firstCodecToken.tokenID,
                 initialTalkerLastHiddenState: talkerOutput.finalLastHiddenState,
                 initialKVCache: talkerOutput.kvCache,
                 promptInputs: talkerPromptInputs,
-                maxNewRows: maxNewTokens
+                maxNewRows: maxNewTokens,
+                performanceMode: performanceMode
             )
             breadcrumbs.completed(.codePredictorCodebookEval)
             trace.stageCompleted(.codePredictorCodebookEval)
         } catch {
             throw error
         }
+        let codePredictorSeconds = Date().timeIntervalSince(codePredictorStart)
 
         print("""
         [TuringQwenNative] dynamic generation finished
@@ -378,25 +413,49 @@ public actor TuringQwenNativeVoiceDesignEngine {
         breadcrumbs.started(.speechDecoderFirstEval)
         trace.stageStarted(.speechDecoderFirstEval)
         do {
-            TuringQwenNativeMemoryProbe.log(stage: "beforeDecode", rowCount: generatedCodebook.count)
+            if performanceMode.shouldLogFullTokenRows {
+                TuringQwenNativeMemoryProbe.log(stage: "beforeDecode", rowCount: generatedCodebook.count)
+            }
+            let decodeStart = Date()
             let audio = try TuringQwenNativeSpeechDecoder.decode(
                 codebookRows: generatedCodebook,
                 modelRoot: modelRoot
             )
+            let decodeSeconds = Date().timeIntervalSince(decodeStart)
             breadcrumbs.completed(.speechDecoderFirstEval)
             trace.stageCompleted(.speechDecoderFirstEval)
-            TuringQwenNativeMemoryProbe.log(stage: "afterDecode", rowCount: generatedCodebook.count)
+            if performanceMode.shouldLogFullTokenRows {
+                TuringQwenNativeMemoryProbe.log(stage: "afterDecode", rowCount: generatedCodebook.count)
+            }
             rowBudgetRecorder.finished(completedRows: generatedCodebook.count)
+            let renderSeconds = Date().timeIntervalSince(renderStart)
+            let realTimeFactor = TuringQwenNativeRealtimeBudgetProbe.realTimeFactor(
+                renderSeconds: renderSeconds,
+                audioDurationSeconds: audio.durationSeconds
+            )
 
             print("""
             [TuringQwenNative] decode finished
-              mode: dynamic
+              mode: \(generationModeLabel)
               fixtureRowsUsed: false
               sampleCount: \(audio.samples.count)
               sampleRate: \(audio.sampleRate)
               durationSeconds: \(String(format: "%.3f", audio.durationSeconds))
               peakAbs: \(audio.peakAbs)
               rms: \(audio.rms)
+            """)
+
+            print("""
+            [TuringQwenNativePerf] generation finished
+              mode: \(generationModeLabel)
+              rowCount: \(generatedCodebook.count)
+              audioDurationSeconds: \(String(format: "%.3f", audio.durationSeconds))
+              renderSeconds: \(String(format: "%.3f", renderSeconds))
+              realTimeFactor: \(String(format: "%.3f", realTimeFactor))
+              codePredictorSeconds: \(String(format: "%.3f", codePredictorSeconds))
+              decodeSeconds: \(String(format: "%.3f", decodeSeconds))
+              codePredictorKVCache: oneStep
+              fixtureRowsUsed: false
             """)
 
             return audio
@@ -410,10 +469,14 @@ public actor TuringQwenNativeVoiceDesignEngine {
         initialTalkerLastHiddenState: MLXArray,
         initialKVCache: TuringQwenNativeKVCache,
         promptInputs: TuringQwenNativeTalkerPromptInputs,
-        maxNewRows: Int
+        maxNewRows: Int,
+        performanceMode: TuringQwenNativePerformanceMode
     ) throws -> [[Int]] {
         let targetRowCount = max(maxNewRows, 1)
+        let generationStart = Date()
         var generatedRows: [[Int]] = []
+        var talkerOneStepSeconds = Double(0)
+        var codePredictorGroupSeconds = Double(0)
         var generationState = initialGenerationState(
             promptInputs: promptInputs,
             kvCache: initialKVCache
@@ -422,29 +485,36 @@ public actor TuringQwenNativeVoiceDesignEngine {
         print("""
         [TuringQwenNative] dynamic codebook generation started
           maxNewRows: \(targetRowCount)
+          performanceMode: \(performanceMode.rawValue)
           fixtureRowsUsed: false
           residentWeights: true
           kvCacheMode: appendPreallocated
+          codePredictorKVCache: oneStep
           runtimePerStepFileIO: false
         """)
 
-        rowBudgetRecorder.startedRow(0)
+        if performanceMode.shouldWriteRowBudgetEveryRow {
+            rowBudgetRecorder.startedRow(0)
+        }
+        let firstCodeGroupStart = Date()
         let firstCodeGroup = try TuringQwenNativeCodePredictor.generateCodeGroup(
             firstCodecToken: initialFirstCodecToken,
             talkerLastHiddenState: initialTalkerLastHiddenState,
             config: config,
             weightsStore: weightsStore,
-            expectedFixtureRowIndex: nil
+            expectedFixtureRowIndex: nil,
+            resolvedWeights: codePredictorWeights,
+            performanceMode: performanceMode
         )
+        codePredictorGroupSeconds += Date().timeIntervalSince(firstCodeGroupStart)
 
-        print("""
-        [TuringQwenNative] dynamic codebook row generated
-          rowIndex: 0
-          firstCodecToken: \(initialFirstCodecToken)
-          tokenIDs: \(firstCodeGroup.tokenIDs)
-          fixtureRowsUsed: false
-        """)
-        TuringQwenNativeMemoryProbe.log(stage: "afterRow", rowIndex: 0)
+        logGeneratedRow(
+            rowIndex: 0,
+            firstCodecToken: initialFirstCodecToken,
+            tokenIDs: firstCodeGroup.tokenIDs,
+            generationStart: generationStart,
+            performanceMode: performanceMode
+        )
 
         if let stopReason = shouldStopAfterCodeGroup(
             firstCodeGroup.tokenIDs,
@@ -464,7 +534,9 @@ public actor TuringQwenNativeVoiceDesignEngine {
         }
 
         generatedRows.append(firstCodeGroup.tokenIDs)
-        rowBudgetRecorder.completedRows(generatedRows.count)
+        if performanceMode.shouldWriteRowBudgetEveryRow {
+            rowBudgetRecorder.completedRows(generatedRows.count)
+        }
 
         if generatedRows.count >= targetRowCount {
             return generatedRows
@@ -472,28 +544,35 @@ public actor TuringQwenNativeVoiceDesignEngine {
 
         while generatedRows.count < targetRowCount {
             let rowIndex = generatedRows.count
-            rowBudgetRecorder.startedRow(rowIndex)
+            if performanceMode.shouldWriteRowBudgetEveryRow {
+                rowBudgetRecorder.startedRow(rowIndex)
+            }
             let nextInput = try nextTalkerInputEmbedding(
                 codeGroup: generatedRows[rowIndex - 1],
                 generationStep: rowIndex - 1,
-                promptInputs: promptInputs
+                promptInputs: promptInputs,
+                performanceMode: performanceMode
             )
             let nextStep = try TuringQwenNativeTalkerForwardRunner.forwardOneStep(
                 inputEmbedding: nextInput,
                 previousState: generationState,
                 config: config,
-                weightsStore: weightsStore
+                weightsStore: weightsStore,
+                resolvedWeights: talkerWeights,
+                codePredictorWeights: codePredictorWeights,
+                performanceMode: performanceMode
             )
             generationState = nextStep.state
+            talkerOneStepSeconds += nextStep.talkerStepSeconds
+            codePredictorGroupSeconds += nextStep.codePredictorSeconds
 
-            print("""
-            [TuringQwenNative] dynamic codebook row generated
-              rowIndex: \(rowIndex)
-              firstCodecToken: \(nextStep.firstCodecToken)
-              tokenIDs: \(nextStep.codeGroup)
-              fixtureRowsUsed: false
-            """)
-            TuringQwenNativeMemoryProbe.log(stage: "afterRow", rowIndex: rowIndex)
+            logGeneratedRow(
+                rowIndex: rowIndex,
+                firstCodecToken: nextStep.firstCodecToken,
+                tokenIDs: nextStep.codeGroup,
+                generationStart: generationStart,
+                performanceMode: performanceMode
+            )
 
             if let stopReason = shouldStopAfterCodeGroup(
                 nextStep.codeGroup,
@@ -513,16 +592,74 @@ public actor TuringQwenNativeVoiceDesignEngine {
             }
 
             generatedRows.append(nextStep.codeGroup)
-            rowBudgetRecorder.completedRows(generatedRows.count)
+            if performanceMode.shouldWriteRowBudgetEveryRow {
+                rowBudgetRecorder.completedRows(generatedRows.count)
+            }
 
             if generatedRows.count >= targetRowCount {
                 break
             }
 
-            TuringQwenNativeMemoryControl.clearCache(label: "dynamicCodebook.row.\(rowIndex)")
+            if performanceMode.shouldClearMLXCacheEveryRow {
+                TuringQwenNativeMemoryControl.clearCache(label: "dynamicCodebook.row.\(rowIndex)")
+            }
         }
 
+        let elapsed = Date().timeIntervalSince(generationStart)
+        print("""
+        [TuringQwenNativePerf] dynamic codebook timing
+          rowCount: \(generatedRows.count)
+          totalSeconds: \(String(format: "%.3f", elapsed))
+          talkerOneStepSeconds: \(String(format: "%.3f", talkerOneStepSeconds))
+          codePredictorGroupSeconds: \(String(format: "%.3f", codePredictorGroupSeconds))
+          otherLoopSeconds: \(String(format: "%.3f", max(0, elapsed - talkerOneStepSeconds - codePredictorGroupSeconds)))
+          runtimePerStepWeightLookup: false
+        """)
+
         return generatedRows
+    }
+
+    private func logGeneratedRow(
+        rowIndex: Int,
+        firstCodecToken: Int,
+        tokenIDs: [Int],
+        generationStart: Date,
+        performanceMode: TuringQwenNativePerformanceMode
+    ) {
+        if performanceMode.shouldLogFullTokenRows {
+            print("""
+            [TuringQwenNative] dynamic codebook row generated
+              rowIndex: \(rowIndex)
+              firstCodecToken: \(firstCodecToken)
+              tokenIDs: \(tokenIDs)
+              fixtureRowsUsed: false
+            """)
+            TuringQwenNativeMemoryProbe.log(stage: "afterRow", rowIndex: rowIndex)
+            return
+        }
+
+        guard rowIndex == 0 ||
+              (rowIndex + 1) % performanceMode.rowCheckpointStride == 0 else {
+            return
+        }
+
+        let elapsed = Date().timeIntervalSince(generationStart)
+        let completedRows = rowIndex + 1
+        let audioSeconds = Double(completedRows) * 1920.0 / 24_000.0
+        let realTimeFactor = TuringQwenNativeRealtimeBudgetProbe.realTimeFactor(
+            renderSeconds: elapsed,
+            audioDurationSeconds: audioSeconds
+        )
+
+        print("""
+        [TuringQwenNativePerf] dynamic codebook checkpoint
+          rowIndex: \(rowIndex)
+          completedRows: \(completedRows)
+          averageSecondsPerRow: \(String(format: "%.3f", elapsed / Double(completedRows)))
+          projectedRealTimeFactor: \(String(format: "%.3f", realTimeFactor))
+          codePredictorKVCache: oneStep
+          fixtureRowsUsed: false
+        """)
     }
 
     private func initialGenerationState(
@@ -561,12 +698,13 @@ public actor TuringQwenNativeVoiceDesignEngine {
     private func nextTalkerInputEmbedding(
         codeGroup: [Int],
         generationStep: Int,
-        promptInputs: TuringQwenNativeTalkerPromptInputs
+        promptInputs: TuringQwenNativeTalkerPromptInputs,
+        performanceMode: TuringQwenNativePerformanceMode
     ) throws -> MLXArray {
         let codeEmbedding = try TuringQwenNativeCodePredictor.talkerInputEmbedding(
             forCodeGroup: codeGroup,
             config: config,
-            weightsStore: weightsStore
+            resolvedWeights: codePredictorWeights
         )
 
         let trailingHidden: MLXArray
@@ -580,7 +718,9 @@ public actor TuringQwenNativeVoiceDesignEngine {
         }
 
         let input = codeEmbedding + trailingHidden
-        eval(input)
+        if performanceMode.shouldForceEveryEval {
+            eval(input)
+        }
         return input
     }
 
