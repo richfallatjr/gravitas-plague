@@ -22,6 +22,7 @@
 Tools/Turing/.venv/
 .venv-hf/
 .venv-hf-turing-phase0/
+**/.build/
 
 # Local Qwen/Hugging Face model payloads are installed on disk for device testing,
 # but must not be committed or backed up through Git.

@@ -31,7 +31,15 @@ public struct TuringQwenNativeConfig: Decodable, Sendable {
         public let numKeyValueHeads: Int
         public let headDim: Int
         public let intermediateSize: Int
+        public let rmsNormEps: Double
+        public let ropeTheta: Double
         public let codecLanguageID: [String: Int]
+        public let codecThinkID: Int
+        public let codecThinkBosID: Int
+        public let codecThinkEosID: Int
+        public let codecPadID: Int
+        public let codecBosID: Int
+        public let codecEosTokenID: Int
         public let codePredictorConfig: CodePredictorConfig
 
         enum CodingKeys: String, CodingKey {
@@ -44,7 +52,15 @@ public struct TuringQwenNativeConfig: Decodable, Sendable {
             case numKeyValueHeads = "num_key_value_heads"
             case headDim = "head_dim"
             case intermediateSize = "intermediate_size"
+            case rmsNormEps = "rms_norm_eps"
+            case ropeTheta = "rope_theta"
             case codecLanguageID = "codec_language_id"
+            case codecThinkID = "codec_think_id"
+            case codecThinkBosID = "codec_think_bos_id"
+            case codecThinkEosID = "codec_think_eos_id"
+            case codecPadID = "codec_pad_id"
+            case codecBosID = "codec_bos_id"
+            case codecEosTokenID = "codec_eos_token_id"
             case codePredictorConfig = "code_predictor_config"
         }
     }
@@ -93,6 +109,7 @@ public enum TuringQwenNativeError: Error, CustomStringConvertible, Sendable {
     case missingModelFile(String)
     case invalidConfig(String)
     case invalidSafetensors(String)
+    case tokenizer(String)
     case nativeGenerationNotImplemented(String)
     case emptyAudio
 
@@ -104,6 +121,8 @@ public enum TuringQwenNativeError: Error, CustomStringConvertible, Sendable {
             return "Invalid Qwen config: \(message)"
         case .invalidSafetensors(let message):
             return "Invalid safetensors file: \(message)"
+        case .tokenizer(let message):
+            return "Qwen tokenizer error: \(message)"
         case .nativeGenerationNotImplemented(let message):
             return message
         case .emptyAudio:

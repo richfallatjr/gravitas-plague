@@ -70,12 +70,13 @@ public actor TuringQwenNativeVoiceDesignEngine {
         maxNewTokens: Int,
         seed: UInt64
     ) async throws -> TuringQwenNativeAudio {
-        try Self.withStage(
+        let tokenizer = try Self.withStage(
             .tokenizerLoad,
             trace: trace,
             breadcrumbs: breadcrumbs
         ) {
             try Self.preflightTokenizer(modelRoot: modelRoot)
+            return try TuringQwenNativeTokenizer(modelRoot: modelRoot)
         }
 
         let prompt = try Self.withStage(
@@ -87,15 +88,22 @@ public actor TuringQwenNativeVoiceDesignEngine {
                 text: text,
                 voiceDescription: voiceDescription,
                 language: language,
-                englishLanguageID: config.talkerConfig.codecLanguageID["english"]
+                englishLanguageID: config.talkerConfig.codecLanguageID["english"],
+                tokenizer: tokenizer
             )
         }
 
         trace.tensor(
-            "prompt.inputIDs",
-            shape: [prompt.inputIDs.count],
-            dtype: "int32",
-            ndim: 1
+            "prompt.assistantInputIDs",
+            shape: [1, prompt.assistantInputIDs.count],
+            dtype: "int64",
+            ndim: 2
+        )
+        trace.tensor(
+            "prompt.instructInputIDs",
+            shape: [1, prompt.instructInputIDs.count],
+            dtype: "int64",
+            ndim: 2
         )
 
         try Self.withStage(
@@ -103,12 +111,75 @@ public actor TuringQwenNativeVoiceDesignEngine {
             trace: trace,
             breadcrumbs: breadcrumbs
         ) {
-            let ids = MLXArray(prompt.inputIDs)
-            eval(ids)
+            let assistantIDs = MLXArray(
+                int64: prompt.assistantInputIDs,
+                [1, prompt.assistantInputIDs.count]
+            )
+            let instructIDs = MLXArray(
+                int64: prompt.instructInputIDs,
+                [1, prompt.instructInputIDs.count]
+            )
+            eval(assistantIDs, instructIDs)
         }
 
+        let talkerPromptInputs = try Self.withStage(
+            .talkerPromptInputEval,
+            trace: trace,
+            breadcrumbs: breadcrumbs
+        ) {
+            try TuringQwenNativeTalkerPromptInputBuilder.build(
+                prompt: prompt,
+                config: config,
+                tensorIndex: tensorIndex
+            )
+        }
+
+        trace.tensor(
+            "talker.inputsEmbeds",
+            shape: [1, talkerPromptInputs.sequenceLength, talkerPromptInputs.hiddenSize],
+            dtype: "float32",
+            ndim: 3
+        )
+        trace.tensor(
+            "talker.attentionMask",
+            shape: [1, talkerPromptInputs.sequenceLength],
+            dtype: "int64",
+            ndim: 2
+        )
+        trace.tensor(
+            "talker.trailingTextHidden",
+            shape: [1, 1, talkerPromptInputs.hiddenSize],
+            dtype: "float32",
+            ndim: 3
+        )
+        trace.tensor(
+            "talker.ttsPadEmbed",
+            shape: [1, 1, talkerPromptInputs.hiddenSize],
+            dtype: "float32",
+            ndim: 3
+        )
+
+        let layer0Output = try Self.withStage(
+            .talkerLayer0Eval,
+            trace: trace,
+            breadcrumbs: breadcrumbs
+        ) {
+            try TuringQwenNativeTalkerLayer0Runner.run(
+                promptInputs: talkerPromptInputs,
+                config: config,
+                tensorIndex: tensorIndex
+            )
+        }
+
+        trace.tensor(
+            "talker.layer0.hiddenStates",
+            shape: [1, layer0Output.sequenceLength, layer0Output.hiddenSize],
+            dtype: "float32",
+            ndim: 3
+        )
+
         throw TuringQwenNativeError.nativeGenerationNotImplemented(
-            "TuringQwenNative preflight, config parse, safetensors header parse, tokenizer asset check, prompt build, and first MLX input eval completed. The owned talker/code-predictor/speech-decoder graph still needs to be ported before audio can be generated."
+            "TuringQwenNative preflight, tokenizer, safetensors row loading, official VoiceDesign prompt embedding projection, codec prefill, first talker input tensor eval, and talker decoder layer 0 eval completed. The remaining talker layers, codec sampling, code predictor, and speech decoder still need to be ported before audio can be generated."
         )
     }
 
@@ -182,7 +253,10 @@ public actor TuringQwenNativeVoiceDesignEngine {
 }
 
 struct TuringQwenNativeVoiceDesignPrompt: Sendable {
-    let inputIDs: [Int32]
+    let assistantText: String
+    let instructText: String
+    let assistantInputIDs: [Int]
+    let instructInputIDs: [Int]
 }
 
 enum TuringQwenNativeVoiceDesignPromptBuilder {
@@ -190,7 +264,8 @@ enum TuringQwenNativeVoiceDesignPromptBuilder {
         text: String,
         voiceDescription: String,
         language: String,
-        englishLanguageID: Int?
+        englishLanguageID: Int?,
+        tokenizer: TuringQwenNativeTokenizer
     ) throws -> TuringQwenNativeVoiceDesignPrompt {
         guard text.isEmpty == false else {
             throw TuringQwenNativeError.invalidConfig("VoiceDesign text is empty.")
@@ -203,12 +278,14 @@ enum TuringQwenNativeVoiceDesignPromptBuilder {
             throw TuringQwenNativeError.invalidConfig("Only english VoiceDesign canary is wired.")
         }
 
-        // TODO: Port QwenLM/Qwen3-TTS generate_voice_design prompt construction exactly.
-        // This placeholder is intentionally only a local byte-level transport probe so
-        // the native package owns model asset, tokenizer, and MLX eval boundaries first.
-        let prompt = "VoiceDesign:\nInstruction:\n\(voiceDescription)\nText:\n\(text)"
+        let assistantText = "<|im_start|>assistant\n\(text)<|im_end|>\n<|im_start|>assistant\n"
+        let instructText = "<|im_start|>user\n\(voiceDescription)<|im_end|>\n"
+
         return TuringQwenNativeVoiceDesignPrompt(
-            inputIDs: prompt.utf8.map(Int32.init)
+            assistantText: assistantText,
+            instructText: instructText,
+            assistantInputIDs: try tokenizer.encode(assistantText),
+            instructInputIDs: try tokenizer.encode(instructText)
         )
     }
 }

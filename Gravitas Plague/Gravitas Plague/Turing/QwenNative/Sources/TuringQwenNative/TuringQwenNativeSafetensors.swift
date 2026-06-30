@@ -1,6 +1,9 @@
 import Foundation
+import MLX
 
 struct TuringQwenNativeSafetensorsIndex: Sendable {
+    let fileURL: URL
+    let dataStartOffset: UInt64
     let tensors: [String: TensorMetadata]
 
     struct TensorMetadata: Decodable, Sendable {
@@ -59,7 +62,11 @@ struct TuringQwenNativeSafetensorsIndex: Sendable {
             )
         }
 
-        return TuringQwenNativeSafetensorsIndex(tensors: tensors)
+        return TuringQwenNativeSafetensorsIndex(
+            fileURL: url,
+            dataStartOffset: 8 + headerLength,
+            tensors: tensors
+        )
     }
 
     func requireAny(prefixes: [String]) throws {
@@ -82,5 +89,219 @@ struct TuringQwenNativeSafetensorsIndex: Sendable {
             case shape
             case dataOffsets = "data_offsets"
         }
+    }
+}
+
+struct TuringQwenNativeFloatTensor: Sendable {
+    let name: String
+    let shape: [Int]
+    let values: [Float]
+}
+
+struct TuringQwenNativeSafetensorsReader: Sendable {
+    private let index: TuringQwenNativeSafetensorsIndex
+
+    init(index: TuringQwenNativeSafetensorsIndex) {
+        self.index = index
+    }
+
+    func loadTensorFloat32(
+        name: String
+    ) throws -> TuringQwenNativeFloatTensor {
+        let metadata = try metadata(for: name)
+        let byteCount = try expectedByteCount(for: metadata, name: name)
+        let start = try absoluteOffset(for: metadata.dataOffsets[0])
+
+        let handle = try FileHandle(forReadingFrom: index.fileURL)
+        defer {
+            try? handle.close()
+        }
+
+        try handle.seek(toOffset: start)
+        let data = try handle.read(upToCount: byteCount) ?? Data()
+        guard data.count == byteCount else {
+            throw TuringQwenNativeError.invalidSafetensors(
+                "Could not read full tensor \(name). Expected \(byteCount) bytes, got \(data.count)."
+            )
+        }
+
+        return TuringQwenNativeFloatTensor(
+            name: name,
+            shape: metadata.shape,
+            values: try decodeFloat32(data, dtype: metadata.dtype, name: name)
+        )
+    }
+
+    func loadRowsFloat32(
+        name: String,
+        rows: [Int]
+    ) throws -> TuringQwenNativeFloatTensor {
+        let metadata = try metadata(for: name)
+        guard metadata.shape.count == 2 else {
+            throw TuringQwenNativeError.invalidSafetensors(
+                "Row slicing requires rank-2 tensor \(name), got shape \(metadata.shape)."
+            )
+        }
+
+        let rowCount = metadata.shape[0]
+        let columnCount = metadata.shape[1]
+        let bytesPerElement = try bytesPerElement(dtype: metadata.dtype, name: name)
+        let rowByteCount = columnCount * bytesPerElement
+
+        let handle = try FileHandle(forReadingFrom: index.fileURL)
+        defer {
+            try? handle.close()
+        }
+
+        var values: [Float] = []
+        values.reserveCapacity(rows.count * columnCount)
+
+        for row in rows {
+            guard row >= 0,
+                  row < rowCount else {
+                throw TuringQwenNativeError.invalidSafetensors(
+                    "Row \(row) is out of bounds for tensor \(name) with \(rowCount) rows."
+                )
+            }
+
+            let relative = metadata.dataOffsets[0] +
+                Int64(row) * Int64(rowByteCount)
+            let start = try absoluteOffset(for: relative)
+
+            try handle.seek(toOffset: start)
+            let data = try handle.read(upToCount: rowByteCount) ?? Data()
+            guard data.count == rowByteCount else {
+                throw TuringQwenNativeError.invalidSafetensors(
+                    "Could not read row \(row) from \(name). Expected \(rowByteCount) bytes, got \(data.count)."
+                )
+            }
+
+            values.append(
+                contentsOf: try decodeFloat32(data, dtype: metadata.dtype, name: name)
+            )
+        }
+
+        return TuringQwenNativeFloatTensor(
+            name: name,
+            shape: [rows.count, columnCount],
+            values: values
+        )
+    }
+
+    private func metadata(
+        for name: String
+    ) throws -> TuringQwenNativeSafetensorsIndex.TensorMetadata {
+        guard let metadata = index.tensors[name] else {
+            throw TuringQwenNativeError.invalidSafetensors("Missing tensor \(name).")
+        }
+
+        return metadata
+    }
+
+    private func absoluteOffset(
+        for relativeOffset: Int64
+    ) throws -> UInt64 {
+        guard relativeOffset >= 0 else {
+            throw TuringQwenNativeError.invalidSafetensors(
+                "Negative tensor data offset \(relativeOffset)."
+            )
+        }
+
+        return index.dataStartOffset + UInt64(relativeOffset)
+    }
+
+    private func expectedByteCount(
+        for metadata: TuringQwenNativeSafetensorsIndex.TensorMetadata,
+        name: String
+    ) throws -> Int {
+        let elementCount = try metadata.shape.reduce(1) { partial, next in
+            guard next >= 0,
+                  partial <= Int.max / max(next, 1) else {
+                throw TuringQwenNativeError.invalidSafetensors(
+                    "Invalid tensor shape for \(name): \(metadata.shape)."
+                )
+            }
+
+            return partial * next
+        }
+
+        let expected = elementCount * (try bytesPerElement(dtype: metadata.dtype, name: name))
+        let actual = metadata.dataOffsets[1] - metadata.dataOffsets[0]
+        guard actual == Int64(expected) else {
+            throw TuringQwenNativeError.invalidSafetensors(
+                "Tensor \(name) byte count mismatch. Metadata \(actual), expected \(expected)."
+            )
+        }
+
+        return expected
+    }
+
+    private func bytesPerElement(
+        dtype: String,
+        name: String
+    ) throws -> Int {
+        switch dtype {
+        case "BF16":
+            return 2
+        case "F32":
+            return 4
+        default:
+            throw TuringQwenNativeError.invalidSafetensors(
+                "Unsupported tensor dtype \(dtype) for \(name)."
+            )
+        }
+    }
+
+    private func decodeFloat32(
+        _ data: Data,
+        dtype: String,
+        name: String
+    ) throws -> [Float] {
+        switch dtype {
+        case "BF16":
+            guard data.count.isMultiple(of: 2) else {
+                throw TuringQwenNativeError.invalidSafetensors(
+                    "BF16 tensor \(name) has odd byte count \(data.count)."
+                )
+            }
+
+            var values: [Float] = []
+            values.reserveCapacity(data.count / 2)
+            data.withUnsafeBytes { raw in
+                for offset in stride(from: 0, to: data.count, by: 2) {
+                    let word = UInt16(littleEndian: raw.loadUnaligned(fromByteOffset: offset, as: UInt16.self))
+                    values.append(Float(bitPattern: UInt32(word) << 16))
+                }
+            }
+            return values
+
+        case "F32":
+            guard data.count.isMultiple(of: 4) else {
+                throw TuringQwenNativeError.invalidSafetensors(
+                    "F32 tensor \(name) byte count is not divisible by 4: \(data.count)."
+                )
+            }
+
+            var values: [Float] = []
+            values.reserveCapacity(data.count / 4)
+            data.withUnsafeBytes { raw in
+                for offset in stride(from: 0, to: data.count, by: 4) {
+                    let word = UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: offset, as: UInt32.self))
+                    values.append(Float(bitPattern: word))
+                }
+            }
+            return values
+
+        default:
+            throw TuringQwenNativeError.invalidSafetensors(
+                "Unsupported tensor dtype \(dtype) for \(name)."
+            )
+        }
+    }
+}
+
+extension TuringQwenNativeFloatTensor {
+    func mlxArray() -> MLXArray {
+        MLXArray(values, shape)
     }
 }

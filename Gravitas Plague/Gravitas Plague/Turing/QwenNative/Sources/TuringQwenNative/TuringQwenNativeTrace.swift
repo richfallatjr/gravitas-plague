@@ -41,6 +41,8 @@ public enum TuringQwenNativeStage: String, Codable, Sendable {
     case weightMapValidate
     case promptBuild
     case promptEmbeddingsEval
+    case talkerPromptInputEval
+    case talkerLayer0Eval
     case talkerForwardFirstEval
     case sampleFirstToken
     case codePredictorFirstEval
