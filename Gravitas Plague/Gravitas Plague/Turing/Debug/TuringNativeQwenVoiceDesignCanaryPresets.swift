@@ -120,8 +120,15 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
         switch self {
         case .rowBudgetProbe40Ref80:
             return 80
-        case .rowBudgetProbe40Ref160:
-            return 160
+        case .rowBudgetProbe40Ref160,
+             .bigMikeShortDynamic,
+             .bigMikeShortDynamicPerformance8,
+             .bigMikeBroadcastSegment1Dynamic,
+             .bigMikeBroadcastSegment1DynamicPerformance,
+             .bigMikeBroadcastLongformDynamic,
+             .bigMikeHello,
+             .bigMikeBroadcast450:
+            return Self.runtimeReferenceRowLimit
         default:
             return nil
         }
@@ -173,6 +180,7 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
     static let dynamicRowHeadroom = 8
     static let estimatedCharactersPerSecond = 14.0
     static let minimumUsefulSpeechSeconds = Double(minimumUsefulSpeechRows) * secondsPerGeneratedRow
+    static let runtimeReferenceRowLimit = 160
 
     static func estimatedAudioSeconds(
         rows: Int
