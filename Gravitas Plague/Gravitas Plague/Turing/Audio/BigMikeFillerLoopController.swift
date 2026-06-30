@@ -28,8 +28,8 @@ final class BigMikeFillerLoopController: NSObject, AVAudioPlayerDelegate {
         ]
         var allowedExtensions: Set<String> = ["wav", "mp3", "m4a", "aiff", "caf"]
         var fadeOutSeconds: TimeInterval = 0.20
-        var maxContinuousSeconds: TimeInterval = 12.0
-        var maxConsecutiveClips: Int = 2
+        var maxContinuousSeconds: TimeInterval = 12.0 // 0 disables this cap.
+        var maxConsecutiveClips: Int = 2 // 0 disables this cap.
         var volume: Float = 0.85
         var avoidImmediateRepeat: Bool = true
     }
@@ -42,6 +42,7 @@ final class BigMikeFillerLoopController: NSObject, AVAudioPlayerDelegate {
     private var lastClipURL: URL?
     private var loopStartedAt: Date?
     private var clipsPlayedInCurrentRun = 0
+    private var playbackSupervisorTask: Task<Void, Never>?
 
     override init() {
         self.configuration = Configuration()
@@ -110,11 +111,14 @@ final class BigMikeFillerLoopController: NSObject, AVAudioPlayerDelegate {
         """)
 
         playNextClip(runID: currentRunID)
+        startPlaybackSupervisor(runID: currentRunID)
     }
 
     /// Stop filler because real Qwen speech is ready.
     func stopForRealSpeech(reason: String) {
         guard state == .playing else {
+            playbackSupervisorTask?.cancel()
+            playbackSupervisorTask = nil
             state = .idle
             player?.stop()
             player = nil
@@ -161,6 +165,8 @@ final class BigMikeFillerLoopController: NSObject, AVAudioPlayerDelegate {
         [BigMikeFiller] stopped immediately
           reason: \(reason)
         """)
+        playbackSupervisorTask?.cancel()
+        playbackSupervisorTask = nil
         currentRunID = UUID()
         state = .idle
         player?.stop()
@@ -171,6 +177,8 @@ final class BigMikeFillerLoopController: NSObject, AVAudioPlayerDelegate {
 
     private func finishStop(runID: UUID) {
         guard currentRunID == runID else { return }
+        playbackSupervisorTask?.cancel()
+        playbackSupervisorTask = nil
         state = .idle
         player = nil
         loopStartedAt = nil
@@ -204,7 +212,14 @@ final class BigMikeFillerLoopController: NSObject, AVAudioPlayerDelegate {
             player = next
             lastClipURL = clip
             clipsPlayedInCurrentRun += 1
-            next.play()
+            guard next.play() else {
+                print("""
+                [BigMikeFiller] clip play returned false
+                  clip: \(clip.lastPathComponent)
+                """)
+                stopImmediately(reason: "clipPlayReturnedFalse")
+                return
+            }
 
             print("""
             [BigMikeFiller] clip started
@@ -233,19 +248,53 @@ final class BigMikeFillerLoopController: NSObject, AVAudioPlayerDelegate {
     private func shouldStopBecauseBudgetExpired() -> Bool {
         if configuration.maxConsecutiveClips > 0,
            clipsPlayedInCurrentRun >= configuration.maxConsecutiveClips {
+            print("""
+            [BigMikeFiller] consecutive clip budget reached
+              clipsPlayed: \(clipsPlayedInCurrentRun)
+              maxConsecutiveClips: \(configuration.maxConsecutiveClips)
+            """)
             return true
         }
-        if let loopStartedAt,
+        if configuration.maxContinuousSeconds > 0,
+           let loopStartedAt,
            Date().timeIntervalSince(loopStartedAt) >= configuration.maxContinuousSeconds {
+            print("""
+            [BigMikeFiller] continuous time budget reached
+              elapsedSeconds: \(Date().timeIntervalSince(loopStartedAt))
+              maxContinuousSeconds: \(configuration.maxContinuousSeconds)
+            """)
             return true
         }
         return false
     }
 
+    private func startPlaybackSupervisor(runID: UUID) {
+        playbackSupervisorTask?.cancel()
+        playbackSupervisorTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                guard let self else { return }
+                guard self.currentRunID == runID else { return }
+                guard self.state == .playing else { return }
+
+                if self.player?.isPlaying != true {
+                    print("""
+                    [BigMikeFiller] supervisor advancing clip
+                      clipsPlayed: \(self.clipsPlayedInCurrentRun)
+                    """)
+                    self.playNextClip(runID: runID)
+                }
+            }
+        }
+    }
+
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor [weak self] in
             guard let self else { return }
-            guard self.player === player else { return }
+            guard self.player === player else {
+                print("[BigMikeFiller] stale finish callback ignored")
+                return
+            }
             print("""
             [BigMikeFiller] clip finished
               successful: \(flag)
