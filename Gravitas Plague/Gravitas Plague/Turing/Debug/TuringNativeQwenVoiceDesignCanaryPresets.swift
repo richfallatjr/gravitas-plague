@@ -131,12 +131,11 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
 
     var performanceMode: TuringQwenNativePerformanceMode {
         switch self {
-        case .bigMikeShortDynamicPerformance8,
-             .bigMikeBroadcastSegment1Dynamic,
-             .bigMikeBroadcastSegment1DynamicPerformance:
-            return .performance
-        default:
+        case .fixtureDecode,
+             .sourceTruthHelloWorldFixture:
             return .diagnostic
+        default:
+            return .performance
         }
     }
 

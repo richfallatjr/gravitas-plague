@@ -76,7 +76,8 @@ enum TuringQwenNativeTalkerForwardRunner {
         config: TuringQwenNativeConfig,
         weightsStore: TuringQwenNativeWeightsStore,
         maxNewRows: Int,
-        resolvedWeights: TuringQwenNativeTalkerResolvedWeights? = nil
+        resolvedWeights: TuringQwenNativeTalkerResolvedWeights? = nil,
+        performanceMode: TuringQwenNativePerformanceMode = .diagnostic
     ) throws -> TuringQwenNativeTalkerForwardOutput {
         try runFullForward(
             inputsEmbeds: promptInputs.inputsEmbeds,
@@ -86,7 +87,8 @@ enum TuringQwenNativeTalkerForwardRunner {
             weightsStore: weightsStore,
             maxNewRows: maxNewRows,
             resolvedWeights: resolvedWeights,
-            logLabel: "prompt"
+            logLabel: "prompt",
+            performanceMode: performanceMode
         )
     }
 
@@ -98,7 +100,8 @@ enum TuringQwenNativeTalkerForwardRunner {
         weightsStore: TuringQwenNativeWeightsStore,
         maxNewRows: Int,
         resolvedWeights: TuringQwenNativeTalkerResolvedWeights? = nil,
-        logLabel: String
+        logLabel: String,
+        performanceMode: TuringQwenNativePerformanceMode = .diagnostic
     ) throws -> TuringQwenNativeTalkerForwardOutput {
         let resolved = try resolvedWeights ?? TuringQwenNativeTalkerResolvedWeights(
             config: config,
@@ -115,13 +118,22 @@ enum TuringQwenNativeTalkerForwardRunner {
             )
         }
 
-        print("""
-        [TuringQwenNative] talker all-layers eval starting
-          label: \(logLabel)
-          layerCount: \(config.talkerConfig.numHiddenLayers)
-          sequenceLength: \(sequenceLength)
-          hiddenSize: \(hiddenSize)
-        """)
+        if performanceMode.shouldLogFullTokenRows {
+            print("""
+            [TuringQwenNative] talker all-layers eval starting
+              label: \(logLabel)
+              layerCount: \(config.talkerConfig.numHiddenLayers)
+              sequenceLength: \(sequenceLength)
+              hiddenSize: \(hiddenSize)
+            """)
+        } else {
+            print("""
+            [TuringQwenNativePerf] talker full forward started
+              label: \(logLabel)
+              layerCount: \(config.talkerConfig.numHiddenLayers)
+              sequenceLength: \(sequenceLength)
+            """)
+        }
 
         for layerIndex in 0..<config.talkerConfig.numHiddenLayers {
             let layerStart = Date()
@@ -136,16 +148,21 @@ enum TuringQwenNativeTalkerForwardRunner {
             )
             hidden = layerResult.hiddenStates
             cacheLayers.append(layerResult.cacheLayer)
-            eval(hidden)
-            TuringQwenNativeMemoryControl.clearCache(label: "talker.\(logLabel).layer.\(layerIndex)")
-
-            print("""
-            [TuringQwenNative] talker layer completed
-              label: \(logLabel)
-              layerIndex: \(layerIndex)
-              layerSeconds: \(String(format: "%.3f", Date().timeIntervalSince(layerStart)))
-              cumulativeSeconds: \(String(format: "%.3f", Date().timeIntervalSince(forwardStart)))
-            """)
+            if performanceMode.shouldForceEveryEval {
+                eval(hidden)
+            }
+            if performanceMode.shouldClearMLXCacheEveryRow {
+                TuringQwenNativeMemoryControl.clearCache(label: "talker.\(logLabel).layer.\(layerIndex)")
+            }
+            if performanceMode.shouldLogFullTokenRows {
+                print("""
+                [TuringQwenNative] talker layer completed
+                  label: \(logLabel)
+                  layerIndex: \(layerIndex)
+                  layerSeconds: \(String(format: "%.3f", Date().timeIntervalSince(layerStart)))
+                  cumulativeSeconds: \(String(format: "%.3f", Date().timeIntervalSince(forwardStart)))
+                """)
+            }
         }
 
         let finalNormStart = Date()
@@ -154,19 +171,33 @@ enum TuringQwenNativeTalkerForwardRunner {
             weight: resolved.finalNormWeight,
             eps: Float(config.talkerConfig.rmsNormEps)
         )
-        eval(finalHidden)
+        if performanceMode.shouldForceEveryEval {
+            eval(finalHidden)
+        }
         let finalLastHidden = finalHidden[
             (sequenceLength - 1)..<sequenceLength,
             axis: 1
         ]
-        eval(finalLastHidden)
-        TuringQwenNativeMemoryControl.clearCache(label: "talker.\(logLabel).finalNorm")
-        print("""
-        [TuringQwenNative] talker final norm completed
-          label: \(logLabel)
-          seconds: \(String(format: "%.3f", Date().timeIntervalSince(finalNormStart)))
-          cumulativeSeconds: \(String(format: "%.3f", Date().timeIntervalSince(forwardStart)))
-        """)
+        if performanceMode.shouldForceEveryEval {
+            eval(finalLastHidden)
+        }
+        if performanceMode.shouldClearMLXCacheEveryRow {
+            TuringQwenNativeMemoryControl.clearCache(label: "talker.\(logLabel).finalNorm")
+        }
+        if performanceMode.shouldLogFullTokenRows {
+            print("""
+            [TuringQwenNative] talker final norm completed
+              label: \(logLabel)
+              seconds: \(String(format: "%.3f", Date().timeIntervalSince(finalNormStart)))
+              cumulativeSeconds: \(String(format: "%.3f", Date().timeIntervalSince(forwardStart)))
+            """)
+        } else {
+            print("""
+            [TuringQwenNativePerf] talker full forward finished
+              label: \(logLabel)
+              seconds: \(String(format: "%.3f", Date().timeIntervalSince(forwardStart)))
+            """)
+        }
 
         return TuringQwenNativeTalkerForwardOutput(
             finalLastHiddenState: finalLastHidden,

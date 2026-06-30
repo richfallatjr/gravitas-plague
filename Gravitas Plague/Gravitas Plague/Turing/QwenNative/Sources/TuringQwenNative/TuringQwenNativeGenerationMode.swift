@@ -44,20 +44,6 @@ enum TuringQwenNativeStopReason: String {
     case maxTokens
 }
 
-enum TuringQwenNativeSampler {
-    static func greedyTokenArray(
-        from logits: MLXArray
-    ) throws -> MLXArray {
-        logits[0, 0].argMax(keepDims: true)
-    }
-
-    static func greedyToken(
-        from logits: MLXArray
-    ) throws -> Int {
-        try greedyTokenArray(from: logits).item(Int.self)
-    }
-}
-
 enum TuringQwenNativeMemoryProbe {
     static func log(
         stage: String,

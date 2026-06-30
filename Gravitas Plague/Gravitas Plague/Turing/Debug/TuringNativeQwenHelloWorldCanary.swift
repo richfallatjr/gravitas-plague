@@ -28,6 +28,7 @@ enum TuringNativeQwenHelloWorldCanary {
         preset: TuringNativeQwenVoiceDesignCanaryPreset = .bigMikeShortDynamic
     ) async -> TuringNativeQwenRunResult {
         let input = preset.input
+        var engine: TuringQwenNativeBaseCloneEngine?
 
         do {
             print("""
@@ -72,10 +73,11 @@ enum TuringNativeQwenHelloWorldCanary {
                 activeQwenModelID: activeModelID,
                 quantization: activeQuantization
             )
-            let engine = try TuringQwenNativeBaseCloneEngine(
+            let loadedEngine = try TuringQwenNativeBaseCloneEngine(
                 modelRoot: stagedRoot,
                 trace: .stdout(prefix: "[TuringQwenNativeBaseClone]")
             )
+            engine = loadedEngine
             TuringMemoryBudgetProbe.log(
                 label: "afterQwenLoad",
                 activeQwenModelID: activeModelID,
@@ -92,13 +94,13 @@ enum TuringNativeQwenHelloWorldCanary {
                 try await runLongform(
                     preset: preset,
                     cloneProfile: cloneProfile,
-                    engine: engine
+                    engine: loadedEngine
                 )
             } else {
                 let audio = try await renderBaseCloneSegment(
                     preset: preset,
                     cloneProfile: cloneProfile,
-                    engine: engine,
+                    engine: loadedEngine,
                     segment: input.spokenText,
                     segmentIndex: 0
                 )
@@ -108,6 +110,11 @@ enum TuringNativeQwenHelloWorldCanary {
                     sampleRate: audio.sampleRate
                 )
             }
+
+            await loadedEngine.releaseResidentState(
+                reason: "episodePickerRunFinished.\(preset.rawValue)"
+            )
+            engine = nil
 
             TuringMemoryBudgetProbe.log(
                 label: "afterQwenGenerate",
@@ -120,6 +127,11 @@ enum TuringNativeQwenHelloWorldCanary {
             print("[TuringQwenNativeBaseClone] playback finished")
             return .succeeded("Finished \(preset.rawValue)")
         } catch {
+            if let engine {
+                await engine.releaseResidentState(
+                    reason: "episodePickerRunFailed.\(preset.rawValue)"
+                )
+            }
             TuringMemoryBudgetProbe.log(label: "afterTransientCleanup")
             TuringMemoryBudgetProbe.log(label: "afterQwenUnload")
 
