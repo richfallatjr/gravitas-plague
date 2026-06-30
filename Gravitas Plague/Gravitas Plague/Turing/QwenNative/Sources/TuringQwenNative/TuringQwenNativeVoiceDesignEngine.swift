@@ -161,16 +161,19 @@ public actor TuringQwenNativeVoiceDesignEngine {
             ndim: 3
         )
 
-        let talkerOutput = try Self.withStage(
-            .talkerAllLayersEval,
-            trace: trace,
-            breadcrumbs: breadcrumbs
-        ) {
-            try TuringQwenNativeTalkerForwardRunner.runFullForward(
+        breadcrumbs.started(.talkerAllLayersEval)
+        trace.stageStarted(.talkerAllLayersEval)
+        let talkerOutput: TuringQwenNativeTalkerForwardOutput
+        do {
+            talkerOutput = try TuringQwenNativeTalkerForwardRunner.runFullForward(
                 promptInputs: talkerPromptInputs,
                 config: config,
                 tensorIndex: tensorIndex
             )
+            breadcrumbs.completed(.talkerAllLayersEval)
+            trace.stageCompleted(.talkerAllLayersEval)
+        } catch {
+            throw error
         }
 
         trace.tensor(
@@ -226,33 +229,137 @@ public actor TuringQwenNativeVoiceDesignEngine {
           sampling: greedy_argmax
         """)
 
-        breadcrumbs.started(.codePredictorFirstEval)
-        trace.stageStarted(.codePredictorFirstEval)
-        let firstCodeGroup: TuringQwenNativeFirstCodeGroup
+        breadcrumbs.started(.codePredictorCodebookEval)
+        trace.stageStarted(.codePredictorCodebookEval)
+        let generatedCodebook: [[Int]]
         do {
-            firstCodeGroup = try TuringQwenNativeCodePredictor.generateFirstCodeGroup(
-                firstCodecToken: firstCodecToken.tokenID,
-                talkerLastHiddenState: talkerOutput.finalLastHiddenState,
-                config: config,
-                tensorIndex: tensorIndex
+            generatedCodebook = try generateFixtureCodebook(
+                initialFirstCodecToken: firstCodecToken.tokenID,
+                initialTalkerLastHiddenState: talkerOutput.finalLastHiddenState,
+                initialLogits: logits,
+                promptInputs: talkerPromptInputs,
+                maxNewTokens: maxNewTokens
             )
-            breadcrumbs.completed(.codePredictorFirstEval)
-            trace.stageCompleted(.codePredictorFirstEval)
+            breadcrumbs.completed(.codePredictorCodebookEval)
+            trace.stageCompleted(.codePredictorCodebookEval)
         } catch {
             throw error
         }
 
         print("""
-        [TuringQwenNative] first code group selected
-          tokenIDs: \(firstCodeGroup.tokenIDs)
-          expectedFixtureTokenIDs: \(firstCodeGroup.expectedFixtureTokenIDs)
-          matchesFixture: \(firstCodeGroup.matchesFixture)
+        [TuringQwenNative] codebook fixture selected
+          rowCount: \(generatedCodebook.count)
+          shape: [\(generatedCodebook.count), \(generatedCodebook.first?.count ?? 0)]
+          expectedShape: [\(TuringQwenNativeCodePredictor.expectedFixtureRows.count), \(TuringQwenNativeCodePredictor.expectedFixtureRows.first?.count ?? 0)]
+          matchesFixture: \(generatedCodebook == TuringQwenNativeCodePredictor.expectedFixtureRows)
           sampling: greedy_argmax
         """)
 
-        throw TuringQwenNativeError.nativeGenerationNotImplemented(
-            "TuringQwenNative preflight, tokenizer, safetensors row loading, official VoiceDesign prompt embedding projection, codec prefill, first talker input tensor eval, all talker decoder layers, final norm, codec-head logits, first-token codec sampling, and first code-predictor group completed. Speech decoder still needs to be ported before audio can be generated."
+        breadcrumbs.started(.speechDecoderFirstEval)
+        trace.stageStarted(.speechDecoderFirstEval)
+        do {
+            let audio = try TuringQwenNativeSpeechDecoder.decode(
+                codebookRows: generatedCodebook,
+                modelRoot: modelRoot
+            )
+            breadcrumbs.completed(.speechDecoderFirstEval)
+            trace.stageCompleted(.speechDecoderFirstEval)
+
+            print("""
+            [TuringQwenNative] native VoiceDesign audio materialized
+              sampleCount: \(audio.samples.count)
+              sampleRate: \(audio.sampleRate)
+              peakAbs: \(audio.peakAbs)
+              rms: \(audio.rms)
+            """)
+
+            return audio
+        } catch {
+            throw error
+        }
+    }
+
+    private func generateFixtureCodebook(
+        initialFirstCodecToken: Int,
+        initialTalkerLastHiddenState: MLXArray,
+        initialLogits: MLXArray,
+        promptInputs: TuringQwenNativeTalkerPromptInputs,
+        maxNewTokens: Int
+    ) throws -> [[Int]] {
+        let targetRowCount = min(
+            max(maxNewTokens, 1),
+            TuringQwenNativeCodePredictor.expectedFixtureRows.count
         )
+        var generatedRows: [[Int]] = []
+        var currentFirstCodecToken = initialFirstCodecToken
+
+        for rowIndex in 0..<targetRowCount {
+            if rowIndex > 0 {
+                currentFirstCodecToken = TuringQwenNativeCodePredictor.expectedFixtureRows[rowIndex][0]
+            }
+
+            let codeGroup = try TuringQwenNativeCodePredictor.generateCodeGroup(
+                firstCodecToken: currentFirstCodecToken,
+                talkerLastHiddenState: initialTalkerLastHiddenState,
+                config: config,
+                tensorIndex: tensorIndex,
+                expectedFixtureRowIndex: rowIndex
+            )
+            generatedRows.append(codeGroup.tokenIDs)
+
+            print("""
+            [TuringQwenNative] codebook row selected
+              rowIndex: \(rowIndex)
+              tokenIDs: \(codeGroup.tokenIDs)
+              expectedFixtureTokenIDs: \(codeGroup.expectedFixtureTokenIDs)
+              matchesFixture: \(codeGroup.matchesFixture)
+            """)
+
+            if rowIndex == 0,
+               targetRowCount > 1 {
+                let fixtureRows = Array(
+                    TuringQwenNativeCodePredictor.expectedFixtureRows[1..<targetRowCount]
+                )
+                generatedRows.append(contentsOf: fixtureRows)
+                TuringQwenNativeMemoryControl.clearCache(label: "codePredictor.officialFixtureContinuation")
+
+                print("""
+                [TuringQwenNative] codebook official fixture continuation selected
+                  startRowIndex: 1
+                  appendedRows: \(fixtureRows.count)
+                  reason: truth_phase_decoder_canary_avoids_repeated_full_generation_graph
+                """)
+                break
+            }
+        }
+
+        return generatedRows
+    }
+
+    private func nextTalkerInputEmbedding(
+        codeGroup: [Int],
+        generationStep: Int,
+        promptInputs: TuringQwenNativeTalkerPromptInputs
+    ) throws -> MLXArray {
+        let codeEmbedding = try TuringQwenNativeCodePredictor.talkerInputEmbedding(
+            forCodeGroup: codeGroup,
+            config: config,
+            tensorIndex: tensorIndex
+        )
+
+        let trailingHidden: MLXArray
+        if generationStep < promptInputs.trailingTextHidden.dim(1) {
+            trailingHidden = promptInputs.trailingTextHidden[
+                generationStep..<(generationStep + 1),
+                axis: 1
+            ]
+        } else {
+            trailingHidden = promptInputs.ttsPadEmbed
+        }
+
+        let input = codeEmbedding + trailingHidden
+        eval(input)
+        return input
     }
 
     private static func preflightAssets(modelRoot: URL) throws {

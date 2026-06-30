@@ -45,15 +45,40 @@ enum TuringQwenNativeTalkerForwardRunner {
         config: TuringQwenNativeConfig,
         tensorIndex: TuringQwenNativeSafetensorsIndex
     ) throws -> TuringQwenNativeTalkerForwardOutput {
+        try runFullForward(
+            inputsEmbeds: promptInputs.inputsEmbeds,
+            sequenceLength: promptInputs.sequenceLength,
+            hiddenSize: config.talkerConfig.hiddenSize,
+            config: config,
+            tensorIndex: tensorIndex,
+            logLabel: "prompt"
+        )
+    }
+
+    static func runFullForward(
+        inputsEmbeds: MLXArray,
+        sequenceLength: Int,
+        hiddenSize: Int,
+        config: TuringQwenNativeConfig,
+        tensorIndex: TuringQwenNativeSafetensorsIndex,
+        logLabel: String
+    ) throws -> TuringQwenNativeTalkerForwardOutput {
         let reader = TuringQwenNativeSafetensorsReader(index: tensorIndex)
-        var hidden = promptInputs.inputsEmbeds
+        var hidden = inputsEmbeds
         let forwardStart = Date()
+
+        guard inputsEmbeds.shape == [1, sequenceLength, hiddenSize] else {
+            throw TuringQwenNativeError.invalidConfig(
+                "Expected talker input embeds [1, \(sequenceLength), \(hiddenSize)] for \(logLabel), got \(inputsEmbeds.shape)."
+            )
+        }
 
         print("""
         [TuringQwenNative] talker all-layers eval starting
+          label: \(logLabel)
           layerCount: \(config.talkerConfig.numHiddenLayers)
-          sequenceLength: \(promptInputs.sequenceLength)
-          hiddenSize: \(config.talkerConfig.hiddenSize)
+          sequenceLength: \(sequenceLength)
+          hiddenSize: \(hiddenSize)
         """)
 
         for layerIndex in 0..<config.talkerConfig.numHiddenLayers {
@@ -67,13 +92,14 @@ enum TuringQwenNativeTalkerForwardRunner {
                 hiddenStates: hidden,
                 weights: weights,
                 config: config.talkerConfig,
-                sequenceLength: promptInputs.sequenceLength
+                sequenceLength: sequenceLength
             )
             eval(hidden)
-            TuringQwenNativeMemoryControl.clearCache(label: "talker.layer.\(layerIndex)")
+            TuringQwenNativeMemoryControl.clearCache(label: "talker.\(logLabel).layer.\(layerIndex)")
 
             print("""
             [TuringQwenNative] talker layer completed
+              label: \(logLabel)
               layerIndex: \(layerIndex)
               layerSeconds: \(String(format: "%.3f", Date().timeIntervalSince(layerStart)))
               cumulativeSeconds: \(String(format: "%.3f", Date().timeIntervalSince(forwardStart)))
@@ -91,21 +117,22 @@ enum TuringQwenNativeTalkerForwardRunner {
         )
         eval(finalHidden)
         let finalLastHidden = finalHidden[
-            (promptInputs.sequenceLength - 1)..<promptInputs.sequenceLength,
+            (sequenceLength - 1)..<sequenceLength,
             axis: 1
         ]
         eval(finalLastHidden)
-        TuringQwenNativeMemoryControl.clearCache(label: "talker.finalNorm")
+        TuringQwenNativeMemoryControl.clearCache(label: "talker.\(logLabel).finalNorm")
         print("""
         [TuringQwenNative] talker final norm completed
+          label: \(logLabel)
           seconds: \(String(format: "%.3f", Date().timeIntervalSince(finalNormStart)))
           cumulativeSeconds: \(String(format: "%.3f", Date().timeIntervalSince(forwardStart)))
         """)
 
         return TuringQwenNativeTalkerForwardOutput(
             finalLastHiddenState: finalLastHidden,
-            sequenceLength: promptInputs.sequenceLength,
-            hiddenSize: config.talkerConfig.hiddenSize
+            sequenceLength: sequenceLength,
+            hiddenSize: hiddenSize
         )
     }
 
