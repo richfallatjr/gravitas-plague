@@ -29,6 +29,8 @@ public actor TuringQwenNativeVoiceDesignEngine {
         modelRoot: URL,
         trace: TuringQwenNativeTrace
     ) async throws {
+        TuringQwenNativeMemoryControl.configureForCanary()
+
         self.modelRoot = modelRoot
         self.trace = trace
         self.breadcrumbs = try TuringQwenNativeStageBreadcrumbs()
@@ -159,12 +161,12 @@ public actor TuringQwenNativeVoiceDesignEngine {
             ndim: 3
         )
 
-        let layer0Output = try Self.withStage(
-            .talkerLayer0Eval,
+        let talkerOutput = try Self.withStage(
+            .talkerAllLayersEval,
             trace: trace,
             breadcrumbs: breadcrumbs
         ) {
-            try TuringQwenNativeTalkerLayer0Runner.run(
+            try TuringQwenNativeTalkerForwardRunner.runFullForward(
                 promptInputs: talkerPromptInputs,
                 config: config,
                 tensorIndex: tensorIndex
@@ -172,14 +174,84 @@ public actor TuringQwenNativeVoiceDesignEngine {
         }
 
         trace.tensor(
-            "talker.layer0.hiddenStates",
-            shape: [1, layer0Output.sequenceLength, layer0Output.hiddenSize],
+            "talker.finalLastHiddenState",
+            shape: [1, 1, talkerOutput.hiddenSize],
+            dtype: "float32",
+            ndim: 3
+        )
+        TuringQwenNativeMemoryControl.clearCache(label: "afterTalkerForward")
+
+        breadcrumbs.started(.talkerCodecHeadEval)
+        trace.stageStarted(.talkerCodecHeadEval)
+        let logits: MLXArray
+        do {
+            logits = try TuringQwenNativeTalkerForwardRunner.codecHeadLogits(
+                finalLastHiddenState: talkerOutput.finalLastHiddenState,
+                tensorIndex: tensorIndex
+            )
+            breadcrumbs.completed(.talkerCodecHeadEval)
+            trace.stageCompleted(.talkerCodecHeadEval)
+        } catch {
+            throw error
+        }
+
+        eval(logits)
+        trace.tensor(
+            "talker.logits",
+            shape: [1, 1, config.talkerConfig.vocabSize],
             dtype: "float32",
             ndim: 3
         )
 
+        breadcrumbs.started(.sampleFirstToken)
+        trace.stageStarted(.sampleFirstToken)
+        let firstCodecToken: TuringQwenNativeFirstCodecToken
+        do {
+            firstCodecToken = try TuringQwenNativeCodecSampler.selectFirstCodecToken(
+                logits: logits,
+                sequenceLength: talkerOutput.sequenceLength,
+                vocabSize: config.talkerConfig.vocabSize
+            )
+            breadcrumbs.completed(.sampleFirstToken)
+            trace.stageCompleted(.sampleFirstToken)
+        } catch {
+            throw error
+        }
+
+        print("""
+        [TuringQwenNative] first codec token selected
+          tokenID: \(firstCodecToken.tokenID)
+          expectedFixtureTokenID: \(firstCodecToken.expectedFixtureTokenID)
+          matchesFixture: \(firstCodecToken.matchesFixture)
+          sampling: greedy_argmax
+        """)
+
+        breadcrumbs.started(.codePredictorFirstEval)
+        trace.stageStarted(.codePredictorFirstEval)
+        let firstCodeGroup: TuringQwenNativeFirstCodeGroup
+        do {
+            firstCodeGroup = try TuringQwenNativeCodePredictor.generateFirstCodeGroup(
+                firstCodecToken: firstCodecToken.tokenID,
+                talkerLastHiddenState: talkerOutput.finalLastHiddenState,
+                config: config,
+                tensorIndex: tensorIndex
+            )
+            breadcrumbs.completed(.codePredictorFirstEval)
+            trace.stageCompleted(.codePredictorFirstEval)
+        } catch {
+            throw error
+        }
+
+        print("""
+        [TuringQwenNative] first code group selected
+          tokenIDs: \(firstCodeGroup.tokenIDs)
+          expectedFixtureTokenIDs: \(firstCodeGroup.expectedFixtureTokenIDs)
+          matchesFixture: \(firstCodeGroup.matchesFixture)
+          sampling: greedy_argmax
+        """)
+
         throw TuringQwenNativeError.nativeGenerationNotImplemented(
-            "TuringQwenNative preflight, tokenizer, safetensors row loading, official VoiceDesign prompt embedding projection, codec prefill, first talker input tensor eval, and talker decoder layer 0 eval completed. The remaining talker layers, codec sampling, code predictor, and speech decoder still need to be ported before audio can be generated."
+            "TuringQwenNative preflight, tokenizer, safetensors row loading, official VoiceDesign prompt embedding projection, codec prefill, first talker input tensor eval, all talker decoder layers, final norm, codec-head logits, first-token codec sampling, and first code-predictor group completed. Speech decoder still needs to be ported before audio can be generated."
         )
     }
 

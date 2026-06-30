@@ -26,6 +26,7 @@ public struct TuringQwenNativeConfig: Decodable, Sendable {
         public let textHiddenSize: Int
         public let textVocabSize: Int
         public let vocabSize: Int
+        public let numCodeGroups: Int
         public let numHiddenLayers: Int
         public let numAttentionHeads: Int
         public let numKeyValueHeads: Int
@@ -47,6 +48,7 @@ public struct TuringQwenNativeConfig: Decodable, Sendable {
             case textHiddenSize = "text_hidden_size"
             case textVocabSize = "text_vocab_size"
             case vocabSize = "vocab_size"
+            case numCodeGroups = "num_code_groups"
             case numHiddenLayers = "num_hidden_layers"
             case numAttentionHeads = "num_attention_heads"
             case numKeyValueHeads = "num_key_value_heads"
@@ -71,7 +73,11 @@ public struct TuringQwenNativeConfig: Decodable, Sendable {
         public let numHiddenLayers: Int?
         public let numAttentionHeads: Int?
         public let numKeyValueHeads: Int?
+        public let headDim: Int?
         public let intermediateSize: Int?
+        public let rmsNormEps: Double?
+        public let ropeTheta: Double?
+        public let numCodeGroups: Int?
 
         enum CodingKeys: String, CodingKey {
             case hiddenSize = "hidden_size"
@@ -79,7 +85,11 @@ public struct TuringQwenNativeConfig: Decodable, Sendable {
             case numHiddenLayers = "num_hidden_layers"
             case numAttentionHeads = "num_attention_heads"
             case numKeyValueHeads = "num_key_value_heads"
+            case headDim = "head_dim"
             case intermediateSize = "intermediate_size"
+            case rmsNormEps = "rms_norm_eps"
+            case ropeTheta = "rope_theta"
+            case numCodeGroups = "num_code_groups"
         }
     }
 

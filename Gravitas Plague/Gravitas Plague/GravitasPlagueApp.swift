@@ -10,6 +10,10 @@ struct GravitasPlagueApp: App {
     @StateObject private var demoSession = PlagueDemoSession()
     @State private var immersionStyle: ImmersionStyle = .mixed
 
+    init() {
+        TuringMemoryBudgetProbe.log(label: "appLaunch")
+    }
+
     var body: some Scene {
         WindowGroup(id: PlagueWindowID.control) {
             PlagueDemoView(session: demoSession)

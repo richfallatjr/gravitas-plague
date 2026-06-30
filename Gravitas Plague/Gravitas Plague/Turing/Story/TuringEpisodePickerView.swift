@@ -8,6 +8,9 @@ struct TuringEpisodePickerView: View {
     @State private var selectedEpisodeID: TuringEpisodeID? = .prologue
 #if DEBUG || GR_TURING_DIAGNOSTICS
     @State private var qwenNativeHelloRunning = false
+    @State private var memorySnapshot = TuringMemoryBudgetProbe.currentSnapshot(
+        label: "storyPickerInitial"
+    )
 #endif
 
     private let episodes = TuringEpisodeCatalog.developmentEpisodes
@@ -44,6 +47,8 @@ struct TuringEpisodePickerView: View {
                     Text("Qwen Model Check")
                         .font(.headline)
 
+                    memoryBudgetReadout
+
                     Text("Runs the in-repo TuringQwenNative VoiceDesign canary directly from the episode picker.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -54,11 +59,19 @@ struct TuringEpisodePickerView: View {
                         isRunning: qwenNativeHelloRunning
                     ) {
                         qwenNativeHelloRunning = true
+                        memorySnapshot = TuringMemoryBudgetProbe.log(
+                            label: "beforeQwenGenerate",
+                            activeQwenModelID: "qwen3-tts-12hz-1.7b-voicedesign-bf16",
+                            quantization: "bf16"
+                        )
 
                         Task.detached(priority: .userInitiated) {
                             await TuringNativeQwenHelloWorldCanary.run()
                             await MainActor.run {
                                 qwenNativeHelloRunning = false
+                                memorySnapshot = TuringMemoryBudgetProbe.log(
+                                    label: "afterTransientCleanup"
+                                )
                             }
                         }
                     }
@@ -69,6 +82,11 @@ struct TuringEpisodePickerView: View {
         }
         .padding(24)
         .frame(minWidth: 520)
+        .onAppear {
+            memorySnapshot = TuringMemoryBudgetProbe.log(
+                label: "storyPickerOpened"
+            )
+        }
     }
 
     private func episodeButton(
@@ -143,6 +161,16 @@ struct TuringEpisodePickerView: View {
             isRunning ||
             qwenNativeHelloRunning
         )
+    }
+
+    private var memoryBudgetReadout: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Footprint \(memorySnapshot.physicalFootprintMB) MB")
+            Text("Available \(memorySnapshot.availableProcessMemoryMB) MB")
+            Text("Increased memory \(memorySnapshot.increasedMemoryEntitlementStatus)")
+        }
+        .font(.caption2.monospacedDigit())
+        .foregroundStyle(.secondary)
     }
 #endif
 

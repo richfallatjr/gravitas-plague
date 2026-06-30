@@ -7,14 +7,21 @@ struct TuringQwenNativeTalkerLayerOutput {
     let hiddenSize: Int
 }
 
-enum TuringQwenNativeTalkerLayer0Runner {
-    static func run(
+struct TuringQwenNativeTalkerForwardOutput {
+    let finalLastHiddenState: MLXArray
+    let sequenceLength: Int
+    let hiddenSize: Int
+}
+
+enum TuringQwenNativeTalkerForwardRunner {
+    static func runLayer0(
         promptInputs: TuringQwenNativeTalkerPromptInputs,
         config: TuringQwenNativeConfig,
         tensorIndex: TuringQwenNativeSafetensorsIndex
     ) throws -> TuringQwenNativeTalkerLayerOutput {
+        let reader = TuringQwenNativeSafetensorsReader(index: tensorIndex)
         let weights = try TuringQwenNativeTalkerLayerWeights(
-            reader: TuringQwenNativeSafetensorsReader(index: tensorIndex),
+            reader: reader,
             layerIndex: 0
         )
 
@@ -31,6 +38,94 @@ enum TuringQwenNativeTalkerLayer0Runner {
             sequenceLength: promptInputs.sequenceLength,
             hiddenSize: config.talkerConfig.hiddenSize
         )
+    }
+
+    static func runFullForward(
+        promptInputs: TuringQwenNativeTalkerPromptInputs,
+        config: TuringQwenNativeConfig,
+        tensorIndex: TuringQwenNativeSafetensorsIndex
+    ) throws -> TuringQwenNativeTalkerForwardOutput {
+        let reader = TuringQwenNativeSafetensorsReader(index: tensorIndex)
+        var hidden = promptInputs.inputsEmbeds
+        let forwardStart = Date()
+
+        print("""
+        [TuringQwenNative] talker all-layers eval starting
+          layerCount: \(config.talkerConfig.numHiddenLayers)
+          sequenceLength: \(promptInputs.sequenceLength)
+          hiddenSize: \(config.talkerConfig.hiddenSize)
+        """)
+
+        for layerIndex in 0..<config.talkerConfig.numHiddenLayers {
+            let layerStart = Date()
+            let weights = try TuringQwenNativeTalkerLayerWeights(
+                reader: reader,
+                layerIndex: layerIndex
+            )
+
+            hidden = try runDecoderLayer(
+                hiddenStates: hidden,
+                weights: weights,
+                config: config.talkerConfig,
+                sequenceLength: promptInputs.sequenceLength
+            )
+            eval(hidden)
+            TuringQwenNativeMemoryControl.clearCache(label: "talker.layer.\(layerIndex)")
+
+            print("""
+            [TuringQwenNative] talker layer completed
+              layerIndex: \(layerIndex)
+              layerSeconds: \(String(format: "%.3f", Date().timeIntervalSince(layerStart)))
+              cumulativeSeconds: \(String(format: "%.3f", Date().timeIntervalSince(forwardStart)))
+            """)
+        }
+
+        let finalNormStart = Date()
+        let finalNormWeight = try reader.loadTensorFloat32(
+            name: "talker.model.norm.weight"
+        ).mlxArray()
+        let finalHidden = rmsNorm(
+            hidden,
+            weight: finalNormWeight,
+            eps: Float(config.talkerConfig.rmsNormEps)
+        )
+        eval(finalHidden)
+        let finalLastHidden = finalHidden[
+            (promptInputs.sequenceLength - 1)..<promptInputs.sequenceLength,
+            axis: 1
+        ]
+        eval(finalLastHidden)
+        TuringQwenNativeMemoryControl.clearCache(label: "talker.finalNorm")
+        print("""
+        [TuringQwenNative] talker final norm completed
+          seconds: \(String(format: "%.3f", Date().timeIntervalSince(finalNormStart)))
+          cumulativeSeconds: \(String(format: "%.3f", Date().timeIntervalSince(forwardStart)))
+        """)
+
+        return TuringQwenNativeTalkerForwardOutput(
+            finalLastHiddenState: finalLastHidden,
+            sequenceLength: promptInputs.sequenceLength,
+            hiddenSize: config.talkerConfig.hiddenSize
+        )
+    }
+
+    static func codecHeadLogits(
+        finalLastHiddenState: MLXArray,
+        tensorIndex: TuringQwenNativeSafetensorsIndex
+    ) throws -> MLXArray {
+        let start = Date()
+        let reader = TuringQwenNativeSafetensorsReader(index: tensorIndex)
+        let codecHeadWeight = try reader.loadTensorFloat32(
+            name: "talker.codec_head.weight"
+        ).mlxArray()
+        let logits = linear(finalLastHiddenState, weight: codecHeadWeight)
+        eval(logits)
+        TuringQwenNativeMemoryControl.clearCache(label: "talker.codecHead")
+        print("""
+        [TuringQwenNative] talker codec head completed
+          seconds: \(String(format: "%.3f", Date().timeIntervalSince(start)))
+        """)
+        return logits
     }
 
     private static func runDecoderLayer(

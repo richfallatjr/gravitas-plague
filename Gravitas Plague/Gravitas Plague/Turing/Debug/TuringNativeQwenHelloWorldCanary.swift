@@ -6,6 +6,8 @@ import TuringQwenNative
 enum TuringNativeQwenHelloWorldCanary {
     static let text = "Hello world"
     private static let expectedModelFolderName = "Qwen3-TTS-12Hz-1.7B-VoiceDesign-bf16"
+    private static let activeModelID = "qwen3-tts-12hz-1.7b-voicedesign-bf16"
+    private static let activeQuantization = "bf16"
 
     static let bigMikeDescription = """
     A mid-forties Black American man with a large, grounded physical presence, like a retired college football lineman. Deep chest resonance, heavy but controlled breath, warm gravel, a Baltimore edge, streetwise but intelligent. Tough, protective, tired, and emotionally grounded. Former military, former athlete, current security guard. Not polished, not theatrical, not a radio announcer. He speaks like a real neighbor trying to keep his best friend alive. Thick, weighted vocal texture from age, size, and hard living; low, steady, and human.
@@ -29,19 +31,49 @@ enum TuringNativeQwenHelloWorldCanary {
             """)
 
             let modelRoot = try locateBundledVoiceDesignModel()
+            TuringMemoryBudgetProbe.log(
+                label: "beforeQwenStage",
+                activeQwenModelID: activeModelID,
+                quantization: activeQuantization
+            )
             let stagedRoot = try stageWritableModel(from: modelRoot)
+            TuringMemoryBudgetProbe.log(
+                label: "afterQwenStage",
+                activeQwenModelID: activeModelID,
+                quantization: activeQuantization
+            )
 
+            TuringMemoryBudgetProbe.log(
+                label: "beforeQwenLoad",
+                activeQwenModelID: activeModelID,
+                quantization: activeQuantization
+            )
             let engine = try await TuringQwenNativeVoiceDesignEngine(
                 modelRoot: stagedRoot,
                 trace: .stdout(prefix: "[TuringQwenNative]")
             )
+            TuringMemoryBudgetProbe.log(
+                label: "afterQwenLoad",
+                activeQwenModelID: activeModelID,
+                quantization: activeQuantization
+            )
 
+            TuringMemoryBudgetProbe.log(
+                label: "beforeQwenGenerate",
+                activeQwenModelID: activeModelID,
+                quantization: activeQuantization
+            )
             let audio = try await engine.generateVoiceDesign(
                 text: text,
                 voiceDescription: bigMikeDescription,
                 language: "english",
                 maxNewTokens: 256,
                 seed: 0
+            )
+            TuringMemoryBudgetProbe.log(
+                label: "afterQwenGenerate",
+                activeQwenModelID: activeModelID,
+                quantization: activeQuantization
             )
 
             print("""
@@ -57,8 +89,19 @@ enum TuringNativeQwenHelloWorldCanary {
                 sampleRate: audio.sampleRate
             )
 
+            TuringMemoryBudgetProbe.log(
+                label: "afterPlayback",
+                activeQwenModelID: activeModelID,
+                quantization: activeQuantization
+            )
+            TuringMemoryBudgetProbe.log(label: "afterTransientCleanup")
+            TuringMemoryBudgetProbe.log(label: "afterQwenUnload")
+
             print("[TuringQwenNativeHello] playback finished")
         } catch {
+            TuringMemoryBudgetProbe.log(label: "afterTransientCleanup")
+            TuringMemoryBudgetProbe.log(label: "afterQwenUnload")
+
             print("""
             [TuringQwenNativeHello] failed
               error: \(error)
@@ -139,36 +182,119 @@ enum TuringNativeQwenHelloWorldCanary {
             create: true
         )
 
-        let root = appSupport
+        let stageContainer = appSupport
             .appendingPathComponent("TuringQwenNativeHelloWorld", isDirectory: true)
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let writableModelRoot = stageContainer
             .appendingPathComponent("WritableModel", isDirectory: true)
+        let root = writableModelRoot
             .appendingPathComponent(source.lastPathComponent, isDirectory: true)
 
         try fm.createDirectory(
-            at: root.deletingLastPathComponent(),
+            at: stageContainer,
+            withIntermediateDirectories: true
+        )
+
+        try removeLegacyWritableStages(
+            stageContainer: stageContainer,
+            preserving: writableModelRoot
+        )
+
+        if fm.fileExists(atPath: root.path),
+           isWritableModelStageUsable(root) {
+            try markExcludedFromBackup(root)
+            try verifyWritable(root)
+
+            print("""
+            [TuringQwenNativeHello] writable stage ready
+              source: \(source.path)
+              staged: \(root.path)
+              writable: true
+              reusedExistingStage: true
+            """)
+
+            return root
+        }
+
+        if fm.fileExists(atPath: root.path) {
+            try fm.removeItem(at: root)
+        }
+
+        try fm.createDirectory(
+            at: writableModelRoot,
             withIntermediateDirectories: true
         )
 
         try fm.copyItem(at: source, to: root)
-
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        var mutableRoot = root
-        try mutableRoot.setResourceValues(values)
-
-        let probe = root.appendingPathComponent(".write-probe")
-        try Data("ok".utf8).write(to: probe)
-        try fm.removeItem(at: probe)
+        try markExcludedFromBackup(root)
+        try verifyWritable(root)
 
         print("""
         [TuringQwenNativeHello] writable stage ready
           source: \(source.path)
           staged: \(root.path)
           writable: true
+          reusedExistingStage: false
         """)
 
         return root
+    }
+
+    private static func removeLegacyWritableStages(
+        stageContainer: URL,
+        preserving writableModelRoot: URL
+    ) throws {
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(
+            at: stageContainer,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return
+        }
+
+        for url in contents
+        where url.standardizedFileURL != writableModelRoot.standardizedFileURL {
+            try? fm.removeItem(at: url)
+        }
+    }
+
+    private static func isWritableModelStageUsable(
+        _ root: URL
+    ) -> Bool {
+        let required = [
+            "config.json",
+            "generation_config.json",
+            "model.safetensors",
+            "model.safetensors.index.json",
+            "tokenizer_config.json",
+            "vocab.json",
+            "merges.txt",
+            "speech_tokenizer/config.json",
+            "speech_tokenizer/model.safetensors"
+        ]
+
+        return required.allSatisfy {
+            FileManager.default.fileExists(
+                atPath: root.appendingPathComponent($0).path
+            )
+        }
+    }
+
+    private static func markExcludedFromBackup(
+        _ root: URL
+    ) throws {
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var mutableRoot = root
+        try mutableRoot.setResourceValues(values)
+    }
+
+    private static func verifyWritable(
+        _ root: URL
+    ) throws {
+        let probe = root.appendingPathComponent(".write-probe")
+        try Data("ok".utf8).write(to: probe)
+        try FileManager.default.removeItem(at: probe)
     }
 }
 #endif

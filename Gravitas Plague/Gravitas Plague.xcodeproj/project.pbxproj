@@ -123,7 +123,7 @@
 		8E3C30202FCF200100000001 /* Exceptions for "Gravitas Plague" folder in "Gravitas Plague" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				"Turing/QwenNative",
+				Turing/QwenNative,
 			);
 			target = 2D78FE2F2FCCF44A0063708B /* Gravitas Plague */;
 		};
