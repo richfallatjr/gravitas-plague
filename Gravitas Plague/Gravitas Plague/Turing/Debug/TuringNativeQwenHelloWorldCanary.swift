@@ -24,40 +24,6 @@ enum TuringNativeQwenHelloWorldCanary {
     private static let activeRuntimeMode = "baseClone"
     private static let activeWeightBackend = "mlx4bit"
 
-    @MainActor
-    private static let qwenComputeFillerBridge: BigMikeSegmentGapFillerBridge = {
-        var configuration = BigMikeFillerLoopController.Configuration()
-        configuration.maxConsecutiveClips = 0
-        configuration.maxContinuousSeconds = 0
-        let loop = BigMikeFillerLoopController(configuration: configuration)
-        return BigMikeSegmentGapFillerBridge(loop: loop)
-    }()
-
-    @MainActor
-    private static func startQwenComputeFiller(segmentIndex: Int, reason: String) {
-        print("""
-        [TuringQwenNativeCompute] compute filler starting
-          segmentIndex: \(segmentIndex)
-          reason: \(reason)
-        """)
-        qwenComputeFillerBridge.segmentEndedWaitingForNext(segmentIndex: segmentIndex)
-    }
-
-    @MainActor
-    private static func stopQwenComputeFiller(segmentIndex: Int, reason: String) {
-        print("""
-        [TuringQwenNativeCompute] compute filler stopping
-          segmentIndex: \(segmentIndex)
-          reason: \(reason)
-        """)
-        qwenComputeFillerBridge.nextRealSegmentReady(segmentIndex: segmentIndex)
-    }
-
-    @MainActor
-    private static func stopQwenFiller(reason: String) {
-        qwenComputeFillerBridge.playbackStopped(reason: reason)
-    }
-
     static func run(
         preset: TuringNativeQwenVoiceDesignCanaryPreset = .bigMikeShortDynamic
     ) async -> TuringNativeQwenRunResult {
@@ -154,7 +120,6 @@ enum TuringNativeQwenHelloWorldCanary {
             print("[TuringQwenNativeBaseClone] playback finished")
             return .succeeded("Finished \(preset.rawValue)")
         } catch {
-            stopQwenFiller(reason: "qwenBaseCloneRunFailed")
             TuringMemoryBudgetProbe.log(label: "afterTransientCleanup")
             TuringMemoryBudgetProbe.log(label: "afterQwenUnload")
 
@@ -267,58 +232,55 @@ enum TuringNativeQwenHelloWorldCanary {
           qwenSequential: true
         """)
 
-        var currentAudio = try await renderBaseCloneSegment(
-            preset: preset,
-            cloneProfile: cloneProfile,
-            engine: engine,
-            segment: segments[0],
-            segmentIndex: 0,
-            startsComputeFiller: true
+        let gapAudio = try await MainActor.run {
+            try TuringComputeGapAudioCoordinator.makeBigMikeCoordinator()
+        }
+
+        await gapAudio.beginRun(
+            runID: "bigMikeBaseCloneLongform",
+            expectedSegmentCount: segments.count
         )
 
-        for index in segments.indices {
-            let nextIndex = segments.index(after: index)
-            let nextRenderTask: Task<TuringQwenNativeAudio, Error>? = nextIndex < segments.endIndex
-                ? Task.detached(priority: .userInitiated) {
-                    print("""
-                    [TuringQwenNativeBaseCloneLongform] compute-ahead render started
-                      currentSegmentIndex: \(index)
-                      nextSegmentIndex: \(nextIndex)
-                    """)
-                    return try await renderBaseCloneSegment(
+        do {
+            for index in segments.indices {
+                try Task.checkCancellation()
+
+                await gapAudio.qwenComputeStarted(segmentIndex: index)
+
+                do {
+                    let qwenAudio = try await renderBaseCloneSegment(
                         preset: preset,
                         cloneProfile: cloneProfile,
                         engine: engine,
-                        segment: segments[nextIndex],
-                        segmentIndex: nextIndex,
-                        startsComputeFiller: false
+                        segment: segments[index],
+                        segmentIndex: index
                     )
+
+                    await gapAudio.qwenComputeFinished(
+                        segmentIndex: index,
+                        audio: TuringComputeGapGeneratedAudio(
+                            segmentIndex: index,
+                            samples: qwenAudio.samples,
+                            sampleRate: Double(qwenAudio.sampleRate),
+                            channelCount: 1
+                        )
+                    )
+                } catch {
+                    await gapAudio.qwenComputeFailed(
+                        segmentIndex: index,
+                        error: error
+                    )
+                    throw error
                 }
-                : nil
-
-            print("""
-            [TuringQwenNativeBaseCloneLongform] playback started
-              segmentIndex: \(index)
-              nextSegmentComputeAhead: \(nextRenderTask != nil)
-              durationSeconds: \(String(format: "%.3f", currentAudio.durationSeconds))
-            """)
-
-            try await TuringQwenNativeMemoryPlayer.shared.play(
-                samples: currentAudio.samples,
-                sampleRate: currentAudio.sampleRate
-            )
-
-            print("""
-            [TuringQwenNativeBaseCloneLongform] playback finished
-              segmentIndex: \(index)
-            """)
-
-            if let nextRenderTask {
-                currentAudio = try await awaitComputeAheadSegment(
-                    nextRenderTask,
-                    segmentIndex: nextIndex
-                )
             }
+
+            await gapAudio.qwenComputeAllFinished()
+            await gapAudio.waitUntilPlaybackFinished()
+        } catch {
+            await gapAudio.runCancelled(
+                reason: "longformFailed.\(String(describing: error))"
+            )
+            throw error
         }
 
         print("""
@@ -327,64 +289,6 @@ enum TuringNativeQwenHelloWorldCanary {
         """)
     }
 
-    private enum ComputeAheadWaitResult {
-        case ready(TuringQwenNativeAudio)
-        case stillRendering
-    }
-
-    private static func awaitComputeAheadSegment(
-        _ task: Task<TuringQwenNativeAudio, Error>,
-        segmentIndex: Int
-    ) async throws -> TuringQwenNativeAudio {
-        let waitResult = try await withThrowingTaskGroup(
-            of: ComputeAheadWaitResult.self
-        ) { group -> ComputeAheadWaitResult in
-            group.addTask {
-                .ready(try await task.value)
-            }
-            group.addTask {
-                try await Task.sleep(nanoseconds: 150_000_000)
-                return .stillRendering
-            }
-
-            guard let first = try await group.next() else {
-                return .stillRendering
-            }
-            group.cancelAll()
-            return first
-        }
-
-        switch waitResult {
-        case .ready(let audio):
-            print("""
-            [TuringQwenNativeBaseCloneLongform] compute-ahead segment ready
-              segmentIndex: \(segmentIndex)
-              waitedAfterPlayback: false
-            """)
-            return audio
-
-        case .stillRendering:
-            startQwenComputeFiller(
-                segmentIndex: segmentIndex,
-                reason: "longformNextSegmentLateAfterPlayback"
-            )
-            defer {
-                stopQwenComputeFiller(
-                    segmentIndex: segmentIndex,
-                    reason: "longformNextSegmentReady"
-                )
-            }
-
-            let audio = try await task.value
-            print("""
-            [TuringQwenNativeBaseCloneLongform] compute-ahead segment ready
-              segmentIndex: \(segmentIndex)
-              waitedAfterPlayback: true
-            """)
-            return audio
-        }
-    }
-
     private static func renderBaseCloneSegment(
         preset: TuringNativeQwenVoiceDesignCanaryPreset,
         cloneProfile: TuringQwenNativeCloneProfile,
@@ -392,39 +296,6 @@ enum TuringNativeQwenHelloWorldCanary {
         segment: String,
         segmentIndex: Int
     ) async throws -> TuringQwenNativeAudio {
-        try await renderBaseCloneSegment(
-            preset: preset,
-            cloneProfile: cloneProfile,
-            engine: engine,
-            segment: segment,
-            segmentIndex: segmentIndex,
-            startsComputeFiller: true
-        )
-    }
-
-    private static func renderBaseCloneSegment(
-        preset: TuringNativeQwenVoiceDesignCanaryPreset,
-        cloneProfile: TuringQwenNativeCloneProfile,
-        engine: TuringQwenNativeBaseCloneEngine,
-        segment: String,
-        segmentIndex: Int,
-        startsComputeFiller: Bool
-    ) async throws -> TuringQwenNativeAudio {
-        if startsComputeFiller {
-            startQwenComputeFiller(
-                segmentIndex: segmentIndex,
-                reason: "baseCloneSegmentComputeStarted"
-            )
-        }
-        defer {
-            if startsComputeFiller {
-                stopQwenComputeFiller(
-                    segmentIndex: segmentIndex,
-                    reason: "baseCloneSegmentReadyOrFailed"
-                )
-            }
-        }
-
         let prompt = TuringQwenNativeBaseClonePrompt(
             text: segment,
             language: preset.input.language,
@@ -443,7 +314,6 @@ enum TuringNativeQwenHelloWorldCanary {
           refTextCharacters: \(cloneProfile.referenceText.utf16.count)
           runtimeRefAudioUsed: false
           fixtureRowsUsed: false
-          startsComputeFiller: \(startsComputeFiller)
         """)
 
         return try await engine.generateBaseClone(prompt: prompt)
