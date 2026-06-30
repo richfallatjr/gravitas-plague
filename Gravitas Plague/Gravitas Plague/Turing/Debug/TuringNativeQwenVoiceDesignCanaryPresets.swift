@@ -22,6 +22,8 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
     case rowBudgetProbe24
     case rowBudgetProbe32
     case rowBudgetProbe40
+    case rowBudgetProbe40Ref80
+    case rowBudgetProbe40Ref160
     case fixtureDecode
     case bigMikeShortDynamic
     case bigMikeShortDynamicPerformance8
@@ -45,7 +47,9 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
              .rowBudgetProbe16,
              .rowBudgetProbe24,
              .rowBudgetProbe32,
-             .rowBudgetProbe40:
+             .rowBudgetProbe40,
+             .rowBudgetProbe40Ref80,
+             .rowBudgetProbe40Ref160:
             return false
         case .fixtureDecode,
              .sourceTruthHelloWorldFixture:
@@ -64,7 +68,9 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
              .rowBudgetProbe16,
              .rowBudgetProbe24,
              .rowBudgetProbe32,
-             .rowBudgetProbe40:
+             .rowBudgetProbe40,
+             .rowBudgetProbe40Ref80,
+             .rowBudgetProbe40Ref160:
             return false
         case .bigMikeBroadcastLongformDynamic,
              .bigMikeBroadcast450:
@@ -94,6 +100,9 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
             return 32
         case .rowBudgetProbe40:
             return 40
+        case .rowBudgetProbe40Ref80,
+             .rowBudgetProbe40Ref160:
+            return 40
         case .fixtureDecode,
              .sourceTruthHelloWorldFixture:
             return 7
@@ -105,6 +114,21 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
              .bigMikeHello:
             return nil
         }
+    }
+
+    var referenceRowLimit: Int? {
+        switch self {
+        case .rowBudgetProbe40Ref80:
+            return 80
+        case .rowBudgetProbe40Ref160:
+            return 160
+        default:
+            return nil
+        }
+    }
+
+    var referenceWindowStrategy: TuringQwenNativeReferenceWindowStrategy {
+        referenceRowLimit == nil ? .full : .suffix
     }
 
     var maxNewTokens: Int {
@@ -194,7 +218,9 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
              .rowBudgetProbe16,
              .rowBudgetProbe24,
              .rowBudgetProbe32,
-             .rowBudgetProbe40:
+             .rowBudgetProbe40,
+             .rowBudgetProbe40Ref80,
+             .rowBudgetProbe40Ref160:
             return TuringNativeQwenVoiceDesignCanaryInput(
                 voiceID: "big_mike_vd_v1",
                 language: "english",

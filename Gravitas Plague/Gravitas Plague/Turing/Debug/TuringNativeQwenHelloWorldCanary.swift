@@ -313,7 +313,9 @@ enum TuringNativeQwenHelloWorldCanary {
             language: preset.input.language,
             cloneProfile: cloneProfile,
             maxNewRows: preset.maxNewTokens(for: segment),
-            performanceMode: preset.performanceMode
+            performanceMode: preset.performanceMode,
+            referenceRowLimit: preset.referenceRowLimit,
+            referenceWindowStrategy: preset.referenceWindowStrategy
         )
 
         print("""
@@ -324,6 +326,8 @@ enum TuringNativeQwenHelloWorldCanary {
           profileKind: \(cloneProfile.profileKind)
           cloneArtifactsRequired: true
           refTextCharacters: \(cloneProfile.referenceText.utf16.count)
+          referenceRowLimit: \(preset.referenceRowLimit.map(String.init) ?? "full")
+          referenceWindowStrategy: \(preset.referenceWindowStrategy.rawValue)
           runtimeRefAudioUsed: false
           fixtureRowsUsed: false
         """)

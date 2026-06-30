@@ -10,6 +10,8 @@ public struct TuringQwenNativeBaseClonePreflightReport: Sendable {
     public let targetTokenCount: Int
     public let refTextTokenCount: Int
     public let referenceRowCount: Int
+    public let originalReferenceRowCount: Int
+    public let referenceWindowStrategy: String
     public let codebookCount: Int
     public let speakerEmbeddingCount: Int
     public let languageCodecID: Int
@@ -24,6 +26,8 @@ public struct TuringQwenNativeBaseClonePreflightReport: Sendable {
         targetTokenCount: Int,
         refTextTokenCount: Int,
         referenceRowCount: Int,
+        originalReferenceRowCount: Int,
+        referenceWindowStrategy: String,
         codebookCount: Int,
         speakerEmbeddingCount: Int,
         languageCodecID: Int,
@@ -37,6 +41,8 @@ public struct TuringQwenNativeBaseClonePreflightReport: Sendable {
         self.targetTokenCount = targetTokenCount
         self.refTextTokenCount = refTextTokenCount
         self.referenceRowCount = referenceRowCount
+        self.originalReferenceRowCount = originalReferenceRowCount
+        self.referenceWindowStrategy = referenceWindowStrategy
         self.codebookCount = codebookCount
         self.speakerEmbeddingCount = speakerEmbeddingCount
         self.languageCodecID = languageCodecID
@@ -91,6 +97,8 @@ public actor TuringQwenNativeBaseCloneEngine {
           targetCharacters: \(prompt.text.utf16.count)
           maxNewRows: \(prompt.maxNewRows)
           performanceMode: \(prompt.performanceMode.rawValue)
+          referenceRowLimit: \(prompt.referenceRowLimit.map(String.init) ?? "full")
+          referenceWindowStrategy: \(prompt.referenceWindowStrategy.rawValue)
           rawReferenceRuntime: false
           precomputedCloneArtifacts: true
         """)
@@ -110,6 +118,8 @@ public actor TuringQwenNativeBaseCloneEngine {
         [TuringQwenNativeBaseClone] artifacts loaded
           refTextTokenCount: \(prepared.report.refTextTokenCount)
           referenceRows: \(prepared.report.referenceRowCount)
+          originalReferenceRows: \(prepared.report.originalReferenceRowCount)
+          referenceWindowStrategy: \(prepared.report.referenceWindowStrategy)
           codebookCount: \(prepared.report.codebookCount)
           speakerEmbeddingShape: [\(prepared.report.speakerEmbeddingCount)]
           xVectorOnlyMode: \(prepared.report.xVectorOnlyMode)
@@ -356,7 +366,9 @@ public actor TuringQwenNativeBaseCloneEngine {
             request: TuringQwenNativeBaseClonePromptRequest(
                 targetText: prompt.text,
                 targetLanguage: prompt.language,
-                cloneArtifacts: conditioning.artifacts
+                cloneArtifacts: conditioning.artifacts,
+                referenceRowLimit: prompt.referenceRowLimit,
+                referenceWindowStrategy: prompt.referenceWindowStrategy
             ),
             config: config,
             tokenizer: tokenizer
@@ -371,6 +383,8 @@ public actor TuringQwenNativeBaseCloneEngine {
             targetTokenCount: preparedPrompt.targetInputIDs.count,
             refTextTokenCount: preparedPrompt.refTextTokens.count,
             referenceRowCount: preparedPrompt.referenceRowCount,
+            originalReferenceRowCount: preparedPrompt.originalReferenceRowCount,
+            referenceWindowStrategy: preparedPrompt.referenceWindowStrategy.rawValue,
             codebookCount: conditioning.artifacts.codebookCount,
             speakerEmbeddingCount: preparedPrompt.speakerEmbedding.count,
             languageCodecID: preparedPrompt.languageCodecID,

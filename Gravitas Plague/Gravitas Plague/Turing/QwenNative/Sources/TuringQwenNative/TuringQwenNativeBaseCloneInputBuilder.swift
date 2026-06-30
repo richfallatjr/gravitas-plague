@@ -5,6 +5,8 @@ struct TuringQwenNativeBaseClonePromptRequest: Sendable {
     let targetText: String
     let targetLanguage: String
     let cloneArtifacts: TuringQwenNativeCloneArtifacts
+    let referenceRowLimit: Int?
+    let referenceWindowStrategy: TuringQwenNativeReferenceWindowStrategy
 }
 
 struct TuringQwenNativePreparedBaseClonePrompt: Sendable {
@@ -14,6 +16,8 @@ struct TuringQwenNativePreparedBaseClonePrompt: Sendable {
     let referenceCodes: [[Int32]]
     let speakerEmbedding: [Float]
     let referenceRowCount: Int
+    let originalReferenceRowCount: Int
+    let referenceWindowStrategy: TuringQwenNativeReferenceWindowStrategy
     let languageCodecID: Int
     let xVectorOnlyMode: Bool
 
@@ -42,6 +46,13 @@ enum TuringQwenNativeBaseCloneInputBuilder {
             )
         }
 
+        let compactedReference = try compactReference(
+            refTextTokens: request.cloneArtifacts.refTextTokens,
+            referenceCodes: request.cloneArtifacts.referenceCodes,
+            rowLimit: request.referenceRowLimit,
+            strategy: request.referenceWindowStrategy
+        )
+
         let targetPrompt = """
         <|im_start|>assistant
         \(request.targetText)<|im_end|>
@@ -57,13 +68,108 @@ enum TuringQwenNativeBaseCloneInputBuilder {
         return TuringQwenNativePreparedBaseClonePrompt(
             layout: "officialBaseICL",
             targetInputIDs: targetInputIDs,
-            refTextTokens: request.cloneArtifacts.refTextTokens,
-            referenceCodes: request.cloneArtifacts.referenceCodes,
+            refTextTokens: compactedReference.refTextTokens,
+            referenceCodes: compactedReference.referenceCodes,
             speakerEmbedding: request.cloneArtifacts.speakerEmbedding,
-            referenceRowCount: request.cloneArtifacts.referenceRowCount,
+            referenceRowCount: compactedReference.referenceCodes.count,
+            originalReferenceRowCount: request.cloneArtifacts.referenceRowCount,
+            referenceWindowStrategy: compactedReference.strategy,
             languageCodecID: languageCodecID,
             xVectorOnlyMode: request.cloneArtifacts.xVectorOnlyMode
         )
+    }
+
+    private static func compactReference(
+        refTextTokens: [Int32],
+        referenceCodes: [[Int32]],
+        rowLimit: Int?,
+        strategy: TuringQwenNativeReferenceWindowStrategy
+    ) throws -> (
+        refTextTokens: [Int32],
+        referenceCodes: [[Int32]],
+        strategy: TuringQwenNativeReferenceWindowStrategy
+    ) {
+        guard let rowLimit,
+              strategy != .full,
+              rowLimit < referenceCodes.count else {
+            return (refTextTokens, referenceCodes, .full)
+        }
+
+        guard rowLimit > 0 else {
+            throw TuringQwenNativeError.invalidConfig(
+                "referenceRowLimit must be greater than zero."
+            )
+        }
+
+        let selectedCodes: [[Int32]]
+        switch strategy {
+        case .full:
+            selectedCodes = referenceCodes
+        case .prefix:
+            selectedCodes = Array(referenceCodes.prefix(rowLimit))
+        case .suffix:
+            selectedCodes = Array(referenceCodes.suffix(rowLimit))
+        }
+
+        let selectedRefTextTokens = try compactReferenceTextTokens(
+            refTextTokens,
+            originalReferenceRowCount: referenceCodes.count,
+            selectedReferenceRowCount: selectedCodes.count,
+            strategy: strategy
+        )
+
+        print("""
+        [TuringQwenNativeBaseClone] reference context compacted
+          strategy: \(strategy.rawValue)
+          originalReferenceRows: \(referenceCodes.count)
+          effectiveReferenceRows: \(selectedCodes.count)
+          originalRefTextTokens: \(refTextTokens.count)
+          effectiveRefTextTokens: \(selectedRefTextTokens.count)
+        """)
+
+        return (selectedRefTextTokens, selectedCodes, strategy)
+    }
+
+    private static func compactReferenceTextTokens(
+        _ tokens: [Int32],
+        originalReferenceRowCount: Int,
+        selectedReferenceRowCount: Int,
+        strategy: TuringQwenNativeReferenceWindowStrategy
+    ) throws -> [Int32] {
+        guard tokens.count > 5,
+              originalReferenceRowCount > 0,
+              selectedReferenceRowCount < originalReferenceRowCount else {
+            return tokens
+        }
+
+        let prefix = Array(tokens.prefix(3))
+        let suffix = Array(tokens.suffix(2))
+        let body = Array(tokens.dropFirst(3).dropLast(2))
+        guard body.isEmpty == false else {
+            return tokens
+        }
+
+        let proportionalBodyCount = Int(ceil(
+            Double(body.count) *
+            Double(selectedReferenceRowCount) /
+            Double(originalReferenceRowCount)
+        ))
+        let bodyLimit = min(
+            body.count,
+            max(8, proportionalBodyCount)
+        )
+
+        let selectedBody: [Int32]
+        switch strategy {
+        case .full:
+            selectedBody = body
+        case .prefix:
+            selectedBody = Array(body.prefix(bodyLimit))
+        case .suffix:
+            selectedBody = Array(body.suffix(bodyLimit))
+        }
+
+        return prefix + selectedBody + suffix
     }
 }
 

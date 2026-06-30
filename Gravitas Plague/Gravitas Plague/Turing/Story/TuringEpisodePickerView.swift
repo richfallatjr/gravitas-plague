@@ -81,6 +81,22 @@ struct TuringEpisodePickerView: View {
                     )
 
                     knownQwenButton(
+                        title: "Run Native Qwen - Big Mike Base Clone Perf 40 Rows Ref 80",
+                        runningTitle: "Running Base Clone Perf 40 Rows Ref 80...",
+                        preset: .rowBudgetProbe40Ref80,
+                        prominence: .standard,
+                        isEnabled: !qwenBaseClonePreflightRunning
+                    )
+
+                    knownQwenButton(
+                        title: "Run Native Qwen - Big Mike Base Clone Perf 40 Rows Ref 160",
+                        runningTitle: "Running Base Clone Perf 40 Rows Ref 160...",
+                        preset: .rowBudgetProbe40Ref160,
+                        prominence: .standard,
+                        isEnabled: !qwenBaseClonePreflightRunning
+                    )
+
+                    knownQwenButton(
                         title: "Run Native Qwen - Big Mike Base Clone Short",
                         runningTitle: "Running Base Clone Short...",
                         preset: .bigMikeShortDynamic,
