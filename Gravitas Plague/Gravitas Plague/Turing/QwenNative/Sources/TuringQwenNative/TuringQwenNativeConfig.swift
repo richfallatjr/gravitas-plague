@@ -115,7 +115,7 @@ public struct TuringQwenNativeConfig: Decodable, Sendable {
     }
 }
 
-public enum TuringQwenNativeError: Error, CustomStringConvertible, Sendable {
+public enum TuringQwenNativeError: Error, LocalizedError, Sendable {
     case missingModelFile(String)
     case invalidConfig(String)
     case invalidSafetensors(String)
@@ -123,7 +123,7 @@ public enum TuringQwenNativeError: Error, CustomStringConvertible, Sendable {
     case nativeGenerationNotImplemented(String)
     case emptyAudio
 
-    public var description: String {
+    public var errorDescription: String? {
         switch self {
         case .missingModelFile(let file):
             return "Missing Qwen model file: \(file)"

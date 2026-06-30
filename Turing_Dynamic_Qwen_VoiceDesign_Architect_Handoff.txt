@@ -1,0 +1,440 @@
+Architect Handoff: Native Qwen VoiceDesign Dynamic Codebook Generation
+
+Goal
+Make the native in-repo Qwen VoiceDesign path generate audio from the selected
+spoken text and voice prompt, instead of decoding the fixed golden codebook
+fixture. The immediate show-off target is a full Big Mike broadcast recording.
+
+Current State
+- The app has an in-repo native Swift/MLX Qwen runtime:
+  Gravitas Plague/Gravitas Plague/Turing/QwenNative
+
+- The Story episode picker button calls:
+  Gravitas Plague/Gravitas Plague/Turing/Debug/TuringNativeQwenHelloWorldCanary.swift
+
+- Prompt text and voice instruction are routed into:
+  TuringQwenNativeVoiceDesignEngine.generateVoiceDesign(
+      text: input.spokenText,
+      voiceDescription: input.instruction,
+      language: input.language,
+      maxNewTokens: 256,
+      seed: 0
+  )
+
+- The selected long-form text and Big Mike VoiceDesign prompt are now hardcoded
+  in:
+  Gravitas Plague/Gravitas Plague/Turing/Debug/TuringNativeQwenVoiceDesignCanaryPresets.swift
+
+- The golden fixture text JSON has also been text-replaced in:
+  Gravitas Plague/Gravitas Plague/Turing/QwenNative/Reference/Golden/voice_design_big_mike_hello/input.json
+  Gravitas Plague/Gravitas Plague/Turing/QwenNative/Reference/Golden/voice_design_big_mike_hello/prompt-strings.json
+  Gravitas Plague/Gravitas Plague/Turing/QwenNative/Reference/Golden/voice_design_big_mike_hello/tokenizer-fixture.json
+
+Important: those JSON edits do not regenerate tokenizer IDs, codebook rows, or
+reference-output.wav. They only replace the text fields. The real audio is still
+controlled by the generated codebook rows.
+
+Root Cause
+The runtime is not truly dynamic yet. It gets through prompt building, talker
+forward, first codec-token sampling, and one code-predictor row, but then it
+short-circuits into a fixed fixture continuation.
+
+Current blocking code:
+
+File:
+Gravitas Plague/Gravitas Plague/Turing/QwenNative/Sources/TuringQwenNative/TuringQwenNativeVoiceDesignEngine.swift
+
+Current method:
+
+private func generateFixtureCodebook(
+    initialFirstCodecToken: Int,
+    initialTalkerLastHiddenState: MLXArray,
+    initialLogits: MLXArray,
+    promptInputs: TuringQwenNativeTalkerPromptInputs,
+    maxNewTokens: Int
+) throws -> [[Int]]
+
+The problematic branch is:
+
+if rowIndex == 0,
+   targetRowCount > 1 {
+    let fixtureRows = Array(
+        TuringQwenNativeCodePredictor.expectedFixtureRows[1..<targetRowCount]
+    )
+    generatedRows.append(contentsOf: fixtureRows)
+    TuringQwenNativeMemoryControl.clearCache(label: "codePredictor.officialFixtureContinuation")
+
+    print("""
+    [TuringQwenNative] codebook official fixture continuation selected
+      startRowIndex: 1
+      appendedRows: \(fixtureRows.count)
+      reason: truth_phase_decoder_canary_avoids_repeated_full_generation_graph
+    """)
+    break
+}
+
+That means every prompt eventually decodes the same hard-coded codebook fixture,
+so the audio cannot reflect the Big Mike broadcast text yet.
+
+Non-Goals
+- Do not bring back Hamptus, AtomGradient, mlx-audio-swift, MLXAudioTTS, or
+  SpeechGenerationModel.
+- Do not use Python, PyTorch, system TTS, prerecorded dialogue, remote model
+  fetch, or a parallel audio system in the app runtime.
+- Do not treat edited JSON fixture text as generated audio.
+- Do not keep adding new renderer wrappers.
+- Do not use the fixture codebook for user-facing dynamic speech.
+
+Two Valid Paths
+
+Path A: Fast Show-Off Recording, Offline Fixture Regeneration
+This is the fastest way to get a full Big Mike recording to show. It is not the
+final runtime implementation.
+
+Use official Qwen/Python on Mac to generate a long-form reference WAV and new
+golden codebook rows for the Big Mike broadcast. Then the app can decode/play
+that known codebook as a source-truth recording.
+
+Steps:
+1. Use the existing official reference derivation script:
+
+python3 /Users/richardfallat/Downloads/derive_qwen_official_truth.py \
+  --repo-root "/Users/richardfallat/Projects/dev/gravitas-plague" \
+  --qwen-official "ExternalReference/Qwen3-TTS-official" \
+  --model "Gravitas Plague/Gravitas Plague/TuringResources/Turing/Models/Qwen3TTS/Qwen3-TTS-12Hz-1.7B-VoiceDesign-bf16" \
+  --out "/Users/richardfallat/Projects/dev/gravitas-plague/Gravitas Plague/Gravitas Plague/Turing/QwenNative/Reference/Golden/voice_design_big_mike_broadcast" \
+  --text "$BIG_MIKE_BROADCAST_TEXT" \
+  --instruct "$BIG_MIKE_VOICE_PROMPT" \
+  --language "English"
+
+2. Confirm the generated files include:
+   - input.json
+   - prompt-strings.json
+   - tokenizer-fixture.json
+   - codebook-fixture.json
+   - decode-input-fixture.json
+   - reference-output.wav
+   - reference-output-metrics.json
+
+3. Update or add a Swift fixture row table from codebook-fixture.json. Do not
+   overwrite expectedFixtureRows blindly unless this is explicitly intended to
+   replace the old Hello fixture.
+
+Recommended shape:
+
+enum TuringQwenNativeFixtureCodebooks {
+    static let bigMikeBroadcastRows: [[Int]] = [
+        // rows generated from official Qwen codebook-fixture.json
+    ]
+}
+
+4. Add a separate debug button:
+
+Run Native Qwen - Big Mike Broadcast Fixture WAV
+
+or
+
+Run Native Qwen - Big Mike Broadcast Fixture Decode
+
+5. If using fixture decode, feed TuringQwenNativeFixtureCodebooks.bigMikeBroadcastRows
+   directly to TuringQwenNativeSpeechDecoder.decode(...). If using the generated
+   WAV, play reference-output.wav as a one-off debug artifact and label it as
+   offline-generated.
+
+Acceptance for Path A:
+- reference-output.wav audibly contains the broadcast text.
+- It uses the Big Mike VoiceDesign prompt.
+- It is clearly labeled as an offline source-truth recording, not runtime
+  dynamic generation.
+
+Path B: Real Runtime Dynamic Generation
+This is the implementation needed for Story Mode dynamic voiceScript.
+
+The current runtime must stop appending TuringQwenNativeCodePredictor.expectedFixtureRows
+and instead autoregressively generate codebook rows until stop condition or max
+tokens.
+
+Key files:
+- TuringQwenNativeVoiceDesignEngine.swift
+- TuringQwenNativeCodePredictor.swift
+- TuringQwenNativeTalkerForwardRunner.swift
+- TuringQwenNativeCodecSampler.swift
+- TuringQwenNativeSpeechDecoder.swift
+- TuringQwenNativeMemoryControl.swift
+
+Required Runtime Architecture
+
+1. Replace generateFixtureCodebook(...) with generateDynamicCodebook(...).
+
+Target API:
+
+private func generateDynamicCodebook(
+    initialFirstCodecToken: Int,
+    initialTalkerLastHiddenState: MLXArray,
+    promptInputs: TuringQwenNativeTalkerPromptInputs,
+    maxNewTokens: Int
+) throws -> [[Int]] {
+    var rows: [[Int]] = []
+    var currentFirstCodecToken = initialFirstCodecToken
+    var currentTalkerLastHidden = initialTalkerLastHiddenState
+
+    for step in 0..<maxNewTokens {
+        let group = try TuringQwenNativeCodePredictor.generateCodeGroup(
+            firstCodecToken: currentFirstCodecToken,
+            talkerLastHiddenState: currentTalkerLastHidden,
+            config: config,
+            tensorIndex: tensorIndex,
+            expectedFixtureRowIndex: nil
+        )
+
+        rows.append(group.tokenIDs)
+
+        if shouldStopAfterCodeGroup(group.tokenIDs, step: step) {
+            break
+        }
+
+        let nextInput = try nextTalkerInputEmbedding(
+            codeGroup: group.tokenIDs,
+            generationStep: step,
+            promptInputs: promptInputs
+        )
+
+        let next = try TuringQwenNativeTalkerForwardRunner.runOneGeneratedStep(
+            inputEmbedding: nextInput,
+            previousState: /* KV cache / generation state */,
+            config: config,
+            tensorIndex: tensorIndex
+        )
+
+        currentTalkerLastHidden = next.finalLastHiddenState
+        currentFirstCodecToken = try TuringQwenNativeCodecSampler.selectFirstCodecToken(
+            logits: next.logits,
+            sequenceLength: next.sequenceLength,
+            vocabSize: config.talkerConfig.vocabSize
+        ).tokenID
+
+        TuringQwenNativeMemoryControl.clearCache(label: "dynamicCodebook.step.\(step)")
+    }
+
+    return rows
+}
+
+2. Implement one-step talker forward with KV cache.
+
+The existing runtime can do the initial full prompt forward:
+
+TuringQwenNativeTalkerForwardRunner.runFullForward(...)
+
+That is not enough for long generation. Re-running the full graph for every row
+will blow memory and time on Vision Pro.
+
+Add:
+
+struct TuringQwenNativeTalkerGenerationState {
+    var pastKeyValues: [TuringQwenNativeLayerKV]
+    var cachePosition: Int
+    var attentionMask: MLXArray
+}
+
+struct TuringQwenNativeGeneratedStepOutput {
+    let logits: MLXArray
+    let finalLastHiddenState: MLXArray
+    let sequenceLength: Int
+    let state: TuringQwenNativeTalkerGenerationState
+}
+
+enum TuringQwenNativeTalkerForwardRunner {
+    static func runFullForwardForGenerationState(...) throws
+        -> (TuringQwenNativeTalkerForwardOutput, TuringQwenNativeTalkerGenerationState)
+
+    static func runOneGeneratedStep(
+        inputEmbedding: MLXArray,
+        previousState: TuringQwenNativeTalkerGenerationState,
+        config: TuringQwenNativeConfig,
+        tensorIndex: TuringQwenNativeSafetensorsIndex
+    ) throws -> TuringQwenNativeGeneratedStepOutput
+}
+
+The one-step call must:
+- Feed exactly one generated embedding: shape [1, 1, hiddenSize].
+- Reuse KV cache from the previous talker pass.
+- Advance cache position by one.
+- Extend attention mask mechanically.
+- Return logits for the new position and final last hidden state.
+
+3. Keep code predictor dynamic.
+
+TuringQwenNativeCodePredictor.generateCodeGroup(...) already has a partial
+dynamic shape because expectedFixtureRowIndex is optional.
+
+Current call for fixture:
+
+try TuringQwenNativeCodePredictor.generateCodeGroup(
+    firstCodecToken: currentFirstCodecToken,
+    talkerLastHiddenState: initialTalkerLastHiddenState,
+    config: config,
+    tensorIndex: tensorIndex,
+    expectedFixtureRowIndex: rowIndex
+)
+
+Dynamic call:
+
+try TuringQwenNativeCodePredictor.generateCodeGroup(
+    firstCodecToken: currentFirstCodecToken,
+    talkerLastHiddenState: currentTalkerLastHidden,
+    config: config,
+    tensorIndex: tensorIndex,
+    expectedFixtureRowIndex: nil
+)
+
+Do not compare dynamic rows against expectedFixtureRows. Log generated rows for
+debugging, but do not guard them against fixture values.
+
+4. Implement correct stop logic.
+
+Do not hardcode seven rows. Stop when official Qwen generation would stop.
+
+Architect should inspect official Qwen source and generation_config.json for:
+- EOS token / stop token handling
+- suppress tokens
+- max_new_tokens
+- language tokens
+- codebook row format
+
+Initial conservative implementation:
+
+private func shouldStopAfterCodeGroup(
+    _ codeGroup: [Int],
+    step: Int
+) -> Bool {
+    if step <= 0 {
+        return false
+    }
+
+    // Replace with official stop token check once confirmed.
+    if let eos = config.talkerConfig.eosTokenID,
+       codeGroup.first == eos {
+        return true
+    }
+
+    return false
+}
+
+If config does not expose eosTokenID yet, add it from config.json /
+generation_config.json rather than inventing a value.
+
+5. Segment long text for runtime.
+
+Do not try to generate a whole long broadcast as one device runtime segment
+unless specifically testing memory. The production Story path should feed short
+segments:
+- 3-5 second spoken chunks for runtime
+- Qwen remains sequential
+- playback can start after each generated clip
+- next clip computes while current clip plays once memory is stable
+
+For the full show-off recording, either:
+- use Path A offline generation, or
+- run runtime generation segment-by-segment and concatenate/play in order.
+
+6. Control memory aggressively.
+
+Known memory constraints:
+- Previous attempts hit 5 GB and 8 GB high-water failures.
+- Speech decoder memory scales with codebook row count.
+- Repeated full talker graph evaluation is not acceptable for device runtime.
+
+Rules:
+- Load model weights once per canary/session where possible.
+- Do not retain all intermediate MLXArray values longer than needed.
+- Release per-step arrays after sampling.
+- Clear MLX cache after each generated row and after decode.
+- Log memory before/after prompt, initial forward, each N rows, decode, playback.
+- Keep the increased memory entitlement in place.
+
+Recommended logs:
+
+[TuringQwenNative] dynamic codebook generation started
+  textUTF16: ...
+  instructUTF16: ...
+  maxNewTokens: ...
+  fixtureRowsUsed: false
+
+[TuringQwenNative] dynamic codebook row generated
+  rowIndex: ...
+  firstCodecToken: ...
+  tokenIDs: [...]
+  memoryMB: ...
+
+[TuringQwenNative] dynamic codebook generation finished
+  rowCount: ...
+  stopReason: eos|maxTokens|manual
+  fixtureRowsUsed: false
+
+7. Keep fixture tests, but isolate them.
+
+expectedFixtureRows should remain only for:
+- source-truth unit tests
+- decoder fixture validation
+- offline regression comparison
+
+It should not be used by the user-facing Story picker dynamic button.
+
+Add separate APIs:
+
+public func generateVoiceDesignFixtureDecode(...) async throws -> TuringQwenNativeAudio
+public func generateVoiceDesignDynamic(...) async throws -> TuringQwenNativeAudio
+
+or add an explicit mode:
+
+public enum TuringQwenNativeGenerationMode: Sendable {
+    case fixtureDecode(rows: [[Int]])
+    case dynamic(maxNewTokens: Int)
+}
+
+Avoid silent fallback from dynamic to fixture.
+
+8. Add acceptance tests.
+
+Static checks:
+- rg must not find "codebook official fixture continuation selected" in the active
+  dynamic path.
+- dynamic generation logs must include fixtureRowsUsed: false.
+
+Device canary:
+1. Tap Story Mode.
+2. Run Native Qwen - Big Mike Short Dynamic.
+3. Confirm the spoken output is not the old Hello fixture.
+4. Run Native Qwen - Big Mike Broadcast Segment 1 Dynamic.
+5. Confirm it speaks the requested broadcast text.
+
+Architect should add three buttons:
+- Run Native Qwen - Fixture Decode
+- Run Native Qwen - Big Mike Short Dynamic
+- Run Native Qwen - Big Mike Broadcast Segment 1 Dynamic
+
+Do not make the dynamic buttons call fixture decode.
+
+Fastest Show-Off Recommendation
+For an immediate full voice recording to show off, use Path A first:
+- Generate the full broadcast WAV with official Qwen on Mac.
+- Verify the WAV audibly speaks the full broadcast in Big Mike style.
+- Commit the resulting metadata if useful, but do not ship the WAV as production
+  dialogue unless explicitly allowed.
+
+Then implement Path B for real app runtime.
+
+The reason: Path B needs KV-cache-correct one-step talker generation and memory
+control. That is the correct final implementation, but it is more than a text
+swap. Path A can produce the full recording quickly while Path B is built
+properly.
+
+Current Acceptance For This Handoff
+- Architect understands why text replacement alone cannot change audio.
+- Architect has exact runtime branch to remove:
+  TuringQwenNativeCodePredictor.expectedFixtureRows[1..<targetRowCount]
+- Architect knows dynamic generation requires:
+  prompt -> initial talker forward -> first codec token -> dynamic code group ->
+  next talker input embedding -> one-step talker forward with KV cache -> repeat
+  -> speech decoder.
+- Architect has a fast offline recording path and a correct runtime path.

@@ -7,7 +7,7 @@ struct TuringEpisodePickerView: View {
     @State private var openingEpisodeID: TuringEpisodeID?
     @State private var selectedEpisodeID: TuringEpisodeID? = .prologue
 #if DEBUG || GR_TURING_DIAGNOSTICS
-    @State private var qwenNativeHelloRunning = false
+    @State private var qwenNativeRunningPreset: TuringNativeQwenVoiceDesignCanaryPreset?
     @State private var memorySnapshot = TuringMemoryBudgetProbe.currentSnapshot(
         label: "storyPickerInitial"
     )
@@ -49,32 +49,99 @@ struct TuringEpisodePickerView: View {
 
                     memoryBudgetReadout
 
-                    Text("Runs the in-repo TuringQwenNative VoiceDesign canary directly from the episode picker.")
+                    Text("Runs the in-repo TuringQwenNative canary directly from the episode picker.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Text("Row budget: 1 row is ~0.08s. Useful speech needs at least \(TuringNativeQwenVoiceDesignCanaryPreset.minimumUsefulSpeechRows) rows (~\(String(format: "%.1f", TuringNativeQwenVoiceDesignCanaryPreset.minimumUsefulSpeechSeconds))s).")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
                     knownQwenButton(
-                        title: "Run Native Qwen Hello World",
-                        runningTitle: "Running Native Qwen Hello World...",
-                        isRunning: qwenNativeHelloRunning
-                    ) {
-                        qwenNativeHelloRunning = true
-                        memorySnapshot = TuringMemoryBudgetProbe.log(
-                            label: "beforeQwenGenerate",
-                            activeQwenModelID: "qwen3-tts-12hz-1.7b-voicedesign-bf16",
-                            quantization: "bf16"
-                        )
+                        title: "Probe Native Qwen Row Budget - 1 Row",
+                        runningTitle: "Probing 1 Row...",
+                        preset: .rowBudgetProbe1,
+                        prominence: .standard
+                    )
 
-                        Task.detached(priority: .userInitiated) {
-                            await TuringNativeQwenHelloWorldCanary.run()
-                            await MainActor.run {
-                                qwenNativeHelloRunning = false
-                                memorySnapshot = TuringMemoryBudgetProbe.log(
-                                    label: "afterTransientCleanup"
-                                )
-                            }
-                        }
-                    }
+                    knownQwenButton(
+                        title: "Probe Native Qwen Row Budget - 2 Rows",
+                        runningTitle: "Probing 2 Rows...",
+                        preset: .rowBudgetProbe2,
+                        prominence: .prominent
+                    )
+
+                    knownQwenButton(
+                        title: "Run Native Qwen - Big Mike Short Dynamic Memory 4 Rows",
+                        runningTitle: "Probing 4 Rows...",
+                        preset: .rowBudgetProbe4,
+                        prominence: .standard
+                    )
+
+                    knownQwenButton(
+                        title: "Probe Native Qwen Row Budget - 8 Rows",
+                        runningTitle: "Probing 8 Rows...",
+                        preset: .rowBudgetProbe8,
+                        prominence: .standard
+                    )
+
+                    knownQwenButton(
+                        title: "Probe Native Qwen Row Budget - 16 Rows",
+                        runningTitle: "Probing 16 Rows...",
+                        preset: .rowBudgetProbe16,
+                        prominence: .standard
+                    )
+
+                    knownQwenButton(
+                        title: "Probe Native Qwen Row Budget - 24 Rows",
+                        runningTitle: "Probing 24 Rows...",
+                        preset: .rowBudgetProbe24,
+                        prominence: .standard
+                    )
+
+                    knownQwenButton(
+                        title: "Probe Native Qwen Row Budget - 32 Rows",
+                        runningTitle: "Probing 32 Rows...",
+                        preset: .rowBudgetProbe32,
+                        prominence: .standard
+                    )
+
+                    knownQwenButton(
+                        title: "Probe Native Qwen Row Budget - 40 Rows",
+                        runningTitle: "Probing 40 Rows...",
+                        preset: .rowBudgetProbe40,
+                        prominence: .prominent
+                    )
+
+                    knownQwenButton(
+                        title: "Run Native Qwen - Big Mike Short Dynamic",
+                        runningTitle: "Running Big Mike Short Dynamic...",
+                        preset: .bigMikeShortDynamic,
+                        prominence: .standard,
+                        isEnabled: false
+                    )
+
+                    knownQwenButton(
+                        title: "Run Native Qwen - Big Mike Broadcast Segment 1 Dynamic",
+                        runningTitle: "Running Broadcast Segment 1 Dynamic...",
+                        preset: .bigMikeBroadcastSegment1Dynamic,
+                        prominence: .standard
+                    )
+
+                    knownQwenButton(
+                        title: "Run Native Qwen - Big Mike Broadcast Longform Dynamic",
+                        runningTitle: "Running Broadcast Longform Dynamic...",
+                        preset: .bigMikeBroadcastLongformDynamic,
+                        prominence: .standard,
+                        isEnabled: false
+                    )
+
+                    knownQwenButton(
+                        title: "Run Native Qwen - Fixture Decode",
+                        runningTitle: "Running Fixture Decode...",
+                        preset: .fixtureDecode,
+                        prominence: .standard
+                    )
                 }
             }
 #endif
@@ -130,18 +197,40 @@ struct TuringEpisodePickerView: View {
     }
 
 #if DEBUG || GR_TURING_DIAGNOSTICS
+    @ViewBuilder
     private func knownQwenButton(
         title: String,
         runningTitle: String,
-        isRunning: Bool,
-        action: @escaping () -> Void
+        preset: TuringNativeQwenVoiceDesignCanaryPreset,
+        prominence: KnownQwenButtonProminence,
+        isEnabled: Bool = true
     ) -> some View {
-        Button {
-            guard isRunning == false else {
+        let isRunning = qwenNativeRunningPreset == preset
+
+        let button = Button {
+            guard qwenNativeRunningPreset == nil else {
                 return
             }
 
-            action()
+            qwenNativeRunningPreset = preset
+            memorySnapshot = TuringMemoryBudgetProbe.log(
+                label: "beforeQwenGenerate",
+                activeQwenModelID: "qwen3-tts-12hz-1.7b-voicedesign-bf16",
+                quantization: "bf16"
+            )
+
+            Task.detached(priority: .userInitiated) {
+                await TuringNativeQwenHelloWorldCanary.run(
+                    preset: preset
+                )
+
+                await MainActor.run {
+                    qwenNativeRunningPreset = nil
+                    memorySnapshot = TuringMemoryBudgetProbe.log(
+                        label: "afterTransientCleanup"
+                    )
+                }
+            }
         } label: {
             HStack(spacing: 8) {
                 if isRunning {
@@ -156,11 +245,23 @@ struct TuringEpisodePickerView: View {
                 )
             }
         }
-        .buttonStyle(.bordered)
-        .disabled(
-            isRunning ||
-            qwenNativeHelloRunning
-        )
+
+        switch prominence {
+        case .standard:
+            button
+                .buttonStyle(.bordered)
+                .disabled(qwenNativeRunningPreset != nil || !isEnabled)
+
+        case .prominent:
+            button
+                .buttonStyle(.borderedProminent)
+                .disabled(qwenNativeRunningPreset != nil || !isEnabled)
+        }
+    }
+
+    private enum KnownQwenButtonProminence {
+        case standard
+        case prominent
     }
 
     private var memoryBudgetReadout: some View {

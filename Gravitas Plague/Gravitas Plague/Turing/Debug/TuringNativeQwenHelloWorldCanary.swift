@@ -1,26 +1,34 @@
-#if DEBUG
+#if DEBUG || GR_TURING_DIAGNOSTICS
 import Foundation
 import AVFoundation
 import TuringQwenNative
 
 enum TuringNativeQwenHelloWorldCanary {
-    static let text = "Hello world"
     private static let expectedModelFolderName = "Qwen3-TTS-12Hz-1.7B-VoiceDesign-bf16"
     private static let activeModelID = "qwen3-tts-12hz-1.7b-voicedesign-bf16"
     private static let activeQuantization = "bf16"
 
-    static let bigMikeDescription = """
-    A mid-forties Black American man with a large, grounded physical presence, like a retired college football lineman. Deep chest resonance, heavy but controlled breath, warm gravel, a Baltimore edge, streetwise but intelligent. Tough, protective, tired, and emotionally grounded. Former military, former athlete, current security guard. Not polished, not theatrical, not a radio announcer. He speaks like a real neighbor trying to keep his best friend alive. Thick, weighted vocal texture from age, size, and hard living; low, steady, and human.
-    """
+    static func run(
+        preset: TuringNativeQwenVoiceDesignCanaryPreset = .bigMikeShortDynamic
+    ) async {
+        let input = preset.input
 
-    static func run() async {
         do {
             print("""
             [TuringQwenNativeHello] requested
               implementation: in_repo_turing_qwen_native
               source: QwenLM/Qwen3-TTS architecture port
-              text: \(text)
-              instructCharacters: \(bigMikeDescription.count)
+              preset: \(preset.rawValue)
+              voiceID: \(input.voiceID)
+              textUTF16: \(input.spokenText.utf16.count)
+              instructUTF16: \(input.instruction.utf16.count)
+              estimatedCombinedTokens: \(input.estimatedCombinedTokens)
+              maxNewTokens: \(preset.maxNewTokens)
+              estimatedAudioSeconds: \(String(format: "%.3f", preset.estimatedAudioSeconds))
+              minimumUsefulRows: \(TuringNativeQwenVoiceDesignCanaryPreset.minimumUsefulSpeechRows)
+              usefulForSegmentation: \(preset.isUsefulSpeechLength)
+              spokenText:
+            \(input.spokenText)
               episodePickerButton: true
               prologueBypassed: true
               turingHostBypassed: true
@@ -63,30 +71,37 @@ enum TuringNativeQwenHelloWorldCanary {
                 activeQwenModelID: activeModelID,
                 quantization: activeQuantization
             )
-            let audio = try await engine.generateVoiceDesign(
-                text: text,
-                voiceDescription: bigMikeDescription,
-                language: "english",
-                maxNewTokens: 256,
-                seed: 0
-            )
+            if preset.isLongform {
+                try await runLongform(
+                    preset: preset,
+                    engine: engine
+                )
+            } else {
+                let audio = try await renderSingleClip(
+                    preset: preset,
+                    input: input,
+                    engine: engine,
+                    segmentIndex: 0
+                )
+
+                print("""
+                [TuringQwenNativeHello] generation finished
+                  sampleRate: \(audio.sampleRate)
+                  sampleCount: \(audio.samples.count)
+                  durationSeconds: \(String(format: "%.3f", audio.durationSeconds))
+                  peakAbs: \(audio.peakAbs)
+                  rms: \(audio.rms)
+                """)
+
+                try await TuringQwenNativeMemoryPlayer.shared.play(
+                    samples: audio.samples,
+                    sampleRate: audio.sampleRate
+                )
+            }
             TuringMemoryBudgetProbe.log(
                 label: "afterQwenGenerate",
                 activeQwenModelID: activeModelID,
                 quantization: activeQuantization
-            )
-
-            print("""
-            [TuringQwenNativeHello] generation finished
-              sampleRate: \(audio.sampleRate)
-              sampleCount: \(audio.samples.count)
-              peakAbs: \(audio.peakAbs)
-              rms: \(audio.rms)
-            """)
-
-            try await TuringQwenNativeMemoryPlayer.shared.play(
-                samples: audio.samples,
-                sampleRate: audio.sampleRate
             )
 
             TuringMemoryBudgetProbe.log(
@@ -107,6 +122,91 @@ enum TuringNativeQwenHelloWorldCanary {
               error: \(error)
             """)
         }
+    }
+
+    private static func renderSingleClip(
+        preset: TuringNativeQwenVoiceDesignCanaryPreset,
+        input: TuringNativeQwenVoiceDesignCanaryInput,
+        engine: TuringQwenNativeVoiceDesignEngine,
+        segmentIndex: Int
+    ) async throws -> TuringQwenNativeAudio {
+        if preset.isFixtureDecode {
+            return try await engine.generateVoiceDesignFixtureDecode(
+                text: input.spokenText,
+                instruct: input.instruction,
+                fixtureRows: TuringQwenNativeVoiceDesignEngine.sourceTruthFixtureRows,
+                memoryLabel: "\(preset.rawValue).segment.\(segmentIndex)"
+            )
+        }
+
+        return try await engine.generateVoiceDesignDynamic(
+            text: input.spokenText,
+            instruct: input.instruction,
+            maxNewTokens: preset.maxNewTokens,
+            memoryLabel: "\(preset.rawValue).segment.\(segmentIndex)"
+        )
+    }
+
+    private static func runLongform(
+        preset: TuringNativeQwenVoiceDesignCanaryPreset,
+        engine: TuringQwenNativeVoiceDesignEngine
+    ) async throws {
+        let baseInput = preset.input
+        print("""
+        [TuringQwenNativeHello] longform dynamic started
+          preset: \(preset.rawValue)
+          segmentCount: \(preset.segments.count)
+          fixtureRowsUsed: false
+        """)
+
+        for (index, segment) in preset.segments.enumerated() {
+            let input = TuringNativeQwenVoiceDesignCanaryInput(
+                voiceID: baseInput.voiceID,
+                language: baseInput.language,
+                spokenText: segment,
+                instruction: baseInput.instruction
+            )
+
+            print("""
+            [TuringQwenNativeHello] longform segment render started
+              segmentIndex: \(index)
+              textUTF16: \(segment.utf16.count)
+              fixtureRowsUsed: false
+            """)
+
+            let audio = try await renderSingleClip(
+                preset: preset,
+                input: input,
+                engine: engine,
+                segmentIndex: index
+            )
+
+            print("""
+            [TuringQwenNativeHello] longform segment playback started
+              segmentIndex: \(index)
+              sampleCount: \(audio.samples.count)
+              sampleRate: \(audio.sampleRate)
+              durationSeconds: \(String(format: "%.3f", audio.durationSeconds))
+            """)
+
+            try await TuringQwenNativeMemoryPlayer.shared.play(
+                samples: audio.samples,
+                sampleRate: audio.sampleRate
+            )
+
+            TuringMemoryBudgetProbe.log(
+                label: "afterLongformSegment.\(index)",
+                activeQwenModelID: activeModelID,
+                quantization: activeQuantization
+            )
+        }
+
+        print("""
+        [TuringQwenNativeHello] longform dynamic finished
+          preset: \(preset.rawValue)
+          segmentCount: \(preset.segments.count)
+          fixtureRowsUsed: false
+        """)
     }
 
     private static func locateBundledVoiceDesignModel() throws -> URL {

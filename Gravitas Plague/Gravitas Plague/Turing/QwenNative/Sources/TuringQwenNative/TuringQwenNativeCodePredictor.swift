@@ -148,7 +148,7 @@ enum TuringQwenNativeCodePredictor {
         firstCodecToken: Int,
         talkerLastHiddenState: MLXArray,
         config: TuringQwenNativeConfig,
-        tensorIndex: TuringQwenNativeSafetensorsIndex
+        weightsStore: TuringQwenNativeWeightsStore
     ) throws -> TuringQwenNativeFirstCodeGroup {
         let codePredictorConfig = try ResolvedConfig(config.talkerConfig.codePredictorConfig)
         guard config.talkerConfig.numCodeGroups == codePredictorConfig.numCodeGroups else {
@@ -166,7 +166,7 @@ enum TuringQwenNativeCodePredictor {
             firstCodecToken: firstCodecToken,
             talkerLastHiddenState: talkerLastHiddenState,
             config: config,
-            tensorIndex: tensorIndex,
+            weightsStore: weightsStore,
             expectedFixtureRowIndex: 0
         )
     }
@@ -175,13 +175,13 @@ enum TuringQwenNativeCodePredictor {
         firstCodecToken: Int,
         talkerLastHiddenState: MLXArray,
         config: TuringQwenNativeConfig,
-        tensorIndex: TuringQwenNativeSafetensorsIndex,
+        weightsStore: TuringQwenNativeWeightsStore,
         expectedFixtureRowIndex: Int? = nil
     ) throws -> TuringQwenNativeFirstCodeGroup {
         let codePredictorConfig = try ResolvedConfig(config.talkerConfig.codePredictorConfig)
         let start = Date()
-        let reader = TuringQwenNativeSafetensorsReader(index: tensorIndex)
-        let weights = try ProjectionWeights(reader: reader)
+        let resolver = TuringQwenNativeWeightResolver(store: weightsStore)
+        let weights = try ProjectionWeights(resolver: resolver)
         let expectedFixtureTokens: [Int]
         if let expectedFixtureRowIndex {
             guard expectedFixtureRows.indices.contains(expectedFixtureRowIndex) else {
@@ -212,7 +212,7 @@ enum TuringQwenNativeCodePredictor {
             talkerLastHiddenState,
             try talkerCodecEmbedding(
                 tokenID: firstCodecToken,
-                reader: reader
+                resolver: resolver
             )
         ]
 
@@ -229,12 +229,10 @@ enum TuringQwenNativeCodePredictor {
                 projectedInputs: projected,
                 sequenceLength: codeHiddens.count,
                 config: codePredictorConfig,
-                reader: reader
+                resolver: resolver
             )
             let lastHidden = hidden[(codeHiddens.count - 1)..<codeHiddens.count, axis: 1]
-            let lmHeadWeight = try reader.loadTensorFloat32(
-                name: "talker.code_predictor.lm_head.\(headIndex).weight"
-            ).mlxArray()
+            let lmHeadWeight = try resolver.tensor("talker.code_predictor.lm_head.\(headIndex).weight")
             let logits = linear(lastHidden, weight: lmHeadWeight)
             let nextToken = logits
                 .argMax()
@@ -247,7 +245,7 @@ enum TuringQwenNativeCodePredictor {
                     try codePredictorCodecEmbedding(
                         embeddingIndex: headIndex,
                         tokenID: nextToken,
-                        reader: reader
+                        resolver: resolver
                     )
                 )
             }
@@ -269,7 +267,7 @@ enum TuringQwenNativeCodePredictor {
     static func talkerInputEmbedding(
         forCodeGroup tokenIDs: [Int],
         config: TuringQwenNativeConfig,
-        tensorIndex: TuringQwenNativeSafetensorsIndex
+        weightsStore: TuringQwenNativeWeightsStore
     ) throws -> MLXArray {
         guard tokenIDs.count == config.talkerConfig.numCodeGroups else {
             throw TuringQwenNativeError.invalidConfig(
@@ -277,11 +275,11 @@ enum TuringQwenNativeCodePredictor {
             )
         }
 
-        let reader = TuringQwenNativeSafetensorsReader(index: tensorIndex)
+        let resolver = TuringQwenNativeWeightResolver(store: weightsStore)
         var embeddings: [MLXArray] = [
             try talkerCodecEmbedding(
                 tokenID: tokenIDs[0],
-                reader: reader
+                resolver: resolver
             )
         ]
 
@@ -290,7 +288,7 @@ enum TuringQwenNativeCodePredictor {
                 try codePredictorCodecEmbedding(
                     embeddingIndex: offset,
                     tokenID: tokenID,
-                    reader: reader
+                    resolver: resolver
                 )
             )
         }
@@ -303,13 +301,13 @@ enum TuringQwenNativeCodePredictor {
         projectedInputs: MLXArray,
         sequenceLength: Int,
         config: ResolvedConfig,
-        reader: TuringQwenNativeSafetensorsReader
+        resolver: TuringQwenNativeWeightResolver
     ) throws -> MLXArray {
         var hidden = projectedInputs
 
         for layerIndex in 0..<config.numHiddenLayers {
             let weights = try LayerWeights(
-                reader: reader,
+                resolver: resolver,
                 layerIndex: layerIndex
             )
             hidden = try runDecoderLayer(
@@ -324,9 +322,7 @@ enum TuringQwenNativeCodePredictor {
             )
         }
 
-        let normWeight = try reader.loadTensorFloat32(
-            name: "talker.code_predictor.model.norm.weight"
-        ).mlxArray()
+        let normWeight = try resolver.tensor("talker.code_predictor.model.norm.weight")
         let normalized = rmsNorm(
             hidden,
             weight: normWeight,
@@ -436,26 +432,24 @@ enum TuringQwenNativeCodePredictor {
 
     private static func talkerCodecEmbedding(
         tokenID: Int,
-        reader: TuringQwenNativeSafetensorsReader
+        resolver: TuringQwenNativeWeightResolver
     ) throws -> MLXArray {
-        try reader.loadRowsFloat32(
-            name: "talker.model.codec_embedding.weight",
+        try resolver.rows(
+            "talker.model.codec_embedding.weight",
             rows: [tokenID]
         )
-        .mlxArray()
         .reshaped([1, 1, 2048])
     }
 
     private static func codePredictorCodecEmbedding(
         embeddingIndex: Int,
         tokenID: Int,
-        reader: TuringQwenNativeSafetensorsReader
+        resolver: TuringQwenNativeWeightResolver
     ) throws -> MLXArray {
-        try reader.loadRowsFloat32(
-            name: "talker.code_predictor.model.codec_embedding.\(embeddingIndex).weight",
+        try resolver.rows(
+            "talker.code_predictor.model.codec_embedding.\(embeddingIndex).weight",
             rows: [tokenID]
         )
-        .mlxArray()
         .reshaped([1, 1, 2048])
     }
 
@@ -619,13 +613,13 @@ enum TuringQwenNativeCodePredictor {
         let smallToMTPProjectionWeight: MLXArray
         let smallToMTPProjectionBias: MLXArray
 
-        init(reader: TuringQwenNativeSafetensorsReader) throws {
-            self.smallToMTPProjectionWeight = try reader.loadTensorFloat32(
-                name: "talker.code_predictor.small_to_mtp_projection.weight"
-            ).mlxArray()
-            self.smallToMTPProjectionBias = try reader.loadTensorFloat32(
-                name: "talker.code_predictor.small_to_mtp_projection.bias"
-            ).mlxArray()
+        init(resolver: TuringQwenNativeWeightResolver) throws {
+            self.smallToMTPProjectionWeight = try resolver.tensor(
+                "talker.code_predictor.small_to_mtp_projection.weight"
+            )
+            self.smallToMTPProjectionBias = try resolver.tensor(
+                "talker.code_predictor.small_to_mtp_projection.bias"
+            )
         }
     }
 
@@ -643,43 +637,21 @@ enum TuringQwenNativeCodePredictor {
         let downProjWeight: MLXArray
 
         init(
-            reader: TuringQwenNativeSafetensorsReader,
+            resolver: TuringQwenNativeWeightResolver,
             layerIndex: Int
         ) throws {
             let prefix = "talker.code_predictor.model.layers.\(layerIndex)"
-            self.inputLayerNormWeight = try reader.loadTensorFloat32(
-                name: "\(prefix).input_layernorm.weight"
-            ).mlxArray()
-            self.postAttentionLayerNormWeight = try reader.loadTensorFloat32(
-                name: "\(prefix).post_attention_layernorm.weight"
-            ).mlxArray()
-            self.qNormWeight = try reader.loadTensorFloat32(
-                name: "\(prefix).self_attn.q_norm.weight"
-            ).mlxArray()
-            self.kNormWeight = try reader.loadTensorFloat32(
-                name: "\(prefix).self_attn.k_norm.weight"
-            ).mlxArray()
-            self.qProjWeight = try reader.loadTensorFloat32(
-                name: "\(prefix).self_attn.q_proj.weight"
-            ).mlxArray()
-            self.kProjWeight = try reader.loadTensorFloat32(
-                name: "\(prefix).self_attn.k_proj.weight"
-            ).mlxArray()
-            self.vProjWeight = try reader.loadTensorFloat32(
-                name: "\(prefix).self_attn.v_proj.weight"
-            ).mlxArray()
-            self.oProjWeight = try reader.loadTensorFloat32(
-                name: "\(prefix).self_attn.o_proj.weight"
-            ).mlxArray()
-            self.gateProjWeight = try reader.loadTensorFloat32(
-                name: "\(prefix).mlp.gate_proj.weight"
-            ).mlxArray()
-            self.upProjWeight = try reader.loadTensorFloat32(
-                name: "\(prefix).mlp.up_proj.weight"
-            ).mlxArray()
-            self.downProjWeight = try reader.loadTensorFloat32(
-                name: "\(prefix).mlp.down_proj.weight"
-            ).mlxArray()
+            self.inputLayerNormWeight = try resolver.tensor("\(prefix).input_layernorm.weight")
+            self.postAttentionLayerNormWeight = try resolver.tensor("\(prefix).post_attention_layernorm.weight")
+            self.qNormWeight = try resolver.tensor("\(prefix).self_attn.q_norm.weight")
+            self.kNormWeight = try resolver.tensor("\(prefix).self_attn.k_norm.weight")
+            self.qProjWeight = try resolver.tensor("\(prefix).self_attn.q_proj.weight")
+            self.kProjWeight = try resolver.tensor("\(prefix).self_attn.k_proj.weight")
+            self.vProjWeight = try resolver.tensor("\(prefix).self_attn.v_proj.weight")
+            self.oProjWeight = try resolver.tensor("\(prefix).self_attn.o_proj.weight")
+            self.gateProjWeight = try resolver.tensor("\(prefix).mlp.gate_proj.weight")
+            self.upProjWeight = try resolver.tensor("\(prefix).mlp.up_proj.weight")
+            self.downProjWeight = try resolver.tensor("\(prefix).mlp.down_proj.weight")
         }
     }
 }

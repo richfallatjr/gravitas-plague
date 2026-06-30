@@ -1,0 +1,191 @@
+Turing Native Qwen Memory Retention Findings For Architect
+Date: 2026-06-30
+
+Summary
+The latest native VoiceDesign dynamic path is not failing because the spoken text is too long.
+It is failing because the current dynamic continuation path retains or rematerializes too much
+native MLX/model state. Two spoken words should not approach an 8 GB process high-water limit.
+
+Current device behavior
+- Fixture decode can play the golden fixture rows.
+- Dynamic generation no longer uses fixture continuation rows.
+- Dynamic row 0 completes and produces a real code group.
+- Dynamic row 1 starts the one-step talker continuation and the process is killed by memory pressure.
+- The row 1 failure is not useful for a segmenter budget because 1 generated row is only about 0.08s of audio.
+- A useful spoken segment needs roughly 38 rows for about 3.0s at the current 1920 samples per row / 24000 Hz assumption.
+
+Relevant files
+- Gravitas Plague/Gravitas Plague/Turing/QwenNative/Sources/TuringQwenNative/TuringQwenNativeVoiceDesignEngine.swift
+- Gravitas Plague/Gravitas Plague/Turing/QwenNative/Sources/TuringQwenNative/TuringQwenNativeTalkerLayer.swift
+- Gravitas Plague/Gravitas Plague/Turing/QwenNative/Sources/TuringQwenNative/TuringQwenNativeCodePredictor.swift
+- Gravitas Plague/Gravitas Plague/Turing/QwenNative/Sources/TuringQwenNative/TuringQwenNativeSafetensors.swift
+- Gravitas Plague/Gravitas Plague/Turing/QwenNative/Sources/TuringQwenNative/TuringQwenNativeMemoryControl.swift
+- Gravitas Plague/Gravitas Plague/Turing/QwenNative/Sources/TuringQwenNative/TuringQwenNativeRowBudgetRecorder.swift
+
+Important evidence
+The latest crash pattern was:
+
+1. Initial prompt preparation and prompt talker forward completed.
+2. First codec token was selected.
+3. Dynamic code predictor generated row 0 with fixtureRowsUsed: false.
+4. The next row entered TuringQwenNativeTalkerForwardRunner.forwardOneStep.
+5. The log reached generated step layer 26 of 28.
+6. visionOS killed the process:
+   EXC_RESOURCE RESOURCE_TYPE_MEMORY high watermark memory limit exceeded, limit=8192 MB.
+
+This means the app is not dying because of Foundation, Prologue UI, text length, cache hits, or segmenting.
+It is dying while the native talker continuation is evaluating the second generated row.
+
+Primary suspected bug: lazy K/V cache graph retention
+In TuringQwenNativeTalkerLayer.swift, prompt attention stores cache tensors like this:
+
+    let cachedKeyStates = keyStates
+    let cachedValueStates = valueStates
+    ...
+    cacheLayer: TuringQwenNativeKVCache.Layer(
+        key: cachedKeyStates,
+        value: cachedValueStates
+    )
+
+The one-step path then appends to previous cache tensors like this:
+
+    let combinedKeyStates = concatenated([previousKeyStates, keyStates], axis: 2)
+    let combinedValueStates = concatenated([previousValueStates, valueStates], axis: 2)
+    ...
+    cacheLayer: TuringQwenNativeKVCache.Layer(
+        key: combinedKeyStates,
+        value: combinedValueStates
+    )
+
+These arrays may still be lazy MLX graphs rather than compact materialized cache buffers.
+If so, storing them in TuringQwenNativeKVCache can retain the full computation graph for every layer,
+including references to hidden states, projections, weight arrays, and concat history. That would explain
+why row 1 explodes memory even for tiny spoken text.
+
+Recommended first fix
+Materialize K/V tensors before putting them into the cache.
+
+In prompt selfAttention:
+
+    let cachedKeyStates = keyStates
+    let cachedValueStates = valueStates
+    eval(cachedKeyStates, cachedValueStates)
+
+In one-step selfAttentionOneStep:
+
+    let combinedKeyStates = concatenated([previousKeyStates, keyStates], axis: 2)
+    let combinedValueStates = concatenated([previousValueStates, valueStates], axis: 2)
+    eval(combinedKeyStates, combinedValueStates)
+
+Then return only those evaluated tensors in the cache layer.
+
+If this still retains graph history, force a real detached copy after eval using the safest MLX Swift idiom
+available in this local package. The invariant is that the cache should own only compact K/V values with
+shape [1, num_key_value_heads, sequence_length, head_dim], not the graph that produced them.
+
+Secondary suspected bug: repeated full tensor Data materialization
+TuringQwenNativeSafetensorsReader.loadTensorFloat32 reads every requested tensor into a fresh Data value:
+
+    let data = try handle.read(upToCount: byteCount) ?? Data()
+    return TuringQwenNativeFloatTensor(rawData: data, dtype: ...)
+
+Then TuringQwenNativeFloatTensor.mlxArray() creates:
+
+    MLXArray(data, shape, dtype: dtype.mlxDType)
+
+The talker and code predictor call this repeatedly:
+- Talker full prompt forward loads every talker layer weight.
+- Talker one-step forward loads every talker layer weight again for each generated row.
+- Code predictor generates each code group by running up to 15 heads.
+- Each code predictor head re-enters code predictor transformer layers and loads those weights again.
+
+If MLXArray keeps the Data alive while lazy graphs are pending, or if the allocator cannot reuse those
+buffers fast enough, process memory can climb even when MLX cacheMemory looks capped at 64 MB.
+
+Recommended second fix
+Add an explicit weight lifetime strategy. Options:
+
+1. Weight cache with bounded scope:
+   Load each layer's weights once per engine/session and keep MLXArrays for the session, not Data copies.
+   This may increase steady memory but avoids repeated Data and graph churn. It needs careful budget measurement.
+
+2. Memory-mapped safetensors:
+   Prefer mmap-backed slices or MLX load APIs if available, instead of reading large tensor Data repeatedly.
+   The goal is no repeated heap Data copies for unchanged BF16 weight tensors.
+
+3. Autorelease/lifetime fences:
+   Wrap per-layer and per-code-predictor-head temporary work in an autoreleasepool and force eval before leaving.
+   This is not sufficient alone if the K/V cache retains lazy graphs, but it can reduce ObjC/Swift temporary pressure.
+
+Tertiary suspected bug: returned logits and generation state retain graphs unnecessarily
+TuringQwenNativeTalkerForwardRunner.forwardOneStep returns TuringQwenNativeGeneratedStepOutput with:
+
+    logitsForPosition: logits
+    talkerLastHiddenState: finalLastHiddenState
+    state: nextState
+
+The dynamic caller only needs:
+- codeGroup
+- firstCodecToken for logging
+- nextState
+
+If logitsForPosition is not used by the dynamic caller, do not return it from the active path.
+Returning the logits can accidentally extend graph lifetime past the row boundary.
+
+The generation state also stores:
+
+    generatedCodeGroups: previousState.generatedCodeGroups + [codeGroup.tokenIDs]
+    lastHiddenState: finalLastHiddenState
+
+generatedCodeGroups is small, but verify it is actually needed. lastHiddenState is needed only if the
+next path consumes it; if not, remove it from state.
+
+Instrumentation gap
+TuringQwenNativeMemoryControl logs MLX Memory.snapshot(), which is not enough. The crash is a process
+high-water kill. The architect should add process memory snapshots at these exact native points:
+
+- before prompt build
+- after prompt embeddings
+- after each prompt talker layer
+- after final prompt K/V cache is stored
+- after first code predictor row
+- before forwardOneStep row 1
+- after each forwardOneStep layer
+- after each code predictor head
+
+Use phys_footprint / resident_size / os_proc_available_memory if available in this target.
+The report should show both MLX active/cache/peak and process footprint.
+
+Do not do these as the next fix
+- Do not tune text length as the primary fix.
+- Do not claim 1 row is a usable row budget.
+- Do not build a segmenter around the current 1-row limit.
+- Do not change Big Mike prompt or spoken text to hide the memory issue.
+- Do not add another Qwen package or renderer wrapper.
+- Do not reintroduce fixture continuation rows into dynamic mode.
+- Do not use persistent generated WAV cache to mask generation failures.
+
+Acceptance target for the next engineering pass
+The next pass should prove:
+
+1. Dynamic mode still logs fixtureRowsUsed: false.
+2. Row 0 completes.
+3. Row 1 completes without process kill.
+4. A minimum useful row target is reachable:
+   - minimum useful: about 38 rows, about 3.0s
+   - preferred canary: 40 rows, about 3.2s
+5. Process footprint stabilizes or grows predictably after warmup.
+6. Decode produces non-empty audio with duration matching rows * 1920 / 24000.
+
+Recommended immediate architect patch order
+1. Materialize/detach K/V cache tensors before storing them.
+2. Remove unused logits from generated step output.
+3. Add process-footprint memory logging around row 1 forwardOneStep.
+4. Add lifetime fences around talker layer and code predictor head work.
+5. Only after row 2 survives, rerun row-budget probes for 2, 4, 8, 16, 32, 40 rows.
+6. Only after 40 rows survives, re-enable Story demo dynamic buttons.
+
+Bottom line
+The row-budget probes did their job: they proved the current implementation cannot support even a
+second dynamic row. That is not a segmentation result. It is a native memory ownership bug in the
+dynamic talker/code-predictor path, with K/V cache lazy graph retention as the leading suspect.

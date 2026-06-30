@@ -11,26 +11,36 @@ struct TuringQwenNativeTalkerForwardOutput {
     let finalLastHiddenState: MLXArray
     let sequenceLength: Int
     let hiddenSize: Int
+    let kvCache: TuringQwenNativeKVCache
+}
+
+private struct TuringQwenNativeTalkerLayerForwardResult {
+    let hiddenStates: MLXArray
+    let cacheLayer: TuringQwenNativeKVCache.Layer
 }
 
 enum TuringQwenNativeTalkerForwardRunner {
     static func runLayer0(
         promptInputs: TuringQwenNativeTalkerPromptInputs,
         config: TuringQwenNativeConfig,
-        tensorIndex: TuringQwenNativeSafetensorsIndex
+        weightsStore: TuringQwenNativeWeightsStore,
+        maxNewRows: Int
     ) throws -> TuringQwenNativeTalkerLayerOutput {
-        let reader = TuringQwenNativeSafetensorsReader(index: tensorIndex)
+        let weightsResolver = TuringQwenNativeWeightResolver(store: weightsStore)
         let weights = try TuringQwenNativeTalkerLayerWeights(
-            reader: reader,
+            resolver: weightsResolver,
             layerIndex: 0
         )
 
-        let hidden = try runDecoderLayer(
+        let layerResult = try runDecoderLayer(
             hiddenStates: promptInputs.inputsEmbeds,
             weights: weights,
             config: config.talkerConfig,
-            sequenceLength: promptInputs.sequenceLength
+            sequenceLength: promptInputs.sequenceLength,
+            layerIndex: 0,
+            maxNewRows: maxNewRows
         )
+        let hidden = layerResult.hiddenStates
         eval(hidden)
 
         return TuringQwenNativeTalkerLayerOutput(
@@ -43,14 +53,16 @@ enum TuringQwenNativeTalkerForwardRunner {
     static func runFullForward(
         promptInputs: TuringQwenNativeTalkerPromptInputs,
         config: TuringQwenNativeConfig,
-        tensorIndex: TuringQwenNativeSafetensorsIndex
+        weightsStore: TuringQwenNativeWeightsStore,
+        maxNewRows: Int
     ) throws -> TuringQwenNativeTalkerForwardOutput {
         try runFullForward(
             inputsEmbeds: promptInputs.inputsEmbeds,
             sequenceLength: promptInputs.sequenceLength,
             hiddenSize: config.talkerConfig.hiddenSize,
             config: config,
-            tensorIndex: tensorIndex,
+            weightsStore: weightsStore,
+            maxNewRows: maxNewRows,
             logLabel: "prompt"
         )
     }
@@ -60,11 +72,14 @@ enum TuringQwenNativeTalkerForwardRunner {
         sequenceLength: Int,
         hiddenSize: Int,
         config: TuringQwenNativeConfig,
-        tensorIndex: TuringQwenNativeSafetensorsIndex,
+        weightsStore: TuringQwenNativeWeightsStore,
+        maxNewRows: Int,
         logLabel: String
     ) throws -> TuringQwenNativeTalkerForwardOutput {
-        let reader = TuringQwenNativeSafetensorsReader(index: tensorIndex)
+        let weightsResolver = TuringQwenNativeWeightResolver(store: weightsStore)
         var hidden = inputsEmbeds
+        var cacheLayers: [TuringQwenNativeKVCache.Layer] = []
+        cacheLayers.reserveCapacity(config.talkerConfig.numHiddenLayers)
         let forwardStart = Date()
 
         guard inputsEmbeds.shape == [1, sequenceLength, hiddenSize] else {
@@ -84,16 +99,20 @@ enum TuringQwenNativeTalkerForwardRunner {
         for layerIndex in 0..<config.talkerConfig.numHiddenLayers {
             let layerStart = Date()
             let weights = try TuringQwenNativeTalkerLayerWeights(
-                reader: reader,
+                resolver: weightsResolver,
                 layerIndex: layerIndex
             )
 
-            hidden = try runDecoderLayer(
+            let layerResult = try runDecoderLayer(
                 hiddenStates: hidden,
                 weights: weights,
                 config: config.talkerConfig,
-                sequenceLength: sequenceLength
+                sequenceLength: sequenceLength,
+                layerIndex: layerIndex,
+                maxNewRows: maxNewRows
             )
+            hidden = layerResult.hiddenStates
+            cacheLayers.append(layerResult.cacheLayer)
             eval(hidden)
             TuringQwenNativeMemoryControl.clearCache(label: "talker.\(logLabel).layer.\(layerIndex)")
 
@@ -107,9 +126,7 @@ enum TuringQwenNativeTalkerForwardRunner {
         }
 
         let finalNormStart = Date()
-        let finalNormWeight = try reader.loadTensorFloat32(
-            name: "talker.model.norm.weight"
-        ).mlxArray()
+        let finalNormWeight = try weightsResolver.tensor("talker.model.norm.weight")
         let finalHidden = rmsNorm(
             hidden,
             weight: finalNormWeight,
@@ -132,19 +149,23 @@ enum TuringQwenNativeTalkerForwardRunner {
         return TuringQwenNativeTalkerForwardOutput(
             finalLastHiddenState: finalLastHidden,
             sequenceLength: sequenceLength,
-            hiddenSize: hiddenSize
+            hiddenSize: hiddenSize,
+            kvCache: TuringQwenNativeKVCache(
+                layers: cacheLayers,
+                usesMaterializedLayerState: true,
+                maxNewRows: maxNewRows
+            )
         )
     }
 
     static func codecHeadLogits(
         finalLastHiddenState: MLXArray,
-        tensorIndex: TuringQwenNativeSafetensorsIndex
+        weightsStore: TuringQwenNativeWeightsStore
     ) throws -> MLXArray {
         let start = Date()
-        let reader = TuringQwenNativeSafetensorsReader(index: tensorIndex)
-        let codecHeadWeight = try reader.loadTensorFloat32(
-            name: "talker.codec_head.weight"
-        ).mlxArray()
+        let codecHeadWeight = try TuringQwenNativeWeightResolver(
+            store: weightsStore
+        ).tensor("talker.codec_head.weight")
         let logits = linear(finalLastHiddenState, weight: codecHeadWeight)
         eval(logits)
         TuringQwenNativeMemoryControl.clearCache(label: "talker.codecHead")
@@ -155,12 +176,122 @@ enum TuringQwenNativeTalkerForwardRunner {
         return logits
     }
 
+    static func forwardOneStep(
+        inputEmbedding: MLXArray,
+        previousState: TuringQwenNativeTalkerGenerationState,
+        config: TuringQwenNativeConfig,
+        weightsStore: TuringQwenNativeWeightsStore
+    ) throws -> TuringQwenNativeGeneratedStepOutput {
+        guard inputEmbedding.shape == [1, 1, config.talkerConfig.hiddenSize] else {
+            throw TuringQwenNativeError.invalidConfig(
+                "Expected one-step talker input embedding [1, 1, \(config.talkerConfig.hiddenSize)], got \(inputEmbedding.shape)."
+            )
+        }
+
+        print("""
+        [TuringQwenNative] forwardOneStep started
+          position: \(previousState.position)
+          kvCacheLayers: \(previousState.kvCache.layers.count)
+          kvCacheMaterialized: \(previousState.kvCache.usesMaterializedLayerState)
+        """)
+
+        guard previousState.kvCache.layers.count == config.talkerConfig.numHiddenLayers,
+              previousState.kvCache.usesMaterializedLayerState else {
+            throw TuringQwenNativeError.invalidConfig(
+                "One-step talker forward requires materialized K/V cache from the initial prompt forward."
+            )
+        }
+
+        let weightsResolver = TuringQwenNativeWeightResolver(store: weightsStore)
+        var hidden = inputEmbedding
+        var nextCacheLayers: [TuringQwenNativeKVCache.Layer] = []
+        nextCacheLayers.reserveCapacity(config.talkerConfig.numHiddenLayers)
+
+        for layerIndex in 0..<config.talkerConfig.numHiddenLayers {
+            let weights = try TuringQwenNativeTalkerLayerWeights(
+                resolver: weightsResolver,
+                layerIndex: layerIndex
+            )
+            let layerResult = try runDecoderLayerOneStep(
+                hiddenStates: hidden,
+                previousCacheLayer: previousState.kvCache.layers[layerIndex],
+                weights: weights,
+                config: config.talkerConfig,
+                layerIndex: layerIndex,
+                position: previousState.position
+            )
+            hidden = layerResult.hiddenStates
+            nextCacheLayers.append(layerResult.cacheLayer)
+            eval(hidden)
+            TuringQwenNativeMemoryControl.clearCache(
+                label: "talker.generatedStep.\(previousState.position).layer.\(layerIndex)"
+            )
+        }
+
+        let finalNormWeight = try weightsResolver.tensor("talker.model.norm.weight")
+        let finalLastHiddenState = rmsNorm(
+            hidden,
+            weight: finalNormWeight,
+            eps: Float(config.talkerConfig.rmsNormEps)
+        )
+        eval(finalLastHiddenState)
+        let logits = try codecHeadLogits(
+            finalLastHiddenState: finalLastHiddenState,
+            weightsStore: weightsStore
+        )
+        let firstCodecToken = try TuringQwenNativeCodecSampler.selectFirstCodecToken(
+            logits: logits,
+            sequenceLength: 1,
+            vocabSize: config.talkerConfig.vocabSize
+        ).tokenID
+        let codeGroup = try TuringQwenNativeCodePredictor.generateCodeGroup(
+            firstCodecToken: firstCodecToken,
+            talkerLastHiddenState: finalLastHiddenState,
+            config: config,
+            weightsStore: weightsStore,
+            expectedFixtureRowIndex: nil
+        )
+        let nextPosition = previousState.position + 1
+        let attentionMask = MLXArray(
+            int64: Array(repeating: 1, count: nextPosition),
+            [1, nextPosition]
+        )
+        let nextState = TuringQwenNativeTalkerGenerationState(
+            kvCache: TuringQwenNativeKVCache(
+                layers: nextCacheLayers,
+                usesMaterializedLayerState: true,
+                maxNewRows: previousState.kvCache.maxNewRows
+            ),
+            position: nextPosition,
+            attentionMask: attentionMask,
+            generatedCodeGroups: previousState.generatedCodeGroups + [codeGroup.tokenIDs]
+        )
+
+        print("""
+        [TuringQwenNative] forwardOneStep finished
+          position: \(nextPosition)
+          firstCodecToken: \(firstCodecToken)
+          tokenIDs: \(codeGroup.tokenIDs)
+        """)
+
+        return TuringQwenNativeGeneratedStepOutput(
+            step: nextPosition,
+            firstCodecToken: firstCodecToken,
+            codeGroup: codeGroup.tokenIDs,
+            talkerLastHiddenState: finalLastHiddenState,
+            stop: false,
+            state: nextState
+        )
+    }
+
     private static func runDecoderLayer(
         hiddenStates: MLXArray,
         weights: TuringQwenNativeTalkerLayerWeights,
         config: TuringQwenNativeConfig.TalkerConfig,
-        sequenceLength: Int
-    ) throws -> MLXArray {
+        sequenceLength: Int,
+        layerIndex: Int,
+        maxNewRows: Int
+    ) throws -> TuringQwenNativeTalkerLayerForwardResult {
         let residual = hiddenStates
         let normalized = rmsNorm(
             hiddenStates,
@@ -168,13 +299,15 @@ enum TuringQwenNativeTalkerForwardRunner {
             eps: Float(config.rmsNormEps)
         )
 
-        let attentionOutput = try selfAttention(
+        let attentionResult = try selfAttention(
             hiddenStates: normalized,
             weights: weights,
             config: config,
-            sequenceLength: sequenceLength
+            sequenceLength: sequenceLength,
+            layerIndex: layerIndex,
+            maxNewRows: maxNewRows
         )
-        let afterAttention = residual + attentionOutput
+        let afterAttention = residual + attentionResult.hiddenStates
 
         let mlpResidual = afterAttention
         let mlpInput = rmsNorm(
@@ -184,15 +317,59 @@ enum TuringQwenNativeTalkerForwardRunner {
         )
         let mlpOutput = mlp(mlpInput, weights: weights)
 
-        return mlpResidual + mlpOutput
+        return TuringQwenNativeTalkerLayerForwardResult(
+            hiddenStates: mlpResidual + mlpOutput,
+            cacheLayer: attentionResult.cacheLayer
+        )
+    }
+
+    private static func runDecoderLayerOneStep(
+        hiddenStates: MLXArray,
+        previousCacheLayer: TuringQwenNativeKVCache.Layer,
+        weights: TuringQwenNativeTalkerLayerWeights,
+        config: TuringQwenNativeConfig.TalkerConfig,
+        layerIndex: Int,
+        position: Int
+    ) throws -> TuringQwenNativeTalkerLayerForwardResult {
+        let residual = hiddenStates
+        let normalized = rmsNorm(
+            hiddenStates,
+            weight: weights.inputLayerNormWeight,
+            eps: Float(config.rmsNormEps)
+        )
+
+        let attentionResult = try selfAttentionOneStep(
+            hiddenStates: normalized,
+            previousCacheLayer: previousCacheLayer,
+            weights: weights,
+            config: config,
+            layerIndex: layerIndex,
+            position: position
+        )
+        let afterAttention = residual + attentionResult.hiddenStates
+
+        let mlpResidual = afterAttention
+        let mlpInput = rmsNorm(
+            afterAttention,
+            weight: weights.postAttentionLayerNormWeight,
+            eps: Float(config.rmsNormEps)
+        )
+        let mlpOutput = mlp(mlpInput, weights: weights)
+
+        return TuringQwenNativeTalkerLayerForwardResult(
+            hiddenStates: mlpResidual + mlpOutput,
+            cacheLayer: attentionResult.cacheLayer
+        )
     }
 
     private static func selfAttention(
         hiddenStates: MLXArray,
         weights: TuringQwenNativeTalkerLayerWeights,
         config: TuringQwenNativeConfig.TalkerConfig,
-        sequenceLength: Int
-    ) throws -> MLXArray {
+        sequenceLength: Int,
+        layerIndex: Int,
+        maxNewRows: Int
+    ) throws -> TuringQwenNativeTalkerLayerForwardResult {
         let hiddenSize = config.hiddenSize
         let headDim = config.headDim
         let attentionHeads = config.numAttentionHeads
@@ -225,6 +402,13 @@ enum TuringQwenNativeTalkerForwardRunner {
         queryStates = applyRotary(queryStates, cos: rope.cos, sin: rope.sin)
         keyStates = applyRotary(keyStates, cos: rope.cos, sin: rope.sin)
 
+        let cacheLayer = try TuringQwenNativeKVCacheStore.promptLayer(
+            keyStates: keyStates,
+            valueStates: valueStates,
+            maxNewRows: maxNewRows,
+            layerIndex: layerIndex
+        )
+
         keyStates = repeatKeyValueHeads(
             keyStates,
             keyValueHeads: keyValueHeads,
@@ -244,7 +428,80 @@ enum TuringQwenNativeTalkerForwardRunner {
             .transposed(0, 2, 1, 3)
             .reshaped([1, sequenceLength, hiddenSize])
 
-        return linear(attended, weight: weights.oProjWeight)
+        return TuringQwenNativeTalkerLayerForwardResult(
+            hiddenStates: linear(attended, weight: weights.oProjWeight),
+            cacheLayer: cacheLayer
+        )
+    }
+
+    private static func selfAttentionOneStep(
+        hiddenStates: MLXArray,
+        previousCacheLayer: TuringQwenNativeKVCache.Layer,
+        weights: TuringQwenNativeTalkerLayerWeights,
+        config: TuringQwenNativeConfig.TalkerConfig,
+        layerIndex: Int,
+        position: Int
+    ) throws -> TuringQwenNativeTalkerLayerForwardResult {
+        let hiddenSize = config.hiddenSize
+        let headDim = config.headDim
+        let attentionHeads = config.numAttentionHeads
+        let keyValueHeads = config.numKeyValueHeads
+
+        let query = linear(hiddenStates, weight: weights.qProjWeight)
+            .reshaped([1, 1, attentionHeads, headDim])
+        let key = linear(hiddenStates, weight: weights.kProjWeight)
+            .reshaped([1, 1, keyValueHeads, headDim])
+        let value = linear(hiddenStates, weight: weights.vProjWeight)
+            .reshaped([1, 1, keyValueHeads, headDim])
+
+        var queryStates = rmsNorm(
+            query,
+            weight: weights.qNormWeight,
+            eps: Float(config.rmsNormEps)
+        ).transposed(0, 2, 1, 3)
+        var keyStates = rmsNorm(
+            key,
+            weight: weights.kNormWeight,
+            eps: Float(config.rmsNormEps)
+        ).transposed(0, 2, 1, 3)
+        let valueStates = value.transposed(0, 2, 1, 3)
+
+        let rope = rotaryEmbeddings(
+            positions: [position],
+            headDim: headDim,
+            theta: config.ropeTheta
+        )
+        queryStates = applyRotary(queryStates, cos: rope.cos, sin: rope.sin)
+        keyStates = applyRotary(keyStates, cos: rope.cos, sin: rope.sin)
+
+        let updatedCacheLayer = try TuringQwenNativeKVCacheStore.appendOneStep(
+            layer: previousCacheLayer,
+            newKeys: keyStates,
+            newValues: valueStates,
+            layerIndex: layerIndex
+        )
+        let repeatedKeyStates = repeatKeyValueHeads(
+            updatedCacheLayer.activeKeys,
+            keyValueHeads: keyValueHeads,
+            attentionHeads: attentionHeads
+        )
+        let repeatedValueStates = repeatKeyValueHeads(
+            updatedCacheLayer.activeValues,
+            keyValueHeads: keyValueHeads,
+            attentionHeads: attentionHeads
+        )
+
+        let scale = Float(1.0 / sqrt(Double(headDim)))
+        let scores = matmul(queryStates, repeatedKeyStates.transposed(0, 1, 3, 2)) * scale
+        let probabilities = softmax(scores, axis: -1, precise: true)
+        let attended = matmul(probabilities, repeatedValueStates)
+            .transposed(0, 2, 1, 3)
+            .reshaped([1, 1, hiddenSize])
+
+        return TuringQwenNativeTalkerLayerForwardResult(
+            hiddenStates: linear(attended, weight: weights.oProjWeight),
+            cacheLayer: updatedCacheLayer
+        )
     }
 
     private static func mlp(
@@ -295,13 +552,25 @@ enum TuringQwenNativeTalkerForwardRunner {
         headDim: Int,
         theta: Double
     ) -> (cos: MLXArray, sin: MLXArray) {
+        rotaryEmbeddings(
+            positions: Array(0..<sequenceLength),
+            headDim: headDim,
+            theta: theta
+        )
+    }
+
+    private static func rotaryEmbeddings(
+        positions: [Int],
+        headDim: Int,
+        theta: Double
+    ) -> (cos: MLXArray, sin: MLXArray) {
         let half = headDim / 2
         var cosValues: [Float] = []
         var sinValues: [Float] = []
-        cosValues.reserveCapacity(sequenceLength * headDim)
-        sinValues.reserveCapacity(sequenceLength * headDim)
+        cosValues.reserveCapacity(positions.count * headDim)
+        sinValues.reserveCapacity(positions.count * headDim)
 
-        for position in 0..<sequenceLength {
+        for position in positions {
             var freqs: [Double] = []
             freqs.reserveCapacity(half)
 
@@ -322,8 +591,8 @@ enum TuringQwenNativeTalkerForwardRunner {
         }
 
         return (
-            MLXArray(cosValues, [1, 1, sequenceLength, headDim]),
-            MLXArray(sinValues, [1, 1, sequenceLength, headDim])
+            MLXArray(cosValues, [1, 1, positions.count, headDim]),
+            MLXArray(sinValues, [1, 1, positions.count, headDim])
         )
     }
 
@@ -375,42 +644,20 @@ private struct TuringQwenNativeTalkerLayerWeights {
     let downProjWeight: MLXArray
 
     init(
-        reader: TuringQwenNativeSafetensorsReader,
+        resolver: TuringQwenNativeWeightResolver,
         layerIndex: Int
     ) throws {
         let prefix = "talker.model.layers.\(layerIndex)"
-        self.inputLayerNormWeight = try reader.loadTensorFloat32(
-            name: "\(prefix).input_layernorm.weight"
-        ).mlxArray()
-        self.postAttentionLayerNormWeight = try reader.loadTensorFloat32(
-            name: "\(prefix).post_attention_layernorm.weight"
-        ).mlxArray()
-        self.qNormWeight = try reader.loadTensorFloat32(
-            name: "\(prefix).self_attn.q_norm.weight"
-        ).mlxArray()
-        self.kNormWeight = try reader.loadTensorFloat32(
-            name: "\(prefix).self_attn.k_norm.weight"
-        ).mlxArray()
-        self.qProjWeight = try reader.loadTensorFloat32(
-            name: "\(prefix).self_attn.q_proj.weight"
-        ).mlxArray()
-        self.kProjWeight = try reader.loadTensorFloat32(
-            name: "\(prefix).self_attn.k_proj.weight"
-        ).mlxArray()
-        self.vProjWeight = try reader.loadTensorFloat32(
-            name: "\(prefix).self_attn.v_proj.weight"
-        ).mlxArray()
-        self.oProjWeight = try reader.loadTensorFloat32(
-            name: "\(prefix).self_attn.o_proj.weight"
-        ).mlxArray()
-        self.gateProjWeight = try reader.loadTensorFloat32(
-            name: "\(prefix).mlp.gate_proj.weight"
-        ).mlxArray()
-        self.upProjWeight = try reader.loadTensorFloat32(
-            name: "\(prefix).mlp.up_proj.weight"
-        ).mlxArray()
-        self.downProjWeight = try reader.loadTensorFloat32(
-            name: "\(prefix).mlp.down_proj.weight"
-        ).mlxArray()
+        self.inputLayerNormWeight = try resolver.tensor("\(prefix).input_layernorm.weight")
+        self.postAttentionLayerNormWeight = try resolver.tensor("\(prefix).post_attention_layernorm.weight")
+        self.qNormWeight = try resolver.tensor("\(prefix).self_attn.q_norm.weight")
+        self.kNormWeight = try resolver.tensor("\(prefix).self_attn.k_norm.weight")
+        self.qProjWeight = try resolver.tensor("\(prefix).self_attn.q_proj.weight")
+        self.kProjWeight = try resolver.tensor("\(prefix).self_attn.k_proj.weight")
+        self.vProjWeight = try resolver.tensor("\(prefix).self_attn.v_proj.weight")
+        self.oProjWeight = try resolver.tensor("\(prefix).self_attn.o_proj.weight")
+        self.gateProjWeight = try resolver.tensor("\(prefix).mlp.gate_proj.weight")
+        self.upProjWeight = try resolver.tensor("\(prefix).mlp.up_proj.weight")
+        self.downProjWeight = try resolver.tensor("\(prefix).mlp.down_proj.weight")
     }
 }
