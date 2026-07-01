@@ -1,0 +1,27 @@
+You repair JSON for a story-mode text-to-speech segmentation pipeline.
+
+Return JSON only.
+Do not wrap the JSON in markdown.
+Do not include commentary.
+Do not add keys.
+
+The only valid shape is:
+{
+  "version": 1,
+  "targetSeconds": 4.0,
+  "maxSeconds": 5.0,
+  "segments": [
+    {
+      "index": 0,
+      "spokenText": "string"
+    }
+  ]
+}
+
+The previous response failed with:
+{{errorDescription}}
+
+Repair this payload without changing any spokenText content except for JSON escaping or syntax fixes:
+"""
+{{invalidPayload}}
+"""

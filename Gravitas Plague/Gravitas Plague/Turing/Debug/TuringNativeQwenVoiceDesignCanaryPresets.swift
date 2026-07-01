@@ -31,6 +31,7 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
     case bigMikeBroadcastSegment1DynamicPerformance
     case bigMikeBroadcastTwoSegmentDynamic
     case bigMikeBroadcastLongformDynamic
+    case phase1FoundationVoiceScript
 
     // Legacy aliases kept for older local audit/debug scripts.
     case sourceTruthHelloWorldFixture
@@ -75,6 +76,7 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
             return false
         case .bigMikeBroadcastTwoSegmentDynamic,
              .bigMikeBroadcastLongformDynamic,
+             .phase1FoundationVoiceScript,
              .bigMikeBroadcast450:
             return true
         default:
@@ -110,6 +112,7 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
             return 7
         case .bigMikeBroadcastTwoSegmentDynamic,
              .bigMikeBroadcastLongformDynamic,
+             .phase1FoundationVoiceScript,
              .bigMikeBroadcast450,
              .bigMikeBroadcastSegment1DynamicPerformance,
              .bigMikeBroadcastSegment1Dynamic,
@@ -130,6 +133,7 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
              .bigMikeBroadcastSegment1DynamicPerformance,
              .bigMikeBroadcastTwoSegmentDynamic,
              .bigMikeBroadcastLongformDynamic,
+             .phase1FoundationVoiceScript,
              .bigMikeHello,
              .bigMikeBroadcast450:
             return Self.runtimeReferenceRowLimit
@@ -203,6 +207,7 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
         case .bigMikeBroadcastTwoSegmentDynamic:
             return Array(Self.bigMikeBroadcastRuntimeSegments.prefix(2))
         case .bigMikeBroadcastLongformDynamic,
+             .phase1FoundationVoiceScript,
              .bigMikeBroadcast450:
             return Self.bigMikeBroadcastRuntimeSegments
         default:
@@ -266,6 +271,14 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
                 spokenText: Self.bigMikeBroadcastText,
                 instruction: Self.bigMikeVoiceDNA + "\n\n" + Self.bigMikeBroadcastPerformance
             )
+
+        case .phase1FoundationVoiceScript:
+            return TuringNativeQwenVoiceDesignCanaryInput(
+                voiceID: "big_mike_vd_v1",
+                language: "english",
+                spokenText: Self.phase1VoiceScriptText,
+                instruction: Self.bigMikeVoiceDNA + "\n\n" + Self.bigMikeBroadcastPerformance
+            )
         }
     }
 
@@ -300,7 +313,27 @@ THE GRAVITAS PLAGUE SPREADS
 
 Officials are warning residents to stay indoors after new cases of the Gravitas Plague were confirmed across the city.
 
-Doctors say the illness attacks the brain’s fear response. Early victims may seem confused, sleepless, or strangely calm. Later symptoms include cloudy eyes, broken speech, fixation on movement, and sudden violence.
+Doctors say the illness attacks the brain’s fear response. Early victims may seem confused, sleepless, or strangely calm. Later symptoms include cloudy eyes, broken speech, fixation on movement, and sudden agitation.
+
+One hospital worker said, “They look awake, but unreachable.”
+
+The infected are not dead. They are living hosts with severe brain damage.
+
+Residents are advised to lock doors, avoid contact with aggressive animals, and report any bite or fluid exposure immediately.
+
+If someone you know appears infected, do not open the door.
+
+If the eyes cloud, isolate.
+
+If speech fails, do not negotiate.
+"""#
+
+    private static let phase1VoiceScriptText = #"""
+THE GRAVITAS PLAGUE SPREADS
+
+Officials are warning residents to stay indoors after new cases of the Gravitas Plague were confirmed across the city.
+
+Doctors say the illness attacks the brain’s fear response. Early victims may seem confused, sleepless, or strangely calm. Later symptoms include cloudy eyes, broken speech, fixation on movement, and sudden agitation.
 
 One hospital worker said, “They look awake, but unreachable.”
 

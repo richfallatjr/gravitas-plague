@@ -76,9 +76,9 @@ struct TuringEpisodePickerView: View {
                     )
 
                     knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Base Clone Longform",
-                        runningTitle: "Running Base Clone Longform...",
-                        preset: .bigMikeBroadcastLongformDynamic,
+                        title: "Run Native Qwen - Phase 1 Foundation voiceScript",
+                        runningTitle: "Running Phase 1 voiceScript...",
+                        preset: .phase1FoundationVoiceScript,
                         prominence: .prominent
                     )
                 }
@@ -166,10 +166,11 @@ struct TuringEpisodePickerView: View {
 
             qwenNativeRunningPreset = preset
             qwenDebugStatus = "Running \(preset.rawValue)"
+            let startsWithFoundation = preset == .phase1FoundationVoiceScript
             memorySnapshot = TuringMemoryBudgetProbe.log(
-                label: "beforeQwenGenerate",
-                activeQwenModelID: "qwen3-tts-12hz-1.7b-base-4bit",
-                quantization: "4bit"
+                label: startsWithFoundation ? "beforePhase1Foundation" : "beforeQwenGenerate",
+                activeQwenModelID: startsWithFoundation ? nil : "qwen3-tts-12hz-1.7b-base-4bit",
+                quantization: startsWithFoundation ? nil : "4bit"
             )
 
             Task.detached(priority: .userInitiated) {

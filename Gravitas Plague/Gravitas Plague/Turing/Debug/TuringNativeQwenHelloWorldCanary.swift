@@ -24,6 +24,7 @@ enum TuringNativeQwenHelloWorldCanary {
     private static let activeRuntimeMode = "baseClone"
     private static let activeWeightBackend = "mlx4bit"
     private static let memoryDiagnosticsEnvKey = "TURING_QWEN_MEMORY_DIAGNOSTICS"
+    private static let foundationGuardrailAutoResponse = "No man. You can't say that."
 
     static func run(
         preset: TuringNativeQwenVoiceDesignCanaryPreset = .bigMikeShortDynamic
@@ -32,6 +33,10 @@ enum TuringNativeQwenHelloWorldCanary {
         var engine: TuringQwenNativeBaseCloneEngine?
 
         do {
+            let phase1Segments = try await resolvePhase1FoundationSegmentsIfNeeded(
+                preset: preset
+            )
+
             print("""
             [TuringQwenNativeBaseClone] requested
               implementation: in_repo_turing_qwen_native
@@ -92,11 +97,21 @@ enum TuringNativeQwenHelloWorldCanary {
             )
 
             if preset.isLongform {
-                try await runLongform(
-                    preset: preset,
-                    cloneProfile: cloneProfile,
-                    engine: loadedEngine
-                )
+                if let phase1Segments {
+                    try await runLongform(
+                        preset: preset,
+                        cloneProfile: cloneProfile,
+                        engine: loadedEngine,
+                        segments: phase1Segments,
+                        runID: "phase1FoundationVoiceScript"
+                    )
+                } else {
+                    try await runLongform(
+                        preset: preset,
+                        cloneProfile: cloneProfile,
+                        engine: loadedEngine
+                    )
+                }
             } else {
                 let audio = try await renderBaseCloneSegment(
                     preset: preset,
@@ -248,7 +263,85 @@ enum TuringNativeQwenHelloWorldCanary {
         cloneProfile: TuringQwenNativeCloneProfile,
         engine: TuringQwenNativeBaseCloneEngine
     ) async throws {
-        let segments = preset.segments
+        try await runLongform(
+            preset: preset,
+            cloneProfile: cloneProfile,
+            engine: engine,
+            segments: preset.segments,
+            runID: "bigMikeBaseCloneLongform"
+        )
+    }
+
+    private static func resolvePhase1FoundationSegmentsIfNeeded(
+        preset: TuringNativeQwenVoiceDesignCanaryPreset
+    ) async throws -> [String]? {
+        guard preset == .phase1FoundationVoiceScript else {
+            return nil
+        }
+
+        let input = preset.input
+        let requestID = "story.picker.phase1.voiceScript.001"
+        let emotion = "urgent, controlled"
+        let segmentation = TuringVoiceScriptFoundationSegmentationService()
+
+        let report: TuringVoiceScriptFoundationSegmentationReport
+        do {
+            report = try await segmentation.segmentExactSpeech(
+                sourceText: input.spokenText,
+                requestID: requestID,
+                emotion: emotion
+            )
+        } catch where isFoundationGuardrailError(error) {
+            print("""
+            [TuringPhase1] Foundation guardrails triggered
+              requestID: \(requestID)
+              autoTuringResponse: \(foundationGuardrailAutoResponse)
+              qwenWillGenerateAutoResponse: true
+            """)
+            return [foundationGuardrailAutoResponse]
+        }
+
+        let segments = report.segments.map(\.spokenText)
+
+        print("""
+        [TuringPhase1] voiceScript approved for Qwen
+          requestID: \(requestID)
+          segmentCount: \(segments.count)
+          exactCoverage: \(report.exactCoveragePassed ? "passed" : "mismatchLogged")
+          renderer: in_repo_turing_qwen_native_base_clone
+          voiceID: big_mike_base_clone_v1
+          modelID: \(activeModelID)
+          quantization: \(activeQuantization)
+          qwenSequentialPerSegment: true
+        """)
+
+        return segments
+    }
+
+    private static func isFoundationGuardrailError(
+        _ error: Error
+    ) -> Bool {
+        let description = [
+            error.localizedDescription,
+            String(describing: error)
+        ]
+        .joined(separator: " ")
+        .lowercased()
+
+        return description.contains("guardrail")
+            || description.contains("safety")
+            || description.contains("safe")
+            || description.contains("policy")
+            || description.contains("not allowed")
+    }
+
+    private static func runLongform(
+        preset: TuringNativeQwenVoiceDesignCanaryPreset,
+        cloneProfile: TuringQwenNativeCloneProfile,
+        engine: TuringQwenNativeBaseCloneEngine,
+        segments: [String],
+        runID: String
+    ) async throws {
         guard segments.isEmpty == false else {
             print("""
             [TuringQwenNativeBaseCloneLongform] skipped
@@ -259,6 +352,7 @@ enum TuringNativeQwenHelloWorldCanary {
 
         print("""
         [TuringQwenNativeBaseCloneLongform] started
+          runID: \(runID)
           segmentCount: \(segments.count)
           modelID: \(activeModelID)
           runtimeMode: \(activeRuntimeMode)
@@ -273,7 +367,7 @@ enum TuringNativeQwenHelloWorldCanary {
         }
 
         await gapAudio.beginRun(
-            runID: "bigMikeBaseCloneLongform",
+            runID: runID,
             expectedSegmentCount: segments.count
         )
 
@@ -321,6 +415,7 @@ enum TuringNativeQwenHelloWorldCanary {
 
         print("""
         [TuringQwenNativeBaseCloneLongform] finished
+          runID: \(runID)
           segmentCount: \(segments.count)
         """)
     }
