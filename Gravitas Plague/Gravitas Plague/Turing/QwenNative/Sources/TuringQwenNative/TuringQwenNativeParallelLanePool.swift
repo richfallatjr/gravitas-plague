@@ -78,7 +78,7 @@ public actor TuringQwenNativeParallelLanePool {
 
         if active < laneCountRequested {
             print("""
-            [TuringQwenParallel] second lane disabled by memory guard
+            [TuringQwenParallel] requested lane disabled by memory guard
               laneCountRequested: \(laneCountRequested)
               laneCountActive: \(active)
             """)
@@ -129,6 +129,6 @@ public actor TuringQwenNativeParallelLanePool {
             return 1
         }
 
-        return min(requested, 2)
+        return min(requested, 3)
     }
 }

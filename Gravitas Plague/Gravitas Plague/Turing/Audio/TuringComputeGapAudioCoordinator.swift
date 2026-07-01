@@ -23,6 +23,7 @@ public struct TuringComputeGapGeneratedAudio: Sendable {
 public struct TuringComputeGapAudioPolicy: Sendable {
     public var playOneFillerBeforeFirstGeneratedSegment: Bool
     public var firstSegmentPrerollFillerCount: Int
+    public var minimumFillerClipsBetweenRealSegments: Int
     public var completeCurrentFillerBeforeRealSpeech: Bool
     public var chainFillerWhileComputeWithoutSpeech: Bool
     public var avoidImmediateFillerRepeat: Bool
@@ -30,12 +31,14 @@ public struct TuringComputeGapAudioPolicy: Sendable {
     public init(
         playOneFillerBeforeFirstGeneratedSegment: Bool = true,
         firstSegmentPrerollFillerCount: Int = 1,
+        minimumFillerClipsBetweenRealSegments: Int = 1,
         completeCurrentFillerBeforeRealSpeech: Bool = true,
         chainFillerWhileComputeWithoutSpeech: Bool = true,
         avoidImmediateFillerRepeat: Bool = true
     ) {
         self.playOneFillerBeforeFirstGeneratedSegment = playOneFillerBeforeFirstGeneratedSegment
         self.firstSegmentPrerollFillerCount = firstSegmentPrerollFillerCount
+        self.minimumFillerClipsBetweenRealSegments = minimumFillerClipsBetweenRealSegments
         self.completeCurrentFillerBeforeRealSpeech = completeCurrentFillerBeforeRealSpeech
         self.chainFillerWhileComputeWithoutSpeech = chainFillerWhileComputeWithoutSpeech
         self.avoidImmediateFillerRepeat = avoidImmediateFillerRepeat
@@ -103,6 +106,7 @@ public final class TuringComputeGapAudioCoordinator {
     private var playbackFormat: AVAudioFormat?
 
     private var fillerFiles: [URL] = []
+    private var fillerQueue: [URL] = []
     private var lastFillerFile: URL?
     private var fillerGeneration = 0
     private var fillerFadeTask: Task<Void, Never>?
@@ -119,6 +123,7 @@ public final class TuringComputeGapAudioCoordinator {
     private var fillerPlaying = false
     private var fillerStopAfterCurrent = false
     private var firstSegmentPrerollRemaining = 0
+    private var interSegmentFillerRemaining = 0
     private var playbackFinishedContinuation: CheckedContinuation<Void, Never>?
 
     public init(
@@ -135,11 +140,14 @@ public final class TuringComputeGapAudioCoordinator {
         )
         print("""
         [TuringGapAudio] initialized
-          fillerClipCount: \(fillerFiles.count)
+          fillerClipCount: \(Set(fillerFiles).count)
+          weightedFillerEntryCount: \(fillerFiles.count)
+          fillerWeightFilenameSuffix: _1..._10
           playbackSampleRate: \(playbackFormat?.sampleRate ?? 0)
           playbackChannelCount: \(playbackFormat?.channelCount ?? 0)
           playOneFillerBeforeFirstGeneratedSegment: \(policy.playOneFillerBeforeFirstGeneratedSegment)
           firstSegmentPrerollFillerCount: \(policy.firstSegmentPrerollFillerCount)
+          minimumFillerClipsBetweenRealSegments: \(policy.minimumFillerClipsBetweenRealSegments)
           completeCurrentFillerBeforeRealSpeech: \(policy.completeCurrentFillerBeforeRealSpeech)
           chainFillerWhileComputeWithoutSpeech: \(policy.chainFillerWhileComputeWithoutSpeech)
         """)
@@ -162,11 +170,13 @@ public final class TuringComputeGapAudioCoordinator {
         self.pendingGeneratedSegments.removeAll(keepingCapacity: true)
         self.nextPlaybackSegmentIndex = 0
         self.fillerGeneration &+= 1
+        self.fillerQueue.removeAll(keepingCapacity: true)
         self.fillerPlaying = false
         self.fillerStopAfterCurrent = false
         self.firstSegmentPrerollRemaining = policy.playOneFillerBeforeFirstGeneratedSegment
             ? max(0, policy.firstSegmentPrerollFillerCount)
             : 0
+        self.interSegmentFillerRemaining = 0
         realSpeechNode.stop()
         fillerNode.stop()
         realSpeechNode.reset()
@@ -176,8 +186,10 @@ public final class TuringComputeGapAudioCoordinator {
         [TuringGapAudio] run started
           runID: \(runID)
           expectedSegmentCount: \(expectedSegmentCount.map(String.init) ?? "streaming")
-          fillerClipCount: \(fillerFiles.count)
+          fillerClipCount: \(Set(fillerFiles).count)
+          weightedFillerEntryCount: \(fillerFiles.count)
           firstSegmentPrerollRemaining: \(firstSegmentPrerollRemaining)
+          minimumFillerClipsBetweenRealSegments: \(policy.minimumFillerClipsBetweenRealSegments)
         """)
         await reconcile(reason: "runStarted")
     }
@@ -275,6 +287,7 @@ public final class TuringComputeGapAudioCoordinator {
         fillerPlaying = false
         fillerStopAfterCurrent = false
         firstSegmentPrerollRemaining = 0
+        interSegmentFillerRemaining = 0
         longStallWarningTask?.cancel()
         longStallWarningTask = nil
         await stopFiller(reason: "cancelled", fade: false)
@@ -322,6 +335,21 @@ public final class TuringComputeGapAudioCoordinator {
             return
         }
 
+        if shouldPlayInterSegmentFiller {
+            interSegmentFillerRemaining -= 1
+            print("""
+            [TuringGapAudio] inter-segment filler required
+              previousSegmentIndex: \(nextPlaybackSegmentIndex - 1)
+              waitingForSegmentIndex: \(nextPlaybackSegmentIndex)
+              fillerClipsRemaining: \(interSegmentFillerRemaining)
+            """)
+            startFillerIfNeeded(
+                reason: "interSegmentBuffer",
+                waitingForSegmentIndex: nextPlaybackSegmentIndex
+            )
+            return
+        }
+
         if let audio = pendingGeneratedSegments.removeValue(forKey: nextPlaybackSegmentIndex) {
             await startRealSpeech(audio, reason: reason)
             return
@@ -353,6 +381,15 @@ public final class TuringComputeGapAudioCoordinator {
         nextPlaybackSegmentIndex == 0 &&
         firstSegmentPrerollRemaining > 0 &&
         pendingGeneratedSegments[0] != nil &&
+        realSpeechPlayingSegmentIndex == nil &&
+        fillerPlaying == false
+    }
+
+    private var shouldPlayInterSegmentFiller: Bool {
+        runActive &&
+        nextPlaybackSegmentIndex > 0 &&
+        interSegmentFillerRemaining > 0 &&
+        pendingGeneratedSegments[nextPlaybackSegmentIndex] != nil &&
         realSpeechPlayingSegmentIndex == nil &&
         fillerPlaying == false
     }
@@ -417,11 +454,34 @@ public final class TuringComputeGapAudioCoordinator {
         guard realSpeechPlayingSegmentIndex == segmentIndex else { return }
         realSpeechPlayingSegmentIndex = nil
         nextPlaybackSegmentIndex = max(nextPlaybackSegmentIndex, segmentIndex + 1)
+        if shouldRequireFillerAfterRealSpeech(finishedSegmentIndex: segmentIndex) {
+            interSegmentFillerRemaining = max(
+                interSegmentFillerRemaining,
+                policy.minimumFillerClipsBetweenRealSegments
+            )
+        }
         print("""
         [TuringGapAudio] real speech finished
           segmentIndex: \(segmentIndex)
+          interSegmentFillerRemaining: \(interSegmentFillerRemaining)
         """)
         await reconcile(reason: "realSpeechFinished")
+    }
+
+    private func shouldRequireFillerAfterRealSpeech(
+        finishedSegmentIndex: Int
+    ) -> Bool {
+        guard policy.minimumFillerClipsBetweenRealSegments > 0 else {
+            return false
+        }
+
+        if let expectedSegmentCount {
+            return finishedSegmentIndex + 1 < expectedSegmentCount
+        }
+
+        return pendingGeneratedSegments[finishedSegmentIndex + 1] != nil ||
+            activeComputeSegmentIndex != nil ||
+            allComputeFinished == false
     }
 
     private func startFillerIfNeeded(
@@ -499,6 +559,7 @@ public final class TuringComputeGapAudioCoordinator {
             """)
             let remaining = fillerFiles.filter { $0 != selected }
             fillerFiles = remaining
+            fillerQueue.removeAll { $0 == selected }
             if fillerFiles.isEmpty == false {
                 scheduleNextFillerClip(generation: generation, firstInChain: false)
             }
@@ -604,13 +665,42 @@ public final class TuringComputeGapAudioCoordinator {
     }
 
     private func randomFillerURL() -> URL {
-        guard fillerFiles.count > 1,
-              policy.avoidImmediateFillerRepeat,
-              let lastFillerFile else {
+        if fillerQueue.isEmpty {
+            rebuildFillerQueue()
+        }
+
+        if policy.avoidImmediateFillerRepeat,
+           let lastFillerFile,
+           fillerQueue.count > 1,
+           fillerQueue.first == lastFillerFile,
+           let replacementIndex = fillerQueue.firstIndex(where: { $0 != lastFillerFile }) {
+            fillerQueue.swapAt(0, replacementIndex)
+        }
+
+        guard fillerQueue.isEmpty == false else {
             return fillerFiles.randomElement() ?? fillerFiles[0]
         }
-        let candidates = fillerFiles.filter { $0 != lastFillerFile }
-        return candidates.randomElement() ?? fillerFiles[0]
+
+        return fillerQueue.removeFirst()
+    }
+
+    private func rebuildFillerQueue() {
+        fillerQueue = fillerFiles.shuffled()
+
+        if policy.avoidImmediateFillerRepeat,
+           let lastFillerFile,
+           fillerQueue.count > 1,
+           fillerQueue.first == lastFillerFile,
+           let replacementIndex = fillerQueue.firstIndex(where: { $0 != lastFillerFile }) {
+            fillerQueue.swapAt(0, replacementIndex)
+        }
+
+        print("""
+        [TuringGapAudio] filler weighted queue rebuilt
+          uniqueClipCount: \(Set(fillerFiles).count)
+          weightedEntryCount: \(fillerQueue.count)
+          lastClip: \(lastFillerFile?.lastPathComponent ?? "nil")
+        """)
     }
 
     private func makePCMBuffer(
@@ -829,9 +919,30 @@ public final class TuringComputeGapAudioCoordinator {
             }
         }
 
-        urls = Array(Set(urls)).sorted { $0.lastPathComponent < $1.lastPathComponent }
-        urls = urls.filter { fileManager.fileExists(atPath: $0.path) }
-        return urls
+        let uniqueURLs = Array(Set(urls))
+            .filter { fileManager.fileExists(atPath: $0.path) }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+
+        return uniqueURLs.flatMap { url in
+            Array(repeating: url, count: fillerWeight(for: url))
+        }
+    }
+
+    private static func fillerWeight(
+        for url: URL
+    ) -> Int {
+        let stem = url.deletingPathExtension().lastPathComponent
+        guard let separator = stem.lastIndex(of: "_") else {
+            return 1
+        }
+
+        let suffixStart = stem.index(after: separator)
+        guard suffixStart < stem.endIndex,
+              let rawWeight = Int(stem[suffixStart...]) else {
+            return 1
+        }
+
+        return min(max(rawWeight, 0), 10)
     }
 
     private static func filesUnder(

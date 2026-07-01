@@ -76,7 +76,7 @@ enum TuringNativeQwenHelloWorldCanary {
     private static let activeWeightBackend = "mlx4bit"
     private static let memoryDiagnosticsEnvKey = "TURING_QWEN_MEMORY_DIAGNOSTICS"
     private static let foundationGuardrailAutoResponse = "No man. You can't say that."
-    private static let activeParallelQwenLaneCount = 2
+    private static let activeParallelQwenLaneCount = 3
 
     static func run(
         preset: TuringNativeQwenVoiceDesignCanaryPreset = .bigMikeShortDynamic
