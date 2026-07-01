@@ -265,7 +265,7 @@ enum TuringQwenNativeCodePredictor {
                 break
             }
 
-            state.generatedResidualTokens.append(0)
+            state.generatedResidualTokenCount += 1
             let residualEmbedding = try resolved.codePredictorCodecEmbedding(
                 embeddingIndex: headIndex,
                 tokenIndex: nextTokenArray

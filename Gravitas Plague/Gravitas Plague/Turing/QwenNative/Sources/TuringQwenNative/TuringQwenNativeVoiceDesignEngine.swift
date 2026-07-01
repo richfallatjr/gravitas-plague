@@ -674,8 +674,7 @@ public actor TuringQwenNativeVoiceDesignEngine {
         return TuringQwenNativeTalkerGenerationState(
             kvCache: kvCache,
             position: promptInputs.sequenceLength,
-            attentionMask: mask,
-            generatedCodeGroups: []
+            attentionMask: mask
         )
     }
 

@@ -5,7 +5,7 @@ struct TuringQwenNativeCodePredictorGenerationState {
     var kvCache: TuringQwenNativeCodePredictorKVCache
     var position: Int
     var lastHiddenState: MLXArray
-    var generatedResidualTokens: [Int]
+    var generatedResidualTokenCount: Int
 }
 
 struct TuringQwenNativeCodePredictorKVCache {

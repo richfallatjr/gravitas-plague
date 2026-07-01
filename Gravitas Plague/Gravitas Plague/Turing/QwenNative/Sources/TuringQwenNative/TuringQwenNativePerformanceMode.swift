@@ -32,6 +32,10 @@ public enum TuringQwenNativePerformanceMode: String, Sendable, Equatable {
     var rowCheckpointStride: Int {
         runtimeOptions.rowCheckpointInterval
     }
+
+    var mlxCacheLimitBytes: Int {
+        runtimeOptions.mlxCacheLimitBytes
+    }
 }
 
 public enum TuringQwenNativeSamplerMode: String, Sendable {
@@ -47,6 +51,7 @@ public struct TuringQwenNativeRuntimeOptions: Sendable, Equatable {
     public let enableDiskRowBudgetWrites: Bool
     public let enableForcedIntermediateEval: Bool
     public let enablePerRowCacheClear: Bool
+    public let mlxCacheLimitBytes: Int
 
     public static let performance = TuringQwenNativeRuntimeOptions(
         mode: .performance,
@@ -55,7 +60,8 @@ public struct TuringQwenNativeRuntimeOptions: Sendable, Equatable {
         enablePerTokenLogs: false,
         enableDiskRowBudgetWrites: false,
         enableForcedIntermediateEval: false,
-        enablePerRowCacheClear: false
+        enablePerRowCacheClear: false,
+        mlxCacheLimitBytes: 512 * 1024 * 1024
     )
 
     public static let diagnostic = TuringQwenNativeRuntimeOptions(
@@ -65,6 +71,7 @@ public struct TuringQwenNativeRuntimeOptions: Sendable, Equatable {
         enablePerTokenLogs: true,
         enableDiskRowBudgetWrites: true,
         enableForcedIntermediateEval: true,
-        enablePerRowCacheClear: true
+        enablePerRowCacheClear: true,
+        mlxCacheLimitBytes: 64 * 1024 * 1024
     )
 }

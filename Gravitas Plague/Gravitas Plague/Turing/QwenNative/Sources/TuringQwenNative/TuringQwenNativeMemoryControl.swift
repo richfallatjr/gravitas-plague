@@ -2,13 +2,29 @@ import Foundation
 import MLX
 
 enum TuringQwenNativeMemoryControl {
-    private static let cacheLimitBytes = 64 * 1024 * 1024
+    private static let diagnosticCacheLimitBytes = 64 * 1024 * 1024
 
     static func configureForCanary() {
-        Memory.cacheLimit = cacheLimitBytes
+        Memory.cacheLimit = diagnosticCacheLimitBytes
         Memory.clearCache()
         Memory.peakMemory = 0
         logSnapshot(label: "configured")
+    }
+
+    static func configureForBaseClone(
+        performanceMode: TuringQwenNativePerformanceMode
+    ) {
+        let cacheLimitBytes = performanceMode.mlxCacheLimitBytes
+        if Memory.cacheLimit != cacheLimitBytes {
+            Memory.cacheLimit = cacheLimitBytes
+        }
+        Memory.peakMemory = 0
+        print("""
+        [TuringQwenNativeMemory] configured base clone runtime
+          performanceMode: \(performanceMode.rawValue)
+          cacheLimitMB: \(megabytes(Memory.cacheLimit))
+          clearCacheAtStart: false
+        """)
     }
 
     static func clearCache(label: String) {

@@ -25,7 +25,6 @@ struct TuringQwenNativeTalkerGenerationState {
     let kvCache: TuringQwenNativeKVCache
     let position: Int
     let attentionMask: MLXArray
-    let generatedCodeGroups: [[Int]]
 }
 
 struct TuringQwenNativeGeneratedStepOutput {

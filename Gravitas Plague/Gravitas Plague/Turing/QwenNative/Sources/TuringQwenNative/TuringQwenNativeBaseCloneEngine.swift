@@ -84,6 +84,9 @@ public actor TuringQwenNativeBaseCloneEngine {
     public func generateBaseClone(
         prompt: TuringQwenNativeBaseClonePrompt
     ) async throws -> TuringQwenNativeAudio {
+        TuringQwenNativeMemoryControl.configureForBaseClone(
+            performanceMode: prompt.performanceMode
+        )
         let renderStart = Date()
         trace.stageStarted(.fullGenerate)
         defer {
@@ -627,8 +630,7 @@ public actor TuringQwenNativeBaseCloneEngine {
         return TuringQwenNativeTalkerGenerationState(
             kvCache: kvCache,
             position: promptInputs.sequenceLength,
-            attentionMask: mask,
-            generatedCodeGroups: []
+            attentionMask: mask
         )
     }
 

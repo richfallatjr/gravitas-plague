@@ -271,7 +271,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
                 kvCache: TuringQwenNativeCodePredictorKVCache(layers: cacheLayers),
                 position: sequenceLength,
                 lastHiddenState: lastHidden,
-                generatedResidualTokens: []
+                generatedResidualTokenCount: 0
             )
         )
     }
@@ -326,7 +326,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
             weight: resolved.normWeight,
             eps: Float(resolvedConfig.rmsNormEps)
         )
-        let lmHeadIndex = previousState.generatedResidualTokens.count
+        let lmHeadIndex = previousState.generatedResidualTokenCount
         let logits = linear(lastHidden, weight: resolved.lmHeadWeights[lmHeadIndex])
         if performanceMode.shouldForceEveryEval {
             eval(logits)
@@ -336,7 +336,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
             kvCache: TuringQwenNativeCodePredictorKVCache(layers: nextCacheLayers),
             position: previousState.position + 1,
             lastHiddenState: lastHidden,
-            generatedResidualTokens: previousState.generatedResidualTokens
+            generatedResidualTokenCount: previousState.generatedResidualTokenCount
         )
 
         return TuringQwenNativeCodePredictorStepOutput(

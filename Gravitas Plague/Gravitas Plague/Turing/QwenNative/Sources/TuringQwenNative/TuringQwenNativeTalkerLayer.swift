@@ -351,8 +351,7 @@ enum TuringQwenNativeTalkerForwardRunner {
                 maxNewRows: previousState.kvCache.maxNewRows
             ),
             position: nextPosition,
-            attentionMask: attentionMask,
-            generatedCodeGroups: previousState.generatedCodeGroups + [codeGroup.tokenIDs]
+            attentionMask: attentionMask
         )
 
         if performanceMode.shouldLogFullTokenRows {
