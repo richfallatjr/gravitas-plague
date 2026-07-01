@@ -78,12 +78,19 @@ struct TuringEpisodePickerView: View {
                         prominence: .standard
                     )
 
-                    knownQwenButton(
-                        title: "Run Native Qwen - Phase 1 Foundation voiceScript",
-                        runningTitle: "Running Phase 1 voiceScript...",
-                        preset: .phase1FoundationVoiceScript,
-                        prominence: .prominent
-                    )
+                    Button {
+                        runGravitasPlagueBackstory()
+                    } label: {
+                        HStack(spacing: 8) {
+                            if turingDialogueBusy {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                            Text("Gravitas Plague Backstory")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(qwenNativeRunningPreset != nil || turingDialogueBusy)
 
                     Divider()
                         .padding(.vertical, 4)
@@ -317,6 +324,33 @@ struct TuringEpisodePickerView: View {
                     turingDialogueBusy = false
                     qwenDebugStatus = "Failed: \(error.localizedDescription)"
                 }
+            }
+        }
+    }
+
+    private func runGravitasPlagueBackstory() {
+        guard qwenNativeRunningPreset == nil,
+              turingDialogueBusy == false else {
+            return
+        }
+
+        turingDialogueBusy = true
+        qwenDebugStatus = "Running Gravitas Plague Backstory"
+
+        Task.detached(priority: .userInitiated) {
+            let result = await TuringNativeQwenHelloWorldCanary
+                .runLongformVoiceScriptResource(
+                    resourcePath: "Turing/Scripts/Phase1/gravitas_plague_backstory.txt",
+                    requestID: "phase1.gravitasPlagueBackstory.001",
+                    debugLabel: "Gravitas Plague Backstory"
+                )
+
+            await MainActor.run {
+                turingDialogueBusy = false
+                qwenDebugStatus = result.pickerStatus
+                memorySnapshot = TuringMemoryBudgetProbe.log(
+                    label: "afterTransientCleanup"
+                )
             }
         }
     }

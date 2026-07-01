@@ -338,6 +338,68 @@ enum TuringNativeQwenHelloWorldCanary {
         }
     }
 
+    static func runLongformVoiceScriptResource(
+        resourcePath: String,
+        requestID: String,
+        debugLabel: String
+    ) async -> TuringNativeQwenRunResult {
+        do {
+            let url = try TuringResourceLoader.resourceURL(
+                resourcePath: resourcePath
+            )
+            let sourceText = try String(contentsOf: url, encoding: .utf8)
+            let request = TuringLongformVoiceScriptRequest(
+                requestID: requestID,
+                sourceText: sourceText,
+                speakerID: "big_mike",
+                voiceID: "big_mike_base_clone_v1",
+                defaultEmotion: "controlled, grave, documentary",
+                playbackTarget: TuringPlaybackTarget(id: "storyEpisodePicker"),
+                debugLabel: debugLabel
+            )
+
+            print("""
+            [TuringPhase1Longform] requested
+              requestID: \(request.requestID)
+              debugLabel: \(debugLabel)
+              sourceUTF16: \(request.sourceText.utf16.count)
+              estimatedTokens: \(TuringLongformTransportPlanner.estimatedTokens(request.sourceText))
+              voiceID: \(request.voiceID)
+            """)
+
+            let runner = TuringVoiceScriptLongformRunner()
+            let exactSegments = try await runner.segmentAll(
+                request: request
+            )
+            let speechSegments = exactSegments.map { segment in
+                TuringSpeechSegment(
+                    text: segment.text,
+                    emotion: segment.emotion
+                )
+            }
+
+            print("""
+            [TuringPhase1Longform] ordered segment stream ready
+              requestID: \(request.requestID)
+              segmentCount: \(speechSegments.count)
+              qwenSequential: true
+            """)
+
+            return await runDialogueSegments(
+                speechSegments,
+                runID: request.requestID,
+                source: "voiceScript_exactSegmentation_longform_focusChunk"
+            )
+        } catch {
+            print("""
+            [TuringPhase1Longform] failed
+              requestID: \(requestID)
+              error: \(error.localizedDescription)
+            """)
+            return .failed(error.localizedDescription)
+        }
+    }
+
     private static func runLongform(
         preset: TuringNativeQwenVoiceDesignCanaryPreset,
         cloneProfile: TuringQwenNativeCloneProfile,
