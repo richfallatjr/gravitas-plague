@@ -258,7 +258,8 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         let normalized = rmsNorm(
             hidden,
             weight: resolved.normWeight,
-            eps: Float(resolvedConfig.rmsNormEps)
+            eps: Float(resolvedConfig.rmsNormEps),
+            performanceMode: performanceMode
         )
         let lastHidden = normalized[(sequenceLength - 1)..<sequenceLength, axis: 1]
         let logits = linear(lastHidden, weight: resolved.lmHeadWeights[0])
@@ -334,7 +335,8 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         let lastHidden = rmsNorm(
             hidden,
             weight: resolved.normWeight,
-            eps: Float(resolvedConfig.rmsNormEps)
+            eps: Float(resolvedConfig.rmsNormEps),
+            performanceMode: performanceMode
         )
         let lmHeadIndex = previousState.generatedResidualTokenCount
         let logits = linear(lastHidden, weight: resolved.lmHeadWeights[lmHeadIndex])
@@ -369,7 +371,8 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         let normalized = rmsNorm(
             hiddenStates,
             weight: weights.inputLayerNormWeight,
-            eps: Float(config.rmsNormEps)
+            eps: Float(config.rmsNormEps),
+            performanceMode: performanceMode
         )
         let attentionResult = try selfAttention(
             hiddenStates: normalized,
@@ -385,7 +388,8 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         let mlpInput = rmsNorm(
             afterAttention,
             weight: weights.postAttentionLayerNormWeight,
-            eps: Float(config.rmsNormEps)
+            eps: Float(config.rmsNormEps),
+            performanceMode: performanceMode
         )
         let mlpOutput = mlp(mlpInput, weights: weights)
 
@@ -409,7 +413,8 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         let normalized = rmsNorm(
             hiddenStates,
             weight: weights.inputLayerNormWeight,
-            eps: Float(config.rmsNormEps)
+            eps: Float(config.rmsNormEps),
+            performanceMode: performanceMode
         )
         let attentionResult = try selfAttentionOneStep(
             hiddenStates: normalized,
@@ -426,7 +431,8 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         let mlpInput = rmsNorm(
             afterAttention,
             weight: weights.postAttentionLayerNormWeight,
-            eps: Float(config.rmsNormEps)
+            eps: Float(config.rmsNormEps),
+            performanceMode: performanceMode
         )
         let mlpOutput = mlp(mlpInput, weights: weights)
 
@@ -454,12 +460,14 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         var queryStates = rmsNorm(
             query,
             weight: weights.qNormWeight,
-            eps: Float(config.rmsNormEps)
+            eps: Float(config.rmsNormEps),
+            performanceMode: performanceMode
         ).transposed(0, 2, 1, 3)
         var keyStates = rmsNorm(
             key,
             weight: weights.kNormWeight,
-            eps: Float(config.rmsNormEps)
+            eps: Float(config.rmsNormEps),
+            performanceMode: performanceMode
         ).transposed(0, 2, 1, 3)
         var valueStates = value.transposed(0, 2, 1, 3)
 
@@ -533,12 +541,14 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         var queryStates = rmsNorm(
             query,
             weight: weights.qNormWeight,
-            eps: Float(config.rmsNormEps)
+            eps: Float(config.rmsNormEps),
+            performanceMode: performanceMode
         ).transposed(0, 2, 1, 3)
         var keyStates = rmsNorm(
             key,
             weight: weights.kNormWeight,
-            eps: Float(config.rmsNormEps)
+            eps: Float(config.rmsNormEps),
+            performanceMode: performanceMode
         ).transposed(0, 2, 1, 3)
         let valueStates = value.transposed(0, 2, 1, 3)
 
@@ -627,8 +637,13 @@ enum TuringQwenNativeCodePredictorForwardRunner {
     private static func rmsNorm(
         _ value: MLXArray,
         weight: MLXArray,
-        eps: Float
+        eps: Float,
+        performanceMode: TuringQwenNativePerformanceMode
     ) -> MLXArray {
+        if performanceMode == .performance {
+            return MLXFast.rmsNorm(value, weight: weight, eps: eps)
+        }
+
         let variance = (value * value).mean(axis: -1, keepDims: true)
         return value / sqrt(variance + eps) * weight
     }

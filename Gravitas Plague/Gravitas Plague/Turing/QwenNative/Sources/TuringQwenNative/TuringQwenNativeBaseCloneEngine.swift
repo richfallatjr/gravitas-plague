@@ -576,7 +576,9 @@ public actor TuringQwenNativeBaseCloneEngine {
         let segmentCache = TuringQwenNativeSegmentRuntimeCache(
             config: config,
             promptSequenceLength: promptInputs.sequenceLength,
-            maxNewRows: targetRowCount
+            maxNewRows: targetRowCount,
+            trailingTextHidden: promptInputs.trailingTextHidden,
+            ttsPadEmbed: promptInputs.ttsPadEmbed
         )
 
         print("""
@@ -587,6 +589,8 @@ public actor TuringQwenNativeBaseCloneEngine {
           codePredictorKVCache: oneStep
           segmentRuntimeCache: enabled
           attentionKernel: \(performanceMode.shouldUseFastGroupedQueryAttention ? "mlxFastGroupedQuery" : "manualMatmulSoftmax")
+          rmsNormKernel: \(performanceMode == .performance ? "mlxFast" : "manual")
+          talkerInputEmbeddingAssembly: directSumNoConcat
         """)
 
         let firstCodeGroupStart = Date()
@@ -638,6 +642,7 @@ public actor TuringQwenNativeBaseCloneEngine {
                 generationStep: rowIndex - 1,
                 promptInputs: promptInputs,
                 resident: resident,
+                segmentCache: segmentCache,
                 performanceMode: performanceMode
             )
             let nextStep = try TuringQwenNativeTalkerForwardRunner.forwardOneStep(
@@ -725,6 +730,7 @@ public actor TuringQwenNativeBaseCloneEngine {
         generationStep: Int,
         promptInputs: TuringQwenNativeTalkerPromptInputs,
         resident: ResidentWeights,
+        segmentCache: TuringQwenNativeSegmentRuntimeCache,
         performanceMode: TuringQwenNativePerformanceMode
     ) throws -> MLXArray {
         let codeEmbedding = try TuringQwenNativeCodePredictor.talkerInputEmbedding(
@@ -733,15 +739,8 @@ public actor TuringQwenNativeBaseCloneEngine {
             resolvedWeights: resident.codePredictorWeights
         )
 
-        let trailingHidden: MLXArray
-        if generationStep < promptInputs.trailingTextHidden.dim(1) {
-            trailingHidden = promptInputs.trailingTextHidden[
-                generationStep..<(generationStep + 1),
-                axis: 1
-            ]
-        } else {
-            trailingHidden = promptInputs.ttsPadEmbed
-        }
+        let trailingHidden = segmentCache.talkerTrailingTextEmbed(generationStep: generationStep) ??
+            promptInputs.ttsPadEmbed
 
         let input = codeEmbedding + trailingHidden
         if performanceMode.shouldForceEveryEval {

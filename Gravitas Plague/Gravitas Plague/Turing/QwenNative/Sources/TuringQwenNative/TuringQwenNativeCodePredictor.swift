@@ -400,21 +400,16 @@ enum TuringQwenNativeCodePredictor {
             )
         }
 
-        var embeddings: [MLXArray] = [
-            resolvedWeights.talkerCodecEmbedding(tokenIndex: tokenArray[0..<1])
-        ]
+        var embedding = resolvedWeights.talkerCodecEmbedding(tokenIndex: tokenArray[0..<1])
 
         for offset in 0..<(config.talkerConfig.numCodeGroups - 1) {
-            embeddings.append(
-                try resolvedWeights.codePredictorCodecEmbedding(
+            embedding = embedding + (try resolvedWeights.codePredictorCodecEmbedding(
                     embeddingIndex: offset,
                     tokenIndex: tokenArray[(offset + 1)..<(offset + 2)]
-                )
-            )
+            ))
         }
 
-        return concatenated(embeddings, axis: 1)
-            .sum(axis: 1, keepDims: true)
+        return embedding
     }
 
     private static func talkerCodecEmbedding(

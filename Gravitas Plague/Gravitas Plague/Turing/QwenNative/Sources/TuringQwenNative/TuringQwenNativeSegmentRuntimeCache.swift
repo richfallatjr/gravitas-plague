@@ -11,13 +11,17 @@ struct TuringQwenNativeSegmentRuntimeCache: @unchecked Sendable {
     let codePredictorPrefillRope: TuringQwenNativeRotaryCachePair
     let codePredictorPrefillMask: MLXArray
     let codePredictorOneStepRopes: [Int: TuringQwenNativeRotaryCachePair]
+    let talkerTrailingTextEmbeds: [MLXArray]
 
     init(
         config: TuringQwenNativeConfig,
         promptSequenceLength: Int,
-        maxNewRows: Int
+        maxNewRows: Int,
+        trailingTextHidden: MLXArray,
+        ttsPadEmbed: MLXArray
     ) {
-        let talkerPositions = Array(promptSequenceLength..<(promptSequenceLength + max(maxNewRows, 1)))
+        let rowBudget = max(maxNewRows, 1)
+        let talkerPositions = Array(promptSequenceLength..<(promptSequenceLength + rowBudget))
         self.talkerOneStepRopes = Dictionary(
             uniqueKeysWithValues: talkerPositions.map { position in
                 (
@@ -30,6 +34,15 @@ struct TuringQwenNativeSegmentRuntimeCache: @unchecked Sendable {
                 )
             }
         )
+        self.talkerTrailingTextEmbeds = (0..<rowBudget).map { generationStep in
+            if generationStep < trailingTextHidden.dim(1) {
+                return trailingTextHidden[
+                    generationStep..<(generationStep + 1),
+                    axis: 1
+                ]
+            }
+            return ttsPadEmbed
+        }
 
         let codePredictorConfig = config.talkerConfig.codePredictorConfig
         let codePredictorHeadDim = codePredictorConfig.headDim ?? 128
@@ -68,6 +81,13 @@ struct TuringQwenNativeSegmentRuntimeCache: @unchecked Sendable {
             return nil
         }
         return (pair.cos, pair.sin)
+    }
+
+    func talkerTrailingTextEmbed(generationStep: Int) -> MLXArray? {
+        guard talkerTrailingTextEmbeds.indices.contains(generationStep) else {
+            return nil
+        }
+        return talkerTrailingTextEmbeds[generationStep]
     }
 
     private static func rotaryPair(
