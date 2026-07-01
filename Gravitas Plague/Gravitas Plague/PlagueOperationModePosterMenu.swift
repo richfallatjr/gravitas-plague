@@ -286,6 +286,7 @@ struct PlagueOperationModePosterMenu: View {
     @ObservedObject private var resources = OperationModePosterResources.shared
     @ObservedObject private var accessController = OperationModeAccessController.shared
 
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
 
     private let showDebugHitRects = false
@@ -337,13 +338,6 @@ struct PlagueOperationModePosterMenu: View {
                       sourceImage: \(OperationModePosterLayout.assetName).\(OperationModePosterLayout.assetExtension)
                       walkLoopPlayerFacing: false
                     """
-                )
-            }
-            .sheet(
-                isPresented: $session.isStoryEpisodePickerPresented
-            ) {
-                TuringEpisodePickerView(
-                    session: session
                 )
             }
         }
@@ -474,14 +468,6 @@ struct PlagueOperationModePosterMenu: View {
     private func selectOperationMode(
         _ mode: PlagueDemoSession.PlagueOperationMode
     ) async {
-        if mode == .story,
-           PlagueFeatureFlags.showStoryEpisodePicker,
-           session.immersiveSpaceStatus == .closed {
-            print("[PlagueMenu] opening Story picker without immersive room")
-            session.selectOperationMode(mode)
-            return
-        }
-
         guard session.immersiveSpaceStatus != .opening else {
             return
         }
@@ -491,6 +477,11 @@ struct PlagueOperationModePosterMenu: View {
             session.forestImmersiveState = .opening
             session.forestImmersiveStatus = "Opening mixed room scene..."
             session.statusMessage = "Opening mixed-reality space."
+            session.armControlWindowBackgroundIgnoreForStoryDebug(
+                reason: mode == .story
+                    ? "story_debug_immersive_open_requested"
+                    : "operation_mode_immersive_open_requested"
+            )
 
             let result = await openImmersiveSpace(
                 id: PlagueDemoSession.immersiveSpaceID
@@ -500,6 +491,11 @@ struct PlagueOperationModePosterMenu: View {
             case .opened:
                 session.immersiveSpaceStatus = .open
                 session.forestImmersiveDidOpen()
+                if mode == .story {
+                    session.armControlWindowBackgroundIgnoreForStoryDebug(
+                        reason: "story_debug_immersive_opened"
+                    )
+                }
 
             case .userCancelled:
                 session.immersiveSpaceStatus = .closed
@@ -526,6 +522,17 @@ struct PlagueOperationModePosterMenu: View {
 
         print("[PlagueMenu] selected operation mode: \(mode.rawValue)")
         session.selectOperationMode(mode)
+
+        if mode == .story,
+           PlagueFeatureFlags.showStoryEpisodePicker {
+            openWindow(id: PlagueWindowID.storyDebug)
+            print("""
+            [TuringStory] Story debug window opened
+              windowID: \(PlagueWindowID.storyDebug)
+              immersiveSpaceStatus: \(String(describing: session.immersiveSpaceStatus))
+              sheetPickerUsed: false
+            """)
+        }
     }
 }
 

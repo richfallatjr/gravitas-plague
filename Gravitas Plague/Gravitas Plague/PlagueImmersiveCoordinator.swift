@@ -488,6 +488,54 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         perform(envelope.command)
     }
 
+    func applyTuringDictationEventToExistingHUD(
+        _ event: TuringDictationEvent
+    ) {
+        switch event {
+        case .recordingStarted:
+            showInstructionHUD("Listening...")
+            print("[TuringHUD] player dictation shown state=listening")
+
+        case .partialTranscript(let text):
+            let trimmed = text.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            if trimmed.isEmpty {
+                showInstructionHUD("Listening...")
+                print("[TuringHUD] player dictation shown state=listening")
+            } else {
+                showInstructionHUD("You said:\n\(trimmed)")
+                print("[TuringHUD] player dictation shown state=partial")
+            }
+
+        case .finalTranscript(let text),
+             .processingStarted(let text):
+            let trimmed = text.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            if trimmed.isEmpty {
+                showInstructionHUD("Listening...")
+                print("[TuringHUD] player dictation shown state=listening")
+            } else {
+                showInstructionHUD("You said:\n\(trimmed)")
+                print("[TuringHUD] player dictation shown state=final")
+            }
+
+        case .responseAudioStarted:
+            instructionHUD.clear()
+            print("[TuringHUD] player dictation cleared for qwenSpeech")
+
+        case .responseAudioFinished,
+             .cancelled:
+            instructionHUD.clear()
+            print("[TuringHUD] player dictation cleared")
+
+        case .failed:
+            showInstructionHUD("Dictation failed.")
+            print("[TuringHUD] player dictation shown state=failed")
+        }
+    }
+
     private func perform(_ command: PlagueDemoSession.Command) {
         switch command {
         case .startJockRetargetTest:

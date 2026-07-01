@@ -6,62 +6,58 @@ enum TuringExactSegmentationGate {
         job: TuringExactSegmentationJob,
         defaultEmotion: String
     ) throws -> [TuringExactSpeechSegment] {
-        guard payload.version == 1 else {
-            throw gateError("version must be 1.")
-        }
-        guard payload.chunkIndex == job.index,
-              payload.focusStartUTF16 == job.focusStartUTF16,
-              payload.focusEndUTF16 == job.focusEndUTF16 else {
-            throw gateError("payload chunk identity did not match job.")
-        }
-        guard payload.targetSeconds == 4.0,
-              payload.maxSeconds == 5.0 else {
-            throw gateError("targetSeconds/maxSeconds must be 4.0/5.0.")
-        }
-        guard payload.segments.isEmpty == false else {
-            throw gateError("segments must not be empty.")
+        let usableSegments = payload.segments.compactMap { segment -> String? in
+            let trimmed = segment.spokenText.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            return trimmed.isEmpty ? nil : trimmed
         }
 
-        for (expectedIndex, segment) in payload.segments.enumerated() {
-            guard segment.index == expectedIndex else {
-                throw gateError(
-                    "segment index \(segment.index) did not match \(expectedIndex)."
-                )
-            }
-            guard segment.spokenText.trimmingCharacters(
-                in: .whitespacesAndNewlines
-            ).isEmpty == false else {
-                throw gateError("segment \(expectedIndex) text was empty.")
-            }
+        guard usableSegments.isEmpty == false else {
+            throw gateError("segments must not be empty.")
         }
 
         let normalizedFocus = normalizeForCoverage(job.focusText)
         let normalizedSegments = normalizeForCoverage(
-            payload.segments.map(\.spokenText).joined(separator: " ")
+            usableSegments.joined(separator: " ")
         )
-        guard normalizedFocus == normalizedSegments else {
-            throw gateError("concatenated segment text did not match focus text.")
+        if normalizedFocus != normalizedSegments {
+            print("""
+            [TuringPhase1Longform] exact coverage mismatch logged
+              chunkIndex: \(job.index)
+              focusUTF16: \(job.focusText.utf16.count)
+              segmentUTF16: \(usableSegments.joined(separator: " ").utf16.count)
+              qwenContinues: true
+            """)
         }
 
         var searchStart = job.focusText.startIndex
-        return try payload.segments.map { segment in
-            let trimmed = segment.spokenText.trimmingCharacters(
-                in: .whitespacesAndNewlines
-            )
-            guard let range = job.focusText[searchStart...].range(of: trimmed) else {
-                throw gateError(
-                    "segment \(segment.index) could not be mapped into focus text."
+        return usableSegments.enumerated().map { localIndex, trimmed in
+            let range = job.focusText[searchStart...].range(of: trimmed)
+            let localStart: Int
+            let localEnd: Int
+            if let range {
+                searchStart = range.upperBound
+                localStart = range.lowerBound.utf16Offset(in: job.focusText)
+                localEnd = range.upperBound.utf16Offset(in: job.focusText)
+            } else {
+                print("""
+                [TuringPhase1Longform] segment range mapping failed
+                  chunkIndex: \(job.index)
+                  localIndex: \(localIndex)
+                  qwenContinues: true
+                """)
+                localStart = searchStart.utf16Offset(in: job.focusText)
+                localEnd = min(
+                    job.focusText.utf16.count,
+                    localStart + trimmed.utf16.count
                 )
             }
-
-            searchStart = range.upperBound
-            let localStart = range.lowerBound.utf16Offset(in: job.focusText)
-            let localEnd = range.upperBound.utf16Offset(in: job.focusText)
 
             return TuringExactSpeechSegment(
                 globalIndex: 0,
                 chunkIndex: job.index,
-                localIndex: segment.index,
+                localIndex: localIndex,
                 absoluteStartUTF16: job.focusStartUTF16 + localStart,
                 absoluteEndUTF16: job.focusStartUTF16 + localEnd,
                 text: trimmed,

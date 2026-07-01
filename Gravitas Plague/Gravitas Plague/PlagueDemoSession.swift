@@ -38,6 +38,17 @@ extension Notification.Name {
         Notification.Name("plagueShowGameCenterLeaderboards")
 }
 
+enum TuringDictationEvent: Sendable, Equatable {
+    case recordingStarted
+    case partialTranscript(String)
+    case finalTranscript(String)
+    case processingStarted(finalTranscript: String)
+    case responseAudioStarted
+    case responseAudioFinished
+    case cancelled
+    case failed(String)
+}
+
 enum PlagueUILegacySuppressionKeys {
     static let keys = [
         "roomSkinningHasOccurred",
@@ -125,6 +136,16 @@ final class PlagueDemoSession: ObservableObject {
         }
     }
 
+    struct TuringDictationEnvelope: Identifiable, Equatable {
+        let id: UUID
+        let event: TuringDictationEvent
+
+        init(_ event: TuringDictationEvent) {
+            self.id = UUID()
+            self.event = event
+        }
+    }
+
     @Published var immersiveSpaceStatus: ImmersiveSpaceStatus = .closed
     @Published var activeMode: ActiveMode = .none
     @Published var selectedOperationMode: PlagueOperationMode?
@@ -195,6 +216,7 @@ final class PlagueDemoSession: ObservableObject {
     @Published var wallPosterUIActive = false
     @Published var damageTintEventID = UUID()
     @Published var damageTintIntensity: Double = 0.0
+    @Published private(set) var latestTuringDictationEvent: TuringDictationEnvelope?
     @Published private(set) var highestWaveReachedThisRun = 0
     @Published private(set) var lifetimeWavesCleared = 0
     @Published private(set) var latestCommand: CommandEnvelope?
@@ -234,6 +256,10 @@ final class PlagueDemoSession: ObservableObject {
         latestCommand = CommandEnvelope(command)
     }
 
+    func publishTuringDictationEvent(_ event: TuringDictationEvent) {
+        latestTuringDictationEvent = TuringDictationEnvelope(event)
+    }
+
     func selectOperationMode(_ mode: PlagueOperationMode) {
         let availability = operationModeAccessController.snapshot[mode]
 
@@ -268,10 +294,9 @@ final class PlagueDemoSession: ObservableObject {
             experienceMode = .story
             activeMode = .none
             statusMessage = "Select a Story episode."
+            isStoryEpisodePickerPresented = false
 
-            if PlagueFeatureFlags.showStoryEpisodePicker {
-                isStoryEpisodePickerPresented = true
-            } else {
+            if !PlagueFeatureFlags.showStoryEpisodePicker {
                 startStoryEpisode(
                     PlagueFeatureFlags.defaultStoryEpisodeID
                 )
@@ -656,7 +681,7 @@ final class PlagueDemoSession: ObservableObject {
            episodeID == .prologue {
             selectedOperationMode = .story
             selectedStoryEpisodeID = episodeID
-            isStoryEpisodePickerPresented = true
+            isStoryEpisodePickerPresented = false
             experienceMode = .story
             activeMode = .none
             statusMessage = "Prologue Qwen Phase 0 controls are ready."
@@ -831,6 +856,15 @@ final class PlagueDemoSession: ObservableObject {
               reason: \(reason)
               seconds: 2.0
             """
+        )
+    }
+
+    @MainActor
+    func armControlWindowBackgroundIgnoreForStoryDebug(
+        reason: String
+    ) {
+        markControlWindowBackgroundAsImmersiveTransition(
+            reason: reason
         )
     }
 

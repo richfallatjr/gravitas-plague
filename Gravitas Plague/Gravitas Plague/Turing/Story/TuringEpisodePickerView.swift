@@ -10,7 +10,8 @@ struct TuringEpisodePickerView: View {
     @StateObject private var dictationCoordinator = TuringDictationCoordinator()
     @State private var qwenNativeRunningPreset: TuringNativeQwenVoiceDesignCanaryPreset?
     @State private var turingDialogueBusy = false
-    @State private var playerDictationHUDText = ""
+    @State private var dictationPressActive = false
+    @State private var dictationStartTask: Task<Void, Never>?
     @State private var qwenDebugStatus = "Idle"
     @State private var memorySnapshot = TuringMemoryBudgetProbe.currentSnapshot(
         label: "storyPickerInitial"
@@ -65,16 +66,9 @@ struct TuringEpisodePickerView: View {
                         .foregroundStyle(.secondary)
 
                     knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Base Clone Short",
-                        runningTitle: "Running Base Clone Short...",
-                        preset: .bigMikeShortDynamic,
-                        prominence: .prominent
-                    )
-
-                    knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Base Clone Longform 2 Segments",
-                        runningTitle: "Running Base Clone Longform 2 Segments...",
-                        preset: .bigMikeBroadcastTwoSegmentDynamic,
+                        title: "Run Native Qwen - Big Mike Base Clone Longform",
+                        runningTitle: "Running Base Clone Longform...",
+                        preset: .bigMikeBroadcastLongformDynamic,
                         prominence: .standard
                     )
 
@@ -94,20 +88,6 @@ struct TuringEpisodePickerView: View {
 
                     Divider()
                         .padding(.vertical, 4)
-
-                    Button {
-                        runBigMikeVoicePromptTest()
-                    } label: {
-                        HStack(spacing: 8) {
-                            if turingDialogueBusy {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                            Text("Run Big Mike voicePrompt Test")
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(qwenNativeRunningPreset != nil || turingDialogueBusy)
 
                     HStack(spacing: 12) {
                         TuringDictateButton(
@@ -129,12 +109,6 @@ struct TuringEpisodePickerView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-
-                    if !playerDictationHUDText.isEmpty {
-                        Text("You: \(playerDictationHUDText)")
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                    }
                 }
             }
 #endif
@@ -143,6 +117,9 @@ struct TuringEpisodePickerView: View {
         .padding(24)
         .frame(minWidth: 520)
         .onAppear {
+            dictationCoordinator.onEvent = { event in
+                session.publishTuringDictationEvent(event)
+            }
             memorySnapshot = TuringMemoryBudgetProbe.log(
                 label: "storyPickerOpened"
             )
@@ -283,51 +260,6 @@ struct TuringEpisodePickerView: View {
         return "Pinch and hold to speak. Release to send."
     }
 
-    private func runBigMikeVoicePromptTest() {
-        guard qwenNativeRunningPreset == nil,
-              turingDialogueBusy == false else {
-            return
-        }
-
-        turingDialogueBusy = true
-        qwenDebugStatus = "Running Big Mike voicePrompt Test"
-
-        let request = VoicePromptRequest(
-            id: "story.picker.phase2.voicePrompt.001",
-            speaker: "Big Mike",
-            voiceID: "big_mike_base_clone_v1",
-            characterProfileID: "big_mike",
-            intent: "Tell Rich what to do if he hears scratching outside the apartment door.",
-            emotion: "protective, tired, low, controlled"
-        )
-
-        Task.detached(priority: .userInitiated) {
-            do {
-                let service = TuringDialogueService()
-                let plan = try await service.generateVoicePrompt(request)
-                let result = await TuringNativeQwenHelloWorldCanary
-                    .runDialogueSegments(
-                        plan.segments,
-                        runID: "bigMikeVoicePromptTest",
-                        source: "voicePrompt_characterIntent"
-                    )
-
-                await MainActor.run {
-                    turingDialogueBusy = false
-                    qwenDebugStatus = result.pickerStatus
-                    memorySnapshot = TuringMemoryBudgetProbe.log(
-                        label: "afterTransientCleanup"
-                    )
-                }
-            } catch {
-                await MainActor.run {
-                    turingDialogueBusy = false
-                    qwenDebugStatus = "Failed: \(error.localizedDescription)"
-                }
-            }
-        }
-    }
-
     private func runGravitasPlagueBackstory() {
         guard qwenNativeRunningPreset == nil,
               turingDialogueBusy == false else {
@@ -361,9 +293,96 @@ struct TuringEpisodePickerView: View {
             return
         }
 
-        playerDictationHUDText = ""
-        Task {
+        dictationPressActive = true
+        dictationStartTask?.cancel()
+        qwenDebugStatus = "Opening Story HUD for dictation"
+
+        dictationStartTask = Task { @MainActor in
+            guard await ensureImmersiveSpaceForTuringHUD(
+                reason: "holdMicDictation"
+            ) else {
+                dictationPressActive = false
+                session.publishTuringDictationEvent(
+                    .failed("HUD unavailable.")
+                )
+                qwenDebugStatus = "Failed: HUD unavailable."
+                return
+            }
+
+            guard dictationPressActive else {
+                await dictationCoordinator.cancel(
+                    reason: "press ended before recording started"
+                )
+                return
+            }
+
             await dictationCoordinator.beginHoldToRecord()
+
+            if !dictationPressActive,
+               dictationCoordinator.isRecording {
+                await dictationCoordinator.cancel(
+                    reason: "press ended before recording startup completed"
+                )
+            }
+        }
+    }
+
+    @MainActor
+    private func ensureImmersiveSpaceForTuringHUD(
+        reason: String
+    ) async -> Bool {
+        if session.immersiveSpaceStatus == .open {
+            return true
+        }
+
+        guard session.immersiveSpaceStatus != .opening else {
+            print("""
+            [TuringHUD] existing HUD unavailable
+              reason: \(reason)
+              immersiveSpaceStatus: opening
+            """)
+            return false
+        }
+
+        session.immersiveSpaceStatus = .opening
+        session.forestImmersiveState = .opening
+        session.forestImmersiveStatus = "Opening mixed room scene for Turing HUD..."
+        session.statusMessage = "Opening Story HUD."
+
+        let result = await openImmersiveSpace(
+            id: PlagueDemoSession.immersiveSpaceID
+        )
+
+        switch result {
+        case .opened:
+            session.immersiveSpaceStatus = .open
+            session.forestImmersiveDidOpen()
+            print("""
+            [TuringHUD] existing HUD immersive space opened
+              reason: \(reason)
+            """)
+            return true
+
+        case .userCancelled:
+            session.immersiveSpaceStatus = .closed
+            session.forestImmersiveState = .closed
+            session.forestImmersiveStatus = "Mixed room scene cancelled."
+            session.statusMessage = "Story HUD was not opened."
+            return false
+
+        case .error:
+            session.immersiveSpaceStatus = .closed
+            session.forestImmersiveState = .failed
+            session.forestImmersiveStatus = "Mixed room scene failed."
+            session.statusMessage = "Could not open Story HUD."
+            return false
+
+        @unknown default:
+            session.immersiveSpaceStatus = .closed
+            session.forestImmersiveState = .failed
+            session.forestImmersiveStatus = "Mixed room scene failed: \(String(describing: result))"
+            session.statusMessage = "Unknown immersive-space result."
+            return false
         }
     }
 
@@ -373,12 +392,22 @@ struct TuringEpisodePickerView: View {
             return
         }
 
+        dictationPressActive = false
+
+        guard dictationCoordinator.isRecording else {
+            dictationStartTask?.cancel()
+            dictationStartTask = nil
+            return
+        }
+
+        dictationStartTask = nil
+
         Task {
             do {
                 let transcript = try await dictationCoordinator.endHoldToSend()
-                playerDictationHUDText = transcript
                 runBigMikeConversationNoBible(playerDictation: transcript)
             } catch {
+                session.publishTuringDictationEvent(.failed(error.localizedDescription))
                 qwenDebugStatus = "Failed: \(error.localizedDescription)"
             }
         }
@@ -393,6 +422,9 @@ struct TuringEpisodePickerView: View {
 
         turingDialogueBusy = true
         qwenDebugStatus = "Running Big Mike conversation"
+        session.publishTuringDictationEvent(
+            .processingStarted(finalTranscript: playerDictation)
+        )
 
         let request = ConversationPromptNoBibleRequest(
             id: "story.picker.phase3light.conversation.001",
@@ -410,6 +442,9 @@ struct TuringEpisodePickerView: View {
                 let plan = try await service.generateConversationNoBible(
                     request
                 )
+                await MainActor.run {
+                    session.publishTuringDictationEvent(.responseAudioStarted)
+                }
                 let result = await TuringNativeQwenHelloWorldCanary
                     .runDialogueSegments(
                         plan.segments,
@@ -418,6 +453,7 @@ struct TuringEpisodePickerView: View {
                     )
 
                 await MainActor.run {
+                    session.publishTuringDictationEvent(.responseAudioFinished)
                     turingDialogueBusy = false
                     qwenDebugStatus = result.pickerStatus
                     memorySnapshot = TuringMemoryBudgetProbe.log(
@@ -427,6 +463,7 @@ struct TuringEpisodePickerView: View {
             } catch {
                 await MainActor.run {
                     turingDialogueBusy = false
+                    session.publishTuringDictationEvent(.failed(error.localizedDescription))
                     qwenDebugStatus = "Failed: \(error.localizedDescription)"
                 }
             }

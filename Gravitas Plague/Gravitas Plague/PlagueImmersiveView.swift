@@ -104,6 +104,15 @@ struct PlagueImmersiveView: View {
                     }
 
                     session.handleWallPosterAction(action)
+
+                    if action == .story,
+                       PlagueFeatureFlags.showStoryEpisodePicker {
+                        openWindow(id: PlagueWindowID.storyDebug)
+                        print("""
+                        [TuringStory] Story debug window opened from wall poster
+                          windowID: \(PlagueWindowID.storyDebug)
+                        """)
+                    }
                 }
         )
         .simultaneousGesture(
@@ -135,6 +144,10 @@ struct PlagueImmersiveView: View {
         .task(id: session.latestCommand?.id) {
             guard let commandEnvelope = session.latestCommand else { return }
             coordinator.handle(commandEnvelope)
+        }
+        .task(id: session.latestTuringDictationEvent?.id) {
+            guard let envelope = session.latestTuringDictationEvent else { return }
+            coordinator.applyTuringDictationEventToExistingHUD(envelope.event)
         }
         .onReceive(frameTimer) { date in
             coordinator.tick(at: date)

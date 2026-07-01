@@ -151,7 +151,7 @@ public final class TuringComputeGapAudioCoordinator {
 
     public func beginRun(
         runID: String,
-        expectedSegmentCount: Int
+        expectedSegmentCount: Int? = nil
     ) async {
         self.runID = runID
         self.expectedSegmentCount = expectedSegmentCount
@@ -175,7 +175,7 @@ public final class TuringComputeGapAudioCoordinator {
         print("""
         [TuringGapAudio] run started
           runID: \(runID)
-          expectedSegmentCount: \(expectedSegmentCount)
+          expectedSegmentCount: \(expectedSegmentCount.map(String.init) ?? "streaming")
           fillerClipCount: \(fillerFiles.count)
           firstSegmentPrerollRemaining: \(firstSegmentPrerollRemaining)
         """)

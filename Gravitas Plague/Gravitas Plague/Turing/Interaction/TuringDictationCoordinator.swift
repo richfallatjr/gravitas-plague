@@ -18,6 +18,8 @@ final class TuringDictationCoordinator: ObservableObject {
     @Published private(set) var finalTranscript = ""
     @Published private(set) var status: Status = .idle
 
+    var onEvent: ((TuringDictationEvent) -> Void)?
+
     private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
@@ -32,11 +34,17 @@ final class TuringDictationCoordinator: ObservableObject {
 
         do {
             try await requestPermissions()
+            try Task.checkCancellation()
+            onEvent?(.recordingStarted)
             try startRecognition()
+            try Task.checkCancellation()
             print("[TuringDictation] recording started")
+        } catch is CancellationError {
+            await cancel(reason: "press ended before recording started")
         } catch {
             await cancel(reason: error.localizedDescription)
             status = .failed(error.localizedDescription)
+            onEvent?(.failed(error.localizedDescription))
             print("""
             [TuringDictation] recording failed
               error: \(error.localizedDescription)
@@ -76,6 +84,7 @@ final class TuringDictationCoordinator: ObservableObject {
 
         finalTranscript = transcript
         status = .idle
+        onEvent?(.finalTranscript(transcript))
 
         print("""
         [TuringDictation] recording finished
@@ -93,6 +102,7 @@ final class TuringDictationCoordinator: ObservableObject {
         recognitionRequest = nil
         isRecording = false
         status = .idle
+        onEvent?(.cancelled)
 
         print("""
         [TuringDictation] recording cancelled
@@ -178,6 +188,7 @@ final class TuringDictationCoordinator: ObservableObject {
                 if let result {
                     let transcript = result.bestTranscription.formattedString
                     self.partialTranscript = transcript
+                    self.onEvent?(.partialTranscript(transcript))
                     if result.isFinal {
                         self.finalTranscript = transcript
                     }

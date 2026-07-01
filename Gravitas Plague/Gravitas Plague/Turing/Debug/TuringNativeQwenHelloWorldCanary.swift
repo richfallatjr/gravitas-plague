@@ -343,6 +343,9 @@ enum TuringNativeQwenHelloWorldCanary {
         requestID: String,
         debugLabel: String
     ) async -> TuringNativeQwenRunResult {
+        var engine: TuringQwenNativeBaseCloneEngine?
+        var gapAudio: TuringComputeGapAudioCoordinator?
+
         do {
             let url = try TuringResourceLoader.resourceURL(
                 resourcePath: resourcePath
@@ -368,29 +371,133 @@ enum TuringNativeQwenHelloWorldCanary {
             """)
 
             let runner = TuringVoiceScriptLongformRunner()
-            let exactSegments = try await runner.segmentAll(
-                request: request
-            )
-            let speechSegments = exactSegments.map { segment in
-                TuringSpeechSegment(
-                    text: segment.text,
-                    emotion: segment.emotion
-                )
-            }
+            let segmentStream = runner.segmentStream(request: request)
 
             print("""
-            [TuringPhase1Longform] ordered segment stream ready
+            [TuringPhase1Longform] ordered segment stream started
               requestID: \(request.requestID)
-              segmentCount: \(speechSegments.count)
+              qwenSequential: true
+              foundationParallel: true
+              playbackOwner: TuringComputeGapAudioCoordinator
+            """)
+
+            let modelRoot = try locateBundledBaseCloneModel()
+            let cloneProfile = try loadBundledBigMikeCloneProfile()
+            let stagedRoot = try stageWritableModel(from: modelRoot)
+            let loadedEngine = try TuringQwenNativeBaseCloneEngine(
+                modelRoot: stagedRoot,
+                trace: .stdout(prefix: "[TuringQwenNativePhase1]")
+            )
+            engine = loadedEngine
+
+            let coordinator = try await MainActor.run {
+                try TuringComputeGapAudioCoordinator.makeBigMikeCoordinator()
+            }
+            gapAudio = coordinator
+
+            await coordinator.beginRun(
+                runID: request.requestID
+            )
+
+            var renderedSegmentCount = 0
+
+            do {
+                for try await segment in segmentStream {
+                    try Task.checkCancellation()
+
+                    let segmentIndex = segment.globalIndex
+                    renderedSegmentCount = max(
+                        renderedSegmentCount,
+                        segmentIndex + 1
+                    )
+
+                    print("""
+                    [TuringPhase1Longform] ordered segment emitted
+                      requestID: \(request.requestID)
+                      globalIndex: \(segment.globalIndex)
+                      chunkIndex: \(segment.chunkIndex)
+                      localIndex: \(segment.localIndex)
+                      textUTF16: \(segment.text.utf16.count)
+                    """)
+
+                    await coordinator.qwenComputeStarted(
+                        segmentIndex: segmentIndex
+                    )
+
+                    do {
+                        let qwenAudio = try await renderBaseCloneSegment(
+                            preset: .phase1FoundationVoiceScript,
+                            cloneProfile: cloneProfile,
+                            engine: loadedEngine,
+                            segment: segment.text,
+                            segmentIndex: segmentIndex
+                        )
+
+                        await coordinator.qwenComputeFinished(
+                            segmentIndex: segmentIndex,
+                            audio: TuringComputeGapGeneratedAudio(
+                                segmentIndex: segmentIndex,
+                                samples: qwenAudio.samples,
+                                sampleRate: Double(qwenAudio.sampleRate),
+                                channelCount: 1
+                            )
+                        )
+                    } catch {
+                        await coordinator.qwenComputeFailed(
+                            segmentIndex: segmentIndex,
+                            error: error
+                        )
+                        throw error
+                    }
+                }
+
+                guard renderedSegmentCount > 0 else {
+                    throw TuringRuntimeError.foundationJSONGateFailed(
+                        "Phase 1 longform segment stream produced no segments."
+                    )
+                }
+
+                await coordinator.qwenComputeAllFinished()
+                await coordinator.waitUntilPlaybackFinished()
+            } catch {
+                await coordinator.runCancelled(
+                    reason: "phase1LongformFailed.\(String(describing: error))"
+                )
+                throw error
+            }
+
+            await loadedEngine.releaseResidentState(
+                reason: "phase1LongformFinished.\(request.requestID)",
+                logMemorySnapshot: shouldLogMemoryDiagnostics
+            )
+            engine = nil
+
+            logMemoryBudgetIfEnabled(label: "afterTransientCleanup")
+            logMemoryBudgetIfEnabled(label: "afterQwenUnload")
+
+            print("""
+            [TuringPhase1Longform] finished
+              requestID: \(request.requestID)
+              renderedSegmentCount: \(renderedSegmentCount)
               qwenSequential: true
             """)
 
-            return await runDialogueSegments(
-                speechSegments,
-                runID: request.requestID,
-                source: "voiceScript_exactSegmentation_longform_focusChunk"
-            )
+            return .succeeded("Finished \(debugLabel)")
         } catch {
+            if let gapAudio {
+                await gapAudio.runCancelled(
+                    reason: "phase1LongformFailed.\(String(describing: error))"
+                )
+            }
+            if let engine {
+                await engine.releaseResidentState(
+                    reason: "phase1LongformFailed.\(requestID)",
+                    logMemorySnapshot: shouldLogMemoryDiagnostics
+                )
+            }
+            logMemoryBudgetIfEnabled(label: "afterTransientCleanup")
+            logMemoryBudgetIfEnabled(label: "afterQwenUnload")
+
             print("""
             [TuringPhase1Longform] failed
               requestID: \(requestID)

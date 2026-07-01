@@ -180,9 +180,31 @@ struct TuringParallelExactSegmentationService: Sendable {
         let data = try TuringJSONSanitizer.extractSingleTopLevelObject(
             from: raw
         )
-        return try JSONDecoder().decode(
-            TuringExactSegmentationPayload.self,
-            from: data
+        let object = try JSONSerialization.jsonObject(
+            with: data,
+            options: []
+        )
+        guard let root = object as? [String: Any],
+              let rawSegments = root["segments"] as? [[String: Any]] else {
+            throw TuringRuntimeError.foundationJSONGateFailed(
+                "JSON object must contain a segments array."
+            )
+        }
+
+        let segments = rawSegments.compactMap { rawSegment -> TuringExactSegmentationPayload.Segment? in
+            let text = rawSegment["spokenText"] as? String
+                ?? rawSegment["text"] as? String
+            guard let text else {
+                return nil
+            }
+            return TuringExactSegmentationPayload.Segment(
+                index: rawSegment["index"] as? Int,
+                spokenText: text
+            )
+        }
+
+        return TuringExactSegmentationPayload(
+            segments: segments
         )
     }
 
