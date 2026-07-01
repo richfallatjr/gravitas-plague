@@ -103,6 +103,126 @@ public actor TuringQwenNativeBaseCloneEngine {
           precomputedCloneArtifacts: true
         """)
 
+        let generated = try generateCodebookForDecode(prompt)
+        let generatedRows = generated.generatedRows
+        let codePredictorSeconds = generated.codePredictorTotalSeconds
+        let talkerOneStepTotalSeconds = generated.talkerOneStepTotalSeconds
+        let referenceRows = generated.referenceRows
+        let initialPromptSeconds = generated.initialPromptSeconds
+        let initialTalkerForwardSeconds = generated.initialTalkerForwardSeconds
+
+        let decodeReferenceRows = Array(referenceRows.suffix(Self.decodeReferenceContextRows))
+        let rowsForDecode = decodeReferenceRows + generatedRows
+
+        print("""
+        [TuringQwenNativeBaseClone] decode started
+          referenceRows: \(referenceRows.count)
+          decodeReferenceRows: \(decodeReferenceRows.count)
+          generatedRows: \(generatedRows.count)
+          totalRows: \(rowsForDecode.count)
+          decodeFullReference: false
+          trimReferenceAfterDecode: true
+        """)
+
+        let decodeStart = Date()
+        let fullAudio = try TuringQwenNativeSpeechDecoder.decode(
+            codebookRows: rowsForDecode,
+            modelRoot: modelRoot,
+            performanceMode: prompt.performanceMode
+        )
+        let decodeSeconds = Date().timeIntervalSince(decodeStart)
+        let trimmedSamples = try TuringQwenNativeBaseCloneDecodeTrimmer.trimReferencePrefix(
+            from: fullAudio.samples,
+            referenceRowCount: decodeReferenceRows.count,
+            totalRowCount: rowsForDecode.count
+        )
+        let audio = TuringQwenNativeAudio(
+            samples: trimmedSamples,
+            sampleRate: fullAudio.sampleRate
+        )
+        let renderSeconds = Date().timeIntervalSince(renderStart)
+        let realTimeFactor = TuringQwenNativeRealtimeBudgetProbe.realTimeFactor(
+            renderSeconds: renderSeconds,
+            audioDurationSeconds: audio.durationSeconds
+        )
+        var perfTrace = TuringQwenNativePerfTrace()
+        perfTrace.recordCodePredictor(
+            generatedRows: generatedRows.count,
+            codeGroupsPerRow: config.talkerConfig.numCodeGroups
+        )
+        let memoryPeak = TuringQwenNativePerfTrace.memoryPeakMegabytes()
+        let averageSecondsPerRow: Double
+        if generatedRows.isEmpty {
+            averageSecondsPerRow = 0
+        } else {
+            averageSecondsPerRow = codePredictorSeconds / Double(generatedRows.count)
+        }
+        let codePredictorOneStepSeconds = max(0, codePredictorSeconds - perfTrace.codePredictorPrefillTotalSeconds)
+        TuringQwenNativePerfTrace.log(
+            TuringQwenNativePerfReport(
+                presetID: prompt.cloneProfile.voiceID,
+                modelID: prompt.cloneProfile.modelID,
+                quantization: "\(config.quantization?.bits ?? 0)bit",
+                fixtureRowsUsed: false,
+                performanceMode: prompt.performanceMode.rawValue,
+                generatedRows: generatedRows.count,
+                generatedSamples: audio.samples.count,
+                sampleRate: audio.sampleRate,
+                audioDurationSeconds: audio.durationSeconds,
+                totalRenderSeconds: renderSeconds,
+                initialPromptSeconds: initialPromptSeconds,
+                initialTalkerForwardSeconds: initialTalkerForwardSeconds,
+                talkerOneStepTotalSeconds: talkerOneStepTotalSeconds,
+                codePredictorPrefillTotalSeconds: perfTrace.codePredictorPrefillTotalSeconds,
+                codePredictorOneStepTotalSeconds: codePredictorOneStepSeconds,
+                codePredictorTotalSeconds: codePredictorSeconds,
+                codePredictorPrefillCount: perfTrace.codePredictorPrefillCount,
+                codePredictorOneStepCount: perfTrace.codePredictorOneStepCount,
+                codePredictorNoCacheForwardCount: perfTrace.codePredictorNoCacheForwardCount,
+                codePredictorKVCache: perfTrace.codePredictorKVCache,
+                tokenSyncTotalSeconds: perfTrace.tokenSyncTotalSeconds,
+                speechDecodeSeconds: decodeSeconds,
+                playbackStartDelaySeconds: nil,
+                averageSecondsPerRow: averageSecondsPerRow,
+                realTimeFactor: realTimeFactor,
+                mlxActiveMemoryPeakMB: memoryPeak.active,
+                mlxCacheMemoryPeakMB: memoryPeak.cache,
+                processFootprintPeakMB: nil
+            )
+        )
+
+        print("""
+        [TuringQwenNativeBaseClone] generation finished
+          generatedRows: \(generatedRows.count)
+          sampleRate: \(audio.sampleRate)
+          sampleCount: \(audio.samples.count)
+          durationSeconds: \(String(format: "%.3f", audio.durationSeconds))
+          peakAbs: \(audio.peakAbs)
+          rms: \(audio.rms)
+          codePredictorSeconds: \(String(format: "%.3f", codePredictorSeconds))
+          decodeSeconds: \(String(format: "%.3f", decodeSeconds))
+          renderSeconds: \(String(format: "%.3f", renderSeconds))
+          realTimeFactor: \(String(format: "%.3f", realTimeFactor))
+        """)
+
+        return audio
+    }
+
+    private func generateCodebookForDecode(
+        _ prompt: TuringQwenNativeBaseClonePrompt
+    ) throws -> GeneratedCodebookForDecode {
+        defer {
+            residentWeights = nil
+            TuringQwenNativeMemoryControl.clearCache(
+                label: "baseClone.afterCodebookBeforeDecode"
+            )
+            print("""
+            [TuringQwenNativeBaseClone] resident talker state released before decode
+              reason: codebookRowsReady
+              residentWeights: false
+            """)
+        }
+
         let promptStart = Date()
         let prepared = try prepareBaseClonePrompt(prompt)
         let resident = try loadResidentWeights()
@@ -202,112 +322,22 @@ public actor TuringQwenNativeBaseCloneEngine {
             resident: resident
         )
         let generatedRows = dynamicCodebook.rows
-        let codePredictorSeconds = dynamicCodebook.codePredictorTotalSeconds
-        let talkerOneStepTotalSeconds = dynamicCodebook.talkerOneStepTotalSeconds
-        let referenceRows = prepared.prompt.referenceCodes.map { row in
-            row.map(Int.init)
-        }
         guard generatedRows.isEmpty == false else {
             throw TuringQwenNativeError.invalidConfig(
                 "Base clone generated no codec rows before EOS."
             )
         }
 
-        let decodeReferenceRows = Array(referenceRows.suffix(Self.decodeReferenceContextRows))
-        let rowsForDecode = decodeReferenceRows + generatedRows
-
-        print("""
-        [TuringQwenNativeBaseClone] decode started
-          referenceRows: \(referenceRows.count)
-          decodeReferenceRows: \(decodeReferenceRows.count)
-          generatedRows: \(generatedRows.count)
-          totalRows: \(rowsForDecode.count)
-          decodeFullReference: false
-          trimReferenceAfterDecode: true
-        """)
-
-        let decodeStart = Date()
-        let fullAudio = try TuringQwenNativeSpeechDecoder.decode(
-            codebookRows: rowsForDecode,
-            modelRoot: modelRoot,
-            performanceMode: prompt.performanceMode
+        return GeneratedCodebookForDecode(
+            generatedRows: generatedRows,
+            referenceRows: prepared.prompt.referenceCodes.map { row in
+                row.map(Int.init)
+            },
+            initialPromptSeconds: initialPromptSeconds,
+            initialTalkerForwardSeconds: initialTalkerForwardSeconds,
+            talkerOneStepTotalSeconds: dynamicCodebook.talkerOneStepTotalSeconds,
+            codePredictorTotalSeconds: dynamicCodebook.codePredictorTotalSeconds
         )
-        let decodeSeconds = Date().timeIntervalSince(decodeStart)
-        let trimmedSamples = try TuringQwenNativeBaseCloneDecodeTrimmer.trimReferencePrefix(
-            from: fullAudio.samples,
-            referenceRowCount: decodeReferenceRows.count,
-            totalRowCount: rowsForDecode.count
-        )
-        let audio = TuringQwenNativeAudio(
-            samples: trimmedSamples,
-            sampleRate: fullAudio.sampleRate
-        )
-        let renderSeconds = Date().timeIntervalSince(renderStart)
-        let realTimeFactor = TuringQwenNativeRealtimeBudgetProbe.realTimeFactor(
-            renderSeconds: renderSeconds,
-            audioDurationSeconds: audio.durationSeconds
-        )
-        var perfTrace = TuringQwenNativePerfTrace()
-        perfTrace.recordCodePredictor(
-            generatedRows: generatedRows.count,
-            codeGroupsPerRow: config.talkerConfig.numCodeGroups
-        )
-        let memoryPeak = TuringQwenNativePerfTrace.memoryPeakMegabytes()
-        let averageSecondsPerRow: Double
-        if generatedRows.isEmpty {
-            averageSecondsPerRow = 0
-        } else {
-            averageSecondsPerRow = codePredictorSeconds / Double(generatedRows.count)
-        }
-        let codePredictorOneStepSeconds = max(0, codePredictorSeconds - perfTrace.codePredictorPrefillTotalSeconds)
-        TuringQwenNativePerfTrace.log(
-            TuringQwenNativePerfReport(
-                presetID: prompt.cloneProfile.voiceID,
-                modelID: prompt.cloneProfile.modelID,
-                quantization: "\(config.quantization?.bits ?? 0)bit",
-                fixtureRowsUsed: false,
-                performanceMode: prompt.performanceMode.rawValue,
-                generatedRows: generatedRows.count,
-                generatedSamples: audio.samples.count,
-                sampleRate: audio.sampleRate,
-                audioDurationSeconds: audio.durationSeconds,
-                totalRenderSeconds: renderSeconds,
-                initialPromptSeconds: initialPromptSeconds,
-                initialTalkerForwardSeconds: initialTalkerForwardSeconds,
-                talkerOneStepTotalSeconds: talkerOneStepTotalSeconds,
-                codePredictorPrefillTotalSeconds: perfTrace.codePredictorPrefillTotalSeconds,
-                codePredictorOneStepTotalSeconds: codePredictorOneStepSeconds,
-                codePredictorTotalSeconds: codePredictorSeconds,
-                codePredictorPrefillCount: perfTrace.codePredictorPrefillCount,
-                codePredictorOneStepCount: perfTrace.codePredictorOneStepCount,
-                codePredictorNoCacheForwardCount: perfTrace.codePredictorNoCacheForwardCount,
-                codePredictorKVCache: perfTrace.codePredictorKVCache,
-                tokenSyncTotalSeconds: perfTrace.tokenSyncTotalSeconds,
-                speechDecodeSeconds: decodeSeconds,
-                playbackStartDelaySeconds: nil,
-                averageSecondsPerRow: averageSecondsPerRow,
-                realTimeFactor: realTimeFactor,
-                mlxActiveMemoryPeakMB: memoryPeak.active,
-                mlxCacheMemoryPeakMB: memoryPeak.cache,
-                processFootprintPeakMB: nil
-            )
-        )
-
-        print("""
-        [TuringQwenNativeBaseClone] generation finished
-          generatedRows: \(generatedRows.count)
-          sampleRate: \(audio.sampleRate)
-          sampleCount: \(audio.samples.count)
-          durationSeconds: \(String(format: "%.3f", audio.durationSeconds))
-          peakAbs: \(audio.peakAbs)
-          rms: \(audio.rms)
-          codePredictorSeconds: \(String(format: "%.3f", codePredictorSeconds))
-          decodeSeconds: \(String(format: "%.3f", decodeSeconds))
-          renderSeconds: \(String(format: "%.3f", renderSeconds))
-          realTimeFactor: \(String(format: "%.3f", realTimeFactor))
-        """)
-
-        return audio
     }
 
     public func preflightBaseClone(
@@ -406,6 +436,15 @@ public actor TuringQwenNativeBaseCloneEngine {
 
     private struct DynamicCodebookResult: Sendable {
         let rows: [[Int]]
+        let talkerOneStepTotalSeconds: Double
+        let codePredictorTotalSeconds: Double
+    }
+
+    private struct GeneratedCodebookForDecode: Sendable {
+        let generatedRows: [[Int]]
+        let referenceRows: [[Int]]
+        let initialPromptSeconds: Double
+        let initialTalkerForwardSeconds: Double
         let talkerOneStepTotalSeconds: Double
         let codePredictorTotalSeconds: Double
     }

@@ -113,6 +113,14 @@ struct TuringEpisodePickerView: View {
                     )
 
                     knownQwenButton(
+                        title: "Run Native Qwen - Big Mike Base Clone Longform 2 Segments",
+                        runningTitle: "Running Base Clone Longform 2 Segments...",
+                        preset: .bigMikeBroadcastTwoSegmentDynamic,
+                        prominence: .standard,
+                        isEnabled: !qwenBaseClonePreflightRunning
+                    )
+
+                    knownQwenButton(
                         title: "Run Native Qwen - Big Mike Base Clone Longform",
                         runningTitle: "Running Base Clone Longform...",
                         preset: .bigMikeBroadcastLongformDynamic,

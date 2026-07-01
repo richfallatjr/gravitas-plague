@@ -29,6 +29,7 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
     case bigMikeShortDynamicPerformance8
     case bigMikeBroadcastSegment1Dynamic
     case bigMikeBroadcastSegment1DynamicPerformance
+    case bigMikeBroadcastTwoSegmentDynamic
     case bigMikeBroadcastLongformDynamic
 
     // Legacy aliases kept for older local audit/debug scripts.
@@ -72,7 +73,8 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
              .rowBudgetProbe40Ref80,
              .rowBudgetProbe40Ref160:
             return false
-        case .bigMikeBroadcastLongformDynamic,
+        case .bigMikeBroadcastTwoSegmentDynamic,
+             .bigMikeBroadcastLongformDynamic,
              .bigMikeBroadcast450:
             return true
         default:
@@ -106,7 +108,8 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
         case .fixtureDecode,
              .sourceTruthHelloWorldFixture:
             return 7
-        case .bigMikeBroadcastLongformDynamic,
+        case .bigMikeBroadcastTwoSegmentDynamic,
+             .bigMikeBroadcastLongformDynamic,
              .bigMikeBroadcast450,
              .bigMikeBroadcastSegment1DynamicPerformance,
              .bigMikeBroadcastSegment1Dynamic,
@@ -125,6 +128,7 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
              .bigMikeShortDynamicPerformance8,
              .bigMikeBroadcastSegment1Dynamic,
              .bigMikeBroadcastSegment1DynamicPerformance,
+             .bigMikeBroadcastTwoSegmentDynamic,
              .bigMikeBroadcastLongformDynamic,
              .bigMikeHello,
              .bigMikeBroadcast450:
@@ -209,6 +213,8 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
 
     var segments: [String] {
         switch self {
+        case .bigMikeBroadcastTwoSegmentDynamic:
+            return Array(Self.bigMikeBroadcastRuntimeSegments.prefix(2))
         case .bigMikeBroadcastLongformDynamic,
              .bigMikeBroadcast450:
             return Self.bigMikeBroadcastRuntimeSegments
@@ -264,7 +270,8 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
                 instruction: Self.bigMikeVoiceDNA + "\n\n" + Self.bigMikeBroadcastPerformance
             )
 
-        case .bigMikeBroadcastLongformDynamic,
+        case .bigMikeBroadcastTwoSegmentDynamic,
+             .bigMikeBroadcastLongformDynamic,
              .bigMikeBroadcast450:
             return TuringNativeQwenVoiceDesignCanaryInput(
                 voiceID: "big_mike_vd_v1",
