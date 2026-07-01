@@ -66,8 +66,8 @@ struct TuringEpisodePickerView: View {
                         .foregroundStyle(.secondary)
 
                     knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Base Clone Longform",
-                        runningTitle: "Running Base Clone Longform...",
+                        title: "ATNV-15 Cases Spread Across City",
+                        runningTitle: "Reading ATNV-15 Headline...",
                         preset: .bigMikeBroadcastLongformDynamic,
                         prominence: .standard
                     )

@@ -6,7 +6,7 @@ Source spec: `turing_system_spec.md`
 
 Target app: Gravitas Plague on visionOS / Apple Vision Pro
 
-Primary reuse source: Gravitas Crunch text, chunking, JSON, and packet-first speech pipeline patterns
+Primary reuse source: Gravitas Crunch text, chunking, JSON, and sequential speech pipeline patterns
 
 Primary Plague integration shell: `PlagueImmersiveCoordinator`
 
@@ -36,7 +36,7 @@ Allowed mechanical work:
 - UTF-16 chunking by offsets
 - stable indexing
 - cache lookup
-- packet scheduling
+- ordered segment scheduling
 - file IO
 - playback scheduling
 - structural JSON wrapper cleanup
@@ -69,7 +69,6 @@ Gravitas Crunch/Gravitas Crunch/GravitasCrunch/Services/AI/ResearchSummarySuppor
 Gravitas Crunch/Gravitas Crunch/GravitasCrunch/Services/AI/TTSNarrationSegmentPlanner.swift
 Gravitas Crunch/Gravitas Crunch/GravitasCrunch/Services/AI/AudiobookPreparationService.swift
 Gravitas Crunch/Gravitas Crunch/GravitasCrunch/Services/Audiobook/ArticleAudiobookPreparationCoordinator.swift
-Gravitas Crunch/Gravitas Crunch/GravitasCrunch/Models/DeterministicSpeechPacketization.swift
 Gravitas Crunch/Gravitas Crunch/GravitasCrunch/Services/AI/AnchorBroadcastService.swift
 Gravitas Crunch/Gravitas Crunch/GravitasCrunch/Services/AI/RadioSummaryFinalizerService.swift
 Gravitas Crunch/Gravitas Crunch/GravitasCrunch/Services/Radio/RadioCrunchPipeline.swift
@@ -86,8 +85,7 @@ Port these patterns:
 - `SummaryPromptBuilder.buildChunkPrompt` sparse JSON chunk prompt pattern.
 - `TTSNarrationSegmentPlanner` exact text segmentation prompt pattern.
 - `AudiobookPreparationService` JSON repair loop shape.
-- `ArticleAudiobookPreparationCoordinator` packet-zero render, immediate playback, remaining packet compute-ahead.
-- `DeterministicSpeechPacketization.packetize`: `<= 5` segments is one packet, `> 5` segments splits into two packets using `ceil(count / 2)`.
+- `ArticleAudiobookPreparationCoordinator` compute-ahead idea, adapted to first-segment playback and sequential segment rendering.
 - Cache identity discipline: model revision, voice revision, text, emotion, tokenizer, quantization, language, and generation settings must affect the key.
 
 Do not port these Crunch behaviors:
@@ -188,7 +186,6 @@ Gravitas Plague/Gravitas Plague/Turing/
   Speech/
     TuringSpeechSegment.swift
     TuringDialoguePlan.swift
-    TuringPacketizer.swift
     TuringSpeechPipeline.swift
 
   Bible/
@@ -369,12 +366,6 @@ struct TuringRenderedSegment: Sendable, Hashable {
     let cacheKey: String
 }
 
-struct TuringRenderedPacket: Sendable, Hashable {
-    let packetIndex: Int
-    let packetCount: Int
-    let segments: [TuringRenderedSegment]
-    let totalDurationSeconds: TimeInterval
-}
 ```
 
 Do not send `TuringPlaybackTarget`, emitter IDs, HUD state, checkpoint state, unlock state, or RealityKit entity identifiers to Foundation Models unless the words themselves need to mention them.
@@ -1324,6 +1315,294 @@ Generated speech gates:
 
 If any gate fails, use Foundation Models repair. If repair fails, fail the action.
 
+## 11A. Audiobook Mode Text Splitting: Current Contract
+
+Audiobook mode is the arbitrary-length text path. The active implementation has two separate splitting layers:
+
+1. Source sectioning: mechanical transport split with stable UTF-16 offsets. This is allowed because it only creates prompt-sized source sections. It does not decide spoken TTS phrasing.
+2. Spoken segmentation: Foundation Models receives one source section and chooses natural spoken TTS segments. Runtime code does not replace this with punctuation, sentence, word-count, or character-count speech splitting.
+
+Do not collapse these layers. Source sections are only the amount of source text sent to Foundation at one time. Spoken segments are the text sent to Qwen.
+
+### 11A.1 Source Section Policy
+
+Use this policy for mechanical source sectioning:
+
+```swift
+struct TuringAudiobookSourceSectionPolicy: Sendable, Equatable {
+    let targetWords: Int = 120
+    let minWords: Int = 45
+    let maxWords: Int = 210
+    let maxChars: Int = 2400
+}
+```
+
+### 11A.2 Source Sectioning Rules
+
+1. Normalize source text.
+2. Enumerate by paragraphs.
+3. Trim paragraph ranges while preserving UTF-16 offsets.
+4. Count words.
+5. If paragraph `wordCount > 210` or UTF-16 length is greater than `2400`, enumerate that paragraph by sentences as transport units.
+6. Pack units into sections.
+7. Start a new section only when:
+
+```text
+currentWordCount >= 45
+AND
+(
+  currentWordCount >= 120
+  OR currentWordCount + nextUnit.wordCount > 210
+  OR currentUTF16Length + nextUnitUTF16Length > 2400
+)
+```
+
+8. Each source section stores:
+
+```text
+index
+sourceStartUTF16
+sourceEndUTF16
+estimatedWordCount
+```
+
+The runner should log each planned section, including the actual section text, before sending Foundation work. Those logs are diagnostic visibility, not gates.
+
+### 11A.3 Foundation Spoken Segmentation
+
+For each source section:
+
+- Use a fresh Foundation Models session.
+- Send only that section text.
+- Ask the model to return ordered spoken segments.
+- The prompt tells the model to cover the full section, preserve order, target 3 to 5 seconds per segment, avoid tiny segments, split long sentences naturally, and return JSON only.
+- Runtime does not verify those semantic requirements. The prompt owns phrasing correctness.
+- Run sections through a rolling window, not an all-sections upfront batch.
+- Recommended default: one Foundation section request in flight. Optional lookahead may add one extra request only when the device budget allows.
+- Priority is current section, then next section, then optional lookahead.
+- Each LLM call receives previous context tail, section text, and next context head. The context is read-only; only section text is segmentable.
+
+The current sparse JSON shape is:
+
+```json
+{
+  "schemaVersion": 1,
+  "sectionIndex": 0,
+  "segments": [
+    {
+      "index": 0,
+      "spokenText": "string sent to TTS",
+      "emotion": "narration"
+    }
+  ]
+}
+```
+
+Do not require a returned `sourceText` field. The app's input text for one job is called section text in logs and prompts.
+
+### 11A.4 Rolling Window LLM Compute
+
+Audiobook mode must not send the whole book to Foundation Models and must not precompute the entire book upfront.
+
+Use a rolling section window:
+
+```text
+currentSection  = section being spoken or about to be spoken
+nextSection     = section being segmented by Foundation while current audio plays
+lookahead       = optional section after next, only when runtime budget allows
+```
+
+Default window:
+
+```text
+Window size: 2 sections
+
+N     = active playback / active Qwen sequential synthesis
+N + 1 = Foundation Models spoken segmentation in flight or ready
+```
+
+Optional low-priority window:
+
+```text
+Window size: 3 sections max
+
+N     = active playback / active Qwen sequential synthesis
+N + 1 = high-priority Foundation segmentation
+N + 2 = low-priority Foundation segmentation only when idle
+```
+
+Runtime state:
+
+```swift
+struct TuringAudiobookRollingWindowState: Sendable {
+    var activeSectionIndex: Int
+    var activeSegmentIndex: Int
+    var highestPreparedSectionIndex: Int
+    var llmInFlightSectionIndices: Set<Int>
+    var preparedSectionIndices: Set<Int>
+    var qwenInFlight: Bool
+}
+```
+
+Scheduling priority:
+
+```text
+1. current section missing parsed segments
+2. next section missing parsed segments
+3. optional lookahead section
+```
+
+Do not launch Foundation jobs for every section. The rolling window exists to keep memory, Foundation scheduling, and Qwen playback predictable.
+
+Foundation prompt window per section:
+
+```text
+previousContextTail: last 300-600 characters of previous section, read-only
+sectionText:         the only text the model should segment
+nextContextHead:     first 300-600 characters of next section, read-only
+```
+
+Context is only for continuity at section edges. The model may use it to avoid awkward starts and endings, but it must only return spoken segments for `sectionText`.
+
+Prompt payload shape:
+
+```json
+{
+  "sectionIndex": 12,
+  "previousContextTail": "read-only tail from section 11",
+  "sectionText": "the exact source section to segment",
+  "nextContextHead": "read-only head from section 13"
+}
+```
+
+Rolling compute flow:
+
+```text
+1. Normalize full audiobook text once.
+2. Mechanically create UTF-16 source sections once.
+3. Start Foundation segmentation for section 0.
+4. When section 0 JSON parses, begin sequential Qwen synthesis/playback for section 0.
+5. As soon as section 0 has parsed segments, start Foundation segmentation for section 1.
+6. While Qwen speaks section 0 segments, Foundation computes section 1.
+7. When section 0 completes:
+   - if section 1 is ready, continue immediately;
+   - if section 1 is not ready, wait;
+   - do not create filler;
+   - do not deterministic-split section 1.
+8. Repeat for section N.
+```
+
+Pseudocode:
+
+```swift
+func runAudiobook() async throws {
+    try await ensureFoundationPrepared(sectionIndex: 0, priority: .high)
+
+    while let section = currentSection {
+        try await ensureFoundationPrepared(sectionIndex: section.index, priority: .high)
+
+        scheduleFoundationIfNeeded(
+            sectionIndex: section.index + 1,
+            priority: .high
+        )
+
+        scheduleFoundationIfBudgetAllows(
+            sectionIndex: section.index + 2,
+            priority: .low
+        )
+
+        let prepared = try await preparedSection(section.index)
+
+        for segment in prepared.segments {
+            try await qwenSequentiallySynthesizeAndPlay(segment)
+
+            scheduleFoundationIfNeeded(
+                sectionIndex: section.index + 1,
+                priority: .high
+            )
+        }
+
+        advanceToNextSection()
+    }
+}
+```
+
+Concurrency rules:
+
+- Foundation segmentation may run ahead within the rolling window.
+- Foundation repair for malformed JSON counts against the same Foundation concurrency budget.
+- Qwen synthesis remains strictly sequential.
+- Playback remains ordered by section index and segment order returned by JSON.
+- Lookahead work must cancel or yield if the active or next section needs Foundation.
+- If the user jumps to another section, cancel stale lookahead and prioritize the new active section.
+
+No semantic gates are added to this rolling window. A ready section means "JSON parsed into the sparse payload," not "runtime proved source coverage."
+
+### 11A.5 JSON Handling Rule
+
+Runtime only checks whether the model response can be decoded as the sparse JSON payload.
+
+If JSON parses:
+
+- accept it;
+- read `segments` in returned order;
+- default missing or blank emotion to `narration`;
+- send `spokenText` values sequentially to Qwen.
+
+If JSON does not parse:
+
+1. Do mechanical cleanup through the JSON sanitizer.
+2. Try JSON parse again.
+3. If still malformed, send malformed output to a fresh Foundation Models JSON repair prompt.
+4. Parse repaired JSON.
+5. If repaired JSON still does not parse, fail the section before Qwen.
+
+### 11A.6 No Semantic Gates
+
+Do not gate or repair valid JSON for:
+
+- exact source coverage;
+- segment count;
+- segment duration;
+- segment index order;
+- duplicate text;
+- missing text;
+- added text;
+- rewritten text;
+- empty emotion;
+- one-word segments;
+- tiny final segments.
+
+Those are prompt responsibilities only.
+
+### 11A.7 Sequential TTS
+
+After JSON parses:
+
+1. Emit source sections to Qwen in source order as each ordered section becomes available from the rolling Foundation window.
+2. Iterate each section's returned segments in order.
+3. For each segment, create a fresh Qwen synthesis session, synthesize the segment, release segment-local state, and hand generated audio to the compute-gap audio coordinator.
+4. Continue until the section is complete, then continue to the next available ordered section.
+5. Qwen generation remains one segment at a time.
+6. Foundation segmentation for section `N + 1` may continue while Qwen renders or plays section `N`.
+7. No packets.
+8. No packet-zero behavior.
+9. No split-in-half behavior.
+10. No filler in audiobook mode. If the next section is not ready when the current section finishes, wait.
+
+The active implementation does not reintroduce a persistent generated-WAV cache. Temporary playback files or in-memory generated audio may be used by the existing playback system, then cleaned up.
+
+### 11A.8 Failure Rule
+
+Only fail audiobook mode for:
+
+- Foundation Models unavailable;
+- malformed JSON after repair;
+- TTS model failure;
+- audio playback/coordinator failure.
+
+Do not fail because Foundation made a bad segmentation choice. Do not repair valid JSON for semantic reasons. Do not use deterministic fallback speech splitting.
+
 ## 12. Qwen MLX TTS layer
 
 Qwen MVP constraints:
@@ -1524,49 +1803,32 @@ Library/Caches/TuringAudio/
 
 Metadata JSON should include duration, sample rate, channel count, creation date, cache identity, and source text.
 
-## 14. Packet-zero compute-ahead pipeline
+## 14. Sequential segment compute-ahead pipeline
 
-Packet rule:
+The new model path has segments, not packets.
+
+Rules:
 
 - `0` segments: fail.
-- `1...5` segments: one packet.
-- `>5` segments: two packets.
-- Split index is `ceil(count / 2)`.
-- Render packet 0 first.
-- Start playback immediately when packet 0 is ready.
-- Continue rendering packet 1 while packet 0 plays.
-- TTS renders within each packet are sequential.
-
-```swift
-enum TuringPacketizer {
-    static let maxSegmentsBeforeSplit = 5
-
-    static func packetize<T>(_ segments: [T]) -> [[T]] {
-        guard segments.isEmpty == false else {
-            return []
-        }
-        guard segments.count > maxSegmentsBeforeSplit else {
-            return [segments]
-        }
-
-        let splitIndex = Int(ceil(Double(segments.count) / 2.0))
-        return [
-            Array(segments[..<splitIndex]),
-            Array(segments[splitIndex...])
-        ]
-    }
-}
-```
+- Iterate returned segments in order.
+- Qwen renders one segment at a time.
+- Each segment uses a fresh Qwen synthesis session.
+- Segment-local synthesis state is released immediately after the segment is rendered.
+- Playback is ordered by section index and segment order.
+- Foundation Models may compute the next audiobook section while Qwen renders or playback speaks the current section.
+- No packet grouping.
+- No packet-zero rule.
+- No split-in-half rule.
 
 Speech pipeline:
 
 ```swift
 actor TuringSpeechPipeline {
     enum Event: Sendable {
-        case packetRenderBegan(packetIndex: Int)
-        case packetReady(TuringRenderedPacket)
-        case packetRenderFinished(packetIndex: Int)
-        case playbackCanStart(TuringRenderedPacket)
+        case segmentRenderBegan(sectionIndex: Int?, segmentIndex: Int)
+        case segmentReady(TuringRenderedSegment)
+        case segmentRenderFinished(sectionIndex: Int?, segmentIndex: Int)
+        case playbackCanStart(TuringRenderedSegment)
         case failed(String)
     }
 
@@ -1576,87 +1838,52 @@ actor TuringSpeechPipeline {
         self.tts = tts
     }
 
-    func renderForPlayback(
+    func renderSequentiallyForPlayback(
+        sectionIndex: Int?,
         segments: [TuringSpeechSegment],
         voice: TuringVoiceDescriptor,
         radioTreatment: TuringRadioEffectProfile?,
         onEvent: @escaping @Sendable (Event) async -> Void
-    ) async throws -> [TuringRenderedPacket] {
-        let packets = TuringPacketizer.packetize(segments)
-        guard packets.isEmpty == false else {
+    ) async throws -> [TuringRenderedSegment] {
+        guard segments.isEmpty == false else {
             throw TuringSpeechError.emptySegments
         }
 
-        var renderedPackets: [TuringRenderedPacket] = []
-        renderedPackets.reserveCapacity(packets.count)
-
-        let first = try await renderPacket(
-            packetIndex: 0,
-            packetCount: packets.count,
-            packetSegments: packets[0],
-            globalSegmentOffset: 0,
-            voice: voice,
-            radioTreatment: radioTreatment,
-            onEvent: onEvent
-        )
-
-        renderedPackets.append(first)
-        await onEvent(.playbackCanStart(first))
-
-        guard packets.count > 1 else {
-            return renderedPackets
-        }
-
-        let remaining = try await renderPacket(
-            packetIndex: 1,
-            packetCount: packets.count,
-            packetSegments: packets[1],
-            globalSegmentOffset: packets[0].count,
-            voice: voice,
-            radioTreatment: radioTreatment,
-            onEvent: onEvent
-        )
-
-        renderedPackets.append(remaining)
-        return renderedPackets
-    }
-
-    private func renderPacket(
-        packetIndex: Int,
-        packetCount: Int,
-        packetSegments: [TuringSpeechSegment],
-        globalSegmentOffset: Int,
-        voice: TuringVoiceDescriptor,
-        radioTreatment: TuringRadioEffectProfile?,
-        onEvent: @escaping @Sendable (Event) async -> Void
-    ) async throws -> TuringRenderedPacket {
-        await onEvent(.packetRenderBegan(packetIndex: packetIndex))
-
         var rendered: [TuringRenderedSegment] = []
-        rendered.reserveCapacity(packetSegments.count)
+        rendered.reserveCapacity(segments.count)
 
-        for localIndex in packetSegments.indices {
+        for index in segments.indices {
             try Task.checkCancellation()
-            let segment = packetSegments[localIndex]
+            await onEvent(
+                .segmentRenderBegan(
+                    sectionIndex: sectionIndex,
+                    segmentIndex: index
+                )
+            )
+
             let renderedSegment = try await tts.render(
-                segment: segment,
-                segmentIndex: globalSegmentOffset + localIndex,
+                segment: segments[index],
+                segmentIndex: index,
                 voice: voice,
                 radioTreatment: radioTreatment
             )
+
             rendered.append(renderedSegment)
+            await onEvent(.segmentReady(renderedSegment))
+
+            if index == 0 {
+                await onEvent(.playbackCanStart(renderedSegment))
+            }
+
+            await onEvent(
+                .segmentRenderFinished(
+                    sectionIndex: sectionIndex,
+                    segmentIndex: index
+                )
+            )
         }
 
-        let packet = TuringRenderedPacket(
-            packetIndex: packetIndex,
-            packetCount: packetCount,
-            segments: rendered,
-            totalDurationSeconds: rendered.reduce(0) { $0 + $1.durationSeconds }
-        )
-
-        await onEvent(.packetReady(packet))
-        await onEvent(.packetRenderFinished(packetIndex: packetIndex))
-        return packet
+        return rendered
     }
 }
 ```
@@ -1666,14 +1893,14 @@ Playback adapter:
 ```swift
 @MainActor
 protocol TuringSpatialAudioAdapter {
-    func playPacket(
-        _ packet: TuringRenderedPacket,
+    func playSegment(
+        _ segment: TuringRenderedSegment,
         target: TuringPlaybackTarget
     ) async throws
 
-    func enqueuePacket(
-        _ packet: TuringRenderedPacket,
-        after previousPacket: TuringRenderedPacket,
+    func enqueueSegment(
+        _ segment: TuringRenderedSegment,
+        after previousSegment: TuringRenderedSegment,
         target: TuringPlaybackTarget
     ) async throws
 }
@@ -1686,7 +1913,7 @@ Plague implementation should wrap `GravitasDemoAudioController`, adding a method
 - a world-position entity
 - the existing radio entity
 
-If `AudioFileResource.load` cannot load from a cache file URL directly in the chosen visionOS SDK, the adapter should copy the cached file into an app-owned playback-safe location and load it there. That is file IO, not fallback.
+If `AudioFileResource.load` cannot load from a generated file URL directly in the chosen visionOS SDK, the adapter should copy the file into an app-owned playback-safe location and load it there. That is file IO, not fallback.
 
 ## 15. Action flows
 
@@ -1701,11 +1928,9 @@ Flow:
 3. Run `voiceScript_exactSegmentation` through a fresh Foundation Models session.
 4. Sanitize, gate, repair once if needed.
 5. Convert to `[TuringSpeechSegment]` with authored emotion.
-6. Packetize.
-7. Render packet 0 through sequential Qwen.
-8. MainActor starts spatial playback when packet 0 is ready.
-9. Continue rendering packet 1 while packet 0 plays.
-10. Enqueue packet 1 when ready.
+6. Render segments sequentially through Qwen.
+7. MainActor starts spatial playback when the first segment is ready.
+8. Continue rendering and enqueueing later segments in order.
 
 Failure:
 
@@ -1723,7 +1948,7 @@ Flow:
 2. Load character profile, emotion, voice, intent.
 3. Run `voicePrompt_characterIntent` through a fresh Foundation Models session.
 4. Gate and repair.
-5. Send returned segments to the speech pipeline.
+5. Send returned segments to the sequential speech pipeline.
 
 ### 15.3 `conversationPrompt`
 
@@ -1773,7 +1998,7 @@ Flow:
 1. Build prompt from character profile, question, and Focus result JSON.
 2. Fresh Foundation Models session.
 3. Gate and repair.
-4. Send segments to Qwen speech pipeline.
+4. Send segments to the sequential Qwen speech pipeline.
 
 ## 16. Coordinator skeleton
 
@@ -1799,7 +2024,8 @@ actor TuringCoordinator {
             ).map {
                 TuringSpeechSegment(text: $0.text, emotion: request.emotion)
             }
-            let packets = try await speechPipeline.renderForPlayback(
+            let renderedSegments = try await speechPipeline.renderSequentiallyForPlayback(
+                sectionIndex: nil,
                 segments: segments,
                 voice: voice,
                 radioTreatment: request.radioTreatment,
@@ -1808,12 +2034,13 @@ actor TuringCoordinator {
                     onPlaybackEvent: onPlaybackEvent
                 )
             )
-            return .spoken(packets)
+            return .spoken(renderedSegments)
 
         case .voicePrompt(let request):
             let plan = try await dialogue.generateVoicePrompt(request)
             let voice = try await voices.voice(id: request.voiceID)
-            let packets = try await speechPipeline.renderForPlayback(
+            let renderedSegments = try await speechPipeline.renderSequentiallyForPlayback(
+                sectionIndex: nil,
                 segments: plan.segments,
                 voice: voice,
                 radioTreatment: request.radioTreatment,
@@ -1822,7 +2049,7 @@ actor TuringCoordinator {
                     onPlaybackEvent: onPlaybackEvent
                 )
             )
-            return .spoken(packets)
+            return .spoken(renderedSegments)
 
         case .conversationPrompt(let request):
             return try await handleConversation(
@@ -1843,7 +2070,8 @@ actor TuringCoordinator {
         case .focusPrompt(let request):
             let plan = try await focusPrompt.generateSpeech(request)
             let voice = try await voices.voice(id: request.voiceID)
-            let packets = try await speechPipeline.renderForPlayback(
+            let renderedSegments = try await speechPipeline.renderSequentiallyForPlayback(
+                sectionIndex: nil,
                 segments: plan.segments,
                 voice: voice,
                 radioTreatment: request.radioTreatment,
@@ -1852,7 +2080,7 @@ actor TuringCoordinator {
                     onPlaybackEvent: onPlaybackEvent
                 )
             )
-            return .spoken(packets)
+            return .spoken(renderedSegments)
         }
     }
 }
@@ -2013,8 +2241,8 @@ If product wants spoken error recovery, it must be its own `voicePrompt` or `con
 Cancellation rules:
 
 - Cancelling an action cancels outstanding Foundation Models chunk tasks.
-- Cancelling an action cancels packet renders that have not started playback.
-- Do not cancel packet 1 render if packet 0 is already playing and packet 1 is required to avoid silence, unless the user explicitly exits the scene.
+- Cancelling an action cancels segment renders that have not started playback.
+- Do not cancel the active segment render unless the user exits, changes playback target, or cancels the audiobook/story action.
 - Qwen session cleanup must run on cancellation.
 - Cache temp files must be removed if the render did not complete.
 
@@ -2067,13 +2295,14 @@ Mandatory tests before story use:
 - Cache key changes when emotion changes.
 - GPU unavailable fails loudly.
 
-### 22.5 Packet compute-ahead tests
+### 22.5 Sequential segment compute-ahead tests
 
-- 1 to 5 segments produce one packet.
-- 6 segments produce two packets of 3 and 3.
-- 7 segments produce two packets of 4 and 3.
-- Packet 0 playback event fires before packet 1 finishes.
-- Packet 1 continues rendering while packet 0 plays.
+- Segments render one at a time.
+- First segment playback event fires as soon as the first segment is ready.
+- Later segments enqueue in returned order.
+- Foundation can prepare the next audiobook source section while Qwen renders or playback speaks the current section.
+- No packet object is created.
+- No split-in-half behavior exists.
 
 ### 22.6 Qwen lifecycle soak test
 
@@ -2112,7 +2341,7 @@ Pass criteria:
 
 - Implement exact segmentation prompt.
 - Implement speech pipeline with a test TTS backend injected only in tests.
-- Implement packet-zero event behavior.
+- Implement first-segment-ready playback behavior.
 - MainActor adapter logs playback events before real Qwen is ready.
 
 Test backend rule:
@@ -2133,7 +2362,7 @@ The test backend is for unit tests only and must not be compiled into production
 - Add `TuringSpatialAudioAdapter`.
 - Add `GravitasDemoAudioController` entry point for Turing cache files.
 - Add wall radio emitter or character head emitter routing.
-- Start packet 0 immediately and enqueue packet 1.
+- Start playback on the first rendered segment and enqueue later segments sequentially.
 
 ### Phase 4: `voicePrompt` and `conversationPrompt`
 
@@ -2178,12 +2407,12 @@ Turing MVP is ready when:
 - `voicePrompt` can generate character speech through Foundation Models and speak it through Qwen.
 - `conversationPrompt` can respond to player dictation.
 - Focus can process long Bible text using bounded parallel Foundation Models chunking.
-- Packet 0 begins playback before packet 1 finishes.
+- First rendered segment begins playback while later segments continue sequential synthesis.
 - Cache hits play without Qwen synthesis.
 - Qwen GPU requirement is enforced.
 - No Python or PyTorch ships.
 - No deterministic semantic fallback remains.
-- All malformed JSON paths are sanitize, strict gate, Foundation Models repair, strict gate, fail.
+- Audiobook malformed JSON paths are sanitize, parse, Foundation Models repair, parse, fail.
 - Plague reuses existing wall placement, wall occupancy, HUD, spatial audio, and MainActor coordinator systems.
 
 ## 25. Plague repo integration code: Story Mode, Prologue, and unlocks
@@ -2705,23 +2934,21 @@ private func applyTuringPlaybackEvent(
     _ event: TuringPlaybackEvent
 ) {
     switch event {
-    case .packetReady(let packet, let target):
-        for segment in packet.segments {
-            do {
-                try audioController.playTuringRenderedSegment(
-                    id: "turing.\(segment.cacheKey)",
-                    fileURL: segment.fileURL,
-                    target: target,
-                    sceneRoot: sceneRoot,
-                    propRecords: turingPropRecordsByID,
-                    characterControllersByID: turingCharacterControllersByID
-                )
-            } catch {
-                instructionHUD.show(
-                    "Turing playback failed: \(error.localizedDescription)",
-                    on: headAnchor
-                )
-            }
+    case .segmentReady(let segment, let target):
+        do {
+            try audioController.playTuringRenderedSegment(
+                id: "turing.\(segment.cacheKey)",
+                fileURL: segment.fileURL,
+                target: target,
+                sceneRoot: sceneRoot,
+                propRecords: turingPropRecordsByID,
+                characterControllersByID: turingCharacterControllersByID
+            )
+        } catch {
+            instructionHUD.show(
+                "Turing playback failed: \(error.localizedDescription)",
+                on: headAnchor
+            )
         }
     }
 }

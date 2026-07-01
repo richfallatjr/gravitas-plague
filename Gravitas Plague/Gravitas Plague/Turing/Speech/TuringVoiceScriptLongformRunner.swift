@@ -1,23 +1,35 @@
 import Foundation
 
 struct TuringVoiceScriptLongformRunner: Sendable {
-    private let segmentationService: TuringParallelExactSegmentationService
+    private let audiobookRunner: TuringPhase1AudiobookRunner
 
     init(
-        segmentationService: TuringParallelExactSegmentationService = TuringParallelExactSegmentationService()
+        audiobookRunner: TuringPhase1AudiobookRunner = TuringPhase1AudiobookRunner()
     ) {
-        self.segmentationService = segmentationService
+        self.audiobookRunner = audiobookRunner
     }
 
-    func segmentStream(
+    func audiobookPlan(
         request: TuringLongformVoiceScriptRequest
-    ) -> AsyncThrowingStream<TuringExactSpeechSegment, Error> {
-        segmentationService.segmentStream(request: request)
+    ) async throws -> TuringPhase1AudiobookPlan {
+        try await audiobookRunner.makePlan(request: request)
     }
 
-    func segmentAll(
+    func makeSourcePlan(
         request: TuringLongformVoiceScriptRequest
-    ) async throws -> [TuringExactSpeechSegment] {
-        try await segmentationService.segmentAll(request: request)
+    ) throws -> TuringAudiobookSourcePlan {
+        try audiobookRunner.makeSourcePlan(request: request)
+    }
+
+    func prepareSection(
+        _ section: TuringAudiobookSourceSection,
+        in plan: TuringAudiobookSourcePlan,
+        request: TuringLongformVoiceScriptRequest
+    ) async throws -> TuringAudiobookSectionSegmentationResult {
+        try await audiobookRunner.prepareSection(
+            section,
+            in: plan,
+            request: request
+        )
     }
 }

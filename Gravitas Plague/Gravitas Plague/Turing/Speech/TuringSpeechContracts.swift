@@ -51,13 +51,6 @@ struct TuringRenderedSegment: Sendable, Hashable {
     let cacheKey: String
 }
 
-struct TuringRenderedPacket: Sendable, Hashable {
-    let packetIndex: Int
-    let packetCount: Int
-    let segments: [TuringRenderedSegment]
-    let totalDurationSeconds: TimeInterval
-}
-
 struct TuringRadioEffectProfile: Codable, Sendable, Hashable {
     let id: String
     let revision: String

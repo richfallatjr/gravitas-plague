@@ -344,7 +344,6 @@ enum TuringNativeQwenHelloWorldCanary {
         debugLabel: String
     ) async -> TuringNativeQwenRunResult {
         var engine: TuringQwenNativeBaseCloneEngine?
-        var gapAudio: TuringComputeGapAudioCoordinator?
 
         do {
             let url = try TuringResourceLoader.resourceURL(
@@ -362,22 +361,23 @@ enum TuringNativeQwenHelloWorldCanary {
             )
 
             print("""
-            [TuringPhase1Longform] requested
+            [TuringPhase1Audiobook] requested
               requestID: \(request.requestID)
               debugLabel: \(debugLabel)
               sourceUTF16: \(request.sourceText.utf16.count)
-              estimatedTokens: \(TuringLongformTransportPlanner.estimatedTokens(request.sourceText))
               voiceID: \(request.voiceID)
             """)
 
             let runner = TuringVoiceScriptLongformRunner()
-            let segmentStream = runner.segmentStream(request: request)
+            let sourcePlan = try runner.makeSourcePlan(request: request)
 
             print("""
-            [TuringPhase1Longform] ordered segment stream started
+            [TuringPhase1Audiobook] rolling window started
               requestID: \(request.requestID)
+              sectionCount: \(sourcePlan.sections.count)
               qwenSequential: true
-              foundationParallel: true
+              foundationRollingWindow: true
+              foundationWindow: currentPlusNext
               playbackOwner: TuringComputeGapAudioCoordinator
             """)
 
@@ -390,81 +390,15 @@ enum TuringNativeQwenHelloWorldCanary {
             )
             engine = loadedEngine
 
-            let coordinator = try await MainActor.run {
-                try TuringComputeGapAudioCoordinator.makeBigMikeCoordinator()
-            }
-            gapAudio = coordinator
-
-            await coordinator.beginRun(
+            try await runAudiobookSections(
+                preset: .phase1FoundationVoiceScript,
+                cloneProfile: cloneProfile,
+                engine: loadedEngine,
+                runner: runner,
+                request: request,
+                sourcePlan: sourcePlan,
                 runID: request.requestID
             )
-
-            var renderedSegmentCount = 0
-
-            do {
-                for try await segment in segmentStream {
-                    try Task.checkCancellation()
-
-                    let segmentIndex = segment.globalIndex
-                    renderedSegmentCount = max(
-                        renderedSegmentCount,
-                        segmentIndex + 1
-                    )
-
-                    print("""
-                    [TuringPhase1Longform] ordered segment emitted
-                      requestID: \(request.requestID)
-                      globalIndex: \(segment.globalIndex)
-                      chunkIndex: \(segment.chunkIndex)
-                      localIndex: \(segment.localIndex)
-                      textUTF16: \(segment.text.utf16.count)
-                    """)
-
-                    await coordinator.qwenComputeStarted(
-                        segmentIndex: segmentIndex
-                    )
-
-                    do {
-                        let qwenAudio = try await renderBaseCloneSegment(
-                            preset: .phase1FoundationVoiceScript,
-                            cloneProfile: cloneProfile,
-                            engine: loadedEngine,
-                            segment: segment.text,
-                            segmentIndex: segmentIndex
-                        )
-
-                        await coordinator.qwenComputeFinished(
-                            segmentIndex: segmentIndex,
-                            audio: TuringComputeGapGeneratedAudio(
-                                segmentIndex: segmentIndex,
-                                samples: qwenAudio.samples,
-                                sampleRate: Double(qwenAudio.sampleRate),
-                                channelCount: 1
-                            )
-                        )
-                    } catch {
-                        await coordinator.qwenComputeFailed(
-                            segmentIndex: segmentIndex,
-                            error: error
-                        )
-                        throw error
-                    }
-                }
-
-                guard renderedSegmentCount > 0 else {
-                    throw TuringRuntimeError.foundationJSONGateFailed(
-                        "Phase 1 longform segment stream produced no segments."
-                    )
-                }
-
-                await coordinator.qwenComputeAllFinished()
-                await coordinator.waitUntilPlaybackFinished()
-            } catch {
-                await coordinator.runCancelled(
-                    reason: "phase1LongformFailed.\(String(describing: error))"
-                )
-                throw error
-            }
 
             await loadedEngine.releaseResidentState(
                 reason: "phase1LongformFinished.\(request.requestID)",
@@ -476,19 +410,13 @@ enum TuringNativeQwenHelloWorldCanary {
             logMemoryBudgetIfEnabled(label: "afterQwenUnload")
 
             print("""
-            [TuringPhase1Longform] finished
+            [TuringPhase1Audiobook] finished
               requestID: \(request.requestID)
-              renderedSegmentCount: \(renderedSegmentCount)
               qwenSequential: true
             """)
 
             return .succeeded("Finished \(debugLabel)")
         } catch {
-            if let gapAudio {
-                await gapAudio.runCancelled(
-                    reason: "phase1LongformFailed.\(String(describing: error))"
-                )
-            }
             if let engine {
                 await engine.releaseResidentState(
                     reason: "phase1LongformFailed.\(requestID)",
@@ -499,7 +427,7 @@ enum TuringNativeQwenHelloWorldCanary {
             logMemoryBudgetIfEnabled(label: "afterQwenUnload")
 
             print("""
-            [TuringPhase1Longform] failed
+            [TuringPhase1Audiobook] failed
               requestID: \(requestID)
               error: \(error.localizedDescription)
             """)
@@ -519,6 +447,125 @@ enum TuringNativeQwenHelloWorldCanary {
             segments: preset.segments,
             runID: "bigMikeBaseCloneLongform"
         )
+    }
+
+    private static func runAudiobookSections(
+        preset: TuringNativeQwenVoiceDesignCanaryPreset,
+        cloneProfile: TuringQwenNativeCloneProfile,
+        engine: TuringQwenNativeBaseCloneEngine,
+        runner: TuringVoiceScriptLongformRunner,
+        request: TuringLongformVoiceScriptRequest,
+        sourcePlan: TuringAudiobookSourcePlan,
+        runID: String
+    ) async throws {
+        let gapAudio = try await MainActor.run {
+            try TuringComputeGapAudioCoordinator.makeBigMikeCoordinator()
+        }
+
+        await gapAudio.beginRun(
+            runID: runID,
+            expectedSegmentCount: nil
+        )
+
+        var renderedSegmentCount = 0
+        var currentSectionIndex = 0
+        var currentTask: Task<TuringAudiobookSectionSegmentationResult, Error>?
+        var nextTask: Task<TuringAudiobookSectionSegmentationResult, Error>?
+
+        func makeSectionTask(
+            _ sectionIndex: Int
+        ) -> Task<TuringAudiobookSectionSegmentationResult, Error>? {
+            guard sourcePlan.sections.indices.contains(sectionIndex) else {
+                return nil
+            }
+            let section = sourcePlan.sections[sectionIndex]
+            return Task.detached(priority: .userInitiated) {
+                try await runner.prepareSection(
+                    section,
+                    in: sourcePlan,
+                    request: request
+                )
+            }
+        }
+
+        do {
+            currentTask = makeSectionTask(0)
+
+            while let task = currentTask {
+                let sectionResult = try await task.value
+                let nextSectionIndex = currentSectionIndex + 1
+                nextTask = makeSectionTask(nextSectionIndex)
+
+                print("""
+                [TuringPhase1Audiobook] section sequential render began
+                  sectionIndex: \(sectionResult.section.index)
+                  segmentCount: \(sectionResult.segments.count)
+                  nextSectionPreparing: \(nextTask == nil ? "false" : "true")
+                """)
+
+                for segment in sectionResult.segments {
+                    try Task.checkCancellation()
+                    let segmentIndex = renderedSegmentCount
+
+                    await gapAudio.qwenComputeStarted(
+                        segmentIndex: segmentIndex
+                    )
+
+                    do {
+                        let qwenAudio = try await renderBaseCloneSegment(
+                            preset: preset,
+                            cloneProfile: cloneProfile,
+                            engine: engine,
+                            segment: segment.spokenText,
+                            segmentIndex: segmentIndex
+                        )
+
+                        await gapAudio.qwenComputeFinished(
+                            segmentIndex: segmentIndex,
+                            audio: TuringComputeGapGeneratedAudio(
+                                segmentIndex: segmentIndex,
+                                samples: qwenAudio.samples,
+                                sampleRate: Double(qwenAudio.sampleRate),
+                                channelCount: 1
+                            )
+                        )
+                        renderedSegmentCount += 1
+                    } catch {
+                        await gapAudio.qwenComputeFailed(
+                            segmentIndex: segmentIndex,
+                            error: error
+                        )
+                        throw error
+                    }
+                }
+
+                print("""
+                [TuringPhase1Audiobook] section sequential render finished
+                  sectionIndex: \(sectionResult.section.index)
+                  renderedSegmentCount: \(renderedSegmentCount)
+                """)
+
+                currentSectionIndex = nextSectionIndex
+                currentTask = nextTask
+                nextTask = nil
+            }
+
+            guard renderedSegmentCount > 0 else {
+                throw TuringRuntimeError.foundationJSONGateFailed(
+                    "Phase 1 audiobook produced no spoken segments."
+                )
+            }
+
+            await gapAudio.qwenComputeAllFinished()
+            await gapAudio.waitUntilPlaybackFinished()
+        } catch {
+            currentTask?.cancel()
+            nextTask?.cancel()
+            await gapAudio.runCancelled(
+                reason: "audiobookFailed.\(String(describing: error))"
+            )
+            throw error
+        }
     }
 
     private static func resolvePhase1FoundationSegmentsIfNeeded(
