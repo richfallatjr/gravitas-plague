@@ -18,7 +18,7 @@ final class TuringDictationCoordinator: ObservableObject {
     @Published private(set) var finalTranscript = ""
     @Published private(set) var status: Status = .idle
 
-    private let audioEngine = AVAudioEngine()
+    private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var recognizer: SFSpeechRecognizer?
@@ -56,7 +56,7 @@ final class TuringDictationCoordinator: ObservableObject {
         }
 
         status = .finishing
-        stopAudioCapture()
+        tearDownAudioEngine()
         recognitionRequest?.endAudio()
 
         try? await Task.sleep(nanoseconds: 300_000_000)
@@ -86,7 +86,7 @@ final class TuringDictationCoordinator: ObservableObject {
     }
 
     func cancel(reason: String) async {
-        stopAudioCapture()
+        tearDownAudioEngine()
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
         recognitionTask = nil
@@ -132,6 +132,11 @@ final class TuringDictationCoordinator: ObservableObject {
 
         recognitionTask?.cancel()
         recognitionTask = nil
+        recognitionRequest = nil
+        tearDownAudioEngine()
+        try configureAudioSessionForRecording()
+
+        print("[TuringDictation] audio session configured for recording")
 
         let recognizer = SFSpeechRecognizer(
             locale: Locale(identifier: "en_US")
@@ -145,6 +150,8 @@ final class TuringDictationCoordinator: ObservableObject {
         request.shouldReportPartialResults = true
         recognitionRequest = request
 
+        let audioEngine = AVAudioEngine()
+        self.audioEngine = audioEngine
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
         inputNode.removeTap(onBus: 0)
@@ -157,6 +164,7 @@ final class TuringDictationCoordinator: ObservableObject {
         }
 
         audioEngine.prepare()
+        print("[TuringDictation] audio engine starting")
         try audioEngine.start()
         isRecording = true
         status = .recording
@@ -187,10 +195,37 @@ final class TuringDictationCoordinator: ObservableObject {
     }
 
     private func stopAudioCapture() {
+        guard let audioEngine else {
+            return
+        }
+
         if audioEngine.isRunning {
             audioEngine.stop()
         }
         audioEngine.inputNode.removeTap(onBus: 0)
+        print("[TuringDictation] audio engine stopped")
+    }
+
+    private func tearDownAudioEngine() {
+        stopAudioCapture()
+        audioEngine?.reset()
+        audioEngine = nil
+    }
+
+    private func configureAudioSessionForRecording() throws {
+#if os(iOS) || os(visionOS) || os(tvOS)
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(
+            .playAndRecord,
+            mode: .spokenAudio,
+            options: [
+                .defaultToSpeaker,
+                .allowBluetooth,
+                .mixWithOthers
+            ]
+        )
+        try session.setActive(true, options: [])
+#endif
     }
 
     private func bestTranscript() -> String {
