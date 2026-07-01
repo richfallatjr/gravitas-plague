@@ -57,7 +57,8 @@ public actor TuringQwenNativeBaseCloneEngine {
     private let trace: TuringQwenNativeTrace
     private let weightBackend: TuringQwenNativeWeightBackend
     private let config: TuringQwenNativeConfig
-    private var residentWeights: ResidentWeights?
+    private let sharedResidentResources: TuringQwenNativeResidentResources?
+    private var residentWeights: TuringQwenNativeResidentResources?
     private var staticPromptContexts: [StaticPromptContextKey: TuringQwenNativeBaseCloneStaticPromptContext] = [:]
 
     public init(
@@ -68,6 +69,7 @@ public actor TuringQwenNativeBaseCloneEngine {
         self.modelRoot = modelRoot
         self.trace = trace
         self.weightBackend = weightBackend
+        self.sharedResidentResources = nil
 
         try Self.preflightModelRoot(modelRoot)
         let loadedConfig = try TuringQwenNativeConfig.load(from: modelRoot)
@@ -80,6 +82,20 @@ public actor TuringQwenNativeBaseCloneEngine {
             bits: loadedConfig.quantization?.bits ?? 4
         )
         .preflightOnly()
+    }
+
+    public init(
+        modelRoot: URL,
+        residentResources: TuringQwenNativeResidentResources,
+        trace: TuringQwenNativeTrace = .stdout(prefix: "[TuringQwenNativeBaseClone]")
+    ) throws {
+        self.modelRoot = modelRoot
+        self.trace = trace
+        self.weightBackend = .baseCloneRuntime
+        self.sharedResidentResources = residentResources
+
+        try Self.preflightModelRoot(modelRoot)
+        self.config = residentResources.config
     }
 
     public func generateBaseClone(
@@ -216,7 +232,9 @@ public actor TuringQwenNativeBaseCloneEngine {
         _ prompt: TuringQwenNativeBaseClonePrompt
     ) throws -> GeneratedCodebookForDecode {
         defer {
-            residentWeights = nil
+            if sharedResidentResources == nil {
+                residentWeights = nil
+            }
             TuringQwenNativeMemoryControl.clearCache(
                 label: "baseClone.afterCodebookBeforeDecode",
                 shouldLogSnapshot: prompt.performanceMode.shouldLogMemorySnapshots
@@ -225,7 +243,7 @@ public actor TuringQwenNativeBaseCloneEngine {
                 print("""
                 [TuringQwenNativeBaseClone] resident talker state released before decode
                   reason: codebookRowsReady
-                  residentWeights: false
+                  residentWeights: \(sharedResidentResources == nil ? "false" : "sharedWeightsRetained")
                 """)
             }
         }
@@ -466,12 +484,6 @@ public actor TuringQwenNativeBaseCloneEngine {
         let codePredictorTotalSeconds: Double
     }
 
-    private struct ResidentWeights {
-        let weightsStore: TuringQwenNativeWeightsStore
-        let talkerWeights: TuringQwenNativeTalkerResolvedWeights
-        let codePredictorWeights: TuringQwenNativeCodePredictorResolvedWeights
-    }
-
     private struct StaticPromptContextKey: Hashable {
         let voiceID: String
         let variantID: String
@@ -480,23 +492,16 @@ public actor TuringQwenNativeBaseCloneEngine {
         let referenceWindowStrategy: TuringQwenNativeReferenceWindowStrategy
     }
 
-    private func loadResidentWeights() throws -> ResidentWeights {
+    private func loadResidentWeights() throws -> TuringQwenNativeResidentResources {
+        if let sharedResidentResources {
+            return sharedResidentResources
+        }
+
         if let residentWeights {
             return residentWeights
         }
 
-        let weightsStore = try TuringQwenNativeWeightsStore(modelRoot: modelRoot)
-        let loaded = try ResidentWeights(
-            weightsStore: weightsStore,
-            talkerWeights: TuringQwenNativeTalkerResolvedWeights(
-                config: config,
-                weightsStore: weightsStore
-            ),
-            codePredictorWeights: TuringQwenNativeCodePredictorResolvedWeights(
-                config: config,
-                weightsStore: weightsStore
-            )
-        )
+        let loaded = try TuringQwenNativeResidentResources(modelRoot: modelRoot)
         residentWeights = loaded
 
         print("""
@@ -513,7 +518,7 @@ public actor TuringQwenNativeBaseCloneEngine {
     private func cachedStaticPromptContext(
         prompt: TuringQwenNativeBaseClonePrompt,
         prepared: TuringQwenNativePreparedBaseClonePrompt,
-        resident: ResidentWeights
+        resident: TuringQwenNativeResidentResources
     ) throws -> TuringQwenNativeBaseCloneStaticPromptContext {
         let key = StaticPromptContextKey(
             voiceID: prompt.cloneProfile.voiceID,
@@ -562,7 +567,7 @@ public actor TuringQwenNativeBaseCloneEngine {
         promptInputs: TuringQwenNativeTalkerPromptInputs,
         maxNewRows: Int,
         performanceMode: TuringQwenNativePerformanceMode,
-        resident: ResidentWeights
+        resident: TuringQwenNativeResidentResources
     ) throws -> DynamicCodebookResult {
         let targetRowCount = max(maxNewRows, 1)
         let generationStart = Date()
@@ -729,7 +734,7 @@ public actor TuringQwenNativeBaseCloneEngine {
         codeGroup: TuringQwenNativeFirstCodeGroup,
         generationStep: Int,
         promptInputs: TuringQwenNativeTalkerPromptInputs,
-        resident: ResidentWeights,
+        resident: TuringQwenNativeResidentResources,
         segmentCache: TuringQwenNativeSegmentRuntimeCache,
         performanceMode: TuringQwenNativePerformanceMode
     ) throws -> MLXArray {
