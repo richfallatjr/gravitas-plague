@@ -573,6 +573,11 @@ public actor TuringQwenNativeBaseCloneEngine {
             promptInputs: promptInputs,
             kvCache: initialKVCache
         )
+        let segmentCache = TuringQwenNativeSegmentRuntimeCache(
+            config: config,
+            promptSequenceLength: promptInputs.sequenceLength,
+            maxNewRows: targetRowCount
+        )
 
         print("""
         [TuringQwenNativeBaseClone] dynamic codebook generation started
@@ -580,6 +585,8 @@ public actor TuringQwenNativeBaseCloneEngine {
           performanceMode: \(performanceMode.rawValue)
           fixtureRowsUsed: false
           codePredictorKVCache: oneStep
+          segmentRuntimeCache: enabled
+          attentionKernel: \(performanceMode.shouldUseFastGroupedQueryAttention ? "mlxFastGroupedQuery" : "manualMatmulSoftmax")
         """)
 
         let firstCodeGroupStart = Date()
@@ -590,6 +597,7 @@ public actor TuringQwenNativeBaseCloneEngine {
             weightsStore: resident.weightsStore,
             expectedFixtureRowIndex: nil,
             resolvedWeights: resident.codePredictorWeights,
+            segmentCache: segmentCache,
             performanceMode: performanceMode
         )
         codePredictorTotalSeconds += Date().timeIntervalSince(firstCodeGroupStart)
@@ -639,6 +647,7 @@ public actor TuringQwenNativeBaseCloneEngine {
                 weightsStore: resident.weightsStore,
                 resolvedWeights: resident.talkerWeights,
                 codePredictorWeights: resident.codePredictorWeights,
+                segmentCache: segmentCache,
                 performanceMode: performanceMode
             )
             talkerOneStepTotalSeconds += nextStep.talkerStepSeconds

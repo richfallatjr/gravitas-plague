@@ -180,9 +180,7 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
 
     static let secondsPerGeneratedRow = 1920.0 / 24_000.0
     static let minimumUsefulSpeechRows = 38
-    static let maximumDynamicSpeechRows = 64
-    static let dynamicRowHeadroom = 8
-    static let estimatedCharactersPerSecond = 14.0
+    static let dynamicSafetySpeechRows = 160
     static let minimumUsefulSpeechSeconds = Double(minimumUsefulSpeechRows) * secondsPerGeneratedRow
     static let runtimeReferenceRowLimit = 160
 
@@ -193,22 +191,11 @@ enum TuringNativeQwenVoiceDesignCanaryPreset: String, CaseIterable, Identifiable
     }
 
     static func dynamicRowCeiling(
-        for spokenText: String
+        for _: String
     ) -> Int {
-        let trimmedCharacterCount = max(
-            1,
-            spokenText
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .utf16
-                .count
-        )
-        let estimatedSeconds = Double(trimmedCharacterCount) / estimatedCharactersPerSecond
-        let estimatedRows = Int(ceil(estimatedSeconds / secondsPerGeneratedRow)) + dynamicRowHeadroom
-
-        return min(
-            max(estimatedRows, minimumUsefulSpeechRows),
-            maximumDynamicSpeechRows
-        )
+        // Dynamic generation is EOS-driven. This is only an emergency runaway guard,
+        // not a spoken-text length target.
+        dynamicSafetySpeechRows
     }
 
     var segments: [String] {

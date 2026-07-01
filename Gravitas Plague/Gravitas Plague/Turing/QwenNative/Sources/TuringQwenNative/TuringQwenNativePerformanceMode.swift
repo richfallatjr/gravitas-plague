@@ -37,6 +37,10 @@ public enum TuringQwenNativePerformanceMode: String, Sendable, Equatable {
         runtimeOptions.enablePreciseAttentionSoftmax
     }
 
+    var shouldUseFastGroupedQueryAttention: Bool {
+        runtimeOptions.enableFastGroupedQueryAttention
+    }
+
     var rowCheckpointStride: Int {
         runtimeOptions.rowCheckpointInterval
     }
@@ -60,6 +64,7 @@ public struct TuringQwenNativeRuntimeOptions: Sendable, Equatable {
     public let enableForcedIntermediateEval: Bool
     public let enablePerRowCacheClear: Bool
     public let enablePreciseAttentionSoftmax: Bool
+    public let enableFastGroupedQueryAttention: Bool
     public let mlxCacheLimitBytes: Int
 
     public static let performance = TuringQwenNativeRuntimeOptions(
@@ -71,6 +76,7 @@ public struct TuringQwenNativeRuntimeOptions: Sendable, Equatable {
         enableForcedIntermediateEval: false,
         enablePerRowCacheClear: false,
         enablePreciseAttentionSoftmax: false,
+        enableFastGroupedQueryAttention: true,
         mlxCacheLimitBytes: 512 * 1024 * 1024
     )
 
@@ -83,6 +89,7 @@ public struct TuringQwenNativeRuntimeOptions: Sendable, Equatable {
         enableForcedIntermediateEval: true,
         enablePerRowCacheClear: true,
         enablePreciseAttentionSoftmax: true,
+        enableFastGroupedQueryAttention: false,
         mlxCacheLimitBytes: 64 * 1024 * 1024
     )
 }

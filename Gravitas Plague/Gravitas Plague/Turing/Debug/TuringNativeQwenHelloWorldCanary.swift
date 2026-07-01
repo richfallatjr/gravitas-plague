@@ -346,6 +346,7 @@ enum TuringNativeQwenHelloWorldCanary {
         [TuringQwenNativeBaseClone] segment render started
           segmentIndex: \(segmentIndex)
           textUTF16: \(segment.utf16.count)
+          maxNewRows: \(preset.maxNewTokens(for: segment))
           cloneProfileLoaded: true
           profileKind: \(cloneProfile.profileKind)
           cloneArtifactsRequired: true

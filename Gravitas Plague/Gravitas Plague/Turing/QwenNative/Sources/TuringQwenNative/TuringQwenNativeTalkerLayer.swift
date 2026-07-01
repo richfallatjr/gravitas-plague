@@ -257,6 +257,7 @@ enum TuringQwenNativeTalkerForwardRunner {
         weightsStore: TuringQwenNativeWeightsStore,
         resolvedWeights: TuringQwenNativeTalkerResolvedWeights? = nil,
         codePredictorWeights: TuringQwenNativeCodePredictorResolvedWeights? = nil,
+        segmentCache: TuringQwenNativeSegmentRuntimeCache? = nil,
         performanceMode: TuringQwenNativePerformanceMode = .diagnostic
     ) throws -> TuringQwenNativeGeneratedStepOutput {
         let stepStart = Date()
@@ -289,11 +290,12 @@ enum TuringQwenNativeTalkerForwardRunner {
         var hidden = inputEmbedding
         var nextCacheLayers: [TuringQwenNativeKVCache.Layer] = []
         nextCacheLayers.reserveCapacity(config.talkerConfig.numHiddenLayers)
-        let oneStepRope = rotaryEmbeddings(
-            positions: [previousState.position],
-            headDim: config.talkerConfig.headDim,
-            theta: config.talkerConfig.ropeTheta
-        )
+        let oneStepRope = segmentCache?.talkerRope(position: previousState.position) ??
+            rotaryEmbeddings(
+                positions: [previousState.position],
+                headDim: config.talkerConfig.headDim,
+                theta: config.talkerConfig.ropeTheta
+            )
 
         for layerIndex in 0..<config.talkerConfig.numHiddenLayers {
             let layerResult = try runDecoderLayerOneStep(
@@ -344,6 +346,7 @@ enum TuringQwenNativeTalkerForwardRunner {
             weightsStore: weightsStore,
             expectedFixtureRowIndex: nil,
             resolvedWeights: codePredictorWeights,
+            segmentCache: segmentCache,
             performanceMode: performanceMode
         )
         let codePredictorSeconds = Date().timeIntervalSince(codePredictorStart)
@@ -592,25 +595,38 @@ enum TuringQwenNativeTalkerForwardRunner {
             layerIndex: layerIndex,
             performanceMode: performanceMode
         )
-        let repeatedKeyStates = repeatKeyValueHeads(
-            updatedCacheLayer.activeKeys,
-            keyValueHeads: keyValueHeads,
-            attentionHeads: attentionHeads
-        )
-        let repeatedValueStates = repeatKeyValueHeads(
-            updatedCacheLayer.activeValues,
-            keyValueHeads: keyValueHeads,
-            attentionHeads: attentionHeads
-        )
 
         let scale = Float(1.0 / sqrt(Double(headDim)))
-        let scores = matmul(queryStates, repeatedKeyStates.transposed(0, 1, 3, 2)) * scale
-        let probabilities = softmax(
-            scores,
-            axis: -1,
-            precise: performanceMode.shouldUsePreciseAttentionSoftmax
-        )
-        let attended = matmul(probabilities, repeatedValueStates)
+        let attendedHeads: MLXArray
+        if performanceMode.shouldUseFastGroupedQueryAttention {
+            attendedHeads = MLXFast.scaledDotProductAttention(
+                queries: queryStates,
+                keys: updatedCacheLayer.activeKeys,
+                values: updatedCacheLayer.activeValues,
+                scale: scale,
+                mask: .none
+            )
+        } else {
+            let repeatedKeyStates = repeatKeyValueHeads(
+                updatedCacheLayer.activeKeys,
+                keyValueHeads: keyValueHeads,
+                attentionHeads: attentionHeads
+            )
+            let repeatedValueStates = repeatKeyValueHeads(
+                updatedCacheLayer.activeValues,
+                keyValueHeads: keyValueHeads,
+                attentionHeads: attentionHeads
+            )
+            let scores = matmul(queryStates, repeatedKeyStates.transposed(0, 1, 3, 2)) * scale
+            let probabilities = softmax(
+                scores,
+                axis: -1,
+                precise: performanceMode.shouldUsePreciseAttentionSoftmax
+            )
+            attendedHeads = matmul(probabilities, repeatedValueStates)
+        }
+
+        let attended = attendedHeads
             .transposed(0, 2, 1, 3)
             .reshaped([1, 1, hiddenSize])
 

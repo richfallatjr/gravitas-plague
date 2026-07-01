@@ -186,6 +186,7 @@ enum TuringQwenNativeCodePredictor {
         weightsStore: TuringQwenNativeWeightsStore,
         expectedFixtureRowIndex: Int? = nil,
         resolvedWeights: TuringQwenNativeCodePredictorResolvedWeights? = nil,
+        segmentCache: TuringQwenNativeSegmentRuntimeCache? = nil,
         performanceMode: TuringQwenNativePerformanceMode = .diagnostic
     ) throws -> TuringQwenNativeFirstCodeGroup {
         try generateCodeGroupCached(
@@ -195,6 +196,7 @@ enum TuringQwenNativeCodePredictor {
             weightsStore: weightsStore,
             expectedFixtureRowIndex: expectedFixtureRowIndex,
             resolvedWeights: resolvedWeights,
+            segmentCache: segmentCache,
             performanceMode: performanceMode
         )
     }
@@ -206,6 +208,7 @@ enum TuringQwenNativeCodePredictor {
         weightsStore: TuringQwenNativeWeightsStore,
         expectedFixtureRowIndex: Int? = nil,
         resolvedWeights: TuringQwenNativeCodePredictorResolvedWeights? = nil,
+        segmentCache: TuringQwenNativeSegmentRuntimeCache? = nil,
         performanceMode: TuringQwenNativePerformanceMode
     ) throws -> TuringQwenNativeFirstCodeGroup {
         let resolved = try resolvedWeights ?? TuringQwenNativeCodePredictorResolvedWeights(
@@ -254,6 +257,7 @@ enum TuringQwenNativeCodePredictor {
             config: config,
             weights: weightsStore,
             resolvedWeights: resolved,
+            segmentCache: segmentCache,
             performanceMode: performanceMode
         )
 
@@ -285,6 +289,7 @@ enum TuringQwenNativeCodePredictor {
                 config: config,
                 weights: weightsStore,
                 resolvedWeights: resolved,
+                segmentCache: segmentCache,
                 performanceMode: performanceMode
             )
             state = step.state
