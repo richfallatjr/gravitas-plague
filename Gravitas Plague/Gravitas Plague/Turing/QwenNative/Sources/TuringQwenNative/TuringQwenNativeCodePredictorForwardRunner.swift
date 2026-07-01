@@ -303,6 +303,11 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         var hidden = inputEmbedding
         var nextCacheLayers: [TuringQwenNativeCodePredictorKVCache.Layer] = []
         nextCacheLayers.reserveCapacity(resolvedConfig.numHiddenLayers)
+        let oneStepRope = rotaryEmbeddings(
+            positions: [previousState.position],
+            headDim: resolvedConfig.headDim,
+            theta: resolvedConfig.ropeTheta
+        )
 
         for layerIndex in 0..<resolvedConfig.numHiddenLayers {
             let result = try runDecoderLayerOneStep(
@@ -312,6 +317,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
                 config: resolvedConfig,
                 layerIndex: layerIndex,
                 position: previousState.position,
+                rope: oneStepRope,
                 performanceMode: performanceMode
             )
             hidden = result.hiddenStates
@@ -390,6 +396,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         config: TuringQwenNativeCodePredictorResolvedConfig,
         layerIndex: Int,
         position: Int,
+        rope: (cos: MLXArray, sin: MLXArray),
         performanceMode: TuringQwenNativePerformanceMode
     ) throws -> TuringQwenNativeCodePredictorLayerForwardResult {
         let residual = hiddenStates
@@ -405,6 +412,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
             config: config,
             layerIndex: layerIndex,
             position: position,
+            rope: rope,
             performanceMode: performanceMode
         )
         let afterAttention = residual + attentionResult.hiddenStates
@@ -476,7 +484,11 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         let scale = Float(1.0 / sqrt(Double(config.headDim)))
         let attentionMask = causalMask(sequenceLength: sequenceLength)
         let scores = matmul(queryStates, keyStates.transposed(0, 1, 3, 2)) * scale + attentionMask
-        let probabilities = softmax(scores, axis: -1, precise: true)
+        let probabilities = softmax(
+            scores,
+            axis: -1,
+            precise: performanceMode.shouldUsePreciseAttentionSoftmax
+        )
         let attended = matmul(probabilities, valueStates)
             .transposed(0, 2, 1, 3)
             .reshaped([1, sequenceLength, config.attentionOutputSize])
@@ -494,6 +506,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         config: TuringQwenNativeCodePredictorResolvedConfig,
         layerIndex: Int,
         position: Int,
+        rope: (cos: MLXArray, sin: MLXArray),
         performanceMode: TuringQwenNativePerformanceMode
     ) throws -> TuringQwenNativeCodePredictorLayerForwardResult {
         let query = linear(hiddenStates, weight: weights.qProjWeight)
@@ -514,11 +527,6 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         ).transposed(0, 2, 1, 3)
         let valueStates = value.transposed(0, 2, 1, 3)
 
-        let rope = rotaryEmbeddings(
-            positions: [position],
-            headDim: config.headDim,
-            theta: config.ropeTheta
-        )
         queryStates = applyRotary(queryStates, cos: rope.cos, sin: rope.sin)
         keyStates = applyRotary(keyStates, cos: rope.cos, sin: rope.sin)
 
@@ -542,7 +550,11 @@ enum TuringQwenNativeCodePredictorForwardRunner {
 
         let scale = Float(1.0 / sqrt(Double(config.headDim)))
         let scores = matmul(queryStates, repeatedKeyStates.transposed(0, 1, 3, 2)) * scale
-        let probabilities = softmax(scores, axis: -1, precise: true)
+        let probabilities = softmax(
+            scores,
+            axis: -1,
+            precise: performanceMode.shouldUsePreciseAttentionSoftmax
+        )
         let attended = matmul(probabilities, repeatedValueStates)
             .transposed(0, 2, 1, 3)
             .reshaped([1, 1, config.attentionOutputSize])

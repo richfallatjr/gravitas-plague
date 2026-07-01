@@ -58,6 +58,7 @@ public actor TuringQwenNativeBaseCloneEngine {
     private let weightBackend: TuringQwenNativeWeightBackend
     private let config: TuringQwenNativeConfig
     private var residentWeights: ResidentWeights?
+    private var staticPromptContexts: [StaticPromptContextKey: TuringQwenNativeBaseCloneStaticPromptContext] = [:]
 
     public init(
         modelRoot: URL,
@@ -217,23 +218,31 @@ public actor TuringQwenNativeBaseCloneEngine {
         defer {
             residentWeights = nil
             TuringQwenNativeMemoryControl.clearCache(
-                label: "baseClone.afterCodebookBeforeDecode"
+                label: "baseClone.afterCodebookBeforeDecode",
+                shouldLogSnapshot: prompt.performanceMode.shouldLogMemorySnapshots
             )
-            print("""
-            [TuringQwenNativeBaseClone] resident talker state released before decode
-              reason: codebookRowsReady
-              residentWeights: false
-            """)
+            if prompt.performanceMode.shouldLogMemorySnapshots {
+                print("""
+                [TuringQwenNativeBaseClone] resident talker state released before decode
+                  reason: codebookRowsReady
+                  residentWeights: false
+                """)
+            }
         }
 
         let promptStart = Date()
         let prepared = try prepareBaseClonePrompt(prompt)
         let resident = try loadResidentWeights()
+        let staticPromptContext = try cachedStaticPromptContext(
+            prompt: prompt,
+            prepared: prepared.prompt,
+            resident: resident
+        )
         let promptInputs = try TuringQwenNativeBaseClonePromptInputBuilder.build(
             prepared: prepared.prompt,
             config: config,
             weightsStore: resident.weightsStore,
-            codePredictorWeights: resident.codePredictorWeights
+            staticContext: staticPromptContext
         )
         let initialPromptSeconds = Date().timeIntervalSince(promptStart)
 
@@ -324,15 +333,14 @@ public actor TuringQwenNativeBaseCloneEngine {
             performanceMode: prompt.performanceMode,
             resident: resident
         )
-        let generatedRows = dynamicCodebook.rows
-        guard generatedRows.isEmpty == false else {
+        guard dynamicCodebook.rows.isEmpty == false else {
             throw TuringQwenNativeError.invalidConfig(
                 "Base clone generated no codec rows before EOS."
             )
         }
 
         return GeneratedCodebookForDecode(
-            generatedRows: generatedRows,
+            generatedRows: dynamicCodebook.rows.map(\.tokenIDs),
             referenceRows: prepared.prompt.referenceCodes.map { row in
                 row.map(Int.init)
             },
@@ -377,16 +385,22 @@ public actor TuringQwenNativeBaseCloneEngine {
         return prepared.report
     }
 
-    public func releaseResidentState(reason: String) {
+    public func releaseResidentState(
+        reason: String,
+        logMemorySnapshot: Bool = true
+    ) {
         residentWeights = nil
         TuringQwenNativeMemoryControl.clearCache(
-            label: "baseClone.releaseResidentState.\(reason)"
+            label: "baseClone.releaseResidentState.\(reason)",
+            shouldLogSnapshot: logMemorySnapshot
         )
-        print("""
-        [TuringQwenNativeBaseClone] resident state released
-          reason: \(reason)
-          residentWeights: false
-        """)
+        if logMemorySnapshot {
+            print("""
+            [TuringQwenNativeBaseClone] resident state released
+              reason: \(reason)
+              residentWeights: false
+            """)
+        }
     }
 
     private func prepareBaseClonePrompt(
@@ -438,7 +452,7 @@ public actor TuringQwenNativeBaseCloneEngine {
     }
 
     private struct DynamicCodebookResult: Sendable {
-        let rows: [[Int]]
+        let rows: [TuringQwenNativeFirstCodeGroup]
         let talkerOneStepTotalSeconds: Double
         let codePredictorTotalSeconds: Double
     }
@@ -456,6 +470,14 @@ public actor TuringQwenNativeBaseCloneEngine {
         let weightsStore: TuringQwenNativeWeightsStore
         let talkerWeights: TuringQwenNativeTalkerResolvedWeights
         let codePredictorWeights: TuringQwenNativeCodePredictorResolvedWeights
+    }
+
+    private struct StaticPromptContextKey: Hashable {
+        let voiceID: String
+        let variantID: String
+        let language: String
+        let referenceRowLimit: Int?
+        let referenceWindowStrategy: TuringQwenNativeReferenceWindowStrategy
     }
 
     private func loadResidentWeights() throws -> ResidentWeights {
@@ -488,6 +510,51 @@ public actor TuringQwenNativeBaseCloneEngine {
         return loaded
     }
 
+    private func cachedStaticPromptContext(
+        prompt: TuringQwenNativeBaseClonePrompt,
+        prepared: TuringQwenNativePreparedBaseClonePrompt,
+        resident: ResidentWeights
+    ) throws -> TuringQwenNativeBaseCloneStaticPromptContext {
+        let key = StaticPromptContextKey(
+            voiceID: prompt.cloneProfile.voiceID,
+            variantID: prompt.cloneProfile.defaultVariantID,
+            language: prompt.language.lowercased(),
+            referenceRowLimit: prompt.referenceRowLimit,
+            referenceWindowStrategy: prompt.referenceWindowStrategy
+        )
+
+        if let cached = staticPromptContexts[key] {
+            print("""
+            [TuringQwenNativeBaseClone] static clone prompt cache hit
+              voiceID: \(key.voiceID)
+              variantID: \(key.variantID)
+              referenceRows: \(cached.referenceRowCount)
+              refTextBodyTokens: \(cached.refTextTokenCount)
+            """)
+            return cached
+        }
+
+        let buildStart = Date()
+        let built = try TuringQwenNativeBaseClonePromptInputBuilder.makeStaticContext(
+            prepared: prepared,
+            config: config,
+            weightsStore: resident.weightsStore,
+            codePredictorWeights: resident.codePredictorWeights
+        )
+        staticPromptContexts[key] = built
+
+        print("""
+        [TuringQwenNativeBaseClone] static clone prompt cache built
+          voiceID: \(key.voiceID)
+          variantID: \(key.variantID)
+          referenceRows: \(built.referenceRowCount)
+          refTextBodyTokens: \(built.refTextTokenCount)
+          seconds: \(String(format: "%.3f", Date().timeIntervalSince(buildStart)))
+        """)
+
+        return built
+    }
+
     private func generateDynamicCodebook(
         initialFirstCodecToken: Int,
         initialTalkerLastHiddenState: MLXArray,
@@ -499,7 +566,7 @@ public actor TuringQwenNativeBaseCloneEngine {
     ) throws -> DynamicCodebookResult {
         let targetRowCount = max(maxNewRows, 1)
         let generationStart = Date()
-        var generatedRows: [[Int]] = []
+        var generatedRows: [TuringQwenNativeFirstCodeGroup] = []
         var talkerOneStepTotalSeconds: Double = 0
         var codePredictorTotalSeconds: Double = 0
         var generationState = initialGenerationState(
@@ -529,13 +596,13 @@ public actor TuringQwenNativeBaseCloneEngine {
         logGeneratedRow(
             rowIndex: 0,
             firstCodecToken: initialFirstCodecToken,
-            tokenIDs: firstCodeGroup.tokenIDs,
+            tokenIDs: performanceMode.shouldLogFullTokenRows ? firstCodeGroup.tokenIDs : [],
             generationStart: generationStart,
             performanceMode: performanceMode
         )
 
-        if let stopReason = shouldStopAfterCodeGroup(
-            firstCodeGroup.tokenIDs,
+        if let stopReason = shouldStopAfterFirstCodecToken(
+            initialFirstCodecToken,
             step: 0,
             maxNewRows: targetRowCount
         ) {
@@ -554,7 +621,7 @@ public actor TuringQwenNativeBaseCloneEngine {
             }
         }
 
-        generatedRows.append(firstCodeGroup.tokenIDs)
+        generatedRows.append(firstCodeGroup)
 
         while generatedRows.count < targetRowCount {
             let rowIndex = generatedRows.count
@@ -580,13 +647,13 @@ public actor TuringQwenNativeBaseCloneEngine {
             logGeneratedRow(
                 rowIndex: rowIndex,
                 firstCodecToken: nextStep.firstCodecToken,
-                tokenIDs: nextStep.codeGroup,
+                tokenIDs: performanceMode.shouldLogFullTokenRows ? nextStep.codeGroup.tokenIDs : [],
                 generationStart: generationStart,
                 performanceMode: performanceMode
             )
 
-            if let stopReason = shouldStopAfterCodeGroup(
-                nextStep.codeGroup,
+            if let stopReason = shouldStopAfterFirstCodecToken(
+                nextStep.firstCodecToken,
                 step: rowIndex,
                 maxNewRows: targetRowCount
             ) {
@@ -622,24 +689,18 @@ public actor TuringQwenNativeBaseCloneEngine {
         promptInputs: TuringQwenNativeTalkerPromptInputs,
         kvCache: TuringQwenNativeKVCache
     ) -> TuringQwenNativeTalkerGenerationState {
-        let mask = MLXArray(
-            int64: Array(repeating: 1, count: promptInputs.sequenceLength),
-            [1, promptInputs.sequenceLength]
-        )
-
         return TuringQwenNativeTalkerGenerationState(
             kvCache: kvCache,
-            position: promptInputs.sequenceLength,
-            attentionMask: mask
+            position: promptInputs.sequenceLength
         )
     }
 
-    private func shouldStopAfterCodeGroup(
-        _ codeGroup: [Int],
+    private func shouldStopAfterFirstCodecToken(
+        _ firstCodecToken: Int,
         step: Int,
         maxNewRows: Int
     ) -> TuringQwenNativeStopReason? {
-        if codeGroup.first == config.talkerConfig.codecEosTokenID {
+        if firstCodecToken == config.talkerConfig.codecEosTokenID {
             return .eos
         }
 
@@ -651,14 +712,14 @@ public actor TuringQwenNativeBaseCloneEngine {
     }
 
     private func nextTalkerInputEmbedding(
-        codeGroup: [Int],
+        codeGroup: TuringQwenNativeFirstCodeGroup,
         generationStep: Int,
         promptInputs: TuringQwenNativeTalkerPromptInputs,
         resident: ResidentWeights,
         performanceMode: TuringQwenNativePerformanceMode
     ) throws -> MLXArray {
         let codeEmbedding = try TuringQwenNativeCodePredictor.talkerInputEmbedding(
-            forCodeGroup: codeGroup,
+            forCodeGroupTokenArray: codeGroup.tokenArray,
             config: config,
             resolvedWeights: resident.codePredictorWeights
         )

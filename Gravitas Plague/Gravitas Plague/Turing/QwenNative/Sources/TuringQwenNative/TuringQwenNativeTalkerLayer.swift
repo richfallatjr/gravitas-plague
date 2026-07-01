@@ -59,7 +59,8 @@ enum TuringQwenNativeTalkerForwardRunner {
             config: config.talkerConfig,
             sequenceLength: promptInputs.sequenceLength,
             layerIndex: 0,
-            maxNewRows: maxNewRows
+            maxNewRows: maxNewRows,
+            performanceMode: .diagnostic
         )
         let hidden = layerResult.hiddenStates
         eval(hidden)
@@ -144,7 +145,8 @@ enum TuringQwenNativeTalkerForwardRunner {
                 config: config.talkerConfig,
                 sequenceLength: sequenceLength,
                 layerIndex: layerIndex,
-                maxNewRows: maxNewRows
+                maxNewRows: maxNewRows,
+                performanceMode: performanceMode
             )
             hidden = layerResult.hiddenStates
             cacheLayers.append(layerResult.cacheLayer)
@@ -287,6 +289,11 @@ enum TuringQwenNativeTalkerForwardRunner {
         var hidden = inputEmbedding
         var nextCacheLayers: [TuringQwenNativeKVCache.Layer] = []
         nextCacheLayers.reserveCapacity(config.talkerConfig.numHiddenLayers)
+        let oneStepRope = rotaryEmbeddings(
+            positions: [previousState.position],
+            headDim: config.talkerConfig.headDim,
+            theta: config.talkerConfig.ropeTheta
+        )
 
         for layerIndex in 0..<config.talkerConfig.numHiddenLayers {
             let layerResult = try runDecoderLayerOneStep(
@@ -296,6 +303,7 @@ enum TuringQwenNativeTalkerForwardRunner {
                 config: config.talkerConfig,
                 layerIndex: layerIndex,
                 position: previousState.position,
+                rope: oneStepRope,
                 performanceMode: performanceMode
             )
             hidden = layerResult.hiddenStates
@@ -340,18 +348,13 @@ enum TuringQwenNativeTalkerForwardRunner {
         )
         let codePredictorSeconds = Date().timeIntervalSince(codePredictorStart)
         let nextPosition = previousState.position + 1
-        let attentionMask = MLXArray(
-            int64: Array(repeating: 1, count: nextPosition),
-            [1, nextPosition]
-        )
         let nextState = TuringQwenNativeTalkerGenerationState(
             kvCache: TuringQwenNativeKVCache(
                 layers: nextCacheLayers,
                 usesMaterializedLayerState: true,
                 maxNewRows: previousState.kvCache.maxNewRows
             ),
-            position: nextPosition,
-            attentionMask: attentionMask
+            position: nextPosition
         )
 
         if performanceMode.shouldLogFullTokenRows {
@@ -374,7 +377,7 @@ enum TuringQwenNativeTalkerForwardRunner {
         return TuringQwenNativeGeneratedStepOutput(
             step: nextPosition,
             firstCodecToken: firstCodecToken,
-            codeGroup: codeGroup.tokenIDs,
+            codeGroup: codeGroup,
             talkerLastHiddenState: finalLastHiddenState,
             talkerStepSeconds: max(0, totalStepSeconds - codePredictorSeconds),
             codePredictorSeconds: codePredictorSeconds,
@@ -389,7 +392,8 @@ enum TuringQwenNativeTalkerForwardRunner {
         config: TuringQwenNativeConfig.TalkerConfig,
         sequenceLength: Int,
         layerIndex: Int,
-        maxNewRows: Int
+        maxNewRows: Int,
+        performanceMode: TuringQwenNativePerformanceMode
     ) throws -> TuringQwenNativeTalkerLayerForwardResult {
         let residual = hiddenStates
         let normalized = rmsNorm(
@@ -404,7 +408,8 @@ enum TuringQwenNativeTalkerForwardRunner {
             config: config,
             sequenceLength: sequenceLength,
             layerIndex: layerIndex,
-            maxNewRows: maxNewRows
+            maxNewRows: maxNewRows,
+            performanceMode: performanceMode
         )
         let afterAttention = residual + attentionResult.hiddenStates
 
@@ -429,6 +434,7 @@ enum TuringQwenNativeTalkerForwardRunner {
         config: TuringQwenNativeConfig.TalkerConfig,
         layerIndex: Int,
         position: Int,
+        rope: (cos: MLXArray, sin: MLXArray),
         performanceMode: TuringQwenNativePerformanceMode
     ) throws -> TuringQwenNativeTalkerLayerForwardResult {
         let residual = hiddenStates
@@ -445,6 +451,7 @@ enum TuringQwenNativeTalkerForwardRunner {
             config: config,
             layerIndex: layerIndex,
             position: position,
+            rope: rope,
             performanceMode: performanceMode
         )
         let afterAttention = residual + attentionResult.hiddenStates
@@ -469,7 +476,8 @@ enum TuringQwenNativeTalkerForwardRunner {
         config: TuringQwenNativeConfig.TalkerConfig,
         sequenceLength: Int,
         layerIndex: Int,
-        maxNewRows: Int
+        maxNewRows: Int,
+        performanceMode: TuringQwenNativePerformanceMode
     ) throws -> TuringQwenNativeTalkerLayerForwardResult {
         let hiddenSize = config.hiddenSize
         let headDim = config.headDim
@@ -507,7 +515,8 @@ enum TuringQwenNativeTalkerForwardRunner {
             keyStates: keyStates,
             valueStates: valueStates,
             maxNewRows: maxNewRows,
-            layerIndex: layerIndex
+            layerIndex: layerIndex,
+            performanceMode: performanceMode
         )
 
         keyStates = repeatKeyValueHeads(
@@ -524,7 +533,11 @@ enum TuringQwenNativeTalkerForwardRunner {
         let scale = Float(1.0 / sqrt(Double(headDim)))
         let attentionMask = causalMask(sequenceLength: sequenceLength)
         let scores = matmul(queryStates, keyStates.transposed(0, 1, 3, 2)) * scale + attentionMask
-        let probabilities = softmax(scores, axis: -1, precise: true)
+        let probabilities = softmax(
+            scores,
+            axis: -1,
+            precise: performanceMode.shouldUsePreciseAttentionSoftmax
+        )
         let attended = matmul(probabilities, valueStates)
             .transposed(0, 2, 1, 3)
             .reshaped([1, sequenceLength, hiddenSize])
@@ -542,6 +555,7 @@ enum TuringQwenNativeTalkerForwardRunner {
         config: TuringQwenNativeConfig.TalkerConfig,
         layerIndex: Int,
         position: Int,
+        rope: (cos: MLXArray, sin: MLXArray),
         performanceMode: TuringQwenNativePerformanceMode
     ) throws -> TuringQwenNativeTalkerLayerForwardResult {
         let hiddenSize = config.hiddenSize
@@ -568,11 +582,6 @@ enum TuringQwenNativeTalkerForwardRunner {
         ).transposed(0, 2, 1, 3)
         let valueStates = value.transposed(0, 2, 1, 3)
 
-        let rope = rotaryEmbeddings(
-            positions: [position],
-            headDim: headDim,
-            theta: config.ropeTheta
-        )
         queryStates = applyRotary(queryStates, cos: rope.cos, sin: rope.sin)
         keyStates = applyRotary(keyStates, cos: rope.cos, sin: rope.sin)
 
@@ -596,7 +605,11 @@ enum TuringQwenNativeTalkerForwardRunner {
 
         let scale = Float(1.0 / sqrt(Double(headDim)))
         let scores = matmul(queryStates, repeatedKeyStates.transposed(0, 1, 3, 2)) * scale
-        let probabilities = softmax(scores, axis: -1, precise: true)
+        let probabilities = softmax(
+            scores,
+            axis: -1,
+            precise: performanceMode.shouldUsePreciseAttentionSoftmax
+        )
         let attended = matmul(probabilities, repeatedValueStates)
             .transposed(0, 2, 1, 3)
             .reshaped([1, 1, hiddenSize])

@@ -569,13 +569,13 @@ public actor TuringQwenNativeVoiceDesignEngine {
             logGeneratedRow(
                 rowIndex: rowIndex,
                 firstCodecToken: nextStep.firstCodecToken,
-                tokenIDs: nextStep.codeGroup,
+                tokenIDs: nextStep.codeGroup.tokenIDs,
                 generationStart: generationStart,
                 performanceMode: performanceMode
             )
 
             if let stopReason = shouldStopAfterCodeGroup(
-                nextStep.codeGroup,
+                nextStep.codeGroup.tokenIDs,
                 step: rowIndex,
                 maxNewTokens: targetRowCount
             ) {
@@ -591,7 +591,7 @@ public actor TuringQwenNativeVoiceDesignEngine {
                 }
             }
 
-            generatedRows.append(nextStep.codeGroup)
+            generatedRows.append(nextStep.codeGroup.tokenIDs)
             if performanceMode.shouldWriteRowBudgetEveryRow {
                 rowBudgetRecorder.completedRows(generatedRows.count)
             }
@@ -666,15 +666,9 @@ public actor TuringQwenNativeVoiceDesignEngine {
         promptInputs: TuringQwenNativeTalkerPromptInputs,
         kvCache: TuringQwenNativeKVCache
     ) -> TuringQwenNativeTalkerGenerationState {
-        let mask = MLXArray(
-            int64: Array(repeating: 1, count: promptInputs.sequenceLength),
-            [1, promptInputs.sequenceLength]
-        )
-
         return TuringQwenNativeTalkerGenerationState(
             kvCache: kvCache,
-            position: promptInputs.sequenceLength,
-            attentionMask: mask
+            position: promptInputs.sequenceLength
         )
     }
 

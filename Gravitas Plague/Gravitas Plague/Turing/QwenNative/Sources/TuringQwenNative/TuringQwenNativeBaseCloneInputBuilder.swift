@@ -26,6 +26,17 @@ struct TuringQwenNativePreparedBaseClonePrompt: Sendable {
     }
 }
 
+struct TuringQwenNativeBaseCloneStaticPromptContext {
+    let roleEmbed: MLXArray
+    let tagAndSpeaker: MLXArray
+    let refTextEmbed: MLXArray
+    let ttsEosEmbed: MLXArray
+    let ttsPadEmbed: MLXArray
+    let referenceCodecEmbed: MLXArray
+    let referenceRowCount: Int
+    let refTextTokenCount: Int
+}
+
 enum TuringQwenNativeBaseCloneInputBuilder {
     static func build(
         request: TuringQwenNativeBaseClonePromptRequest,
@@ -174,12 +185,12 @@ enum TuringQwenNativeBaseCloneInputBuilder {
 }
 
 enum TuringQwenNativeBaseClonePromptInputBuilder {
-    static func build(
+    static func makeStaticContext(
         prepared: TuringQwenNativePreparedBaseClonePrompt,
         config: TuringQwenNativeConfig,
         weightsStore: TuringQwenNativeWeightsStore,
         codePredictorWeights: TuringQwenNativeCodePredictorResolvedWeights
-    ) throws -> TuringQwenNativeTalkerPromptInputs {
+    ) throws -> TuringQwenNativeBaseCloneStaticPromptContext {
         let weights = try BaseClonePromptWeights(
             config: config,
             weightsStore: weightsStore
@@ -189,12 +200,6 @@ enum TuringQwenNativeBaseClonePromptInputBuilder {
             start: 0,
             end: 3,
             label: "target assistant role IDs"
-        )
-        let targetBodyIDs = try slice(
-            prepared.targetInputIDs,
-            start: 3,
-            end: prepared.targetInputIDs.count - 5,
-            label: "target body IDs"
         )
         let refIDs = prepared.refTextTokens.map(Int.init)
         let refBodyIDs = try slice(
@@ -236,11 +241,7 @@ enum TuringQwenNativeBaseClonePromptInputBuilder {
         )
         let tagAndSpeaker = concatenated([padPrefix, ttsBosEmbed], axis: 1)
             + codecPrompt[0..<(codecPrompt.dim(1) - 1), axis: 1]
-
-        let refAndTargetTextEmbed = try weights.projectTextEmbedding(
-            ids: refBodyIDs + targetBodyIDs
-        )
-        let textWithEos = concatenated([refAndTargetTextEmbed, ttsEosEmbed], axis: 1)
+        let refTextEmbed = try weights.projectTextEmbedding(ids: refBodyIDs)
 
         let referenceCodeEmbeds = try prepared.referenceCodes.map { row -> MLXArray in
             try TuringQwenNativeCodePredictor.talkerInputEmbedding(
@@ -256,8 +257,53 @@ enum TuringQwenNativeBaseClonePromptInputBuilder {
             axis: 1
         )
 
+        eval(
+            roleEmbed,
+            tagAndSpeaker,
+            refTextEmbed,
+            ttsEosEmbed,
+            ttsPadEmbed,
+            referenceCodecEmbed
+        )
+
+        return TuringQwenNativeBaseCloneStaticPromptContext(
+            roleEmbed: roleEmbed,
+            tagAndSpeaker: tagAndSpeaker,
+            refTextEmbed: refTextEmbed,
+            ttsEosEmbed: ttsEosEmbed,
+            ttsPadEmbed: ttsPadEmbed,
+            referenceCodecEmbed: referenceCodecEmbed,
+            referenceRowCount: prepared.referenceCodes.count,
+            refTextTokenCount: refBodyIDs.count
+        )
+    }
+
+    static func build(
+        prepared: TuringQwenNativePreparedBaseClonePrompt,
+        config: TuringQwenNativeConfig,
+        weightsStore: TuringQwenNativeWeightsStore,
+        staticContext: TuringQwenNativeBaseCloneStaticPromptContext
+    ) throws -> TuringQwenNativeTalkerPromptInputs {
+        let weights = try BaseClonePromptWeights(
+            config: config,
+            weightsStore: weightsStore
+        )
+        let targetBodyIDs = try slice(
+            prepared.targetInputIDs,
+            start: 3,
+            end: prepared.targetInputIDs.count - 5,
+            label: "target body IDs"
+        )
+        let targetTextEmbed = try weights.projectTextEmbedding(ids: targetBodyIDs)
+        let textWithEos = concatenated([
+            staticContext.refTextEmbed,
+            targetTextEmbed,
+            staticContext.ttsEosEmbed
+        ], axis: 1)
+
         let iclEmbed: MLXArray
         let trailingTextHidden: MLXArray
+        let referenceCodecEmbed = staticContext.referenceCodecEmbed
         if textWithEos.dim(1) > referenceCodecEmbed.dim(1) {
             iclEmbed = textWithEos[0..<referenceCodecEmbed.dim(1), axis: 1]
                 + referenceCodecEmbed
@@ -270,16 +316,16 @@ enum TuringQwenNativeBaseClonePromptInputBuilder {
             let paddedText = padCount > 0
                 ? concatenated([
                     textWithEos,
-                    repeatSequence(ttsPadEmbed, count: padCount)
+                    repeatSequence(staticContext.ttsPadEmbed, count: padCount)
                 ], axis: 1)
                 : textWithEos
             iclEmbed = paddedText + referenceCodecEmbed
-            trailingTextHidden = ttsPadEmbed
+            trailingTextHidden = staticContext.ttsPadEmbed
         }
 
         let inputsEmbeds = concatenated([
-            roleEmbed,
-            tagAndSpeaker,
+            staticContext.roleEmbed,
+            staticContext.tagAndSpeaker,
             iclEmbed
         ], axis: 1)
         let sequenceLength = inputsEmbeds.dim(1)
@@ -288,13 +334,13 @@ enum TuringQwenNativeBaseClonePromptInputBuilder {
             [1, sequenceLength]
         )
 
-        eval(inputsEmbeds, attentionMask, trailingTextHidden, ttsPadEmbed)
+        eval(inputsEmbeds, attentionMask, trailingTextHidden, staticContext.ttsPadEmbed)
 
         return TuringQwenNativeTalkerPromptInputs(
             inputsEmbeds: inputsEmbeds,
             attentionMask: attentionMask,
             trailingTextHidden: trailingTextHidden,
-            ttsPadEmbed: ttsPadEmbed,
+            ttsPadEmbed: staticContext.ttsPadEmbed,
             sequenceLength: sequenceLength,
             hiddenSize: config.talkerConfig.hiddenSize
         )

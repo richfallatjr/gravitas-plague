@@ -24,13 +24,12 @@ public struct TuringQwenNativeCodebookSequence: Sendable {
 struct TuringQwenNativeTalkerGenerationState {
     let kvCache: TuringQwenNativeKVCache
     let position: Int
-    let attentionMask: MLXArray
 }
 
 struct TuringQwenNativeGeneratedStepOutput {
     let step: Int
     let firstCodecToken: Int
-    let codeGroup: [Int]
+    let codeGroup: TuringQwenNativeFirstCodeGroup
     let talkerLastHiddenState: MLXArray
     let talkerStepSeconds: Double
     let codePredictorSeconds: Double

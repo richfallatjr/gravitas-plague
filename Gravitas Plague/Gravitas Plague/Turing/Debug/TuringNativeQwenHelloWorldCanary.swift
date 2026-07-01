@@ -23,6 +23,7 @@ enum TuringNativeQwenHelloWorldCanary {
     private static let activeQuantization = "4bit"
     private static let activeRuntimeMode = "baseClone"
     private static let activeWeightBackend = "mlx4bit"
+    private static let memoryDiagnosticsEnvKey = "TURING_QWEN_MEMORY_DIAGNOSTICS"
 
     static func run(
         preset: TuringNativeQwenVoiceDesignCanaryPreset = .bigMikeShortDynamic
@@ -56,19 +57,19 @@ enum TuringNativeQwenHelloWorldCanary {
             let modelRoot = try locateBundledBaseCloneModel()
             let cloneProfile = try loadBundledBigMikeCloneProfile()
 
-            TuringMemoryBudgetProbe.log(
+            logMemoryBudgetIfEnabled(
                 label: "beforeQwenStage",
                 activeQwenModelID: activeModelID,
                 quantization: activeQuantization
             )
             let stagedRoot = try stageWritableModel(from: modelRoot)
-            TuringMemoryBudgetProbe.log(
+            logMemoryBudgetIfEnabled(
                 label: "afterQwenStage",
                 activeQwenModelID: activeModelID,
                 quantization: activeQuantization
             )
 
-            TuringMemoryBudgetProbe.log(
+            logMemoryBudgetIfEnabled(
                 label: "beforeQwenLoad",
                 activeQwenModelID: activeModelID,
                 quantization: activeQuantization
@@ -78,13 +79,13 @@ enum TuringNativeQwenHelloWorldCanary {
                 trace: .stdout(prefix: "[TuringQwenNativeBaseClone]")
             )
             engine = loadedEngine
-            TuringMemoryBudgetProbe.log(
+            logMemoryBudgetIfEnabled(
                 label: "afterQwenLoad",
                 activeQwenModelID: activeModelID,
                 quantization: activeQuantization
             )
 
-            TuringMemoryBudgetProbe.log(
+            logMemoryBudgetIfEnabled(
                 label: "beforeQwenGenerate",
                 activeQwenModelID: activeModelID,
                 quantization: activeQuantization
@@ -112,28 +113,30 @@ enum TuringNativeQwenHelloWorldCanary {
             }
 
             await loadedEngine.releaseResidentState(
-                reason: "episodePickerRunFinished.\(preset.rawValue)"
+                reason: "episodePickerRunFinished.\(preset.rawValue)",
+                logMemorySnapshot: shouldLogMemoryDiagnostics
             )
             engine = nil
 
-            TuringMemoryBudgetProbe.log(
+            logMemoryBudgetIfEnabled(
                 label: "afterQwenGenerate",
                 activeQwenModelID: activeModelID,
                 quantization: activeQuantization
             )
-            TuringMemoryBudgetProbe.log(label: "afterTransientCleanup")
-            TuringMemoryBudgetProbe.log(label: "afterQwenUnload")
+            logMemoryBudgetIfEnabled(label: "afterTransientCleanup")
+            logMemoryBudgetIfEnabled(label: "afterQwenUnload")
 
             print("[TuringQwenNativeBaseClone] playback finished")
             return .succeeded("Finished \(preset.rawValue)")
         } catch {
             if let engine {
                 await engine.releaseResidentState(
-                    reason: "episodePickerRunFailed.\(preset.rawValue)"
+                    reason: "episodePickerRunFailed.\(preset.rawValue)",
+                    logMemorySnapshot: shouldLogMemoryDiagnostics
                 )
             }
-            TuringMemoryBudgetProbe.log(label: "afterTransientCleanup")
-            TuringMemoryBudgetProbe.log(label: "afterQwenUnload")
+            logMemoryBudgetIfEnabled(label: "afterTransientCleanup")
+            logMemoryBudgetIfEnabled(label: "afterQwenUnload")
 
             print("""
             [TuringQwenNativeBaseClone] failed
@@ -141,6 +144,27 @@ enum TuringNativeQwenHelloWorldCanary {
             """)
             return .failed(error.localizedDescription)
         }
+    }
+
+    private static var shouldLogMemoryDiagnostics: Bool {
+        let value = ProcessInfo.processInfo.environment[memoryDiagnosticsEnvKey] ?? ""
+        return value == "1" || value.lowercased() == "true"
+    }
+
+    private static func logMemoryBudgetIfEnabled(
+        label: String,
+        activeQwenModelID: String? = nil,
+        quantization: String? = nil
+    ) {
+        guard shouldLogMemoryDiagnostics else {
+            return
+        }
+
+        TuringMemoryBudgetProbe.log(
+            label: label,
+            activeQwenModelID: activeQwenModelID,
+            quantization: quantization
+        )
     }
 
     static func runBaseCloneRuntimePreflight(

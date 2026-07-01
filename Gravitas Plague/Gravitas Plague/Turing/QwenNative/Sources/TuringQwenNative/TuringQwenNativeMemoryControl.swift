@@ -27,9 +27,14 @@ enum TuringQwenNativeMemoryControl {
         """)
     }
 
-    static func clearCache(label: String) {
+    static func clearCache(
+        label: String,
+        shouldLogSnapshot: Bool = true
+    ) {
         Memory.clearCache()
-        logSnapshot(label: label)
+        if shouldLogSnapshot {
+            logSnapshot(label: label)
+        }
     }
 
     static func logSnapshot(label: String) {

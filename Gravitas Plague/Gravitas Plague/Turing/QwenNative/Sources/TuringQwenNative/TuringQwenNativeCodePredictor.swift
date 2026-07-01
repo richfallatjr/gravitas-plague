@@ -1,9 +1,14 @@
 import Foundation
 import MLX
 
-struct TuringQwenNativeFirstCodeGroup: Sendable {
-    let tokenIDs: [Int]
+struct TuringQwenNativeFirstCodeGroup: @unchecked Sendable {
+    let tokenArray: MLXArray
+    let materializedTokenIDs: [Int]?
     let expectedFixtureTokenIDs: [Int]
+
+    var tokenIDs: [Int] {
+        materializedTokenIDs ?? tokenArray.asArray(Int.self)
+    }
 
     var matchesFixture: Bool {
         tokenIDs == expectedFixtureTokenIDs
@@ -286,13 +291,15 @@ enum TuringQwenNativeCodePredictor {
             logits = step.logits
         }
         let tokenArray = concatenated(tokenArrays, axis: 0)
-        let tokens = tokenArray.asArray(Int.self)
+        let shouldMaterializeTokens = performanceMode.shouldLogFullTokenRows ||
+            expectedFixtureRowIndex != nil
+        let tokens = shouldMaterializeTokens ? tokenArray.asArray(Int.self) : nil
 
         if performanceMode.shouldLogFullTokenRows {
             print("""
             [TuringQwenNative] code predictor group completed
               fixtureRowIndex: \(expectedFixtureRowIndex.map(String.init) ?? "none")
-              tokenCount: \(tokens.count)
+              tokenCount: \(tokens?.count ?? codePredictorConfig.numCodeGroups)
               seconds: \(String(format: "%.3f", Date().timeIntervalSince(start)))
               codePredictorKVCache: oneStep
               noCacheForwardCount: 0
@@ -301,16 +308,17 @@ enum TuringQwenNativeCodePredictor {
         } else {
             print("""
             [TuringQwenNativePerf] code predictor group completed
-              tokenCount: \(tokens.count)
+              tokenCount: \(codePredictorConfig.numCodeGroups)
               seconds: \(String(format: "%.3f", Date().timeIntervalSince(start)))
               codePredictorKVCache: oneStep
               noCacheForwardCount: 0
-              residualTokenSyncs: 1
+              residualTokenSyncs: 0
             """)
         }
 
         return TuringQwenNativeFirstCodeGroup(
-            tokenIDs: tokens,
+            tokenArray: tokenArray,
+            materializedTokenIDs: tokens,
             expectedFixtureTokenIDs: expectedFixtureTokens
         )
     }
@@ -368,6 +376,34 @@ enum TuringQwenNativeCodePredictor {
                 try resolvedWeights.codePredictorCodecEmbedding(
                     embeddingIndex: offset,
                     tokenID: tokenID
+                )
+            )
+        }
+
+        return concatenated(embeddings, axis: 1)
+            .sum(axis: 1, keepDims: true)
+    }
+
+    static func talkerInputEmbedding(
+        forCodeGroupTokenArray tokenArray: MLXArray,
+        config: TuringQwenNativeConfig,
+        resolvedWeights: TuringQwenNativeCodePredictorResolvedWeights
+    ) throws -> MLXArray {
+        guard tokenArray.size == config.talkerConfig.numCodeGroups else {
+            throw TuringQwenNativeError.invalidConfig(
+                "Expected \(config.talkerConfig.numCodeGroups) code group tokens, got token array shape \(tokenArray.shape)."
+            )
+        }
+
+        var embeddings: [MLXArray] = [
+            resolvedWeights.talkerCodecEmbedding(tokenIndex: tokenArray[0..<1])
+        ]
+
+        for offset in 0..<(config.talkerConfig.numCodeGroups - 1) {
+            embeddings.append(
+                try resolvedWeights.codePredictorCodecEmbedding(
+                    embeddingIndex: offset,
+                    tokenIndex: tokenArray[(offset + 1)..<(offset + 2)]
                 )
             )
         }
