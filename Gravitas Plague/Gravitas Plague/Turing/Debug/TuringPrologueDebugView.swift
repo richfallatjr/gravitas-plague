@@ -8,7 +8,7 @@ struct TuringPrologueDebugView: View {
     @State private var isRunningCanary = false
     @State private var isRunningSoak = false
     @State private var canaryPassed = false
-    @State private var audioPlayer: AVAudioPlayer?
+    @State private var audioPlayer: TuringPrologueDebugFilePlayer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -204,10 +204,9 @@ struct TuringPrologueDebugView: View {
     private func play(
         rendered: TuringRenderedSegment
     ) throws {
-        let player = try AVAudioPlayer(
-            contentsOf: rendered.fileURL
+        let player = try TuringPrologueDebugFilePlayer(
+            fileURL: rendered.fileURL
         )
-        player.prepareToPlay()
         player.play()
         audioPlayer = player
 
@@ -248,5 +247,42 @@ struct TuringPrologueDebugView: View {
                 """
             )
         }
+    }
+}
+
+@MainActor
+private final class TuringPrologueDebugFilePlayer {
+    private let engine = AVAudioEngine()
+    private let playerNode = AVAudioPlayerNode()
+
+    init(fileURL: URL) throws {
+        let file = try AVAudioFile(forReading: fileURL)
+        engine.attach(playerNode)
+        engine.connect(
+            playerNode,
+            to: engine.mainMixerNode,
+            format: file.processingFormat
+        )
+        try engine.start()
+        playerNode.scheduleFile(
+            file,
+            at: nil,
+            completionCallbackType: .dataPlayedBack
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.stop()
+            }
+        }
+    }
+
+    func play() {
+        if playerNode.isPlaying == false {
+            playerNode.play()
+        }
+    }
+
+    func stop() {
+        playerNode.stop()
+        engine.stop()
     }
 }

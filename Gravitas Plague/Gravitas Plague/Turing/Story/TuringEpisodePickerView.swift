@@ -8,7 +8,6 @@ struct TuringEpisodePickerView: View {
     @State private var selectedEpisodeID: TuringEpisodeID? = .prologue
 #if DEBUG || GR_TURING_DIAGNOSTICS
     @State private var qwenNativeRunningPreset: TuringNativeQwenVoiceDesignCanaryPreset?
-    @State private var qwenBaseClonePreflightRunning = false
     @State private var qwenDebugStatus = "Idle"
     @State private var memorySnapshot = TuringMemoryBudgetProbe.currentSnapshot(
         label: "storyPickerInitial"
@@ -62,70 +61,25 @@ struct TuringEpisodePickerView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    baseClonePreflightButton
-
-                    knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Base Clone Perf 4 Rows",
-                        runningTitle: "Running Base Clone Perf 4 Rows...",
-                        preset: .rowBudgetProbe4,
-                        prominence: .standard,
-                        isEnabled: !qwenBaseClonePreflightRunning
-                    )
-
-                    knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Base Clone Perf 40 Rows",
-                        runningTitle: "Running Base Clone Perf 40 Rows...",
-                        preset: .rowBudgetProbe40,
-                        prominence: .standard,
-                        isEnabled: !qwenBaseClonePreflightRunning
-                    )
-
-                    knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Base Clone Perf 40 Rows Ref 80",
-                        runningTitle: "Running Base Clone Perf 40 Rows Ref 80...",
-                        preset: .rowBudgetProbe40Ref80,
-                        prominence: .standard,
-                        isEnabled: !qwenBaseClonePreflightRunning
-                    )
-
-                    knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Base Clone Perf 40 Rows Ref 160",
-                        runningTitle: "Running Base Clone Perf 40 Rows Ref 160...",
-                        preset: .rowBudgetProbe40Ref160,
-                        prominence: .standard,
-                        isEnabled: !qwenBaseClonePreflightRunning
-                    )
-
                     knownQwenButton(
                         title: "Run Native Qwen - Big Mike Base Clone Short",
                         runningTitle: "Running Base Clone Short...",
                         preset: .bigMikeShortDynamic,
-                        prominence: .prominent,
-                        isEnabled: !qwenBaseClonePreflightRunning
-                    )
-
-                    knownQwenButton(
-                        title: "Run Native Qwen - Big Mike Base Clone Broadcast Segment 1",
-                        runningTitle: "Running Base Clone Segment 1...",
-                        preset: .bigMikeBroadcastSegment1Dynamic,
-                        prominence: .prominent,
-                        isEnabled: !qwenBaseClonePreflightRunning
+                        prominence: .prominent
                     )
 
                     knownQwenButton(
                         title: "Run Native Qwen - Big Mike Base Clone Longform 2 Segments",
                         runningTitle: "Running Base Clone Longform 2 Segments...",
                         preset: .bigMikeBroadcastTwoSegmentDynamic,
-                        prominence: .standard,
-                        isEnabled: !qwenBaseClonePreflightRunning
+                        prominence: .standard
                     )
 
                     knownQwenButton(
                         title: "Run Native Qwen - Big Mike Base Clone Longform",
                         runningTitle: "Running Base Clone Longform...",
                         preset: .bigMikeBroadcastLongformDynamic,
-                        prominence: .prominent,
-                        isEnabled: !qwenBaseClonePreflightRunning
+                        prominence: .prominent
                     )
                 }
             }
@@ -207,7 +161,6 @@ struct TuringEpisodePickerView: View {
             [TuringQwenNativeBaseClone] episode picker generation button tapped
               preset: \(preset.rawValue)
               isEnabled: \(isEnabled)
-              preflightRunning: \(qwenBaseClonePreflightRunning)
               runningPreset: none
             """)
 
@@ -263,64 +216,6 @@ struct TuringEpisodePickerView: View {
     private enum KnownQwenButtonProminence {
         case standard
         case prominent
-    }
-
-    private var baseClonePreflightButton: some View {
-        Button {
-            guard qwenNativeRunningPreset == nil,
-                  !qwenBaseClonePreflightRunning else {
-                print("""
-                [TuringQwenNativeBaseClone] episode picker preflight tap ignored
-                  reason: busy
-                  preflightRunning: \(qwenBaseClonePreflightRunning)
-                  runningPreset: \(qwenNativeRunningPreset?.rawValue ?? "none")
-                """)
-                return
-            }
-
-            print("""
-            [TuringQwenNativeBaseClone] episode picker preflight button tapped
-              preset: bigMikeShortDynamic
-              runningPreset: none
-            """)
-
-            qwenBaseClonePreflightRunning = true
-            qwenDebugStatus = "Checking Big Mike clone runtime"
-            memorySnapshot = TuringMemoryBudgetProbe.log(
-                label: "beforeQwenBaseClonePreflight",
-                activeQwenModelID: "qwen3-tts-12hz-1.7b-base-4bit",
-                quantization: "4bit"
-            )
-
-            Task.detached(priority: .userInitiated) {
-                let result = await TuringNativeQwenHelloWorldCanary.runBaseCloneRuntimePreflight(
-                    preset: .bigMikeShortDynamic
-                )
-
-                await MainActor.run {
-                    qwenBaseClonePreflightRunning = false
-                    qwenDebugStatus = result.pickerStatus
-                    memorySnapshot = TuringMemoryBudgetProbe.log(
-                        label: "afterQwenBaseClonePreflight"
-                    )
-                }
-            }
-        } label: {
-            HStack(spacing: 8) {
-                if qwenBaseClonePreflightRunning {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-
-                Text(
-                    qwenBaseClonePreflightRunning
-                        ? "Checking Big Mike Clone Runtime..."
-                        : "Check Big Mike Clone Runtime"
-                )
-            }
-        }
-        .buttonStyle(.bordered)
-        .disabled(qwenNativeRunningPreset != nil || qwenBaseClonePreflightRunning)
     }
 
     private var memoryBudgetReadout: some View {
