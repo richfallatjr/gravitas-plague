@@ -258,6 +258,86 @@ enum TuringNativeQwenHelloWorldCanary {
         }
     }
 
+    static func runDialogueSegments(
+        _ segments: [TuringSpeechSegment],
+        runID: String,
+        source: String
+    ) async -> TuringNativeQwenRunResult {
+        var engine: TuringQwenNativeBaseCloneEngine?
+
+        do {
+            let spokenSegments = segments.map(\.text)
+            guard spokenSegments.isEmpty == false else {
+                throw TuringRuntimeError.foundationJSONGateFailed(
+                    "Dialogue response did not contain speech segments."
+                )
+            }
+
+            print("""
+            [TuringNativeQwenSpeech] rendering started
+              runID: \(runID)
+              source: \(source)
+              segmentCount: \(segments.count)
+              voiceID: big_mike_base_clone_v1
+              modelID: \(activeModelID)
+              quantization: \(activeQuantization)
+              qwenSequential: true
+            """)
+
+            let modelRoot = try locateBundledBaseCloneModel()
+            let cloneProfile = try loadBundledBigMikeCloneProfile()
+            let stagedRoot = try stageWritableModel(from: modelRoot)
+            let loadedEngine = try TuringQwenNativeBaseCloneEngine(
+                modelRoot: stagedRoot,
+                trace: .stdout(prefix: "[TuringQwenNativeSpeech]")
+            )
+            engine = loadedEngine
+
+            for (index, segment) in segments.enumerated() {
+                print("""
+                [TuringNativeQwenSpeech] segment render started
+                  segmentIndex: \(index)
+                  emotion: \(segment.emotion)
+                """)
+            }
+
+            try await runLongform(
+                preset: .phase1FoundationVoiceScript,
+                cloneProfile: cloneProfile,
+                engine: loadedEngine,
+                segments: spokenSegments,
+                runID: runID
+            )
+
+            await loadedEngine.releaseResidentState(
+                reason: "dialogueSegmentsFinished.\(runID)",
+                logMemorySnapshot: shouldLogMemoryDiagnostics
+            )
+            engine = nil
+
+            logMemoryBudgetIfEnabled(label: "afterTransientCleanup")
+            logMemoryBudgetIfEnabled(label: "afterQwenUnload")
+
+            return .succeeded("Finished \(runID)")
+        } catch {
+            if let engine {
+                await engine.releaseResidentState(
+                    reason: "dialogueSegmentsFailed.\(runID)",
+                    logMemorySnapshot: shouldLogMemoryDiagnostics
+                )
+            }
+            logMemoryBudgetIfEnabled(label: "afterTransientCleanup")
+            logMemoryBudgetIfEnabled(label: "afterQwenUnload")
+
+            print("""
+            [TuringNativeQwenSpeech] rendering failed
+              runID: \(runID)
+              error: \(error.localizedDescription)
+            """)
+            return .failed(error.localizedDescription)
+        }
+    }
+
     private static func runLongform(
         preset: TuringNativeQwenVoiceDesignCanaryPreset,
         cloneProfile: TuringQwenNativeCloneProfile,

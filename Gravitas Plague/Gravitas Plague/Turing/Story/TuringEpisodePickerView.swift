@@ -7,7 +7,10 @@ struct TuringEpisodePickerView: View {
     @State private var openingEpisodeID: TuringEpisodeID?
     @State private var selectedEpisodeID: TuringEpisodeID? = .prologue
 #if DEBUG || GR_TURING_DIAGNOSTICS
+    @StateObject private var dictationCoordinator = TuringDictationCoordinator()
     @State private var qwenNativeRunningPreset: TuringNativeQwenVoiceDesignCanaryPreset?
+    @State private var turingDialogueBusy = false
+    @State private var playerDictationHUDText = ""
     @State private var qwenDebugStatus = "Idle"
     @State private var memorySnapshot = TuringMemoryBudgetProbe.currentSnapshot(
         label: "storyPickerInitial"
@@ -81,6 +84,50 @@ struct TuringEpisodePickerView: View {
                         preset: .phase1FoundationVoiceScript,
                         prominence: .prominent
                     )
+
+                    Divider()
+                        .padding(.vertical, 4)
+
+                    Button {
+                        runBigMikeVoicePromptTest()
+                    } label: {
+                        HStack(spacing: 8) {
+                            if turingDialogueBusy {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                            Text("Run Big Mike voicePrompt Test")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(qwenNativeRunningPreset != nil || turingDialogueBusy)
+
+                    HStack(spacing: 12) {
+                        TuringDictateButton(
+                            isRecording: dictationCoordinator.isRecording,
+                            isBusy: qwenNativeRunningPreset != nil || turingDialogueBusy,
+                            onPressStarted: {
+                                startBigMikeDictation()
+                            },
+                            onPressEnded: {
+                                finishBigMikeDictationAndSend()
+                            }
+                        )
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Hold Mic: Ask Big Mike")
+                                .font(.subheadline.weight(.semibold))
+                            Text(dictationStatusText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if !playerDictationHUDText.isEmpty {
+                        Text("You: \(playerDictationHUDText)")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 #endif
@@ -147,7 +194,8 @@ struct TuringEpisodePickerView: View {
         let isRunning = qwenNativeRunningPreset == preset
 
         let button = Button {
-            guard qwenNativeRunningPreset == nil else {
+            guard qwenNativeRunningPreset == nil,
+                  turingDialogueBusy == false else {
                 print("""
                 [TuringQwenNativeBaseClone] episode picker generation tap ignored
                   preset: \(preset.rawValue)
@@ -205,12 +253,149 @@ struct TuringEpisodePickerView: View {
         case .standard:
             button
                 .buttonStyle(.bordered)
-                .disabled(qwenNativeRunningPreset != nil || !isEnabled)
+                .disabled(qwenNativeRunningPreset != nil || turingDialogueBusy || !isEnabled)
 
         case .prominent:
             button
                 .buttonStyle(.borderedProminent)
-                .disabled(qwenNativeRunningPreset != nil || !isEnabled)
+                .disabled(qwenNativeRunningPreset != nil || turingDialogueBusy || !isEnabled)
+        }
+    }
+
+    private var dictationStatusText: String {
+        if dictationCoordinator.isRecording {
+            return dictationCoordinator.partialTranscript.isEmpty
+                ? "Listening..."
+                : dictationCoordinator.partialTranscript
+        }
+
+        if turingDialogueBusy {
+            return "Processing..."
+        }
+
+        return "Pinch and hold to speak. Release to send."
+    }
+
+    private func runBigMikeVoicePromptTest() {
+        guard qwenNativeRunningPreset == nil,
+              turingDialogueBusy == false else {
+            return
+        }
+
+        turingDialogueBusy = true
+        qwenDebugStatus = "Running Big Mike voicePrompt Test"
+
+        let request = VoicePromptRequest(
+            id: "story.picker.phase2.voicePrompt.001",
+            speaker: "Big Mike",
+            voiceID: "big_mike_base_clone_v1",
+            characterProfileID: "big_mike",
+            intent: "Tell Rich what to do if he hears scratching outside the apartment door.",
+            emotion: "protective, tired, low, controlled"
+        )
+
+        Task.detached(priority: .userInitiated) {
+            do {
+                let service = TuringDialogueService()
+                let plan = try await service.generateVoicePrompt(request)
+                let result = await TuringNativeQwenHelloWorldCanary
+                    .runDialogueSegments(
+                        plan.segments,
+                        runID: "bigMikeVoicePromptTest",
+                        source: "voicePrompt_characterIntent"
+                    )
+
+                await MainActor.run {
+                    turingDialogueBusy = false
+                    qwenDebugStatus = result.pickerStatus
+                    memorySnapshot = TuringMemoryBudgetProbe.log(
+                        label: "afterTransientCleanup"
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    turingDialogueBusy = false
+                    qwenDebugStatus = "Failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func startBigMikeDictation() {
+        guard qwenNativeRunningPreset == nil,
+              turingDialogueBusy == false else {
+            return
+        }
+
+        playerDictationHUDText = ""
+        Task {
+            await dictationCoordinator.beginHoldToRecord()
+        }
+    }
+
+    private func finishBigMikeDictationAndSend() {
+        guard qwenNativeRunningPreset == nil,
+              turingDialogueBusy == false else {
+            return
+        }
+
+        Task {
+            do {
+                let transcript = try await dictationCoordinator.endHoldToSend()
+                playerDictationHUDText = transcript
+                runBigMikeConversationNoBible(playerDictation: transcript)
+            } catch {
+                qwenDebugStatus = "Failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func runBigMikeConversationNoBible(
+        playerDictation: String
+    ) {
+        guard turingDialogueBusy == false else {
+            return
+        }
+
+        turingDialogueBusy = true
+        qwenDebugStatus = "Running Big Mike conversation"
+
+        let request = ConversationPromptNoBibleRequest(
+            id: "story.picker.phase3light.conversation.001",
+            speaker: "Big Mike",
+            voiceID: "big_mike_base_clone_v1",
+            characterProfileID: "big_mike",
+            playerDictation: playerDictation,
+            episodeStateForWordsOnly: "Rich is checking in with Big Mike during the early Gravitas Plague emergency. Big Mike is nearby, protective, tired, and trying to keep Rich calm and alive.",
+            emotion: "protective, grounded, tired"
+        )
+
+        Task.detached(priority: .userInitiated) {
+            do {
+                let service = TuringDialogueService()
+                let plan = try await service.generateConversationNoBible(
+                    request
+                )
+                let result = await TuringNativeQwenHelloWorldCanary
+                    .runDialogueSegments(
+                        plan.segments,
+                        runID: "bigMikeConversationNoBible",
+                        source: "conversationPrompt_playerTurn_noBible"
+                    )
+
+                await MainActor.run {
+                    turingDialogueBusy = false
+                    qwenDebugStatus = result.pickerStatus
+                    memorySnapshot = TuringMemoryBudgetProbe.log(
+                        label: "afterTransientCleanup"
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    turingDialogueBusy = false
+                    qwenDebugStatus = "Failed: \(error.localizedDescription)"
+                }
+            }
         }
     }
 

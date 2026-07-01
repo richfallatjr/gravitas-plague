@@ -646,6 +646,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Gravitas Plague";
 				INFOPLIST_KEY_NSHandsTrackingUsageDescription = "Gravitas Plague uses hand tracking to detect player interactions with nearby infected characters.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Use the microphone while you hold the Story dictation button.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Use speech recognition so you can talk to Story Mode characters.";
 				INFOPLIST_KEY_NSWorldSensingUsageDescription = "Gravitas Plague uses room and wall understanding to place mixed-reality gameplay props on real surfaces.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -684,6 +686,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Gravitas Plague";
 				INFOPLIST_KEY_NSHandsTrackingUsageDescription = "Gravitas Plague uses hand tracking to detect player interactions with nearby infected characters.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Use the microphone while you hold the Story dictation button.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Use speech recognition so you can talk to Story Mode characters.";
 				INFOPLIST_KEY_NSWorldSensingUsageDescription = "Gravitas Plague uses room and wall understanding to place mixed-reality gameplay props on real surfaces.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

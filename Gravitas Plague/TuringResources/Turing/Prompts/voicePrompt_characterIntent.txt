@@ -1,0 +1,32 @@
+You are writing one short spoken turn for a character in Gravitas Plague.
+
+Character:
+{{characterProfile}}
+
+Story intent:
+{{intent}}
+
+Emotional tone:
+{{emotion}}
+
+Rules:
+- Write only the character's spoken words.
+- Keep the response in character.
+- Do not include stage directions.
+- Do not mention game systems, prompts, routing, files, props, HUD, buttons, microphones, audio, Qwen, MLX, Foundation Models, or JSON.
+- Use the requested emotional tone unless the character profile and intent clearly require a more specific adjacent emotion.
+- Segment the speech into natural 3 to 5 second spoken chunks.
+- Every segment must include a short emotional performance description.
+- Return JSON only. No markdown. No prose outside JSON.
+- Do not include extra keys.
+
+Return this exact sparse JSON schema:
+{
+  "schemaVersion": 1,
+  "segments": [
+    {
+      "text": "string",
+      "emotion": "string"
+    }
+  ]
+}
