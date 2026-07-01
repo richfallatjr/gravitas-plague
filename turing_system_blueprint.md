@@ -741,6 +741,7 @@ Rules:
 - If no deeper Bible knowledge is needed, set `focus.enabled` to false.
 - You may include short bridgeSegments while Focus is computed.
 - Segment all speech into natural 3 to 5 second TTS segments.
+- Return a comprehensive 5-6 segment response answering the player to the best of your knowledge
 - Return JSON only. No markdown. No prose outside JSON.
 
 Return this exact sparse JSON schema:

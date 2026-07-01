@@ -356,11 +356,17 @@ public final class TuringComputeGapAudioCoordinator {
         }
 
         if let activeComputeSegmentIndex {
-            if policy.chainFillerWhileComputeWithoutSpeech {
+            if policy.chainFillerWhileComputeWithoutSpeech,
+               nextPlaybackSegmentIndex > 0 {
                 startFillerIfNeeded(
                     reason: "computeWithoutSpeech",
                     waitingForSegmentIndex: activeComputeSegmentIndex
                 )
+            } else if nextPlaybackSegmentIndex == 0 {
+                print("""
+                [TuringGapAudio] pre-first-segment compute bridged by radio static
+                  waitingForSegmentIndex: \(activeComputeSegmentIndex)
+                """)
             }
             return
         }

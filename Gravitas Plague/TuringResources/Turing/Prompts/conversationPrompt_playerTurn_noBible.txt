@@ -23,7 +23,8 @@ Rules:
 - Use the character writeup and the player's words.
 - Keep the response grounded in the small character/episode writeup provided here.
 - If the player asks something outside the provided context, answer in character using ordinary reasoning and uncertainty; do not invent episode lore as fact.
-- Segment all speech into natural 3 to 5 second spoken chunks.
+- Segment all speech into natural 3 to 5 second spoken phrases.
+- Return a comprehensive 5-6 segment response answering the player to the best of your knowledge
 - Every segment must include a short emotional performance description.
 - Return JSON only. No markdown. No prose outside JSON.
 - Do not include extra keys.

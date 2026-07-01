@@ -41,9 +41,9 @@ public actor TuringQwenNativeParallelScheduler {
         try await withThrowingTaskGroup(of: Void.self) { group in
             for laneID in 0..<active {
                 group.addTask {
-                    while let segmentIndex = await workQueue.nextIndex() {
-                        let request = requests[segmentIndex]
-                        await onSegmentStarted(laneID, segmentIndex)
+                    while let requestIndex = await workQueue.nextIndex() {
+                        let request = requests[requestIndex]
+                        await onSegmentStarted(laneID, request.segmentIndex)
                         let generated = try await self.lanePool.render(
                             request: request,
                             laneID: laneID
@@ -51,7 +51,7 @@ public actor TuringQwenNativeParallelScheduler {
                         await metricsCollector.record(
                             TuringQwenNativeParallelLaneMetrics(
                                 laneID: laneID,
-                                segmentIndex: segmentIndex,
+                                segmentIndex: request.segmentIndex,
                                 renderSeconds: generated.renderSeconds,
                                 audioDurationSeconds: generated.audio.durationSeconds
                             )

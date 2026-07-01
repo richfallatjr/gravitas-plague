@@ -310,15 +310,6 @@ enum TuringQwenNativeCodePredictor {
               noCacheForwardCount: 0
               residualTokenSyncs: 1
             """)
-        } else {
-            print("""
-            [TuringQwenNativePerf] code predictor group completed
-              tokenCount: \(codePredictorConfig.numCodeGroups)
-              seconds: \(String(format: "%.3f", Date().timeIntervalSince(start)))
-              codePredictorKVCache: oneStep
-              noCacheForwardCount: 0
-              residualTokenSyncs: 0
-            """)
         }
 
         return TuringQwenNativeFirstCodeGroup(

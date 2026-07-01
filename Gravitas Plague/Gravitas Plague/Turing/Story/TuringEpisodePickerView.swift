@@ -8,6 +8,7 @@ struct TuringEpisodePickerView: View {
     @State private var selectedEpisodeID: TuringEpisodeID? = .prologue
 #if DEBUG || GR_TURING_DIAGNOSTICS
     @StateObject private var dictationCoordinator = TuringDictationCoordinator()
+    @StateObject private var radioStaticLeadIn = TuringRadioStaticLeadInController()
     @State private var qwenNativeRunningPreset: TuringNativeQwenVoiceDesignCanaryPreset?
     @State private var turingDialogueBusy = false
     @State private var dictationPressActive = false
@@ -401,12 +402,14 @@ struct TuringEpisodePickerView: View {
         }
 
         dictationStartTask = nil
+        radioStaticLeadIn.start(reason: "askBigMikeMicReleased")
 
         Task {
             do {
                 let transcript = try await dictationCoordinator.endHoldToSend()
                 runBigMikeConversationNoBible(playerDictation: transcript)
             } catch {
+                radioStaticLeadIn.stop(reason: "dictationFailed")
                 session.publishTuringDictationEvent(.failed(error.localizedDescription))
                 qwenDebugStatus = "Failed: \(error.localizedDescription)"
             }
@@ -454,6 +457,7 @@ struct TuringEpisodePickerView: View {
 
                 await MainActor.run {
                     session.publishTuringDictationEvent(.responseAudioFinished)
+                    radioStaticLeadIn.stop(reason: "responseAudioFinished")
                     turingDialogueBusy = false
                     qwenDebugStatus = result.pickerStatus
                     memorySnapshot = TuringMemoryBudgetProbe.log(
@@ -463,6 +467,7 @@ struct TuringEpisodePickerView: View {
             } catch {
                 await MainActor.run {
                     turingDialogueBusy = false
+                    radioStaticLeadIn.stop(reason: "conversationFailed")
                     session.publishTuringDictationEvent(.failed(error.localizedDescription))
                     qwenDebugStatus = "Failed: \(error.localizedDescription)"
                 }
