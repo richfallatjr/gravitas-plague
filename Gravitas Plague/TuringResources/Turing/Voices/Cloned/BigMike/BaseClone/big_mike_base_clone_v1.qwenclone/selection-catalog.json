@@ -1,23 +1,9 @@
 {
-  "schemaVersion": 1,
-  "voiceID": "big_mike_base_clone_v1",
   "characterID": "big_mike",
-  "defaultVariantID": "broadcast_reading_lazy",
+  "defaultVariantID": "broadcast_reference_fast_01",
+  "schemaVersion": 1,
   "variants": [
     {
-      "variantID": "broadcast_reading_lazy",
-      "description": "Use when Big Mike is reading or reacting to official information with a tired, dry, unimpressed tone, protective underneath.",
-      "tags": [
-        "broadcast",
-        "reading",
-        "lazy",
-        "unimpressed",
-        "dry",
-        "protective"
-      ],
-      "intensity": 3,
-      "pace": "slow_measured",
-      "energy": "low",
       "allowedContexts": [
         "broadcast",
         "exposition",
@@ -29,7 +15,46 @@
         "panic",
         "stealth_whisper",
         "grief"
-      ]
+      ],
+      "description": "Use when Big Mike is reading or reacting to official information with a tired, dry, unimpressed tone, protective underneath.",
+      "energy": "low",
+      "intensity": 3,
+      "pace": "slow_measured",
+      "tags": [
+        "broadcast",
+        "reading",
+        "lazy",
+        "unimpressed",
+        "dry",
+        "protective"
+      ],
+      "variantID": "broadcast_reading_lazy"
+    },
+    {
+      "allowedContexts": [
+        "conversation",
+        "broadcast",
+        "exposition",
+        "safe_room",
+        "radio_instruction"
+      ],
+      "blockedContexts": [
+        "panic",
+        "grief"
+      ],
+      "description": "Default faster Big Mike clone reference from the rerecorded 12.7 second take.",
+      "energy": "medium_low",
+      "intensity": 4,
+      "pace": "brisk_natural",
+      "tags": [
+        "radio",
+        "brisk",
+        "protective",
+        "dry",
+        "instruction"
+      ],
+      "variantID": "broadcast_reference_fast_01"
     }
-  ]
+  ],
+  "voiceID": "big_mike_base_clone_v1"
 }

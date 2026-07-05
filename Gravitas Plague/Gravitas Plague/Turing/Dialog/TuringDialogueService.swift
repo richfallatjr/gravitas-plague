@@ -38,6 +38,11 @@ actor TuringDialogueService {
             prompt,
             purpose: "voicePrompt_characterIntent"
         )
+        Self.logRawResponse(
+            raw,
+            name: "voicePrompt_characterIntent",
+            promptCharacters: prompt.utf16.count
+        )
         let plan = try await decodePlanWithOneRepair(
             raw: raw,
             purpose: "TuringVoicePrompt"
@@ -81,6 +86,11 @@ actor TuringDialogueService {
         let raw = try await runner.runPrompt(
             prompt,
             purpose: "conversationPrompt_playerTurn_noBible"
+        )
+        Self.logRawResponse(
+            raw,
+            name: "conversationPrompt_playerTurn_noBible",
+            promptCharacters: prompt.utf16.count
         )
         let plan = try await decodePlanWithOneRepair(
             raw: raw,
@@ -229,6 +239,60 @@ actor TuringDialogueService {
               textUTF16: \(segment.text.utf16.count)
               emotion: \(segment.emotion)
               text: \(segment.text)
+            """)
+        }
+    }
+
+    private static func logRawResponse(
+        _ raw: String,
+        name: String,
+        promptCharacters: Int
+    ) {
+        print("""
+        [TuringFoundation] dialogue raw response received
+          promptCharacters: \(promptCharacters)
+          responseCharacters: \(raw.utf16.count)
+          freshSession: true
+        [TuringFoundationRawResponse] BEGIN \(name)
+        \(raw)
+        [TuringFoundationRawResponse] END \(name)
+        """)
+        writeDebugLog(
+            fileName: "last_\(name)_raw_response.txt",
+            contents: raw
+        )
+    }
+
+    private static func writeDebugLog(
+        fileName: String,
+        contents: String
+    ) {
+        do {
+            let directory = try FileManager.default.url(
+                for: .cachesDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            ).appendingPathComponent(
+                "TuringFoundationLogs",
+                isDirectory: true
+            )
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            let url = directory.appendingPathComponent(fileName)
+            try contents.write(to: url, atomically: true, encoding: .utf8)
+
+            print("""
+            [TuringFoundationLog] wrote \(fileName)
+              path: \(url.path)
+            """)
+        } catch {
+            print("""
+            [TuringFoundationLog] write failed
+              fileName: \(fileName)
+              error: \(error.localizedDescription)
             """)
         }
     }

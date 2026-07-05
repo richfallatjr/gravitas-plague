@@ -229,6 +229,35 @@ public final class TuringComputeGapAudioCoordinator {
         if activeComputeSegmentIndex == segmentIndex {
             activeComputeSegmentIndex = nil
         }
+
+        guard segmentIndex >= nextPlaybackSegmentIndex else {
+            print("""
+            [TuringGapAudio] stale generated segment discarded
+              segmentIndex: \(segmentIndex)
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+              realSpeechPlaying: \(realSpeechPlayingSegmentIndex.map(String.init) ?? "nil")
+            """)
+            return
+        }
+
+        guard realSpeechPlayingSegmentIndex != segmentIndex else {
+            print("""
+            [TuringGapAudio] generated segment discarded because it is already playing
+              segmentIndex: \(segmentIndex)
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+            """)
+            return
+        }
+
+        guard pendingGeneratedSegments[segmentIndex] == nil else {
+            print("""
+            [TuringGapAudio] duplicate pending generated segment discarded
+              segmentIndex: \(segmentIndex)
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+            """)
+            return
+        }
+
         pendingGeneratedSegments[segmentIndex] = audio
         print("""
         [TuringGapAudio] qwen compute finished
@@ -441,6 +470,26 @@ public final class TuringComputeGapAudioCoordinator {
         reason: String
     ) async {
         guard runActive else { return }
+        guard audio.segmentIndex == nextPlaybackSegmentIndex else {
+            pendingGeneratedSegments[audio.segmentIndex] = audio
+            print("""
+            [TuringGapAudio] out-of-order real speech start prevented
+              segmentIndex: \(audio.segmentIndex)
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+              realSpeechPlaying: \(realSpeechPlayingSegmentIndex.map(String.init) ?? "nil")
+            """)
+            return
+        }
+        guard realSpeechPlayingSegmentIndex == nil else {
+            pendingGeneratedSegments[audio.segmentIndex] = audio
+            print("""
+            [TuringGapAudio] real speech start prevented while another segment is playing
+              segmentIndex: \(audio.segmentIndex)
+              currentSegmentIndex: \(realSpeechPlayingSegmentIndex.map(String.init) ?? "nil")
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+            """)
+            return
+        }
         guard fillerPlaying == false else {
             pendingGeneratedSegments[audio.segmentIndex] = audio
             fillerStopAfterCurrent = true

@@ -1,24 +1,28 @@
 {
-  "schemaVersion": 1,
-  "profileKind": "qwenBaseCloneReferenceProfile",
-  "voiceID": "big_mike_base_clone_v1",
+  "allowFallback": false,
+  "allowPrerecordedDialoguePlayback": false,
+  "allowRuntimeRefAudioEncoding": false,
   "characterID": "big_mike",
+  "createdBy": "Tools/TuringVoicePackager/turing_voicepackager_mvp.py",
+  "defaultVariantID": "broadcast_reference_fast_01",
   "displayName": "Big Mike",
+  "language": "english",
   "modelFamily": "qwen3-tts-base",
   "modelID": "qwen3-tts-12hz-1.7b-base-4bit",
+  "profileKind": "qwenBaseCloneReferenceProfile",
   "quantization": "4bit",
-  "language": "english",
-  "defaultVariantID": "broadcast_reading_lazy",
-  "allowFallback": false,
-  "allowRuntimeRefAudioEncoding": true,
-  "allowPrerecordedDialoguePlayback": false,
+  "revision": "sha256:0ce3714cf94346ee1df9a87baf91cdfed33d103719074d4c4f8859655b95c4b7",
+  "schemaVersion": 1,
   "sourceProvider": "elevenlabs",
-  "createdBy": "Tools/TuringVoicePackager/turing_voicepackager_mvp.py",
-  "revision": "sha256:aca7c44463fe84b1c251479bccb284086b08e06bba075e13f3739ae3cbd3b2e8",
   "variants": [
     {
-      "variantID": "broadcast_reading_lazy",
-      "path": "variants/broadcast_reading_lazy/variant.json"
+      "path": "variants/broadcast_reading_lazy/variant.json",
+      "variantID": "broadcast_reading_lazy"
+    },
+    {
+      "path": "variants/broadcast_reference_fast_01/variant.json",
+      "variantID": "broadcast_reference_fast_01"
     }
-  ]
+  ],
+  "voiceID": "big_mike_base_clone_v1"
 }
