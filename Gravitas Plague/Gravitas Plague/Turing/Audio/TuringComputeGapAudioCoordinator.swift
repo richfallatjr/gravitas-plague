@@ -27,6 +27,8 @@ public struct TuringComputeGapAudioPolicy: Sendable {
     public var completeCurrentFillerBeforeRealSpeech: Bool
     public var chainFillerWhileComputeWithoutSpeech: Bool
     public var avoidImmediateFillerRepeat: Bool
+    public var preparedBacklogPauseThreshold: Int
+    public var preparedBacklogPauseSeconds: Double
 
     public init(
         playOneFillerBeforeFirstGeneratedSegment: Bool = true,
@@ -34,7 +36,9 @@ public struct TuringComputeGapAudioPolicy: Sendable {
         minimumFillerClipsBetweenRealSegments: Int = 1,
         completeCurrentFillerBeforeRealSpeech: Bool = true,
         chainFillerWhileComputeWithoutSpeech: Bool = true,
-        avoidImmediateFillerRepeat: Bool = true
+        avoidImmediateFillerRepeat: Bool = true,
+        preparedBacklogPauseThreshold: Int = 1,
+        preparedBacklogPauseSeconds: Double = 0.25
     ) {
         self.playOneFillerBeforeFirstGeneratedSegment = playOneFillerBeforeFirstGeneratedSegment
         self.firstSegmentPrerollFillerCount = firstSegmentPrerollFillerCount
@@ -42,6 +46,8 @@ public struct TuringComputeGapAudioPolicy: Sendable {
         self.completeCurrentFillerBeforeRealSpeech = completeCurrentFillerBeforeRealSpeech
         self.chainFillerWhileComputeWithoutSpeech = chainFillerWhileComputeWithoutSpeech
         self.avoidImmediateFillerRepeat = avoidImmediateFillerRepeat
+        self.preparedBacklogPauseThreshold = preparedBacklogPauseThreshold
+        self.preparedBacklogPauseSeconds = preparedBacklogPauseSeconds
     }
 
     public static let bigMikeDefault = TuringComputeGapAudioPolicy()
@@ -111,6 +117,7 @@ public final class TuringComputeGapAudioCoordinator {
     private var fillerGeneration = 0
     private var fillerFadeTask: Task<Void, Never>?
     private var longStallWarningTask: Task<Void, Never>?
+    private var shortPauseTask: Task<Void, Never>?
 
     private var runID: String?
     private var expectedSegmentCount: Int?
@@ -122,6 +129,7 @@ public final class TuringComputeGapAudioCoordinator {
     private var nextPlaybackSegmentIndex = 0
     private var fillerPlaying = false
     private var fillerStopAfterCurrent = false
+    private var shortPauseActive = false
     private var firstSegmentPrerollRemaining = 0
     private var interSegmentFillerRemaining = 0
     private var playbackFinishedContinuation: CheckedContinuation<Void, Never>?
@@ -150,6 +158,8 @@ public final class TuringComputeGapAudioCoordinator {
           minimumFillerClipsBetweenRealSegments: \(policy.minimumFillerClipsBetweenRealSegments)
           completeCurrentFillerBeforeRealSpeech: \(policy.completeCurrentFillerBeforeRealSpeech)
           chainFillerWhileComputeWithoutSpeech: \(policy.chainFillerWhileComputeWithoutSpeech)
+          preparedBacklogPauseThreshold: \(policy.preparedBacklogPauseThreshold)
+          preparedBacklogPauseSeconds: \(String(format: "%.2f", policy.preparedBacklogPauseSeconds))
         """)
     }
 
@@ -173,6 +183,9 @@ public final class TuringComputeGapAudioCoordinator {
         self.fillerQueue.removeAll(keepingCapacity: true)
         self.fillerPlaying = false
         self.fillerStopAfterCurrent = false
+        self.shortPauseActive = false
+        self.shortPauseTask?.cancel()
+        self.shortPauseTask = nil
         self.firstSegmentPrerollRemaining = policy.playOneFillerBeforeFirstGeneratedSegment
             ? max(0, policy.firstSegmentPrerollFillerCount)
             : 0
@@ -190,6 +203,8 @@ public final class TuringComputeGapAudioCoordinator {
           weightedFillerEntryCount: \(fillerFiles.count)
           firstSegmentPrerollRemaining: \(firstSegmentPrerollRemaining)
           minimumFillerClipsBetweenRealSegments: \(policy.minimumFillerClipsBetweenRealSegments)
+          preparedBacklogPauseThreshold: \(policy.preparedBacklogPauseThreshold)
+          preparedBacklogPauseSeconds: \(String(format: "%.2f", policy.preparedBacklogPauseSeconds))
         """)
         await reconcile(reason: "runStarted")
     }
@@ -235,12 +250,25 @@ public final class TuringComputeGapAudioCoordinator {
                   segmentIndex: \(segmentIndex)
                   fillerClipsRemaining: 0
                 """)
+                fillerStopAfterCurrent = true
+                print("""
+                [TuringGapAudio] real speech ready while filler active; deferring until filler finishes
+                  segmentIndex: \(segmentIndex)
+                """)
+            } else if policy.preparedBacklogPauseSeconds > 0 {
+                print("""
+                [TuringGapAudio] prepared audio arrived during filler; switching to short pause
+                  segmentIndex: \(segmentIndex)
+                  pauseSeconds: \(String(format: "%.2f", policy.preparedBacklogPauseSeconds))
+                """)
+                await stopFiller(reason: "preparedAudioReady.shortPause", fade: false)
+            } else {
+                fillerStopAfterCurrent = true
+                print("""
+                [TuringGapAudio] real speech ready while filler active; deferring until filler finishes
+                  segmentIndex: \(segmentIndex)
+                """)
             }
-            fillerStopAfterCurrent = true
-            print("""
-            [TuringGapAudio] real speech ready while filler active; deferring until filler finishes
-              segmentIndex: \(segmentIndex)
-            """)
         }
 
         await reconcile(reason: "computeFinished")
@@ -286,6 +314,9 @@ public final class TuringComputeGapAudioCoordinator {
         realSpeechPlayingSegmentIndex = nil
         fillerPlaying = false
         fillerStopAfterCurrent = false
+        shortPauseActive = false
+        shortPauseTask?.cancel()
+        shortPauseTask = nil
         firstSegmentPrerollRemaining = 0
         interSegmentFillerRemaining = 0
         longStallWarningTask?.cancel()
@@ -302,6 +333,7 @@ public final class TuringComputeGapAudioCoordinator {
             activeComputeSegmentIndex == nil &&
             realSpeechPlayingSegmentIndex == nil &&
             fillerPlaying == false &&
+            shortPauseActive == false &&
             pendingGeneratedSegments.isEmpty
         )
     }
@@ -318,6 +350,10 @@ public final class TuringComputeGapAudioCoordinator {
                policy.completeCurrentFillerBeforeRealSpeech {
                 fillerStopAfterCurrent = true
             }
+            return
+        }
+
+        if shortPauseActive {
             return
         }
 
@@ -343,6 +379,12 @@ public final class TuringComputeGapAudioCoordinator {
               waitingForSegmentIndex: \(nextPlaybackSegmentIndex)
               fillerClipsRemaining: \(interSegmentFillerRemaining)
             """)
+            if shouldUsePreparedBacklogPause {
+                startPreparedBacklogPause(
+                    waitingForSegmentIndex: nextPlaybackSegmentIndex
+                )
+                return
+            }
             startFillerIfNeeded(
                 reason: "interSegmentBuffer",
                 waitingForSegmentIndex: nextPlaybackSegmentIndex
@@ -389,6 +431,12 @@ public final class TuringComputeGapAudioCoordinator {
         pendingGeneratedSegments[0] != nil &&
         realSpeechPlayingSegmentIndex == nil &&
         fillerPlaying == false
+    }
+
+    private var shouldUsePreparedBacklogPause: Bool {
+        pendingGeneratedSegments.count >= max(1, policy.preparedBacklogPauseThreshold) &&
+        pendingGeneratedSegments[nextPlaybackSegmentIndex] != nil &&
+        policy.preparedBacklogPauseSeconds > 0
     }
 
     private var shouldPlayInterSegmentFiller: Bool {
@@ -525,6 +573,42 @@ public final class TuringComputeGapAudioCoordinator {
           waitingForSegmentIndex: \(waitingForSegmentIndex)
         """)
         scheduleLongStallWarning(waitingForSegmentIndex: waitingForSegmentIndex)
+    }
+
+    private func startPreparedBacklogPause(
+        waitingForSegmentIndex: Int
+    ) {
+        guard runActive else { return }
+        guard shortPauseActive == false else { return }
+
+        shortPauseTask?.cancel()
+        shortPauseActive = true
+        let seconds = policy.preparedBacklogPauseSeconds
+        print("""
+        [TuringGapAudio] prepared backlog pause started
+          waitingForSegmentIndex: \(waitingForSegmentIndex)
+          pendingPreparedCount: \(pendingGeneratedSegments.count)
+          seconds: \(String(format: "%.2f", seconds))
+        """)
+
+        shortPauseTask = Task { [weak self] in
+            try? await Task.sleep(
+                nanoseconds: UInt64(seconds * 1_000_000_000)
+            )
+            await MainActor.run {
+                guard let self else { return }
+                self.shortPauseActive = false
+                self.shortPauseTask = nil
+                print("""
+                [TuringGapAudio] prepared backlog pause finished
+                  waitingForSegmentIndex: \(waitingForSegmentIndex)
+                  pendingPreparedCount: \(self.pendingGeneratedSegments.count)
+                """)
+                Task { @MainActor in
+                    await self.reconcile(reason: "preparedBacklogPauseFinished")
+                }
+            }
+        }
     }
 
     private func scheduleNextFillerClip(

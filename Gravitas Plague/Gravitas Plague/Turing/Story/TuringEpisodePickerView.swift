@@ -50,21 +50,7 @@ struct TuringEpisodePickerView: View {
                     .padding(.vertical, 4)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Qwen Model Check")
-                        .font(.headline)
-
                     memoryBudgetReadout
-                    Text(qwenDebugStatus)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-
-                    Text("Runs the in-repo TuringQwenNative Base clone runtime directly from the episode picker.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Text("Requires the Big Mike Base clone profile. No runtime reference-audio encoding and no design-prompt fallback.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
 
                     knownQwenButton(
                         title: "ATNV-15 Cases Spread Across City",
@@ -199,6 +185,7 @@ struct TuringEpisodePickerView: View {
 
             qwenNativeRunningPreset = preset
             qwenDebugStatus = "Running \(preset.rawValue)"
+            radioStaticLeadIn.start(reason: "qwenTestStarted.\(preset.rawValue)")
             let startsWithFoundation = preset == .phase1FoundationVoiceScript
             memorySnapshot = TuringMemoryBudgetProbe.log(
                 label: startsWithFoundation ? "beforePhase1Foundation" : "beforeQwenGenerate",
@@ -213,6 +200,7 @@ struct TuringEpisodePickerView: View {
 
                 await MainActor.run {
                     qwenNativeRunningPreset = nil
+                    radioStaticLeadIn.stop(reason: "qwenTestFinished.\(preset.rawValue)")
                     qwenDebugStatus = result.pickerStatus
                     memorySnapshot = TuringMemoryBudgetProbe.log(
                         label: "afterTransientCleanup"
@@ -269,6 +257,7 @@ struct TuringEpisodePickerView: View {
 
         turingDialogueBusy = true
         qwenDebugStatus = "Running Gravitas Plague Backstory"
+        radioStaticLeadIn.start(reason: "backstoryTestStarted")
 
         Task.detached(priority: .userInitiated) {
             let result = await TuringNativeQwenHelloWorldCanary
@@ -280,6 +269,7 @@ struct TuringEpisodePickerView: View {
 
             await MainActor.run {
                 turingDialogueBusy = false
+                radioStaticLeadIn.stop(reason: "backstoryTestFinished")
                 qwenDebugStatus = result.pickerStatus
                 memorySnapshot = TuringMemoryBudgetProbe.log(
                     label: "afterTransientCleanup"
@@ -481,10 +471,9 @@ struct TuringEpisodePickerView: View {
     }
 
     private var memoryBudgetReadout: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        HStack(spacing: 10) {
             Text("Footprint \(memorySnapshot.physicalFootprintMB) MB")
             Text("Available \(memorySnapshot.availableProcessMemoryMB) MB")
-            Text("Increased memory \(memorySnapshot.increasedMemoryEntitlementStatus)")
         }
         .font(.caption2.monospacedDigit())
         .foregroundStyle(.secondary)
