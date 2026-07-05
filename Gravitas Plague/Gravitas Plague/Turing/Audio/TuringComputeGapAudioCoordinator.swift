@@ -123,7 +123,7 @@ public final class TuringComputeGapAudioCoordinator {
     private var expectedSegmentCount: Int?
     private var runActive = false
     private var allComputeFinished = false
-    private var activeComputeSegmentIndex: Int?
+    private var activeComputeSegmentIndices = Set<Int>()
     private var realSpeechPlayingSegmentIndex: Int?
     private var pendingGeneratedSegments: [Int: TuringComputeGapGeneratedAudio] = [:]
     private var nextPlaybackSegmentIndex = 0
@@ -175,7 +175,7 @@ public final class TuringComputeGapAudioCoordinator {
         self.expectedSegmentCount = expectedSegmentCount
         self.runActive = true
         self.allComputeFinished = false
-        self.activeComputeSegmentIndex = nil
+        self.activeComputeSegmentIndices.removeAll(keepingCapacity: true)
         self.realSpeechPlayingSegmentIndex = nil
         self.pendingGeneratedSegments.removeAll(keepingCapacity: true)
         self.nextPlaybackSegmentIndex = 0
@@ -211,10 +211,11 @@ public final class TuringComputeGapAudioCoordinator {
 
     public func qwenComputeStarted(segmentIndex: Int) async {
         guard runActive else { return }
-        activeComputeSegmentIndex = segmentIndex
+        activeComputeSegmentIndices.insert(segmentIndex)
         print("""
         [TuringGapAudio] qwen compute started
           segmentIndex: \(segmentIndex)
+          activeComputeSegments: \(formattedActiveComputeSegments)
           realSpeechPlaying: \(realSpeechPlayingSegmentIndex.map(String.init) ?? "nil")
           fillerPlaying: \(fillerPlaying)
         """)
@@ -226,9 +227,7 @@ public final class TuringComputeGapAudioCoordinator {
         audio: TuringComputeGapGeneratedAudio
     ) async {
         guard runActive else { return }
-        if activeComputeSegmentIndex == segmentIndex {
-            activeComputeSegmentIndex = nil
-        }
+        activeComputeSegmentIndices.remove(segmentIndex)
 
         guard segmentIndex >= nextPlaybackSegmentIndex else {
             print("""
@@ -318,6 +317,7 @@ public final class TuringComputeGapAudioCoordinator {
           segmentIndex: \(segmentIndex)
           error: \(error.localizedDescription)
         """)
+        activeComputeSegmentIndices.remove(segmentIndex)
         await runCancelled(reason: "qwenComputeFailed.segment\(segmentIndex)")
     }
 
@@ -343,7 +343,7 @@ public final class TuringComputeGapAudioCoordinator {
           reason: \(reason)
         """)
         runActive = false
-        activeComputeSegmentIndex = nil
+        activeComputeSegmentIndices.removeAll(keepingCapacity: false)
         allComputeFinished = true
         pendingGeneratedSegments.removeAll(keepingCapacity: false)
         realSpeechPlayingSegmentIndex = nil
@@ -365,7 +365,7 @@ public final class TuringComputeGapAudioCoordinator {
     private var isRunFinished: Bool {
         runActive == false || (
             allComputeFinished &&
-            activeComputeSegmentIndex == nil &&
+            activeComputeSegmentIndices.isEmpty &&
             realSpeechPlayingSegmentIndex == nil &&
             fillerPlaying == false &&
             shortPauseActive == false &&
@@ -432,19 +432,38 @@ public final class TuringComputeGapAudioCoordinator {
             return
         }
 
-        if let activeComputeSegmentIndex {
+        if activeComputeSegmentIndices.isEmpty == false {
+            let waitingForSegmentIndex = activeComputeSegmentIndices.contains(nextPlaybackSegmentIndex)
+                ? nextPlaybackSegmentIndex
+                : (activeComputeSegmentIndices.sorted().first ?? nextPlaybackSegmentIndex)
             if policy.chainFillerWhileComputeWithoutSpeech,
                nextPlaybackSegmentIndex > 0 {
                 startFillerIfNeeded(
                     reason: "computeWithoutSpeech",
-                    waitingForSegmentIndex: activeComputeSegmentIndex
+                    waitingForSegmentIndex: waitingForSegmentIndex
                 )
             } else if nextPlaybackSegmentIndex == 0 {
                 print("""
                 [TuringGapAudio] pre-first-segment compute bridged by radio static
-                  waitingForSegmentIndex: \(activeComputeSegmentIndex)
+                  waitingForSegmentIndex: \(waitingForSegmentIndex)
+                  activeComputeSegments: \(formattedActiveComputeSegments)
                 """)
             }
+            return
+        }
+
+        if allComputeFinished,
+           pendingGeneratedSegments.isEmpty == false,
+           pendingGeneratedSegments[nextPlaybackSegmentIndex] == nil {
+            print("""
+            [TuringGapAudio] missing next generated segment after compute finished
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+              pendingSegmentIndexes: \(formattedPendingGeneratedSegments)
+              activeComputeSegments: \(formattedActiveComputeSegments)
+            """)
+            await runCancelled(
+                reason: "missingNextGeneratedSegment.\(nextPlaybackSegmentIndex)"
+            )
             return
         }
 
@@ -589,7 +608,7 @@ public final class TuringComputeGapAudioCoordinator {
         }
 
         return pendingGeneratedSegments[finishedSegmentIndex + 1] != nil ||
-            activeComputeSegmentIndex != nil ||
+            activeComputeSegmentIndices.isEmpty == false ||
             allComputeFinished == false
     }
 
@@ -727,7 +746,7 @@ public final class TuringComputeGapAudioCoordinator {
           clip: \(clipURL.lastPathComponent)
           stopAfterCurrent: \(fillerStopAfterCurrent)
           pendingNextReady: \(pendingGeneratedSegments[nextPlaybackSegmentIndex] != nil)
-          activeComputeSegmentIndex: \(activeComputeSegmentIndex.map(String.init) ?? "nil")
+          activeComputeSegments: \(formattedActiveComputeSegments)
         """)
 
         if fillerStopAfterCurrent {
@@ -737,7 +756,7 @@ public final class TuringComputeGapAudioCoordinator {
         }
 
         if realSpeechPlayingSegmentIndex == nil,
-           activeComputeSegmentIndex != nil,
+           activeComputeSegmentIndices.isEmpty == false,
            pendingGeneratedSegments[nextPlaybackSegmentIndex] == nil,
            policy.chainFillerWhileComputeWithoutSpeech {
             print("""
@@ -799,14 +818,39 @@ public final class TuringComputeGapAudioCoordinator {
             await MainActor.run {
                 guard self.runActive,
                       self.realSpeechPlayingSegmentIndex == nil,
-                      self.activeComputeSegmentIndex == waitingForSegmentIndex else { return }
+                      (
+                          self.activeComputeSegmentIndices.contains(waitingForSegmentIndex) ||
+                          self.activeComputeSegmentIndices.isEmpty == false
+                      ) else { return }
                 print("""
                 [TuringGapAudio] long compute gap still bridged by filler
                   waitingForSegmentIndex: \(waitingForSegmentIndex)
+                  nextPlaybackSegmentIndex: \(self.nextPlaybackSegmentIndex)
+                  activeComputeSegments: \(self.formattedActiveComputeSegments)
                   seconds: \(seconds)
                 """)
             }
         }
+    }
+
+    private var formattedActiveComputeSegments: String {
+        guard activeComputeSegmentIndices.isEmpty == false else {
+            return "none"
+        }
+        return activeComputeSegmentIndices
+            .sorted()
+            .map(String.init)
+            .joined(separator: ",")
+    }
+
+    private var formattedPendingGeneratedSegments: String {
+        guard pendingGeneratedSegments.isEmpty == false else {
+            return "none"
+        }
+        return pendingGeneratedSegments.keys
+            .sorted()
+            .map(String.init)
+            .joined(separator: ",")
     }
 
     private func randomFillerURL() -> URL {

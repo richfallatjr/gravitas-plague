@@ -138,6 +138,12 @@ struct TuringPhase1AudiobookRunner: Sendable {
             prompt,
             purpose: "voiceScript_audiobookSourceSectionSegmentation"
         )
+        Self.logRawResponse(
+            raw,
+            name: "voiceScript_audiobook_section_\(section.index)",
+            sectionIndex: section.index,
+            promptCharacters: prompt.utf16.count
+        )
 
         do {
             return try decodeSegmentationResult(raw, section: section)
@@ -159,6 +165,12 @@ struct TuringPhase1AudiobookRunner: Sendable {
                         previousError: error
                     ),
                     purpose: "voiceScript_audiobookSourceSectionSegmentationRepair"
+                )
+                Self.logRawResponse(
+                    repaired,
+                    name: "voiceScript_audiobook_section_\(section.index)_repair",
+                    sectionIndex: section.index,
+                    promptCharacters: prompt.utf16.count
                 )
                 return try decodeSegmentationResult(repaired, section: section)
             } catch {
@@ -196,6 +208,10 @@ struct TuringPhase1AudiobookRunner: Sendable {
           segmentCount: \(segments.count)
           semanticValidation: disabled
         """)
+        Self.logAcceptedSegments(
+            sectionIndex: section.index,
+            segments: segments
+        )
 
         return TuringAudiobookSectionSegmentationResult(
             section: section,
@@ -265,6 +281,82 @@ struct TuringPhase1AudiobookRunner: Sendable {
             with: nextContextHead
         )
         return prompt
+    }
+
+    private static func logAcceptedSegments(
+        sectionIndex: Int,
+        segments: [TuringAudiobookSpeechSegment]
+    ) {
+        for segment in segments {
+            print("""
+            [TuringFoundation] audiobook accepted segment
+              sectionIndex: \(sectionIndex)
+              localIndex: \(segment.localIndex)
+              globalIndex: \(segment.globalIndex)
+              spokenUTF16: \(segment.spokenText.utf16.count)
+              emotion: \(segment.emotion)
+              spokenText:
+            ---BEGIN_TURING_AUDIOBOOK_SPOKEN_SEGMENT---
+            \(segment.spokenText)
+            ---END_TURING_AUDIOBOOK_SPOKEN_SEGMENT---
+            """)
+        }
+    }
+
+    private static func logRawResponse(
+        _ raw: String,
+        name: String,
+        sectionIndex: Int,
+        promptCharacters: Int
+    ) {
+        print("""
+        [TuringFoundation] audiobook raw response received
+          sectionIndex: \(sectionIndex)
+          promptCharacters: \(promptCharacters)
+          responseCharacters: \(raw.utf16.count)
+          freshSession: true
+        [TuringFoundationRawResponse] BEGIN \(name)
+        \(raw)
+        [TuringFoundationRawResponse] END \(name)
+        """)
+        writeDebugLog(
+            fileName: "last_\(name)_raw_response.txt",
+            contents: raw
+        )
+    }
+
+    private static func writeDebugLog(
+        fileName: String,
+        contents: String
+    ) {
+        do {
+            let directory = try FileManager.default.url(
+                for: .cachesDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            ).appendingPathComponent(
+                "TuringFoundationLogs",
+                isDirectory: true
+            )
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+            let url = directory.appendingPathComponent(fileName)
+            try contents.write(to: url, atomically: true, encoding: .utf8)
+
+            print("""
+            [TuringFoundationLog] wrote \(fileName)
+              path: \(url.path)
+            """)
+        } catch {
+            print("""
+            [TuringFoundationLog] write failed
+              fileName: \(fileName)
+              error: \(error.localizedDescription)
+            """)
+        }
     }
 
     private func renderRepairPrompt(

@@ -58,7 +58,23 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                         await onSegmentStarted(instanceID, request.segmentIndex)
 
                         let renderStart = Date()
-                        let audio = try await instance.generate(request)
+                        let audio: TuringQwenNativeAudio
+                        do {
+                            audio = try await instance.generate(request)
+                        } catch {
+                            let renderSeconds = Date().timeIntervalSince(renderStart)
+                            await metricsCollector.sampleMemory(
+                                label: "segmentFailed.\(request.segmentIndex)"
+                            )
+                            print("""
+                            [TuringQwenFresh2] segment failed
+                              segmentIndex: \(request.segmentIndex)
+                              instanceID: \(instanceID.rawValue)
+                              renderSeconds: \(String(format: "%.3f", renderSeconds))
+                              error: \(error.localizedDescription)
+                            """)
+                            throw error
+                        }
                         let renderSeconds = Date().timeIntervalSince(renderStart)
                         let result = TuringQwenNativeFreshSegmentResult(
                             instanceID: instanceID,
