@@ -53,6 +53,16 @@ private final class TuringParallelPerfGapAudioBridge: @unchecked Sendable {
         )
     }
 
+    func qwenComputeSkipped(
+        segmentIndex: Int,
+        reason: String
+    ) async {
+        await coordinator.qwenComputeSkipped(
+            segmentIndex: segmentIndex,
+            reason: reason
+        )
+    }
+
     func qwenComputeAllFinished() async {
         await coordinator.qwenComputeAllFinished()
     }
@@ -720,9 +730,35 @@ enum TuringNativeQwenHelloWorldCanary {
             currentTask = makeSectionTask(0)
 
             while let task = currentTask {
-                let sectionResult = try await task.value
                 let nextSectionIndex = currentSectionIndex + 1
                 nextTask = makeSectionTask(nextSectionIndex)
+                let section = sourcePlan.sections[currentSectionIndex]
+                let sectionResult: TuringAudiobookSectionSegmentationResult
+
+                do {
+                    sectionResult = try await task.value
+                } catch {
+                    let sectionText = TuringAudiobookSourceSectioner.sourceText(
+                        for: section,
+                        in: sourcePlan.normalizedSourceText
+                    )
+                    print("""
+                    [TuringPhase1Audiobook] section skipped
+                      sectionIndex: \(section.index)
+                      reason: foundationSectionFailure
+                      error: \(error.localizedDescription)
+                      sourceUTF16: \(sectionText.utf16.count)
+                      qwenStarted: false
+                      sourceText:
+                    ---BEGIN_TURING_SKIPPED_AUDIOBOOK_SECTION---
+                    \(sectionText)
+                    ---END_TURING_SKIPPED_AUDIOBOOK_SECTION---
+                    """)
+                    currentSectionIndex = nextSectionIndex
+                    currentTask = nextTask
+                    nextTask = nil
+                    continue
+                }
 
                 print("""
                 [TuringPhase1Audiobook] section parallel render began
@@ -743,7 +779,8 @@ enum TuringNativeQwenHelloWorldCanary {
                     requests,
                     scheduler: scheduler,
                     gapAudio: gapAudio,
-                    runID: "\(runID).section\(sectionResult.section.index)"
+                    runID: "\(runID).section\(sectionResult.section.index)",
+                    skipQwenSegmentFailures: true
                 )
                 renderedSegmentCount += sectionTexts.count
                 logMemoryBudgetIfEnabled(
@@ -985,6 +1022,7 @@ enum TuringNativeQwenHelloWorldCanary {
         scheduler: TuringQwenNativeFreshInstanceScheduler,
         gapAudio: TuringParallelPerfGapAudioBridge,
         runID: String,
+        skipQwenSegmentFailures: Bool = false,
         onFirstSegmentReady: (@MainActor @Sendable () async -> Void)? = nil
     ) async throws -> TuringQwenNativeFreshInstanceRunReport {
         let firstSegmentReadyNotifier = TuringFirstSegmentReadyNotifier(
@@ -993,6 +1031,7 @@ enum TuringNativeQwenHelloWorldCanary {
         let report = try await scheduler.renderSegments(
             requests,
             runID: runID,
+            skipSegmentFailures: skipQwenSegmentFailures,
             onSegmentStarted: { _, segmentIndex in
                 await gapAudio.qwenComputeStarted(segmentIndex: segmentIndex)
             },
@@ -1008,6 +1047,12 @@ enum TuringNativeQwenHelloWorldCanary {
                         sampleRate: Double(generated.audio.sampleRate),
                         channelCount: 1
                     )
+                )
+            },
+            onSegmentSkipped: { skipped in
+                await gapAudio.qwenComputeSkipped(
+                    segmentIndex: skipped.segmentIndex,
+                    reason: skipped.errorDescription
                 )
             }
         )

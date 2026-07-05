@@ -126,6 +126,7 @@ public final class TuringComputeGapAudioCoordinator {
     private var activeComputeSegmentIndices = Set<Int>()
     private var realSpeechPlayingSegmentIndex: Int?
     private var pendingGeneratedSegments: [Int: TuringComputeGapGeneratedAudio] = [:]
+    private var skippedSegmentIndices = Set<Int>()
     private var nextPlaybackSegmentIndex = 0
     private var fillerPlaying = false
     private var fillerStopAfterCurrent = false
@@ -178,6 +179,7 @@ public final class TuringComputeGapAudioCoordinator {
         self.activeComputeSegmentIndices.removeAll(keepingCapacity: true)
         self.realSpeechPlayingSegmentIndex = nil
         self.pendingGeneratedSegments.removeAll(keepingCapacity: true)
+        self.skippedSegmentIndices.removeAll(keepingCapacity: true)
         self.nextPlaybackSegmentIndex = 0
         self.fillerGeneration &+= 1
         self.fillerQueue.removeAll(keepingCapacity: true)
@@ -321,6 +323,33 @@ public final class TuringComputeGapAudioCoordinator {
         await runCancelled(reason: "qwenComputeFailed.segment\(segmentIndex)")
     }
 
+    public func qwenComputeSkipped(
+        segmentIndex: Int,
+        reason: String
+    ) async {
+        guard runActive else { return }
+        activeComputeSegmentIndices.remove(segmentIndex)
+
+        guard segmentIndex >= nextPlaybackSegmentIndex else {
+            print("""
+            [TuringGapAudio] stale skipped segment ignored
+              segmentIndex: \(segmentIndex)
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+              reason: \(reason)
+            """)
+            return
+        }
+
+        skippedSegmentIndices.insert(segmentIndex)
+        print("""
+        [TuringGapAudio] qwen compute skipped
+          segmentIndex: \(segmentIndex)
+          nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+          reason: \(reason)
+        """)
+        await reconcile(reason: "computeSkipped")
+    }
+
     public func qwenComputeAllFinished() async {
         allComputeFinished = true
         print("[TuringGapAudio] qwen compute all finished")
@@ -346,6 +375,7 @@ public final class TuringComputeGapAudioCoordinator {
         activeComputeSegmentIndices.removeAll(keepingCapacity: false)
         allComputeFinished = true
         pendingGeneratedSegments.removeAll(keepingCapacity: false)
+        skippedSegmentIndices.removeAll(keepingCapacity: false)
         realSpeechPlayingSegmentIndex = nil
         fillerPlaying = false
         fillerStopAfterCurrent = false
@@ -378,6 +408,15 @@ public final class TuringComputeGapAudioCoordinator {
 
         if realSpeechPlayingSegmentIndex != nil {
             return
+        }
+
+        while skippedSegmentIndices.remove(nextPlaybackSegmentIndex) != nil {
+            print("""
+            [TuringGapAudio] skipped segment advanced playback cursor
+              skippedSegmentIndex: \(nextPlaybackSegmentIndex)
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex + 1)
+            """)
+            nextPlaybackSegmentIndex += 1
         }
 
         if fillerPlaying {

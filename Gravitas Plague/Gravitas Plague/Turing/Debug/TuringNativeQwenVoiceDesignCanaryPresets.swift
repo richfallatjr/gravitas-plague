@@ -319,7 +319,7 @@ One hospital worker said, “They look awake, but unreachable.”
 
 The infected are not dead. They are living hosts with severe brain damage.
 
-Residents are advised to lock doors, avoid contact with aggressive animals, and report any bite or fluid exposure immediately.
+Residents are advised to lock doors, avoid contact with rabid animals, and report any bite or fluid exposure immediately.
 
 If someone you know appears infected, do not open the door.
 
@@ -339,7 +339,7 @@ One hospital worker said, “They look awake, but unreachable.”
 
 The infected are not dead. They are living hosts with severe brain damage.
 
-Residents are advised to lock doors, avoid contact with aggressive animals, and report any bite or fluid exposure immediately.
+Residents are advised to lock doors, avoid contact with rabid animals, and report any bite or fluid exposure immediately.
 
 If someone you know appears infected, do not open the door.
 
@@ -360,7 +360,7 @@ If speech fails, do not negotiate.
         "One hospital worker said, ‘They look awake, but unreachable.’",
         "The infected are not dead.",
         "They are living hosts with severe brain damage.",
-        "Residents are advised to lock doors and avoid aggressive animals.",
+        "Residents are advised to lock doors and avoid rabid animals.",
         "Report any bite or fluid exposure immediately.",
         "If someone you know appears infected, do not open the door.",
         "If the eyes cloud, isolate.",

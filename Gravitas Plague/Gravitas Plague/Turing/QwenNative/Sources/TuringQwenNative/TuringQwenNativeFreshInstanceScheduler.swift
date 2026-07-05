@@ -1,6 +1,22 @@
 import Foundation
 import MLX
 
+public struct TuringQwenNativeFreshSegmentSkip: Sendable {
+    public let instanceID: TuringQwenNativeFreshInstanceID
+    public let segmentIndex: Int
+    public let errorDescription: String
+
+    public init(
+        instanceID: TuringQwenNativeFreshInstanceID,
+        segmentIndex: Int,
+        errorDescription: String
+    ) {
+        self.instanceID = instanceID
+        self.segmentIndex = segmentIndex
+        self.errorDescription = errorDescription
+    }
+}
+
 public actor TuringQwenNativeFreshInstanceScheduler {
     private let instancePool: TuringQwenNativeFreshInstancePool
 
@@ -13,8 +29,10 @@ public actor TuringQwenNativeFreshInstanceScheduler {
     public func renderSegments(
         _ requests: [TuringQwenNativeBaseCloneSegmentRequest],
         runID: String,
+        skipSegmentFailures: Bool = false,
         onSegmentStarted: @Sendable @escaping (TuringQwenNativeFreshInstanceID, Int) async -> Void,
-        onSegmentFinished: @Sendable @escaping (TuringQwenNativeFreshSegmentResult) async throws -> Void
+        onSegmentFinished: @Sendable @escaping (TuringQwenNativeFreshSegmentResult) async throws -> Void,
+        onSegmentSkipped: @Sendable @escaping (TuringQwenNativeFreshSegmentSkip) async -> Void = { _ in }
     ) async throws -> TuringQwenNativeFreshInstanceRunReport {
         guard requests.isEmpty == false else {
             throw TuringQwenNativeError.nativeGenerationNotImplemented(
@@ -36,6 +54,7 @@ public actor TuringQwenNativeFreshInstanceScheduler {
           runID: \(runID)
           requestedInstanceCount: \(requested)
           actualInstanceCount: \(actual)
+          skipSegmentFailures: \(skipSegmentFailures)
           sharedWeights: false
           fallbackUsed: false
         """)
@@ -66,6 +85,33 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                             await metricsCollector.sampleMemory(
                                 label: "segmentFailed.\(request.segmentIndex)"
                             )
+                            if skipSegmentFailures ||
+                                Self.isSkippableEOSBeforeGeneratedAudio(error) {
+                                let reason = Self.isSkippableEOSBeforeGeneratedAudio(error)
+                                    ? "eosBeforeGeneratedAudio"
+                                    : "qwenSegmentFailure"
+                                print("""
+                                [TuringQwenFresh2] segment skipped
+                                  segmentIndex: \(request.segmentIndex)
+                                  instanceID: \(instanceID.rawValue)
+                                  renderSeconds: \(String(format: "%.3f", renderSeconds))
+                                  reason: \(reason)
+                                  error: \(error.localizedDescription)
+                                  spokenUTF16: \(request.text.utf16.count)
+                                  spokenText:
+                                ---BEGIN_TURING_SKIPPED_QWEN_SEGMENT---
+                                \(request.text)
+                                ---END_TURING_SKIPPED_QWEN_SEGMENT---
+                                """)
+                                await onSegmentSkipped(
+                                    TuringQwenNativeFreshSegmentSkip(
+                                        instanceID: instanceID,
+                                        segmentIndex: request.segmentIndex,
+                                        errorDescription: error.localizedDescription
+                                    )
+                                )
+                                continue
+                            }
                             print("""
                             [TuringQwenFresh2] segment failed
                               segmentIndex: \(request.segmentIndex)
@@ -125,6 +171,15 @@ public actor TuringQwenNativeFreshInstanceScheduler {
             peakMLXCacheMemoryMB: metrics.peakMLXCacheMemoryMB,
             fallbackUsed: false
         )
+    }
+
+    private static func isSkippableEOSBeforeGeneratedAudio(_ error: Error) -> Bool {
+        if case TuringQwenNativeError.invalidConfig(let message) = error {
+            return message == "Base clone generated no codec rows before EOS."
+        }
+
+        return error.localizedDescription
+            .contains("Base clone generated no codec rows before EOS.")
     }
 }
 
