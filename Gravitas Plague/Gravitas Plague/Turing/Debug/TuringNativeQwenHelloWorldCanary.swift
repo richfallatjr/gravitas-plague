@@ -194,8 +194,15 @@ enum TuringNativeQwenHelloWorldCanary {
                     segmentIndex: 0
                 )
 
-                try await TuringQwenNativeMemoryPlayer.shared.play(
+                let processedSamples = await TuringQwenOutputPostProcessor.processSamplesForPlayback(
                     samples: audio.samples,
+                    sampleRate: audio.sampleRate,
+                    segmentIndex: 0,
+                    reason: "directMemoryPlayer.\(preset.rawValue)"
+                )
+
+                try await TuringQwenNativeMemoryPlayer.shared.play(
+                    samples: processedSamples,
                     sampleRate: audio.sampleRate
                 )
 

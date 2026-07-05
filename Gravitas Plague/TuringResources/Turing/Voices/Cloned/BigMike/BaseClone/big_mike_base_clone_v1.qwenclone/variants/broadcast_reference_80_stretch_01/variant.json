@@ -1,0 +1,56 @@
+{
+  "allowFallback": false,
+  "allowPrerecordedDialoguePlayback": false,
+  "characterID": "big_mike",
+  "displayName": "Broadcast Reference — 80 Stretch 01",
+  "kind": "baseCloneReferenceVariant",
+  "language": "english",
+  "performance": {
+    "allowedContexts": [
+      "conversation",
+      "broadcast",
+      "exposition",
+      "safe_room",
+      "radio_instruction"
+    ],
+    "blockedContexts": [
+      "panic",
+      "grief"
+    ],
+    "energy": "medium_low",
+    "intensity": 4,
+    "pace": "fast_reference",
+    "selectionHint": "Default Big Mike Base clone reference using the 80%-stretch faster source clip.",
+    "tags": [
+      "radio",
+      "fast-reference",
+      "protective",
+      "dry",
+      "instruction"
+    ],
+    "tone": "fast protective radio instruction, dry, tired, practical",
+    "volume": "low_medium"
+  },
+  "qwenArtifacts": {
+    "manifestSHA256": "8e262dad7232ecd75ba1f8766da6be3e68b46ed95270110fe2de327c3ae81710",
+    "mode": "icl",
+    "path": "qwen_artifacts/clone_prompt_manifest.json",
+    "safetensorsSHA256": "e8e18e3a50183da683ea33b2ae1c4ed5b1b3ca8251b1c07b7a5203bc5ec75fae",
+    "status": "ready"
+  },
+  "reference": {
+    "channels": 1,
+    "normalizedAudioPath": "ref_audio/normalized/ref_24000_mono.wav",
+    "normalizedAudioSHA256": "a4ec5a48b29ccdb3b0b30e37ac006fe77784dd83e296ceda82ab9b1e943b400e",
+    "normalizedFormat": "wav_float32_le",
+    "originalAudioPath": "ref_audio/original/big-mike-reference-baseline-80-stretch-01.mp3",
+    "originalAudioSHA256": "a445d61f054917648643db48e11bfba83b000d1a5ebb3eae5aee5afebdd396db",
+    "sampleRate": 24000,
+    "textPath": "ref_text.txt",
+    "textSHA256": "c8b6014fb46585b61c7dad0f4329d79286f47c2d77612b32499b8da9ac4d49be"
+  },
+  "schemaVersion": 1,
+  "sourceProvider": "local_recording_80_stretch",
+  "variantID": "broadcast_reference_80_stretch_01",
+  "voiceID": "big_mike_base_clone_v1"
+}

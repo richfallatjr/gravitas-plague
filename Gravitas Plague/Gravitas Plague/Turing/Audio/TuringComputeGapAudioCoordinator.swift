@@ -258,12 +258,30 @@ public final class TuringComputeGapAudioCoordinator {
             return
         }
 
-        pendingGeneratedSegments[segmentIndex] = audio
+        let processedAudio = await TuringQwenOutputPostProcessor.processForPlayback(
+            audio,
+            reason: "computeGapAudio"
+        )
+
+        guard runActive else { return }
+        guard segmentIndex >= nextPlaybackSegmentIndex,
+              realSpeechPlayingSegmentIndex != segmentIndex,
+              pendingGeneratedSegments[segmentIndex] == nil else {
+            print("""
+            [TuringGapAudio] generated segment discarded after postprocess
+              segmentIndex: \(segmentIndex)
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+              realSpeechPlaying: \(realSpeechPlayingSegmentIndex.map(String.init) ?? "nil")
+            """)
+            return
+        }
+
+        pendingGeneratedSegments[segmentIndex] = processedAudio
         print("""
         [TuringGapAudio] qwen compute finished
           segmentIndex: \(segmentIndex)
-          sampleCount: \(audio.samples.count)
-          sampleRate: \(audio.sampleRate)
+          sampleCount: \(processedAudio.samples.count)
+          sampleRate: \(processedAudio.sampleRate)
           pendingCount: \(pendingGeneratedSegments.count)
           fillerPlaying: \(fillerPlaying)
         """)

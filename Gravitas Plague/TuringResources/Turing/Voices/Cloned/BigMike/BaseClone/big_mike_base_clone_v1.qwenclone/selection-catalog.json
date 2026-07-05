@@ -54,6 +54,31 @@
         "instruction"
       ],
       "variantID": "broadcast_reference_fast_01"
+    },
+    {
+      "allowedContexts": [
+        "conversation",
+        "broadcast",
+        "exposition",
+        "safe_room",
+        "radio_instruction"
+      ],
+      "blockedContexts": [
+        "panic",
+        "grief"
+      ],
+      "description": "Default 80%-stretch Big Mike clone reference for faster Qwen generation plus slowed post-process playback.",
+      "energy": "medium_low",
+      "intensity": 4,
+      "pace": "fast_reference",
+      "tags": [
+        "radio",
+        "fast-reference",
+        "protective",
+        "dry",
+        "instruction"
+      ],
+      "variantID": "broadcast_reference_80_stretch_01"
     }
   ],
   "voiceID": "big_mike_base_clone_v1"
