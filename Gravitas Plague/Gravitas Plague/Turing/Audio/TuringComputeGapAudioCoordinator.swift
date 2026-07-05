@@ -250,25 +250,13 @@ public final class TuringComputeGapAudioCoordinator {
                   segmentIndex: \(segmentIndex)
                   fillerClipsRemaining: 0
                 """)
-                fillerStopAfterCurrent = true
-                print("""
-                [TuringGapAudio] real speech ready while filler active; deferring until filler finishes
-                  segmentIndex: \(segmentIndex)
-                """)
-            } else if policy.preparedBacklogPauseSeconds > 0 {
-                print("""
-                [TuringGapAudio] prepared audio arrived during filler; switching to short pause
-                  segmentIndex: \(segmentIndex)
-                  pauseSeconds: \(String(format: "%.2f", policy.preparedBacklogPauseSeconds))
-                """)
-                await stopFiller(reason: "preparedAudioReady.shortPause", fade: false)
-            } else {
-                fillerStopAfterCurrent = true
-                print("""
-                [TuringGapAudio] real speech ready while filler active; deferring until filler finishes
-                  segmentIndex: \(segmentIndex)
-                """)
             }
+            fillerStopAfterCurrent = true
+            print("""
+            [TuringGapAudio] real speech ready while filler active; deferring until filler finishes
+              segmentIndex: \(segmentIndex)
+              shortPauseSkipped: true
+            """)
         }
 
         await reconcile(reason: "computeFinished")
