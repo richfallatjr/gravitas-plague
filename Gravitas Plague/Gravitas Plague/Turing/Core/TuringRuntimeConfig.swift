@@ -35,6 +35,8 @@ struct TuringRuntimeConfig: Codable, Sendable, Equatable {
         let parallelQwenMode: String
         let freshInstanceCount: Int
         let allowSharedWeightLaneFallback: Bool
+        let allowSingleInstanceFallback: Bool
+        let warmLoadFreshInstancesBeforeRun: Bool
 
         enum VoiceArgumentPolicy: String, Codable, Sendable {
             case baseNilOnly
@@ -74,6 +76,8 @@ struct TuringRuntimeConfig: Codable, Sendable, Equatable {
             case parallelQwenMode
             case freshInstanceCount
             case allowSharedWeightLaneFallback
+            case allowSingleInstanceFallback
+            case warmLoadFreshInstancesBeforeRun
         }
 
         init(from decoder: Decoder) throws {
@@ -115,11 +119,19 @@ struct TuringRuntimeConfig: Codable, Sendable, Equatable {
             freshInstanceCount = try container.decodeIfPresent(
                 Int.self,
                 forKey: .freshInstanceCount
-            ) ?? 4
+            ) ?? 2
             allowSharedWeightLaneFallback = try container.decodeIfPresent(
                 Bool.self,
                 forKey: .allowSharedWeightLaneFallback
             ) ?? false
+            allowSingleInstanceFallback = try container.decodeIfPresent(
+                Bool.self,
+                forKey: .allowSingleInstanceFallback
+            ) ?? false
+            warmLoadFreshInstancesBeforeRun = try container.decodeIfPresent(
+                Bool.self,
+                forKey: .warmLoadFreshInstancesBeforeRun
+            ) ?? true
         }
     }
 

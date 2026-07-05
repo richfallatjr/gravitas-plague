@@ -16,18 +16,25 @@ public actor TuringQwenNativeFreshInstance {
         variantID: String,
         performanceMode: TuringQwenNativePerformanceMode
     ) async throws {
+        print("""
+        [TuringQwenFresh2] instance warm load started
+          instanceID: \(id.rawValue)
+          sharedResidentResources: false
+          sharedWeightStore: false
+        """)
+
         let resident = try TuringQwenNativeResidentResources(modelRoot: modelRoot)
         let engine = try TuringQwenNativeBaseCloneEngine(
             modelRoot: modelRoot,
             residentResources: resident,
-            trace: .stdout(prefix: "[TuringQwenFreshInstances.\(id.rawValue)]")
+            trace: .stdout(prefix: "[TuringQwenFresh2.\(id.rawValue)]")
         )
 
         self.residentResources = resident
         self.baseCloneEngine = engine
 
         print("""
-        [TuringQwenFreshInstances] instance warm loaded
+        [TuringQwenFresh2] instance warm load finished
           instanceID: \(id.rawValue)
           residentResourcesObjectID: \(ObjectIdentifier(resident))
           weightsStoreObjectID: \(id.rawValue).weightsStore
@@ -35,6 +42,7 @@ public actor TuringQwenNativeFreshInstance {
           variantID: \(variantID)
           performanceMode: \(performanceMode.rawValue)
           sharedWeights: false
+          sharedWeightStore: false
         """)
     }
 

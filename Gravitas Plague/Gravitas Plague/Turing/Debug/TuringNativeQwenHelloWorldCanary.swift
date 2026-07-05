@@ -673,10 +673,7 @@ enum TuringNativeQwenHelloWorldCanary {
             expectedSegmentCount: nil
         )
 
-        let freshPool = TuringQwenNativeFreshInstancePool(
-            requestedInstanceCount: activeParallelQwenLaneCount,
-            fallbackAllowed: false
-        )
+        let freshPool = try TuringQwenNativeGenerationSchedulerFactory.makeFresh2Pool()
         try await freshPool.warmLoadExactlyRequestedInstances(
             modelRoot: stagedRoot,
             cloneProfile: cloneProfile,
@@ -688,7 +685,9 @@ enum TuringNativeQwenHelloWorldCanary {
             activeQwenModelID: activeModelID,
             quantization: activeQuantization
         )
-        let scheduler = TuringQwenNativeFreshInstanceScheduler(instancePool: freshPool)
+        let scheduler = TuringQwenNativeGenerationSchedulerFactory.makeFresh2Scheduler(
+            instancePool: freshPool
+        )
         var renderedSegmentCount = 0
         var currentSectionIndex = 0
         var currentTask: Task<TuringAudiobookSectionSegmentationResult, Error>?
@@ -881,10 +880,7 @@ enum TuringNativeQwenHelloWorldCanary {
             expectedSegmentCount: segments.count
         )
 
-        let freshPool = TuringQwenNativeFreshInstancePool(
-            requestedInstanceCount: activeParallelQwenLaneCount,
-            fallbackAllowed: false
-        )
+        let freshPool = try TuringQwenNativeGenerationSchedulerFactory.makeFresh2Pool()
         try await freshPool.warmLoadExactlyRequestedInstances(
             modelRoot: stagedRoot,
             cloneProfile: cloneProfile,
@@ -896,7 +892,9 @@ enum TuringNativeQwenHelloWorldCanary {
             activeQwenModelID: activeModelID,
             quantization: activeQuantization
         )
-        let scheduler = TuringQwenNativeFreshInstanceScheduler(instancePool: freshPool)
+        let scheduler = TuringQwenNativeGenerationSchedulerFactory.makeFresh2Scheduler(
+            instancePool: freshPool
+        )
         let requests = makeParallelBaseCloneRequests(
             preset: preset,
             cloneProfile: cloneProfile,

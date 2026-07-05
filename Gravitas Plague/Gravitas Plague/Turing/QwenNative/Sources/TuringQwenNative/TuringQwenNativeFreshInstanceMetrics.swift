@@ -65,7 +65,7 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
 
     public func log() {
         print("""
-        [TuringQwenFreshInstances] run finished
+        [TuringQwenFresh2] run finished
           totalSegments: \(totalSegments)
           requestedInstanceCount: \(requestedInstanceCount)
           actualInstanceCount: \(actualInstanceCount)

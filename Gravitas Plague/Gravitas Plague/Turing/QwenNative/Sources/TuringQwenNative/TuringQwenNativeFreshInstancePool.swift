@@ -28,7 +28,7 @@ public actor TuringQwenNativeFreshInstancePool {
         performanceMode: TuringQwenNativePerformanceMode
     ) async throws {
         print("""
-        [TuringQwenFreshInstances] pool warm load started
+        [TuringQwenFresh2] pool warm load started
           requestedInstanceCount: \(requestedInstanceCount)
           sharedWeights: false
           fallbackAllowed: \(fallbackAllowed)
@@ -41,7 +41,7 @@ public actor TuringQwenNativeFreshInstancePool {
                 let memoryDecision = memoryGate.evaluateBeforeWarmLoad(instanceID: id)
                 guard memoryDecision.allowed else {
                     print("""
-                    [TuringQwenFreshInstances] failed
+                    [TuringQwenFresh2] failed
                       reason: insufficientMemoryForFreshInstances
                       requestedInstanceCount: \(requestedInstanceCount)
                       createdInstanceCount: \(loaded.count)
@@ -72,8 +72,8 @@ public actor TuringQwenNativeFreshInstancePool {
             instances.removeAll(keepingCapacity: false)
             availableInstanceIDs.removeAll(keepingCapacity: false)
             print("""
-            [TuringQwenFreshInstances] failed
-              reason: couldNotCreateFreshInstances
+            [TuringQwenFresh2] failed
+              reason: couldNotCreateExactlyTwoFreshInstances
               requestedInstanceCount: \(requestedInstanceCount)
               createdInstanceCount: \(loaded.count)
               fallbackUsed: false
@@ -86,7 +86,8 @@ public actor TuringQwenNativeFreshInstancePool {
         availableInstanceIDs = loaded.map(\.id)
 
         print("""
-        [TuringQwenFreshInstances] pool ready
+        [TuringQwenFresh2] pool ready
+          requestedInstanceCount: \(requestedInstanceCount)
           actualInstanceCount: \(actualInstanceCount)
           uniqueResidentResources: \(actualInstanceCount)
           uniqueWeightStores: \(actualInstanceCount)
@@ -129,7 +130,7 @@ public actor TuringQwenNativeFreshInstancePool {
         availableInstanceIDs.removeAll(keepingCapacity: false)
         actualInstanceCount = 0
         print("""
-        [TuringQwenFreshInstances] pool unloaded
+        [TuringQwenFresh2] pool unloaded
           reason: \(reason)
           fallbackUsed: false
         """)

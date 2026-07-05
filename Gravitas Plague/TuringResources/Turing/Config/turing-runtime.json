@@ -26,6 +26,8 @@
     "parallelQwenMode": "freshInstances",
     "freshInstanceCount": 2,
     "allowSharedWeightLaneFallback": false,
+    "allowSingleInstanceFallback": false,
+    "warmLoadFreshInstancesBeforeRun": true,
     "quantization": "4bit",
     "refAudioPolicy": "forbidden",
     "refTextPolicy": "forbidden",

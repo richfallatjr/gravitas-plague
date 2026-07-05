@@ -32,7 +32,7 @@ public actor TuringQwenNativeFreshInstanceScheduler {
         )
 
         print("""
-        [TuringQwenFreshInstances] run started
+        [TuringQwenFresh2] run started
           runID: \(runID)
           requestedInstanceCount: \(requested)
           actualInstanceCount: \(actual)
@@ -48,7 +48,7 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                         let request = requests[requestIndex]
                         let instanceID = instance.id
                         print("""
-                        [TuringQwenFreshInstances] segment scheduled
+                        [TuringQwenFresh2] segment scheduled
                           segmentIndex: \(request.segmentIndex)
                           instanceID: \(instanceID.rawValue)
                         """)
@@ -78,7 +78,7 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                             label: "segmentFinished.\(request.segmentIndex)"
                         )
                         print("""
-                        [TuringQwenFreshInstances] segment finished
+                        [TuringQwenFresh2] segment finished
                           segmentIndex: \(request.segmentIndex)
                           instanceID: \(instanceID.rawValue)
                           renderSeconds: \(String(format: "%.3f", renderSeconds))
@@ -177,7 +177,7 @@ private actor TuringQwenNativeFreshInstanceMetricsCollector {
         )
 
         print("""
-        [TuringQwenFreshInstances] memory sampled
+        [TuringQwenFresh2] memory sampled
           label: \(label)
           physFootprintMB: \(String(format: "%.1f", processMemory.physFootprintMB))
           residentSizeMB: \(String(format: "%.1f", processMemory.residentSizeMB))
