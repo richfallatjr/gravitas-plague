@@ -68,6 +68,26 @@ private final class TuringParallelPerfGapAudioBridge: @unchecked Sendable {
     }
 }
 
+private actor TuringFirstSegmentReadyNotifier {
+    private let onFirstSegmentReady: (@MainActor @Sendable () async -> Void)?
+    private var didNotify = false
+
+    init(
+        onFirstSegmentReady: (@MainActor @Sendable () async -> Void)?
+    ) {
+        self.onFirstSegmentReady = onFirstSegmentReady
+    }
+
+    func notifyIfNeeded(segmentIndex: Int) async {
+        guard segmentIndex == 0,
+              didNotify == false else {
+            return
+        }
+        didNotify = true
+        await onFirstSegmentReady?()
+    }
+}
+
 enum TuringNativeQwenHelloWorldCanary {
     private static let expectedModelFolderName = "Qwen3-TTS-12Hz-1.7B-Base-4bit"
     private static let activeModelID = "qwen3-tts-12hz-1.7b-base-4bit"
@@ -76,7 +96,8 @@ enum TuringNativeQwenHelloWorldCanary {
     private static let activeWeightBackend = "mlx4bit"
     private static let memoryDiagnosticsEnvKey = "TURING_QWEN_MEMORY_DIAGNOSTICS"
     private static let foundationGuardrailAutoResponse = "No man. You can't say that."
-    private static let activeParallelQwenLaneCount = 3
+    private static let activeParallelQwenLaneCount = 2
+    private static let activeParallelQwenMode = "freshInstances"
 
     static func run(
         preset: TuringNativeQwenVoiceDesignCanaryPreset = .bigMikeShortDynamic
@@ -313,7 +334,8 @@ enum TuringNativeQwenHelloWorldCanary {
     static func runDialogueSegments(
         _ segments: [TuringSpeechSegment],
         runID: String,
-        source: String
+        source: String,
+        onFirstSegmentReady: (@MainActor @Sendable () async -> Void)? = nil
     ) async -> TuringNativeQwenRunResult {
         do {
             let spokenSegments = segments.map(\.text)
@@ -332,7 +354,7 @@ enum TuringNativeQwenHelloWorldCanary {
               modelID: \(activeModelID)
               quantization: \(activeQuantization)
               parallelQwenLanes: \(activeParallelQwenLaneCount)
-              parallelQwenMode: dualLaneSharedWeights
+              parallelQwenMode: \(activeParallelQwenMode)
             """)
 
             let modelRoot = try locateBundledBaseCloneModel()
@@ -343,7 +365,9 @@ enum TuringNativeQwenHelloWorldCanary {
                 print("""
                 [TuringNativeQwenSpeech] segment render started
                   segmentIndex: \(index)
+                  textUTF16: \(segment.text.utf16.count)
                   emotion: \(segment.emotion)
+                  text: \(segment.text)
                 """)
             }
 
@@ -352,7 +376,8 @@ enum TuringNativeQwenHelloWorldCanary {
                 cloneProfile: cloneProfile,
                 stagedRoot: stagedRoot,
                 segments: spokenSegments,
-                runID: runID
+                runID: runID,
+                onFirstSegmentReady: onFirstSegmentReady
             )
 
             logMemoryBudgetIfEnabled(label: "afterTransientCleanup")
@@ -453,7 +478,7 @@ enum TuringNativeQwenHelloWorldCanary {
           modelID: \(activeModelID)
           quantization: \(activeQuantization)
           parallelQwenLanes: \(laneCountRequested)
-          parallelQwenMode: dualLaneSharedWeights
+          parallelQwenMode: inProcessSharedWeightsDefaultStream
           parallelQwenEnabledForDebugOnly: true
         """)
 
@@ -571,7 +596,7 @@ enum TuringNativeQwenHelloWorldCanary {
               requestID: \(request.requestID)
               sectionCount: \(sourcePlan.sections.count)
               parallelQwenLanes: \(activeParallelQwenLaneCount)
-              parallelQwenMode: dualLaneSharedWeights
+              parallelQwenMode: \(activeParallelQwenMode)
               foundationRollingWindow: true
               foundationWindow: currentPlusNext
               playbackOwner: TuringComputeGapAudioCoordinator
@@ -648,11 +673,22 @@ enum TuringNativeQwenHelloWorldCanary {
             expectedSegmentCount: nil
         )
 
-        let lanePool = try TuringQwenNativeParallelLanePool(
-            modelRoot: stagedRoot,
-            laneCountRequested: activeParallelQwenLaneCount
+        let freshPool = TuringQwenNativeFreshInstancePool(
+            requestedInstanceCount: activeParallelQwenLaneCount,
+            fallbackAllowed: false
         )
-        let scheduler = TuringQwenNativeParallelScheduler(lanePool: lanePool)
+        try await freshPool.warmLoadExactlyRequestedInstances(
+            modelRoot: stagedRoot,
+            cloneProfile: cloneProfile,
+            variantID: cloneProfile.defaultVariantID,
+            performanceMode: preset.performanceMode
+        )
+        logMemoryBudgetIfEnabled(
+            label: "afterQwenFresh2WarmLoad",
+            activeQwenModelID: activeModelID,
+            quantization: activeQuantization
+        )
+        let scheduler = TuringQwenNativeFreshInstanceScheduler(instancePool: freshPool)
         var renderedSegmentCount = 0
         var currentSectionIndex = 0
         var currentTask: Task<TuringAudiobookSectionSegmentationResult, Error>?
@@ -697,13 +733,18 @@ enum TuringNativeQwenHelloWorldCanary {
                     segments: sectionTexts,
                     startingSegmentIndex: renderedSegmentCount
                 )
-                let report = try await renderParallelBaseCloneRequests(
+                let report = try await renderFreshBaseCloneRequests(
                     requests,
                     scheduler: scheduler,
                     gapAudio: gapAudio,
                     runID: "\(runID).section\(sectionResult.section.index)"
                 )
                 renderedSegmentCount += sectionTexts.count
+                logMemoryBudgetIfEnabled(
+                    label: "afterQwenFresh2SectionRenderBeforeUnload",
+                    activeQwenModelID: activeModelID,
+                    quantization: activeQuantization
+                )
 
                 print("""
                 [TuringPhase1Audiobook] section parallel render finished
@@ -725,14 +766,14 @@ enum TuringNativeQwenHelloWorldCanary {
 
             await gapAudio.qwenComputeAllFinished()
             await gapAudio.waitUntilPlaybackFinished()
-            await lanePool.releaseResidentResources(reason: "audiobookFinished.\(runID)")
+            await freshPool.unloadAll(reason: "audiobookFinished.\(runID)")
         } catch {
             currentTask?.cancel()
             nextTask?.cancel()
             await gapAudio.runCancelled(
                 reason: "audiobookFailed.\(String(describing: error))"
             )
-            await lanePool.releaseResidentResources(reason: "audiobookFailed.\(runID)")
+            await freshPool.unloadAll(reason: "audiobookFailed.\(runID)")
             throw error
         }
     }
@@ -805,7 +846,8 @@ enum TuringNativeQwenHelloWorldCanary {
         cloneProfile: TuringQwenNativeCloneProfile,
         stagedRoot: URL,
         segments: [String],
-        runID: String
+        runID: String,
+        onFirstSegmentReady: (@MainActor @Sendable () async -> Void)? = nil
     ) async throws {
         guard segments.isEmpty == false else {
             print("""
@@ -825,7 +867,7 @@ enum TuringNativeQwenHelloWorldCanary {
           weightBackend: \(activeWeightBackend)
           computeAhead: true
           parallelQwenLanes: \(activeParallelQwenLaneCount)
-          parallelQwenMode: dualLaneSharedWeights
+          parallelQwenMode: \(activeParallelQwenMode)
         """)
 
         let gapAudio = try await MainActor.run {
@@ -839,11 +881,22 @@ enum TuringNativeQwenHelloWorldCanary {
             expectedSegmentCount: segments.count
         )
 
-        let lanePool = try TuringQwenNativeParallelLanePool(
-            modelRoot: stagedRoot,
-            laneCountRequested: activeParallelQwenLaneCount
+        let freshPool = TuringQwenNativeFreshInstancePool(
+            requestedInstanceCount: activeParallelQwenLaneCount,
+            fallbackAllowed: false
         )
-        let scheduler = TuringQwenNativeParallelScheduler(lanePool: lanePool)
+        try await freshPool.warmLoadExactlyRequestedInstances(
+            modelRoot: stagedRoot,
+            cloneProfile: cloneProfile,
+            variantID: cloneProfile.defaultVariantID,
+            performanceMode: preset.performanceMode
+        )
+        logMemoryBudgetIfEnabled(
+            label: "afterQwenFresh2WarmLoad",
+            activeQwenModelID: activeModelID,
+            quantization: activeQuantization
+        )
+        let scheduler = TuringQwenNativeFreshInstanceScheduler(instancePool: freshPool)
         let requests = makeParallelBaseCloneRequests(
             preset: preset,
             cloneProfile: cloneProfile,
@@ -852,15 +905,21 @@ enum TuringNativeQwenHelloWorldCanary {
         )
 
         do {
-            let report = try await renderParallelBaseCloneRequests(
+            let report = try await renderFreshBaseCloneRequests(
                 requests,
                 scheduler: scheduler,
                 gapAudio: gapAudio,
-                runID: runID
+                runID: runID,
+                onFirstSegmentReady: onFirstSegmentReady
+            )
+            logMemoryBudgetIfEnabled(
+                label: "afterQwenFresh2RenderBeforeUnload",
+                activeQwenModelID: activeModelID,
+                quantization: activeQuantization
             )
             await gapAudio.qwenComputeAllFinished()
             await gapAudio.waitUntilPlaybackFinished()
-            await lanePool.releaseResidentResources(reason: "longformFinished.\(runID)")
+            await freshPool.unloadAll(reason: "longformFinished.\(runID)")
 
             print("""
             [TuringQwenNativeBaseCloneLongform] parallel report
@@ -871,7 +930,7 @@ enum TuringNativeQwenHelloWorldCanary {
             await gapAudio.runCancelled(
                 reason: "longformFailed.\(String(describing: error))"
             )
-            await lanePool.releaseResidentResources(reason: "longformFailed.\(runID)")
+            await freshPool.unloadAll(reason: "longformFailed.\(runID)")
             throw error
         }
 
@@ -916,19 +975,26 @@ enum TuringNativeQwenHelloWorldCanary {
         }
     }
 
-    private static func renderParallelBaseCloneRequests(
+    private static func renderFreshBaseCloneRequests(
         _ requests: [TuringQwenNativeBaseCloneSegmentRequest],
-        scheduler: TuringQwenNativeParallelScheduler,
+        scheduler: TuringQwenNativeFreshInstanceScheduler,
         gapAudio: TuringParallelPerfGapAudioBridge,
-        runID: String
-    ) async throws -> TuringQwenNativeParallelPerfReport {
-        try await scheduler.renderSegments(
+        runID: String,
+        onFirstSegmentReady: (@MainActor @Sendable () async -> Void)? = nil
+    ) async throws -> TuringQwenNativeFreshInstanceRunReport {
+        let firstSegmentReadyNotifier = TuringFirstSegmentReadyNotifier(
+            onFirstSegmentReady: onFirstSegmentReady
+        )
+        let report = try await scheduler.renderSegments(
             requests,
             runID: runID,
             onSegmentStarted: { _, segmentIndex in
                 await gapAudio.qwenComputeStarted(segmentIndex: segmentIndex)
             },
             onSegmentFinished: { generated in
+                await firstSegmentReadyNotifier.notifyIfNeeded(
+                    segmentIndex: generated.segmentIndex
+                )
                 await gapAudio.qwenComputeFinished(
                     segmentIndex: generated.segmentIndex,
                     audio: TuringComputeGapGeneratedAudio(
@@ -940,6 +1006,8 @@ enum TuringNativeQwenHelloWorldCanary {
                 )
             }
         )
+        report.log()
+        return report
     }
 
     private static func renderBaseCloneSegment(

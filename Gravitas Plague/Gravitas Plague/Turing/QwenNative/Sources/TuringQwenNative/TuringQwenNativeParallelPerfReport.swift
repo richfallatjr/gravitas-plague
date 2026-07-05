@@ -29,6 +29,8 @@ public struct TuringQwenNativeParallelPerfReport: Sendable {
     public let perLaneRenderSeconds: [Double]
     public let perLaneGeneratedAudioSeconds: [Double]
     public let maxConcurrentQwenJobs: Int
+    public let currentPhysFootprintMB: Double
+    public let currentResidentSizeMB: Double
     public let peakMLXActiveMemoryMB: Double
     public let peakMLXCacheMemoryMB: Double
     public let cacheLimitMB: Int
@@ -58,6 +60,9 @@ public struct TuringQwenNativeParallelPerfReport: Sendable {
         self.perLaneRenderSeconds = perLaneRenderSeconds
         self.perLaneGeneratedAudioSeconds = perLaneGeneratedAudioSeconds
         self.maxConcurrentQwenJobs = maxConcurrentQwenJobs
+        let processMemory = TuringQwenNativeProcessMemoryProbe.snapshot()
+        self.currentPhysFootprintMB = processMemory.physFootprintMB
+        self.currentResidentSizeMB = processMemory.residentSizeMB
         let memory = Self.memorySnapshotMegabytes()
         self.peakMLXActiveMemoryMB = memory.active
         self.peakMLXCacheMemoryMB = memory.cache
@@ -81,7 +86,8 @@ public struct TuringQwenNativeParallelPerfReport: Sendable {
           perLaneRenderSeconds: \(perLaneRenderSeconds.map { String(format: "%.3f", $0) })
           perLaneGeneratedAudioSeconds: \(perLaneGeneratedAudioSeconds.map { String(format: "%.3f", $0) })
           maxConcurrentQwenJobs: \(maxConcurrentQwenJobs)
-          peakPhysFootprintMB: app_probe
+          currentPhysFootprintMB: \(String(format: "%.1f", currentPhysFootprintMB))
+          currentResidentSizeMB: \(String(format: "%.1f", currentResidentSizeMB))
           peakMLXActiveMemoryMB: \(String(format: "%.1f", peakMLXActiveMemoryMB))
           peakMLXCacheMemoryMB: \(String(format: "%.1f", peakMLXCacheMemoryMB))
           cacheLimitMB: \(cacheLimitMB)

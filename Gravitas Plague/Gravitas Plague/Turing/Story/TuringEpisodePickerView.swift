@@ -14,9 +14,6 @@ struct TuringEpisodePickerView: View {
     @State private var dictationPressActive = false
     @State private var dictationStartTask: Task<Void, Never>?
     @State private var qwenDebugStatus = "Idle"
-    @State private var memorySnapshot = TuringMemoryBudgetProbe.currentSnapshot(
-        label: "storyPickerInitial"
-    )
 #endif
 
     private let episodes = TuringEpisodeCatalog.developmentEpisodes
@@ -50,8 +47,6 @@ struct TuringEpisodePickerView: View {
                     .padding(.vertical, 4)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    memoryBudgetReadout
-
                     knownQwenButton(
                         title: "ATNV-15 Cases Spread Across City",
                         runningTitle: "Reading ATNV-15 Headline...",
@@ -107,9 +102,6 @@ struct TuringEpisodePickerView: View {
             dictationCoordinator.onEvent = { event in
                 session.publishTuringDictationEvent(event)
             }
-            memorySnapshot = TuringMemoryBudgetProbe.log(
-                label: "storyPickerOpened"
-            )
         }
     }
 
@@ -186,12 +178,6 @@ struct TuringEpisodePickerView: View {
             qwenNativeRunningPreset = preset
             qwenDebugStatus = "Running \(preset.rawValue)"
             radioStaticLeadIn.start(reason: "qwenTestStarted.\(preset.rawValue)")
-            let startsWithFoundation = preset == .phase1FoundationVoiceScript
-            memorySnapshot = TuringMemoryBudgetProbe.log(
-                label: startsWithFoundation ? "beforePhase1Foundation" : "beforeQwenGenerate",
-                activeQwenModelID: startsWithFoundation ? nil : "qwen3-tts-12hz-1.7b-base-4bit",
-                quantization: startsWithFoundation ? nil : "4bit"
-            )
 
             Task.detached(priority: .userInitiated) {
                 let result = await TuringNativeQwenHelloWorldCanary.run(
@@ -202,9 +188,6 @@ struct TuringEpisodePickerView: View {
                     qwenNativeRunningPreset = nil
                     radioStaticLeadIn.stop(reason: "qwenTestFinished.\(preset.rawValue)")
                     qwenDebugStatus = result.pickerStatus
-                    memorySnapshot = TuringMemoryBudgetProbe.log(
-                        label: "afterTransientCleanup"
-                    )
                 }
             }
         } label: {
@@ -271,9 +254,6 @@ struct TuringEpisodePickerView: View {
                 turingDialogueBusy = false
                 radioStaticLeadIn.stop(reason: "backstoryTestFinished")
                 qwenDebugStatus = result.pickerStatus
-                memorySnapshot = TuringMemoryBudgetProbe.log(
-                    label: "afterTransientCleanup"
-                )
             }
         }
     }
@@ -435,14 +415,17 @@ struct TuringEpisodePickerView: View {
                 let plan = try await service.generateConversationNoBible(
                     request
                 )
-                await MainActor.run {
-                    session.publishTuringDictationEvent(.responseAudioStarted)
-                }
                 let result = await TuringNativeQwenHelloWorldCanary
                     .runDialogueSegments(
                         plan.segments,
                         runID: "bigMikeConversationNoBible",
-                        source: "conversationPrompt_playerTurn_noBible"
+                        source: "conversationPrompt_playerTurn_noBible",
+                        onFirstSegmentReady: {
+                            session.publishTuringDictationEvent(
+                                .responseSegmentZeroReady(clearAfterSeconds: 2.0)
+                            )
+                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        }
                     )
 
                 await MainActor.run {
@@ -450,9 +433,6 @@ struct TuringEpisodePickerView: View {
                     radioStaticLeadIn.stop(reason: "responseAudioFinished")
                     turingDialogueBusy = false
                     qwenDebugStatus = result.pickerStatus
-                    memorySnapshot = TuringMemoryBudgetProbe.log(
-                        label: "afterTransientCleanup"
-                    )
                 }
             } catch {
                 await MainActor.run {
@@ -468,15 +448,6 @@ struct TuringEpisodePickerView: View {
     private enum KnownQwenButtonProminence {
         case standard
         case prominent
-    }
-
-    private var memoryBudgetReadout: some View {
-        HStack(spacing: 10) {
-            Text("Footprint \(memorySnapshot.physicalFootprintMB) MB")
-            Text("Available \(memorySnapshot.availableProcessMemoryMB) MB")
-        }
-        .font(.caption2.monospacedDigit())
-        .foregroundStyle(.secondary)
     }
 #endif
 

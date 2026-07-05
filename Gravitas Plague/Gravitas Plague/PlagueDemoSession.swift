@@ -44,6 +44,7 @@ enum TuringDictationEvent: Sendable, Equatable {
     case finalTranscript(String)
     case processingStarted(finalTranscript: String)
     case responseAudioStarted
+    case responseSegmentZeroReady(clearAfterSeconds: Double)
     case responseAudioFinished
     case cancelled
     case failed(String)

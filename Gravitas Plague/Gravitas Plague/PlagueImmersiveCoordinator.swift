@@ -124,6 +124,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let hordeRoomScanTracker = HordeRoomScanTracker()
     private let enemyBodySeparationResolver = HordeEnemyBodySeparationResolver()
     private let instructionHUD = PlagueHeadTrackedInstructionHUD()
+    private var turingHUDDelayedClearTask: Task<Void, Never>?
     private let timingProfiler = TimingProfiler(label: "main_actor_shell")
     private let hordeSimulationEngine = HordeSimulationEngine()
     private let hordeEnemyBrainEngine = HordeEnemyBrainEngine()
@@ -493,10 +494,14 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     ) {
         switch event {
         case .recordingStarted:
+            turingHUDDelayedClearTask?.cancel()
+            turingHUDDelayedClearTask = nil
             showInstructionHUD("Listening...")
             print("[TuringHUD] player dictation shown state=listening")
 
         case .partialTranscript(let text):
+            turingHUDDelayedClearTask?.cancel()
+            turingHUDDelayedClearTask = nil
             let trimmed = text.trimmingCharacters(
                 in: .whitespacesAndNewlines
             )
@@ -510,6 +515,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         case .finalTranscript(let text),
              .processingStarted(let text):
+            turingHUDDelayedClearTask?.cancel()
+            turingHUDDelayedClearTask = nil
             let trimmed = text.trimmingCharacters(
                 in: .whitespacesAndNewlines
             )
@@ -522,15 +529,37 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             }
 
         case .responseAudioStarted:
+            turingHUDDelayedClearTask?.cancel()
+            turingHUDDelayedClearTask = nil
             instructionHUD.clear()
             print("[TuringHUD] player dictation cleared for qwenSpeech")
 
+        case .responseSegmentZeroReady(let clearAfterSeconds):
+            turingHUDDelayedClearTask?.cancel()
+            print("""
+            [TuringHUD] player dictation retained after segment zero ready
+              clearAfterSeconds: \(String(format: "%.2f", clearAfterSeconds))
+            """)
+            turingHUDDelayedClearTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(
+                    nanoseconds: UInt64(max(0, clearAfterSeconds) * 1_000_000_000)
+                )
+                guard !Task.isCancelled else { return }
+                self?.instructionHUD.clear()
+                self?.turingHUDDelayedClearTask = nil
+                print("[TuringHUD] player dictation cleared after segment zero ready hold")
+            }
+
         case .responseAudioFinished,
              .cancelled:
+            turingHUDDelayedClearTask?.cancel()
+            turingHUDDelayedClearTask = nil
             instructionHUD.clear()
             print("[TuringHUD] player dictation cleared")
 
         case .failed:
+            turingHUDDelayedClearTask?.cancel()
+            turingHUDDelayedClearTask = nil
             showInstructionHUD("Dictation failed.")
             print("[TuringHUD] player dictation shown state=failed")
         }

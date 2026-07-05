@@ -47,6 +47,10 @@ actor TuringDialogueService {
         [TuringVoicePrompt] gate passed
           segmentCount: \(plan.segments.count)
         """)
+        Self.logAcceptedSegments(
+            purpose: "TuringVoicePrompt",
+            segments: plan.segments
+        )
 
         return plan
     }
@@ -87,6 +91,10 @@ actor TuringDialogueService {
         [TuringConversationNoBible] gate passed
           segmentCount: \(plan.segments.count)
         """)
+        Self.logAcceptedSegments(
+            purpose: "TuringConversationNoBible",
+            segments: plan.segments
+        )
 
         return plan
     }
@@ -208,6 +216,21 @@ actor TuringDialogueService {
         }
 
         return prompt
+    }
+
+    private static func logAcceptedSegments(
+        purpose: String,
+        segments: [TuringSpeechSegment]
+    ) {
+        for (index, segment) in segments.enumerated() {
+            print("""
+            [\(purpose)] accepted segment
+              index: \(index)
+              textUTF16: \(segment.text.utf16.count)
+              emotion: \(segment.emotion)
+              text: \(segment.text)
+            """)
+        }
     }
 }
 

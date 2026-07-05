@@ -1,0 +1,328 @@
+Architect Handoff: Current State Of Multi-Process / Multi-Lane Qwen TTS
+
+Summary
+The current Qwen TTS runtime is not true multi-process TTS. It is an in-process
+parallel-lane experiment:
+
+- one app process
+- one shared resident Qwen 1.7B Base 4-bit weight store
+- multiple Swift actor lanes
+- one scheduler using withThrowingTaskGroup
+- shared MLX default stream only
+- ordered playback through TuringComputeGapAudioCoordinator
+
+The latest user-reported memory readout was roughly:
+
+- phys footprint: about 707 MB
+- available process budget: about 8 GB
+
+That suggests there is enough memory headroom to investigate stronger TTS
+concurrency than the current default-stream lane setup. The current lane setup
+may be limited by shared MLX scheduling / default GPU stream behavior rather
+than by memory.
+
+
+Current Runtime Model
+
+Active model:
+
+- Qwen3-TTS-12Hz-1.7B-Base-4bit
+- local MLX runtime
+- precomputed Big Mike .qwenclone artifacts
+- no raw reference WAV extraction on device
+- no VoiceDesign runtime path for Big Mike
+- no system TTS fallback
+- no prerecorded story dialogue fallback
+
+The runtime is using Base clone with precomputed clone artifacts and dynamic row
+generation. The practical quality target currently uses about 160 generated rows
+for useful spoken output. Lower caps such as 80 rows were too short for real
+dialogue.
+
+
+Current Parallel Files
+
+Relevant code:
+
+- Gravitas Plague/Gravitas Plague/Turing/Debug/TuringNativeQwenHelloWorldCanary.swift
+  - activeParallelQwenLaneCount is currently 3.
+  - Story/debug routes use the parallel scheduler for Big Mike tests.
+
+- Gravitas Plague/Gravitas Plague/Turing/QwenNative/Sources/TuringQwenNative/TuringQwenNativeParallelLanePool.swift
+  - loads TuringQwenNativeResidentResources once.
+  - creates N TuringQwenNativeGenerationLane instances.
+  - logs sharedWeights: true.
+  - admits up to 3 lanes.
+
+- Gravitas Plague/Gravitas Plague/Turing/QwenNative/Sources/TuringQwenNative/TuringQwenNativeParallelScheduler.swift
+  - uses withThrowingTaskGroup.
+  - assigns segment requests to lanes via an actor work queue.
+  - emits finished segment audio back to ordered playback.
+  - logs streamMode: defaultOnly.
+
+- Gravitas Plague/Gravitas Plague/Turing/QwenNative/Sources/TuringQwenNative/TuringQwenNativeLaneStream.swift
+  - only supports TuringQwenNativeLaneStreamMode.defaultOnly.
+  - no real per-lane MLX stream is implemented yet.
+
+- Gravitas Plague/Gravitas Plague/Turing/QwenNative/Sources/TuringQwenNative/TuringQwenNativeGenerationLane.swift
+  - each lane owns a TuringQwenNativeBaseCloneEngine instance.
+  - each engine points at shared resident resources.
+
+- Gravitas Plague/Gravitas Plague/Turing/Audio/TuringComputeGapAudioCoordinator.swift
+  - ordered playback owner.
+  - radio static / filler / short prepared-backlog pause behavior lives here.
+
+
+What Current "3 Lanes" Actually Means
+
+Current 3-lane mode gives three independent Swift lane actors and three engine
+instances. It does not provide:
+
+- separate OS processes
+- separate Metal devices
+- separate MLX runtime instances
+- separate MLX GPU streams
+- hard isolation of temporary MLX state by process
+
+The lane scheduler can dispatch three segment renders concurrently from Swift's
+point of view, but the work still funnels through one app process and the MLX
+default execution path. This is why the user is describing it as "sharing
+resources on the same thread." That statement is not literally proven at the
+Swift actor level, but it is directionally correct: the current implementation
+does not prove independent native/GPU execution lanes.
+
+
+Why Multi-Process Is Being Considered
+
+The user goal is to reduce time-to-audio and aggregate TTS latency. Current
+single-segment generation is still too slow for conversational use, even though
+quality is now good. Filler and radio static can hide lead time, but they do not
+solve throughput.
+
+The user observed much lower memory pressure than expected, about 707 MB used
+against an 8 GB process budget. If accurate and stable during real TTS work,
+memory may allow heavier concurrency than the current in-process default-stream
+lane experiment.
+
+
+Critical Platform Question
+
+Before implementing true multi-process TTS, verify whether the target visionOS
+deployment model can legally and practically run a persistent helper process,
+XPC service, extension, or equivalent worker. Do not assume macOS-style
+fork/exec helpers are available or App-Store-safe on visionOS.
+
+If true app-owned worker processes are not available on visionOS, the next best
+target is not "multi-process"; it is:
+
+- per-lane MLX streams if MLX Swift supports them for this graph
+- dedicated per-lane serial threads/queues
+- removal of any global runtime locks
+- bigger batched kernels / microbatching if stream parallelism fails
+
+
+Candidate Architecture A: Real OS Worker Processes
+
+Only pursue this if visionOS supports the deployment shape.
+
+Main app process:
+
+- owns UI
+- owns Story mode
+- owns Foundation Models / segmentation
+- owns playback ordering
+- owns radio static / filler
+- owns final AVAudio output
+- sends TTS segment requests to worker processes
+
+TTS worker process:
+
+- loads local Qwen 1.7B Base 4-bit model
+- loads precomputed Big Mike qwenclone artifacts
+- receives one segment request at a time
+- generates PCM or writes a transient audio file
+- returns completion metadata and audio handle to the main app
+- releases request-local state after each segment
+
+IPC request shape:
+
+- requestID
+- runID
+- segmentIndex
+- text
+- language
+- voiceID / variantID
+- maxNewRows
+- performanceMode
+- referenceRowLimit / referenceWindowStrategy
+
+IPC response shape:
+
+- requestID
+- segmentIndex
+- sampleRate
+- channelCount
+- sampleCount
+- durationSeconds
+- peakAbs / rms
+- renderSeconds
+- transient PCM/file handle
+- error if failed
+
+Pros:
+
+- real process isolation
+- each worker may get its own MLX runtime state
+- process crash can be isolated from main UI
+- easier to kill/restart a bad worker
+
+Risks:
+
+- may be impossible or unsuitable on visionOS
+- model residency may duplicate GPU buffers
+- per-process model load may erase memory headroom
+- IPC audio transfer can become expensive
+- process startup/warmup can hurt first response
+- App Store packaging/signing may become complicated
+
+
+Candidate Architecture B: Stronger In-Process Native Lanes
+
+This is the practical next experiment if true worker processes are blocked.
+
+Target:
+
+- one app process
+- one shared resident weight store
+- independent per-lane MLX streams if available
+- independent per-lane serial execution context
+- independent KV/session/temp state
+- ordered playback queue
+
+Required changes:
+
+- replace TuringQwenNativeLaneStreamMode.defaultOnly with real stream modes
+- create or bind a distinct MLX stream per lane
+- ensure every MLX operation inside a lane uses that lane's stream
+- remove hidden global serial bottlenecks
+- log stream identity per lane
+- compare defaultOnly vs perLaneStream
+
+Acceptance:
+
+- same audio quality as current 160-row Base clone path
+- aggregate RTF improves materially
+- no segment corruption
+- no reordered playback
+- no memory slope
+
+
+Candidate Architecture C: Microbatching
+
+If per-lane/process concurrency does not work, batch multiple active segments
+inside one Qwen graph instead of running separate lanes.
+
+Target shape:
+
+- prompt/input embeddings: batch dimension 2 or 3
+- separate KV cache per batch item
+- same model weights
+- larger kernels
+- one decode pass per step for multiple segments
+
+Pros:
+
+- likely better GPU occupancy than tiny autoregressive single-row steps
+- no OS process issue
+- no duplicated model residency
+
+Risks:
+
+- more invasive graph work
+- cache layout complexity
+- different stop/eos per item
+- more chances to damage speech quality
+
+
+Measurement Requirements
+
+Every experiment must log:
+
+- lane/process ID
+- segmentIndex
+- text UTF-16 count
+- generatedRows
+- audioDurationSeconds
+- renderSeconds
+- realTimeFactor
+- talkerOneStepTotalSeconds
+- codePredictorTotalSeconds
+- speechDecoderSeconds
+- peak process phys footprint
+- MLX active memory
+- MLX cache memory
+- firstAudioLatencySeconds
+- playback underrun count
+- filler/static seconds used
+
+Aggregate run metrics:
+
+- total source segments
+- total generated audio seconds
+- wall clock seconds from request to final playback
+- aggregate realTimeFactor
+- max concurrent TTS jobs
+- peak memory
+- failed/cancelled segment count
+
+
+Acceptance Target
+
+Keep a concurrency change only if:
+
+- generated speech remains intelligible and Big Mike identity remains strong
+- ordered playback is correct
+- no missing or duplicated segments
+- no crash or memory watermark failure
+- peak phys footprint stays below policy
+- aggregate RTF improves by at least 25% over the current 3-lane defaultOnly path
+
+Stretch target:
+
+- conversational response begins after radio-static lead-in without a long dead
+  wait
+- aggregate TTS throughput approaches 1.0x real time or better
+
+
+Do Not Change In This Experiment
+
+- Do not change the model family.
+- Do not add VoiceDesign back into the Big Mike runtime path.
+- Do not add system TTS fallback.
+- Do not play reference/filler clips as generated dialogue.
+- Do not change the qwenclone artifact format unless required for IPC.
+- Do not change Foundation prompt/segmentation behavior.
+- Do not change row cap as a fake speed optimization.
+
+
+Recommended Next Step
+
+First, make the current logs truthful:
+
+- rename "parallelQwenMode: dualLaneSharedWeights" to something accurate like
+  "inProcessSharedWeightsDefaultStream".
+- log whether lane execution is defaultOnly or real per-lane stream.
+- log process ID for the current app process.
+
+Then run one targeted feasibility spike:
+
+1. Verify whether visionOS supports a persistent app-owned worker service for
+   this use case.
+2. If yes, create a minimal worker that only loads the model and returns a
+   health/memory report.
+3. If no, implement real per-lane MLX streams or per-lane serial queues before
+   touching process architecture.
+
+The current 707 MB / 8 GB readout argues for trying stronger concurrency, but
+the correct next implementation depends on whether visionOS allows true worker
+processes and whether MLX memory remains shared or duplicated across them.

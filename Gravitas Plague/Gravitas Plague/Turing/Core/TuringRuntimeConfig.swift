@@ -32,18 +32,24 @@ struct TuringRuntimeConfig: Codable, Sendable, Equatable {
         let voiceArgumentPolicy: VoiceArgumentPolicy
         let refAudioPolicy: RefAudioPolicy
         let refTextPolicy: RefTextPolicy
+        let parallelQwenMode: String
+        let freshInstanceCount: Int
+        let allowSharedWeightLaneFallback: Bool
 
         enum VoiceArgumentPolicy: String, Codable, Sendable {
             case baseNilOnly
             case basePresetOnly
+            case voiceDesignInstructionRequired
         }
 
         enum RefAudioPolicy: String, Codable, Sendable {
             case phase0NilOnly
+            case forbidden
         }
 
         enum RefTextPolicy: String, Codable, Sendable {
             case phase0NilOnly
+            case forbidden
         }
 
         enum CodingKeys: String, CodingKey {
@@ -65,6 +71,9 @@ struct TuringRuntimeConfig: Codable, Sendable, Equatable {
             case voiceArgumentPolicy
             case refAudioPolicy
             case refTextPolicy
+            case parallelQwenMode
+            case freshInstanceCount
+            case allowSharedWeightLaneFallback
         }
 
         init(from decoder: Decoder) throws {
@@ -99,6 +108,18 @@ struct TuringRuntimeConfig: Codable, Sendable, Equatable {
                 RefTextPolicy.self,
                 forKey: .refTextPolicy
             ) ?? .phase0NilOnly
+            parallelQwenMode = try container.decodeIfPresent(
+                String.self,
+                forKey: .parallelQwenMode
+            ) ?? "freshInstances"
+            freshInstanceCount = try container.decodeIfPresent(
+                Int.self,
+                forKey: .freshInstanceCount
+            ) ?? 4
+            allowSharedWeightLaneFallback = try container.decodeIfPresent(
+                Bool.self,
+                forKey: .allowSharedWeightLaneFallback
+            ) ?? false
         }
     }
 

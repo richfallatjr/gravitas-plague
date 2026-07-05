@@ -38,12 +38,12 @@ public final class TuringQwenNativeResidentResources: @unchecked Sendable {
         self.quantization = "\(loadedConfig.quantization?.bits ?? 0)bit"
 
         print("""
-        [TuringQwenParallel] residentResources loaded
-          sharedWeights: true
+        [TuringQwenNativeResidentResources] loaded
           modelID: \(modelID)
           quantization: \(quantization)
-          parallelQwenMode: dualLaneSharedWeights
-          runtimePerLaneWeightLoads: false
+          weightsStore: instanceOwned
+          owner: callerScoped
+          sharedWeights: callerDefined
         """)
     }
 }
@@ -87,7 +87,7 @@ public actor TuringQwenNativeParallelLanePool {
         print("""
         [TuringQwenParallel] lane pool ready
           parallelQwenLanes: \(laneCountRequested)
-          parallelQwenMode: dualLaneSharedWeights
+          parallelQwenMode: inProcessSharedWeightsDefaultStream
           laneCountActive: \(active)
           sharedWeights: true
           memoryGuardDowngraded: \(active < laneCountRequested)
