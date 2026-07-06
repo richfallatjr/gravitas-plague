@@ -120,6 +120,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let roomSkinningCoordinator = RoomSkinningCoordinator()
     private let hordePortalManager = HordePortalManager()
     private let wallPosterUIController = WallMountedPosterUIController()
+    private let turingWalkieBundleController = TuringStoryWalkieBundleController()
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
     private let hordeRoomScanTracker = HordeRoomScanTracker()
     private let enemyBodySeparationResolver = HordeEnemyBodySeparationResolver()
@@ -129,6 +130,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let hordeSimulationEngine = HordeSimulationEngine()
     private let hordeEnemyBrainEngine = HordeEnemyBrainEngine()
     private let hordePrewarmCoordinator = HordePrewarmCoordinator()
+    private var turingStoryPropBillboardIconController: TuringStoryPropBillboardIconController?
 
     private var architectureFrameIndex = 0
     private var latestFrameClockSnapshot: FrameClockSnapshot?
@@ -282,6 +284,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             sceneRoot: root,
             wallManager: roomSkinningCoordinator.wallManager,
             hordePortalManager: hordePortalManager,
+            occupancyRegistry: wallPropOccupancyRegistry
+        )
+        turingWalkieBundleController.installIfNeeded(
+            sceneRoot: root,
+            wallManager: roomSkinningCoordinator.wallManager,
             occupancyRegistry: wallPropOccupancyRegistry
         )
         forestEnvironmentController.applyIBLReceiverRecursively(
@@ -629,7 +636,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             roomSkinningCoordinator.cancelRoomSkinning()
 
         case .startStoryEpisode(let episodeID):
+            requestStoryWalkieBundlePlacement(reason: "startStoryEpisode.\(episodeID.rawValue)")
             startStoryEpisode(episodeID)
+
+        case .requestStoryWalkieBundlePlacement:
+            requestStoryWalkieBundlePlacement(reason: "storyModeRequested")
 
         case .updatePortalHDRIAtmosphere(let atmosphere):
             roomSkinningCoordinator.updatePortalContentAtmosphere(atmosphere)
@@ -672,6 +683,81 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               qwenSmokeAutoRun: false
             """
         )
+    }
+
+    private func requestStoryWalkieBundlePlacement(
+        reason: String
+    ) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            for attempt in 1...12 {
+                let pose = self.spatialProvider.currentPoseOrFallback()
+                self.roomSkinningCoordinator.wallManager
+                    .updateViewerPositionForWallSelection(
+                        pose.headPosition
+                    )
+                let placed = await self.turingWalkieBundleController
+                    .placeOnBestWallIfNeeded(
+                        playerPosition: pose.headPosition,
+                        playerForward: pose.headForward
+                    )
+
+                if placed {
+                    self.configureTuringWalkieAudioAndInteraction(
+                        reason: reason,
+                        attempt: attempt
+                    )
+                    return
+                }
+
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+
+            print("""
+            [TuringWalkieBundle] placement not available after retries
+              reason: \(reason)
+            """)
+        }
+    }
+
+    private func configureTuringWalkieAudioAndInteraction(
+        reason: String,
+        attempt: Int
+    ) {
+        guard let walkieEmitter = turingWalkieBundleController.walkieAudioEmitter else {
+            print("""
+            [TuringAudio] ERROR cannot select walkie emitter
+              reason: missing_walkie_emitter
+              source: turing_story_wall_bundle_v1
+            """)
+            return
+        }
+
+        TuringStoryWalkieAudioRoute.install(
+            audioController: audioController,
+            walkieEmitter: walkieEmitter
+        )
+
+        if let iconAnchor = turingWalkieBundleController.walkieIconAnchor {
+            let controller = turingStoryPropBillboardIconController
+                ?? TuringStoryPropBillboardIconController()
+            controller.installWalkieMicIcon(
+                anchor: iconAnchor,
+                target: .walkieTalkie,
+                onHoldBegan: {},
+                onHoldEnded: {}
+            )
+            turingStoryPropBillboardIconController = controller
+        }
+
+        print("""
+        [TuringScriptTrigger] physical anchors registered
+          walkieTalkie: TuringStoryWalkieTalkie_IconAnchor
+          dadFrame: TuringStoryDadFrame_IconAnchor
+          reason: \(reason)
+          placementAttempt: \(attempt)
+        """)
     }
 
     func setEnemyCollisionDebugVisible(
@@ -1262,6 +1348,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         resetHordeBenchmarkDeathPresentation()
         forestEnvironmentController.shutdown()
         wallPosterUIController.reset()
+        turingStoryPropBillboardIconController?.removeWalkieMicIcon()
+        turingStoryPropBillboardIconController = nil
+        turingWalkieBundleController.reset(reason: "immersiveShutdown")
+        TuringStoryWalkieAudioRoute.clear(reason: "immersiveShutdown")
         onWallPosterUIActiveChanged?(false)
 
         sceneRoot = nil

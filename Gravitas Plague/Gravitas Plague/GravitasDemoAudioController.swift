@@ -807,6 +807,7 @@ final class GravitasDemoAudioController {
                   file: \(fileURL.lastPathComponent)
                   label: \(label)
                   emitter: \(entity.name)
+                  gainDB: \(volumeDB)
                   durationSeconds: \(duration)
                   spatial: true
                 """
@@ -835,6 +836,21 @@ final class GravitasDemoAudioController {
         playGeneratedTuringSpatialAudio(
             fileURL: fileURL,
             at: radioAudioEntity,
+            volumeDB: volumeDB,
+            label: label
+        )
+    }
+
+    @discardableResult
+    func playGeneratedTuringAtWalkieSource(
+        fileURL: URL,
+        walkieEmitter: Entity,
+        volumeDB: Float = -6.0,
+        label: String = "turing_walkie_qwen"
+    ) -> UUID? {
+        playGeneratedTuringSpatialAudio(
+            fileURL: fileURL,
+            at: walkieEmitter,
             volumeDB: volumeDB,
             label: label
         )

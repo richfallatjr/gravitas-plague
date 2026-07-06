@@ -5,6 +5,7 @@ enum WallPropOccupancyKind: String, Codable, Hashable, Sendable {
     case wallPoster
     case hordePortal
     case storyPortal
+    case storyWalkieBundle
     case killSwitch
     case other
 }
@@ -175,6 +176,45 @@ final class WallPropOccupancyRegistry {
                 print(
                     """
                     [WallOccupancy] HARD REJECT portal overlaps poster
+                      candidateKind: \(candidateKind.rawValue)
+                      recordKind: \(record.kind.rawValue)
+                      recordLabel: \(record.label)
+                      candidate: \(candidate)
+                      occupied: \(occupied)
+                    """
+                )
+                return true
+            }
+
+            if candidateKind == .storyWalkieBundle,
+               [
+                   .wallPoster,
+                   .hordePortal,
+                   .storyPortal,
+                   .storyWalkieBundle
+               ].contains(record.kind) {
+                print(
+                    """
+                    [WallOccupancy] HARD REJECT story walkie bundle overlaps occupied wall prop
+                      candidateKind: \(candidateKind.rawValue)
+                      recordKind: \(record.kind.rawValue)
+                      recordLabel: \(record.label)
+                      candidate: \(candidate)
+                      occupied: \(occupied)
+                    """
+                )
+                return true
+            }
+
+            if record.kind == .storyWalkieBundle,
+               [
+                   .wallPoster,
+                   .hordePortal,
+                   .storyPortal
+               ].contains(candidateKind) {
+                print(
+                    """
+                    [WallOccupancy] HARD REJECT candidate overlaps story walkie bundle
                       candidateKind: \(candidateKind.rawValue)
                       recordKind: \(record.kind.rawValue)
                       recordLabel: \(record.label)

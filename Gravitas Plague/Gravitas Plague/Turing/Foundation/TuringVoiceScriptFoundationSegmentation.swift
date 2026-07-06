@@ -50,7 +50,10 @@ struct TuringVoiceScriptFoundationSegmentationService: Sendable {
                 prompt,
                 purpose: "voiceScript_exactSegmentation"
             )
-        } catch where TuringFoundationGuardrailPolicy.isGuardrailError(error) {
+        } catch {
+            guard TuringFoundationGuardrailPolicy.isGuardrailError(error) else {
+                throw error
+            }
             print("""
             [TuringPhase1] Foundation guardrails triggered
               requestID: \(requestID)
@@ -81,7 +84,10 @@ struct TuringVoiceScriptFoundationSegmentationService: Sendable {
                 raw: raw,
                 repairService: repair
             )
-        } catch where TuringFoundationGuardrailPolicy.isGuardrailError(error) {
+        } catch {
+            guard TuringFoundationGuardrailPolicy.isGuardrailError(error) else {
+                throw error
+            }
             print("""
             [TuringPhase1] Foundation repair guardrails triggered
               requestID: \(requestID)

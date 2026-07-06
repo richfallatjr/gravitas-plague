@@ -122,6 +122,7 @@ final class PlagueDemoSession: ObservableObject {
         case confirmRoomSkinningDoorAdjustment
         case cancelRoomSkinning
         case startStoryEpisode(TuringEpisodeID)
+        case requestStoryWalkieBundlePlacement
         case updatePortalHDRIAtmosphere(PortalHDRIAtmosphere)
         case updatePortalLoopGainDB(Float)
         case updateEnemyCollisionDebugVisible(Bool)
@@ -296,6 +297,7 @@ final class PlagueDemoSession: ObservableObject {
             activeMode = .none
             statusMessage = "Select a Story episode."
             isStoryEpisodePickerPresented = false
+            send(.requestStoryWalkieBundlePlacement)
 
             if !PlagueFeatureFlags.showStoryEpisodePicker {
                 startStoryEpisode(
@@ -687,6 +689,7 @@ final class PlagueDemoSession: ObservableObject {
             activeMode = .none
             statusMessage = "Prologue Qwen Phase 0 controls are ready."
             resetPlayerDeathState()
+            send(.requestStoryWalkieBundlePlacement)
 
             print(
                 """
@@ -707,6 +710,7 @@ final class PlagueDemoSession: ObservableObject {
         activeMode = .none
         statusMessage = "Starting \(episode.title)."
         resetPlayerDeathState()
+        send(.requestStoryWalkieBundlePlacement)
         send(.startStoryEpisode(episodeID))
 
         print(

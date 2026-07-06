@@ -106,6 +106,7 @@ public final class TuringComputeGapAudioCoordinator {
 
     private let configuration: Configuration
     private let policy: TuringComputeGapAudioPolicy
+    private let playbackSink: TuringSpeechPlaybackSink?
     private let engine = AVAudioEngine()
     private let realSpeechNode = AVAudioPlayerNode()
     private let fillerNode = AVAudioPlayerNode()
@@ -137,10 +138,12 @@ public final class TuringComputeGapAudioCoordinator {
 
     public init(
         configuration: Configuration = Configuration(),
-        policy: TuringComputeGapAudioPolicy = .bigMikeDefault
+        policy: TuringComputeGapAudioPolicy = .bigMikeDefault,
+        playbackSink: TuringSpeechPlaybackSink? = nil
     ) throws {
         self.configuration = configuration
         self.policy = policy
+        self.playbackSink = playbackSink
         try configureAudioSessionIfAvailable()
         try configureEngine()
         self.fillerFiles = Self.discoverFillerFiles(
@@ -164,8 +167,12 @@ public final class TuringComputeGapAudioCoordinator {
         """)
     }
 
-    public static func makeBigMikeCoordinator() throws -> TuringComputeGapAudioCoordinator {
-        try TuringComputeGapAudioCoordinator()
+    public static func makeBigMikeCoordinator(
+        playbackSink: TuringSpeechPlaybackSink? = nil
+    ) throws -> TuringComputeGapAudioCoordinator {
+        try TuringComputeGapAudioCoordinator(
+            playbackSink: playbackSink ?? TuringStoryWalkieAudioRoute.makeActiveSink()
+        )
     }
 
     public func beginRun(
@@ -196,6 +203,10 @@ public final class TuringComputeGapAudioCoordinator {
         fillerNode.stop()
         realSpeechNode.reset()
         fillerNode.reset()
+        await playbackSink?.beginRun(
+            runID: runID,
+            expectedSegmentCount: expectedSegmentCount
+        )
         startEngineIfNeeded()
         print("""
         [TuringGapAudio] run started
@@ -387,6 +398,7 @@ public final class TuringComputeGapAudioCoordinator {
         longStallWarningTask?.cancel()
         longStallWarningTask = nil
         await stopFiller(reason: "cancelled", fade: false)
+        await playbackSink?.stopAll(reason: reason)
         realSpeechNode.stop()
         realSpeechNode.reset()
         finishWaiterIfNeeded()
@@ -508,6 +520,7 @@ public final class TuringComputeGapAudioCoordinator {
 
         if allComputeFinished && pendingGeneratedSegments.isEmpty {
             await stopFiller(reason: "runFinished", fade: false)
+            await playbackSink?.stopAll(reason: "runFinished")
             runActive = false
             print("""
             [TuringGapAudio] run finished
@@ -587,6 +600,11 @@ public final class TuringComputeGapAudioCoordinator {
         }
 
         do {
+            if playbackSink != nil {
+                try await startRealSpeechViaPlaybackSink(audio, reason: reason)
+                return
+            }
+
             let buffer = try makePCMBuffer(audio)
             realSpeechPlayingSegmentIndex = audio.segmentIndex
             realSpeechNode.volume = configuration.realSpeechVolume
@@ -613,6 +631,33 @@ public final class TuringComputeGapAudioCoordinator {
               error: \(error.localizedDescription)
             """)
             await runCancelled(reason: "realSpeechStartFailed")
+        }
+    }
+
+    private func startRealSpeechViaPlaybackSink(
+        _ audio: TuringComputeGapGeneratedAudio,
+        reason: String
+    ) async throws {
+        guard let playbackSink else {
+            return
+        }
+
+        realSpeechPlayingSegmentIndex = audio.segmentIndex
+        let duration = try await playbackSink.playGeneratedSegment(audio)
+
+        print("""
+        [TuringGapAudio] real speech started
+          segmentIndex: \(audio.segmentIndex)
+          reason: \(reason)
+          playbackSink: TuringWalkieSpatialPlaybackSink
+          durationSeconds: \(String(format: "%.3f", duration))
+        """)
+
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(
+                nanoseconds: UInt64(max(0.05, duration) * 1_000_000_000)
+            )
+            await self?.realSpeechFinished(segmentIndex: audio.segmentIndex)
         }
     }
 
@@ -675,6 +720,18 @@ public final class TuringComputeGapAudioCoordinator {
         let generation = fillerGeneration
         fillerPlaying = true
         fillerStopAfterCurrent = false
+
+        if playbackSink != nil {
+            startFillerViaPlaybackSink(
+                generation: generation,
+                firstInChain: true,
+                reason: reason,
+                waitingForSegmentIndex: waitingForSegmentIndex
+            )
+            scheduleLongStallWarning(waitingForSegmentIndex: waitingForSegmentIndex)
+            return
+        }
+
         fillerNode.stop()
         fillerNode.reset()
         fillerNode.volume = configuration.fillerVolume
@@ -686,6 +743,68 @@ public final class TuringComputeGapAudioCoordinator {
           waitingForSegmentIndex: \(waitingForSegmentIndex)
         """)
         scheduleLongStallWarning(waitingForSegmentIndex: waitingForSegmentIndex)
+    }
+
+    private func startFillerViaPlaybackSink(
+        generation: Int,
+        firstInChain: Bool,
+        reason: String,
+        waitingForSegmentIndex: Int
+    ) {
+        guard let playbackSink else {
+            return
+        }
+
+        let selected = randomFillerURL()
+        lastFillerFile = selected
+
+        print("""
+        [TuringGapAudio] filler started
+          reason: \(reason)
+          waitingForSegmentIndex: \(waitingForSegmentIndex)
+          playbackSink: TuringWalkieSpatialPlaybackSink
+        """)
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            do {
+                let duration = try await playbackSink.playFillerClip(
+                    fileURL: selected,
+                    label: selected.deletingPathExtension().lastPathComponent
+                )
+                print("""
+                [TuringGapAudio] filler clip \(firstInChain ? "started" : "chained")
+                  clip: \(selected.lastPathComponent)
+                  playbackSink: TuringWalkieSpatialPlaybackSink
+                """)
+                try? await Task.sleep(
+                    nanoseconds: UInt64(max(0.05, duration) * 1_000_000_000)
+                )
+                await self.fillerClipFinished(
+                    generation: generation,
+                    clipURL: selected
+                )
+            } catch {
+                print("""
+                [TuringGapAudio] filler clip load failed
+                  clip: \(selected.path)
+                  error: \(error.localizedDescription)
+                """)
+                self.fillerFiles.removeAll { $0 == selected }
+                self.fillerQueue.removeAll { $0 == selected }
+                if self.fillerFiles.isEmpty == false,
+                   self.runActive,
+                   generation == self.fillerGeneration {
+                    self.startFillerViaPlaybackSink(
+                        generation: generation,
+                        firstInChain: false,
+                        reason: reason,
+                        waitingForSegmentIndex: waitingForSegmentIndex
+                    )
+                }
+            }
+        }
     }
 
     private func startPreparedBacklogPause(

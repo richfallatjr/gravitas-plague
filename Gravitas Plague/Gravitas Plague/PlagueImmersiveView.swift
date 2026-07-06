@@ -16,6 +16,7 @@ struct PlagueImmersiveView: View {
     @StateObject private var deathPresentationController = DeathPresentationController()
     @State private var youDiedWorldAnchor: AnchorEntity?
     @State private var youDiedWorldCardPresenter = YouDiedWorldCardPresenter()
+    @State private var walkieMicHoldActive = false
 
     private let frameTimer = Timer.publish(
         every: 1.0 / 60.0,
@@ -135,6 +136,34 @@ struct PlagueImmersiveView: View {
                     Task { @MainActor in
                         session.showGameCenterLeaderboards()
                     }
+                }
+        )
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .targetedToEntity(where: .has(TuringStoryWalkieMicBillboardComponent.self))
+                .onChanged { _ in
+                    guard !walkieMicHoldActive else {
+                        return
+                    }
+
+                    walkieMicHoldActive = true
+                    NotificationCenter.default.post(
+                        name: .turingStoryWalkieMicHoldBegan,
+                        object: nil
+                    )
+                    print("[TuringWalkieBundle] mic billboard hold began")
+                }
+                .onEnded { _ in
+                    guard walkieMicHoldActive else {
+                        return
+                    }
+
+                    walkieMicHoldActive = false
+                    NotificationCenter.default.post(
+                        name: .turingStoryWalkieMicHoldEnded,
+                        object: nil
+                    )
+                    print("[TuringWalkieBundle] mic billboard hold ended")
                 }
         )
         .preferredSurroundingsEffect(

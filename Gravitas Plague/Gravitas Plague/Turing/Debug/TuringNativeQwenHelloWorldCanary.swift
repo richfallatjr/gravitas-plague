@@ -875,7 +875,10 @@ enum TuringNativeQwenHelloWorldCanary {
                 requestID: requestID,
                 emotion: emotion
             )
-        } catch where TuringFoundationGuardrailPolicy.isGuardrailError(error) {
+        } catch {
+            guard TuringFoundationGuardrailPolicy.isGuardrailError(error) else {
+                throw error
+            }
             print("""
             [TuringPhase1] Foundation guardrails triggered
               requestID: \(requestID)

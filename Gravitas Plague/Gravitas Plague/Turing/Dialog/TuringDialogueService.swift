@@ -40,7 +40,10 @@ actor TuringDialogueService {
                 prompt,
                 purpose: "voicePrompt_characterIntent"
             )
-        } catch where TuringFoundationGuardrailPolicy.isGuardrailError(error) {
+        } catch {
+            guard TuringFoundationGuardrailPolicy.isGuardrailError(error) else {
+                throw error
+            }
             print("""
             [TuringVoicePrompt] Foundation guardrails triggered
               characterID: \(profile.characterID)
@@ -64,7 +67,10 @@ actor TuringDialogueService {
                 raw: raw,
                 purpose: "TuringVoicePrompt"
             )
-        } catch where TuringFoundationGuardrailPolicy.isGuardrailError(error) {
+        } catch {
+            guard TuringFoundationGuardrailPolicy.isGuardrailError(error) else {
+                throw error
+            }
             print("""
             [TuringVoicePrompt] Foundation repair guardrails triggered
               characterID: \(profile.characterID)
@@ -128,7 +134,10 @@ actor TuringDialogueService {
                 raw: raw,
                 purpose: "TuringConversationNoBible"
             )
-        } catch where TuringFoundationGuardrailPolicy.isGuardrailError(error) {
+        } catch {
+            guard TuringFoundationGuardrailPolicy.isGuardrailError(error) else {
+                throw error
+            }
             plan = Self.bigMikeConversationGuardrailPlan(error: error)
         }
 
