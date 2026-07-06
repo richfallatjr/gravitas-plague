@@ -804,6 +804,11 @@ enum TuringNativeQwenHelloWorldCanary {
                 """)
 
                 let sectionTexts = sectionResult.segments.map(\.spokenText)
+                logAudiobookLLMToQwenTextHandoff(
+                    sectionResult: sectionResult,
+                    qwenTexts: sectionTexts,
+                    startingSegmentIndex: renderedSegmentCount
+                )
                 let requests = makeParallelBaseCloneRequests(
                     preset: preset,
                     cloneProfile: cloneProfile,
@@ -1036,6 +1041,39 @@ enum TuringNativeQwenHelloWorldCanary {
                 referenceRowLimit: preset.referenceRowLimit,
                 referenceWindowStrategy: preset.referenceWindowStrategy
             )
+        }
+    }
+
+    private static func logAudiobookLLMToQwenTextHandoff(
+        sectionResult: TuringAudiobookSectionSegmentationResult,
+        qwenTexts: [String],
+        startingSegmentIndex: Int
+    ) {
+        for (offset, segment) in sectionResult.segments.enumerated() {
+            let qwenText = qwenTexts.indices.contains(offset)
+                ? qwenTexts[offset]
+                : ""
+            let globalSegmentIndex = startingSegmentIndex + offset
+            let isExactMatch = segment.spokenText == qwenText
+
+            print("""
+            [TuringPhase1Audiobook] LLM segment handed to Qwen
+              sectionIndex: \(segment.sectionIndex)
+              localIndex: \(segment.localIndex)
+              globalIndexFromLLMPlan: \(segment.globalIndex)
+              qwenSegmentIndex: \(globalSegmentIndex)
+              llmSpokenUTF16: \(segment.spokenText.utf16.count)
+              qwenTextUTF16: \(qwenText.utf16.count)
+              exactTextMatch: \(isExactMatch)
+              llmReturnedSpokenText:
+            ---BEGIN_TURING_LLM_RETURNED_SPOKEN_TEXT---
+            \(segment.spokenText)
+            ---END_TURING_LLM_RETURNED_SPOKEN_TEXT---
+              qwenInputText:
+            ---BEGIN_TURING_QWEN_INPUT_TEXT---
+            \(qwenText)
+            ---END_TURING_QWEN_INPUT_TEXT---
+            """)
         }
     }
 

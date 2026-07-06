@@ -84,35 +84,33 @@ enum TuringAudiobookSourceSectioner {
         var units: [TuringAudiobookSourceUnit] = []
 
         for paragraphRange in paragraphRanges(in: normalizedSource) {
-            guard let trimmedRange = trimmedRange(
-                paragraphRange,
-                in: normalizedSource
-            ) else {
+            let paragraphText = String(normalizedSource[paragraphRange])
+            let paragraphWords = wordCount(paragraphText)
+
+            guard paragraphWords > 0 else {
                 continue
             }
 
-            let paragraphText = String(normalizedSource[trimmedRange])
-            let paragraphWords = wordCount(paragraphText)
             let paragraphChars = paragraphText.utf16.count
 
             if paragraphWords > policy.maxWords
                 || paragraphChars > policy.maxChars {
                 let sentenceUnits = sentenceUnits(
-                    in: trimmedRange,
+                    in: paragraphRange,
                     normalizedSource: normalizedSource
                 )
 
                 guard sentenceUnits.isEmpty == false else {
                     print("""
                     [TuringAudiobookSourceSectioner] sentence enumeration failed; keeping paragraph unit
-                      startUTF16: \(trimmedRange.lowerBound.utf16Offset(in: normalizedSource))
-                      endUTF16: \(trimmedRange.upperBound.utf16Offset(in: normalizedSource))
+                      startUTF16: \(paragraphRange.lowerBound.utf16Offset(in: normalizedSource))
+                      endUTF16: \(paragraphRange.upperBound.utf16Offset(in: normalizedSource))
                     """)
                     let unit = TuringAudiobookSourceUnit(
-                        startUTF16: trimmedRange.lowerBound.utf16Offset(
+                        startUTF16: paragraphRange.lowerBound.utf16Offset(
                             in: normalizedSource
                         ),
-                        endUTF16: trimmedRange.upperBound.utf16Offset(
+                        endUTF16: paragraphRange.upperBound.utf16Offset(
                             in: normalizedSource
                         ),
                         wordCount: paragraphWords
@@ -128,10 +126,10 @@ enum TuringAudiobookSourceSectioner {
                 }
             } else {
                 let unit = TuringAudiobookSourceUnit(
-                    startUTF16: trimmedRange.lowerBound.utf16Offset(
+                    startUTF16: paragraphRange.lowerBound.utf16Offset(
                         in: normalizedSource
                     ),
-                    endUTF16: trimmedRange.upperBound.utf16Offset(
+                    endUTF16: paragraphRange.upperBound.utf16Offset(
                         in: normalizedSource
                     ),
                     wordCount: paragraphWords
@@ -199,14 +197,7 @@ enum TuringAudiobookSourceSectioner {
             in: paragraphRange,
             options: [.bySentences, .substringNotRequired]
         ) { _, sentenceRange, _, _ in
-            guard let range = trimmedRange(
-                sentenceRange,
-                in: normalizedSource
-            ) else {
-                return
-            }
-
-            let text = String(normalizedSource[range])
+            let text = String(normalizedSource[sentenceRange])
             let count = wordCount(text)
             guard count > 0 else {
                 return
@@ -214,10 +205,10 @@ enum TuringAudiobookSourceSectioner {
 
             units.append(
                 TuringAudiobookSourceUnit(
-                    startUTF16: range.lowerBound.utf16Offset(
+                    startUTF16: sentenceRange.lowerBound.utf16Offset(
                         in: normalizedSource
                     ),
-                    endUTF16: range.upperBound.utf16Offset(
+                    endUTF16: sentenceRange.upperBound.utf16Offset(
                         in: normalizedSource
                     ),
                     wordCount: count
@@ -226,29 +217,6 @@ enum TuringAudiobookSourceSectioner {
         }
 
         return units
-    }
-
-    private static func trimmedRange(
-        _ range: Range<String.Index>,
-        in source: String
-    ) -> Range<String.Index>? {
-        var lower = range.lowerBound
-        var upper = range.upperBound
-
-        while lower < upper,
-              source[lower].isWhitespace {
-            lower = source.index(after: lower)
-        }
-
-        while lower < upper {
-            let beforeUpper = source.index(before: upper)
-            guard source[beforeUpper].isWhitespace else {
-                break
-            }
-            upper = beforeUpper
-        }
-
-        return lower < upper ? lower..<upper : nil
     }
 
     private static func wordCount(_ text: String) -> Int {

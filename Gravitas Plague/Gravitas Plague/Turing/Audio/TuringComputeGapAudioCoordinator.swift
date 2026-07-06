@@ -651,11 +651,13 @@ public final class TuringComputeGapAudioCoordinator {
           reason: \(reason)
           playbackSink: TuringWalkieSpatialPlaybackSink
           durationSeconds: \(String(format: "%.3f", duration))
+          completionMode: trackedWalkieSpatialOneShot
         """)
 
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(
-                nanoseconds: UInt64(max(0.05, duration) * 1_000_000_000)
+        Task { @MainActor [weak self, playbackSink] in
+            await playbackSink.waitForGeneratedSegmentPlaybackCompletion(
+                segmentIndex: audio.segmentIndex,
+                fallbackDuration: duration
             )
             await self?.realSpeechFinished(segmentIndex: audio.segmentIndex)
         }

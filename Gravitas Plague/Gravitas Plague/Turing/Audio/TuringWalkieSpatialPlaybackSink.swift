@@ -7,6 +7,7 @@ enum TuringWalkieAudioError: LocalizedError {
     case missingAudioController
     case invalidGeneratedAudio(Int)
     case fileWriteFailed(String)
+    case playbackStartFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -18,6 +19,8 @@ enum TuringWalkieAudioError: LocalizedError {
             return "Invalid generated walkie audio for segment \(segmentIndex)."
         case .fileWriteFailed(let message):
             return "Failed to write walkie audio file: \(message)"
+        case .playbackStartFailed(let label):
+            return "Failed to start walkie playback: \(label)"
         }
     }
 }
@@ -33,6 +36,9 @@ final class TuringWalkieSpatialPlaybackSink: TuringSpeechPlaybackSink {
     private let transientRoot: URL
     private var activeRunRoot: URL?
     private var staticLoopController: AudioPlaybackController?
+    private var generatedPlaybackIDsBySegment: [Int: UUID] = [:]
+
+    private let generatedPlaybackCompletionPollSeconds: TimeInterval = 0.05
 
     init(
         audioController: GravitasDemoAudioController,
@@ -56,6 +62,7 @@ final class TuringWalkieSpatialPlaybackSink: TuringSpeechPlaybackSink {
             isDirectory: true
         )
         activeRunRoot = runRoot
+        generatedPlaybackIDsBySegment.removeAll(keepingCapacity: true)
         do {
             try FileManager.default.createDirectory(
                 at: runRoot,
@@ -93,14 +100,59 @@ final class TuringWalkieSpatialPlaybackSink: TuringSpeechPlaybackSink {
         let duration = Double(audio.samples.count) /
             max(1, audio.sampleRate * Double(audio.channelCount))
 
-        _ = audioController.playGeneratedTuringAtWalkieSource(
+        guard let playbackID = audioController.playGeneratedTuringAtWalkieSource(
             fileURL: fileURL,
             walkieEmitter: walkieEmitter,
             volumeDB: Gain.turingPlaybackDB,
             label: "turing_walkie_qwen.segment\(audio.segmentIndex)"
-        )
+        ) else {
+            throw TuringWalkieAudioError.playbackStartFailed(
+                "turing_walkie_qwen.segment\(audio.segmentIndex)"
+            )
+        }
+        generatedPlaybackIDsBySegment[audio.segmentIndex] = playbackID
 
         return duration
+    }
+
+    func waitForGeneratedSegmentPlaybackCompletion(
+        segmentIndex: Int,
+        fallbackDuration: TimeInterval
+    ) async {
+        let started = Date()
+        let maximumWait = max(0.25, fallbackDuration + 2.0)
+
+        guard let playbackID = generatedPlaybackIDsBySegment[segmentIndex],
+              let audioController else {
+            try? await Task.sleep(
+                nanoseconds: UInt64(
+                    max(0.05, fallbackDuration)
+                        * 1_000_000_000
+                )
+            )
+            generatedPlaybackIDsBySegment.removeValue(forKey: segmentIndex)
+            return
+        }
+
+        while Date().timeIntervalSince(started) < maximumWait {
+            if audioController.isSpatialOneShotActive(id: playbackID) == false {
+                break
+            }
+            try? await Task.sleep(
+                nanoseconds: UInt64(
+                    generatedPlaybackCompletionPollSeconds * 1_000_000_000
+                )
+            )
+        }
+
+        generatedPlaybackIDsBySegment.removeValue(forKey: segmentIndex)
+
+        print("""
+        [TuringAudio] walkie generated playback completion observed
+          segmentIndex: \(segmentIndex)
+          fallbackDurationSeconds: \(String(format: "%.3f", fallbackDuration))
+          waitedSeconds: \(String(format: "%.3f", Date().timeIntervalSince(started)))
+        """)
     }
 
     func playFillerClip(
@@ -188,6 +240,7 @@ final class TuringWalkieSpatialPlaybackSink: TuringSpeechPlaybackSink {
 
     func stopAll(reason: String) async {
         stopRadioStaticLoop(reason: reason)
+        generatedPlaybackIDsBySegment.removeAll(keepingCapacity: false)
 
         if let activeRunRoot,
            FileManager.default.fileExists(atPath: activeRunRoot.path) {

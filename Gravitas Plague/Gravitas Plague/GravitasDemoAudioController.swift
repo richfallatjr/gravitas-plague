@@ -869,6 +869,13 @@ final class GravitasDemoAudioController {
         controller.stop()
     }
 
+    func isSpatialOneShotActive(
+        id: UUID
+    ) -> Bool {
+        pruneFinishedSpatialOneShots()
+        return activeSpatialOneShotsByID[id] != nil
+    }
+
     func startHordeMusicSequence() {
         stopHordeMusicSequence()
 

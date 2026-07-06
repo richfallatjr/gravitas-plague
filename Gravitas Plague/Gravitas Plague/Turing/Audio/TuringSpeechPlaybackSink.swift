@@ -11,6 +11,11 @@ public protocol TuringSpeechPlaybackSink: AnyObject {
         _ audio: TuringComputeGapGeneratedAudio
     ) async throws -> TimeInterval
 
+    func waitForGeneratedSegmentPlaybackCompletion(
+        segmentIndex: Int,
+        fallbackDuration: TimeInterval
+    ) async
+
     func playFillerClip(
         fileURL: URL,
         label: String
