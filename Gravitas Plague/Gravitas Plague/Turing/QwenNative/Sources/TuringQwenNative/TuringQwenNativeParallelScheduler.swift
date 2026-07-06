@@ -1,5 +1,11 @@
 import Foundation
 
+public struct TuringQwenNativeParallelSegmentSkip: Sendable {
+    public let laneID: Int
+    public let segmentIndex: Int
+    public let errorDescription: String
+}
+
 public actor TuringQwenNativeParallelScheduler {
     private let lanePool: TuringQwenNativeParallelLanePool
 
@@ -12,8 +18,10 @@ public actor TuringQwenNativeParallelScheduler {
     public func renderSegments(
         _ requests: [TuringQwenNativeBaseCloneSegmentRequest],
         runID: String,
+        skipSegmentFailures: Bool = true,
         onSegmentStarted: @Sendable @escaping (Int, Int) async -> Void,
-        onSegmentFinished: @Sendable @escaping (TuringQwenNativeGeneratedAudio) async throws -> Void
+        onSegmentFinished: @Sendable @escaping (TuringQwenNativeGeneratedAudio) async throws -> Void,
+        onSegmentSkipped: @Sendable @escaping (TuringQwenNativeParallelSegmentSkip) async -> Void = { _ in }
     ) async throws -> TuringQwenNativeParallelPerfReport {
         guard requests.isEmpty == false else {
             throw TuringQwenNativeError.nativeGenerationNotImplemented(
@@ -34,6 +42,7 @@ public actor TuringQwenNativeParallelScheduler {
           runID: \(runID)
           laneCountRequested: \(requested)
           laneCountActive: \(active)
+          skipSegmentFailures: \(skipSegmentFailures)
           sharedWeights: true
           streamMode: defaultOnly
         """)
@@ -44,10 +53,37 @@ public actor TuringQwenNativeParallelScheduler {
                     while let requestIndex = await workQueue.nextIndex() {
                         let request = requests[requestIndex]
                         await onSegmentStarted(laneID, request.segmentIndex)
-                        let generated = try await self.lanePool.render(
-                            request: request,
-                            laneID: laneID
-                        )
+                        let generated: TuringQwenNativeGeneratedAudio
+                        do {
+                            generated = try await self.lanePool.render(
+                                request: request,
+                                laneID: laneID
+                            )
+                        } catch {
+                            print("""
+                            [TuringQwenParallel] segment skipped
+                              segmentIndex: \(request.segmentIndex)
+                              laneID: \(laneID)
+                              reason: qwenSegmentFailure
+                              error: \(error.localizedDescription)
+                              spokenUTF16: \(request.text.utf16.count)
+                              spokenText:
+                            ---BEGIN_TURING_SKIPPED_QWEN_SEGMENT---
+                            \(request.text)
+                            ---END_TURING_SKIPPED_QWEN_SEGMENT---
+                            """)
+                            await onSegmentSkipped(
+                                TuringQwenNativeParallelSegmentSkip(
+                                    laneID: laneID,
+                                    segmentIndex: request.segmentIndex,
+                                    errorDescription: error.localizedDescription
+                                )
+                            )
+                            if skipSegmentFailures {
+                                continue
+                            }
+                            throw error
+                        }
                         await metricsCollector.record(
                             TuringQwenNativeParallelLaneMetrics(
                                 laneID: laneID,

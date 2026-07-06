@@ -105,7 +105,6 @@ enum TuringNativeQwenHelloWorldCanary {
     private static let activeRuntimeMode = "baseClone"
     private static let activeWeightBackend = "mlx4bit"
     private static let memoryDiagnosticsEnvKey = "TURING_QWEN_MEMORY_DIAGNOSTICS"
-    private static let foundationGuardrailAutoResponse = "No man. You can't say that."
     private static let activeParallelQwenLaneCount = 2
     private static let activeParallelQwenMode = "freshInstances"
 
@@ -196,31 +195,53 @@ enum TuringNativeQwenHelloWorldCanary {
                     quantization: activeQuantization
                 )
 
-                let audio = try await renderBaseCloneSegment(
-                    preset: preset,
-                    cloneProfile: cloneProfile,
-                    engine: loadedEngine,
-                    segment: input.spokenText,
-                    segmentIndex: 0
-                )
+                do {
+                    let audio = try await renderBaseCloneSegment(
+                        preset: preset,
+                        cloneProfile: cloneProfile,
+                        engine: loadedEngine,
+                        segment: input.spokenText,
+                        segmentIndex: 0
+                    )
 
-                let processedSamples = await TuringQwenOutputPostProcessor.processSamplesForPlayback(
-                    samples: audio.samples,
-                    sampleRate: audio.sampleRate,
-                    segmentIndex: 0,
-                    reason: "directMemoryPlayer.\(preset.rawValue)"
-                )
+                    let processedSamples = await TuringQwenOutputPostProcessor.processSamplesForPlayback(
+                        samples: audio.samples,
+                        sampleRate: audio.sampleRate,
+                        segmentIndex: 0,
+                        reason: "directMemoryPlayer.\(preset.rawValue)"
+                    )
 
-                try await TuringQwenNativeMemoryPlayer.shared.play(
-                    samples: processedSamples,
-                    sampleRate: audio.sampleRate
-                )
+                    try await TuringQwenNativeMemoryPlayer.shared.play(
+                        samples: processedSamples,
+                        sampleRate: audio.sampleRate
+                    )
 
-                await loadedEngine.releaseResidentState(
-                    reason: "episodePickerRunFinished.\(preset.rawValue)",
-                    logMemorySnapshot: shouldLogMemoryDiagnostics
-                )
-                engine = nil
+                    await loadedEngine.releaseResidentState(
+                        reason: "episodePickerRunFinished.\(preset.rawValue)",
+                        logMemorySnapshot: shouldLogMemoryDiagnostics
+                    )
+                    engine = nil
+                } catch {
+                    print("""
+                    [TuringQwenNativeBaseClone] segment skipped
+                      segmentIndex: 0
+                      reason: qwenSegmentFailure
+                      error: \(error.localizedDescription)
+                      spokenUTF16: \(input.spokenText.utf16.count)
+                      spokenText:
+                    ---BEGIN_TURING_SKIPPED_QWEN_SEGMENT---
+                    \(input.spokenText)
+                    ---END_TURING_SKIPPED_QWEN_SEGMENT---
+                    """)
+                    await loadedEngine.releaseResidentState(
+                        reason: "episodePickerRunSkipped.\(preset.rawValue)",
+                        logMemorySnapshot: shouldLogMemoryDiagnostics
+                    )
+                    engine = nil
+                    logMemoryBudgetIfEnabled(label: "afterTransientCleanup")
+                    logMemoryBudgetIfEnabled(label: "afterQwenUnload")
+                    return .succeeded("Skipped failed Qwen segment for \(preset.rawValue)")
+                }
             }
 
             logMemoryBudgetIfEnabled(
@@ -357,9 +378,13 @@ enum TuringNativeQwenHelloWorldCanary {
         do {
             let spokenSegments = segments.map(\.text)
             guard spokenSegments.isEmpty == false else {
-                throw TuringRuntimeError.foundationJSONGateFailed(
-                    "Dialogue response did not contain speech segments."
-                )
+                print("""
+                [TuringNativeQwenSpeech] skipped
+                  runID: \(runID)
+                  source: \(source)
+                  reason: noSpeechSegments
+                """)
+                return .succeeded("Skipped \(runID): no speech segments")
             }
 
             print("""
@@ -546,6 +571,7 @@ enum TuringNativeQwenHelloWorldCanary {
             let report = try await scheduler.renderSegments(
                 requests,
                 runID: runID,
+                skipSegmentFailures: true,
                 onSegmentStarted: { _, segmentIndex in
                     await gapAudio.qwenComputeStarted(segmentIndex: segmentIndex)
                 },
@@ -558,6 +584,12 @@ enum TuringNativeQwenHelloWorldCanary {
                             sampleRate: Double(generated.audio.sampleRate),
                             channelCount: 1
                         )
+                    )
+                },
+                onSegmentSkipped: { skipped in
+                    await gapAudio.qwenComputeSkipped(
+                        segmentIndex: skipped.segmentIndex,
+                        reason: skipped.errorDescription
                     )
                 }
             )
@@ -742,10 +774,13 @@ enum TuringNativeQwenHelloWorldCanary {
                         for: section,
                         in: sourcePlan.normalizedSourceText
                     )
+                    let skipReason = TuringFoundationGuardrailPolicy.isGuardrailError(error)
+                        ? "foundationGuardrailSkipped"
+                        : "foundationSectionFailure"
                     print("""
                     [TuringPhase1Audiobook] section skipped
                       sectionIndex: \(section.index)
-                      reason: foundationSectionFailure
+                      reason: \(skipReason)
                       error: \(error.localizedDescription)
                       sourceUTF16: \(sectionText.utf16.count)
                       qwenStarted: false
@@ -840,14 +875,15 @@ enum TuringNativeQwenHelloWorldCanary {
                 requestID: requestID,
                 emotion: emotion
             )
-        } catch where isFoundationGuardrailError(error) {
+        } catch where TuringFoundationGuardrailPolicy.isGuardrailError(error) {
             print("""
             [TuringPhase1] Foundation guardrails triggered
               requestID: \(requestID)
-              autoTuringResponse: \(foundationGuardrailAutoResponse)
-              qwenWillGenerateAutoResponse: true
+              result: skipped
+              qwenWillGenerateAutoResponse: false
+              error: \(error.localizedDescription)
             """)
-            return [foundationGuardrailAutoResponse]
+            return []
         }
 
         let segments = report.segments.map(\.spokenText)
@@ -865,23 +901,6 @@ enum TuringNativeQwenHelloWorldCanary {
         """)
 
         return segments
-    }
-
-    private static func isFoundationGuardrailError(
-        _ error: Error
-    ) -> Bool {
-        let description = [
-            error.localizedDescription,
-            String(describing: error)
-        ]
-        .joined(separator: " ")
-        .lowercased()
-
-        return description.contains("guardrail")
-            || description.contains("safety")
-            || description.contains("safe")
-            || description.contains("policy")
-            || description.contains("not allowed")
     }
 
     private static func runLongform(
@@ -1022,7 +1041,7 @@ enum TuringNativeQwenHelloWorldCanary {
         scheduler: TuringQwenNativeFreshInstanceScheduler,
         gapAudio: TuringParallelPerfGapAudioBridge,
         runID: String,
-        skipQwenSegmentFailures: Bool = false,
+        skipQwenSegmentFailures: Bool = true,
         onFirstSegmentReady: (@MainActor @Sendable () async -> Void)? = nil
     ) async throws -> TuringQwenNativeFreshInstanceRunReport {
         let firstSegmentReadyNotifier = TuringFirstSegmentReadyNotifier(

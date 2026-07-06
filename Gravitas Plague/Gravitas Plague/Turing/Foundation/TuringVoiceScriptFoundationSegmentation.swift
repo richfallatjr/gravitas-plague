@@ -44,10 +44,26 @@ struct TuringVoiceScriptFoundationSegmentationService: Sendable {
             name: "voiceScript_exactSegmentation"
         )
 
-        let raw = try await runner.runPrompt(
-            prompt,
-            purpose: "voiceScript_exactSegmentation"
-        )
+        let raw: String
+        do {
+            raw = try await runner.runPrompt(
+                prompt,
+                purpose: "voiceScript_exactSegmentation"
+            )
+        } catch where TuringFoundationGuardrailPolicy.isGuardrailError(error) {
+            print("""
+            [TuringPhase1] Foundation guardrails triggered
+              requestID: \(requestID)
+              result: skipped
+              qwenWillGenerateAutoResponse: false
+              error: \(error.localizedDescription)
+            """)
+            return TuringVoiceScriptFoundationSegmentationReport(
+                sourceText: sourceText,
+                segments: [],
+                exactCoveragePassed: false
+            )
+        }
 
         Self.logRawResponse(
             raw,
@@ -58,11 +74,27 @@ struct TuringVoiceScriptFoundationSegmentationService: Sendable {
         let repair = FoundationVoiceScriptJSONRepairService(
             runner: runner
         )
-        let payload = try await TuringJSONGate.decodeStrict(
-            ExactSpeechSegmentationPayload.self,
-            raw: raw,
-            repairService: repair
-        )
+        let payload: ExactSpeechSegmentationPayload
+        do {
+            payload = try await TuringJSONGate.decodeStrict(
+                ExactSpeechSegmentationPayload.self,
+                raw: raw,
+                repairService: repair
+            )
+        } catch where TuringFoundationGuardrailPolicy.isGuardrailError(error) {
+            print("""
+            [TuringPhase1] Foundation repair guardrails triggered
+              requestID: \(requestID)
+              result: skipped
+              qwenWillGenerateAutoResponse: false
+              error: \(error.localizedDescription)
+            """)
+            return TuringVoiceScriptFoundationSegmentationReport(
+                sourceText: sourceText,
+                segments: [],
+                exactCoveragePassed: false
+            )
+        }
 
         let segments = try validatePayload(payload)
         let coveragePassed = exactCoveragePassed(

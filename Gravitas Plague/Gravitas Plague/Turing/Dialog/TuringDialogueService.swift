@@ -34,19 +34,49 @@ actor TuringDialogueService {
           promptTemplate: voicePrompt_characterIntent
         """)
 
-        let raw = try await runner.runPrompt(
-            prompt,
-            purpose: "voicePrompt_characterIntent"
-        )
+        let raw: String
+        do {
+            raw = try await runner.runPrompt(
+                prompt,
+                purpose: "voicePrompt_characterIntent"
+            )
+        } catch where TuringFoundationGuardrailPolicy.isGuardrailError(error) {
+            print("""
+            [TuringVoicePrompt] Foundation guardrails triggered
+              characterID: \(profile.characterID)
+              result: skipped
+              qwenWillGenerateAutoResponse: false
+              error: \(error.localizedDescription)
+            """)
+            return TuringDialoguePlan(
+                schemaVersion: 1,
+                segments: []
+            )
+        }
         Self.logRawResponse(
             raw,
             name: "voicePrompt_characterIntent",
             promptCharacters: prompt.utf16.count
         )
-        let plan = try await decodePlanWithOneRepair(
-            raw: raw,
-            purpose: "TuringVoicePrompt"
-        )
+        let plan: TuringDialoguePlan
+        do {
+            plan = try await decodePlanWithOneRepair(
+                raw: raw,
+                purpose: "TuringVoicePrompt"
+            )
+        } catch where TuringFoundationGuardrailPolicy.isGuardrailError(error) {
+            print("""
+            [TuringVoicePrompt] Foundation repair guardrails triggered
+              characterID: \(profile.characterID)
+              result: skipped
+              qwenWillGenerateAutoResponse: false
+              error: \(error.localizedDescription)
+            """)
+            return TuringDialoguePlan(
+                schemaVersion: 1,
+                segments: []
+            )
+        }
 
         print("""
         [TuringVoicePrompt] gate passed
@@ -83,19 +113,24 @@ actor TuringDialogueService {
           promptTemplate: conversationPrompt_playerTurn_noBible
         """)
 
-        let raw = try await runner.runPrompt(
-            prompt,
-            purpose: "conversationPrompt_playerTurn_noBible"
-        )
-        Self.logRawResponse(
-            raw,
-            name: "conversationPrompt_playerTurn_noBible",
-            promptCharacters: prompt.utf16.count
-        )
-        let plan = try await decodePlanWithOneRepair(
-            raw: raw,
-            purpose: "TuringConversationNoBible"
-        )
+        let plan: TuringDialoguePlan
+        do {
+            let raw = try await runner.runPrompt(
+                prompt,
+                purpose: "conversationPrompt_playerTurn_noBible"
+            )
+            Self.logRawResponse(
+                raw,
+                name: "conversationPrompt_playerTurn_noBible",
+                promptCharacters: prompt.utf16.count
+            )
+            plan = try await decodePlanWithOneRepair(
+                raw: raw,
+                purpose: "TuringConversationNoBible"
+            )
+        } catch where TuringFoundationGuardrailPolicy.isGuardrailError(error) {
+            plan = Self.bigMikeConversationGuardrailPlan(error: error)
+        }
 
         print("""
         [TuringConversationNoBible] gate passed
@@ -107,6 +142,27 @@ actor TuringDialogueService {
         )
 
         return plan
+    }
+
+    private static func bigMikeConversationGuardrailPlan(
+        error: Error
+    ) -> TuringDialoguePlan {
+        print("""
+        [TuringConversationNoBible] Foundation guardrails triggered
+          fallbackResponse: \(TuringFoundationGuardrailPolicy.bigMikeConversationResponse)
+          qwenWillGenerateFallbackResponse: true
+          error: \(error.localizedDescription)
+        """)
+
+        return TuringDialoguePlan(
+            schemaVersion: 1,
+            segments: [
+                TuringSpeechSegment(
+                    text: TuringFoundationGuardrailPolicy.bigMikeConversationResponse,
+                    emotion: "firm"
+                )
+            ]
+        )
     }
 
     private func decodePlanWithOneRepair(
