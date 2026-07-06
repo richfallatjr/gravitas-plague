@@ -25,13 +25,14 @@ enum TuringWalkieAudioError: LocalizedError {
 @MainActor
 final class TuringWalkieSpatialPlaybackSink: TuringSpeechPlaybackSink {
     private enum Gain {
-        static let turingPlaybackDB: Float = 0.0
+        static let turingPlaybackDB: Float = -6.0
     }
 
     private weak var audioController: GravitasDemoAudioController?
     private weak var walkieEmitter: Entity?
     private let transientRoot: URL
     private var activeRunRoot: URL?
+    private var staticLoopController: AudioPlaybackController?
 
     init(
         audioController: GravitasDemoAudioController,
@@ -124,7 +125,70 @@ final class TuringWalkieSpatialPlaybackSink: TuringSpeechPlaybackSink {
         return Self.durationSeconds(of: fileURL)
     }
 
+    func startRadioStaticLoop(
+        fileURL: URL,
+        reason: String
+    ) throws {
+        guard staticLoopController == nil else {
+            print("""
+            [TuringRadioStaticLeadIn] already playing
+              reason: \(reason)
+              route: walkieSpatial
+            """)
+            return
+        }
+
+        guard let audioController else {
+            throw TuringWalkieAudioError.missingAudioController
+        }
+        guard let walkieEmitter,
+              walkieEmitter.parent != nil else {
+            throw TuringWalkieAudioError.missingWalkieEmitter
+        }
+
+        audioController.prepareIfNeeded()
+
+        let configuration = AudioFileResource.Configuration(
+            loadingStrategy: .preload,
+            shouldLoop: true
+        )
+        let resource = try AudioFileResource.load(
+            contentsOf: fileURL,
+            configuration: configuration
+        )
+
+        walkieEmitter.components.set(SpatialAudioComponent())
+        let controller = walkieEmitter.playAudio(resource)
+        controller.gain = Self.decibels(linearVolume: 0.20)
+        staticLoopController = controller
+
+        print("""
+        [TuringRadioStaticLeadIn] started
+          reason: \(reason)
+          file: \(fileURL.lastPathComponent)
+          route: walkieSpatial
+          emitter: \(walkieEmitter.name)
+        """)
+    }
+
+    func stopRadioStaticLoop(reason: String) {
+        guard let staticLoopController else {
+            return
+        }
+
+        staticLoopController.stop()
+        self.staticLoopController = nil
+
+        print("""
+        [TuringRadioStaticLeadIn] stopped
+          reason: \(reason)
+          route: walkieSpatial
+        """)
+    }
+
     func stopAll(reason: String) async {
+        stopRadioStaticLoop(reason: reason)
+
         if let activeRunRoot,
            FileManager.default.fileExists(atPath: activeRunRoot.path) {
             do {
@@ -231,6 +295,14 @@ final class TuringWalkieSpatialPlaybackSink: TuringSpeechPlaybackSink {
             return 0
         }
     }
+
+    private static func decibels(linearVolume: Float) -> Double {
+        guard linearVolume > 0 else {
+            return -96.0
+        }
+
+        return Double(20.0 * log10(linearVolume))
+    }
 }
 
 @MainActor
@@ -261,6 +333,8 @@ enum TuringStoryWalkieAudioRoute {
 
     static func clear(reason: String) {
         if activeSink != nil {
+            activeSink?.stopRadioStaticLoop(reason: reason)
+
             print("""
             [TuringAudio] walkie emitter cleared
               reason: \(reason)
@@ -271,5 +345,33 @@ enum TuringStoryWalkieAudioRoute {
 
     static func makeActiveSink() -> TuringSpeechPlaybackSink? {
         activeSink
+    }
+
+    static func startActiveRadioStaticLoop(
+        fileURL: URL,
+        reason: String
+    ) -> Bool {
+        guard let activeSink else {
+            return false
+        }
+
+        do {
+            try activeSink.startRadioStaticLoop(
+                fileURL: fileURL,
+                reason: reason
+            )
+            return true
+        } catch {
+            print("""
+            [TuringRadioStaticLeadIn] walkie route failed
+              reason: \(reason)
+              error: \(error.localizedDescription)
+            """)
+            return false
+        }
+    }
+
+    static func stopActiveRadioStaticLoop(reason: String) {
+        activeSink?.stopRadioStaticLoop(reason: reason)
     }
 }

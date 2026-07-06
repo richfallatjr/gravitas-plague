@@ -891,6 +891,20 @@ final class PlagueDemoSession: ObservableObject {
 
     @discardableResult
     func handleControlWindowSceneBackgrounded() -> Bool {
+        if selectedOperationMode == .story || experienceMode == .story {
+            print(
+                """
+                [PlagueQuit] ignored control window background for active Story mode
+                  selectedOperationMode: \(selectedOperationMode?.rawValue ?? "none")
+                  experienceMode: \(experienceMode.rawValue)
+                  reason: preserve_story_video_capture
+                  killSwitchNextBackground: false
+                """
+            )
+
+            return false
+        }
+
         if let ignoreUntil = controlWindowBackgroundIgnoreUntil,
            Date() < ignoreUntil {
             let reason = controlWindowBackgroundIgnoreReason ?? "unknown"

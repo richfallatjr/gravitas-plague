@@ -4,13 +4,29 @@ import Foundation
 
 @MainActor
 final class TuringRadioStaticLeadInController: ObservableObject {
+    private enum ActiveRoute {
+        case walkieSpatial
+        case localPlayer
+
+        var logName: String {
+            switch self {
+            case .walkieSpatial:
+                return "walkieSpatial"
+            case .localPlayer:
+                return "localPlayerFallback"
+            }
+        }
+    }
+
     private var player: AVAudioPlayer?
+    private var activeRoute: ActiveRoute?
 
     func start(reason: String) {
-        if player?.isPlaying == true {
+        if activeRoute != nil || player?.isPlaying == true {
             print("""
             [TuringRadioStaticLeadIn] already playing
               reason: \(reason)
+              route: \(activeRoute?.logName ?? "localPlayer")
             """)
             return
         }
@@ -27,6 +43,14 @@ final class TuringRadioStaticLeadInController: ObservableObject {
             return
         }
 
+        if TuringStoryWalkieAudioRoute.startActiveRadioStaticLoop(
+            fileURL: url,
+            reason: reason
+        ) {
+            activeRoute = .walkieSpatial
+            return
+        }
+
         do {
             let player = try AVAudioPlayer(contentsOf: url)
             player.numberOfLoops = -1
@@ -34,10 +58,12 @@ final class TuringRadioStaticLeadInController: ObservableObject {
             player.prepareToPlay()
             player.play()
             self.player = player
+            activeRoute = .localPlayer
             print("""
             [TuringRadioStaticLeadIn] started
               reason: \(reason)
               file: \(url.lastPathComponent)
+              route: localPlayerFallback
             """)
         } catch {
             print("""
@@ -49,17 +75,26 @@ final class TuringRadioStaticLeadInController: ObservableObject {
     }
 
     func stop(reason: String) {
-        guard let player else {
+        guard let activeRoute else {
             return
         }
 
-        player.stop()
-        player.currentTime = 0
-        self.player = nil
+        switch activeRoute {
+        case .walkieSpatial:
+            TuringStoryWalkieAudioRoute.stopActiveRadioStaticLoop(
+                reason: reason
+            )
+        case .localPlayer:
+            player?.stop()
+            player?.currentTime = 0
+            player = nil
+            print("""
+            [TuringRadioStaticLeadIn] stopped
+              reason: \(reason)
+              route: localPlayerFallback
+            """)
+        }
 
-        print("""
-        [TuringRadioStaticLeadIn] stopped
-          reason: \(reason)
-        """)
+        self.activeRoute = nil
     }
 }
