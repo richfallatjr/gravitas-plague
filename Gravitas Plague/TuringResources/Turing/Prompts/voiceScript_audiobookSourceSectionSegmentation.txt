@@ -10,13 +10,7 @@ Prompt responsibilities:
 - Avoid tiny segments.
 - Split long sentences naturally.
 - Return JSON only. No markdown. No prose outside JSON.
-- Use the previous and next context only to make better boundary decisions.
-- Return segments only for the section text. Do not segment context text.
-
-Runtime note:
-The app will not verify source coverage, phrasing quality, segment count,
-segment duration, index order, duplicate text, missing text, added text, or
-rewritten text. Return the best ordered spoken segmentation you can.
+- Return segments only for the source section text.
 
 Return this exact sparse JSON schema:
 {
@@ -31,17 +25,7 @@ Return this exact sparse JSON schema:
   ]
 }
 
-Previous context tail, read-only:
-"""
-{{previousContextTail}}
-"""
-
-Section text to segment:
+Source section text to segment:
 """
 {{sectionText}}
-"""
-
-Next context head, read-only:
-"""
-{{nextContextHead}}
 """

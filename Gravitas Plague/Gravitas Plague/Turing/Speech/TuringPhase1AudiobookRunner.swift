@@ -3,7 +3,6 @@ import Foundation
 struct TuringPhase1AudiobookRunner: Sendable {
     private let runner: any TuringFoundationQueryRunning
     private let policy: TuringAudiobookSourceSectionPolicy
-    private let contextUTF16Length = 600
     private let maxLLMInFlight = 1
 
     init(
@@ -71,6 +70,8 @@ struct TuringPhase1AudiobookRunner: Sendable {
           minWords: \(policy.minWords)
           maxWords: \(policy.maxWords)
           maxChars: \(policy.maxChars)
+          sectionRangesOverlap: \(sourceSectionsHaveOverlap(sourceSections))
+          duplicatedContextUTF16: 0
           rollingWindow: currentPlusNext
           maxLLMInFlight: \(maxLLMInFlight)
         """)
@@ -108,19 +109,9 @@ struct TuringPhase1AudiobookRunner: Sendable {
             for: section,
             in: plan.normalizedSourceText
         )
-        let previousContextTail = previousContextTail(
-            before: section,
-            in: plan.normalizedSourceText
-        )
-        let nextContextHead = nextContextHead(
-            after: section,
-            in: plan.normalizedSourceText
-        )
         let prompt = try renderPrompt(
             section: section,
-            previousContextTail: previousContextTail,
-            sectionText: sectionText,
-            nextContextHead: nextContextHead
+            sectionText: sectionText
         )
 
         print("""
@@ -130,8 +121,9 @@ struct TuringPhase1AudiobookRunner: Sendable {
           sectionIndex: \(section.index)
           sourceUTF16: \(sectionText.utf16.count)
           wordCount: \(section.estimatedWordCount)
-          previousContextTailUTF16: \(previousContextTail.utf16.count)
-          nextContextHeadUTF16: \(nextContextHead.utf16.count)
+          previousContextTailUTF16: 0
+          nextContextHeadUTF16: 0
+          duplicatedSourceContextDisabled: true
         """)
 
         let raw = try await runner.runPrompt(
@@ -159,9 +151,7 @@ struct TuringPhase1AudiobookRunner: Sendable {
                 let repaired = try await runner.runPrompt(
                     renderRepairPrompt(
                         section: section,
-                        previousContextTail: previousContextTail,
                         sectionText: sectionText,
-                        nextContextHead: nextContextHead,
                         previousError: error
                     ),
                     purpose: "voiceScript_audiobookSourceSectionSegmentationRepair"
@@ -256,9 +246,7 @@ struct TuringPhase1AudiobookRunner: Sendable {
 
     private func renderPrompt(
         section: TuringAudiobookSourceSection,
-        previousContextTail: String,
-        sectionText: String,
-        nextContextHead: String
+        sectionText: String
     ) throws -> String {
         let url = try TuringResourceLoader.resourceURL(
             resourcePath: "Turing/Prompts/voiceScript_audiobookSourceSectionSegmentation.txt"
@@ -271,14 +259,6 @@ struct TuringPhase1AudiobookRunner: Sendable {
         prompt = prompt.replacingOccurrences(
             of: "{{sectionText}}",
             with: sectionText
-        )
-        prompt = prompt.replacingOccurrences(
-            of: "{{previousContextTail}}",
-            with: previousContextTail
-        )
-        prompt = prompt.replacingOccurrences(
-            of: "{{nextContextHead}}",
-            with: nextContextHead
         )
         return prompt
     }
@@ -361,9 +341,7 @@ struct TuringPhase1AudiobookRunner: Sendable {
 
     private func renderRepairPrompt(
         section: TuringAudiobookSourceSection,
-        previousContextTail: String,
         sectionText: String,
-        nextContextHead: String,
         previousError: Error
     ) -> String {
         """
@@ -391,61 +369,23 @@ struct TuringPhase1AudiobookRunner: Sendable {
         - Do not include sourceText.
         - Only return segments for the section text.
 
-        Previous context tail, read-only:
-        ---BEGIN_PREVIOUS_CONTEXT_TAIL---
-        \(previousContextTail)
-        ---END_PREVIOUS_CONTEXT_TAIL---
-
         Section text to segment:
         ---BEGIN_SECTION_TEXT---
         \(sectionText)
         ---END_SECTION_TEXT---
-
-        Next context head, read-only:
-        ---BEGIN_NEXT_CONTEXT_HEAD---
-        \(nextContextHead)
-        ---END_NEXT_CONTEXT_HEAD---
         """
     }
 
-    private func previousContextTail(
-        before section: TuringAudiobookSourceSection,
-        in source: String
-    ) -> String {
-        let start = max(0, section.sourceStartUTF16 - contextUTF16Length)
-        return substring(
-            source,
-            startUTF16: start,
-            endUTF16: section.sourceStartUTF16
-        )
-    }
-
-    private func nextContextHead(
-        after section: TuringAudiobookSourceSection,
-        in source: String
-    ) -> String {
-        let end = min(
-            source.utf16.count,
-            section.sourceEndUTF16 + contextUTF16Length
-        )
-        return substring(
-            source,
-            startUTF16: section.sourceEndUTF16,
-            endUTF16: end
-        )
-    }
-
-    private func substring(
-        _ source: String,
-        startUTF16: Int,
-        endUTF16: Int
-    ) -> String {
-        guard startUTF16 < endUTF16 else {
-            return ""
+    private func sourceSectionsHaveOverlap(
+        _ sections: [TuringAudiobookSourceSection]
+    ) -> Bool {
+        var previousEnd = 0
+        for section in sections.sorted(by: { $0.index < $1.index }) {
+            if section.sourceStartUTF16 < previousEnd {
+                return true
+            }
+            previousEnd = section.sourceEndUTF16
         }
-        let start = String.Index(utf16Offset: startUTF16, in: source)
-        let end = String.Index(utf16Offset: endUTF16, in: source)
-        return String(source[start..<end])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return false
     }
 }
