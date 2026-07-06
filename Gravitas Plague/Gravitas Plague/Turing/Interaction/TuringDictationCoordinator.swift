@@ -66,6 +66,9 @@ final class TuringDictationCoordinator: ObservableObject {
         status = .finishing
         tearDownAudioEngine()
         recognitionRequest?.endAudio()
+        TuringAudioSessionCoordinator.shared.endRecording(
+            owner: "TuringDictation"
+        )
 
         try? await Task.sleep(nanoseconds: 300_000_000)
 
@@ -97,6 +100,9 @@ final class TuringDictationCoordinator: ObservableObject {
     func cancel(reason: String) async {
         tearDownAudioEngine()
         recognitionRequest?.endAudio()
+        TuringAudioSessionCoordinator.shared.endRecording(
+            owner: "TuringDictation"
+        )
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil
@@ -225,17 +231,9 @@ final class TuringDictationCoordinator: ObservableObject {
 
     private func configureAudioSessionForRecording() throws {
 #if os(iOS) || os(visionOS) || os(tvOS)
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(
-            .playAndRecord,
-            mode: .spokenAudio,
-            options: [
-                .defaultToSpeaker,
-                .allowBluetooth,
-                .mixWithOthers
-            ]
+        TuringAudioSessionCoordinator.shared.beginRecording(
+            owner: "TuringDictation"
         )
-        try session.setActive(true, options: [])
 #endif
     }
 

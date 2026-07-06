@@ -19,10 +19,10 @@ enum TuringNativeQwenRunResult: Sendable {
 
 @MainActor
 private final class TuringParallelPerfGapAudioBridge: @unchecked Sendable {
-    private let coordinator: TuringComputeGapAudioCoordinator
+    private let coordinator: TuringGeneratedSpeechQueueCoordinator
 
     init(
-        coordinator: TuringComputeGapAudioCoordinator
+        coordinator: TuringGeneratedSpeechQueueCoordinator
     ) {
         self.coordinator = coordinator
     }
@@ -74,7 +74,7 @@ private final class TuringParallelPerfGapAudioBridge: @unchecked Sendable {
     func runCancelled(
         reason: String
     ) async {
-        await coordinator.runCancelled(reason: reason)
+        await coordinator.cancel(reason: reason)
     }
 }
 
@@ -553,7 +553,8 @@ enum TuringNativeQwenHelloWorldCanary {
 
         let gapAudio = try await MainActor.run {
             try TuringParallelPerfGapAudioBridge(
-                coordinator: TuringComputeGapAudioCoordinator.makeBigMikeCoordinator()
+                coordinator: TuringGeneratedSpeechQueueCoordinator
+                    .makeBigMikeCoordinator()
             )
         }
         await gapAudio.beginRun(
@@ -648,7 +649,7 @@ enum TuringNativeQwenHelloWorldCanary {
               parallelQwenMode: \(activeParallelQwenMode)
               foundationRollingWindow: true
               foundationWindow: currentPlusNext
-              playbackOwner: TuringComputeGapAudioCoordinator
+              playbackOwner: TuringGeneratedSpeechQueueCoordinator
             """)
 
             let modelRoot = try locateBundledBaseCloneModel()
@@ -713,7 +714,8 @@ enum TuringNativeQwenHelloWorldCanary {
     ) async throws {
         let gapAudio = try await MainActor.run {
             try TuringParallelPerfGapAudioBridge(
-                coordinator: TuringComputeGapAudioCoordinator.makeBigMikeCoordinator()
+                coordinator: TuringGeneratedSpeechQueueCoordinator
+                    .makeBigMikeCoordinator()
             )
         }
 
@@ -942,7 +944,8 @@ enum TuringNativeQwenHelloWorldCanary {
 
         let gapAudio = try await MainActor.run {
             try TuringParallelPerfGapAudioBridge(
-                coordinator: TuringComputeGapAudioCoordinator.makeBigMikeCoordinator()
+                coordinator: TuringGeneratedSpeechQueueCoordinator
+                    .makeBigMikeCoordinator()
             )
         }
 
