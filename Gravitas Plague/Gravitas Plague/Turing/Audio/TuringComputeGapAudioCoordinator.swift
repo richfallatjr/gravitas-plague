@@ -1232,8 +1232,32 @@ public final class TuringComputeGapAudioCoordinator {
     private func configureAudioSessionIfAvailable() throws {
         #if os(iOS) || os(tvOS) || os(visionOS)
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
+        if session.category == .playAndRecord ||
+            session.category == .record {
+            print("""
+            [TuringGapAudio] preserving active recording audio session
+              category: \(session.category.rawValue)
+              mode: \(session.mode.rawValue)
+            """)
+            return
+        }
+
+        try session.setCategory(
+            .ambient,
+            mode: .default,
+            options: [
+                .mixWithOthers
+            ]
+        )
         try session.setActive(true)
+
+        print("""
+        [TuringGapAudio] audio session configured for mixed playback
+          category: \(session.category.rawValue)
+          mode: \(session.mode.rawValue)
+          options: mixWithOthers
+          systemRecordingFriendly: true
+        """)
         #endif
     }
 
