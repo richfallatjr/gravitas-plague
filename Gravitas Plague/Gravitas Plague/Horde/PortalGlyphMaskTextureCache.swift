@@ -194,4 +194,3 @@ final class PortalGlyphMaskTextureCache {
         )
     }
 }
-

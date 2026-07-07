@@ -88,15 +88,8 @@ final class TuringGeneratedSpeechQueueCoordinator {
     static func makeBigMikeCoordinator(
         policy: Policy = .bigMikeDefault
     ) throws -> TuringGeneratedSpeechQueueCoordinator {
-        guard let sink = TuringStoryWalkieAudioRoute.makeActiveQueuedSink() else {
-            throw TuringRuntimeError.playbackFailed(
-                "Missing active walkie queued playback sink."
-            )
-        }
-
-        return TuringGeneratedSpeechQueueCoordinator(
-            sink: sink,
-            policy: policy
+        throw TuringRuntimeError.playbackFailed(
+            "TuringGeneratedSpeechQueueCoordinator is disabled for generated speech. Use TuringSerialWAVFillerPlaybackQueue."
         )
     }
 
@@ -344,36 +337,13 @@ final class TuringGeneratedSpeechQueueCoordinator {
 
         pendingGenerated.removeValue(forKey: audio.segmentIndex)
 
-        do {
-            let handle = try await sink.playGeneratedSegment(audio)
-            state = .playingGenerated(
-                segmentIndex: audio.segmentIndex,
-                handleID: handle.id
-            )
-
-            print("""
-            [TuringPlaybackQueue] generated playback started
-              segmentIndex: \(audio.segmentIndex)
-              handleID: \(handle.id.uuidString)
-              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
-            """)
-
-            Task { @MainActor [weak self] in
-                await self?.sink.waitForPlaybackCompletion(handle)
-                await self?.generatedPlaybackFinished(
-                    segmentIndex: audio.segmentIndex,
-                    handleID: handle.id
-                )
-            }
-        } catch {
-            skippedSegments.insert(audio.segmentIndex)
-            print("""
-            [TuringPlaybackQueue] generated playback start failed
-              segmentIndex: \(audio.segmentIndex)
-              error: \(error.localizedDescription)
-            """)
-            await reconcile(reason: "generatedStartFailed")
-        }
+        skippedSegments.insert(audio.segmentIndex)
+        print("""
+        [TuringPlaybackQueue] legacy generated playback blocked
+          segmentIndex: \(audio.segmentIndex)
+          expectedOwner: TuringSerialWAVFillerPlaybackQueue
+        """)
+        await reconcile(reason: "legacyGeneratedPlaybackBlocked")
     }
 
     private func generatedPlaybackFinished(

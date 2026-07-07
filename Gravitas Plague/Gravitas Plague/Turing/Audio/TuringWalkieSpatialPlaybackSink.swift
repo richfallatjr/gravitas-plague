@@ -96,11 +96,11 @@ final class TuringWalkieSpatialPlaybackSink: TuringSpeechPlaybackSink {
         print("""
         [TuringAudio] blocked legacy generated in-memory playback
           segmentIndex: \(audio.segmentIndex)
-          requiredOwner: TuringGeneratedWAVPlaybackQueue
-          requiredMethod: playGeneratedWAVSegment
+          requiredOwner: TuringSerialWAVFillerPlaybackQueue
+          requiredMethod: qwenComputeFinished
         """)
         throw TuringWalkieAudioError.playbackStartFailed(
-            "Legacy generated in-memory playback is disabled; use TuringGeneratedWAVPlaybackQueue."
+            "Legacy generated in-memory playback is disabled; use TuringSerialWAVFillerPlaybackQueue."
         )
     }
 

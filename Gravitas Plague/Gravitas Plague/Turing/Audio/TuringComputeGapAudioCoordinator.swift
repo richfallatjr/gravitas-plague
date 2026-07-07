@@ -89,6 +89,7 @@ public final class TuringComputeGapAudioCoordinator {
         case invalidGeneratedAudio(segmentIndex: Int)
         case invalidFillerAudio(String)
         case audioConversionFailed(String)
+        case legacyGeneratedPlaybackDisabled(segmentIndex: Int)
 
         public var errorDescription: String? {
             switch self {
@@ -100,6 +101,8 @@ public final class TuringComputeGapAudioCoordinator {
                 return "Filler audio is empty or invalid: \(path)"
             case .audioConversionFailed(let message):
                 return "Audio conversion failed: \(message)"
+            case .legacyGeneratedPlaybackDisabled(let segmentIndex):
+                return "Legacy generated playback is disabled for segment \(segmentIndex). Use TuringSerialWAVFillerPlaybackQueue."
             }
         }
     }
@@ -243,10 +246,12 @@ public final class TuringComputeGapAudioCoordinator {
         print("""
         [TuringGapAudio] legacy generated path used
           segmentIndex: \(segmentIndex)
-          expectedOwner: TuringGeneratedWAVPlaybackQueue
-          action: investigate_call_site
+          expectedOwner: TuringSerialWAVFillerPlaybackQueue
+          action: hard_block_and_cancel
         """)
         activeComputeSegmentIndices.remove(segmentIndex)
+        await runCancelled(reason: "legacyGeneratedPlaybackBlocked.segment\(segmentIndex)")
+        return
 
         guard segmentIndex >= nextPlaybackSegmentIndex else {
             print("""
@@ -644,29 +649,15 @@ public final class TuringComputeGapAudioCoordinator {
         _ audio: TuringComputeGapGeneratedAudio,
         reason: String
     ) async throws {
-        guard let playbackSink else {
-            return
-        }
-
-        realSpeechPlayingSegmentIndex = audio.segmentIndex
-        let duration = try await playbackSink.playGeneratedSegment(audio)
-
         print("""
-        [TuringGapAudio] legacy generated audio started
+        [TuringGapAudio] legacy generated playback blocked
           segmentIndex: \(audio.segmentIndex)
           reason: \(reason)
-          playbackSink: TuringWalkieSpatialPlaybackSink
-          durationSeconds: \(String(format: "%.3f", duration))
-          completionMode: trackedWalkieSpatialOneShot
+          expectedOwner: TuringSerialWAVFillerPlaybackQueue
         """)
-
-        Task { @MainActor [weak self, playbackSink] in
-            await playbackSink.waitForGeneratedSegmentPlaybackCompletion(
-                segmentIndex: audio.segmentIndex,
-                fallbackDuration: duration
-            )
-            await self?.realSpeechFinished(segmentIndex: audio.segmentIndex)
-        }
+        throw CoordinatorError.legacyGeneratedPlaybackDisabled(
+            segmentIndex: audio.segmentIndex
+        )
     }
 
     private func realSpeechFinished(segmentIndex: Int) async {
@@ -1102,7 +1093,7 @@ public final class TuringComputeGapAudioCoordinator {
                 }
             }
         }
-        return try convertToPlaybackFormat(buffer, context: "generated.segment\(audio.segmentIndex)")
+        return try convertToPlaybackFormat(buffer, context: "legacyGenerated.segment\(audio.segmentIndex)")
     }
 
     private func makeFillerBuffer(from url: URL) throws -> AVAudioPCMBuffer {

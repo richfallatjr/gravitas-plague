@@ -19,12 +19,18 @@ enum TuringNativeQwenRunResult: Sendable {
 
 @MainActor
 private final class TuringParallelPerfGapAudioBridge: @unchecked Sendable {
-    private let queue: TuringGeneratedWAVPlaybackQueue
+    private let queue: TuringSerialWAVFillerPlaybackQueue
 
     init(
-        queue: TuringGeneratedWAVPlaybackQueue
+        queue: TuringSerialWAVFillerPlaybackQueue
     ) {
         self.queue = queue
+        print("""
+        [TuringSerialBridge] playback owner selected
+          owner: TuringSerialWAVFillerPlaybackQueue
+          generatedPlayback: fileBackedSerialAVAudioPlayer
+          legacyGapAudioGeneratedPlayback: blocked
+        """)
     }
 
     func beginRun(
@@ -553,7 +559,7 @@ enum TuringNativeQwenHelloWorldCanary {
 
         let gapAudio = await MainActor.run {
             TuringParallelPerfGapAudioBridge(
-                queue: TuringGeneratedWAVPlaybackQueue.makeDefaultQueue()
+                queue: TuringSerialWAVFillerPlaybackQueue.makeBigMikeQueue()
             )
         }
         await gapAudio.beginRun(
@@ -648,7 +654,7 @@ enum TuringNativeQwenHelloWorldCanary {
               parallelQwenMode: \(activeParallelQwenMode)
               foundationRollingWindow: true
               foundationWindow: currentPlusNext
-              playbackOwner: TuringGeneratedWAVPlaybackQueue
+              playbackOwner: TuringSerialWAVFillerPlaybackQueue
             """)
 
             let modelRoot = try locateBundledBaseCloneModel()
@@ -713,7 +719,7 @@ enum TuringNativeQwenHelloWorldCanary {
     ) async throws {
         let gapAudio = await MainActor.run {
             TuringParallelPerfGapAudioBridge(
-                queue: TuringGeneratedWAVPlaybackQueue.makeDefaultQueue()
+                queue: TuringSerialWAVFillerPlaybackQueue.makeBigMikeQueue()
             )
         }
 
@@ -942,7 +948,7 @@ enum TuringNativeQwenHelloWorldCanary {
 
         let gapAudio = await MainActor.run {
             TuringParallelPerfGapAudioBridge(
-                queue: TuringGeneratedWAVPlaybackQueue.makeDefaultQueue()
+                queue: TuringSerialWAVFillerPlaybackQueue.makeBigMikeQueue()
             )
         }
 

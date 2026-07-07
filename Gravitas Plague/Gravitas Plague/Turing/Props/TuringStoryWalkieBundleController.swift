@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import RealityKit
 import simd
+import UIKit
 
 @MainActor
 final class TuringStoryWalkieBundleController: ObservableObject {
@@ -184,6 +185,10 @@ final class TuringStoryWalkieBundleController: ObservableObject {
         root.children.removeAll()
         root.addChild(entity)
         recenterLoadedBundleVisuals(entity)
+        applyOcclusionPlaneMaterialIfPresent(
+            in: entity,
+            bundleURL: url
+        )
         loadedBundleRoot = entity
 
         print("""
@@ -194,6 +199,143 @@ final class TuringStoryWalkieBundleController: ObservableObject {
         """)
 
         return entity
+    }
+
+    private func applyOcclusionPlaneMaterialIfPresent(
+        in root: Entity,
+        bundleURL: URL
+    ) {
+        guard let occlusionEntity = root.turingFindEntity(containingNormalized: "occlusion01") else {
+            print("""
+            [TuringWalkieBundle] occlusion mesh not found
+              expectedEntityName: occlusion-01
+              action: occlusion_mask_disabled
+            """)
+            return
+        }
+
+        guard let maskURL = resolveOcclusionMaskURL(bundleURL: bundleURL) else {
+            occlusionEntity.isEnabled = false
+            print("""
+            [TuringWalkieBundle] occlusion mask texture not found
+              entity: \(occlusionEntity.name)
+              expectedSidecar: ao.png
+              rule: white_opaque_black_transparent
+              action: hide_occlusion_mesh_until_mask_exists
+            """)
+            return
+        }
+
+        do {
+            let texture = try PortalGlyphMaskTextureCache.shared
+                .textureForMaskPNG(url: maskURL)
+            var material = UnlitMaterial()
+            material.color = .init(
+                tint: UIColor.black,
+                texture: .init(texture)
+            )
+            material.blending = .transparent(
+                opacity: .init(floatLiteral: 1.0)
+            )
+            material.faceCulling = .none
+
+            let modelCount = overrideMaterialsRecursively(
+                under: occlusionEntity,
+                with: material
+            )
+            guard modelCount > 0 else {
+                print("""
+                [TuringWalkieBundle] occlusion mesh has no ModelComponent
+                  entity: \(occlusionEntity.name)
+                  action: occlusion_mask_disabled
+                """)
+                return
+            }
+
+            print("""
+            [TuringWalkieBundle] occlusion mask material applied
+              entity: \(occlusionEntity.name)
+              texture: \(maskURL.lastPathComponent)
+              rule: glyph_mask_white_opaque_black_transparent
+              blackIsMask: false
+              visibleColor: black
+              material: unlit_alpha_mask
+              faceCulling: none
+              usdzAuthoredMaterialOverridden: true
+              modelComponentsUpdated: \(modelCount)
+              inputDisabled: true
+            """)
+        } catch {
+            print("""
+            [TuringWalkieBundle] ERROR occlusion mask material failed
+              entity: \(occlusionEntity.name)
+              texture: \(maskURL.lastPathComponent)
+              error: \(error.localizedDescription)
+              action: preserve_authored_material
+            """)
+        }
+    }
+
+    @discardableResult
+    private func overrideMaterialsRecursively(
+        under entity: Entity,
+        with material: RealityKit.Material
+    ) -> Int {
+        var updatedCount = 0
+
+        if var model = entity.components[ModelComponent.self] {
+            model.materials = [material]
+            entity.components.set(model)
+            updatedCount += 1
+        }
+
+        entity.components.remove(InputTargetComponent.self)
+        entity.components.remove(CollisionComponent.self)
+
+        for child in entity.children {
+            updatedCount += overrideMaterialsRecursively(
+                under: child,
+                with: material
+            )
+        }
+
+        return updatedCount
+    }
+
+    private func resolveOcclusionMaskURL(
+        bundleURL: URL
+    ) -> URL? {
+        let directory = bundleURL.deletingLastPathComponent()
+        let sidecarNames = [
+            "ao",
+            "occlusion-01",
+            "occlusion_01",
+            "TuringStoryWallBundle_Occlusion01"
+        ]
+
+        for name in sidecarNames {
+            let url = directory
+                .appendingPathComponent(name)
+                .appendingPathExtension("png")
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+        }
+
+        for name in sidecarNames {
+            if let url = Bundle.main.url(
+                forResource: name,
+                withExtension: "png",
+                subdirectory: "Turing/Props"
+            ) ?? Bundle.main.url(
+                forResource: name,
+                withExtension: "png"
+            ) {
+                return url
+            }
+        }
+
+        return nil
     }
 
     private func recenterLoadedBundleVisuals(_ entity: Entity) {
@@ -544,6 +686,26 @@ private extension Entity {
         }
 
         return nil
+    }
+
+    func turingFindEntity(containingNormalized token: String) -> Entity? {
+        if normalizedEntityName.contains(token) {
+            return self
+        }
+
+        for child in children {
+            if let found = child.turingFindEntity(containingNormalized: token) {
+                return found
+            }
+        }
+
+        return nil
+    }
+
+    var normalizedEntityName: String {
+        name
+            .lowercased()
+            .filter { $0.isLetter || $0.isNumber }
     }
 }
 
