@@ -380,7 +380,18 @@ final class TuringGeneratedSpeechQueueCoordinator {
         segmentIndex: Int,
         handleID: UUID
     ) async {
-        guard case .playingGenerated(segmentIndex, handleID) = state else {
+        guard case .playingGenerated(
+            let activeSegmentIndex,
+            let activeHandleID
+        ) = state,
+              activeSegmentIndex == segmentIndex,
+              activeHandleID == handleID else {
+            print("""
+            [TuringPlaybackQueue] stale generated playback completion ignored
+              callbackSegmentIndex: \(segmentIndex)
+              callbackHandleID: \(handleID.uuidString)
+              state: \(stateLogName)
+            """)
             return
         }
 
@@ -465,7 +476,14 @@ final class TuringGeneratedSpeechQueueCoordinator {
         file: URL,
         handleID: UUID
     ) async {
-        guard case .playingFiller(handleID) = state else {
+        guard case .playingFiller(let activeHandleID) = state,
+              activeHandleID == handleID else {
+            print("""
+            [TuringPlaybackQueue] stale filler completion ignored
+              file: \(file.lastPathComponent)
+              callbackHandleID: \(handleID.uuidString)
+              state: \(stateLogName)
+            """)
             return
         }
 

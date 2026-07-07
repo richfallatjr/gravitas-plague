@@ -19,19 +19,19 @@ enum TuringNativeQwenRunResult: Sendable {
 
 @MainActor
 private final class TuringParallelPerfGapAudioBridge: @unchecked Sendable {
-    private let coordinator: TuringGeneratedSpeechQueueCoordinator
+    private let queue: TuringGeneratedWAVPlaybackQueue
 
     init(
-        coordinator: TuringGeneratedSpeechQueueCoordinator
+        queue: TuringGeneratedWAVPlaybackQueue
     ) {
-        self.coordinator = coordinator
+        self.queue = queue
     }
 
     func beginRun(
         runID: String,
         expectedSegmentCount: Int?
     ) async {
-        await coordinator.beginRun(
+        await queue.beginRun(
             runID: runID,
             expectedSegmentCount: expectedSegmentCount
         )
@@ -40,14 +40,14 @@ private final class TuringParallelPerfGapAudioBridge: @unchecked Sendable {
     func qwenComputeStarted(
         segmentIndex: Int
     ) async {
-        await coordinator.qwenComputeStarted(segmentIndex: segmentIndex)
+        await queue.qwenComputeStarted(segmentIndex: segmentIndex)
     }
 
     func qwenComputeFinished(
         segmentIndex: Int,
         audio: TuringComputeGapGeneratedAudio
     ) async {
-        await coordinator.qwenComputeFinished(
+        await queue.qwenComputeFinished(
             segmentIndex: segmentIndex,
             audio: audio
         )
@@ -57,24 +57,24 @@ private final class TuringParallelPerfGapAudioBridge: @unchecked Sendable {
         segmentIndex: Int,
         reason: String
     ) async {
-        await coordinator.qwenComputeSkipped(
+        await queue.qwenComputeSkipped(
             segmentIndex: segmentIndex,
             reason: reason
         )
     }
 
     func qwenComputeAllFinished() async {
-        await coordinator.qwenComputeAllFinished()
+        await queue.qwenComputeAllFinished()
     }
 
     func waitUntilPlaybackFinished() async {
-        await coordinator.waitUntilPlaybackFinished()
+        await queue.waitUntilPlaybackFinished()
     }
 
     func runCancelled(
         reason: String
     ) async {
-        await coordinator.cancel(reason: reason)
+        await queue.cancel(reason: reason)
     }
 }
 
@@ -551,10 +551,9 @@ enum TuringNativeQwenHelloWorldCanary {
             )
         }
 
-        let gapAudio = try await MainActor.run {
-            try TuringParallelPerfGapAudioBridge(
-                coordinator: TuringGeneratedSpeechQueueCoordinator
-                    .makeBigMikeCoordinator()
+        let gapAudio = await MainActor.run {
+            TuringParallelPerfGapAudioBridge(
+                queue: TuringGeneratedWAVPlaybackQueue.makeDefaultQueue()
             )
         }
         await gapAudio.beginRun(
@@ -649,7 +648,7 @@ enum TuringNativeQwenHelloWorldCanary {
               parallelQwenMode: \(activeParallelQwenMode)
               foundationRollingWindow: true
               foundationWindow: currentPlusNext
-              playbackOwner: TuringGeneratedSpeechQueueCoordinator
+              playbackOwner: TuringGeneratedWAVPlaybackQueue
             """)
 
             let modelRoot = try locateBundledBaseCloneModel()
@@ -712,10 +711,9 @@ enum TuringNativeQwenHelloWorldCanary {
         sourcePlan: TuringAudiobookSourcePlan,
         runID: String
     ) async throws {
-        let gapAudio = try await MainActor.run {
-            try TuringParallelPerfGapAudioBridge(
-                coordinator: TuringGeneratedSpeechQueueCoordinator
-                    .makeBigMikeCoordinator()
+        let gapAudio = await MainActor.run {
+            TuringParallelPerfGapAudioBridge(
+                queue: TuringGeneratedWAVPlaybackQueue.makeDefaultQueue()
             )
         }
 
@@ -942,10 +940,9 @@ enum TuringNativeQwenHelloWorldCanary {
           parallelQwenMode: \(activeParallelQwenMode)
         """)
 
-        let gapAudio = try await MainActor.run {
-            try TuringParallelPerfGapAudioBridge(
-                coordinator: TuringGeneratedSpeechQueueCoordinator
-                    .makeBigMikeCoordinator()
+        let gapAudio = await MainActor.run {
+            TuringParallelPerfGapAudioBridge(
+                queue: TuringGeneratedWAVPlaybackQueue.makeDefaultQueue()
             )
         }
 

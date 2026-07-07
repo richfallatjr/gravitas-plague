@@ -18,6 +18,9 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
     private var fillerLane: Entity?
     private var staticLane: Entity?
     private var transientEntitiesByHandleID: [UUID: Entity] = [:]
+    private var activePlaybackControllersByHandleID: [UUID: AudioPlaybackController] = [:]
+    private var completedPlaybackHandleIDs = Set<UUID>()
+    private var playbackCompletionContinuationsByHandleID: [UUID: CheckedContinuation<Void, Never>] = [:]
 
     init(
         audioController: GravitasDemoAudioController,
@@ -41,6 +44,18 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
             isDirectory: true
         )
         activeRunRoot = runRoot
+        for controller in activePlaybackControllersByHandleID.values {
+            controller.stop()
+        }
+        activePlaybackControllersByHandleID.removeAll(keepingCapacity: true)
+        for continuation in playbackCompletionContinuationsByHandleID.values {
+            continuation.resume()
+        }
+        playbackCompletionContinuationsByHandleID.removeAll(keepingCapacity: true)
+        completedPlaybackHandleIDs.removeAll(keepingCapacity: true)
+        for entity in transientEntitiesByHandleID.values {
+            entity.removeFromParent()
+        }
         transientEntitiesByHandleID.removeAll(keepingCapacity: true)
 
         do {
@@ -71,9 +86,6 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
     func playGeneratedSegment(
         _ audio: TuringComputeGapGeneratedAudio
     ) async throws -> TuringPlaybackHandle {
-        guard let audioController else {
-            throw TuringWalkieAudioError.missingAudioController
-        }
         try ensureAudioLanes()
         guard let generatedLane else {
             throw TuringWalkieAudioError.missingWalkieEmitter
@@ -89,19 +101,20 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
         segmentEntity.components.set(SpatialAudioComponent())
         generatedLane.addChild(segmentEntity)
 
-        guard let playbackID = audioController.playGeneratedTuringSpatialAudio(
-            fileURL: fileURL,
-            at: segmentEntity,
-            volumeDB: Gain.turingPlaybackDB,
-            label: "turing_walkie_queue.generated.segment\(audio.segmentIndex)"
-        ) else {
-            segmentEntity.removeFromParent()
-            throw TuringWalkieAudioError.playbackStartFailed(
-                "turing_walkie_queue.generated.segment\(audio.segmentIndex)"
-            )
-        }
-
+        let resource = try loadOneShotResource(fileURL)
+        let controller = segmentEntity.playAudio(resource)
+        controller.gain = Double(Gain.turingPlaybackDB)
+        let playbackID = UUID()
+        activePlaybackControllersByHandleID[playbackID] = controller
         transientEntitiesByHandleID[playbackID] = segmentEntity
+        controller.completionHandler = { [weak self] in
+            Task { @MainActor in
+                self?.markPlaybackCompleted(
+                    handleID: playbackID,
+                    label: "generated.segment\(audio.segmentIndex)"
+                )
+            }
+        }
 
         print("""
         [TuringQueuedAudio] generated segment started on walkie lane
@@ -109,6 +122,8 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
           handleID: \(playbackID.uuidString)
           lane: TuringWalkieAudio_GeneratedLane
           isolatedLane: true
+          sinkOwnedController: true
+          completionSource: AudioPlaybackController.completionHandler
           durationSeconds: \(String(format: "%.3f", duration))
         """)
 
@@ -123,26 +138,31 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
         fileURL: URL,
         label: String
     ) async throws -> TuringPlaybackHandle {
-        guard let audioController else {
-            throw TuringWalkieAudioError.missingAudioController
-        }
         try ensureAudioLanes()
         guard let fillerLane else {
             throw TuringWalkieAudioError.missingWalkieEmitter
         }
 
-        guard let playbackID = audioController.playGeneratedTuringSpatialAudio(
-            fileURL: fileURL,
-            at: fillerLane,
-            volumeDB: Gain.turingPlaybackDB,
-            label: "turing_walkie_queue.filler.\(label)"
-        ) else {
-            throw TuringWalkieAudioError.playbackStartFailed(
-                "turing_walkie_queue.filler.\(label)"
-            )
-        }
-
         let duration = Self.durationSeconds(of: fileURL)
+        let fillerEntity = Entity()
+        fillerEntity.name = "TuringWalkieAudio_Filler_\(label)"
+        fillerEntity.components.set(SpatialAudioComponent())
+        fillerLane.addChild(fillerEntity)
+
+        let resource = try loadOneShotResource(fileURL)
+        let controller = fillerEntity.playAudio(resource)
+        controller.gain = Double(Gain.turingPlaybackDB)
+        let playbackID = UUID()
+        activePlaybackControllersByHandleID[playbackID] = controller
+        transientEntitiesByHandleID[playbackID] = fillerEntity
+        controller.completionHandler = { [weak self] in
+            Task { @MainActor in
+                self?.markPlaybackCompleted(
+                    handleID: playbackID,
+                    label: "filler.\(label)"
+                )
+            }
+        }
 
         print("""
         [TuringQueuedAudio] filler clip started on walkie lane
@@ -151,6 +171,8 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
           file: \(fileURL.lastPathComponent)
           lane: TuringWalkieAudio_FillerLane
           isolatedLane: true
+          sinkOwnedController: true
+          completionSource: AudioPlaybackController.completionHandler
           durationSeconds: \(String(format: "%.3f", duration))
         """)
 
@@ -165,31 +187,49 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
         _ handle: TuringPlaybackHandle
     ) async {
         let started = Date()
-        let maximumWait = max(0.25, handle.duration + 2.0)
 
-        guard let audioController else {
-            try? await Task.sleep(
-                nanoseconds: UInt64(max(0.05, handle.duration) * 1_000_000_000)
-            )
-            cleanupTransientEntity(handleID: handle.id)
+        if completedPlaybackHandleIDs.remove(handle.id) != nil {
+            print("""
+            [TuringQueuedAudio] playback completion observed
+              label: \(handle.label)
+              handleID: \(handle.id.uuidString)
+              expectedDurationSeconds: \(String(format: "%.3f", handle.duration))
+              completionSource: AudioPlaybackController.completionHandler
+              waitedSeconds: \(String(format: "%.3f", Date().timeIntervalSince(started)))
+              controllerRetainedUntilRunCleanup: true
+              entityRetainedUntilRunCleanup: true
+            """)
             return
         }
 
-        while Date().timeIntervalSince(started) < maximumWait {
-            if audioController.isSpatialOneShotActive(id: handle.id) == false {
-                break
-            }
-            try? await Task.sleep(nanoseconds: 50_000_000)
+        if let controller = activePlaybackControllersByHandleID[handle.id],
+           controller.isPlaying == false {
+            print("""
+            [TuringQueuedAudio] playback completion observed
+              label: \(handle.label)
+              handleID: \(handle.id.uuidString)
+              expectedDurationSeconds: \(String(format: "%.3f", handle.duration))
+              completionSource: AudioPlaybackController.isPlaying.false
+              waitedSeconds: \(String(format: "%.3f", Date().timeIntervalSince(started)))
+              controllerRetainedUntilRunCleanup: true
+              entityRetainedUntilRunCleanup: true
+            """)
+            return
         }
 
-        cleanupTransientEntity(handleID: handle.id)
+        await withCheckedContinuation { continuation in
+            playbackCompletionContinuationsByHandleID[handle.id] = continuation
+        }
 
         print("""
         [TuringQueuedAudio] playback completion observed
           label: \(handle.label)
           handleID: \(handle.id.uuidString)
           expectedDurationSeconds: \(String(format: "%.3f", handle.duration))
+          completionSource: AudioPlaybackController.completionHandler
           waitedSeconds: \(String(format: "%.3f", Date().timeIntervalSince(started)))
+          controllerRetainedUntilRunCleanup: true
+          entityRetainedUntilRunCleanup: true
         """)
     }
 
@@ -251,6 +291,15 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
 
     func cancelRun(reason: String) async {
         await stopStaticLoop(reason: reason)
+        for continuation in playbackCompletionContinuationsByHandleID.values {
+            continuation.resume()
+        }
+        playbackCompletionContinuationsByHandleID.removeAll(keepingCapacity: false)
+        completedPlaybackHandleIDs.removeAll(keepingCapacity: false)
+        for controller in activePlaybackControllersByHandleID.values {
+            controller.stop()
+        }
+        activePlaybackControllersByHandleID.removeAll(keepingCapacity: false)
         for entity in transientEntitiesByHandleID.values {
             entity.removeFromParent()
         }
@@ -272,9 +321,36 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
         activeRunRoot = nil
     }
 
-    private func cleanupTransientEntity(handleID: UUID) {
-        transientEntitiesByHandleID.removeValue(forKey: handleID)?
-            .removeFromParent()
+    private func markPlaybackCompleted(
+        handleID: UUID,
+        label: String
+    ) {
+        if let continuation = playbackCompletionContinuationsByHandleID
+            .removeValue(forKey: handleID) {
+            continuation.resume()
+        } else {
+            completedPlaybackHandleIDs.insert(handleID)
+        }
+
+        print("""
+        [TuringQueuedAudio] playback controller completed
+          label: \(label)
+          handleID: \(handleID.uuidString)
+          completionSource: AudioPlaybackController.completionHandler
+        """)
+    }
+
+    private func loadOneShotResource(
+        _ fileURL: URL
+    ) throws -> AudioFileResource {
+        let configuration = AudioFileResource.Configuration(
+            loadingStrategy: .preload,
+            shouldLoop: false
+        )
+        return try AudioFileResource.load(
+            contentsOf: fileURL,
+            configuration: configuration
+        )
     }
 
     private func ensureAudioLanes() throws {
