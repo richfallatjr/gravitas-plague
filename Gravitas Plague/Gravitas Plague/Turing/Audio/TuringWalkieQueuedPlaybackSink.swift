@@ -20,7 +20,7 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
     private var transientEntitiesByHandleID: [UUID: Entity] = [:]
     private var activePlaybackControllersByHandleID: [UUID: AudioPlaybackController] = [:]
     private var completedPlaybackHandleIDs = Set<UUID>()
-    private var playbackCompletionContinuationsByHandleID: [UUID: CheckedContinuation<Void, Never>] = [:]
+    private var playbackCompletionContinuationsByHandleID: [UUID: [CheckedContinuation<Void, Never>]] = [:]
 
     init(
         audioController: GravitasDemoAudioController,
@@ -48,8 +48,10 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
             controller.stop()
         }
         activePlaybackControllersByHandleID.removeAll(keepingCapacity: true)
-        for continuation in playbackCompletionContinuationsByHandleID.values {
-            continuation.resume()
+        for continuations in playbackCompletionContinuationsByHandleID.values {
+            for continuation in continuations {
+                continuation.resume()
+            }
         }
         playbackCompletionContinuationsByHandleID.removeAll(keepingCapacity: true)
         completedPlaybackHandleIDs.removeAll(keepingCapacity: true)
@@ -86,51 +88,14 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
     func playGeneratedSegment(
         _ audio: TuringComputeGapGeneratedAudio
     ) async throws -> TuringPlaybackHandle {
-        try ensureAudioLanes()
-        guard let generatedLane else {
-            throw TuringWalkieAudioError.missingWalkieEmitter
-        }
-
-        let fileURL = try writeGeneratedAudioFile(audio)
-        let duration = Self.durationSeconds(of: fileURL)
-        let segmentEntity = Entity()
-        segmentEntity.name = String(
-            format: "TuringWalkieAudio_Generated_%04d",
-            audio.segmentIndex
-        )
-        segmentEntity.components.set(SpatialAudioComponent())
-        generatedLane.addChild(segmentEntity)
-
-        let resource = try loadOneShotResource(fileURL)
-        let controller = segmentEntity.playAudio(resource)
-        controller.gain = Double(Gain.turingPlaybackDB)
-        let playbackID = UUID()
-        activePlaybackControllersByHandleID[playbackID] = controller
-        transientEntitiesByHandleID[playbackID] = segmentEntity
-        controller.completionHandler = { [weak self] in
-            Task { @MainActor in
-                self?.markPlaybackCompleted(
-                    handleID: playbackID,
-                    label: "generated.segment\(audio.segmentIndex)"
-                )
-            }
-        }
-
         print("""
-        [TuringQueuedAudio] generated segment started on walkie lane
+        [TuringQueuedAudio] blocked legacy generated in-memory playback
           segmentIndex: \(audio.segmentIndex)
-          handleID: \(playbackID.uuidString)
-          lane: TuringWalkieAudio_GeneratedLane
-          isolatedLane: true
-          sinkOwnedController: true
-          completionSource: AudioPlaybackController.completionHandler
-          durationSeconds: \(String(format: "%.3f", duration))
+          requiredOwner: TuringGeneratedWAVPlaybackQueue
+          requiredMethod: playGeneratedWAVSegment
         """)
-
-        return TuringPlaybackHandle(
-            id: playbackID,
-            label: "generated.segment\(audio.segmentIndex)",
-            duration: duration
+        throw TuringWalkieAudioError.playbackStartFailed(
+            "Legacy generated in-memory playback is disabled; use TuringGeneratedWAVPlaybackQueue."
         )
     }
 
@@ -253,23 +218,11 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
             return
         }
 
-        if let controller = activePlaybackControllersByHandleID[handle.id],
-           controller.isPlaying == false {
-            print("""
-            [TuringQueuedAudio] playback completion observed
-              label: \(handle.label)
-              handleID: \(handle.id.uuidString)
-              expectedDurationSeconds: \(String(format: "%.3f", handle.duration))
-              completionSource: AudioPlaybackController.isPlaying.false
-              waitedSeconds: \(String(format: "%.3f", Date().timeIntervalSince(started)))
-              controllerRetainedUntilRunCleanup: true
-              entityRetainedUntilRunCleanup: true
-            """)
-            return
-        }
-
         await withCheckedContinuation { continuation in
-            playbackCompletionContinuationsByHandleID[handle.id] = continuation
+            playbackCompletionContinuationsByHandleID[
+                handle.id,
+                default: []
+            ].append(continuation)
         }
 
         print("""
@@ -342,8 +295,10 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
 
     func cancelRun(reason: String) async {
         await stopStaticLoop(reason: reason)
-        for continuation in playbackCompletionContinuationsByHandleID.values {
-            continuation.resume()
+        for continuations in playbackCompletionContinuationsByHandleID.values {
+            for continuation in continuations {
+                continuation.resume()
+            }
         }
         playbackCompletionContinuationsByHandleID.removeAll(keepingCapacity: false)
         completedPlaybackHandleIDs.removeAll(keepingCapacity: false)
@@ -376,9 +331,11 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
         handleID: UUID,
         label: String
     ) {
-        if let continuation = playbackCompletionContinuationsByHandleID
+        if let continuations = playbackCompletionContinuationsByHandleID
             .removeValue(forKey: handleID) {
-            continuation.resume()
+            for continuation in continuations {
+                continuation.resume()
+            }
         } else {
             completedPlaybackHandleIDs.insert(handleID)
         }

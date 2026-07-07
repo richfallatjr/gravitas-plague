@@ -5,14 +5,14 @@ import Foundation
 final class TuringRadioStaticLeadInController: ObservableObject {
     private enum ActiveRoute {
         case pendingWalkie
-        case walkieSpatial
+        case walkieQueuedStaticLane
 
         var logName: String {
             switch self {
             case .pendingWalkie:
-                return "pendingWalkieSpatial"
-            case .walkieSpatial:
-                return "walkieSpatial"
+                return "pendingWalkieQueuedStaticLane"
+            case .walkieQueuedStaticLane:
+                return "walkieQueuedStaticLane"
             }
         }
     }
@@ -71,12 +71,14 @@ final class TuringRadioStaticLeadInController: ObservableObject {
             print("""
             [TuringRadioStaticLeadIn] stopped
               reason: \(reason)
-              route: pendingWalkieSpatial
+              route: pendingWalkieQueuedStaticLane
             """)
-        case .walkieSpatial:
-            TuringStoryWalkieAudioRoute.stopActiveRadioStaticLoop(
-                reason: reason
-            )
+        case .walkieQueuedStaticLane:
+            Task { @MainActor in
+                await TuringStoryWalkieAudioRoute.stopActiveRadioStaticLoop(
+                    reason: reason
+                )
+            }
         }
 
         self.activeRoute = nil
@@ -95,17 +97,18 @@ final class TuringRadioStaticLeadInController: ObservableObject {
             }
 
             attempt += 1
-            if TuringStoryWalkieAudioRoute.startActiveRadioStaticLoop(
+            if await TuringStoryWalkieAudioRoute.startActiveRadioStaticLoop(
                 fileURL: fileURL,
                 reason: reason
             ) {
-                activeRoute = .walkieSpatial
+                activeRoute = .walkieQueuedStaticLane
                 pendingStartTask = nil
                 print("""
                 [TuringRadioStaticLeadIn] walkie route resolved
                   reason: \(reason)
                   attempts: \(attempt)
-                  route: walkieSpatial
+                  route: walkieQueuedStaticLane
+                  lane: TuringWalkieAudio_StaticLane
                   fallbackToLocalPlayer: false
                 """)
                 return
@@ -120,7 +123,7 @@ final class TuringRadioStaticLeadInController: ObservableObject {
         print("""
         [TuringRadioStaticLeadIn] start failed
           reason: \(reason)
-          route: walkieSpatial
+          route: walkieQueuedStaticLane
           fallbackToLocalPlayer: false
           error: timed out waiting for TuringStoryWalkieTalkie_AudioEmitter
         """)

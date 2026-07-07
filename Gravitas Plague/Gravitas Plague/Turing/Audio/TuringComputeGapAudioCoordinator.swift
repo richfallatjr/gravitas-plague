@@ -240,6 +240,12 @@ public final class TuringComputeGapAudioCoordinator {
         audio: TuringComputeGapGeneratedAudio
     ) async {
         guard runActive else { return }
+        print("""
+        [TuringGapAudio] legacy generated path used
+          segmentIndex: \(segmentIndex)
+          expectedOwner: TuringGeneratedWAVPlaybackQueue
+          action: investigate_call_site
+        """)
         activeComputeSegmentIndices.remove(segmentIndex)
 
         guard segmentIndex >= nextPlaybackSegmentIndex else {
@@ -312,7 +318,7 @@ public final class TuringComputeGapAudioCoordinator {
             }
             fillerStopAfterCurrent = true
             print("""
-            [TuringGapAudio] real speech ready while filler active; deferring until filler finishes
+            [TuringGapAudio] legacy generated audio ready while filler active; deferring until filler finishes
               segmentIndex: \(segmentIndex)
               shortPauseSkipped: true
             """)
@@ -562,7 +568,7 @@ public final class TuringComputeGapAudioCoordinator {
         guard audio.segmentIndex == nextPlaybackSegmentIndex else {
             pendingGeneratedSegments[audio.segmentIndex] = audio
             print("""
-            [TuringGapAudio] out-of-order real speech start prevented
+            [TuringGapAudio] out-of-order legacy generated audio start prevented
               segmentIndex: \(audio.segmentIndex)
               nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
               realSpeechPlaying: \(realSpeechPlayingSegmentIndex.map(String.init) ?? "nil")
@@ -572,7 +578,7 @@ public final class TuringComputeGapAudioCoordinator {
         guard realSpeechPlayingSegmentIndex == nil else {
             pendingGeneratedSegments[audio.segmentIndex] = audio
             print("""
-            [TuringGapAudio] real speech start prevented while another segment is playing
+            [TuringGapAudio] legacy generated audio start prevented while another segment is playing
               segmentIndex: \(audio.segmentIndex)
               currentSegmentIndex: \(realSpeechPlayingSegmentIndex.map(String.init) ?? "nil")
               nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
@@ -583,7 +589,7 @@ public final class TuringComputeGapAudioCoordinator {
             pendingGeneratedSegments[audio.segmentIndex] = audio
             fillerStopAfterCurrent = true
             print("""
-            [TuringGapAudio] real speech ready while filler active; deferring until filler finishes
+            [TuringGapAudio] legacy generated audio ready while filler active; deferring until filler finishes
               segmentIndex: \(audio.segmentIndex)
             """)
             return
@@ -620,13 +626,13 @@ public final class TuringComputeGapAudioCoordinator {
                 realSpeechNode.play()
             }
             print("""
-            [TuringGapAudio] real speech started
+            [TuringGapAudio] legacy generated audio started
               segmentIndex: \(audio.segmentIndex)
               reason: \(reason)
             """)
         } catch {
             print("""
-            [TuringGapAudio] real speech start failed
+            [TuringGapAudio] legacy generated audio start failed
               segmentIndex: \(audio.segmentIndex)
               error: \(error.localizedDescription)
             """)
@@ -646,7 +652,7 @@ public final class TuringComputeGapAudioCoordinator {
         let duration = try await playbackSink.playGeneratedSegment(audio)
 
         print("""
-        [TuringGapAudio] real speech started
+        [TuringGapAudio] legacy generated audio started
           segmentIndex: \(audio.segmentIndex)
           reason: \(reason)
           playbackSink: TuringWalkieSpatialPlaybackSink
@@ -675,7 +681,7 @@ public final class TuringComputeGapAudioCoordinator {
             )
         }
         print("""
-        [TuringGapAudio] real speech finished
+        [TuringGapAudio] legacy generated audio finished
           segmentIndex: \(segmentIndex)
           interSegmentFillerRemaining: \(interSegmentFillerRemaining)
         """)

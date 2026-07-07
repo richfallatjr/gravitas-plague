@@ -93,50 +93,15 @@ final class TuringWalkieSpatialPlaybackSink: TuringSpeechPlaybackSink {
     func playGeneratedSegment(
         _ audio: TuringComputeGapGeneratedAudio
     ) async throws -> TimeInterval {
-        guard let audioController else {
-            throw TuringWalkieAudioError.missingAudioController
-        }
-        try ensureAudioLanes()
-        guard let generatedLane else {
-            throw TuringWalkieAudioError.missingWalkieEmitter
-        }
-
-        let fileURL = try writeGeneratedAudioFile(audio)
-        let duration = Double(audio.samples.count) /
-            max(1, audio.sampleRate * Double(audio.channelCount))
-        let segmentEntity = Entity()
-        segmentEntity.name = String(
-            format: "TuringWalkieAudio_Generated_%04d",
-            audio.segmentIndex
-        )
-        segmentEntity.position = .zero
-        segmentEntity.components.set(SpatialAudioComponent())
-        generatedLane.addChild(segmentEntity)
-
-        guard let playbackID = audioController.playGeneratedTuringSpatialAudio(
-            fileURL: fileURL,
-            at: segmentEntity,
-            volumeDB: Gain.turingPlaybackDB,
-            label: "turing_walkie_qwen.segment\(audio.segmentIndex)"
-        ) else {
-            segmentEntity.removeFromParent()
-            throw TuringWalkieAudioError.playbackStartFailed(
-                "turing_walkie_qwen.segment\(audio.segmentIndex)"
-            )
-        }
-        generatedPlaybackIDsBySegment[audio.segmentIndex] = playbackID
-        generatedPlaybackEntitiesBySegment[audio.segmentIndex] = segmentEntity
-
         print("""
-        [TuringAudio] walkie generated playback lane started
+        [TuringAudio] blocked legacy generated in-memory playback
           segmentIndex: \(audio.segmentIndex)
-          lane: TuringWalkieAudio_GeneratedLane
-          entity: \(segmentEntity.name)
-          rootEmitter: \(walkieEmitter?.name ?? "nil")
-          isolatedLane: true
+          requiredOwner: TuringGeneratedWAVPlaybackQueue
+          requiredMethod: playGeneratedWAVSegment
         """)
-
-        return duration
+        throw TuringWalkieAudioError.playbackStartFailed(
+            "Legacy generated in-memory playback is disabled; use TuringGeneratedWAVPlaybackQueue."
+        )
     }
 
     func waitForGeneratedSegmentPlaybackCompletion(
@@ -506,13 +471,13 @@ enum TuringStoryWalkieAudioRoute {
     static func startActiveRadioStaticLoop(
         fileURL: URL,
         reason: String
-    ) -> Bool {
-        guard let activeSink else {
+    ) async -> Bool {
+        guard let activeQueuedSink else {
             return false
         }
 
         do {
-            try activeSink.startRadioStaticLoop(
+            try await activeQueuedSink.startStaticLoop(
                 fileURL: fileURL,
                 reason: reason
             )
@@ -521,13 +486,14 @@ enum TuringStoryWalkieAudioRoute {
             print("""
             [TuringRadioStaticLeadIn] walkie route failed
               reason: \(reason)
+              route: walkieQueuedStaticLane
               error: \(error.localizedDescription)
             """)
             return false
         }
     }
 
-    static func stopActiveRadioStaticLoop(reason: String) {
-        activeSink?.stopRadioStaticLoop(reason: reason)
+    static func stopActiveRadioStaticLoop(reason: String) async {
+        await activeQueuedSink?.stopStaticLoop(reason: reason)
     }
 }
