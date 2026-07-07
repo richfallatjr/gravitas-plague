@@ -27,6 +27,10 @@ protocol TuringQueuedPlaybackSink: AnyObject {
         _ audio: TuringComputeGapGeneratedAudio
     ) async throws -> TuringPlaybackHandle
 
+    func playGeneratedWAVSegment(
+        _ wav: TuringGeneratedWAVSegment
+    ) async throws -> TuringPlaybackHandle
+
     func playFillerClip(
         fileURL: URL,
         label: String

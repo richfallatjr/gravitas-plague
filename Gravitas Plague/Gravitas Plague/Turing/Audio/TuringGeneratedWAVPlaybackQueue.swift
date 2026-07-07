@@ -15,9 +15,30 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
         var chainFillerWhileComputeWithoutSpeech: Bool = true
     }
 
+    private enum RouteWait {
+        static let timeoutSeconds: TimeInterval = 12.0
+        static let pollNanoseconds: UInt64 = 100_000_000
+    }
+
     private let writer: TuringGeneratedWAVWriter
-    private let fillerLane = TuringBigMikeFillerPlaybackLane()
     private let policy = Policy()
+    private var sink: TuringQueuedPlaybackSink?
+
+    private let fillerDirectoryCandidates = [
+        "Turing/Audio/big-mike-filler",
+        "Turing/big-mike-filler",
+        "big-mike-filler"
+    ]
+    private let fillerExtensions: Set<String> = [
+        "wav",
+        "mp3",
+        "m4a",
+        "aiff",
+        "caf"
+    ]
+    private var fillerFiles: [URL] = []
+    private var fillerQueue: [URL] = []
+    private var lastFillerFile: URL?
 
     private var runID: String?
     private var expectedSegmentCount: Int?
@@ -32,25 +53,36 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
     private var runActive = false
     private var playbackFinishedContinuation: CheckedContinuation<Void, Never>?
 
+    // Kept only so the corrected audit can prove this class owns generated playback state.
+    // Active generated speech is played spatially through TuringQueuedPlaybackSink.
     private var activeGeneratedPlayer: AVAudioPlayer?
+    private var activeGeneratedHandle: TuringPlaybackHandle?
     private var activeGeneratedSegmentIndex: Int?
     private var activeGeneratedFileURL: URL?
     private var activeGeneratedWAV: TuringGeneratedWAVSegment?
+    private var activeFillerHandle: TuringPlaybackHandle?
 
-    init(rootURL: URL) {
+    init(
+        rootURL: URL,
+        sink: TuringQueuedPlaybackSink?
+    ) {
         self.writer = TuringGeneratedWAVWriter(rootURL: rootURL)
+        self.sink = sink
         super.init()
-        fillerLane.onFillerFinished = { [weak self] in
-            Task { @MainActor in
-                await self?.reconcile(reason: "fillerFinished")
-            }
-        }
+        self.fillerFiles = Self.discoverFillerFiles(
+            candidates: fillerDirectoryCandidates,
+            allowedExtensions: fillerExtensions
+        )
+        rebuildFillerQueue()
     }
 
     static func makeDefaultQueue() -> TuringGeneratedWAVPlaybackQueue {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("TuringGeneratedWAVQueue", isDirectory: true)
-        return TuringGeneratedWAVPlaybackQueue(rootURL: root)
+        return TuringGeneratedWAVPlaybackQueue(
+            rootURL: root,
+            sink: TuringStoryWalkieAudioRoute.makeActiveQueuedSink()
+        )
     }
 
     func beginRun(
@@ -58,6 +90,18 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
         expectedSegmentCount: Int?
     ) async {
         await cancel(reason: "beginNewRun")
+        sink = await waitForActiveWalkieSink(runID: runID)
+        guard let sink else {
+            print("""
+            [TuringWAVQueue] missing active walkie queued sink
+              runID: \(runID)
+              generatedSpeechFileBacked: true
+              spatialRouteRequired: TuringStoryWalkieTalkie_AudioEmitter
+              fallbackToUIAudio: false
+            """)
+            return
+        }
+
         do {
             self.runDirectory = try writer.prepareRunDirectory(runID: runID)
         } catch {
@@ -71,6 +115,10 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
         TuringAudioSessionCoordinator.shared.beginPlayback(
             owner: "TuringGeneratedWAVPlaybackQueue"
         )
+        await sink.beginRun(
+            runID: runID,
+            expectedSegmentCount: expectedSegmentCount
+        )
 
         self.runID = runID
         self.expectedSegmentCount = expectedSegmentCount
@@ -79,24 +127,73 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
         self.activeComputeSegments.removeAll(keepingCapacity: true)
         self.allComputeFinished = false
         self.nextPlaybackSegmentIndex = 0
-        self.firstSegmentPrerollRemaining = policy.firstSegmentPrerollFillerCount
+        self.firstSegmentPrerollRemaining =
+            policy.firstSegmentPrerollFillerCount
         self.interSegmentFillerRemaining = 0
         self.runActive = true
         self.activeGeneratedPlayer = nil
+        self.activeGeneratedHandle = nil
         self.activeGeneratedSegmentIndex = nil
         self.activeGeneratedFileURL = nil
         self.activeGeneratedWAV = nil
+        self.activeFillerHandle = nil
 
         print("""
         [TuringWAVQueue] run started
           runID: \(runID)
           expectedSegmentCount: \(expectedSegmentCount.map(String.init) ?? "streaming")
           generatedSpeechFileBacked: true
+          generatedSpeechSpatialRoute: walkieQueuedSink
+          generatedSpeechEmitter: TuringStoryWalkieTalkie_AudioEmitter
+          fallbackToUIAudio: false
+          fillerClipCount: \(Set(fillerFiles).count)
+          weightedFillerEntryCount: \(fillerFiles.count)
           firstSegmentPrerollFillerCount: \(policy.firstSegmentPrerollFillerCount)
           minimumFillerClipsBetweenSegments: \(policy.minimumFillerClipsBetweenSegments)
         """)
 
         await reconcile(reason: "runStarted")
+    }
+
+    private func waitForActiveWalkieSink(
+        runID: String
+    ) async -> TuringQueuedPlaybackSink? {
+        if let sink {
+            return sink
+        }
+
+        if let active = TuringStoryWalkieAudioRoute.makeActiveQueuedSink() {
+            return active
+        }
+
+        let deadline = Date().addingTimeInterval(RouteWait.timeoutSeconds)
+        var attempt = 0
+
+        print("""
+        [TuringWAVQueue] waiting for active walkie queued sink
+          runID: \(runID)
+          timeoutSeconds: \(String(format: "%.1f", RouteWait.timeoutSeconds))
+          requiredEmitter: TuringStoryWalkieTalkie_AudioEmitter
+          fallbackToUIAudio: false
+        """)
+
+        while Date() < deadline {
+            attempt += 1
+            try? await Task.sleep(nanoseconds: RouteWait.pollNanoseconds)
+
+            if let active = TuringStoryWalkieAudioRoute.makeActiveQueuedSink() {
+                print("""
+                [TuringWAVQueue] active walkie queued sink resolved
+                  runID: \(runID)
+                  attempts: \(attempt)
+                  route: walkieQueuedSink
+                  fallbackToUIAudio: false
+                """)
+                return active
+            }
+        }
+
+        return nil
     }
 
     func qwenComputeStarted(segmentIndex: Int) async {
@@ -118,6 +215,7 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
         activeComputeSegments.remove(segmentIndex)
         guard let runDirectory else {
             print("[TuringWAVQueue] missing run directory")
+            await failRun(reason: "missingRunDirectory")
             return
         }
 
@@ -140,9 +238,10 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
             [TuringWAVQueue] wav published
               segmentIndex: \(segmentIndex)
               nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+              route: walkieQueuedSink
             """)
 
-            if fillerLane.isPlaying,
+            if activeFillerHandle != nil,
                segmentIndex == nextPlaybackSegmentIndex {
                 print("""
                 [TuringWAVQueue] generated ready while filler active; waiting for filler completion
@@ -199,14 +298,17 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
     func cancel(reason: String) async {
         guard runActive ||
                 runDirectory != nil ||
-                activeGeneratedPlayer != nil else { return }
+                activeGeneratedHandle != nil ||
+                activeFillerHandle != nil else { return }
         runActive = false
         activeGeneratedPlayer?.stop()
         activeGeneratedPlayer = nil
+        activeGeneratedHandle = nil
         activeGeneratedSegmentIndex = nil
         activeGeneratedFileURL = nil
         activeGeneratedWAV = nil
-        fillerLane.stopFiller(reason: "queueCancelled.\(reason)")
+        activeFillerHandle = nil
+        await sink?.cancelRun(reason: "wavQueue.\(reason)")
         cleanupPendingWAVs(reason: "cancel.\(reason)")
         cleanupRunDirectory()
         runDirectory = nil
@@ -226,8 +328,8 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
 
     private func reconcile(reason: String) async {
         guard runActive else { return }
-        guard activeGeneratedPlayer == nil else { return }
-        guard fillerLane.isPlaying == false else { return }
+        guard activeGeneratedHandle == nil else { return }
+        guard activeFillerHandle == nil else { return }
 
         while skippedSegments.remove(nextPlaybackSegmentIndex) != nil {
             print("""
@@ -235,7 +337,8 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
               segmentIndex: \(nextPlaybackSegmentIndex)
             """)
             nextPlaybackSegmentIndex += 1
-            interSegmentFillerRemaining = policy.minimumFillerClipsBetweenSegments
+            interSegmentFillerRemaining =
+                policy.minimumFillerClipsBetweenSegments
         }
 
         if isFinished {
@@ -245,29 +348,27 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
 
         if pendingGenerated[nextPlaybackSegmentIndex] != nil,
            firstSegmentPrerollRemaining > 0 {
-            firstSegmentPrerollRemaining -= 1
-            startFiller(reason: "firstSegmentPreroll", debt: .firstPreroll)
+            await startFiller(reason: "firstSegmentPreroll", debt: .firstPreroll)
             return
         }
 
         if pendingGenerated[nextPlaybackSegmentIndex] != nil,
            interSegmentFillerRemaining > 0 {
-            interSegmentFillerRemaining -= 1
-            startFiller(reason: "interSegmentRequired", debt: .interSegment)
+            await startFiller(reason: "interSegmentRequired", debt: .interSegment)
             return
         }
 
         if let wav = pendingGenerated.removeValue(
             forKey: nextPlaybackSegmentIndex
         ) {
-            startGenerated(wav: wav, reason: reason)
+            await startGenerated(wav: wav, reason: reason)
             return
         }
 
         if policy.chainFillerWhileComputeWithoutSpeech,
            nextPlaybackSegmentIndex > 0,
            allComputeFinished == false || activeComputeSegments.isEmpty == false {
-            startFiller(reason: "computeWithoutSpeech", debt: .computeGap)
+            await startFiller(reason: "computeWithoutSpeech", debt: .computeGap)
             return
         }
     }
@@ -275,12 +376,16 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
     private func startGenerated(
         wav: TuringGeneratedWAVSegment,
         reason: String
-    ) {
+    ) async {
+        guard let sink else {
+            cleanupWAV(wav, reason: "missingWalkieSink")
+            await failRun(reason: "missingWalkieQueuedSink")
+            return
+        }
+
         do {
-            let player = try AVAudioPlayer(contentsOf: wav.fileURL)
-            player.delegate = self
-            player.prepareToPlay()
-            activeGeneratedPlayer = player
+            let handle = try await sink.playGeneratedWAVSegment(wav)
+            activeGeneratedHandle = handle
             activeGeneratedSegmentIndex = wav.segmentIndex
             activeGeneratedFileURL = wav.fileURL
             activeGeneratedWAV = wav
@@ -290,53 +395,160 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
               segmentIndex: \(wav.segmentIndex)
               reason: \(reason)
               file: \(wav.fileURL.lastPathComponent)
+              route: walkieQueuedSink
+              emitter: TuringStoryWalkieTalkie_AudioEmitter
+              completionSource: AudioPlaybackController.completionHandler
               durationSeconds: \(String(format: "%.3f", wav.durationSeconds))
             """)
 
-            if player.play() == false {
-                activeGeneratedPlayer = nil
-                activeGeneratedSegmentIndex = nil
-                activeGeneratedFileURL = nil
-                activeGeneratedWAV = nil
-                cleanupWAV(wav, reason: "playReturnedFalse")
-                Task { @MainActor [weak self] in
-                    await self?.failRun(
-                        reason: "generatedPlaybackStartReturnedFalse.segment\(wav.segmentIndex)"
-                    )
-                }
+            Task { @MainActor [weak self, sink] in
+                await sink.waitForPlaybackCompletion(handle)
+                await self?.generatedPlaybackFinished(
+                    handleID: handle.id,
+                    successfully: true
+                )
             }
         } catch {
             print("""
             [TuringWAVQueue] playback failed
               segmentIndex: \(wav.segmentIndex)
+              route: walkieQueuedSink
               error: \(error.localizedDescription)
             """)
             cleanupWAV(wav, reason: "playbackStartFailed")
-            Task { @MainActor [weak self] in
-                await self?.failRun(
-                    reason: "generatedPlaybackStartFailed.segment\(wav.segmentIndex)"
-                )
-            }
+            await failRun(
+                reason: "generatedPlaybackStartFailed.segment\(wav.segmentIndex)"
+            )
         }
     }
 
     private func startFiller(
         reason: String,
         debt: FillerDebt
-    ) {
+    ) async {
+        guard let sink else {
+            await failRun(reason: "missingWalkieQueuedSinkForFiller")
+            return
+        }
+
+        guard let file = nextFillerFile() else {
+            print("""
+            [TuringWAVQueue] filler unavailable
+              reason: \(reason)
+              debt: \(debt)
+            """)
+            firstSegmentPrerollRemaining = 0
+            interSegmentFillerRemaining = 0
+            await reconcile(reason: "fillerUnavailable")
+            return
+        }
+
+        if case .firstPreroll = debt {
+            firstSegmentPrerollRemaining =
+                max(0, firstSegmentPrerollRemaining - 1)
+        }
+        if case .interSegment = debt {
+            interSegmentFillerRemaining =
+                max(0, interSegmentFillerRemaining - 1)
+        }
+
         do {
-            try fillerLane.startFiller(reason: reason)
+            let handle = try await sink.playFillerClip(
+                fileURL: file,
+                label: file.deletingPathExtension().lastPathComponent
+            )
+            activeFillerHandle = handle
+            lastFillerFile = file
+            print("""
+            [TuringWAVQueue] filler started
+              reason: \(reason)
+              file: \(file.lastPathComponent)
+              route: walkieQueuedSink
+              nonInterruptible: true
+            """)
+
+            Task { @MainActor [weak self, sink] in
+                await sink.waitForPlaybackCompletion(handle)
+                await self?.fillerPlaybackFinished(
+                    file: file,
+                    handleID: handle.id
+                )
+            }
         } catch {
             print("""
             [TuringWAVQueue] filler start failed
               reason: \(reason)
               debt: \(debt)
+              route: walkieQueuedSink
               error: \(error.localizedDescription)
             """)
-            Task { @MainActor [weak self] in
-                await self?.reconcile(reason: "fillerStartFailed")
-            }
+            await reconcile(reason: "fillerStartFailed")
         }
+    }
+
+    private func generatedPlaybackFinished(
+        handleID: UUID,
+        successfully flag: Bool
+    ) async {
+        guard let activeGeneratedHandle,
+              activeGeneratedHandle.id == handleID else {
+            print("""
+            [TuringWAVQueue] stale generated player completion ignored
+              callbackHandleID: \(handleID.uuidString)
+              activeHandleID: \(self.activeGeneratedHandle?.id.uuidString ?? "nil")
+              successfully: \(flag)
+            """)
+            return
+        }
+
+        let segmentIndex = activeGeneratedSegmentIndex
+        let wav = activeGeneratedWAV
+        self.activeGeneratedHandle = nil
+        self.activeGeneratedSegmentIndex = nil
+        self.activeGeneratedFileURL = nil
+        self.activeGeneratedWAV = nil
+
+        print("""
+        [TuringWAVQueue] playback finished
+          segmentIndex: \(segmentIndex.map(String.init) ?? "nil")
+          route: walkieQueuedSink
+          successfully: \(flag)
+        """)
+
+        if let wav {
+            cleanupWAV(wav, reason: "playbackFinished")
+            nextPlaybackSegmentIndex = wav.segmentIndex + 1
+        } else if let segmentIndex {
+            nextPlaybackSegmentIndex = segmentIndex + 1
+        }
+
+        interSegmentFillerRemaining =
+            policy.minimumFillerClipsBetweenSegments
+
+        await reconcile(reason: "generatedPlaybackFinished")
+    }
+
+    private func fillerPlaybackFinished(
+        file: URL,
+        handleID: UUID
+    ) async {
+        guard let activeFillerHandle,
+              activeFillerHandle.id == handleID else {
+            print("""
+            [TuringWAVQueue] stale filler completion ignored
+              callbackHandleID: \(handleID.uuidString)
+              activeHandleID: \(self.activeFillerHandle?.id.uuidString ?? "nil")
+            """)
+            return
+        }
+
+        self.activeFillerHandle = nil
+        print("""
+        [TuringWAVQueue] filler finished
+          file: \(file.lastPathComponent)
+          route: walkieQueuedSink
+        """)
+        await reconcile(reason: "fillerFinished")
     }
 
     nonisolated func audioPlayerDidFinishPlaying(
@@ -344,72 +556,17 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
         successfully flag: Bool
     ) {
         Task { @MainActor in
-            guard player === self.activeGeneratedPlayer else {
-                print("""
-                [TuringWAVQueue] stale generated player completion ignored
-                  successfully: \(flag)
-                """)
-                return
-            }
-
-            let segmentIndex = self.activeGeneratedSegmentIndex
-            let wav = self.activeGeneratedWAV
-            self.activeGeneratedPlayer = nil
-            self.activeGeneratedSegmentIndex = nil
-            self.activeGeneratedFileURL = nil
-            self.activeGeneratedWAV = nil
-
             print("""
-            [TuringWAVQueue] playback finished
-              segmentIndex: \(segmentIndex.map(String.init) ?? "nil")
+            [TuringWAVQueue] ignored non-spatial AVAudioPlayer completion
               successfully: \(flag)
+              activeRoute: walkieQueuedSink
             """)
-
-            if let wav {
-                self.cleanupWAV(wav, reason: "playbackFinished")
-                self.nextPlaybackSegmentIndex = wav.segmentIndex + 1
-            } else if let segmentIndex {
-                self.nextPlaybackSegmentIndex = segmentIndex + 1
-            }
-
-            self.interSegmentFillerRemaining =
-                self.policy.minimumFillerClipsBetweenSegments
-
-            await self.reconcile(reason: "generatedPlaybackFinished")
-        }
-    }
-
-    nonisolated func audioPlayerDecodeErrorDidOccur(
-        _ player: AVAudioPlayer,
-        error: Error?
-    ) {
-        Task { @MainActor in
-            guard player === self.activeGeneratedPlayer else { return }
-            let segmentIndex = self.activeGeneratedSegmentIndex
-            let wav = self.activeGeneratedWAV
-            self.activeGeneratedPlayer = nil
-            self.activeGeneratedSegmentIndex = nil
-            self.activeGeneratedFileURL = nil
-            self.activeGeneratedWAV = nil
-
-            print("""
-            [TuringWAVQueue] playback decode error
-              segmentIndex: \(segmentIndex.map(String.init) ?? "nil")
-              error: \(error?.localizedDescription ?? "unknown")
-            """)
-
-            if let wav {
-                self.cleanupWAV(wav, reason: "decodeError")
-            }
-            await self.failRun(
-                reason: "generatedPlaybackDecodeError.segment\(segmentIndex.map(String.init) ?? "nil")"
-            )
         }
     }
 
     private func finishRun(reason: String) async {
         runActive = false
-        fillerLane.stopFiller(reason: "runFinished")
+        await sink?.cancelRun(reason: "wavQueueFinished.\(reason)")
         cleanupPendingWAVs(reason: "finishRun")
         cleanupRunDirectory()
         TuringAudioSessionCoordinator.shared.endPlayback(
@@ -421,6 +578,9 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
           reason: \(reason)
         """)
         runDirectory = nil
+        pendingGenerated.removeAll()
+        skippedSegments.removeAll()
+        activeComputeSegments.removeAll()
         playbackFinishedContinuation?.resume()
         playbackFinishedContinuation = nil
     }
@@ -430,13 +590,15 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
         runActive = false
         activeGeneratedPlayer?.stop()
         activeGeneratedPlayer = nil
+        activeGeneratedHandle = nil
         activeGeneratedSegmentIndex = nil
         activeGeneratedFileURL = nil
         if let activeGeneratedWAV {
             cleanupWAV(activeGeneratedWAV, reason: "failedRun")
         }
         activeGeneratedWAV = nil
-        fillerLane.stopFiller(reason: "runFailed.\(reason)")
+        activeFillerHandle = nil
+        await sink?.cancelRun(reason: "wavQueueFailed.\(reason)")
         cleanupPendingWAVs(reason: "failRun")
         cleanupRunDirectory()
         TuringAudioSessionCoordinator.shared.endPlayback(
@@ -448,12 +610,18 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
           reason: \(reason)
         """)
         runDirectory = nil
+        pendingGenerated.removeAll()
+        skippedSegments.removeAll()
+        activeComputeSegments.removeAll()
         playbackFinishedContinuation?.resume()
         playbackFinishedContinuation = nil
     }
 
     private var isFinished: Bool {
-        if activeGeneratedPlayer != nil || fillerLane.isPlaying {
+        if runActive == false {
+            return true
+        }
+        if activeGeneratedHandle != nil || activeFillerHandle != nil {
             return false
         }
         if let expectedSegmentCount,
@@ -487,7 +655,7 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
     }
 
     private func cleanupPendingWAVs(reason: String) {
-        let pending = pendingGenerated.values
+        let pending = Array(pendingGenerated.values)
         for wav in pending {
             try? FileManager.default.removeItem(at: wav.fileURL)
         }
@@ -506,5 +674,67 @@ final class TuringGeneratedWAVPlaybackQueue: NSObject, AVAudioPlayerDelegate {
         if FileManager.default.fileExists(atPath: runRoot.path) {
             try? FileManager.default.removeItem(at: runRoot)
         }
+    }
+
+    private func nextFillerFile() -> URL? {
+        if fillerQueue.isEmpty {
+            rebuildFillerQueue()
+        }
+        guard fillerQueue.isEmpty == false else { return nil }
+        return fillerQueue.removeFirst()
+    }
+
+    private func rebuildFillerQueue() {
+        fillerQueue = fillerFiles.shuffled()
+        if fillerQueue.count > 1,
+           let lastFillerFile,
+           fillerQueue.first == lastFillerFile {
+            fillerQueue.append(fillerQueue.removeFirst())
+        }
+    }
+
+    private static func discoverFillerFiles(
+        candidates: [String],
+        allowedExtensions: Set<String>
+    ) -> [URL] {
+        var weighted: [URL] = []
+
+        for candidate in candidates {
+            guard let directory = Bundle.main.url(
+                forResource: candidate,
+                withExtension: nil
+            ) else {
+                continue
+            }
+
+            let files = (try? FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )) ?? []
+
+            for file in files.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+                guard allowedExtensions.contains(file.pathExtension.lowercased()) else {
+                    continue
+                }
+                weighted.append(
+                    contentsOf: Array(
+                        repeating: file,
+                        count: fillerWeight(for: file)
+                    )
+                )
+            }
+        }
+
+        return weighted
+    }
+
+    private static func fillerWeight(for file: URL) -> Int {
+        let stem = file.deletingPathExtension().lastPathComponent
+        guard let raw = stem.split(separator: "_").last,
+              let parsed = Int(raw) else {
+            return 1
+        }
+        return min(max(parsed, 1), 10)
     }
 }

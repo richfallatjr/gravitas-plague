@@ -134,6 +134,57 @@ final class TuringWalkieQueuedPlaybackSink: TuringQueuedPlaybackSink {
         )
     }
 
+    func playGeneratedWAVSegment(
+        _ wav: TuringGeneratedWAVSegment
+    ) async throws -> TuringPlaybackHandle {
+        try ensureAudioLanes()
+        guard let generatedLane else {
+            throw TuringWalkieAudioError.missingWalkieEmitter
+        }
+
+        let segmentEntity = Entity()
+        segmentEntity.name = String(
+            format: "TuringWalkieAudio_GeneratedWAV_%04d",
+            wav.segmentIndex
+        )
+        segmentEntity.components.set(SpatialAudioComponent())
+        generatedLane.addChild(segmentEntity)
+
+        let resource = try loadOneShotResource(wav.fileURL)
+        let controller = segmentEntity.playAudio(resource)
+        controller.gain = Double(Gain.turingPlaybackDB)
+        let playbackID = UUID()
+        activePlaybackControllersByHandleID[playbackID] = controller
+        transientEntitiesByHandleID[playbackID] = segmentEntity
+        controller.completionHandler = { [weak self] in
+            Task { @MainActor in
+                self?.markPlaybackCompleted(
+                    handleID: playbackID,
+                    label: "generatedWAV.segment\(wav.segmentIndex)"
+                )
+            }
+        }
+
+        print("""
+        [TuringQueuedAudio] generated wav started on walkie lane
+          segmentIndex: \(wav.segmentIndex)
+          handleID: \(playbackID.uuidString)
+          file: \(wav.fileURL.lastPathComponent)
+          lane: TuringWalkieAudio_GeneratedLane
+          rootEmitter: \(walkieEmitter?.name ?? "nil")
+          isolatedLane: true
+          sinkOwnedController: true
+          completionSource: AudioPlaybackController.completionHandler
+          durationSeconds: \(String(format: "%.3f", wav.durationSeconds))
+        """)
+
+        return TuringPlaybackHandle(
+            id: playbackID,
+            label: "generatedWAV.segment\(wav.segmentIndex)",
+            duration: wav.durationSeconds
+        )
+    }
+
     func playFillerClip(
         fileURL: URL,
         label: String
