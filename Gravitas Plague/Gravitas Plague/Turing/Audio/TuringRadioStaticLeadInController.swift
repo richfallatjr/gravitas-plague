@@ -1,32 +1,31 @@
-import AVFoundation
 import Combine
 import Foundation
 
 @MainActor
 final class TuringRadioStaticLeadInController: ObservableObject {
     private enum ActiveRoute {
+        case pendingWalkie
         case walkieSpatial
-        case localPlayer
 
         var logName: String {
             switch self {
+            case .pendingWalkie:
+                return "pendingWalkieSpatial"
             case .walkieSpatial:
                 return "walkieSpatial"
-            case .localPlayer:
-                return "localPlayerFallback"
             }
         }
     }
 
-    private var player: AVAudioPlayer?
     private var activeRoute: ActiveRoute?
+    private var pendingStartTask: Task<Void, Never>?
 
     func start(reason: String) {
-        if activeRoute != nil || player?.isPlaying == true {
+        if activeRoute != nil || pendingStartTask != nil {
             print("""
             [TuringRadioStaticLeadIn] already playing
               reason: \(reason)
-              route: \(activeRoute?.logName ?? "localPlayer")
+              route: \(activeRoute?.logName ?? "pending")
             """)
             return
         }
@@ -43,34 +42,20 @@ final class TuringRadioStaticLeadInController: ObservableObject {
             return
         }
 
-        if TuringStoryWalkieAudioRoute.startActiveRadioStaticLoop(
-            fileURL: url,
-            reason: reason
-        ) {
-            activeRoute = .walkieSpatial
-            return
-        }
+        activeRoute = .pendingWalkie
 
-        do {
-            let player = try AVAudioPlayer(contentsOf: url)
-            player.numberOfLoops = -1
-            player.volume = 0.20
-            player.prepareToPlay()
-            player.play()
-            self.player = player
-            activeRoute = .localPlayer
-            print("""
-            [TuringRadioStaticLeadIn] started
-              reason: \(reason)
-              file: \(url.lastPathComponent)
-              route: localPlayerFallback
-            """)
-        } catch {
-            print("""
-            [TuringRadioStaticLeadIn] start failed
-              reason: \(reason)
-              error: \(error.localizedDescription)
-            """)
+        print("""
+        [TuringRadioStaticLeadIn] waiting for walkie route
+          reason: \(reason)
+          file: \(url.lastPathComponent)
+          fallbackToLocalPlayer: false
+        """)
+
+        pendingStartTask = Task { @MainActor [weak self] in
+            await self?.startWhenWalkieRouteReady(
+                fileURL: url,
+                reason: reason
+            )
         }
     }
 
@@ -80,21 +65,64 @@ final class TuringRadioStaticLeadInController: ObservableObject {
         }
 
         switch activeRoute {
+        case .pendingWalkie:
+            pendingStartTask?.cancel()
+            pendingStartTask = nil
+            print("""
+            [TuringRadioStaticLeadIn] stopped
+              reason: \(reason)
+              route: pendingWalkieSpatial
+            """)
         case .walkieSpatial:
             TuringStoryWalkieAudioRoute.stopActiveRadioStaticLoop(
                 reason: reason
             )
-        case .localPlayer:
-            player?.stop()
-            player?.currentTime = 0
-            player = nil
-            print("""
-            [TuringRadioStaticLeadIn] stopped
-              reason: \(reason)
-              route: localPlayerFallback
-            """)
         }
 
         self.activeRoute = nil
+    }
+
+    private func startWhenWalkieRouteReady(
+        fileURL: URL,
+        reason: String
+    ) async {
+        let deadline = Date().addingTimeInterval(12.0)
+        var attempt = 0
+
+        while Date() < deadline {
+            guard Task.isCancelled == false else {
+                return
+            }
+
+            attempt += 1
+            if TuringStoryWalkieAudioRoute.startActiveRadioStaticLoop(
+                fileURL: fileURL,
+                reason: reason
+            ) {
+                activeRoute = .walkieSpatial
+                pendingStartTask = nil
+                print("""
+                [TuringRadioStaticLeadIn] walkie route resolved
+                  reason: \(reason)
+                  attempts: \(attempt)
+                  route: walkieSpatial
+                  fallbackToLocalPlayer: false
+                """)
+                return
+            }
+
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        pendingStartTask = nil
+        activeRoute = nil
+
+        print("""
+        [TuringRadioStaticLeadIn] start failed
+          reason: \(reason)
+          route: walkieSpatial
+          fallbackToLocalPlayer: false
+          error: timed out waiting for TuringStoryWalkieTalkie_AudioEmitter
+        """)
     }
 }
