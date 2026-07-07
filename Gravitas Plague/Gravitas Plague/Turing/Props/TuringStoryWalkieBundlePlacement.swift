@@ -13,7 +13,7 @@ struct TuringStoryWallBundlePlacement: Codable, Equatable, Sendable {
 
 enum TuringStoryWalkieBundleTuning {
     static let feetToMeters: Float = 0.3048
-    static let assetImportScale: Float = 2.5
+    static let assetImportScale: Float = 3.0
     static let preferredCenterHeightMeters: Float = 4.0 * feetToMeters
     static let minBottomClearanceMeters: Float = 0.60
     static let wallMarginMeters: Float = 0.10
