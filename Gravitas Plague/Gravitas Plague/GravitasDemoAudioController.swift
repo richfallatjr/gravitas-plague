@@ -1877,17 +1877,7 @@ final class GravitasDemoAudioController {
     }
 
     private func configureAudioSession() throws {
-        let session = AVAudioSession.sharedInstance()
-
-        try session.setCategory(
-            .ambient,
-            mode: .default,
-            options: [
-                .mixWithOthers
-            ]
-        )
-
-        try session.setActive(true)
+        TuringAudioSessionCoordinator.shared.configureForLaunch()
     }
 
     private func makeOptionalSpatialResource(

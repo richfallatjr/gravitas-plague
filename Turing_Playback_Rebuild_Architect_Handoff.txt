@@ -1,0 +1,645 @@
+Turing Playback Rebuild Handoff
+================================
+
+Repo:
+  /Users/richardfallat/Projects/dev/gravitas-plague
+
+Current HEAD observed by Codex:
+  3debe21 Occlusion card MVP
+
+Purpose:
+  Replace the current Story/Turing playback ownership layer. Do not change the
+  LLM prompts, audiobook sectioning, Qwen model, Big Mike clone profile, filler
+  assets, wall bundle placement, or TTS generation code unless needed only to
+  connect to the new playback event API.
+
+Required behavior from product owner:
+  1. Exactly one mandatory Big Mike filler clip before initial generated speech.
+  2. Generated TTS clips play sequentially, in segment order, beginning to end.
+  3. No duration estimates, sleeps, or fallback timers may advance generated
+     playback. Completion must come from actual playback completion.
+  4. If no generated playback is ready, play filler according to filler policy.
+  5. Insert random dead air between filler clips. Dead air is not audio.
+  6. If generated playback becomes ready during filler, finish current filler.
+  7. If generated playback becomes ready during dead air, cancel dead air and
+     start generated playback immediately.
+  8. All Story/Turing generated speech, filler, and static must originate from
+     the walkie talkie spatial emitter.
+  9. Playback must not stomp dictation, microphone recording, or screen capture
+     audio session state.
+ 10. Preserve the two fresh Qwen MLX instance generation pipeline and keep both
+     instances running concurrently. Playback must not wait for all generation.
+
+What Is Known Good Before Playback
+----------------------------------
+
+Keep these areas out of this patch except for connecting event calls:
+
+1. Foundation/LLM audiobook and conversation output.
+   - Raw LLM segment text should continue logging.
+   - Qwen input text should continue logging.
+   - Do not trim or rewrite spokenText in playback code.
+
+2. Native Qwen Base clone generation.
+   - Keep local Base 4-bit Big Mike clone path.
+   - Keep precomputed clone artifacts.
+   - Keep skip behavior for failed Qwen audiobook segments.
+
+3. Two fresh Qwen instances.
+   - Active factory:
+     Gravitas Plague/Gravitas Plague/Turing/QwenNative/Sources/TuringQwenNative/TuringQwenNativeGenerationSchedulerFactory.swift
+   - Current required config is exact two:
+     makeFresh2Pool()
+     makeFresh2Scheduler(instancePool:)
+   - Scheduler currently runs worker tasks through withThrowingTaskGroup:
+     TuringQwenNativeFreshInstanceScheduler.renderSegments(...)
+   - Keep this concurrency. Do not replace it with single-lane playback or an
+     all-complete barrier.
+
+4. Walkie bundle emitter.
+   - Existing route install is in PlagueImmersiveCoordinator around the
+     TuringStoryWalkieAudioRoute.install(...) call.
+   - Required emitter name:
+     TuringStoryWalkieTalkie_AudioEmitter
+   - All Story/Turing audio must be attached under this emitter or child lanes.
+
+Current Playback Code To Quarantine Or Replace
+----------------------------------------------
+
+The current tree contains several competing playback owners. Treat these as
+the disease, not as implementation pieces to patch together.
+
+1. TuringNativeQwenHelloWorldCanary.swift
+   Path:
+     Gravitas Plague/Gravitas Plague/Turing/Debug/TuringNativeQwenHelloWorldCanary.swift
+   Current issue:
+     Lines 20-84 define TuringParallelPerfGapAudioBridge wrapping
+     TuringSerialWAVFillerPlaybackQueue. Multiple call sites create this
+     bridge for longform/audiobook/perf paths. This wrapper should be replaced
+     by a single playback coordinator protocol, not a specific queue class.
+
+   Required replacement event API:
+     beginRun(runID:expectedSegmentCount:)
+     qwenComputeStarted(segmentIndex:)
+     qwenComputeFinished(segmentIndex:audio:)
+     qwenComputeSkipped(segmentIndex:reason:)
+     qwenComputeAllFinished()
+     waitUntilPlaybackFinished()
+     runCancelled(reason:)
+
+2. TuringSerialWAVFillerPlaybackQueue.swift
+   Path:
+     Gravitas Plague/Gravitas Plague/Turing/Audio/TuringSerialWAVFillerPlaybackQueue.swift
+   Current shape:
+     - Writes generated WAVs.
+     - Uses AVAudioPlayerDelegate.
+     - Plays generated and filler in one queue.
+   Why it is not acceptable as active final behavior:
+     - It is not spatially routed to the walkie talkie.
+     - It owns both queue state and low-level playback.
+     - It cancels active playback in beginRun/cancel.
+     - It can become disconnected from Story walkie spatial route.
+   What to reuse:
+     - The idea of one ordered state machine.
+     - The idea of generated WAV validation before playback.
+     - Strong active-player/active-handle identity checks.
+   What not to reuse:
+     - Direct non-spatial AVAudioPlayer playback as the Story runtime output.
+     - Any queue advancement from duration estimates.
+
+3. TuringComputeGapAudioCoordinator.swift
+   Path:
+     Gravitas Plague/Gravitas Plague/Turing/Audio/TuringComputeGapAudioCoordinator.swift
+   Current issue:
+     It still contains old realSpeech/filler AVAudioEngine state and also a
+     hard block for generated playback:
+       [TuringGapAudio] legacy generated path used
+       expectedOwner: TuringSerialWAVFillerPlaybackQueue
+       action: hard_block_and_cancel
+   Why it must be removed from active generated playback:
+     - It contains old generated/filler scheduling policy.
+     - It has legacy in-memory generated playback code below an early return.
+     - It can log/run old [TuringGapAudio] paths that confuse diagnosis.
+   Required:
+     It should not own generated speech in the rebuilt active path.
+
+4. TuringGeneratedWAVPlaybackQueue.swift
+   Path:
+     Gravitas Plague/Gravitas Plague/Turing/Audio/TuringGeneratedWAVPlaybackQueue.swift
+   Current issue:
+     It introduces another queue owner plus TuringFillerSideLaneCoordinator and
+     TuringQueuedPlaybackSink. This keeps playback ownership split.
+   Required:
+     Remove from active path or quarantine behind unused diagnostics.
+
+5. TuringGeneratedSpeechQueueCoordinator.swift
+   Path:
+     Gravitas Plague/Gravitas Plague/Turing/Audio/TuringGeneratedSpeechQueueCoordinator.swift
+   Current issue:
+     Another queue owner with filler logic and sink handles.
+   Required:
+     Remove from active Story/Turing path.
+
+6. TuringWalkieQueuedPlaybackSink.swift
+   Path:
+     Gravitas Plague/Gravitas Plague/Turing/Audio/TuringWalkieQueuedPlaybackSink.swift
+   Current dangerous code:
+     - beginRun stops every active controller and removes transient entities.
+     - cancelRun stops static and all active controllers.
+     - waitForPlaybackCompletion waits on sink handle state while the queue
+       lives elsewhere.
+   Why this is dangerous:
+     A normal run begin/cancel/finish can stop unrelated active playback.
+   Required:
+     Do not let a sink own run lifecycle. Low-level playback should only play a
+     clip and report actual completion for that exact clip.
+
+7. TuringWalkieSpatialPlaybackSink.swift
+   Path:
+     Gravitas Plague/Gravitas Plague/Turing/Audio/TuringWalkieSpatialPlaybackSink.swift
+   Current dangerous code:
+     - waitForGeneratedSegmentPlaybackCompletion has fallbackDuration and
+       polling/sleep behavior.
+     - TuringStoryWalkieAudioRoute owns both activeSink and activeQueuedSink.
+   Required:
+     No fallbackDuration can advance generated playback. The route registry may
+     remain, but it should expose only the walkie emitter and static route, not
+     multiple generated playback owners.
+
+8. BigMikeFillerLoopController.swift, TuringFillerSideLaneCoordinator.swift,
+   TuringBigMikeFillerPlaybackLane.swift
+   Current issue:
+     Extra filler owners create competing policies.
+   Required:
+     One playback coordinator owns filler decisions. No side lane coordinator
+     may independently stop, start, or replace generated speech.
+
+9. TuringQueuedPlaybackSink.swift and TuringSpeechPlaybackSink.swift
+   Current issue:
+     The sink abstraction lets run lifecycle and playback lifecycle bleed
+     together.
+   Required:
+     Replace with a smaller low-level clip player interface.
+
+10. AVAudioSession direct calls
+   - TuringAudioSessionCoordinator.swift exists and should be the only owner.
+   - GravitasDemoAudioController.configureAudioSession currently calls
+     AVAudioSession.sharedInstance().setCategory(.ambient, ...).
+   Required:
+     Story/Turing playback code must not call setCategory(.playback), and direct
+     setCategory calls outside the coordinator must be audited so recording and
+     screen capture are not stomped.
+
+Replacement Architecture
+------------------------
+
+Create one active owner:
+
+  TuringStoryWalkiePlaybackCoordinator
+
+Responsibilities:
+  - Own runID.
+  - Own nextPlaybackSegmentIndex.
+  - Own pending generated WAVs by segmentIndex.
+  - Own skipped segment indexes.
+  - Own active generated/filler/dead-air state.
+  - Own mandatory first filler counter.
+  - Own compute-in-flight set.
+  - Own all-compute-finished flag.
+  - Own waitUntilPlaybackFinished continuations.
+  - Decide what plays next.
+  - Never let any other class advance generated playback.
+
+Low-level helper:
+
+  TuringWalkieOneShotClipPlayer
+
+Responsibilities:
+  - Given a file URL and kind, play exactly one file from the walkie emitter.
+  - Attach generated and filler one-shots under the walkie emitter.
+  - Retain the RealityKit AudioPlaybackController and child entity until actual
+    completion.
+  - Report completion through AudioPlaybackController.completionHandler for the
+    exact handle.
+  - Never call stop except explicit coordinator cancel/shutdown.
+  - Never know nextPlaybackSegmentIndex.
+  - Never clean generated WAV files.
+
+Static helper:
+
+  TuringWalkieStaticLoopController
+
+Responsibilities:
+  - Play static loop from the same walkie emitter.
+  - Static may overlap generated/filler if desired.
+  - Static must not stop generated/filler.
+  - Generated/filler must not stop static except explicit stop/cancel.
+
+Generated WAV writer:
+
+  Keep or replace TuringGeneratedWAVWriter/TuringAudioFileWriter if correct.
+  Generated samples must be written as:
+    segment_000N.tmp.wav
+    close file
+    move to segment_000N.wav
+    reopen final file and validate nonzero frame count/duration
+  Cleanup only after actual generated clip completion.
+
+Required State Machine
+----------------------
+
+State:
+  runActive: Bool
+  runID: String?
+  expectedSegmentCount: Int?
+  nextPlaybackSegmentIndex: Int
+  activeComputeSegments: Set<Int>
+  pendingGenerated: [Int: GeneratedClip]
+  skippedSegments: Set<Int>
+  allComputeFinished: Bool
+  activeItem: ActiveItem
+  firstPrerollRemaining: Int
+  lastFillerURL: URL?
+  deadAirTask: Task<Void, Never>?
+
+ActiveItem:
+  none
+  generated(segmentIndex: Int, handleID: UUID, fileURL: URL)
+  filler(handleID: UUID, fileURL: URL)
+  deadAir(id: UUID)
+  cancelled
+
+Policy:
+  firstSegmentPrerollFillerCount = 1
+  chainFillerWhileComputeWithoutSpeech = true
+  completeCurrentFillerBeforeGeneratedSpeech = true
+  deadAirAfterFillerEnabled = true
+  deadAirMinSeconds = 0.5
+  deadAirMaxSeconds = 4.0
+  avoidImmediateFillerRepeat = true
+
+Important policy interpretation:
+  - Exactly one filler is mandatory before first generated playback.
+  - Additional filler before first generated playback is allowed only if the
+    generated segment is still not ready after that filler and a dead-air period.
+  - There is no mandatory filler between generated segments when the next
+    generated segment is already ready.
+  - If generated segment N+1 is not ready after generated segment N completes,
+    filler/dead-air cycles bridge the gap.
+  - If generated becomes ready while filler is playing, do not interrupt filler.
+  - If generated becomes ready while dead air is active, cancel dead air and
+    start generated immediately.
+
+Reconcile Algorithm
+-------------------
+
+Pseudo-code:
+
+  reconcile(reason):
+    guard runActive else return
+    guard activeItem == .none else return
+
+    while skippedSegments contains nextPlaybackSegmentIndex:
+      remove skip
+      nextPlaybackSegmentIndex += 1
+
+    if firstPrerollRemaining > 0:
+      if pendingGenerated[nextPlaybackSegmentIndex] != nil ||
+         activeComputeSegments.isEmpty == false:
+        firstPrerollRemaining -= 1
+        startFiller(reason: "firstSegmentPreroll")
+        return
+
+    if let generated = pendingGenerated.removeValue(forKey: nextPlaybackSegmentIndex):
+      startGenerated(generated)
+      return
+
+    if activeComputeSegments.isEmpty == false:
+      startFiller(reason: "computeWithoutSpeech")
+      return
+
+    if allComputeFinished && no pending/skipped/active:
+      finishRun()
+
+Generated completion:
+
+  generatedDidComplete(handleID, segmentIndex):
+    guard activeItem == .generated(segmentIndex, handleID, fileURL) else:
+      log stale completion
+      return
+    cleanup fileURL
+    activeItem = .none
+    nextPlaybackSegmentIndex = segmentIndex + 1
+    reconcile("generatedComplete")
+
+Filler completion:
+
+  fillerDidComplete(handleID):
+    guard activeItem == .filler(handleID, fileURL) else:
+      log stale completion
+      return
+    activeItem = .none
+    if pendingGenerated[nextPlaybackSegmentIndex] != nil:
+      reconcile("fillerCompleteGeneratedReady")
+    else if activeComputeSegments.isEmpty == false && deadAirAfterFillerEnabled:
+      startDeadAir()
+    else:
+      reconcile("fillerComplete")
+
+Dead air:
+
+  startDeadAir():
+    id = UUID()
+    activeItem = .deadAir(id)
+    seconds = Double.random(in: 0.5...4.0)
+    sleep seconds in cancellable task
+
+  qwenComputeFinished(...):
+    write/validate generated WAV
+    pendingGenerated[segmentIndex] = wav
+    if activeItem is deadAir:
+      cancel deadAirTask
+      activeItem = .none
+    reconcile("computeFinished")
+
+Low-Level Spatial Clip Player Contract
+--------------------------------------
+
+API:
+
+  @MainActor
+  final class TuringWalkieOneShotClipPlayer {
+      func playOneShot(
+          fileURL: URL,
+          kind: ClipKind,
+          label: String,
+          completion: @escaping @MainActor (UUID) -> Void
+      ) throws -> UUID
+
+      func cancel(handleID: UUID, reason: String)
+      func cancelAll(reason: String)
+  }
+
+Rules:
+  - For generated and filler, create a fresh child entity under:
+      TuringStoryWalkieTalkie_AudioEmitter
+    or stable child lanes under that emitter.
+  - Set SpatialAudioComponent on child entity.
+  - Use AudioFileResource.load(... shouldLoop: false).
+  - Call entity.playAudio(resource).
+  - Retain AudioPlaybackController and entity in dictionaries by handleID.
+  - Set controller.completionHandler before returning if possible.
+  - In completion handler:
+      remove handle from retained dictionaries
+      remove transient child entity
+      call completion(handleID)
+  - Do not use file duration to report completion.
+  - Do not call stop for normal completion.
+  - Do not stop any other handle when starting a new handle.
+
+If RealityKit completion is not reliable enough:
+  The architect must implement an AVAudioEngine spatial node route that is
+  still attached to walkie world position and exposes actual node completion.
+  Do not fall back to non-spatial AVAudioPlayer for Story runtime unless this
+  is explicitly accepted as a temporary diagnostic path.
+
+Two Fresh Qwen Instance Contract
+--------------------------------
+
+Playback rebuild must preserve this generation shape:
+
+  let freshPool = try TuringQwenNativeGenerationSchedulerFactory.makeFresh2Pool()
+  try await freshPool.warmLoadExactlyRequestedInstances(...)
+  let scheduler = TuringQwenNativeGenerationSchedulerFactory.makeFresh2Scheduler(
+      instancePool: freshPool
+  )
+  let report = try await scheduler.renderSegments(
+      requests,
+      runID: runID,
+      skipSegmentFailures: true,
+      onSegmentStarted: { _, segmentIndex in
+          await playback.qwenComputeStarted(segmentIndex: segmentIndex)
+      },
+      onSegmentFinished: { generated in
+          await playback.qwenComputeFinished(
+              segmentIndex: generated.segmentIndex,
+              audio: TuringComputeGapGeneratedAudio(...)
+          )
+      },
+      onSegmentSkipped: { skipped in
+          await playback.qwenComputeSkipped(
+              segmentIndex: skipped.segmentIndex,
+              reason: skipped.errorDescription
+          )
+      }
+  )
+  await playback.qwenComputeAllFinished()
+  await playback.waitUntilPlaybackFinished()
+
+Rules:
+  - Do not wait for all Qwen segments before starting playback.
+  - Do not block scheduler workers on playback.
+  - Segment 0 starts playback as soon as segment 0 is ready and mandatory
+    first filler has completed.
+  - Segments 1...N may finish out of order; playback still consumes only
+    nextPlaybackSegmentIndex.
+  - Scheduler remains concurrent with exactly two fresh Qwen instances.
+
+Audio Session Contract
+----------------------
+
+Single owner:
+  TuringAudioSessionCoordinator
+
+Rules:
+  - No Turing playback class may call AVAudioSession.setCategory(.playback).
+  - No Turing playback class may call setActive(false) during an active run.
+  - Dictation calls beginRecording/endRecording.
+  - Playback calls beginPlayback/endPlayback.
+  - If recordingOwners is non-empty:
+      category = playAndRecord
+      options include mixWithOthers
+  - If recordingOwners is empty:
+      category = ambient
+      options include mixWithOthers
+  - Existing direct calls in GravitasDemoAudioController.configureAudioSession
+    should be audited and routed through the coordinator if they affect Story.
+
+Expected Logs
+-------------
+
+Run start:
+  [TuringPlaybackRebuild] run started
+    runID: ...
+    expectedSegmentCount: ...
+    playbackOwner: TuringStoryWalkiePlaybackCoordinator
+    spatialEmitter: TuringStoryWalkieTalkie_AudioEmitter
+    qwenScheduler: fresh2
+
+Qwen started:
+  [TuringPlaybackRebuild] qwen compute started
+    segmentIndex: ...
+
+Qwen finished:
+  [TuringPlaybackRebuild] generated wav written
+    segmentIndex: ...
+    file: segment_000N.wav
+    frameCount: ...
+    sampleRate: ...
+
+Initial preroll:
+  [TuringPlaybackRebuild] filler started
+    reason: firstSegmentPreroll
+    clip: ...
+    spatialEmitter: TuringStoryWalkieTalkie_AudioEmitter
+
+Generated:
+  [TuringPlaybackRebuild] generated playback started
+    segmentIndex: N
+    handleID: ...
+    spatialEmitter: TuringStoryWalkieTalkie_AudioEmitter
+
+  [TuringPlaybackRebuild] generated playback completed
+    segmentIndex: N
+    handleID: ...
+    completionSource: actualPlaybackCompletion
+
+Gap filler:
+  [TuringPlaybackRebuild] filler started
+    reason: computeWithoutSpeech
+
+Dead air:
+  [TuringPlaybackRebuild] dead air started
+    seconds: ...
+
+  [TuringPlaybackRebuild] dead air cancelled
+    reason: generatedReady
+
+Forbidden Logs In Active Generated Playback
+-------------------------------------------
+
+If these appear during generated TTS playback, the old path is still active:
+
+  [TuringGapAudio] real speech started
+  [TuringGapAudio] legacy generated audio started
+  [TuringGapAudio] legacy generated path used
+  [TuringSerialQueue] generated playback started
+  [TuringWAVQueue] playback started
+  [TuringQueuedAudio] generated wav started on walkie lane
+  [TuringGeneratedSpeechQueue]
+  [TuringFillerSideLane]
+  fallbackDurationSeconds
+  Task.sleep used for generated playback completion
+
+Audit Requirements
+------------------
+
+Static audit should fail if:
+  - TuringNativeQwenHelloWorldCanary creates TuringSerialWAVFillerPlaybackQueue.
+  - Active generated playback references TuringComputeGapAudioCoordinator.
+  - Any active generated playback path uses fallbackDuration.
+  - Any active generated playback path uses Task.sleep to advance generated
+    playback.
+  - Turing playback code calls AVAudioSession.setCategory(.playback).
+  - More than one generated playback owner is wired to active Story/Turing routes.
+
+Runtime audit should verify:
+  - Segment 0 generated ready does not start until exactly one mandatory filler
+    has completed.
+  - Segment N+1 never starts before segment N completion.
+  - A filler clip cannot interrupt generated speech.
+  - Generated-ready during filler waits for filler completion.
+  - Generated-ready during dead air cancels dead air and starts generated.
+  - Static, if enabled, comes from the walkie emitter and does not stop the
+    generated/filler queue.
+  - Dictation can record while playback/static exist without audio session
+    category switching to playback.
+  - Two Qwen fresh instances are warmed and used concurrently.
+
+Implementation Boundary
+-----------------------
+
+This rebuild should be one patch with this scope only:
+
+Allowed:
+  - Add TuringStoryWalkiePlaybackCoordinator.
+  - Add TuringWalkieOneShotClipPlayer.
+  - Add TuringWalkieStaticLoopController if needed.
+  - Rewire TuringNativeQwenHelloWorldCanary playback bridge to the new
+    coordinator.
+  - Rewire radio static lead-in to the same walkie static controller.
+  - Route audio session changes through TuringAudioSessionCoordinator.
+  - Quarantine/remove old playback owners from active route.
+
+Not allowed:
+  - Change Qwen graph, model, clone artifacts, prompts, source sectioning, or
+    filler assets.
+  - Replace the two-fresh-instance Qwen scheduler with one lane or an
+    all-complete barrier.
+  - Add a new fallback TTS path.
+  - Use non-spatial output as the accepted Story runtime route.
+  - Use duration estimates for generated playback completion.
+
+Recommended File Plan
+---------------------
+
+Add:
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringStoryWalkiePlaybackCoordinator.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringWalkieOneShotClipPlayer.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringWalkieStaticLoopController.swift
+
+Modify:
+  Gravitas Plague/Gravitas Plague/Turing/Debug/TuringNativeQwenHelloWorldCanary.swift
+  Gravitas Plague/Gravitas Plague/Turing/Story/TuringEpisodePickerView.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringRadioStaticLeadInController.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringWalkieSpatialPlaybackSink.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringAudioSessionCoordinator.swift
+  Gravitas Plague/Gravitas Plague/GravitasDemoAudioController.swift only if
+    needed to avoid bypassing the audio session coordinator.
+
+Remove from active route or mark diagnostic-only:
+  TuringComputeGapAudioCoordinator
+  TuringSerialWAVFillerPlaybackQueue
+  TuringGeneratedWAVPlaybackQueue
+  TuringGeneratedSpeechQueueCoordinator
+  TuringFillerSideLaneCoordinator
+  TuringWalkieQueuedPlaybackSink
+  BigMikeFillerLoopController
+
+The final active runtime should have exactly:
+  - one Qwen scheduler publishing compute events,
+  - one playback coordinator deciding order,
+  - one low-level walkie clip player producing actual completion,
+  - one audio session coordinator,
+  - no old playback owner in the generated-speech path.
+
+Codex Deletion Pass Applied
+---------------------------
+
+After this handoff was written, the old playback implementation files were
+deleted from disk so the next patch cannot accidentally keep layering on top of
+them. The repo is expected to be non-building until the replacement playback
+coordinator is implemented.
+
+Deleted files:
+  Gravitas Plague/Gravitas Plague/Turing/Audio/BigMikeFillerLoopController.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringAudioSessionCoordinator.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringBigMikeFillerPlaybackLane.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringComputeGapAudioCoordinator.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringFillerSideLaneCoordinator.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringGeneratedSpeechQueueCoordinator.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringGeneratedWAVPlaybackQueue.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringGeneratedWAVWriter.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringQueuedPlaybackSink.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringQwenOutputPostProcessor.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringRadioStaticLeadInController.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringSerialWAVFillerPlaybackQueue.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringSpeechPlaybackSink.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringWAVPlaybackTypes.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringWalkieQueuedPlaybackSink.swift
+  Gravitas Plague/Gravitas Plague/Turing/Audio/TuringWalkieSpatialPlaybackSink.swift
+
+Xcode project file reference check:
+  rg over Gravitas Plague/Gravitas Plague.xcodeproj found no explicit
+  filename references for the deleted playback files. The remaining breakage is
+  expected to be Swift call sites still referring to deleted types.

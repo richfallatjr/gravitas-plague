@@ -721,6 +721,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
     }
 
+    @MainActor
     private func configureTuringWalkieAudioAndInteraction(
         reason: String,
         attempt: Int
@@ -1351,7 +1352,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         turingStoryPropBillboardIconController?.removeWalkieMicIcon()
         turingStoryPropBillboardIconController = nil
         turingWalkieBundleController.reset(reason: "immersiveShutdown")
-        TuringStoryWalkieAudioRoute.clear(reason: "immersiveShutdown")
+        Task { @MainActor in
+            TuringStoryWalkieAudioRoute.clear(reason: "immersiveShutdown")
+        }
         onWallPosterUIActiveChanged?(false)
 
         sceneRoot = nil

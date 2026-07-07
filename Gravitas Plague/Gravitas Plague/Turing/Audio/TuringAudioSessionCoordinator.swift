@@ -7,7 +7,7 @@ final class TuringAudioSessionCoordinator {
 
     private var recordingOwners = Set<String>()
     private var playbackOwners = Set<String>()
-    private var lastAppliedCategory: AVAudioSession.Category?
+    private var lastAppliedCategoryRawValue: String?
 
     private init() {}
 
@@ -53,7 +53,7 @@ final class TuringAudioSessionCoordinator {
                 options: options
             )
             try session.setActive(true)
-            lastAppliedCategory = category
+            lastAppliedCategoryRawValue = category.rawValue
 
             print("""
             [TuringAudioSession] configured
@@ -68,7 +68,7 @@ final class TuringAudioSessionCoordinator {
               reason: \(reason)
               requestedCategory: \(category.rawValue)
               currentCategory: \(session.category.rawValue)
-              lastAppliedCategory: \(lastAppliedCategory?.rawValue ?? "nil")
+              lastAppliedCategory: \(lastAppliedCategoryRawValue ?? "nil")
               error: \(error.localizedDescription)
             """)
         }

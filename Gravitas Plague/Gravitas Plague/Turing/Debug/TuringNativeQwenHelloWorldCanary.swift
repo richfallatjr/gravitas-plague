@@ -19,17 +19,16 @@ enum TuringNativeQwenRunResult: Sendable {
 
 @MainActor
 private final class TuringParallelPerfGapAudioBridge: @unchecked Sendable {
-    private let queue: TuringSerialWAVFillerPlaybackQueue
+    private let coordinator: TuringStoryWalkiePlaybackCoordinator
 
-    init(
-        queue: TuringSerialWAVFillerPlaybackQueue
-    ) {
-        self.queue = queue
+    init() {
+        self.coordinator = TuringStoryWalkiePlaybackCoordinator
+            .makeBigMikeCoordinator()
         print("""
-        [TuringSerialBridge] playback owner selected
-          owner: TuringSerialWAVFillerPlaybackQueue
-          generatedPlayback: fileBackedSerialAVAudioPlayer
-          legacyGapAudioGeneratedPlayback: blocked
+        [TuringPlaybackRebuild] playback owner selected
+          owner: TuringStoryWalkiePlaybackCoordinator
+          generatedPlayback: walkieSpatialActualCompletion
+          legacyGapAudioGeneratedPlayback: removed
         """)
     }
 
@@ -37,7 +36,7 @@ private final class TuringParallelPerfGapAudioBridge: @unchecked Sendable {
         runID: String,
         expectedSegmentCount: Int?
     ) async {
-        await queue.beginRun(
+        await coordinator.beginRun(
             runID: runID,
             expectedSegmentCount: expectedSegmentCount
         )
@@ -46,14 +45,14 @@ private final class TuringParallelPerfGapAudioBridge: @unchecked Sendable {
     func qwenComputeStarted(
         segmentIndex: Int
     ) async {
-        await queue.qwenComputeStarted(segmentIndex: segmentIndex)
+        await coordinator.qwenComputeStarted(segmentIndex: segmentIndex)
     }
 
     func qwenComputeFinished(
         segmentIndex: Int,
         audio: TuringComputeGapGeneratedAudio
     ) async {
-        await queue.qwenComputeFinished(
+        await coordinator.qwenComputeFinished(
             segmentIndex: segmentIndex,
             audio: audio
         )
@@ -63,24 +62,24 @@ private final class TuringParallelPerfGapAudioBridge: @unchecked Sendable {
         segmentIndex: Int,
         reason: String
     ) async {
-        await queue.qwenComputeSkipped(
+        await coordinator.qwenComputeSkipped(
             segmentIndex: segmentIndex,
             reason: reason
         )
     }
 
     func qwenComputeAllFinished() async {
-        await queue.qwenComputeAllFinished()
+        await coordinator.qwenComputeAllFinished()
     }
 
     func waitUntilPlaybackFinished() async {
-        await queue.waitUntilPlaybackFinished()
+        await coordinator.waitUntilPlaybackFinished()
     }
 
     func runCancelled(
         reason: String
     ) async {
-        await queue.cancel(reason: reason)
+        await coordinator.runCancelled(reason: reason)
     }
 }
 
@@ -202,6 +201,16 @@ enum TuringNativeQwenHelloWorldCanary {
                 )
 
                 do {
+                    let playback = await MainActor.run {
+                        TuringStoryWalkiePlaybackCoordinator
+                            .makeBigMikeCoordinator()
+                    }
+                    await playback.beginRun(
+                        runID: "singleSegment.\(preset.rawValue)",
+                        expectedSegmentCount: 1
+                    )
+                    await playback.qwenComputeStarted(segmentIndex: 0)
+
                     let audio = try await renderBaseCloneSegment(
                         preset: preset,
                         cloneProfile: cloneProfile,
@@ -210,17 +219,17 @@ enum TuringNativeQwenHelloWorldCanary {
                         segmentIndex: 0
                     )
 
-                    let processedSamples = await TuringQwenOutputPostProcessor.processSamplesForPlayback(
-                        samples: audio.samples,
-                        sampleRate: audio.sampleRate,
+                    await playback.qwenComputeFinished(
                         segmentIndex: 0,
-                        reason: "directMemoryPlayer.\(preset.rawValue)"
+                        audio: TuringComputeGapGeneratedAudio(
+                            segmentIndex: 0,
+                            samples: audio.samples,
+                            sampleRate: Double(audio.sampleRate),
+                            channelCount: 1
+                        )
                     )
-
-                    try await TuringQwenNativeMemoryPlayer.shared.play(
-                        samples: processedSamples,
-                        sampleRate: audio.sampleRate
-                    )
+                    await playback.qwenComputeAllFinished()
+                    await playback.waitUntilPlaybackFinished()
 
                     await loadedEngine.releaseResidentState(
                         reason: "episodePickerRunFinished.\(preset.rawValue)",
@@ -558,9 +567,7 @@ enum TuringNativeQwenHelloWorldCanary {
         }
 
         let gapAudio = await MainActor.run {
-            TuringParallelPerfGapAudioBridge(
-                queue: TuringSerialWAVFillerPlaybackQueue.makeBigMikeQueue()
-            )
+            TuringParallelPerfGapAudioBridge()
         }
         await gapAudio.beginRun(
             runID: runID,
@@ -654,7 +661,7 @@ enum TuringNativeQwenHelloWorldCanary {
               parallelQwenMode: \(activeParallelQwenMode)
               foundationRollingWindow: true
               foundationWindow: currentPlusNext
-              playbackOwner: TuringSerialWAVFillerPlaybackQueue
+              playbackOwner: TuringStoryWalkiePlaybackCoordinator
             """)
 
             let modelRoot = try locateBundledBaseCloneModel()
@@ -718,9 +725,7 @@ enum TuringNativeQwenHelloWorldCanary {
         runID: String
     ) async throws {
         let gapAudio = await MainActor.run {
-            TuringParallelPerfGapAudioBridge(
-                queue: TuringSerialWAVFillerPlaybackQueue.makeBigMikeQueue()
-            )
+            TuringParallelPerfGapAudioBridge()
         }
 
         await gapAudio.beginRun(
@@ -947,9 +952,7 @@ enum TuringNativeQwenHelloWorldCanary {
         """)
 
         let gapAudio = await MainActor.run {
-            TuringParallelPerfGapAudioBridge(
-                queue: TuringSerialWAVFillerPlaybackQueue.makeBigMikeQueue()
-            )
+            TuringParallelPerfGapAudioBridge()
         }
 
         await gapAudio.beginRun(
