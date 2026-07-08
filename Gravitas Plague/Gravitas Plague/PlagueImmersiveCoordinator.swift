@@ -121,6 +121,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let hordePortalManager = HordePortalManager()
     private let wallPosterUIController = WallMountedPosterUIController()
     private let turingWalkieBundleController = TuringStoryWalkieBundleController()
+    private let turingWindowBundleController = TuringStoryWindowBundleController()
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
     private let hordeRoomScanTracker = HordeRoomScanTracker()
     private let enemyBodySeparationResolver = HordeEnemyBodySeparationResolver()
@@ -222,6 +223,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var hordeReplacementPumpID: UUID?
     private var hordeReplacementCorpseCleanupTasksByEnemyID: [UUID: Task<Void, Never>] = [:]
     private var lastWallPosterPlacementAttempt: Date?
+    private var currentStoryWindowAtmosphere: PortalHDRIAtmosphere = .night
 
     private var lastTickDate: Date?
     private var handledCommandIDs = Set<UUID>()
@@ -287,6 +289,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             occupancyRegistry: wallPropOccupancyRegistry
         )
         turingWalkieBundleController.installIfNeeded(
+            sceneRoot: root,
+            wallManager: roomSkinningCoordinator.wallManager,
+            occupancyRegistry: wallPropOccupancyRegistry
+        )
+        turingWindowBundleController.installIfNeeded(
             sceneRoot: root,
             wallManager: roomSkinningCoordinator.wallManager,
             occupancyRegistry: wallPropOccupancyRegistry
@@ -637,13 +644,20 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         case .startStoryEpisode(let episodeID):
             requestStoryWalkieBundlePlacement(reason: "startStoryEpisode.\(episodeID.rawValue)")
+            requestStoryWindowBundlePlacement(reason: "startStoryEpisode.\(episodeID.rawValue)")
             startStoryEpisode(episodeID)
 
         case .requestStoryWalkieBundlePlacement:
             requestStoryWalkieBundlePlacement(reason: "storyModeRequested")
+            requestStoryWindowBundlePlacement(reason: "storyModeRequested")
 
         case .updatePortalHDRIAtmosphere(let atmosphere):
+            currentStoryWindowAtmosphere = atmosphere
             roomSkinningCoordinator.updatePortalContentAtmosphere(atmosphere)
+            Task { @MainActor [weak self] in
+                await self?.turingWindowBundleController
+                    .updateAtmosphereIfNeeded(atmosphere)
+            }
 
         case .updatePortalLoopGainDB(let gainDB):
             hordePortalManager.updatePortalLoopGainDB(gainDB)
@@ -718,6 +732,48 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             [TuringWalkieBundle] placement not available after retries
               reason: \(reason)
             """)
+        }
+    }
+
+    private func requestStoryWindowBundlePlacement(
+        reason: String
+    ) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            for attempt in 1...12 {
+                let pose = self.spatialProvider.currentPoseOrFallback()
+                self.roomSkinningCoordinator.wallManager
+                    .updateViewerPositionForWallSelection(
+                        pose.headPosition
+                    )
+                let placed = await self.turingWindowBundleController
+                    .placeOnBestWallIfNeeded(
+                        playerPosition: pose.headPosition,
+                        playerForward: pose.headForward,
+                        atmosphere: self.currentStoryWindowAtmosphere
+                    )
+
+                if placed {
+                    print(
+                        """
+                        [TuringWindowPortal] placement ready
+                          reason: \(reason)
+                          attempt: \(attempt)
+                        """
+                    )
+                    return
+                }
+
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+
+            print(
+                """
+                [TuringWindowPortal] placement not available after retries
+                  reason: \(reason)
+                """
+            )
         }
     }
 
@@ -1352,6 +1408,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         turingStoryPropBillboardIconController?.removeWalkieMicIcon()
         turingStoryPropBillboardIconController = nil
         turingWalkieBundleController.reset(reason: "immersiveShutdown")
+        turingWindowBundleController.reset(reason: "immersiveShutdown")
         Task { @MainActor in
             TuringStoryWalkieAudioRoute.clear(reason: "immersiveShutdown")
         }

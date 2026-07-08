@@ -139,6 +139,15 @@ struct PlagueImmersiveView: View {
                 }
         )
         .simultaneousGesture(
+            TapGesture()
+                .targetedToEntity(where: .has(TuringStoryDayNightPosterButtonComponent.self))
+                .onEnded { _ in
+                    Task { @MainActor in
+                        session.togglePortalHDRIAtmosphere()
+                    }
+                }
+        )
+        .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .targetedToEntity(where: .has(TuringStoryWalkieMicBillboardComponent.self))
                 .onChanged { _ in

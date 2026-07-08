@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="${1:?repo root required}"
+
+require_file() {
+  test -f "$ROOT/$1" || {
+    echo "Missing required file: $1" >&2
+    exit 1
+  }
+}
+
+require_rg() {
+  local pattern="$1"
+  local path="$2"
+  rg -q "$pattern" "$ROOT/$path" || {
+    echo "Missing pattern '$pattern' in $path" >&2
+    exit 1
+  }
+}
+
+require_file "Gravitas Plague/TuringResources/Turing/Props/turing_story_window_bundle_v1.usdz"
+
+require_file "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundlePlacement.swift"
+require_file "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
+require_file "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"
+require_file "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowGlassMaterialFactory.swift"
+require_file "Gravitas Plague/Gravitas Plague/Turing/Interaction/TuringStoryPosterDayNightIconController.swift"
+
+require_rg "storyWindowBundle" "Gravitas Plague/Gravitas Plague/RoomSkinning/WallPropOccupancyRegistry.swift"
+require_rg "wallPoster" "Gravitas Plague/Gravitas Plague/RoomSkinning/WallPropOccupancyRegistry.swift"
+require_rg "hordePortal" "Gravitas Plague/Gravitas Plague/RoomSkinning/WallPropOccupancyRegistry.swift"
+require_rg "storyWalkieBundle" "Gravitas Plague/Gravitas Plague/RoomSkinning/WallPropOccupancyRegistry.swift"
+
+require_rg "TuringStoryWindowFrame_Root" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
+require_rg "TuringStoryWindowGlass" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
+require_rg "TuringStoryWindowPortalPlane" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
+require_rg "TuringStoryWindowDayNightIconAnchor" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
+require_rg "PortalComponent" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
+require_rg "PortalMaterial" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
+require_rg "WorldComponent" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
+
+require_rg "PortalHDRIAtmosphere" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"
+require_rg "hellscape_groundplane" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"
+require_rg "forest-overcast-01" "Gravitas Plague/Gravitas Plague/RoomSkinning/RoomSkinningModels.swift"
+require_rg "forest-night-01" "Gravitas Plague/Gravitas Plague/RoomSkinning/RoomSkinningModels.swift"
+
+require_rg "PhysicallyBasedMaterial" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowGlassMaterialFactory.swift"
+require_rg "0.65" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowGlassMaterialFactory.swift"
+require_rg "0.90" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowGlassMaterialFactory.swift"
+require_rg "clearcoat" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowGlassMaterialFactory.swift"
+
+require_rg "TuringStoryDayNightPosterButtonComponent" "Gravitas Plague/Gravitas Plague"
+require_rg "WallPosterDayNight_TuringWindow" "Gravitas Plague/Gravitas Plague"
+require_rg "togglePortalHDRIAtmosphere" "Gravitas Plague/Gravitas Plague"
+
+require_rg "TuringStoryWindowBundleController" "Gravitas Plague/Gravitas Plague/PlagueImmersiveCoordinator.swift"
+require_rg "updateAtmosphereIfNeeded" "Gravitas Plague/Gravitas Plague/PlagueImmersiveCoordinator.swift"
+
+if rg -n "Qwen|TuringGapAudio|TuringPlayback|BigMike|voicePrompt|dictation" "$ROOT/Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindow"*; then
+  echo "FAIL: window portal files should not reference Qwen/playback/dictation systems" >&2
+  exit 1
+fi
+
+echo "Turing Story window portal audit passed."

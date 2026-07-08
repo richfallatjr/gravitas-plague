@@ -20,6 +20,7 @@ final class WallMountedPosterUIController: ObservableObject {
     private let contentRoot = Entity()
     private var posterEntity: ModelEntity?
     private var buttonEntities: [Entity] = []
+    private let dayNightIconController = TuringStoryPosterDayNightIconController()
 
     private weak var wallManager: WallPlaneManager?
     private weak var hordePortalManager: HordePortalManager?
@@ -46,6 +47,7 @@ final class WallMountedPosterUIController: ObservableObject {
         WallPosterUIButtonComponent.registerComponent()
         WallPosterKillSwitchComponent.registerComponent()
         WallPosterLeaderboardButtonComponent.registerComponent()
+        TuringStoryDayNightPosterButtonComponent.registerComponent()
         root.name = "WallPosterWorldLockedRoot"
         contentRoot.name = "WallPosterMutableContentRoot"
         root.addChild(contentRoot)
@@ -665,11 +667,19 @@ private extension WallMountedPosterUIController {
             )
         )
 
+        dayNightIconController.install(
+            posterContentRoot: contentRoot,
+            posterWidth: posterWidth,
+            posterHeight: posterHeight,
+            atmosphere: .night
+        )
+
         print(
             """
             [WallPosterUI] bottom stickers created
               trophy: true
               closeX: true
+              dayNightWindow: true
               tint: two_stops_down
               pureWhite: false
             """

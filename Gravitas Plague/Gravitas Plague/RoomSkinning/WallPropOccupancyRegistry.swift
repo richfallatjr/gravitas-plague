@@ -6,6 +6,7 @@ enum WallPropOccupancyKind: String, Codable, Hashable, Sendable {
     case hordePortal
     case storyPortal
     case storyWalkieBundle
+    case storyWindowBundle
     case killSwitch
     case other
 }
@@ -215,6 +216,47 @@ final class WallPropOccupancyRegistry {
                 print(
                     """
                     [WallOccupancy] HARD REJECT candidate overlaps story walkie bundle
+                      candidateKind: \(candidateKind.rawValue)
+                      recordKind: \(record.kind.rawValue)
+                      recordLabel: \(record.label)
+                      candidate: \(candidate)
+                      occupied: \(occupied)
+                    """
+                )
+                return true
+            }
+
+            if candidateKind == .storyWindowBundle,
+               [
+                   .wallPoster,
+                   .hordePortal,
+                   .storyPortal,
+                   .storyWalkieBundle,
+                   .storyWindowBundle
+               ].contains(record.kind) {
+                print(
+                    """
+                    [WallOccupancy] HARD REJECT story window bundle overlaps occupied wall prop
+                      candidateKind: \(candidateKind.rawValue)
+                      recordKind: \(record.kind.rawValue)
+                      recordLabel: \(record.label)
+                      candidate: \(candidate)
+                      occupied: \(occupied)
+                    """
+                )
+                return true
+            }
+
+            if record.kind == .storyWindowBundle,
+               [
+                   .wallPoster,
+                   .hordePortal,
+                   .storyPortal,
+                   .storyWalkieBundle
+               ].contains(candidateKind) {
+                print(
+                    """
+                    [WallOccupancy] HARD REJECT candidate overlaps story window bundle
                       candidateKind: \(candidateKind.rawValue)
                       recordKind: \(record.kind.rawValue)
                       recordLabel: \(record.label)
