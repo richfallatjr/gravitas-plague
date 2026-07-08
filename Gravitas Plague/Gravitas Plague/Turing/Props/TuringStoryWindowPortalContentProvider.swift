@@ -37,8 +37,19 @@ struct TuringStoryWindowPortalContentProvider: PortalContentProvider {
             )
         )
 
-        let ground = try makeHellscapePlaceholderGround(
-            context: context
+        let groundTextureName = groundTextureName(
+            for: atmosphere
+        )
+        let ground = try HordePortalGroundDiscFactory.makeGroundDisc(
+            config: HordePortalGroundDiscFactory.Config(
+                floorY: context.floorY,
+                centerZ: context.groundDiscCenterZ,
+                radius: context.groundDiscRadius,
+                featherRingCount: 8,
+                featherStartFraction: 0.72,
+                textureName: groundTextureName,
+                exposure: atmosphere.visibleExposure
+            )
         )
         portalWorld.addChild(ground)
 
@@ -56,54 +67,24 @@ struct TuringStoryWindowPortalContentProvider: PortalContentProvider {
             [TuringWindowPortal] portal world populated
               atmosphere: \(atmosphere.rawValue)
               domeEXR: \(atmosphere.exrResourceName).exr
-              ground: hellscape_groundplane.png
-              groundPlaceholder: true
+              ground: \(groundTextureName).png
+              groundMode: horde_faded_disc
+              featherRingCount: 8
+              featherStartFraction: 0.72
               worldYawRadians: \(worldYawRadians)
             """
         )
     }
 
-    @MainActor
-    private func makeHellscapePlaceholderGround(
-        context: PortalContentContext
-    ) throws -> ModelEntity {
-        guard let texture = try? TextureResource.load(
-            named: "hellscape_groundplane"
-        ) else {
-            throw NSError(
-                domain: "TuringWindowPortal",
-                code: 404,
-                userInfo: [
-                    NSLocalizedDescriptionKey: "Missing hellscape_groundplane.png"
-                ]
-            )
+    private func groundTextureName(
+        for atmosphere: PortalHDRIAtmosphere
+    ) -> String {
+        switch atmosphere {
+        case .overcast:
+            return "day-groundplane-tile"
+
+        case .night:
+            return "night-groundplane-tile"
         }
-
-        var material = UnlitMaterial()
-        material.color = .init(
-            tint: .white,
-            texture: .init(texture)
-        )
-        material.faceCulling = .none
-
-        let ground = ModelEntity(
-            mesh: .generatePlane(
-                width: context.groundDiscRadius * 2.0,
-                depth: context.groundDiscRadius * 2.0
-            ),
-            materials: [material]
-        )
-        ground.name = "TuringStoryWindow_HellscapeGroundPlaceholder"
-        ground.position = SIMD3<Float>(
-            0,
-            context.floorY + 0.004,
-            context.groundDiscCenterZ
-        )
-        ground.orientation = simd_quatf(
-            angle: -.pi / 2,
-            axis: SIMD3<Float>(1, 0, 0)
-        )
-
-        return ground
     }
 }

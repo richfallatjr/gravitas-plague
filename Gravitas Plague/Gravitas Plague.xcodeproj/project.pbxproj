@@ -41,6 +41,8 @@
 		8E1A10472FCD000100000001 /* ../forest-night-01.exr in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10462FCD000100000001 /* ../forest-night-01.exr */; };
 		8E1A10492FCD000100000001 /* ../hellscape_01.exr in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10482FCD000100000001 /* ../hellscape_01.exr */; };
 		8E1A104B2FCD000100000001 /* ../hellscape_groundplane.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A104A2FCD000100000001 /* ../hellscape_groundplane.png */; };
+		8E1A10702FCD000100000001 /* ../day-groundplane-tile.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10712FCD000100000001 /* ../day-groundplane-tile.png */; };
+		8E1A10722FCD000100000001 /* ../night-groundplane-tile.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10732FCD000100000001 /* ../night-groundplane-tile.png */; };
 		8E1A104D2FCD000100000001 /* ../kill_switch_x.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A104C2FCD000100000001 /* ../kill_switch_x.png */; };
 		8E1A104E2FCD000100000001 /* GameKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E1A104F2FCD000100000001 /* GameKit.framework */; };
 		8E1A10502FCD000100000001 /* ../trophy_sticker.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10512FCD000100000001 /* ../trophy_sticker.png */; };
@@ -108,6 +110,8 @@
 		8E1A10462FCD000100000001 /* ../forest-night-01.exr */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../forest-night-01.exr"; sourceTree = SOURCE_ROOT; };
 		8E1A10482FCD000100000001 /* ../hellscape_01.exr */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../hellscape_01.exr; sourceTree = SOURCE_ROOT; };
 		8E1A104A2FCD000100000001 /* ../hellscape_groundplane.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../hellscape_groundplane.png; sourceTree = SOURCE_ROOT; };
+		8E1A10712FCD000100000001 /* ../day-groundplane-tile.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../day-groundplane-tile.png"; sourceTree = SOURCE_ROOT; };
+		8E1A10732FCD000100000001 /* ../night-groundplane-tile.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../night-groundplane-tile.png"; sourceTree = SOURCE_ROOT; };
 		8E1A104C2FCD000100000001 /* ../kill_switch_x.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../kill_switch_x.png; sourceTree = SOURCE_ROOT; };
 		8E1A104F2FCD000100000001 /* GameKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameKit.framework; path = System/Library/Frameworks/GameKit.framework; sourceTree = SDKROOT; };
 		8E1A10512FCD000100000001 /* ../trophy_sticker.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../trophy_sticker.png; sourceTree = SOURCE_ROOT; };
@@ -234,6 +238,8 @@
 				8E1A10462FCD000100000001 /* ../forest-night-01.exr */,
 				8E1A10482FCD000100000001 /* ../hellscape_01.exr */,
 				8E1A104A2FCD000100000001 /* ../hellscape_groundplane.png */,
+				8E1A10712FCD000100000001 /* ../day-groundplane-tile.png */,
+				8E1A10732FCD000100000001 /* ../night-groundplane-tile.png */,
 				8E1A104C2FCD000100000001 /* ../kill_switch_x.png */,
 				8E1A10512FCD000100000001 /* ../trophy_sticker.png */,
 				8E1A10652FCD000100000001 /* ../user-interface.png */,
@@ -408,6 +414,8 @@
 				8E1A10472FCD000100000001 /* ../forest-night-01.exr in Resources */,
 				8E1A10492FCD000100000001 /* ../hellscape_01.exr in Resources */,
 				8E1A104B2FCD000100000001 /* ../hellscape_groundplane.png in Resources */,
+				8E1A10702FCD000100000001 /* ../day-groundplane-tile.png in Resources */,
+				8E1A10722FCD000100000001 /* ../night-groundplane-tile.png in Resources */,
 				8E1A104D2FCD000100000001 /* ../kill_switch_x.png in Resources */,
 				8E1A10502FCD000100000001 /* ../trophy_sticker.png in Resources */,
 				8E1A10642FCD000100000001 /* ../user-interface.png in Resources */,

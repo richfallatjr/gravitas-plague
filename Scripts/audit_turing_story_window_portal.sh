@@ -20,6 +20,8 @@ require_rg() {
 }
 
 require_file "Gravitas Plague/TuringResources/Turing/Props/turing_story_window_bundle_v1.usdz"
+require_file "day-groundplane-tile.png"
+require_file "night-groundplane-tile.png"
 
 require_file "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundlePlacement.swift"
 require_file "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
@@ -41,7 +43,11 @@ require_rg "PortalMaterial" "Gravitas Plague/Gravitas Plague/Turing/Props/Turing
 require_rg "WorldComponent" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
 
 require_rg "PortalHDRIAtmosphere" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"
-require_rg "hellscape_groundplane" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"
+require_rg "HordePortalGroundDiscFactory" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"
+require_rg "day-groundplane-tile" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"
+require_rg "night-groundplane-tile" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"
+require_rg "day-groundplane-tile" "Gravitas Plague/Gravitas Plague.xcodeproj/project.pbxproj"
+require_rg "night-groundplane-tile" "Gravitas Plague/Gravitas Plague.xcodeproj/project.pbxproj"
 require_rg "forest-overcast-01" "Gravitas Plague/Gravitas Plague/RoomSkinning/RoomSkinningModels.swift"
 require_rg "forest-night-01" "Gravitas Plague/Gravitas Plague/RoomSkinning/RoomSkinningModels.swift"
 
