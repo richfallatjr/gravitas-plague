@@ -43,13 +43,21 @@ final class TuringStoryWalkiePlaybackCoordinator {
         let fileURL: URL
         let frameCount: AVAudioFramePosition
         let sampleRate: Double
-        let durationSeconds: Double
     }
 
     private enum ActiveItem: Equatable {
         case none
-        case generated(segmentIndex: Int, handleID: UUID, fileURL: URL)
-        case filler(handleID: UUID, fileURL: URL)
+        case generated(
+            segmentIndex: Int,
+            handleID: UUID,
+            fileURL: URL,
+            startedAt: Date
+        )
+        case filler(
+            handleID: UUID,
+            fileURL: URL,
+            startedAt: Date
+        )
         case deadAir(id: UUID)
         case cancelled
     }
@@ -154,7 +162,29 @@ final class TuringStoryWalkiePlaybackCoordinator {
         activeComputeSegments.remove(segmentIndex)
 
         do {
-            let clip = try writeGeneratedWAV(audio: audio, segmentIndex: segmentIndex)
+            print("""
+            [TuringPlaybackRebuild] qwen postprocess requested
+              segmentIndex: \(segmentIndex)
+              inputSampleCount: \(audio.samples.count)
+              sampleRate: \(audio.sampleRate)
+              channelCount: \(audio.channelCount)
+              expectedLog: TuringQwenPostProcess
+            """)
+            let processedAudio = await TuringQwenOutputPostProcessor.processForPlayback(
+                audio,
+                reason: "storyWalkiePlayback"
+            )
+            print("""
+            [TuringPlaybackRebuild] qwen postprocess returned
+              segmentIndex: \(segmentIndex)
+              inputSampleCount: \(audio.samples.count)
+              outputSampleCount: \(processedAudio.samples.count)
+              sampleCountChanged: \(audio.samples.count != processedAudio.samples.count)
+            """)
+            let clip = try writeGeneratedWAV(
+                audio: processedAudio,
+                segmentIndex: segmentIndex
+            )
             pendingGenerated[segmentIndex] = clip
             print("""
             [TuringPlaybackRebuild] generated wav written
@@ -162,7 +192,6 @@ final class TuringStoryWalkiePlaybackCoordinator {
               file: \(clip.fileURL.lastPathComponent)
               frameCount: \(clip.frameCount)
               sampleRate: \(clip.sampleRate)
-              durationSeconds: \(String(format: "%.3f", clip.durationSeconds))
               pendingGenerated: \(pendingGenerated.keys.sorted())
             """)
         } catch {
@@ -224,6 +253,14 @@ final class TuringStoryWalkiePlaybackCoordinator {
 
     private func runCancelled(reason: String, endPlaybackOwner: Bool) async {
         guard runActive || activeItem != .none else { return }
+        print("""
+        [TuringPlaybackTrace] run cancellation requested
+          reason: \(reason)
+          activeItemBeforeCancel: \(activeItemLog)
+          nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+          pendingGenerated: \(pendingGenerated.keys.sorted())
+          activeComputeSegments: \(activeComputeSegments.sorted())
+        """)
         runActive = false
         activeItem = .cancelled
         deadAirTask?.cancel()
@@ -301,6 +338,16 @@ final class TuringStoryWalkiePlaybackCoordinator {
         }
 
         do {
+            print("""
+            [TuringPlaybackTrace] generated playback request
+              segmentIndex: \(clip.segmentIndex)
+              reason: \(reason)
+              file: \(clip.fileURL.lastPathComponent)
+              frameCount: \(clip.frameCount)
+              sampleRate: \(clip.sampleRate)
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+              pendingGenerated: \(pendingGenerated.keys.sorted())
+            """)
             let handleID = try clipPlayer.playOneShot(
                 fileURL: clip.fileURL,
                 kind: .generated,
@@ -311,10 +358,12 @@ final class TuringStoryWalkiePlaybackCoordinator {
                     }
                 }
             )
+            let startedAt = Date()
             activeItem = .generated(
                 segmentIndex: clip.segmentIndex,
                 handleID: handleID,
-                fileURL: clip.fileURL
+                fileURL: clip.fileURL,
+                startedAt: startedAt
             )
             print("""
             [TuringPlaybackRebuild] generated playback started
@@ -323,6 +372,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
               reason: \(reason)
               file: \(clip.fileURL.lastPathComponent)
               spatialEmitter: TuringStoryWalkieTalkie_AudioEmitter
+              completionGate: coordinatorActiveHandleMatch
             """)
         } catch {
             skippedSegments.insert(clip.segmentIndex)
@@ -355,6 +405,13 @@ final class TuringStoryWalkiePlaybackCoordinator {
         }
 
         do {
+            print("""
+            [TuringPlaybackTrace] filler playback request
+              reason: \(reason)
+              clip: \(fillerURL.lastPathComponent)
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+              pendingNextReady: \(pendingGenerated[nextPlaybackSegmentIndex] != nil)
+            """)
             let handleID = try clipPlayer.playOneShot(
                 fileURL: fillerURL,
                 kind: .filler,
@@ -366,7 +423,11 @@ final class TuringStoryWalkiePlaybackCoordinator {
                 }
             )
             lastFillerURL = fillerURL
-            activeItem = .filler(handleID: handleID, fileURL: fillerURL)
+            activeItem = .filler(
+                handleID: handleID,
+                fileURL: fillerURL,
+                startedAt: Date()
+            )
             print("""
             [TuringPlaybackRebuild] filler started
               reason: \(reason)
@@ -423,10 +484,29 @@ final class TuringStoryWalkiePlaybackCoordinator {
     }
 
     private func playbackCompleted(handleID: UUID) async {
+        print("""
+        [TuringPlaybackTrace] coordinator completion received
+          handleID: \(handleID.uuidString)
+          activeItemBeforeMatch: \(activeItemLog)
+          nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+          pendingGenerated: \(pendingGenerated.keys.sorted())
+        """)
         switch activeItem {
-        case .generated(let segmentIndex, let activeHandleID, let fileURL)
+        case .generated(
+            let segmentIndex,
+            let activeHandleID,
+            let fileURL,
+            let startedAt
+        )
             where activeHandleID == handleID:
-            cleanupWAV(fileURL, reason: "generatedPlaybackCompleted")
+            let elapsed = Date().timeIntervalSince(startedAt)
+            print("""
+            [TuringPlaybackTrace] generated completion accepted
+              segmentIndex: \(segmentIndex)
+              handleID: \(handleID.uuidString)
+              elapsedSeconds: \(String(format: "%.3f", elapsed))
+              willAdvanceToSegmentIndex: \(segmentIndex + 1)
+            """)
             nextPlaybackSegmentIndex = segmentIndex + 1
             activeItem = .none
             print("""
@@ -436,15 +516,22 @@ final class TuringStoryWalkiePlaybackCoordinator {
               completionSource: actualPlaybackCompletion
               nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
             """)
+            cleanupWAV(fileURL, reason: "generatedPlaybackCompleted")
             await reconcile(reason: "generatedCompleted")
 
-        case .filler(let activeHandleID, let fileURL)
+        case .filler(
+            let activeHandleID,
+            let fileURL,
+            let startedAt
+        )
             where activeHandleID == handleID:
+            let elapsed = Date().timeIntervalSince(startedAt)
             activeItem = .none
             print("""
             [TuringPlaybackRebuild] filler completed
               handleID: \(handleID.uuidString)
               clip: \(fileURL.lastPathComponent)
+              elapsedSeconds: \(String(format: "%.3f", elapsed))
               pendingNextReady: \(pendingGenerated[nextPlaybackSegmentIndex] != nil)
             """)
             if pendingGenerated[nextPlaybackSegmentIndex] == nil,
@@ -460,6 +547,8 @@ final class TuringStoryWalkiePlaybackCoordinator {
             [TuringPlaybackRebuild] stale playback completion ignored
               handleID: \(handleID.uuidString)
               activeItem: \(activeItemLog)
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+              pendingGenerated: \(pendingGenerated.keys.sorted())
             """)
         }
     }
@@ -606,14 +695,11 @@ final class TuringStoryWalkiePlaybackCoordinator {
         try FileManager.default.moveItem(at: tmpURL, to: finalURL)
         let validation = try AVAudioFile(forReading: finalURL)
         let sampleRate = validation.fileFormat.sampleRate
-        let duration = sampleRate > 0
-            ? Double(validation.length) / sampleRate
-            : 0
-        guard validation.length > 0, duration > 0 else {
+        guard validation.length > 0, sampleRate > 0 else {
             throw NSError(
                 domain: "TuringPlaybackRebuild",
                 code: 6,
-                userInfo: [NSLocalizedDescriptionKey: "Generated WAV validation produced zero duration."]
+                userInfo: [NSLocalizedDescriptionKey: "Generated WAV validation produced zero frames."]
             )
         }
 
@@ -621,8 +707,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
             segmentIndex: segmentIndex,
             fileURL: finalURL,
             frameCount: validation.length,
-            sampleRate: sampleRate,
-            durationSeconds: duration
+            sampleRate: sampleRate
         )
     }
 
@@ -649,10 +734,17 @@ final class TuringStoryWalkiePlaybackCoordinator {
         switch activeItem {
         case .none:
             return "none"
-        case .generated(let segmentIndex, let handleID, _):
-            return "generated.\(segmentIndex).\(handleID.uuidString)"
-        case .filler(let handleID, let fileURL):
-            return "filler.\(fileURL.lastPathComponent).\(handleID.uuidString)"
+        case .generated(
+            let segmentIndex,
+            let handleID,
+            _,
+            let startedAt
+        ):
+            let elapsed = Date().timeIntervalSince(startedAt)
+            return "generated.\(segmentIndex).\(handleID.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
+        case .filler(let handleID, let fileURL, let startedAt):
+            let elapsed = Date().timeIntervalSince(startedAt)
+            return "filler.\(fileURL.lastPathComponent).\(handleID.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
         case .deadAir(let id):
             return "deadAir.\(id.uuidString)"
         case .cancelled:
@@ -697,5 +789,12 @@ final class TuringStoryWalkiePlaybackCoordinator {
             return 1
         }
         return max(1, min(10, weight))
+    }
+
+    private static func formatSeconds(_ seconds: Double?) -> String {
+        guard let seconds else {
+            return "nil"
+        }
+        return String(format: "%.3f", seconds)
     }
 }
