@@ -43,6 +43,14 @@ final class WallMountedPosterUIController: ObservableObject {
         isLocked
     }
 
+    func updateTuringWindowDayNightIcon(
+        atmosphere: PortalHDRIAtmosphere
+    ) {
+        dayNightIconController.update(
+            atmosphere: atmosphere
+        )
+    }
+
     init() {
         WallPosterUIButtonComponent.registerComponent()
         WallPosterKillSwitchComponent.registerComponent()

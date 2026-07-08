@@ -653,6 +653,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         case .updatePortalHDRIAtmosphere(let atmosphere):
             currentStoryWindowAtmosphere = atmosphere
+            wallPosterUIController.updateTuringWindowDayNightIcon(
+                atmosphere: atmosphere
+            )
             roomSkinningCoordinator.updatePortalContentAtmosphere(atmosphere)
             Task { @MainActor [weak self] in
                 await self?.turingWindowBundleController

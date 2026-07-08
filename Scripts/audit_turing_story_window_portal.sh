@@ -46,6 +46,8 @@ require_rg "PortalHDRIAtmosphere" "Gravitas Plague/Gravitas Plague/Turing/Props/
 require_rg "HordePortalGroundDiscFactory" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"
 require_rg "day-groundplane-tile" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"
 require_rg "night-groundplane-tile" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"
+require_rg "groundDiscFloorOffsetMeters" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"
+require_rg "2.5 \\* 0.3048" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"
 require_rg "day-groundplane-tile" "Gravitas Plague/Gravitas Plague.xcodeproj/project.pbxproj"
 require_rg "night-groundplane-tile" "Gravitas Plague/Gravitas Plague.xcodeproj/project.pbxproj"
 require_rg "forest-overcast-01" "Gravitas Plague/Gravitas Plague/RoomSkinning/RoomSkinningModels.swift"
@@ -58,6 +60,10 @@ require_rg "clearcoat" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStory
 
 require_rg "TuringStoryDayNightPosterButtonComponent" "Gravitas Plague/Gravitas Plague"
 require_rg "WallPosterDayNight_TuringWindow" "Gravitas Plague/Gravitas Plague"
+require_rg "WallStickerStyle.twoStopsDownTint" "Gravitas Plague/Gravitas Plague/Turing/Interaction/TuringStoryPosterDayNightIconController.swift"
+require_rg "return \"sun\"" "Gravitas Plague/Gravitas Plague/Turing/Interaction/TuringStoryPosterDayNightIconController.swift"
+require_rg "return \"moon\"" "Gravitas Plague/Gravitas Plague/Turing/Interaction/TuringStoryPosterDayNightIconController.swift"
+require_rg "updateTuringWindowDayNightIcon" "Gravitas Plague/Gravitas Plague"
 require_rg "togglePortalHDRIAtmosphere" "Gravitas Plague/Gravitas Plague"
 
 require_rg "TuringStoryWindowBundleController" "Gravitas Plague/Gravitas Plague/PlagueImmersiveCoordinator.swift"

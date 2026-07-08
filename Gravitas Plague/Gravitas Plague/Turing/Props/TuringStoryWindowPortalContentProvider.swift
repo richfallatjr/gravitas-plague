@@ -5,6 +5,7 @@ import UIKit
 
 struct TuringStoryWindowPortalContentProvider: PortalContentProvider {
     static let providerID = "turingStoryWindowDayNight"
+    private static let groundDiscFloorOffsetMeters: Float = -2.5 * 0.3048
 
     var providerID: String { Self.providerID }
 
@@ -40,9 +41,12 @@ struct TuringStoryWindowPortalContentProvider: PortalContentProvider {
         let groundTextureName = groundTextureName(
             for: atmosphere
         )
+        let groundFloorY =
+            context.floorY +
+            Self.groundDiscFloorOffsetMeters
         let ground = try HordePortalGroundDiscFactory.makeGroundDisc(
             config: HordePortalGroundDiscFactory.Config(
-                floorY: context.floorY,
+                floorY: groundFloorY,
                 centerZ: context.groundDiscCenterZ,
                 radius: context.groundDiscRadius,
                 featherRingCount: 8,
@@ -71,6 +75,8 @@ struct TuringStoryWindowPortalContentProvider: PortalContentProvider {
               groundMode: horde_faded_disc
               featherRingCount: 8
               featherStartFraction: 0.72
+              groundFloorOffsetMeters: \(Self.groundDiscFloorOffsetMeters)
+              groundFloorY: \(groundFloorY)
               worldYawRadians: \(worldYawRadians)
             """
         )
