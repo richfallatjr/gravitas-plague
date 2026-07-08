@@ -110,6 +110,20 @@ private extension HDRIDomePortalContentProvider {
             )
         }
 
+        let attributes = try? FileManager.default.attributesOfItem(
+            atPath: url.path
+        )
+        let fileSizeBytes = (attributes?[.size] as? NSNumber)?.int64Value ?? -1
+        let modifiedEpochSeconds = Int(
+            (attributes?[.modificationDate] as? Date)?
+                .timeIntervalSince1970 ?? 0
+        )
+        let resourceStamp = "\(fileSizeBytes)_\(modifiedEpochSeconds)"
+        let visibleTextureName =
+            "\(atmosphere.exrResourceName)_\(resourceStamp)_portal_visible_texture"
+        let environmentName =
+            "\(atmosphere.exrResourceName)_\(resourceStamp)_portal_ibl"
+
         guard let source = CGImageSourceCreateWithURL(
             url as CFURL,
             nil
@@ -143,6 +157,10 @@ private extension HDRIDomePortalContentProvider {
             """
             [PortalHDRI] EXR loaded
               file: \(url.lastPathComponent)
+              url: \(url.path)
+              fileSizeBytes: \(fileSizeBytes)
+              modifiedEpochSeconds: \(modifiedEpochSeconds)
+              resourceStamp: \(resourceStamp)
               width: \(cgImage.width)
               height: \(cgImage.height)
             """
@@ -150,13 +168,13 @@ private extension HDRIDomePortalContentProvider {
 
         let texture = try TextureResource(
             image: cgImage,
-            withName: "\(atmosphere.exrResourceName)_portal_visible_texture",
+            withName: visibleTextureName,
             options: .init(semantic: .color)
         )
 
         let environment = try EnvironmentResource(
             equirectangular: cgImage,
-            withName: "\(atmosphere.exrResourceName)_portal_ibl"
+            withName: environmentName
         )
 
         return LoadedPortalEXRResources(

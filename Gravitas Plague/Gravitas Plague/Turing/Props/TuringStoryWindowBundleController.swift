@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import RealityKit
 import simd
+import UIKit
 
 @MainActor
 final class TuringStoryWindowBundleController: ObservableObject {
@@ -222,6 +223,10 @@ final class TuringStoryWindowBundleController: ObservableObject {
         root.children.removeAll()
         root.addChild(entity)
         root.addChild(portalWorldRoot)
+        applyOcclusionPlaneMaterialIfPresent(
+            in: entity,
+            bundleURL: url
+        )
         loadedBundleRoot = entity
 
         print(
@@ -234,6 +239,293 @@ final class TuringStoryWindowBundleController: ObservableObject {
         )
 
         return entity
+    }
+
+    private func applyOcclusionPlaneMaterialIfPresent(
+        in root: Entity,
+        bundleURL: URL
+    ) {
+        guard let occlusionEntity = root.turingWindowFindEntity(
+            containingNormalized: "occlusion01"
+        ) else {
+            print(
+                """
+                [TuringWindowPortal] occlusion mesh not found
+                  expectedEntityName: occlusion-01
+                  action: occlusion_mask_disabled
+                """
+            )
+            return
+        }
+
+        guard let maskURL = resolveOcclusionMaskURL(
+            bundleURL: bundleURL
+        ) else {
+            occlusionEntity.isEnabled = false
+            print(
+                """
+                [TuringWindowPortal] occlusion mask texture not found
+                  entity: \(occlusionEntity.name)
+                  expectedSidecar: ao.png
+                  rule: white_opaque_black_transparent
+                  action: hide_occlusion_mesh_until_mask_exists
+                """
+            )
+            return
+        }
+
+        do {
+            let texture = try PortalGlyphMaskTextureCache.shared
+                .textureForMaskPNG(url: maskURL)
+            var material = UnlitMaterial()
+            material.color = .init(
+                tint: UIColor.black,
+                texture: .init(texture)
+            )
+            material.blending = .transparent(
+                opacity: .init(floatLiteral: 1.0)
+            )
+            material.faceCulling = .none
+
+            let modelCount = overrideMaterialsRecursively(
+                under: occlusionEntity,
+                with: material
+            )
+            guard modelCount > 0 else {
+                print(
+                    """
+                    [TuringWindowPortal] occlusion mesh has no ModelComponent
+                      entity: \(occlusionEntity.name)
+                      action: occlusion_mask_disabled
+                    """
+                )
+                return
+            }
+
+            print(
+                """
+                [TuringWindowPortal] occlusion mask material applied
+                  entity: \(occlusionEntity.name)
+                  texture: \(maskURL.lastPathComponent)
+                  rule: glyph_mask_white_opaque_black_transparent
+                  blackIsMask: false
+                  visibleColor: black
+                  material: unlit_alpha_mask
+                  faceCulling: none
+                  usdzAuthoredMaterialOverridden: true
+                  modelComponentsUpdated: \(modelCount)
+                  inputDisabled: true
+                """
+            )
+        } catch {
+            print(
+                """
+                [TuringWindowPortal] ERROR occlusion mask material failed
+                  entity: \(occlusionEntity.name)
+                  texture: \(maskURL.lastPathComponent)
+                  error: \(error.localizedDescription)
+                  action: preserve_authored_material
+                """
+            )
+        }
+    }
+
+    @discardableResult
+    private func overrideMaterialsRecursively(
+        under entity: Entity,
+        with material: RealityKit.Material
+    ) -> Int {
+        var updatedCount = 0
+
+        if var model = entity.components[ModelComponent.self] {
+            model.materials = [material]
+            entity.components.set(model)
+            updatedCount += 1
+        }
+
+        entity.components.remove(InputTargetComponent.self)
+        entity.components.remove(CollisionComponent.self)
+
+        for child in entity.children {
+            updatedCount += overrideMaterialsRecursively(
+                under: child,
+                with: material
+            )
+        }
+
+        return updatedCount
+    }
+
+    private func resolveOcclusionMaskURL(
+        bundleURL: URL
+    ) -> URL? {
+        if let embedded = extractEmbeddedOcclusionMaskURL(
+            bundleURL: bundleURL
+        ) {
+            return embedded
+        }
+
+        let directory = bundleURL.deletingLastPathComponent()
+        let sidecarNames = [
+            "ao",
+            "occlusion-01",
+            "occlusion_01",
+            "TuringStoryWallBundle_Occlusion01",
+            "TuringStoryWindowBundle_Occlusion01"
+        ]
+
+        for name in sidecarNames {
+            let url = directory
+                .appendingPathComponent(name)
+                .appendingPathExtension("png")
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
+        }
+
+        for name in sidecarNames {
+            if let url = Bundle.main.url(
+                forResource: name,
+                withExtension: "png",
+                subdirectory: "Turing/Props"
+            ) ?? Bundle.main.url(
+                forResource: name,
+                withExtension: "png"
+            ) {
+                return url
+            }
+        }
+
+        return nil
+    }
+
+    private func extractEmbeddedOcclusionMaskURL(
+        bundleURL: URL
+    ) -> URL? {
+        guard let archive = try? Data(
+            contentsOf: bundleURL,
+            options: .mappedIfSafe
+        ) else {
+            return nil
+        }
+
+        let targets: Set<String> = [
+            "textures/ao.png",
+            "ao.png"
+        ]
+        var offset = 0
+
+        while offset + 30 <= archive.count {
+            guard archive.turingWindowZIPUInt32(at: offset) == 0x04034b50 else {
+                offset += 1
+                continue
+            }
+
+            let compressionMethod = archive.turingWindowZIPUInt16(
+                at: offset + 8
+            )
+            let compressedSize = Int(
+                archive.turingWindowZIPUInt32(
+                    at: offset + 18
+                )
+            )
+            let uncompressedSize = Int(
+                archive.turingWindowZIPUInt32(
+                    at: offset + 22
+                )
+            )
+            let fileNameLength = Int(
+                archive.turingWindowZIPUInt16(
+                    at: offset + 26
+                )
+            )
+            let extraFieldLength = Int(
+                archive.turingWindowZIPUInt16(
+                    at: offset + 28
+                )
+            )
+            let fileNameStart = offset + 30
+            let fileNameEnd = fileNameStart + fileNameLength
+            let dataStart = fileNameEnd + extraFieldLength
+            let dataLength = compressedSize > 0
+                ? compressedSize
+                : uncompressedSize
+            let dataEnd = dataStart + dataLength
+
+            guard fileNameEnd <= archive.count,
+                  dataStart <= archive.count else {
+                return nil
+            }
+
+            let nameData = archive[fileNameStart..<fileNameEnd]
+            let fileName = String(
+                data: nameData,
+                encoding: .utf8
+            )?.lowercased()
+
+            if let fileName,
+               targets.contains(fileName),
+               compressionMethod == 0,
+               dataLength > 0,
+               dataEnd <= archive.count {
+                let outputURL = embeddedOcclusionMaskCacheURL(
+                    bundleURL: bundleURL
+                )
+
+                do {
+                    try archive
+                        .subdata(in: dataStart..<dataEnd)
+                        .write(
+                            to: outputURL,
+                            options: .atomic
+                        )
+
+                    print(
+                        """
+                        [TuringWindowPortal] embedded occlusion mask extracted
+                          usdz: \(bundleURL.lastPathComponent)
+                          embeddedPath: \(fileName)
+                          output: \(outputURL.lastPathComponent)
+                          source: embedded_usdz_texture
+                        """
+                    )
+
+                    return outputURL
+                } catch {
+                    print(
+                        """
+                        [TuringWindowPortal] ERROR embedded occlusion mask extract failed
+                          usdz: \(bundleURL.lastPathComponent)
+                          embeddedPath: \(fileName)
+                          error: \(error.localizedDescription)
+                        """
+                    )
+                    return nil
+                }
+            }
+
+            offset = max(
+                offset + 1,
+                dataEnd
+            )
+        }
+
+        return nil
+    }
+
+    private func embeddedOcclusionMaskCacheURL(
+        bundleURL: URL
+    ) -> URL {
+        let attributes = try? FileManager.default.attributesOfItem(
+            atPath: bundleURL.path
+        )
+        let fileSize = attributes?[.size] as? NSNumber
+        let modified = attributes?[.modificationDate] as? Date
+        let stamp = "\(fileSize?.intValue ?? 0)_\(Int(modified?.timeIntervalSince1970 ?? 0))"
+        let name = "\(bundleURL.deletingPathExtension().lastPathComponent)_embedded_ao_\(stamp).png"
+
+        return FileManager.default.temporaryDirectory
+            .appendingPathComponent(name)
     }
 
     private func resolveAnchors(
@@ -598,6 +890,56 @@ private extension Entity {
         }
 
         return nil
+    }
+
+    func turingWindowFindEntity(
+        containingNormalized token: String
+    ) -> Entity? {
+        if normalizedWindowEntityName.contains(token) {
+            return self
+        }
+
+        for child in children {
+            if let found = child.turingWindowFindEntity(
+                containingNormalized: token
+            ) {
+                return found
+            }
+        }
+
+        return nil
+    }
+
+    var normalizedWindowEntityName: String {
+        name
+            .lowercased()
+            .filter { $0.isLetter || $0.isNumber }
+    }
+}
+
+private extension Data {
+    func turingWindowZIPUInt16(
+        at offset: Int
+    ) -> UInt16 {
+        guard offset + 2 <= count else {
+            return 0
+        }
+
+        return UInt16(self[offset]) |
+            (UInt16(self[offset + 1]) << 8)
+    }
+
+    func turingWindowZIPUInt32(
+        at offset: Int
+    ) -> UInt32 {
+        guard offset + 4 <= count else {
+            return 0
+        }
+
+        return UInt32(self[offset]) |
+            (UInt32(self[offset + 1]) << 8) |
+            (UInt32(self[offset + 2]) << 16) |
+            (UInt32(self[offset + 3]) << 24)
     }
 }
 
