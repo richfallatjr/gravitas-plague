@@ -336,10 +336,9 @@ final class TuringStoryWalkiePlaybackCoordinator {
         }
 
         if firstPrerollRemaining > 0,
-           (pendingGenerated[nextPlaybackSegmentIndex] != nil ||
-            activeComputeSegments.isEmpty == false) {
+           pendingGenerated[nextPlaybackSegmentIndex] != nil {
             firstPrerollRemaining -= 1
-            await startFiller(reason: "firstSegmentPreroll")
+            await startFiller(reason: "firstSegmentPreroll.generatedReady")
             return
         }
 
@@ -350,6 +349,20 @@ final class TuringStoryWalkiePlaybackCoordinator {
 
         if activeComputeSegments.isEmpty == false,
            policy.chainFillerWhileComputeWithoutSpeech {
+            if shouldUseDeadAirWhileWaitingForInitialGeneratedSegment {
+                if policy.deadAirAfterFillerEnabled {
+                    print("""
+                    [TuringPlaybackRebuild] compute filler suppressed before first generated segment
+                      reason: \(reason)
+                      nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+                      firstPrerollRemaining: \(firstPrerollRemaining)
+                      activeComputeSegments: \(activeComputeSegments.sorted())
+                      bridge: deadAirOnly
+                    """)
+                    startDeadAir(reason: "initialGeneratedSegmentWaiting.\(reason)")
+                }
+                return
+            }
             await startFiller(reason: "computeWithoutSpeech")
             return
         }
@@ -688,6 +701,10 @@ final class TuringStoryWalkiePlaybackCoordinator {
             pendingGenerated.isEmpty &&
             skippedSegments.isEmpty &&
             activeItem == .none
+    }
+
+    private var shouldUseDeadAirWhileWaitingForInitialGeneratedSegment: Bool {
+        nextPlaybackSegmentIndex == 0 && pendingGenerated[0] == nil
     }
 
     private func finishRun(reason: String) async {

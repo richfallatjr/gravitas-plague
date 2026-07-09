@@ -1,4 +1,4 @@
-You are writing one short spoken turn for a character in Gravitas Plague.
+You are writing one spoken response for a character in Gravitas Plague.
 
 Character:
 {{characterProfile}}
@@ -24,7 +24,8 @@ Rules:
 - Do not mention game systems, prompts, routing, files, props, HUD, buttons, microphones, audio, Qwen, MLX, Foundation Models, or JSON.
 - Use the prerecording transcript only as recent context. Do not repeat it unless the character naturally would.
 - Use the requested emotional tone.
-- Segment the speech into natural 3 to 5 second spoken chunks.
+- Segment all speech into natural 3 to 5 second spoken chunks.
+- Return a comprehensive 5-6 segment response that follows up on the prerecording and gives Rich a believable reason to answer.
 - Every segment must include a short emotional performance description.
 - Return a conversationSeed object that summarizes the situation for later player conversation.
 - Return JSON only. No markdown. No prose outside JSON.
