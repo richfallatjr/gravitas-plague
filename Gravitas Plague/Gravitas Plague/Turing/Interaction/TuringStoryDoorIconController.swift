@@ -6,6 +6,7 @@ import UIKit
 @MainActor
 final class TuringStoryDoorIconController {
     private var iconEntity: Entity?
+    private let extraBottomLiftMeters: Float = 6.0 * 0.0254
 
     func install(
         anchor: Entity,
@@ -15,6 +16,11 @@ final class TuringStoryDoorIconController {
         TuringStoryDoorTriggerComponent.registerComponent()
 
         let size = WallStickerStyle.stickerSizeMeters
+        let localExtraBottomLift = extraBottomLiftMeters / max(
+            TuringStoryDoorBundleTuning.assetImportScale,
+            0.001
+        )
+        let localOffsetY = size * 0.5 + localExtraBottomLift
         let material = makeIconMaterial()
         let entity = ModelEntity(
             mesh: .generatePlane(
@@ -27,7 +33,7 @@ final class TuringStoryDoorIconController {
         entity.name = "TuringStoryDoorIcon"
         entity.position = SIMD3<Float>(
             0,
-            size * 0.5,
+            localOffsetY,
             0
         )
         entity.orientation = simd_quatf(
@@ -53,8 +59,10 @@ final class TuringStoryDoorIconController {
               target: \(TuringScriptTriggerTarget.storyDoor.rawValue)
               style: posterSticker
               axisCorrection: x_plus_90_to_wall_normal
-              anchorAlignment: bottom_center
-              localOffsetY: \(size * 0.5)
+              anchorAlignment: bottom_center_plus_lift
+              worldExtraBottomLiftMeters: \(extraBottomLiftMeters)
+              localExtraBottomLift: \(localExtraBottomLift)
+              localOffsetY: \(localOffsetY)
             """
         )
     }

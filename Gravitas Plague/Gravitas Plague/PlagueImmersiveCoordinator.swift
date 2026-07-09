@@ -136,6 +136,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var turingStoryPropBillboardIconController: TuringStoryPropBillboardIconController?
     private var turingWaitingForPlacementRoomScan = false
     private var turingWaitingForPlacementFloorPromptShown = false
+    private var turingStoryPlacementScanCompleted = false
     private var pendingTuringPlacementScanReasons: [String] = []
 
     private var architectureFrameIndex = 0
@@ -724,6 +725,36 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private func requestTuringStoryPlacementRoomScan(
         reason: String
     ) {
+        if turingStoryPropsArePlaced {
+            clearTuringPlacementHUDIfAllPropsPlaced(
+                reason: "alreadyPlaced.\(reason)"
+            )
+            print(
+                """
+                [TuringRoomScan] placement scan request skipped
+                  reason: \(reason)
+                  existingPlacement: complete
+                  action: reuse_existing_story_props
+                """
+            )
+            return
+        }
+
+        if turingStoryPlacementScanCompleted {
+            print(
+                """
+                [TuringRoomScan] placement scan request reused cached scan
+                  reason: \(reason)
+                  existingPlacement: partial
+                  action: retry_missing_story_props_without_rescan
+                """
+            )
+            requestMissingTuringStoryPropPlacements(
+                reason: "cachedPlacementScan.\(reason)"
+            )
+            return
+        }
+
         if hordeWaitingForRoomScan {
             print(
                 """
@@ -834,10 +865,13 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         turingWaitingForPlacementRoomScan = false
         turingWaitingForPlacementFloorPromptShown = false
+        turingStoryPlacementScanCompleted = true
         pendingTuringPlacementScanReasons.removeAll()
 
-        showInstructionHUD(
-            "Room mapped. Placing Turing props."
+        showTemporaryInstructionHUD(
+            "Room mapped. Placing Turing props.",
+            clearAfterSeconds: 2.0,
+            reason: "turingPlacementScanComplete"
         )
 
         print(
@@ -851,13 +885,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             """
         )
 
-        requestStoryWalkieBundlePlacement(
-            reason: "turingRoomScanComplete.\(reasons)"
-        )
-        requestStoryWindowBundlePlacement(
-            reason: "turingRoomScanComplete.\(reasons)"
-        )
-        requestStoryDoorBundlePlacement(
+        requestMissingTuringStoryPropPlacements(
             reason: "turingRoomScanComplete.\(reasons)"
         )
     }
@@ -879,6 +907,78 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             """
             [TuringRoomScan] placement scan cancelled
               reason: \(reason)
+            """
+        )
+    }
+
+    private var turingStoryPropsArePlaced: Bool {
+        turingWalkieBundleController.isPlaced &&
+            turingWindowBundleController.isPlaced &&
+            turingDoorBundleController.isPlaced
+    }
+
+    private func requestMissingTuringStoryPropPlacements(
+        reason: String
+    ) {
+        var requested: [String] = []
+
+        if !turingWalkieBundleController.isPlaced {
+            requested.append("walkie")
+            requestStoryWalkieBundlePlacement(
+                reason: reason
+            )
+        }
+
+        if !turingWindowBundleController.isPlaced {
+            requested.append("window")
+            requestStoryWindowBundlePlacement(
+                reason: reason
+            )
+        }
+
+        if !turingDoorBundleController.isPlaced {
+            requested.append("door")
+            requestStoryDoorBundlePlacement(
+                reason: reason
+            )
+        }
+
+        if requested.isEmpty {
+            clearTuringPlacementHUDIfAllPropsPlaced(
+                reason: "missingPlacementRequest.none.\(reason)"
+            )
+        }
+
+        print(
+            """
+            [TuringRoomScan] missing story prop placement requested
+              reason: \(reason)
+              requested: \(requested.isEmpty ? "none" : requested.joined(separator: ","))
+              walkiePlaced: \(turingWalkieBundleController.isPlaced)
+              windowPlaced: \(turingWindowBundleController.isPlaced)
+              doorPlaced: \(turingDoorBundleController.isPlaced)
+            """
+        )
+    }
+
+    private func clearTuringPlacementHUDIfAllPropsPlaced(
+        reason: String
+    ) {
+        guard turingStoryPropsArePlaced else {
+            return
+        }
+
+        turingHUDDelayedClearTask?.cancel()
+        turingHUDDelayedClearTask = nil
+        instructionHUD.clear()
+
+        print(
+            """
+            [TuringRoomScan] placement HUD cleared
+              reason: \(reason)
+              walkiePlaced: true
+              windowPlaced: true
+              doorPlaced: true
             """
         )
     }
@@ -905,6 +1005,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                     self.configureTuringWalkieAudioAndInteraction(
                         reason: reason,
                         attempt: attempt
+                    )
+                    self.clearTuringPlacementHUDIfAllPropsPlaced(
+                        reason: "walkiePlacementReady.\(reason)"
                     )
                     return
                 }
@@ -945,6 +1048,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                           reason: \(reason)
                           attempt: \(attempt)
                         """
+                    )
+                    self.clearTuringPlacementHUDIfAllPropsPlaced(
+                        reason: "windowPlacementReady.\(reason)"
                     )
                     return
                 }
@@ -987,6 +1093,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                           reason: \(reason)
                           attempt: \(attempt)
                         """
+                    )
+                    self.clearTuringPlacementHUDIfAllPropsPlaced(
+                        reason: "doorPlacementReady.\(reason)"
                     )
                     return
                 }
@@ -1634,6 +1743,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         onYouDiedWorldCardCleanupRequested?()
         stopHordeBenchmark()
         roomSkinningCoordinator.cancelRoomSkinning()
+        turingStoryPlacementScanCompleted = false
         jockRetargetController?.hide()
         spatialProvider.onPlaneAnchorUpdate = nil
         spatialProvider.stop()
@@ -1676,6 +1786,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         cancelTuringStoryPlacementRoomScan(
             reason: "prepareForUserQuitOrClose"
         )
+        turingStoryPlacementScanCompleted = false
         jockRetargetController?.stopFollowDemo()
         jockRetargetController?.stopClip()
         jockRetargetController?.hide()
@@ -2174,6 +2285,37 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             text,
             on: headAnchor
         )
+    }
+
+    private func showTemporaryInstructionHUD(
+        _ text: String,
+        clearAfterSeconds: Double,
+        reason: String
+    ) {
+        turingHUDDelayedClearTask?.cancel()
+        showInstructionHUD(text)
+
+        let delayNanoseconds = UInt64(
+            max(0, clearAfterSeconds) * 1_000_000_000
+        )
+
+        turingHUDDelayedClearTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: delayNanoseconds)
+            guard !Task.isCancelled else {
+                return
+            }
+
+            self?.instructionHUD.clear()
+            self?.turingHUDDelayedClearTask = nil
+
+            print(
+                """
+                [PlagueHUD] temporary instruction HUD cleared
+                  reason: \(reason)
+                  text: \(text)
+                """
+            )
+        }
     }
 
     private func installHordeRoomGroundingReceivers(
