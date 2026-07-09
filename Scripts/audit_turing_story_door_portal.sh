@@ -37,6 +37,8 @@ require_rg "storyDoorBundle" "Gravitas Plague/Gravitas Plague/RoomSkinning/WallP
 require_rg "TuringStoryDoorHingePivot" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryDoorBundleController.swift"
 require_rg "TuringStoryDoorPanel_Root" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryDoorBundleController.swift"
 require_rg "TuringStoryDoorPortalPlane" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryDoorBundleController.swift"
+require_rg "floorSnapBasis: authored_origin" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryDoorBundleController.swift"
+require_rg "originClearanceMeters" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryDoorBundleController.swift"
 require_rg "TuringStoryDoorPortalSlab_Root" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryDoorBundleController.swift"
 require_rg "TuringStoryDoorPortalSlab_Root_PortalClone" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryDoorBundleController.swift"
 require_rg "portal slab pruned from passthrough render" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryDoorBundleController.swift"

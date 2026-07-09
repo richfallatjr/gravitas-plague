@@ -1205,10 +1205,13 @@ final class TuringStoryDoorBundleController: ObservableObject {
         print(
             """
             [TuringDoorBundle] floor snap proof
+              rootOriginWorldY: \(rootPosition.y)
               visualBottomWorldY: \(visualBottomWorld.y)
               floorWorldY: \(floorWorldY.map { "\($0)" } ?? "nil")
+              originClearanceMeters: \(floorWorldY.map { "\(rootPosition.y - $0)" } ?? "nil")
               bottomClearanceMeters: \(floorWorldY.map { "\(visualBottomWorld.y - $0)" } ?? "nil")
               expectedBottomClearanceMeters: \(TuringStoryDoorBundleTuning.minBottomClearanceMeters)
+              floorSnapBasis: authored_origin
               visualMinY: \(loadedVisualMinY)
               visualMaxY: \(loadedVisualMaxY)
               visualCenterY: \(loadedVisualCenterY)
@@ -1230,8 +1233,7 @@ final class TuringStoryDoorBundleController: ObservableObject {
             floorWorldY +
             TuringStoryDoorBundleTuning.minBottomClearanceMeters
 
-        return (targetBottomWorldY - wall.center.y) / wall.up.y -
-            loadedVisualMinY
+        return (targetBottomWorldY - wall.center.y) / wall.up.y
     }
 
     private func worldYawRadians(
