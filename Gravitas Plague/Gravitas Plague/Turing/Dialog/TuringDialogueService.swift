@@ -14,15 +14,17 @@ actor TuringDialogueService {
 
     func generateVoicePrompt(
         _ request: VoicePromptRequest
-    ) async throws -> TuringDialoguePlan {
+    ) async throws -> TuringVoicePromptPlan {
         let profile = try characterStore.profile(
             id: request.characterProfileID
         )
         let prompt = try Self.renderPrompt(
             resourcePath: "Turing/Prompts/voicePrompt_characterIntent.txt",
             replacements: [
-                "{{characterProfile}}": profile.promptText,
+                "{{characterProfile}}": profile.voicePromptPromptText,
+                "{{prerecordingTranscript}}": request.prerecordingTranscript ?? "",
                 "{{intent}}": request.intent,
+                "{{voicePromptSeedIntent}}": request.voicePromptSeedIntent ?? "",
                 "{{emotion}}": request.emotion
             ]
         )
@@ -30,8 +32,11 @@ actor TuringDialogueService {
         print("""
         [TuringVoicePrompt] Foundation request started
           freshSession: true
+          id: \(request.id)
           characterID: \(profile.characterID)
           promptTemplate: voicePrompt_characterIntent
+          profileContext: voicePromptSafe
+          prerecordingTranscriptUTF16: \((request.prerecordingTranscript ?? "").utf16.count)
         """)
 
         let raw: String
@@ -47,13 +52,12 @@ actor TuringDialogueService {
             print("""
             [TuringVoicePrompt] Foundation guardrails triggered
               characterID: \(profile.characterID)
-              result: skipped
+              result: failed
               qwenWillGenerateAutoResponse: false
               error: \(error.localizedDescription)
             """)
-            return TuringDialoguePlan(
-                schemaVersion: 1,
-                segments: []
+            throw TuringRuntimeError.foundationJSONGateFailed(
+                "voicePrompt guardrails triggered: \(error.localizedDescription)"
             )
         }
         Self.logRawResponse(
@@ -61,9 +65,9 @@ actor TuringDialogueService {
             name: "voicePrompt_characterIntent",
             promptCharacters: prompt.utf16.count
         )
-        let plan: TuringDialoguePlan
+        let plan: TuringVoicePromptPlan
         do {
-            plan = try await decodePlanWithOneRepair(
+            plan = try await decodeVoicePromptPlanWithOneRepair(
                 raw: raw,
                 purpose: "TuringVoicePrompt"
             )
@@ -74,19 +78,20 @@ actor TuringDialogueService {
             print("""
             [TuringVoicePrompt] Foundation repair guardrails triggered
               characterID: \(profile.characterID)
-              result: skipped
+              result: failed
               qwenWillGenerateAutoResponse: false
               error: \(error.localizedDescription)
             """)
-            return TuringDialoguePlan(
-                schemaVersion: 1,
-                segments: []
+            throw TuringRuntimeError.foundationRepairFailed(
+                "voicePrompt repair guardrails triggered: \(error.localizedDescription)"
             )
         }
 
         print("""
         [TuringVoicePrompt] gate passed
           segmentCount: \(plan.segments.count)
+          conversationSeed: present
+          seedID: \(plan.conversationSeed.seedID)
         """)
         Self.logAcceptedSegments(
             purpose: "TuringVoicePrompt",
@@ -102,11 +107,14 @@ actor TuringDialogueService {
         let profile = try characterStore.profile(
             id: request.characterProfileID
         )
+        let seed = request.lastVoicePromptSeed ?? .empty
         let prompt = try Self.renderPrompt(
             resourcePath: "Turing/Prompts/conversationPrompt_playerTurn_noBible.txt",
             replacements: [
                 "{{characterProfile}}": profile.promptText,
                 "{{episodeStateForWordsOnly}}": request.episodeStateForWordsOnly,
+                "{{prerecordingTranscript}}": request.prerecordingTranscript ?? "",
+                "{{lastVoicePromptSeed}}": seed.promptJSON,
                 "{{playerDictation}}": request.playerDictation,
                 "{{emotion}}": request.emotion
             ]
@@ -117,6 +125,8 @@ actor TuringDialogueService {
           freshSession: true
           characterID: \(profile.characterID)
           promptTemplate: conversationPrompt_playerTurn_noBible
+          seedStatus: \(seed.isEmptySeed ? "empty" : "present")
+          prerecordingTranscriptUTF16: \((request.prerecordingTranscript ?? "").utf16.count)
         """)
 
         let plan: TuringDialoguePlan
@@ -198,6 +208,31 @@ actor TuringDialogueService {
         }
     }
 
+    private func decodeVoicePromptPlanWithOneRepair(
+        raw: String,
+        purpose: String
+    ) async throws -> TuringVoicePromptPlan {
+        do {
+            return try Self.decodeStrictVoicePromptPlan(raw)
+        } catch {
+            let repairService = TuringDialogueJSONRepairService(
+                runner: runner,
+                expectedSchema: Self.voicePromptPlanRepairSchema
+            )
+            let repaired = try await repairService.repairJSON(
+                invalidPayload: raw,
+                errorDescription: error.localizedDescription
+            )
+            do {
+                return try Self.decodeStrictVoicePromptPlan(repaired)
+            } catch {
+                throw TuringRuntimeError.foundationRepairFailed(
+                    "\(purpose): \(error.localizedDescription)"
+                )
+            }
+        }
+    }
+
     private static func decodeStrictPlan(
         _ raw: String
     ) throws -> TuringDialoguePlan {
@@ -271,6 +306,106 @@ actor TuringDialogueService {
         return TuringDialoguePlan(
             schemaVersion: decoded.schemaVersion,
             segments: normalizedSegments
+        )
+    }
+
+    private static func decodeStrictVoicePromptPlan(
+        _ raw: String
+    ) throws -> TuringVoicePromptPlan {
+        let data = try TuringJSONSanitizer.extractSingleTopLevelObject(
+            from: raw
+        )
+        let object = try JSONSerialization.jsonObject(with: data)
+        guard let dictionary = object as? [String: Any] else {
+            throw TuringRuntimeError.foundationJSONGateFailed(
+                "Top-level response must be a JSON object."
+            )
+        }
+
+        let allowedKeys: Set<String> = [
+            "schemaVersion",
+            "segments",
+            "conversationSeed"
+        ]
+        let extraKeys = Set(dictionary.keys).subtracting(allowedKeys)
+        guard extraKeys.isEmpty else {
+            throw TuringRuntimeError.foundationJSONGateFailed(
+                "Unexpected top-level keys: \(extraKeys.sorted().joined(separator: ", "))."
+            )
+        }
+
+        let decoded = try JSONDecoder().decode(
+            TuringVoicePromptPlan.self,
+            from: data
+        )
+
+        guard decoded.schemaVersion == 1 else {
+            throw TuringRuntimeError.foundationJSONGateFailed(
+                "schemaVersion must be 1."
+            )
+        }
+        guard decoded.segments.isEmpty == false else {
+            throw TuringRuntimeError.foundationJSONGateFailed(
+                "segments must not be empty."
+            )
+        }
+        guard decoded.segments.count <= 8 else {
+            throw TuringRuntimeError.foundationJSONGateFailed(
+                "segments must contain 8 or fewer items."
+            )
+        }
+
+        let normalizedSegments = try decoded.segments.enumerated().map { index, segment in
+            let text = segment.text.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            let emotion = segment.emotion.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+
+            guard text.isEmpty == false else {
+                throw TuringRuntimeError.foundationJSONGateFailed(
+                    "Segment \(index) text must not be empty."
+                )
+            }
+            guard emotion.isEmpty == false else {
+                throw TuringRuntimeError.foundationJSONGateFailed(
+                    "Segment \(index) emotion must not be empty."
+                )
+            }
+
+            return TuringSpeechSegment(
+                text: text,
+                emotion: emotion
+            )
+        }
+
+        let seed = decoded.conversationSeed
+        let normalizedSeed = TuringConversationSeed(
+            seedID: seed.seedID.trimmingCharacters(in: .whitespacesAndNewlines),
+            summary: seed.summary.trimmingCharacters(in: .whitespacesAndNewlines),
+            currentAttitude: seed.currentAttitude.trimmingCharacters(in: .whitespacesAndNewlines),
+            recentFacts: seed.recentFacts.map {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            }.filter { $0.isEmpty == false },
+            openThread: seed.openThread.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+
+        guard normalizedSeed.summary.isEmpty == false else {
+            throw TuringRuntimeError.foundationJSONGateFailed(
+                "conversationSeed.summary must not be empty."
+            )
+        }
+        guard normalizedSeed.openThread.isEmpty == false else {
+            throw TuringRuntimeError.foundationJSONGateFailed(
+                "conversationSeed.openThread must not be empty."
+            )
+        }
+
+        return TuringVoicePromptPlan(
+            schemaVersion: decoded.schemaVersion,
+            segments: normalizedSegments,
+            conversationSeed: normalizedSeed
         )
     }
 
@@ -361,10 +496,42 @@ actor TuringDialogueService {
             """)
         }
     }
+
+    fileprivate static let dialoguePlanRepairSchema = """
+    {
+      "schemaVersion": 1,
+      "segments": [
+        {
+          "text": "string",
+          "emotion": "string"
+        }
+      ]
+    }
+    """
+
+    fileprivate static let voicePromptPlanRepairSchema = """
+    {
+      "schemaVersion": 1,
+      "segments": [
+        {
+          "text": "string",
+          "emotion": "string"
+        }
+      ],
+      "conversationSeed": {
+        "seedID": "string",
+        "summary": "string",
+        "currentAttitude": "string",
+        "recentFacts": ["string"],
+        "openThread": "string"
+      }
+    }
+    """
 }
 
 private struct TuringDialogueJSONRepairService: TuringJSONRepairService {
     let runner: any TuringFoundationQueryRunning
+    var expectedSchema = TuringDialogueService.dialoguePlanRepairSchema
 
     func repairJSON(
         invalidPayload: String,
@@ -376,15 +543,7 @@ private struct TuringDialogueJSONRepairService: TuringJSONRepairService {
         Return JSON only. No markdown. No commentary. Do not add keys.
 
         The only valid schema is:
-        {
-          "schemaVersion": 1,
-          "segments": [
-            {
-              "text": "string",
-              "emotion": "string"
-            }
-          ]
-        }
+        \(expectedSchema)
 
         The previous response failed with:
         \(errorDescription)

@@ -6,6 +6,14 @@ Character:
 Current episode state for words only:
 {{episodeStateForWordsOnly}}
 
+Prerecording transcript, if available:
+"""
+{{prerecordingTranscript}}
+"""
+
+Latest voicePrompt seed. This may be empty:
+{{lastVoicePromptSeed}}
+
 Player said:
 """
 {{playerDictation}}

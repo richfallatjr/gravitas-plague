@@ -523,7 +523,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 showInstructionHUD("Listening...")
                 print("[TuringHUD] player dictation shown state=listening")
             } else {
-                showInstructionHUD("You said:\n\(trimmed)")
+                showInstructionHUD(trimmed)
                 print("[TuringHUD] player dictation shown state=partial")
             }
 
@@ -538,7 +538,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 showInstructionHUD("Listening...")
                 print("[TuringHUD] player dictation shown state=listening")
             } else {
-                showInstructionHUD("You said:\n\(trimmed)")
+                showInstructionHUD(trimmed)
                 print("[TuringHUD] player dictation shown state=final")
             }
 

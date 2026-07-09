@@ -68,6 +68,20 @@ struct TuringEpisodePickerView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(qwenNativeRunningPreset != nil || turingDialogueBusy)
 
+                    Button {
+                        runBigMikeRichContactPrerecordingSeedTest()
+                    } label: {
+                        HStack(spacing: 8) {
+                            if turingDialogueBusy {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                            Text("Run Big Mike Rich Contact PR Seed")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(qwenNativeRunningPreset != nil || turingDialogueBusy)
+
                     Divider()
                         .padding(.vertical, 4)
 
@@ -274,6 +288,32 @@ struct TuringEpisodePickerView: View {
         }
     }
 
+    private func runBigMikeRichContactPrerecordingSeedTest() {
+        guard qwenNativeRunningPreset == nil,
+              turingDialogueBusy == false else {
+            return
+        }
+
+        turingDialogueBusy = true
+        qwenDebugStatus = "Running Big Mike Rich Contact PR seed test"
+        radioStaticLeadIn.start(reason: "bigMikeRichContactPrerecordingSeedStarted")
+
+        Task.detached(priority: .userInitiated) {
+            let result = await TuringPrerecordingSeededPromptRunner
+                .runBigMikeRichContact(
+                    seedStore: TuringConversationSeedStore.shared
+                )
+
+            await MainActor.run {
+                radioStaticLeadIn.stop(
+                    reason: "bigMikeRichContactPrerecordingSeedFinished"
+                )
+                turingDialogueBusy = false
+                qwenDebugStatus = result.pickerStatus
+            }
+        }
+    }
+
     private func startBigMikeDictation() {
         guard qwenNativeRunningPreset == nil,
               turingDialogueBusy == false else {
@@ -415,18 +455,23 @@ struct TuringEpisodePickerView: View {
             .processingStarted(finalTranscript: playerDictation)
         )
 
-        let request = ConversationPromptNoBibleRequest(
-            id: "story.picker.phase3light.conversation.001",
-            speaker: "Big Mike",
-            voiceID: "big_mike_base_clone_v1",
-            characterProfileID: "big_mike",
-            playerDictation: playerDictation,
-            episodeStateForWordsOnly: "Rich is checking in with Big Mike during the early Gravitas Plague emergency. Big Mike is nearby, protective, tired, and trying to keep Rich calm and alive.",
-            emotion: "protective, grounded, tired"
-        )
-
         Task.detached(priority: .userInitiated) {
             do {
+                let context = await TuringConversationSeedStore.shared.context(
+                    for: "big_mike"
+                )
+                let request = ConversationPromptNoBibleRequest(
+                    id: "story.picker.phase3light.conversation.001",
+                    speaker: "Big Mike",
+                    voiceID: "big_mike_base_clone_v1",
+                    voiceVariantID: "broadcast_reading_lazy",
+                    characterProfileID: "big_mike",
+                    playerDictation: playerDictation,
+                    episodeStateForWordsOnly: "Rich is checking in with Big Mike during the early Gravitas Plague emergency. Big Mike is nearby, protective, tired, and trying to keep Rich calm and alive.",
+                    emotion: "protective, grounded, tired",
+                    prerecordingTranscript: context.prerecordingTranscript,
+                    lastVoicePromptSeed: context.lastVoicePromptSeed
+                )
                 let service = TuringDialogueService()
                 let plan = try await service.generateConversationNoBible(
                     request

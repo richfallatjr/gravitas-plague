@@ -20,12 +20,15 @@ enum TuringWalkieAudioError: LocalizedError {
 final class TuringWalkieOneShotClipPlayer {
     enum ClipKind: String {
         case generated
+        case prerecording
         case filler
 
         var laneName: String {
             switch self {
             case .generated:
                 return "TuringWalkieAudio_GeneratedLane"
+            case .prerecording:
+                return "TuringWalkieAudio_PrerecordingLane"
             case .filler:
                 return "TuringWalkieAudio_FillerLane"
             }
@@ -48,6 +51,7 @@ final class TuringWalkieOneShotClipPlayer {
     private var entitiesByHandleID: [UUID: Entity] = [:]
     private var activeClipsByHandleID: [UUID: ActiveClip] = [:]
     private var generatedLane: Entity?
+    private var prerecordingLane: Entity?
     private var fillerLane: Entity?
 
     init(walkieEmitter: Entity) {
@@ -66,6 +70,8 @@ final class TuringWalkieOneShotClipPlayer {
         switch kind {
         case .generated:
             lane = generatedLane
+        case .prerecording:
+            lane = prerecordingLane
         case .filler:
             lane = fillerLane
         }
@@ -227,6 +233,13 @@ final class TuringWalkieOneShotClipPlayer {
         if generatedLane?.parent == nil {
             generatedLane = Self.makeLane(
                 named: ClipKind.generated.laneName,
+                under: walkieEmitter
+            )
+        }
+
+        if prerecordingLane?.parent == nil {
+            prerecordingLane = Self.makeLane(
+                named: ClipKind.prerecording.laneName,
                 under: walkieEmitter
             )
         }

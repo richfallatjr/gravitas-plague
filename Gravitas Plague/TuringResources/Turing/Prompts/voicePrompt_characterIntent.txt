@@ -3,8 +3,16 @@ You are writing one short spoken turn for a character in Gravitas Plague.
 Character:
 {{characterProfile}}
 
+Prerecording transcript, if available:
+"""
+{{prerecordingTranscript}}
+"""
+
 Story intent:
 {{intent}}
+
+Seed intent:
+{{voicePromptSeedIntent}}
 
 Emotional tone:
 {{emotion}}
@@ -14,9 +22,11 @@ Rules:
 - Keep the response in character.
 - Do not include stage directions.
 - Do not mention game systems, prompts, routing, files, props, HUD, buttons, microphones, audio, Qwen, MLX, Foundation Models, or JSON.
-- Use the requested emotional tone unless the character profile and intent clearly require a more specific adjacent emotion.
+- Use the prerecording transcript only as recent context. Do not repeat it unless the character naturally would.
+- Use the requested emotional tone.
 - Segment the speech into natural 3 to 5 second spoken chunks.
 - Every segment must include a short emotional performance description.
+- Return a conversationSeed object that summarizes the situation for later player conversation.
 - Return JSON only. No markdown. No prose outside JSON.
 - Do not include extra keys.
 
@@ -28,5 +38,12 @@ Return this exact sparse JSON schema:
       "text": "string",
       "emotion": "string"
     }
-  ]
+  ],
+  "conversationSeed": {
+    "seedID": "string",
+    "summary": "string",
+    "currentAttitude": "string",
+    "recentFacts": ["string"],
+    "openThread": "string"
+  }
 }

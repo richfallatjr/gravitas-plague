@@ -16,6 +16,10 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
         _ prompt: String,
         purpose: String
     ) async throws -> String {
+        Self.logExactPrompt(
+            prompt,
+            purpose: purpose
+        )
 #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, visionOS 26.0, *) {
             let model = SystemLanguageModel.default
@@ -51,5 +55,55 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
           reason: FoundationModels framework unavailable on this OS/SDK
         """)
         throw TuringRuntimeError.foundationUnavailable
+    }
+
+    private static func logExactPrompt(
+        _ prompt: String,
+        purpose: String
+    ) {
+        print("""
+        [TuringFoundationPrompt] exact prompt sent
+          purpose: \(purpose)
+          promptUTF16: \(prompt.utf16.count)
+        [TuringFoundationPrompt] BEGIN \(purpose)
+        \(prompt)
+        [TuringFoundationPrompt] END \(purpose)
+        """)
+
+        do {
+            let directory = try FileManager.default.url(
+                for: .cachesDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: true
+            ).appendingPathComponent(
+                "TuringFoundationLogs",
+                isDirectory: true
+            )
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+
+            let safePurpose = purpose.map { character in
+                character.isLetter || character.isNumber || character == "_"
+                    ? character
+                    : "_"
+            }
+            let fileName = "last_\(String(safePurpose))_prompt.txt"
+            let url = directory.appendingPathComponent(fileName)
+            try prompt.write(to: url, atomically: true, encoding: .utf8)
+
+            print("""
+            [TuringFoundationPrompt] wrote \(fileName)
+              path: \(url.path)
+            """)
+        } catch {
+            print("""
+            [TuringFoundationPrompt] write failed
+              purpose: \(purpose)
+              error: \(error.localizedDescription)
+            """)
+        }
     }
 }

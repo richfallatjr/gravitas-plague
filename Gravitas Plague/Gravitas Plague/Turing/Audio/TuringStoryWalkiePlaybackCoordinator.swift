@@ -45,8 +45,19 @@ final class TuringStoryWalkiePlaybackCoordinator {
         let sampleRate: Double
     }
 
+    private struct PrerecordingClip {
+        let id: String
+        let fileURL: URL
+    }
+
     private enum ActiveItem: Equatable {
         case none
+        case prerecording(
+            id: String,
+            handleID: UUID,
+            fileURL: URL,
+            startedAt: Date
+        )
         case generated(
             segmentIndex: Int,
             handleID: UUID,
@@ -71,6 +82,8 @@ final class TuringStoryWalkiePlaybackCoordinator {
     private var nextPlaybackSegmentIndex = 0
     private var activeComputeSegments = Set<Int>()
     private var pendingGenerated: [Int: GeneratedClip] = [:]
+    private var pendingPrerecording: PrerecordingClip?
+    private var prerecordingHasPlayed = false
     private var skippedSegments = Set<Int>()
     private var allComputeFinished = false
     private var activeItem: ActiveItem = .none
@@ -105,6 +118,8 @@ final class TuringStoryWalkiePlaybackCoordinator {
         self.nextPlaybackSegmentIndex = 0
         self.activeComputeSegments.removeAll(keepingCapacity: true)
         self.pendingGenerated.removeAll(keepingCapacity: true)
+        self.pendingPrerecording = nil
+        self.prerecordingHasPlayed = false
         self.skippedSegments.removeAll(keepingCapacity: true)
         self.allComputeFinished = false
         self.activeItem = .none
@@ -141,6 +156,21 @@ final class TuringStoryWalkiePlaybackCoordinator {
         """)
 
         await reconcile(reason: "runStarted")
+    }
+
+    func enqueuePrerecording(id: String, fileURL: URL) async {
+        guard runActive else { return }
+        pendingPrerecording = PrerecordingClip(
+            id: id,
+            fileURL: fileURL
+        )
+        print("""
+        [TuringPlaybackRebuild] prerecording queued
+          id: \(id)
+          file: \(fileURL.lastPathComponent)
+          playsBeforeGenerated: true
+        """)
+        await reconcile(reason: "prerecordingQueued")
     }
 
     func qwenComputeStarted(segmentIndex: Int) async {
@@ -269,6 +299,8 @@ final class TuringStoryWalkiePlaybackCoordinator {
             .cancelAll(reason: reason)
         cleanupAllWAVs(reason: "cancel.\(reason)")
         pendingGenerated.removeAll(keepingCapacity: false)
+        pendingPrerecording = nil
+        prerecordingHasPlayed = false
         skippedSegments.removeAll(keepingCapacity: false)
         activeComputeSegments.removeAll(keepingCapacity: false)
         if endPlaybackOwner {
@@ -296,6 +328,13 @@ final class TuringStoryWalkiePlaybackCoordinator {
             nextPlaybackSegmentIndex += 1
         }
 
+        if prerecordingHasPlayed == false,
+           let prerecording = pendingPrerecording {
+            pendingPrerecording = nil
+            await startPrerecording(prerecording, reason: reason)
+            return
+        }
+
         if firstPrerollRemaining > 0,
            (pendingGenerated[nextPlaybackSegmentIndex] != nil ||
             activeComputeSegments.isEmpty == false) {
@@ -317,6 +356,70 @@ final class TuringStoryWalkiePlaybackCoordinator {
 
         if isFinished {
             await finishRun(reason: "allDone")
+        }
+    }
+
+    private func startPrerecording(
+        _ clip: PrerecordingClip,
+        reason: String
+    ) async {
+        guard activeItem == .none else {
+            pendingPrerecording = clip
+            return
+        }
+        guard let clipPlayer = TuringStoryWalkieAudioRoute.makeActiveClipPlayer() else {
+            print("""
+            [TuringPlaybackRebuild] prerecording playback blocked
+              id: \(clip.id)
+              reason: missingWalkieClipPlayer
+              requiredEmitter: TuringStoryWalkieTalkie_AudioEmitter
+            """)
+            await runCancelled(reason: "missingWalkieClipPlayer.prerecording.\(clip.id)")
+            return
+        }
+
+        do {
+            print("""
+            [TuringPlaybackTrace] prerecording playback request
+              id: \(clip.id)
+              reason: \(reason)
+              file: \(clip.fileURL.lastPathComponent)
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+              pendingGenerated: \(pendingGenerated.keys.sorted())
+            """)
+            let handleID = try clipPlayer.playOneShot(
+                fileURL: clip.fileURL,
+                kind: .prerecording,
+                label: clip.id,
+                completion: { [weak self] handleID in
+                    Task { @MainActor in
+                        await self?.playbackCompleted(handleID: handleID)
+                    }
+                }
+            )
+            activeItem = .prerecording(
+                id: clip.id,
+                handleID: handleID,
+                fileURL: clip.fileURL,
+                startedAt: Date()
+            )
+            print("""
+            [TuringPlaybackRebuild] prerecording playback started
+              id: \(clip.id)
+              handleID: \(handleID.uuidString)
+              reason: \(reason)
+              file: \(clip.fileURL.lastPathComponent)
+              spatialEmitter: TuringStoryWalkieTalkie_AudioEmitter
+              completionGate: coordinatorActiveHandleMatch
+            """)
+        } catch {
+            print("""
+            [TuringPlaybackRebuild] prerecording playback failed
+              id: \(clip.id)
+              file: \(clip.fileURL.lastPathComponent)
+              error: \(error.localizedDescription)
+            """)
+            await runCancelled(reason: "prerecordingStartFailed.\(clip.id)")
         }
     }
 
@@ -492,6 +595,27 @@ final class TuringStoryWalkiePlaybackCoordinator {
           pendingGenerated: \(pendingGenerated.keys.sorted())
         """)
         switch activeItem {
+        case .prerecording(
+            let id,
+            let activeHandleID,
+            let fileURL,
+            let startedAt
+        )
+            where activeHandleID == handleID:
+            prerecordingHasPlayed = true
+            firstPrerollRemaining = 0
+            activeItem = .none
+            print("""
+            [TuringPlaybackRebuild] prerecording playback completed
+              id: \(id)
+              handleID: \(handleID.uuidString)
+              file: \(fileURL.lastPathComponent)
+              elapsedSeconds: \(String(format: "%.3f", Date().timeIntervalSince(startedAt)))
+              completionSource: actualPlaybackCompletion
+              initialPrerollSatisfied: true
+            """)
+            await reconcile(reason: "prerecordingCompleted")
+
         case .generated(
             let segmentIndex,
             let activeHandleID,
@@ -742,6 +866,9 @@ final class TuringStoryWalkiePlaybackCoordinator {
         ):
             let elapsed = Date().timeIntervalSince(startedAt)
             return "generated.\(segmentIndex).\(handleID.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
+        case .prerecording(let id, let handleID, let fileURL, let startedAt):
+            let elapsed = Date().timeIntervalSince(startedAt)
+            return "prerecording.\(id).\(fileURL.lastPathComponent).\(handleID.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
         case .filler(let handleID, let fileURL, let startedAt):
             let elapsed = Date().timeIntervalSince(startedAt)
             return "filler.\(fileURL.lastPathComponent).\(handleID.uuidString).elapsed=\(Self.formatSeconds(elapsed))"

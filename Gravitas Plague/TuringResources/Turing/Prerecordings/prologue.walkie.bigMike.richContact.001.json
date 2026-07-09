@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "prologue.walkie.bigMike.richContact.001",
+  "speaker": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "voiceVariantID": "broadcast_reading_lazy",
+  "audioFile": "pr-big-mike-rich-contact.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Hey Rich you there? Haven't heard from you in a minute. Do you copy? Over......Rich this is Big Mike! Do you Copy?! Over.",
+  "summary": "Big Mike checks whether Rich can hear him and is worried because Rich missed their regular contact cadence.",
+  "voicePromptIntent": "You are asking if Rich can hear you. You are worried because you have not heard from Rich at your regular cadence and something may be wrong.",
+  "defaultEmotion": "worried, controlled, protective"
+}

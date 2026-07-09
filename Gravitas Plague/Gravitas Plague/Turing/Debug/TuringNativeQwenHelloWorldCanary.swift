@@ -42,6 +42,16 @@ private final class TuringParallelPerfGapAudioBridge: @unchecked Sendable {
         )
     }
 
+    func enqueuePrerecording(
+        id: String,
+        fileURL: URL
+    ) async {
+        await coordinator.enqueuePrerecording(
+            id: id,
+            fileURL: fileURL
+        )
+    }
+
     func qwenComputeStarted(
         segmentIndex: Int
     ) async {
@@ -450,6 +460,134 @@ enum TuringNativeQwenHelloWorldCanary {
               runID: \(runID)
               error: \(error.localizedDescription)
             """)
+            return .failed(error.localizedDescription)
+        }
+    }
+
+    static func runVoicePromptAfterPrerecording(
+        runID: String,
+        prerecordingID: String,
+        prerecordingAudioURL: URL,
+        voicePromptTask: Task<TuringVoicePromptPlan, Error>,
+        seedStore: TuringConversationSeedStore,
+        seedKey: String
+    ) async -> TuringNativeQwenRunResult {
+        let playback = await MainActor.run {
+            TuringParallelPerfGapAudioBridge()
+        }
+        var freshPool: TuringQwenNativeFreshInstancePool?
+
+        do {
+            await playback.beginRun(
+                runID: runID,
+                expectedSegmentCount: nil
+            )
+            await playback.enqueuePrerecording(
+                id: prerecordingID,
+                fileURL: prerecordingAudioURL
+            )
+
+            print("""
+            [TuringPrerecordingSeed] waiting for voicePrompt result
+              runID: \(runID)
+              prerecordingID: \(prerecordingID)
+              prerecordingAlreadyQueued: true
+              voicePromptComputesInBackground: true
+            """)
+            let plan = try await voicePromptTask.value
+            print("""
+            [TuringPrerecordingSeed] voicePrompt result received
+              runID: \(runID)
+              segmentCount: \(plan.segments.count)
+              conversationSeedEmpty: \(plan.conversationSeed.isEmptySeed)
+            """)
+            await seedStore.updateSeed(
+                plan.conversationSeed,
+                for: seedKey
+            )
+
+            guard plan.segments.isEmpty == false else {
+                await playback.qwenComputeAllFinished()
+                await playback.waitUntilPlaybackFinished()
+                print("""
+                [TuringPrerecordingSeed] voicePrompt produced no generated follow-up
+                  runID: \(runID)
+                  qwenWillStart: false
+                  prerecordingPlaybackFailed: false
+                """)
+                return .succeeded(
+                    "Prerecording finished; voicePrompt returned no generated follow-up."
+                )
+            }
+
+            print("""
+            [TuringPrerecordingSeed] voicePrompt follow-up ready
+              runID: \(runID)
+              segmentCount: \(plan.segments.count)
+              seedID: \(plan.conversationSeed.seedID)
+            """)
+
+            let modelRoot = try locateBundledBaseCloneModel()
+            let cloneProfile = try loadBundledBigMikeCloneProfile()
+            let stagedRoot = try stageWritableModel(from: modelRoot)
+
+            let pool = try TuringQwenNativeGenerationSchedulerFactory.makeFresh2Pool()
+            freshPool = pool
+            try await pool.warmLoadExactlyRequestedInstances(
+                modelRoot: stagedRoot,
+                cloneProfile: cloneProfile,
+                variantID: cloneProfile.defaultVariantID,
+                performanceMode: .performance
+            )
+            let scheduler = TuringQwenNativeGenerationSchedulerFactory
+                .makeFresh2Scheduler(instancePool: pool)
+
+            let requests = makeParallelBaseCloneRequests(
+                preset: .phase1FoundationVoiceScript,
+                cloneProfile: cloneProfile,
+                segments: plan.segments.map(\.text),
+                startingSegmentIndex: 0
+            )
+
+            _ = try await renderFreshBaseCloneRequests(
+                requests,
+                scheduler: scheduler,
+                gapAudio: playback,
+                runID: runID,
+                skipQwenSegmentFailures: true
+            )
+
+            await playback.qwenComputeAllFinished()
+            await playback.waitUntilPlaybackFinished()
+            await pool.unloadAll(reason: "voicePromptAfterPrerecording.\(runID)")
+            return .succeeded("Finished \(runID)")
+        } catch {
+            let qwenStarted = freshPool != nil
+            voicePromptTask.cancel()
+            if qwenStarted {
+                await playback.runCancelled(
+                    reason: "voicePromptAfterPrerecordingFailed.\(String(describing: error))"
+                )
+            } else {
+                await playback.qwenComputeAllFinished()
+                await playback.waitUntilPlaybackFinished()
+            }
+            await freshPool?.unloadAll(
+                reason: "voicePromptAfterPrerecordingFailed.\(runID)"
+            )
+            print("""
+            [TuringPrerecordingSeed] run failed
+              runID: \(runID)
+              qwenStarted: \(qwenStarted)
+              prerecordingAllowedToFinish: \(!qwenStarted)
+              prerecordingPlaybackFailed: false
+              error: \(error.localizedDescription)
+            """)
+            if qwenStarted == false {
+                return .succeeded(
+                    "Prerecording finished; voicePrompt failed before Qwen: \(error.localizedDescription)"
+                )
+            }
             return .failed(error.localizedDescription)
         }
     }
