@@ -15,6 +15,7 @@ struct TuringStoryPropInteractionAnchor: Sendable {
 enum TuringScriptTriggerTarget: String, Codable, Sendable {
     case walkieTalkie
     case dadFrame
+    case storyDoor
 }
 
 struct TuringScriptTriggerAnchor: Sendable {

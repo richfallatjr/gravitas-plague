@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "bundleID": "turing_story_door_bundle_v1",
+  "usdz": "turing_story_door_bundle_v1.usdz",
+  "defaultOpenYawDegrees": -145.0,
+  "openDurationSeconds": 1.15,
+  "closeDurationSeconds": 0.95,
+  "preferredCenterHeightMeters": 1.05,
+  "defaultWidthMeters": 0.95,
+  "defaultHeightMeters": 2.05,
+  "defaultDepthOffsetMeters": 0.018,
+  "occupancyPaddingMeters": 0.14,
+  "portalWorldProvider": "turingStoryDoorDayNightHellscapePlaceholder",
+  "occlusionEnabled": true,
+  "sfx": {
+    "open": "door-open-creak-01.wav",
+    "closeSqueak": "door-close-squeak-01.wav",
+    "closeContact": "door-close-contact-01.wav"
+  }
+}

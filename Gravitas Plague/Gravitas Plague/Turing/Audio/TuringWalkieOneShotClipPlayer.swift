@@ -39,7 +39,8 @@ final class TuringWalkieOneShotClipPlayer {
     }
 
     private enum Gain {
-        static let playbackDB: Double = -6.0
+        static let generatedDB: Double = 0.0
+        static let nonGeneratedDB: Double = -6.0
     }
 
     private struct ActiveClip {
@@ -122,7 +123,7 @@ final class TuringWalkieOneShotClipPlayer {
 
         let startedAt = Date()
         let controller = entity.playAudio(resource)
-        controller.gain = Gain.playbackDB
+        controller.gain = Self.gainDB(for: kind)
         controllersByHandleID[handleID] = controller
         entitiesByHandleID[handleID] = entity
         activeClipsByHandleID[handleID] = ActiveClip(
@@ -146,6 +147,7 @@ final class TuringWalkieOneShotClipPlayer {
           file: \(fileURL.lastPathComponent)
           spatialEmitter: TuringStoryWalkieTalkie_AudioEmitter
           lane: \(kind.laneName)
+          gainDB: \(String(format: "%.1f", Self.gainDB(for: kind)))
           completionSource: AudioPlaybackController.completionHandler
           activeHandleCountAfterStart: \(controllersByHandleID.count)
         """)
@@ -262,6 +264,15 @@ final class TuringWalkieOneShotClipPlayer {
                 named: ClipKind.commSFX.laneName,
                 under: walkieEmitter
             )
+        }
+    }
+
+    private static func gainDB(for kind: ClipKind) -> Double {
+        switch kind {
+        case .generated:
+            return Gain.generatedDB
+        case .prerecording, .filler, .commSFX:
+            return Gain.nonGeneratedDB
         }
     }
 

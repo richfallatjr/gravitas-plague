@@ -148,6 +148,17 @@ struct PlagueImmersiveView: View {
                 }
         )
         .simultaneousGesture(
+            TapGesture()
+                .targetedToEntity(where: .has(TuringStoryDoorTriggerComponent.self))
+                .onEnded { _ in
+                    Task { @MainActor in
+                        coordinator.toggleTuringStoryDoor(
+                            reason: "doorIconTapped"
+                        )
+                    }
+                }
+        )
+        .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .targetedToEntity(where: .has(TuringStoryWalkieMicBillboardComponent.self))
                 .onChanged { _ in

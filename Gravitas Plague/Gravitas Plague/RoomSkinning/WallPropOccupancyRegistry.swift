@@ -7,6 +7,7 @@ enum WallPropOccupancyKind: String, Codable, Hashable, Sendable {
     case storyPortal
     case storyWalkieBundle
     case storyWindowBundle
+    case storyDoorBundle
     case killSwitch
     case other
 }
@@ -232,7 +233,8 @@ final class WallPropOccupancyRegistry {
                    .hordePortal,
                    .storyPortal,
                    .storyWalkieBundle,
-                   .storyWindowBundle
+                   .storyWindowBundle,
+                   .storyDoorBundle
                ].contains(record.kind) {
                 print(
                     """
@@ -252,11 +254,55 @@ final class WallPropOccupancyRegistry {
                    .wallPoster,
                    .hordePortal,
                    .storyPortal,
-                   .storyWalkieBundle
+                   .storyWalkieBundle,
+                   .storyDoorBundle
                ].contains(candidateKind) {
                 print(
                     """
                     [WallOccupancy] HARD REJECT candidate overlaps story window bundle
+                      candidateKind: \(candidateKind.rawValue)
+                      recordKind: \(record.kind.rawValue)
+                      recordLabel: \(record.label)
+                      candidate: \(candidate)
+                      occupied: \(occupied)
+                    """
+                )
+                return true
+            }
+
+            if candidateKind == .storyDoorBundle,
+               [
+                   .wallPoster,
+                   .hordePortal,
+                   .storyPortal,
+                   .storyWalkieBundle,
+                   .storyWindowBundle,
+                   .storyDoorBundle
+               ].contains(record.kind) {
+                print(
+                    """
+                    [WallOccupancy] HARD REJECT story door bundle overlaps occupied wall prop
+                      candidateKind: \(candidateKind.rawValue)
+                      recordKind: \(record.kind.rawValue)
+                      recordLabel: \(record.label)
+                      candidate: \(candidate)
+                      occupied: \(occupied)
+                    """
+                )
+                return true
+            }
+
+            if record.kind == .storyDoorBundle,
+               [
+                   .wallPoster,
+                   .hordePortal,
+                   .storyPortal,
+                   .storyWalkieBundle,
+                   .storyWindowBundle
+               ].contains(candidateKind) {
+                print(
+                    """
+                    [WallOccupancy] HARD REJECT candidate overlaps story door bundle
                       candidateKind: \(candidateKind.rawValue)
                       recordKind: \(record.kind.rawValue)
                       recordLabel: \(record.label)

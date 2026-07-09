@@ -122,6 +122,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let wallPosterUIController = WallMountedPosterUIController()
     private let turingWalkieBundleController = TuringStoryWalkieBundleController()
     private let turingWindowBundleController = TuringStoryWindowBundleController()
+    private let turingDoorBundleController = TuringStoryDoorBundleController()
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
     private let hordeRoomScanTracker = HordeRoomScanTracker()
     private let enemyBodySeparationResolver = HordeEnemyBodySeparationResolver()
@@ -294,6 +295,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             occupancyRegistry: wallPropOccupancyRegistry
         )
         turingWindowBundleController.installIfNeeded(
+            sceneRoot: root,
+            wallManager: roomSkinningCoordinator.wallManager,
+            occupancyRegistry: wallPropOccupancyRegistry
+        )
+        turingDoorBundleController.installIfNeeded(
             sceneRoot: root,
             wallManager: roomSkinningCoordinator.wallManager,
             occupancyRegistry: wallPropOccupancyRegistry
@@ -645,11 +651,13 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         case .startStoryEpisode(let episodeID):
             requestStoryWalkieBundlePlacement(reason: "startStoryEpisode.\(episodeID.rawValue)")
             requestStoryWindowBundlePlacement(reason: "startStoryEpisode.\(episodeID.rawValue)")
+            requestStoryDoorBundlePlacement(reason: "startStoryEpisode.\(episodeID.rawValue)")
             startStoryEpisode(episodeID)
 
         case .requestStoryWalkieBundlePlacement:
             requestStoryWalkieBundlePlacement(reason: "storyModeRequested")
             requestStoryWindowBundlePlacement(reason: "storyModeRequested")
+            requestStoryDoorBundlePlacement(reason: "storyModeRequested")
 
         case .updatePortalHDRIAtmosphere(let atmosphere):
             currentStoryWindowAtmosphere = atmosphere
@@ -659,6 +667,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             roomSkinningCoordinator.updatePortalContentAtmosphere(atmosphere)
             Task { @MainActor [weak self] in
                 await self?.turingWindowBundleController
+                    .updateAtmosphereIfNeeded(atmosphere)
+                await self?.turingDoorBundleController
                     .updateAtmosphereIfNeeded(atmosphere)
             }
 
@@ -778,6 +788,54 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 """
             )
         }
+    }
+
+    private func requestStoryDoorBundlePlacement(
+        reason: String
+    ) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            for attempt in 1...12 {
+                let pose = self.spatialProvider.currentPoseOrFallback()
+                self.roomSkinningCoordinator.wallManager
+                    .updateViewerPositionForWallSelection(
+                        pose.headPosition
+                    )
+                let placed = await self.turingDoorBundleController
+                    .placeOnBestWallIfNeeded(
+                        playerPosition: pose.headPosition,
+                        playerForward: pose.headForward,
+                        atmosphere: self.currentStoryWindowAtmosphere
+                    )
+
+                if placed {
+                    print(
+                        """
+                        [TuringDoorBundle] placement ready
+                          reason: \(reason)
+                          attempt: \(attempt)
+                        """
+                    )
+                    return
+                }
+
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+
+            print(
+                """
+                [TuringDoorBundle] placement not available after retries
+                  reason: \(reason)
+                """
+            )
+        }
+    }
+
+    func toggleTuringStoryDoor(
+        reason: String
+    ) {
+        turingDoorBundleController.toggleDoor(reason: reason)
     }
 
     @MainActor
@@ -1412,6 +1470,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         turingStoryPropBillboardIconController = nil
         turingWalkieBundleController.reset(reason: "immersiveShutdown")
         turingWindowBundleController.reset(reason: "immersiveShutdown")
+        turingDoorBundleController.reset(reason: "immersiveShutdown")
         Task { @MainActor in
             TuringStoryWalkieAudioRoute.clear(reason: "immersiveShutdown")
         }
