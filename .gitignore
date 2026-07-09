@@ -20,6 +20,7 @@
 !Gravitas Plague/Gravitas Plague/Audio/robot-damaged-*.wav
 !Gravitas Plague/Gravitas Plague/Audio/robot-death-*.wav
 !Gravitas Plague/Gravitas Plague/Turing/QwenNative/Reference/Golden/**/reference-output.wav
+!Gravitas Plague/TuringResources/Turing/Audio/door/*.wav
 *.ply
 *.exr
 !hellscape_01.exr

@@ -52,7 +52,8 @@ struct TuringStoryWindowPortalContentProvider: PortalContentProvider {
                 featherRingCount: 8,
                 featherStartFraction: 0.72,
                 textureName: groundTextureName,
-                exposure: atmosphere.visibleExposure
+                exposure: atmosphere.visibleExposure,
+                yawOffsetRadians: worldYawRadians
             )
         )
         portalWorld.addChild(ground)
@@ -77,6 +78,7 @@ struct TuringStoryWindowPortalContentProvider: PortalContentProvider {
               featherStartFraction: 0.72
               groundFloorOffsetMeters: \(Self.groundDiscFloorOffsetMeters)
               groundFloorY: \(groundFloorY)
+              groundYawOffsetRadians: \(worldYawRadians)
               worldYawRadians: \(worldYawRadians)
             """
         )

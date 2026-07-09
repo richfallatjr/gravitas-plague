@@ -3,7 +3,9 @@ import RealityKit
 import simd
 
 struct TuringStoryDoorPortalContentProvider: PortalContentProvider {
-    static let providerID = "turingStoryDoorDayNightHellscapePlaceholder"
+    static let providerID = "turingStoryDoorDayNight"
+    private static let portalLocalGroundY: Float = 0.0
+    private static let groundDiscFloorOffsetMeters: Float = -6.0 * 0.0254
 
     var providerID: String { Self.providerID }
 
@@ -36,7 +38,12 @@ struct TuringStoryDoorPortalContentProvider: PortalContentProvider {
             )
         )
 
-        let groundFloorY = context.floorY + 0.004
+        let groundTextureName = groundTextureName(
+            for: atmosphere
+        )
+        let groundFloorY =
+            Self.portalLocalGroundY +
+            Self.groundDiscFloorOffsetMeters
         let ground = try HordePortalGroundDiscFactory.makeGroundDisc(
             config: HordePortalGroundDiscFactory.Config(
                 floorY: groundFloorY,
@@ -45,8 +52,9 @@ struct TuringStoryDoorPortalContentProvider: PortalContentProvider {
                 segments: 96,
                 featherRingCount: 8,
                 featherStartFraction: 0.72,
-                textureName: "hellscape_groundplane",
-                exposure: 1.0
+                textureName: groundTextureName,
+                exposure: atmosphere.visibleExposure,
+                yawOffsetRadians: worldYawRadians
             )
         )
         portalWorld.addChild(ground)
@@ -65,13 +73,29 @@ struct TuringStoryDoorPortalContentProvider: PortalContentProvider {
             [TuringDoorPortal] portal world populated
               atmosphere: \(atmosphere.rawValue)
               domeEXR: \(atmosphere.exrResourceName).exr
-              ground: hellscape_groundplane.png
+              ground: \(groundTextureName).png
               groundMode: horde_faded_disc
               featherRingCount: 8
               featherStartFraction: 0.72
+              inputContextFloorY: \(context.floorY)
+              portalLocalGroundY: \(Self.portalLocalGroundY)
+              groundFloorOffsetMeters: \(Self.groundDiscFloorOffsetMeters)
               groundFloorY: \(groundFloorY)
+              groundYawOffsetRadians: \(worldYawRadians)
               worldYawRadians: \(worldYawRadians)
             """
         )
+    }
+
+    private func groundTextureName(
+        for atmosphere: PortalHDRIAtmosphere
+    ) -> String {
+        switch atmosphere {
+        case .overcast:
+            return "day-groundplane-tile"
+
+        case .night:
+            return "night-groundplane-tile"
+        }
     }
 }

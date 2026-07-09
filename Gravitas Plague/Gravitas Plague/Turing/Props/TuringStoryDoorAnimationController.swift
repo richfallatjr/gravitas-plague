@@ -29,6 +29,7 @@ final class TuringStoryDoorAnimationController {
     private let openYawRadians: Float
     private let openDuration: TimeInterval
     private let closeDuration: TimeInterval
+    private let hingeRotationAxis = SIMD3<Float>(0, 0, 1)
     private var state: DoorState = .closed
     private var animationTask: Task<Void, Never>?
     private var sfxControllersByID: [UUID: AudioPlaybackController] = [:]
@@ -126,6 +127,7 @@ final class TuringStoryDoorAnimationController {
               fromDegrees: \(fromDegrees)
               toDegrees: \(toDegrees)
               easing: smoothstep
+              hingeAxis: localZ
               sfx: \(startSFX)
               reason: \(reason)
             """
@@ -188,7 +190,7 @@ final class TuringStoryDoorAnimationController {
             closedRotation *
             simd_quatf(
                 angle: yaw,
-                axis: SIMD3<Float>(0, 1, 0)
+                axis: hingeRotationAxis
             )
     }
 
@@ -251,6 +253,7 @@ final class TuringStoryDoorAnimationController {
                 [TuringDoorAnimation] SFX started
                   file: \(fileName)
                   label: \(label)
+                  resolvedURL: \(url.lastPathComponent)
                   emitter: TuringStoryDoorAudioEmitter
                 """
             )

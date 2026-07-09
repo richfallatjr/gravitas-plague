@@ -205,6 +205,11 @@ struct TuringEpisodePickerView: View {
               runningPreset: none
             """)
 
+            session.send(
+                .requestTuringStoryPlacementRoomScan(
+                    "qwenTestButton.\(preset.rawValue)"
+                )
+            )
             qwenNativeRunningPreset = preset
             qwenDebugStatus = "Running \(preset.rawValue)"
             radioStaticLeadIn.start(reason: "qwenTestStarted.\(preset.rawValue)")
@@ -270,6 +275,11 @@ struct TuringEpisodePickerView: View {
 
         turingDialogueBusy = true
         qwenDebugStatus = "Running Gravitas Plague Backstory"
+        session.send(
+            .requestTuringStoryPlacementRoomScan(
+                "qwenTestButton.gravitasPlagueBackstory"
+            )
+        )
         radioStaticLeadIn.start(reason: "backstoryTestStarted")
 
         Task.detached(priority: .userInitiated) {
@@ -296,6 +306,11 @@ struct TuringEpisodePickerView: View {
 
         turingDialogueBusy = true
         qwenDebugStatus = "Running Big Mike Rich Contact PR seed test"
+        session.send(
+            .requestTuringStoryPlacementRoomScan(
+                "qwenTestButton.bigMikeRichContactPrerecordingSeed"
+            )
+        )
         radioStaticLeadIn.start(reason: "bigMikeRichContactPrerecordingSeedStarted")
 
         Task.detached(priority: .userInitiated) {
@@ -342,6 +357,12 @@ struct TuringEpisodePickerView: View {
                 )
                 return
             }
+
+            session.send(
+                .requestTuringStoryPlacementRoomScan(
+                    "holdMicDictation"
+                )
+            )
 
             await TuringWalkieCommsFXController.shared
                 .playOpenCommBeforeRecording(reason: "holdToRecordStarted")

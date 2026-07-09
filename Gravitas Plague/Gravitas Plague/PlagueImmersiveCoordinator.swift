@@ -125,6 +125,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let turingDoorBundleController = TuringStoryDoorBundleController()
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
     private let hordeRoomScanTracker = HordeRoomScanTracker()
+    private let turingPlacementRoomScanTracker = HordeRoomScanTracker()
     private let enemyBodySeparationResolver = HordeEnemyBodySeparationResolver()
     private let instructionHUD = PlagueHeadTrackedInstructionHUD()
     private var turingHUDDelayedClearTask: Task<Void, Never>?
@@ -133,6 +134,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let hordeEnemyBrainEngine = HordeEnemyBrainEngine()
     private let hordePrewarmCoordinator = HordePrewarmCoordinator()
     private var turingStoryPropBillboardIconController: TuringStoryPropBillboardIconController?
+    private var turingWaitingForPlacementRoomScan = false
+    private var turingWaitingForPlacementFloorPromptShown = false
+    private var pendingTuringPlacementScanReasons: [String] = []
 
     private var architectureFrameIndex = 0
     private var latestFrameClockSnapshot: FrameClockSnapshot?
@@ -649,15 +653,20 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             roomSkinningCoordinator.cancelRoomSkinning()
 
         case .startStoryEpisode(let episodeID):
-            requestStoryWalkieBundlePlacement(reason: "startStoryEpisode.\(episodeID.rawValue)")
-            requestStoryWindowBundlePlacement(reason: "startStoryEpisode.\(episodeID.rawValue)")
-            requestStoryDoorBundlePlacement(reason: "startStoryEpisode.\(episodeID.rawValue)")
             startStoryEpisode(episodeID)
+            requestTuringStoryPlacementRoomScan(
+                reason: "startStoryEpisode.\(episodeID.rawValue)"
+            )
 
         case .requestStoryWalkieBundlePlacement:
-            requestStoryWalkieBundlePlacement(reason: "storyModeRequested")
-            requestStoryWindowBundlePlacement(reason: "storyModeRequested")
-            requestStoryDoorBundlePlacement(reason: "storyModeRequested")
+            requestTuringStoryPlacementRoomScan(
+                reason: "storyModeRequested"
+            )
+
+        case .requestTuringStoryPlacementRoomScan(let reason):
+            requestTuringStoryPlacementRoomScan(
+                reason: reason
+            )
 
         case .updatePortalHDRIAtmosphere(let atmosphere):
             currentStoryWindowAtmosphere = atmosphere
@@ -708,6 +717,168 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               activeHordeStopped: true
               runtimeReady: false
               qwenSmokeAutoRun: false
+            """
+        )
+    }
+
+    private func requestTuringStoryPlacementRoomScan(
+        reason: String
+    ) {
+        if hordeWaitingForRoomScan {
+            print(
+                """
+                [TuringRoomScan] placement scan request ignored
+                  reason: \(reason)
+                  activeHordeRoomScan: true
+                """
+            )
+            return
+        }
+
+        if turingWaitingForPlacementRoomScan {
+            if !pendingTuringPlacementScanReasons.contains(reason) {
+                pendingTuringPlacementScanReasons.append(reason)
+            }
+
+            print(
+                """
+                [TuringRoomScan] placement scan request coalesced
+                  reason: \(reason)
+                  pendingReasons: \(pendingTuringPlacementScanReasons.joined(separator: ","))
+                """
+            )
+            return
+        }
+
+        pendingTuringPlacementScanReasons = [reason]
+        turingWaitingForPlacementRoomScan = true
+        turingWaitingForPlacementFloorPromptShown = false
+        turingPlacementRoomScanTracker.begin()
+        roomSkinningCoordinator.startHordeRoomScanOnly()
+
+        showInstructionHUD(
+            "Spin around in a full 360 degree circle to place the Turing props."
+        )
+
+        print(
+            """
+            [TuringRoomScan] placement scan started
+              reason: \(reason)
+              usesHordeRoomScan: true
+              waitsForFloor: true
+            """
+        )
+    }
+
+    private func updateTuringStoryPlacementRoomScanIfNeeded(
+        currentPose: PhaseOneSpawnPose
+    ) {
+        guard turingWaitingForPlacementRoomScan else {
+            return
+        }
+
+        turingPlacementRoomScanTracker.updateHeadForward(
+            currentPose.headForward
+        )
+
+        let percent = Int(turingPlacementRoomScanTracker.progress * 100)
+
+        if percent >= 50,
+           !turingPlacementRoomScanTracker.isComplete {
+            showInstructionHUD(
+                "Keep turning. Turing wall placement is still mapping the room. \(percent)%"
+            )
+        } else if !turingPlacementRoomScanTracker.isComplete {
+            showInstructionHUD(
+                "Spin around in a full 360 degree circle to place the Turing props. \(percent)%"
+            )
+        }
+
+        if turingPlacementRoomScanTracker.isComplete {
+            finishTuringStoryPlacementRoomScanAndPlaceProps()
+        }
+    }
+
+    private func finishTuringStoryPlacementRoomScanAndPlaceProps() {
+        guard turingWaitingForPlacementRoomScan else {
+            return
+        }
+
+        guard roomSkinningCoordinator.wallManager.floorCandidates.values
+            .contains(where: { $0.isUsableFloor }) else {
+            showInstructionHUD(
+                "Look down briefly. I need the floor before placing the Turing props."
+            )
+
+            if !turingWaitingForPlacementFloorPromptShown {
+                turingWaitingForPlacementFloorPromptShown = true
+
+                print(
+                    """
+                    [TuringRoomScan] scan has walls but no verified floor
+                      action: waiting_for_floor
+                    """
+                )
+            }
+
+            return
+        }
+
+        installHordeRoomGroundingReceivers(
+            reason: "turing_story_room_scan_floor_verified"
+        )
+
+        let reasons = pendingTuringPlacementScanReasons.joined(
+            separator: ","
+        )
+
+        turingWaitingForPlacementRoomScan = false
+        turingWaitingForPlacementFloorPromptShown = false
+        pendingTuringPlacementScanReasons.removeAll()
+
+        showInstructionHUD(
+            "Room mapped. Placing Turing props."
+        )
+
+        print(
+            """
+            [TuringRoomScan] placement scan complete
+              reasons: \(reasons)
+              floorVerified: true
+              placingWalkieBundle: true
+              placingWindowBundle: true
+              placingDoorBundle: true
+            """
+        )
+
+        requestStoryWalkieBundlePlacement(
+            reason: "turingRoomScanComplete.\(reasons)"
+        )
+        requestStoryWindowBundlePlacement(
+            reason: "turingRoomScanComplete.\(reasons)"
+        )
+        requestStoryDoorBundlePlacement(
+            reason: "turingRoomScanComplete.\(reasons)"
+        )
+    }
+
+    private func cancelTuringStoryPlacementRoomScan(
+        reason: String
+    ) {
+        guard turingWaitingForPlacementRoomScan
+                || !pendingTuringPlacementScanReasons.isEmpty else {
+            return
+        }
+
+        turingWaitingForPlacementRoomScan = false
+        turingWaitingForPlacementFloorPromptShown = false
+        pendingTuringPlacementScanReasons.removeAll()
+        turingPlacementRoomScanTracker.cancel()
+
+        print(
+            """
+            [TuringRoomScan] placement scan cancelled
+              reason: \(reason)
             """
         )
     }
@@ -1334,6 +1505,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 currentPose: currentPose
             )
 
+            updateTuringStoryPlacementRoomScanIfNeeded(
+                currentPose: currentPose
+            )
+
             updateWallPosterUIIfNeeded(
                 currentPose: currentPose,
                 date: date
@@ -1498,6 +1673,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
 
         stopHordeBenchmark()
+        cancelTuringStoryPlacementRoomScan(
+            reason: "prepareForUserQuitOrClose"
+        )
         jockRetargetController?.stopFollowDemo()
         jockRetargetController?.stopClip()
         jockRetargetController?.hide()
@@ -1574,6 +1752,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             return
         }
 
+        cancelTuringStoryPlacementRoomScan(
+            reason: "horde_room_scan_started"
+        )
         hordeRoomScanCompletionTask?.cancel()
         hordeRoomScanCompletionTask = nil
         pendingNextBenchmarkWaveTask?.cancel()

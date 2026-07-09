@@ -13,9 +13,9 @@ struct TuringStoryDoorBundlePlacement: Codable, Equatable, Sendable {
 }
 
 enum TuringStoryDoorBundleTuning {
-    static let assetImportScale: Float = 1.0
+    static let assetImportScale: Float = 3.2
     static let preferredCenterHeightMeters: Float = 1.05
-    static let minBottomClearanceMeters: Float = 0.02
+    static let minBottomClearanceMeters: Float = 0.0
     static let wallMarginMeters: Float = 0.10
     static let depthOffset: Float = 0.018
     static let defaultWidthMeters: Float = 0.95

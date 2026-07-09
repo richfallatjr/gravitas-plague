@@ -82,6 +82,7 @@ final class TuringStoryDoorBundleController: ObservableObject {
         let audioEmitter: Entity
         let placementBounds: Entity?
         let glass: Entity?
+        let portalSlab: Entity?
     }
 
     let root = Entity()
@@ -194,6 +195,8 @@ final class TuringStoryDoorBundleController: ObservableObject {
                   width: \(selectedPlacement.width)
                   height: \(selectedPlacement.height)
                   floorWorldY: \(selectedPlacement.floorWorldY.map { "\($0)" } ?? "nil")
+                  visualHeight: \(loadedVisualHeight)
+                  heightPlacementSource: scanned_floor_snap_no_visual_height_reject
                   preferredCenterHeightMeters: \(config.preferredCenterHeightMeters)
                   overlapsPoster: false
                   overlapsPortal: false
@@ -330,7 +333,7 @@ final class TuringStoryDoorBundleController: ObservableObject {
         }
 
         let entity = try await Entity(contentsOf: url)
-        if entity.name.isEmpty {
+        if entity.name.isEmpty || entity.name == "root" {
             entity.name = "TuringStoryDoorBundle_Root"
         }
         entity.scale = SIMD3<Float>(
@@ -341,6 +344,7 @@ final class TuringStoryDoorBundleController: ObservableObject {
         root.addChild(entity)
         root.addChild(portalWorldRoot)
         updateLoadedVisualBounds()
+        prunePortalSlabFromPassthroughIfPresent(in: entity)
         applyOcclusionPlaneMaterialIfPresent(
             in: entity,
             bundleURL: url
@@ -676,6 +680,9 @@ final class TuringStoryDoorBundleController: ObservableObject {
         ) else {
             throw BundleError.missingRequiredEntity("TuringStoryDoorPortalPlane")
         }
+        let portalSlab = root.turingDoorFindEntity(
+            named: "TuringStoryDoorPortalSlab_Root"
+        )
         let iconAnchor = proceduralAnchorIfMissing(
             named: "TuringStoryDoorIconAnchor",
             under: root,
@@ -705,7 +712,8 @@ final class TuringStoryDoorBundleController: ObservableObject {
             ),
             glass: root.turingDoorFindEntity(
                 named: "TuringStoryDoorGlass"
-            )
+            ),
+            portalSlab: portalSlab
         )
 
         print(
@@ -718,6 +726,8 @@ final class TuringStoryDoorBundleController: ObservableObject {
               iconAnchor: \(anchors.iconAnchor.name)
               audioEmitter: \(anchors.audioEmitter.name)
               placementBounds: \(anchors.placementBounds?.name ?? "nil")
+              portalSlab: \(anchors.portalSlab?.name ?? "nil")
+              portalSource: authored
             """
         )
 
@@ -860,6 +870,9 @@ final class TuringStoryDoorBundleController: ObservableObject {
                     height: placement.height
                 )
             )
+            if let anchors {
+                installPortalSlabCloneIfPresent(anchors: anchors)
+            }
         } catch {
             print(
                 """
@@ -867,6 +880,91 @@ final class TuringStoryDoorBundleController: ObservableObject {
                   atmosphere: \(atmosphere.rawValue)
                   error: \(error.localizedDescription)
                 """
+            )
+        }
+    }
+
+    private func prunePortalSlabFromPassthroughIfPresent(
+        in bundleRoot: Entity
+    ) {
+        guard let portalSlab = bundleRoot.turingDoorFindEntity(
+            named: "TuringStoryDoorPortalSlab_Root"
+        ) else {
+            print(
+                """
+                [TuringDoorPortal] portal slab missing
+                  entity: TuringStoryDoorPortalSlab_Root
+                  action: passthrough_prune_skipped
+                  required: false
+                """
+            )
+            return
+        }
+
+        portalSlab.isEnabled = false
+
+        print(
+            """
+            [TuringDoorPortal] portal slab pruned from passthrough render
+              entity: TuringStoryDoorPortalSlab_Root
+              action: source_entity_disabled
+              passthroughPreserved: frame_and_panel
+              portalCloneExpected: true
+            """
+        )
+    }
+
+    private func installPortalSlabCloneIfPresent(
+        anchors: Anchors
+    ) {
+        guard let sourceSlab = anchors.portalSlab else {
+            print(
+                """
+                [TuringDoorPortal] portal slab clone skipped
+                  source: nil
+                  entity: TuringStoryDoorPortalSlab_Root
+                """
+            )
+            return
+        }
+
+        let cloneName = "TuringStoryDoorPortalSlab_Root_PortalClone"
+        portalWorldRoot.findEntity(named: cloneName)?.removeFromParent()
+
+        let clone = sourceSlab.clone(recursive: true)
+        clone.name = cloneName
+        setEnabledRecursively(
+            clone,
+            isEnabled: true
+        )
+        portalWorldRoot.addChild(clone)
+        clone.setTransformMatrix(
+            sourceSlab.transformMatrix(relativeTo: portalWorldRoot),
+            relativeTo: portalWorldRoot
+        )
+
+        print(
+            """
+            [TuringDoorPortal] portal slab cloned into portal world
+              source: TuringStoryDoorPortalSlab_Root
+              clone: \(cloneName)
+              sourcePassthroughEnabled: \(sourceSlab.isEnabled)
+              parent: TuringStoryDoorPortalWorldRoot
+              transformBasis: source_relative_to_portalWorldRoot
+            """
+        )
+    }
+
+    private func setEnabledRecursively(
+        _ entity: Entity,
+        isEnabled: Bool
+    ) {
+        entity.isEnabled = isEnabled
+
+        for child in entity.children {
+            setEnabledRecursively(
+                child,
+                isEnabled: isEnabled
             )
         }
     }
@@ -889,16 +987,24 @@ final class TuringStoryDoorBundleController: ObservableObject {
         playerForward: SIMD3<Float>
     ) -> TuringStoryDoorBundlePlacement? {
         let width = config.defaultWidthMeters
-        let height = max(
-            config.defaultHeightMeters,
-            loadedVisualHeight
-        )
-        let snapHeight = loadedVisualHeight
+        let height = config.defaultHeightMeters
+        let visualHeight = loadedVisualHeight
         let walls = wallManager.wallCandidates.values
             .filter {
-                $0.width >= width &&
-                    $0.height >= height
+                $0.width >= width
             }
+
+        if walls.isEmpty {
+            print(
+                """
+                [TuringDoorBundle] no wall candidates wide enough
+                  requiredWidth: \(width)
+                  occupancyHeight: \(height)
+                  visualHeight: \(visualHeight)
+                  scannedWallCount: \(wallManager.wallCandidates.count)
+                """
+            )
+        }
 
         var best: (placement: TuringStoryDoorBundlePlacement, score: Float)?
 
@@ -916,7 +1022,7 @@ final class TuringStoryDoorBundleController: ObservableObject {
             let desiredWorldY =
                 floor.worldY +
                 TuringStoryDoorBundleTuning.minBottomClearanceMeters +
-                snapHeight * 0.5
+                height * 0.5
 
             let desiredLocalY: Float
             if abs(wall.up.y) > 0.05 {
@@ -930,15 +1036,6 @@ final class TuringStoryDoorBundleController: ObservableObject {
                 wall.width * 0.5 - width * 0.5 -
                     TuringStoryDoorBundleTuning.wallMarginMeters
             )
-            let maxY = max(
-                0,
-                wall.height * 0.5 - height * 0.5 -
-                    TuringStoryDoorBundleTuning.wallMarginMeters
-            )
-            let clampedY = min(
-                max(desiredLocalY, -maxY),
-                maxY
-            )
             let candidateXs: [Float] = [
                 0,
                 -maxX * 0.55,
@@ -951,7 +1048,7 @@ final class TuringStoryDoorBundleController: ObservableObject {
                 let placement = TuringStoryDoorBundlePlacement(
                     wallID: wall.id,
                     localX: x,
-                    localY: clampedY,
+                    localY: desiredLocalY,
                     depthOffset: config.defaultDepthOffsetMeters,
                     width: width,
                     height: height,
@@ -962,6 +1059,19 @@ final class TuringStoryDoorBundleController: ObservableObject {
                 let expandedRect = rect.expanded(
                     by: config.occupancyPaddingMeters
                 )
+
+                if wall.height < height {
+                    print(
+                        """
+                        [TuringDoorBundle] wall shorter than occupancy height; using floor snap
+                          wallID: \(wall.id)
+                          wallHeight: \(wall.height)
+                          occupancyHeight: \(height)
+                          visualHeight: \(visualHeight)
+                          floorWorldY: \(floor.worldY)
+                        """
+                    )
+                }
 
                 if occupancyRegistry?.hasHardOverlap(
                     wallID: wall.id,
@@ -1043,7 +1153,10 @@ final class TuringStoryDoorBundleController: ObservableObject {
         let position =
             wall.center +
             wall.right * placement.localX +
-            wall.up * (placement.localY - loadedVisualCenterY) +
+            wall.up * groundedRootLocalY(
+                placement: placement,
+                wall: wall
+            ) +
             wall.normal * placement.depthOffset
 
         var matrix = matrix_identity_float4x4
@@ -1079,7 +1192,10 @@ final class TuringStoryDoorBundleController: ObservableObject {
         let rootPosition =
             wall.center +
             wall.right * placement.localX +
-            wall.up * (placement.localY - loadedVisualCenterY) +
+            wall.up * groundedRootLocalY(
+                placement: placement,
+                wall: wall
+            ) +
             wall.normal * placement.depthOffset
         let visualBottomWorld =
             rootPosition +
@@ -1096,8 +1212,26 @@ final class TuringStoryDoorBundleController: ObservableObject {
               visualMinY: \(loadedVisualMinY)
               visualMaxY: \(loadedVisualMaxY)
               visualCenterY: \(loadedVisualCenterY)
+              assetImportScale: \(TuringStoryDoorBundleTuning.assetImportScale)
             """
         )
+    }
+
+    private func groundedRootLocalY(
+        placement: TuringStoryDoorBundlePlacement,
+        wall: WallCandidate
+    ) -> Float {
+        guard let floorWorldY = placement.floorWorldY,
+              abs(wall.up.y) > 0.05 else {
+            return placement.localY - loadedVisualCenterY
+        }
+
+        let targetBottomWorldY =
+            floorWorldY +
+            TuringStoryDoorBundleTuning.minBottomClearanceMeters
+
+        return (targetBottomWorldY - wall.center.y) / wall.up.y -
+            loadedVisualMinY
     }
 
     private func worldYawRadians(

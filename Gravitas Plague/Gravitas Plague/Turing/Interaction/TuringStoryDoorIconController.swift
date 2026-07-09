@@ -1,5 +1,6 @@
 import Foundation
 import RealityKit
+import simd
 import UIKit
 
 @MainActor
@@ -24,7 +25,15 @@ final class TuringStoryDoorIconController {
         )
 
         entity.name = "TuringStoryDoorIcon"
-        entity.position = SIMD3<Float>(0, 0, 0)
+        entity.position = SIMD3<Float>(
+            0,
+            size * 0.5,
+            0
+        )
+        entity.orientation = simd_quatf(
+            angle: Float.pi / 2.0,
+            axis: SIMD3<Float>(1, 0, 0)
+        )
         entity.components.set(
             TuringStoryDoorTriggerComponent(
                 doorID: doorID
@@ -43,6 +52,9 @@ final class TuringStoryDoorIconController {
               component: TuringStoryDoorTriggerComponent
               target: \(TuringScriptTriggerTarget.storyDoor.rawValue)
               style: posterSticker
+              axisCorrection: x_plus_90_to_wall_normal
+              anchorAlignment: bottom_center
+              localOffsetY: \(size * 0.5)
             """
         )
     }

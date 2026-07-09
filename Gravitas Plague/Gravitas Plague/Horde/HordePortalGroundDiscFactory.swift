@@ -13,6 +13,7 @@ enum HordePortalGroundDiscFactory {
         var featherStartFraction: Float = 0.72
         var textureName: String = "hellscape_groundplane"
         var exposure: Float = 1.0
+        var yawOffsetRadians: Float = 0.0
     }
 
     static func makeGroundDisc(
@@ -67,6 +68,7 @@ enum HordePortalGroundDiscFactory {
               radius: \(config.radius)
               featherStartFraction: \(config.featherStartFraction)
               featherRingCount: \(config.featherRingCount)
+              yawOffsetRadians: \(config.yawOffsetRadians)
               geometry: circular_disc_with_faded_edge
               placementSource: committed_portal_context
               plane: portal_local_xz
@@ -163,7 +165,8 @@ private extension HordePortalGroundDiscFactory {
                 planarUV(
                     x: x,
                     z: z,
-                    radius: config.radius
+                    radius: config.radius,
+                    yawOffsetRadians: config.yawOffsetRadians
                 )
             )
         }
@@ -233,14 +236,16 @@ private extension HordePortalGroundDiscFactory {
                 planarUV(
                     x: innerX,
                     z: innerZ,
-                    radius: config.radius
+                    radius: config.radius,
+                    yawOffsetRadians: config.yawOffsetRadians
                 )
             )
             uvs.append(
                 planarUV(
                     x: outerX,
                     z: outerZ,
-                    radius: config.radius
+                    radius: config.radius,
+                    yawOffsetRadians: config.yawOffsetRadians
                 )
             )
         }
@@ -274,16 +279,21 @@ private extension HordePortalGroundDiscFactory {
     static func planarUV(
         x: Float,
         z: Float,
-        radius: Float
+        radius: Float,
+        yawOffsetRadians: Float
     ) -> SIMD2<Float> {
         let denominator = max(
             radius * 2.0,
             0.001
         )
+        let cosYaw = cos(yawOffsetRadians)
+        let sinYaw = sin(yawOffsetRadians)
+        let rotatedX = x * cosYaw - z * sinYaw
+        let rotatedZ = x * sinYaw + z * cosYaw
 
         return SIMD2<Float>(
-            max(0, min(1, 0.5 + x / denominator)),
-            max(0, min(1, 0.5 + z / denominator))
+            max(0, min(1, 0.5 + rotatedX / denominator)),
+            max(0, min(1, 0.5 + rotatedZ / denominator))
         )
     }
 }

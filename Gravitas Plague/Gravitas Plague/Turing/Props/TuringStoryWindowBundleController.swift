@@ -47,6 +47,9 @@ final class TuringStoryWindowBundleController: ObservableObject {
     private(set) var placement: TuringStoryWindowBundlePlacement?
     private(set) var isPlaced = false
     private var activeAtmosphere: PortalHDRIAtmosphere = .night
+    private var loadedVisualMinY: Float = 0
+    private var loadedVisualMaxY: Float = TuringStoryWindowBundleTuning
+        .defaultHeightMeters
 
     init() {
         root.name = "TuringStoryWindowBundle_WorldRoot"
@@ -117,6 +120,10 @@ final class TuringStoryWindowBundleController: ObservableObject {
             activeAtmosphere = atmosphere
 
             registerOccupancy(placement: selectedPlacement)
+            logBottomPlacementProof(
+                placement: selectedPlacement,
+                wallManager: wallManager
+            )
             await bindRuntimeMaterialsAndPortal(
                 anchors: resolvedAnchors,
                 atmosphere: atmosphere,
@@ -131,8 +138,10 @@ final class TuringStoryWindowBundleController: ObservableObject {
                   localY: \(selectedPlacement.localY)
                   width: \(selectedPlacement.width)
                   height: \(selectedPlacement.height)
+                  visualHeight: \(loadedVisualHeight)
                   preferredBottomHeightMeters: \(TuringStoryWindowBundleTuning.preferredBottomHeightMeters)
                   floorWorldY: \(selectedPlacement.floorWorldY.map { "\($0)" } ?? "nil")
+                  heightPlacementSource: scanned_floor_visual_bottom_2_8ft_no_wall_y_clamp
                   overlapsPoster: false
                   overlapsPortal: false
                   atmosphere: \(atmosphere.rawValue)
@@ -223,6 +232,7 @@ final class TuringStoryWindowBundleController: ObservableObject {
         root.children.removeAll()
         root.addChild(entity)
         root.addChild(portalWorldRoot)
+        updateLoadedVisualBounds()
         applyOcclusionPlaneMaterialIfPresent(
             in: entity,
             bundleURL: url
@@ -235,10 +245,60 @@ final class TuringStoryWindowBundleController: ObservableObject {
               file: turing_story_window_bundle_v1.usdz
               rootName: \(entity.name)
               assetImportScale: \(TuringStoryWindowBundleTuning.assetImportScale)
+              visualMinY: \(loadedVisualMinY)
+              visualMaxY: \(loadedVisualMaxY)
             """
         )
 
         return entity
+    }
+
+    private var loadedVisualHeight: Float {
+        max(
+            0.001,
+            loadedVisualMaxY - loadedVisualMinY
+        )
+    }
+
+    private var loadedVisualCenterY: Float {
+        (loadedVisualMinY + loadedVisualMaxY) * 0.5
+    }
+
+    private func updateLoadedVisualBounds() {
+        let bounds = root.visualBounds(
+            recursive: true,
+            relativeTo: root,
+            excludeInactive: false
+        )
+        let minY = bounds.min.y
+        let maxY = bounds.max.y
+
+        guard minY.isFinite,
+              maxY.isFinite,
+              maxY > minY else {
+            loadedVisualMinY = 0
+            loadedVisualMaxY = TuringStoryWindowBundleTuning.defaultHeightMeters
+            print(
+                """
+                [TuringWindowPortal] visual bounds unavailable; using tuning height
+                  fallbackMinY: \(loadedVisualMinY)
+                  fallbackMaxY: \(loadedVisualMaxY)
+                """
+            )
+            return
+        }
+
+        loadedVisualMinY = minY
+        loadedVisualMaxY = maxY
+
+        print(
+            """
+            [TuringWindowPortal] visual bounds measured
+              minY: \(loadedVisualMinY)
+              maxY: \(loadedVisualMaxY)
+              height: \(loadedVisualHeight)
+            """
+        )
     }
 
     private func applyOcclusionPlaneMaterialIfPresent(
@@ -675,19 +735,23 @@ final class TuringStoryWindowBundleController: ObservableObject {
         for wall in walls {
             let width = TuringStoryWindowBundleTuning.defaultWidthMeters
             let height = TuringStoryWindowBundleTuning.defaultHeightMeters
-            let floor = wallManager.bestFloorCandidate(near: wall)
-            let desiredWorldY: Float
-            if let floor {
-                let preferredBottom =
-                    floor.worldY +
-                    TuringStoryWindowBundleTuning.preferredBottomHeightMeters
-                let minBottom =
-                    floor.worldY +
-                    TuringStoryWindowBundleTuning.minBottomClearanceMeters
-                desiredWorldY = max(preferredBottom, minBottom) + height * 0.5
-            } else {
-                desiredWorldY = wall.center.y
+            guard let floor = wallManager.bestFloorCandidate(near: wall) else {
+                print(
+                    """
+                    [TuringWindowPortal] candidate rejected
+                      wallID: \(wall.id)
+                      reason: no_scanned_floor_for_deterministic_window_height
+                    """
+                )
+                continue
             }
+            let preferredBottom =
+                floor.worldY +
+                TuringStoryWindowBundleTuning.preferredBottomHeightMeters
+            let minBottom =
+                floor.worldY +
+                TuringStoryWindowBundleTuning.minBottomClearanceMeters
+            let desiredWorldY = max(preferredBottom, minBottom) + height * 0.5
 
             let desiredLocalY: Float
             if abs(wall.up.y) > 0.05 {
@@ -701,12 +765,6 @@ final class TuringStoryWindowBundleController: ObservableObject {
                 wall.width * 0.5 - width * 0.5 -
                     TuringStoryWindowBundleTuning.wallMarginMeters
             )
-            let maxY = max(
-                0,
-                wall.height * 0.5 - height * 0.5 -
-                    TuringStoryWindowBundleTuning.wallMarginMeters
-            )
-            let clampedY = min(max(desiredLocalY, -maxY), maxY)
             let candidateXs: [Float] = [
                 0,
                 -maxX * 0.55,
@@ -719,11 +777,11 @@ final class TuringStoryWindowBundleController: ObservableObject {
                 let placement = TuringStoryWindowBundlePlacement(
                     wallID: wall.id,
                     localX: x,
-                    localY: clampedY,
+                    localY: desiredLocalY,
                     depthOffset: TuringStoryWindowBundleTuning.depthOffset,
                     width: width,
                     height: height,
-                    floorWorldY: floor?.worldY,
+                    floorWorldY: floor.worldY,
                     worldYawRadians: worldYawRadians(wall: wall)
                 )
                 let rect = turingWindowWallRect(for: placement)
@@ -801,7 +859,10 @@ final class TuringStoryWindowBundleController: ObservableObject {
         let position =
             wall.center +
             wall.right * placement.localX +
-            wall.up * (placement.localY - placement.height * 0.5) +
+            wall.up * groundedRootLocalY(
+                placement: placement,
+                wall: wall
+            ) +
             wall.normal * placement.depthOffset
 
         var matrix = matrix_identity_float4x4
@@ -810,6 +871,61 @@ final class TuringStoryWindowBundleController: ObservableObject {
         matrix.columns.2 = SIMD4<Float>(wall.normal.x, wall.normal.y, wall.normal.z, 0)
         matrix.columns.3 = SIMD4<Float>(position.x, position.y, position.z, 1)
         return matrix
+    }
+
+    private func logBottomPlacementProof(
+        placement: TuringStoryWindowBundlePlacement,
+        wallManager: WallPlaneManager
+    ) {
+        guard let wall = wallManager.wallCandidates[placement.wallID] else {
+            return
+        }
+
+        let rootPosition =
+            wall.center +
+            wall.right * placement.localX +
+            wall.up * groundedRootLocalY(
+                placement: placement,
+                wall: wall
+            ) +
+            wall.normal * placement.depthOffset
+        let visualBottomWorld =
+            rootPosition +
+            wall.up * loadedVisualMinY
+        let expectedBottomWorldY = placement.floorWorldY.map {
+            $0 + TuringStoryWindowBundleTuning.preferredBottomHeightMeters
+        }
+
+        print(
+            """
+            [TuringWindowPortal] floor-relative placement proof
+              visualBottomWorldY: \(visualBottomWorld.y)
+              floorWorldY: \(placement.floorWorldY.map { "\($0)" } ?? "nil")
+              expectedBottomWorldY: \(expectedBottomWorldY.map { "\($0)" } ?? "nil")
+              bottomHeightAboveFloorMeters: \(placement.floorWorldY.map { "\(visualBottomWorld.y - $0)" } ?? "nil")
+              preferredBottomHeightMeters: \(TuringStoryWindowBundleTuning.preferredBottomHeightMeters)
+              visualMinY: \(loadedVisualMinY)
+              visualMaxY: \(loadedVisualMaxY)
+              visualCenterY: \(loadedVisualCenterY)
+            """
+        )
+    }
+
+    private func groundedRootLocalY(
+        placement: TuringStoryWindowBundlePlacement,
+        wall: WallCandidate
+    ) -> Float {
+        guard let floorWorldY = placement.floorWorldY,
+              abs(wall.up.y) > 0.05 else {
+            return placement.localY - loadedVisualCenterY
+        }
+
+        let targetBottomWorldY =
+            floorWorldY +
+            TuringStoryWindowBundleTuning.preferredBottomHeightMeters
+
+        return (targetBottomWorldY - wall.center.y) / wall.up.y -
+            loadedVisualMinY
     }
 
     private func registerOccupancy(
