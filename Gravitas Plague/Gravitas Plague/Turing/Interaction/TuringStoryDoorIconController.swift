@@ -16,11 +16,6 @@ final class TuringStoryDoorIconController {
         TuringStoryDoorTriggerComponent.registerComponent()
 
         let size = WallStickerStyle.stickerSizeMeters
-        let localExtraBottomLift = extraBottomLiftMeters / max(
-            TuringStoryDoorBundleTuning.assetImportScale,
-            0.001
-        )
-        let localOffsetY = size * 0.5 + localExtraBottomLift
         let material = makeIconMaterial()
         let entity = ModelEntity(
             mesh: .generatePlane(
@@ -31,11 +26,7 @@ final class TuringStoryDoorIconController {
         )
 
         entity.name = "TuringStoryDoorIcon"
-        entity.position = SIMD3<Float>(
-            0,
-            localOffsetY,
-            0
-        )
+        entity.position = .zero
         entity.orientation = simd_quatf(
             angle: Float.pi / 2.0,
             axis: SIMD3<Float>(1, 0, 0)
@@ -49,6 +40,36 @@ final class TuringStoryDoorIconController {
         entity.generateCollisionShapes(recursive: true)
 
         anchor.addChild(entity)
+
+        // The authored icon anchor may be rotated, so its local Y is not
+        // necessarily world-up. Position the icon in world space to keep the
+        // bottom alignment vertical regardless of the USDZ anchor basis.
+        let worldMatrix = entity.transformMatrix(relativeTo: nil)
+        let inheritedWorldScale = max(
+            simd_length(SIMD3<Float>(
+                worldMatrix.columns.0.x,
+                worldMatrix.columns.0.y,
+                worldMatrix.columns.0.z
+            )),
+            simd_length(SIMD3<Float>(
+                worldMatrix.columns.1.x,
+                worldMatrix.columns.1.y,
+                worldMatrix.columns.1.z
+            )),
+            simd_length(SIMD3<Float>(
+                worldMatrix.columns.2.x,
+                worldMatrix.columns.2.y,
+                worldMatrix.columns.2.z
+            ))
+        )
+        let worldOffsetY = size * inheritedWorldScale * 0.5 + extraBottomLiftMeters
+        let anchorWorldPosition = anchor.position(relativeTo: nil)
+        let iconWorldPosition = anchorWorldPosition + SIMD3<Float>(
+            0,
+            worldOffsetY,
+            0
+        )
+        entity.setPosition(iconWorldPosition, relativeTo: nil)
         iconEntity = entity
 
         print(
@@ -59,10 +80,12 @@ final class TuringStoryDoorIconController {
               target: \(TuringScriptTriggerTarget.storyDoor.rawValue)
               style: posterSticker
               axisCorrection: x_plus_90_to_wall_normal
-              anchorAlignment: bottom_center_plus_lift
+              anchorAlignment: world_up_bottom_center_plus_lift
               worldExtraBottomLiftMeters: \(extraBottomLiftMeters)
-              localExtraBottomLift: \(localExtraBottomLift)
-              localOffsetY: \(localOffsetY)
+              inheritedWorldScale: \(inheritedWorldScale)
+              worldOffsetY: \(worldOffsetY)
+              anchorWorldPosition: \(anchorWorldPosition)
+              iconWorldPosition: \(iconWorldPosition)
             """
         )
     }
