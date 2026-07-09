@@ -1,0 +1,342 @@
+import Foundation
+
+@MainActor
+final class TuringWalkieCommsFXController {
+    static let shared = TuringWalkieCommsFXController()
+
+    private enum State: Equatable {
+        case idle
+        case opening
+        case sendingLeadIn
+    }
+
+    private let assetStore = TuringWalkieCommsAssetStore()
+    private var state: State = .idle
+    private var randomBurstTask: Task<Void, Never>?
+    private var lastBurstURL: URL?
+    private var activeBurstHandleID: UUID?
+    private var activeBurstPlaybackOwner: String?
+    private var sendingStaticActive = false
+
+    private init() {}
+
+    func playOpenCommBeforeRecording(reason: String) async {
+        state = .opening
+
+        do {
+            let url = try assetStore.openCommURL()
+            print("""
+            [TuringWalkieComms] open comm started
+              reason: \(reason)
+              file: \(url.lastPathComponent)
+            """)
+
+            _ = try await playOneShotAndWait(
+                fileURL: url,
+                kind: .commSFX,
+                label: "open-comm"
+            )
+
+            print("""
+            [TuringWalkieComms] open comm finished
+              reason: \(reason)
+            """)
+        } catch {
+            print("""
+            [TuringWalkieComms] open comm unavailable
+              reason: \(reason)
+              error: \(error.localizedDescription)
+            """)
+        }
+
+        if state == .opening {
+            state = .idle
+        }
+    }
+
+    func playSendCommAndStartSendingLeadIn(reason: String) async {
+        do {
+            let url = try assetStore.sendCommURL()
+            print("""
+            [TuringWalkieComms] send comm started
+              reason: \(reason)
+              file: \(url.lastPathComponent)
+            """)
+
+            Task { @MainActor [weak self] in
+                _ = try? await self?.playOneShotAndWait(
+                    fileURL: url,
+                    kind: .commSFX,
+                    label: "send-comm"
+                )
+            }
+        } catch {
+            print("""
+            [TuringWalkieComms] send comm unavailable
+              reason: \(reason)
+              error: \(error.localizedDescription)
+            """)
+        }
+
+        await startAmbientWalkieStatic(reason: "conversationVoice.\(reason)")
+        await startSendingLeadIn(reason: reason)
+    }
+
+    func startSendingLeadIn(reason: String) async {
+        guard state != .sendingLeadIn else {
+            return
+        }
+
+        state = .sendingLeadIn
+        do {
+            let url = try assetStore.sendingStaticLoopURL()
+            let routed = await TuringStoryWalkieAudioRoute.startSendingStaticLoop(
+                fileURL: url,
+                reason: reason
+            )
+            sendingStaticActive = routed
+            if routed {
+                print("""
+                [TuringWalkieComms] sending static loop started
+                  reason: \(reason)
+                  file: \(url.lastPathComponent)
+                  stopCondition: firstPlaybackOrFirstFiller
+                """)
+            }
+        } catch {
+            print("""
+            [TuringWalkieComms] sending static loop unavailable
+              reason: \(reason)
+              error: \(error.localizedDescription)
+            """)
+        }
+
+        startRandomBursts(reason: reason)
+    }
+
+    func stopSendingLeadIn(reason: String) async {
+        let wasActive = state == .sendingLeadIn || sendingStaticActive
+        randomBurstTask?.cancel()
+        randomBurstTask = nil
+        if let activeBurstHandleID,
+           let clipPlayer = TuringStoryWalkieAudioRoute.makeActiveClipPlayer() {
+            clipPlayer.cancel(
+                handleID: activeBurstHandleID,
+                reason: "sendingLeadInStopped.\(reason)"
+            )
+            self.activeBurstHandleID = nil
+        }
+        if let activeBurstPlaybackOwner {
+            TuringAudioSessionCoordinator.shared.endPlayback(
+                owner: activeBurstPlaybackOwner
+            )
+            self.activeBurstPlaybackOwner = nil
+        }
+
+        await TuringStoryWalkieAudioRoute.stopSendingStaticLoop(
+            reason: reason
+        )
+        sendingStaticActive = false
+
+        state = .idle
+
+        if wasActive {
+            print("""
+            [TuringWalkieComms] sending lead-in stopped
+              reason: \(reason)
+            """)
+        }
+    }
+
+    func startAmbientWalkieStatic(reason: String) async {
+        do {
+            let url = try assetStore.ambientStaticLoopURL()
+            let routed = await TuringStoryWalkieAudioRoute
+                .startAmbientWalkieStaticLoop(fileURL: url, reason: reason)
+            if routed {
+                print("""
+                [TuringWalkieComms] ambient walkie static started
+                  reason: \(reason)
+                  file: \(url.lastPathComponent)
+                """)
+            }
+        } catch {
+            print("""
+            [TuringWalkieComms] ambient walkie static unavailable
+              reason: \(reason)
+              error: \(error.localizedDescription)
+            """)
+        }
+    }
+
+    func stopAmbientWalkieStatic(reason: String) async {
+        await TuringStoryWalkieAudioRoute.stopAmbientWalkieStaticLoop(
+            reason: reason
+        )
+    }
+
+    func stopAll(reason: String) async {
+        randomBurstTask?.cancel()
+        randomBurstTask = nil
+        if let activeBurstHandleID,
+           let clipPlayer = TuringStoryWalkieAudioRoute.makeActiveClipPlayer() {
+            clipPlayer.cancel(
+                handleID: activeBurstHandleID,
+                reason: "stopAll.\(reason)"
+            )
+            self.activeBurstHandleID = nil
+        }
+        if let activeBurstPlaybackOwner {
+            TuringAudioSessionCoordinator.shared.endPlayback(
+                owner: activeBurstPlaybackOwner
+            )
+            self.activeBurstPlaybackOwner = nil
+        }
+        await TuringStoryWalkieAudioRoute.stopSendingStaticLoop(reason: reason)
+        await TuringStoryWalkieAudioRoute.stopAmbientWalkieStaticLoop(
+            reason: reason
+        )
+        sendingStaticActive = false
+        state = .idle
+        print("""
+        [TuringWalkieComms] stopped
+          reason: \(reason)
+        """)
+    }
+
+    private func startRandomBursts(reason: String) {
+        randomBurstTask?.cancel()
+        let urls = assetStore.randomBurstURLs()
+        guard urls.isEmpty == false else {
+            print("""
+            [TuringWalkieComms] random burst disabled
+              reason: missingWalkieTalkie01To06
+            """)
+            return
+        }
+
+        randomBurstTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                let delay = Double.random(in: 2.0...7.0)
+                try? await Task.sleep(
+                    nanoseconds: UInt64(delay * 1_000_000_000)
+                )
+                guard !Task.isCancelled,
+                      self.state == .sendingLeadIn else {
+                    return
+                }
+
+                let url = self.chooseBurstURL(from: urls)
+                self.lastBurstURL = url
+
+                print("""
+                [TuringWalkieComms] random pre-playback burst started
+                  clip: \(url.lastPathComponent)
+                  nextWindowSeconds: 2.0...7.0
+                """)
+
+                let label = url.deletingPathExtension().lastPathComponent
+                let owner = "TuringWalkieCommsFX.randomBurst.\(label)"
+                self.activeBurstPlaybackOwner = owner
+                self.activeBurstHandleID = try? self.playOneShotNoWait(
+                    fileURL: url,
+                    kind: .commSFX,
+                    label: label,
+                    owner: owner,
+                    completion: { [weak self] completedID in
+                        guard self?.activeBurstHandleID == completedID else {
+                            return
+                        }
+                        self?.activeBurstHandleID = nil
+                        self?.activeBurstPlaybackOwner = nil
+                    }
+                )
+                if self.activeBurstHandleID == nil {
+                    self.activeBurstPlaybackOwner = nil
+                }
+            }
+        }
+    }
+
+    private func chooseBurstURL(from urls: [URL]) -> URL {
+        guard urls.count > 1,
+              let lastBurstURL else {
+            return urls.randomElement() ?? urls[0]
+        }
+        return urls.filter { $0 != lastBurstURL }.randomElement() ?? urls[0]
+    }
+
+    private func playOneShotAndWait(
+        fileURL: URL,
+        kind: TuringWalkieOneShotClipPlayer.ClipKind,
+        label: String
+    ) async throws -> UUID {
+        try await withCheckedThrowingContinuation { continuation in
+            do {
+                guard let clipPlayer = TuringStoryWalkieAudioRoute
+                    .makeActiveClipPlayer() else {
+                    continuation.resume(
+                        throwing: TuringWalkieAudioError.playbackStartFailed(label)
+                    )
+                    return
+                }
+
+                let owner = "TuringWalkieCommsFX.\(label)"
+                TuringAudioSessionCoordinator.shared.beginPlayback(owner: owner)
+                do {
+                    _ = try clipPlayer.playOneShot(
+                        fileURL: fileURL,
+                        kind: kind,
+                        label: label,
+                        completion: { completedID in
+                            TuringAudioSessionCoordinator.shared.endPlayback(
+                                owner: owner
+                            )
+                            continuation.resume(returning: completedID)
+                        }
+                    )
+                } catch {
+                    TuringAudioSessionCoordinator.shared.endPlayback(
+                        owner: owner
+                    )
+                    throw error
+                }
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+
+    @discardableResult
+    private func playOneShotNoWait(
+        fileURL: URL,
+        kind: TuringWalkieOneShotClipPlayer.ClipKind,
+        label: String,
+        owner: String,
+        completion: @escaping @MainActor (UUID) -> Void
+    ) throws -> UUID {
+        guard let clipPlayer = TuringStoryWalkieAudioRoute
+            .makeActiveClipPlayer() else {
+            throw TuringWalkieAudioError.playbackStartFailed(label)
+        }
+
+        TuringAudioSessionCoordinator.shared.beginPlayback(owner: owner)
+        do {
+            return try clipPlayer.playOneShot(
+                fileURL: fileURL,
+                kind: kind,
+                label: label,
+                completion: { completedID in
+                    TuringAudioSessionCoordinator.shared.endPlayback(
+                        owner: owner
+                    )
+                    completion(completedID)
+                }
+            )
+        } catch {
+            TuringAudioSessionCoordinator.shared.endPlayback(owner: owner)
+            throw error
+        }
+    }
+}

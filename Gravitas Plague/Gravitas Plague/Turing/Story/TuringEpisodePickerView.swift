@@ -343,6 +343,16 @@ struct TuringEpisodePickerView: View {
                 return
             }
 
+            await TuringWalkieCommsFXController.shared
+                .playOpenCommBeforeRecording(reason: "holdToRecordStarted")
+
+            guard dictationPressActive else {
+                await dictationCoordinator.cancel(
+                    reason: "press ended before open comm finished"
+                )
+                return
+            }
+
             await dictationCoordinator.beginHoldToRecord()
 
             if !dictationPressActive,
@@ -428,13 +438,22 @@ struct TuringEpisodePickerView: View {
         }
 
         dictationStartTask = nil
-        radioStaticLeadIn.start(reason: "askBigMikeMicReleased")
 
         Task {
             do {
                 let transcript = try await dictationCoordinator.endHoldToSend()
+                await TuringWalkieCommsFXController.shared
+                    .playSendCommAndStartSendingLeadIn(
+                        reason: "dictationReleased"
+                    )
                 runBigMikeConversationNoBible(playerDictation: transcript)
             } catch {
+                await TuringWalkieCommsFXController.shared.stopSendingLeadIn(
+                    reason: "dictationFailed"
+                )
+                await TuringWalkieCommsFXController.shared.stopAmbientWalkieStatic(
+                    reason: "dictationFailed"
+                )
                 radioStaticLeadIn.stop(reason: "dictationFailed")
                 session.publishTuringDictationEvent(.failed(error.localizedDescription))
                 qwenDebugStatus = "Failed: \(error.localizedDescription)"
@@ -489,6 +508,11 @@ struct TuringEpisodePickerView: View {
                         }
                     )
 
+                await TuringWalkieCommsFXController.shared
+                    .stopAmbientWalkieStatic(
+                        reason: "responseAudioFinished"
+                    )
+
                 await MainActor.run {
                     session.publishTuringDictationEvent(.responseAudioFinished)
                     radioStaticLeadIn.stop(reason: "responseAudioFinished")
@@ -496,6 +520,11 @@ struct TuringEpisodePickerView: View {
                     qwenDebugStatus = result.pickerStatus
                 }
             } catch {
+                await TuringWalkieCommsFXController.shared
+                    .stopAmbientWalkieStatic(
+                        reason: "conversationFailed"
+                    )
+
                 await MainActor.run {
                     turingDialogueBusy = false
                     radioStaticLeadIn.stop(reason: "conversationFailed")

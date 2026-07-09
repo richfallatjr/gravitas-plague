@@ -392,6 +392,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
         }
 
         do {
+            await notifyFirstPlaybackStarting(kind: "prerecording")
             print("""
             [TuringPlaybackTrace] prerecording playback request
               id: \(clip.id)
@@ -454,6 +455,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
         }
 
         do {
+            await notifyFirstPlaybackStarting(kind: "generated")
             print("""
             [TuringPlaybackTrace] generated playback request
               segmentIndex: \(clip.segmentIndex)
@@ -521,6 +523,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
         }
 
         do {
+            await notifyFirstPlaybackStarting(kind: "filler")
             print("""
             [TuringPlaybackTrace] filler playback request
               reason: \(reason)
@@ -597,6 +600,12 @@ final class TuringStoryWalkiePlaybackCoordinator {
           id: \(id.uuidString)
         """)
         await reconcile(reason: "deadAirFinished")
+    }
+
+    private func notifyFirstPlaybackStarting(kind: String) async {
+        await TuringWalkieCommsFXController.shared.stopSendingLeadIn(
+            reason: "firstPlaybackStarting.\(kind)"
+        )
     }
 
     private func playbackCompleted(handleID: UUID) async {

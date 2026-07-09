@@ -22,6 +22,7 @@ final class TuringWalkieOneShotClipPlayer {
         case generated
         case prerecording
         case filler
+        case commSFX
 
         var laneName: String {
             switch self {
@@ -31,6 +32,8 @@ final class TuringWalkieOneShotClipPlayer {
                 return "TuringWalkieAudio_PrerecordingLane"
             case .filler:
                 return "TuringWalkieAudio_FillerLane"
+            case .commSFX:
+                return "TuringWalkieAudio_CommSFXLane"
             }
         }
     }
@@ -53,6 +56,7 @@ final class TuringWalkieOneShotClipPlayer {
     private var generatedLane: Entity?
     private var prerecordingLane: Entity?
     private var fillerLane: Entity?
+    private var commSFXLane: Entity?
 
     init(walkieEmitter: Entity) {
         self.walkieEmitter = walkieEmitter
@@ -74,6 +78,8 @@ final class TuringWalkieOneShotClipPlayer {
             lane = prerecordingLane
         case .filler:
             lane = fillerLane
+        case .commSFX:
+            lane = commSFXLane
         }
 
         guard let lane else {
@@ -247,6 +253,13 @@ final class TuringWalkieOneShotClipPlayer {
         if fillerLane?.parent == nil {
             fillerLane = Self.makeLane(
                 named: ClipKind.filler.laneName,
+                under: walkieEmitter
+            )
+        }
+
+        if commSFXLane?.parent == nil {
+            commSFXLane = Self.makeLane(
+                named: ClipKind.commSFX.laneName,
                 under: walkieEmitter
             )
         }
