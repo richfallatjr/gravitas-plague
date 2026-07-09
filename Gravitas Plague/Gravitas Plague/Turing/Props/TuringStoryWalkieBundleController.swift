@@ -219,9 +219,9 @@ final class TuringStoryWalkieBundleController: ObservableObject {
             print("""
             [TuringWalkieBundle] occlusion mask texture not found
               entity: \(occlusionEntity.name)
-              expectedSidecar: ao.png
+              expectedEmbedded: textures/ao.png
               rule: white_opaque_black_transparent
-              action: hide_occlusion_mesh_until_mask_exists
+              action: hide_occlusion_mesh_until_embedded_mask_exists
             """)
             return
         }
@@ -305,37 +305,138 @@ final class TuringStoryWalkieBundleController: ObservableObject {
     private func resolveOcclusionMaskURL(
         bundleURL: URL
     ) -> URL? {
-        let directory = bundleURL.deletingLastPathComponent()
-        let sidecarNames = [
-            "ao",
-            "occlusion-01",
-            "occlusion_01",
-            "TuringStoryWallBundle_Occlusion01"
-        ]
+        return extractEmbeddedOcclusionMaskURL(
+            bundleURL: bundleURL
+        )
+    }
 
-        for name in sidecarNames {
-            let url = directory
-                .appendingPathComponent(name)
-                .appendingPathExtension("png")
-            if FileManager.default.fileExists(atPath: url.path) {
-                return url
-            }
+    private func extractEmbeddedOcclusionMaskURL(
+        bundleURL: URL
+    ) -> URL? {
+        guard let archive = try? Data(
+            contentsOf: bundleURL,
+            options: .mappedIfSafe
+        ) else {
+            return nil
         }
 
-        for name in sidecarNames {
-            if let url = Bundle.main.url(
-                forResource: name,
-                withExtension: "png",
-                subdirectory: "Turing/Props"
-            ) ?? Bundle.main.url(
-                forResource: name,
-                withExtension: "png"
-            ) {
-                return url
+        let targets: Set<String> = [
+            "textures/ao.png",
+            "ao.png"
+        ]
+        var offset = 0
+
+        while offset + 30 <= archive.count {
+            guard archive.turingWalkieZIPUInt32(at: offset) == 0x04034b50 else {
+                offset += 1
+                continue
             }
+
+            let compressionMethod = archive.turingWalkieZIPUInt16(
+                at: offset + 8
+            )
+            let compressedSize = Int(
+                archive.turingWalkieZIPUInt32(
+                    at: offset + 18
+                )
+            )
+            let uncompressedSize = Int(
+                archive.turingWalkieZIPUInt32(
+                    at: offset + 22
+                )
+            )
+            let fileNameLength = Int(
+                archive.turingWalkieZIPUInt16(
+                    at: offset + 26
+                )
+            )
+            let extraFieldLength = Int(
+                archive.turingWalkieZIPUInt16(
+                    at: offset + 28
+                )
+            )
+            let fileNameStart = offset + 30
+            let fileNameEnd = fileNameStart + fileNameLength
+            let dataStart = fileNameEnd + extraFieldLength
+            let dataLength = compressedSize > 0
+                ? compressedSize
+                : uncompressedSize
+            let dataEnd = dataStart + dataLength
+
+            guard fileNameEnd <= archive.count,
+                  dataStart <= archive.count else {
+                return nil
+            }
+
+            let nameData = archive[fileNameStart..<fileNameEnd]
+            let fileName = String(
+                data: nameData,
+                encoding: .utf8
+            )?.lowercased()
+
+            if let fileName,
+               targets.contains(fileName),
+               compressionMethod == 0,
+               dataLength > 0,
+               dataEnd <= archive.count {
+                let outputURL = embeddedOcclusionMaskCacheURL(
+                    bundleURL: bundleURL
+                )
+
+                do {
+                    try archive
+                        .subdata(in: dataStart..<dataEnd)
+                        .write(
+                            to: outputURL,
+                            options: .atomic
+                        )
+
+                    print(
+                        """
+                        [TuringWalkieBundle] embedded occlusion mask extracted
+                          usdz: \(bundleURL.lastPathComponent)
+                          embeddedPath: \(fileName)
+                          output: \(outputURL.lastPathComponent)
+                          source: embedded_usdz_texture
+                        """
+                    )
+
+                    return outputURL
+                } catch {
+                    print(
+                        """
+                        [TuringWalkieBundle] ERROR embedded occlusion mask extract failed
+                          usdz: \(bundleURL.lastPathComponent)
+                          embeddedPath: \(fileName)
+                          error: \(error.localizedDescription)
+                        """
+                    )
+                    return nil
+                }
+            }
+
+            offset = max(
+                offset + 1,
+                dataEnd
+            )
         }
 
         return nil
+    }
+
+    private func embeddedOcclusionMaskCacheURL(
+        bundleURL: URL
+    ) -> URL {
+        let attributes = try? FileManager.default.attributesOfItem(
+            atPath: bundleURL.path
+        )
+        let fileSize = attributes?[.size] as? NSNumber
+        let modified = attributes?[.modificationDate] as? Date
+        let stamp = "\(fileSize?.intValue ?? 0)_\(Int(modified?.timeIntervalSince1970 ?? 0))"
+        let name = "\(bundleURL.deletingPathExtension().lastPathComponent)_embedded_ao_\(stamp).png"
+
+        return FileManager.default.temporaryDirectory
+            .appendingPathComponent(name)
     }
 
     private func recenterLoadedBundleVisuals(_ entity: Entity) {
@@ -706,6 +807,32 @@ private extension Entity {
         name
             .lowercased()
             .filter { $0.isLetter || $0.isNumber }
+    }
+}
+
+private extension Data {
+    func turingWalkieZIPUInt16(
+        at offset: Int
+    ) -> UInt16 {
+        guard offset + 2 <= count else {
+            return 0
+        }
+
+        return UInt16(self[offset]) |
+            (UInt16(self[offset + 1]) << 8)
+    }
+
+    func turingWalkieZIPUInt32(
+        at offset: Int
+    ) -> UInt32 {
+        guard offset + 4 <= count else {
+            return 0
+        }
+
+        return UInt32(self[offset]) |
+            (UInt32(self[offset + 1]) << 8) |
+            (UInt32(self[offset + 2]) << 16) |
+            (UInt32(self[offset + 3]) << 24)
     }
 }
 

@@ -16,9 +16,9 @@ enum TuringStoryWindowGlassMaterialFactory {
             )
         )
         material.metallic = .init(floatLiteral: 0.0)
-        material.roughness = .init(floatLiteral: 0.34)
-        material.clearcoat = .init(floatLiteral: Float(1.0 - alpha))
-        material.clearcoatRoughness = .init(floatLiteral: 0.12)
+        material.roughness = .init(floatLiteral: 0.025)
+        material.clearcoat = .init(floatLiteral: 0.5)
+        material.clearcoatRoughness = .init(floatLiteral: 0.2)
         material.blending = .transparent(opacity: 0.24)
         material.faceCulling = .none
 

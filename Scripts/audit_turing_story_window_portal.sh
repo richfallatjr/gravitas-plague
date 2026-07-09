@@ -10,6 +10,13 @@ require_file() {
   }
 }
 
+require_missing_file() {
+  test ! -f "$ROOT/$1" || {
+    echo "Unexpected stale file: $1" >&2
+    exit 1
+  }
+}
+
 require_rg() {
   local pattern="$1"
   local path="$2"
@@ -19,7 +26,26 @@ require_rg() {
   }
 }
 
+reject_rg() {
+  local pattern="$1"
+  local path="$2"
+  if rg -q "$pattern" "$ROOT/$path"; then
+    echo "Unexpected pattern '$pattern' in $path" >&2
+    exit 1
+  fi
+}
+
 require_file "Gravitas Plague/TuringResources/Turing/Props/turing_story_window_bundle_v1.usdz"
+require_file "Gravitas Plague/TuringResources/Turing/Props/turing_story_wall_bundle_v1.usdz"
+require_missing_file "Gravitas Plague/TuringResources/Turing/Props/ao.png"
+unzip -l "$ROOT/Gravitas Plague/TuringResources/Turing/Props/turing_story_window_bundle_v1.usdz" | rg -q "textures/ao\\.png" || {
+  echo "Missing embedded textures/ao.png in turing_story_window_bundle_v1.usdz" >&2
+  exit 1
+}
+unzip -l "$ROOT/Gravitas Plague/TuringResources/Turing/Props/turing_story_wall_bundle_v1.usdz" | rg -q "textures/ao\\.png" || {
+  echo "Missing embedded textures/ao.png in turing_story_wall_bundle_v1.usdz" >&2
+  exit 1
+}
 require_file "day-groundplane-tile.png"
 require_file "night-groundplane-tile.png"
 
@@ -27,6 +53,7 @@ require_file "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBund
 require_file "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
 require_file "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"
 require_file "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowGlassMaterialFactory.swift"
+require_file "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWalkieBundleController.swift"
 require_file "Gravitas Plague/Gravitas Plague/Turing/Interaction/TuringStoryPosterDayNightIconController.swift"
 
 require_rg "storyWindowBundle" "Gravitas Plague/Gravitas Plague/RoomSkinning/WallPropOccupancyRegistry.swift"
@@ -45,10 +72,23 @@ require_rg "occlusion01" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringSto
 require_rg "ao" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
 require_rg "textures/ao.png" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
 require_rg "embedded_usdz_texture" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
+require_rg "expectedEmbedded: textures/ao.png" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
 require_rg "PortalGlyphMaskTextureCache" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
 require_rg "UIColor.black" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
 require_rg "occlusion mask material applied" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
 require_rg "usdzAuthoredMaterialOverridden: true" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
+reject_rg "sidecarNames" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
+reject_rg "expectedSidecar" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowBundleController.swift"
+
+require_rg "textures/ao.png" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWalkieBundleController.swift"
+require_rg "embedded_usdz_texture" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWalkieBundleController.swift"
+require_rg "expectedEmbedded: textures/ao.png" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWalkieBundleController.swift"
+require_rg "PortalGlyphMaskTextureCache" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWalkieBundleController.swift"
+require_rg "UIColor.black" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWalkieBundleController.swift"
+require_rg "occlusion mask material applied" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWalkieBundleController.swift"
+require_rg "usdzAuthoredMaterialOverridden: true" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWalkieBundleController.swift"
+reject_rg "sidecarNames" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWalkieBundleController.swift"
+reject_rg "expectedSidecar" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWalkieBundleController.swift"
 
 require_rg "PortalHDRIAtmosphere" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"
 require_rg "HordePortalGroundDiscFactory" "Gravitas Plague/Gravitas Plague/Turing/Props/TuringStoryWindowPortalContentProvider.swift"

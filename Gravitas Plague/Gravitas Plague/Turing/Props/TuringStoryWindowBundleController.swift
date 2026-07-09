@@ -266,9 +266,9 @@ final class TuringStoryWindowBundleController: ObservableObject {
                 """
                 [TuringWindowPortal] occlusion mask texture not found
                   entity: \(occlusionEntity.name)
-                  expectedSidecar: ao.png
+                  expectedEmbedded: textures/ao.png
                   rule: white_opaque_black_transparent
-                  action: hide_occlusion_mesh_until_mask_exists
+                  action: hide_occlusion_mesh_until_embedded_mask_exists
                 """
             )
             return
@@ -359,44 +359,9 @@ final class TuringStoryWindowBundleController: ObservableObject {
     private func resolveOcclusionMaskURL(
         bundleURL: URL
     ) -> URL? {
-        if let embedded = extractEmbeddedOcclusionMaskURL(
+        return extractEmbeddedOcclusionMaskURL(
             bundleURL: bundleURL
-        ) {
-            return embedded
-        }
-
-        let directory = bundleURL.deletingLastPathComponent()
-        let sidecarNames = [
-            "ao",
-            "occlusion-01",
-            "occlusion_01",
-            "TuringStoryWallBundle_Occlusion01",
-            "TuringStoryWindowBundle_Occlusion01"
-        ]
-
-        for name in sidecarNames {
-            let url = directory
-                .appendingPathComponent(name)
-                .appendingPathExtension("png")
-            if FileManager.default.fileExists(atPath: url.path) {
-                return url
-            }
-        }
-
-        for name in sidecarNames {
-            if let url = Bundle.main.url(
-                forResource: name,
-                withExtension: "png",
-                subdirectory: "Turing/Props"
-            ) ?? Bundle.main.url(
-                forResource: name,
-                withExtension: "png"
-            ) {
-                return url
-            }
-        }
-
-        return nil
+        )
     }
 
     private func extractEmbeddedOcclusionMaskURL(
