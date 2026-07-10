@@ -53,7 +53,6 @@ enum TuringStoryWallSliceError: LocalizedError {
     case promptTooLarge
     case malformedResponse(String)
     case invalidPlan([String])
-    case noExactPlacement(String)
     case assetPreparationFailed(String)
     case commitFailed(String)
 
@@ -64,7 +63,6 @@ enum TuringStoryWallSliceError: LocalizedError {
         case .promptTooLarge: return "Story wall-slice prompt exceeded the Foundation budget."
         case .malformedResponse(let value): return "Malformed Story wall-slice response: \(value)"
         case .invalidPlan(let issues): return issues.joined(separator: "; ")
-        case .noExactPlacement(let prop): return "No exact placement resolved for \(prop)."
         case .assetPreparationFailed(let value): return "Asset preparation failed: \(value)"
         case .commitFailed(let value): return "Atomic slice-layout commit failed: \(value)"
         }

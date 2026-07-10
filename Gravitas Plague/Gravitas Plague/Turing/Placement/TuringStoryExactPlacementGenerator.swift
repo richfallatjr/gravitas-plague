@@ -127,9 +127,6 @@ struct TuringStoryExactPlacementGenerator: Sendable {
         }
         let ordered = placements.sorted { $0.placementID < $1.placementID }
         let map = Dictionary(uniqueKeysWithValues: ordered.map { ($0.placementID, $0) })
-        guard !ordered.filter({ $0.propID == .door }).isEmpty else {
-            throw TuringStoryHotspotLayoutError.noLegalDoorPlacement
-        }
         return TuringStoryExactPlacementCatalog(
             placements: ordered,
             placementByID: map,

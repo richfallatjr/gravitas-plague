@@ -143,6 +143,13 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             self.turingHUDDelayedClearTask = nil
             self.instructionHUD.clear()
             print("[TuringWallSlices] placement HUD cleared scanID=\(scanID)")
+            self.finishTuringDebugRescanIfNeeded(
+                scanID: scanID,
+                outcome: "committed"
+            )
+            self.startPendingTuringDebugRescanIfNeeded(
+                trigger: "layoutCommitted.\(scanID)"
+            )
         },
         onFailed: { [weak self] scanID, error in
             self?.showTemporaryInstructionHUD(
@@ -151,6 +158,13 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 reason: "sliceLayoutFailed.\(scanID)"
             )
             print("[TuringWallSlices] placement failure surfaced scanID=\(scanID) error=\(error)")
+            self?.finishTuringDebugRescanIfNeeded(
+                scanID: scanID,
+                outcome: "failed.\(error)"
+            )
+            self?.startPendingTuringDebugRescanIfNeeded(
+                trigger: "layoutFailed.\(scanID)"
+            )
         }
     )
     private let hordeRoomScanTracker = HordeRoomScanTracker()
@@ -169,6 +183,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var turingStoryPlacementScanCompleted = false
     private var turingStoryPlacementSpinResult: TuringStoryScanSpinResult?
     private var pendingTuringPlacementScanReasons: [String] = []
+    private var turingDebugRescanAttempt = 0
+    private var activeTuringDebugRescanAttempt: Int?
+    private var pendingTuringDebugRescanReason: String?
 
     private var architectureFrameIndex = 0
     private var latestFrameClockSnapshot: FrameClockSnapshot?
@@ -700,6 +717,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 reason: reason
             )
 
+        case .restartTuringStoryPlacementRoomScan(let reason):
+            restartTuringStoryPlacementRoomScan(
+                reason: reason
+            )
+
         case .updatePortalHDRIAtmosphere(let atmosphere):
             currentStoryWindowAtmosphere = atmosphere
             wallPosterUIController.updateTuringWindowDayNightIcon(
@@ -750,6 +772,114 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               runtimeReady: false
               qwenSmokeAutoRun: false
             """
+        )
+    }
+
+    private func restartTuringStoryPlacementRoomScan(
+        reason: String
+    ) {
+        guard !turingStoryWallLayoutCoordinator.isPlanningOrCommitting else {
+            pendingTuringDebugRescanReason = reason
+            print("""
+            [TuringRoomScanDebug] repeat queued
+              reason: \(reason)
+              activeLayoutState: \(turingStoryWallLayoutCoordinator.state.rawValue)
+              action: start_after_active_layout_finishes
+            """)
+            return
+        }
+
+        turingDebugRescanAttempt += 1
+        let attempt = turingDebugRescanAttempt
+        let previousDoorPlaced = turingDoorBundleController.isPlaced
+        let previousWindowPlaced = turingWindowBundleController.isPlaced
+        let previousWalkiePlaced = turingWalkieBundleController.isPlaced
+        let previousPosterPlaced = wallPosterUIController.isLocked
+
+        turingHUDDelayedClearTask?.cancel()
+        turingHUDDelayedClearTask = nil
+        cancelTuringStoryPlacementRoomScan(
+            reason: "debugRestart.\(attempt)"
+        )
+
+        TuringStoryWalkieAudioRoute.clear(
+            reason: "debugRoomRescan.\(attempt)"
+        )
+        turingStoryPropBillboardIconController?.removeWalkieMicIcon()
+        turingDoorBundleController.reset(
+            reason: "debugRoomRescan.\(attempt)"
+        )
+        turingWindowBundleController.reset(
+            reason: "debugRoomRescan.\(attempt)"
+        )
+        turingWalkieBundleController.reset(
+            reason: "debugRoomRescan.\(attempt)"
+        )
+        wallPosterUIController.resetPlacement(
+            reason: "debugRoomRescan.\(attempt)"
+        )
+
+        turingStoryPlacementScanCompleted = false
+        turingStoryPlacementSpinResult = nil
+        turingStoryScanSpinTracker.reset()
+        pendingTuringPlacementScanReasons.removeAll()
+        turingStoryWallLayoutCoordinator.resetForRetry()
+        activeTuringDebugRescanAttempt = attempt
+
+        print("""
+        [TuringRoomScanDebug] repeat started
+          attempt: \(attempt)
+          reason: \(reason)
+          previousDoorPlaced: \(previousDoorPlaced)
+          previousWindowPlaced: \(previousWindowPlaced)
+          previousWalkiePlaced: \(previousWalkiePlaced)
+          previousPosterPlaced: \(previousPosterPlaced)
+          retainedWallCandidates: \(roomSkinningCoordinator.wallManager.wallCandidates.count)
+          retainedFloorCandidates: \(roomSkinningCoordinator.wallManager.floorCandidates.count)
+          priorStoryOccupanciesRemoved: true
+        """)
+
+        requestTuringStoryPlacementRoomScan(
+            reason: "debugRepeat.\(attempt).\(reason)"
+        )
+    }
+
+    private func finishTuringDebugRescanIfNeeded(
+        scanID: String,
+        outcome: String
+    ) {
+        guard let attempt = activeTuringDebugRescanAttempt else {
+            return
+        }
+
+        activeTuringDebugRescanAttempt = nil
+        print("""
+        [TuringRoomScanDebug] repeat finished
+          attempt: \(attempt)
+          scanID: \(scanID)
+          outcome: \(outcome)
+          doorPlaced: \(turingDoorBundleController.isPlaced)
+          windowPlaced: \(turingWindowBundleController.isPlaced)
+          walkiePlaced: \(turingWalkieBundleController.isPlaced)
+          posterPlaced: \(wallPosterUIController.isLocked)
+        """)
+    }
+
+    private func startPendingTuringDebugRescanIfNeeded(
+        trigger: String
+    ) {
+        guard let reason = pendingTuringDebugRescanReason else {
+            return
+        }
+
+        pendingTuringDebugRescanReason = nil
+        print("""
+        [TuringRoomScanDebug] queued repeat released
+          trigger: \(trigger)
+          reason: \(reason)
+        """)
+        restartTuringStoryPlacementRoomScan(
+            reason: reason
         )
     }
 

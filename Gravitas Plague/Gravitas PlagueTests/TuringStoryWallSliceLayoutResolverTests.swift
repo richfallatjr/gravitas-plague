@@ -37,4 +37,33 @@ final class TuringStoryWallSliceLayoutResolverTests: XCTestCase {
         XCTAssertEqual(result.assignments.map(\.propID), [.door, .window, .walkieShelf])
         XCTAssertEqual(result.assignments[0].sliceIDs, ["10"])
     }
+
+    func testKnownSliceWithoutMatchingOptionStillProjectsRequestedProp() throws {
+        let fixture = try makeSliceFixture()
+        let selectedSlice = try XCTUnwrap(
+            fixture.map.slices.first {
+                !$0.options.contains(.shelfOne)
+            }
+        )
+        let plan = TuringStoryWallSlicePlan(
+            d: nil,
+            w: nil,
+            s: [selectedSlice.sliceID],
+            p: nil
+        )
+
+        let result = try TuringStoryWallSliceLayoutResolver().resolve(
+            plan: plan,
+            map: fixture.map,
+            catalog: fixture.catalog
+        )
+
+        XCTAssertEqual(result.assignments.count, 1)
+        XCTAssertEqual(result.assignments[0].propID, .walkieShelf)
+        XCTAssertEqual(result.assignments[0].sliceIDs, [selectedSlice.sliceID])
+        XCTAssertEqual(
+            result.assignments[0].placement.placementID,
+            "s:slice-\(selectedSlice.sliceID):direct"
+        )
+    }
 }

@@ -14,6 +14,8 @@ struct TuringEpisodePickerView: View {
     @State private var dictationPressActive = false
     @State private var dictationStartTask: Task<Void, Never>?
     @State private var qwenDebugStatus = "Idle"
+    @State private var roomScanRequestStarting = false
+    @State private var roomScanAttempt = 0
 #endif
 
     private let episodes = TuringEpisodeCatalog.developmentEpisodes
@@ -42,6 +44,30 @@ struct TuringEpisodePickerView: View {
             }
 
 #if DEBUG || GR_TURING_DIAGNOSTICS
+            Divider()
+                .padding(.vertical, 4)
+
+            Button {
+                runStoryRoomScanAgain()
+            } label: {
+                HStack(spacing: 8) {
+                    if roomScanRequestStarting {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+
+                    Text(
+                        roomScanRequestStarting
+                            ? "Opening Room Scan..."
+                            : "Run Room Scan Again"
+                    )
+                }
+            }
+            .buttonStyle(.bordered)
+            .disabled(roomScanRequestStarting)
+
             if PlagueFeatureFlags.showQwenHelloWorldInEpisodePicker {
                 Divider()
                     .padding(.vertical, 4)
@@ -176,6 +202,42 @@ struct TuringEpisodePickerView: View {
     }
 
 #if DEBUG || GR_TURING_DIAGNOSTICS
+    private func runStoryRoomScanAgain() {
+        guard !roomScanRequestStarting else {
+            return
+        }
+
+        roomScanRequestStarting = true
+
+        Task { @MainActor in
+            defer {
+                roomScanRequestStarting = false
+            }
+
+            guard await ensureImmersiveSpaceForTuringHUD(
+                reason: "debugRoomScanAgain"
+            ) else {
+                qwenDebugStatus = "Failed: immersive space unavailable for room scan"
+                return
+            }
+
+            roomScanAttempt += 1
+            let reason = "storyDebugUI.attempt.\(roomScanAttempt)"
+            qwenDebugStatus = "Room scan attempt \(roomScanAttempt) started"
+
+            print("""
+            [TuringRoomScanDebug] repeat requested
+              uiAttempt: \(roomScanAttempt)
+              reason: \(reason)
+              immersiveSpaceStatus: open
+            """)
+
+            session.send(
+                .restartTuringStoryPlacementRoomScan(reason)
+            )
+        }
+    }
+
     @ViewBuilder
     private func knownQwenButton(
         title: String,

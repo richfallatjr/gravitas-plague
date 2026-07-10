@@ -80,11 +80,16 @@ actor TuringStoryWallSliceLayoutPlanner {
         datasetJSON: String
     ) async throws -> (plan: TuringStoryWallSlicePlan, raw: String) {
         let template = try loadPrompt(named: "storyWallSliceLayoutRepair")
+        let primaryTemplate = try loadPrompt(named: "storyWallSliceLayoutPlanner")
+        let primaryPrompt = primaryTemplate.replacingOccurrences(
+            of: "{{wallSliceDatasetJSON}}",
+            with: datasetJSON
+        )
         let issuesJSON = try encode(issues)
         let prompt = template
             .replacingOccurrences(of: "{{previousResponseJSON}}", with: previousResponse)
             .replacingOccurrences(of: "{{repairIssuesJSON}}", with: issuesJSON)
-            .replacingOccurrences(of: "{{wallSliceDatasetJSON}}", with: datasetJSON)
+            .replacingOccurrences(of: "{{primaryPrompt}}", with: primaryPrompt)
         try preflight(prompt)
         print("[TuringWallSlices] repair started freshSession=true")
         let raw = try await runner.runPrompt(

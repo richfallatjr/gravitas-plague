@@ -124,6 +124,7 @@ final class PlagueDemoSession: ObservableObject {
         case startStoryEpisode(TuringEpisodeID)
         case requestStoryWalkieBundlePlacement
         case requestTuringStoryPlacementRoomScan(String)
+        case restartTuringStoryPlacementRoomScan(String)
         case updatePortalHDRIAtmosphere(PortalHDRIAtmosphere)
         case updatePortalLoopGainDB(Float)
         case updateEnemyCollisionDebugVisible(Bool)

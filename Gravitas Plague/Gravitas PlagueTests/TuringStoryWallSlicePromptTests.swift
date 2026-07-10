@@ -3,7 +3,7 @@ import XCTest
 @testable import Gravitas_Plague
 
 final class TuringStoryWallSlicePromptTests: XCTestCase {
-    func testPromptTeachesWallFirstRankingAndUsesDatasetIDsOnly() throws {
+    func testRepairDelegatesToExactCurrentPrimaryPrompt() throws {
         let testFile = URL(fileURLWithPath: #filePath)
         let project = testFile.deletingLastPathComponent().deletingLastPathComponent()
         let promptsURL = project
@@ -20,12 +20,12 @@ final class TuringStoryWallSlicePromptTests: XCTestCase {
         XCTAssertTrue(planner.contains("Slices are already listed in room order"))
         XCTAssertTrue(planner.contains("rank currently unused walls"))
         XCTAssertTrue(planner.contains("Every returned slice ID must appear verbatim"))
-        XCTAssertTrue(repair.contains("one selected option-start slice ID"))
-        XCTAssertTrue(repair.contains("must be non-null in the replacement"))
-        XCTAssertTrue(repair.contains("Every returned slice ID must appear verbatim"))
-        XCTAssertTrue(repair.contains("Do not reuse any ID identified as unknown"))
         XCTAssertTrue(planner.contains("exactly the keys d, w, s, p"))
-        XCTAssertTrue(repair.contains("exactly the keys d, w, s, p"))
+        XCTAssertTrue(repair.contains("{{primaryPrompt}}"))
+        XCTAssertTrue(repair.contains("{{previousResponseJSON}}"))
+        XCTAssertTrue(repair.contains("{{repairIssuesJSON}}"))
+        XCTAssertFalse(repair.contains("door returns one slice advertising D2"))
+        XCTAssertFalse(repair.contains("shelf uses one S1 slice"))
         XCTAssertFalse(planner.contains("v must be"))
         XCTAssertFalse(planner.contains("scan must"))
         XCTAssertFalse(repair.contains("v must be"))
