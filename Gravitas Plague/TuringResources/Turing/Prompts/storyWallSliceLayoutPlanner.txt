@@ -12,38 +12,34 @@ HOW THE PERIMETER WORKS
 
 SLICE DATA
 
-Each slice row is:
-[sliceID, options]
+Each slice is:
+{"id":"SLICE_ID","options":"D2,W1,W2,S1,P1","wall":WALL_NUMBER,"score":NORMALIZED_WALL_AREA}
+
+- id is the only slice ID you may return.
+- options identifies the suggested prop types for that slice.
+- wall is the measured wall number containing the slice.
+- score is that wall's measured surface area divided by the largest measured wall surface area.
+- The largest wall has score 1.0. All other scores are between 0 and 1.
+- Every slice on the same wall has the same score.
 
 
 HARD PRIORITY
 
 Place in this order: door, window, walkie shelf, poster.
 
-WALL-FIRST HOTSPOT SCORING
+WALL SELECTION ORDER
 
-"Hotspot count" means the number of legal candidate placements a wall offers for the current prop after removing slices reserved by higher-priority props.
-
-Count hotspots independently for each prop:
-- door hotspot count = number of legal D2 starts;
-- window hotspot count = number of legal W1 starts plus legal W2 starts;
-- shelf hotspot count = number of legal S1 slices;
-- poster hotspot count = number of legal P1 slices.
-
-For each prop, rank currently unused walls by that prop's legal hotspot count.
-
-Required scoring order:
-1. Door: strongest wall by legal door hotspots, then the best legal door slice group on that wall.
-2. Window: strongest remaining unused wall by legal window hotspots, then its best legal window slice group.
-3. Shelf: strongest remaining unused wall by legal shelf hotspots, then its best legal shelf slice.
-4. Poster: strongest remaining unused wall by legal poster hotspots, then its best legal poster slice.
-5. If the expected ranked unused wall is not legal, use the best remaining legal unused wall.
-6. If no unused wall remains, use the best legal shared wall without reusing slices.
+For each prop in priority order:
+1. First prefer a different wall that has not already been selected for another prop.
+2. Next prefer the available wall with the largest score.
+3. Then choose the best slice on that wall for the prop.
+4. Share a wall only when a different usable wall is unavailable.
 
 
 SEPARATE-WALL PREFERENCE
 
-- Prefer one different wall per prop
+- Prefer one different wall per prop.
+- After satisfying different-wall placement, prefer the largest wall-area scores.
 
 
 OUTPUT CONTRACT
