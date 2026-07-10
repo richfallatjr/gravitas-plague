@@ -123,7 +123,16 @@ public actor TuringQwenNativeBaseCloneEngine {
           precomputedCloneArtifacts: true
         """)
 
-        let generated = try generateCodebookForDecode(prompt)
+        await TuringQwenNativeSpeechDecodeGate.shared.beginGeneration()
+        let generated: GeneratedCodebookForDecode
+        do {
+            generated = try generateCodebookForDecode(prompt)
+        } catch {
+            await TuringQwenNativeSpeechDecodeGate.shared.cancelGeneration(
+                reason: error.localizedDescription
+            )
+            throw error
+        }
         let generatedRows = generated.generatedRows
         let codePredictorSeconds = generated.codePredictorTotalSeconds
         let talkerOneStepTotalSeconds = generated.talkerOneStepTotalSeconds
@@ -143,12 +152,13 @@ public actor TuringQwenNativeBaseCloneEngine {
           totalRows: \(rowsForDecode.count)
           decodeFullReference: false
           trimReferenceAfterDecode: true
-          decoderConcurrencyPolicy: serializedHighWatermarkStage
-          qwenGenerationConcurrencyUnchanged: true
+          decoderConcurrencyPolicy: serializedAfterConcurrentGeneration
+          talkerDecodeOverlapAllowed: false
+          freshTalkerConcurrency: 2
         """)
 
         let decodeStart = Date()
-        let fullAudio = try await TuringQwenNativeSpeechDecodeGate.shared.decode(
+        let fullAudio = try await TuringQwenNativeSpeechDecodeGate.shared.decodeAfterGeneration(
             codebookRows: rowsForDecode,
             modelRoot: modelRoot,
             performanceMode: prompt.performanceMode,

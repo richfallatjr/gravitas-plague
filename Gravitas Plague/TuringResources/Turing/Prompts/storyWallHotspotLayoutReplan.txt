@@ -2,6 +2,11 @@ Your previous whole-room Story placement was physically invalid.
 
 Return a complete replacement for all four props using the same room dataset.
 
+Compact row schemas:
+perimeter = [wallID,startX,startZ,endX,endZ,height,stability,floorFrontage]
+hotspots = [hotspotID,propID,wallID,minLocalX,maxLocalX,recommendedLocalX,bestFloorFrontage,meanFloorFrontage,floorKnown,wallCenterScore,cornerClearanceScore,wallStability,quality]
+Each hotspot wallID references the matching wallID in perimeter.
+
 Rules:
 - Use only listed hotspot IDs.
 - u must be between 0 and 1.
@@ -9,14 +14,17 @@ Rules:
 - Preserve strict priority d, w, s, p.
 - For every prop whose previous value is not null, choose a different hotspot ID than that prop used in the previous response.
 - Changing only u is forbidden. The replacement hotspot ID itself must be different for each previously placed prop.
+- The third value in each hotspot row is its wall ID.
+- Every non-null prop must select a hotspot on a different wall ID. Never place two props on the same wall ID.
+- When required is [1,1,1,1], the four selected hotspots must use four distinct wall IDs.
 - Never select both hotspot IDs from any pair listed in conflicts.
 - When selected hotspots are on the same wall, use their ranges, chosen u values, and prop widths to ensure the resulting props do not overlap.
 - Do not repeat any hotspot ID for the same prop from the previous response, even if only one pair caused the validation error.
 - Do not invent coordinates, walls, hotspots, transforms, props, or keys.
-- Return JSON only.
-
-Exact response shape:
-{"v":1,"scan":"copied scan","a":{"d":["d0",0.42],"w":["w1",0.68],"s":["s0",0.35],"p":["p2",0.50]}}
+- Return JSON only with exactly top-level keys "v", "scan", "a" and exactly "a" keys "d", "w", "s", "p".
+- v is 1. Copy Room.scan exactly into scan. a contains exactly d, w, s, p.
+- Each placed prop value is [one listed hotspot ID for that prop, chosen u]. Each unplaced prop value is null.
+- Do not copy hotspot IDs or u values from these instructions. Select them from Room.
 
 Previous response:
 {{previousResponseJSON}}

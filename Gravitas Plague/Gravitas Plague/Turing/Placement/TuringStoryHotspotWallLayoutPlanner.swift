@@ -1,6 +1,7 @@
 import Foundation
 
 actor TuringStoryHotspotWallLayoutPlanner {
+    // Spatial replan is disabled; malformed output is recovered mechanically or by JSON repair.
     private let runner: any TuringFoundationQueryRunning
     private let compressor: TuringStoryPlacementHotspotCompressor
     let debugArtifacts: TuringStoryHotspotDebugArtifacts
@@ -72,7 +73,7 @@ actor TuringStoryHotspotWallLayoutPlanner {
         )
         print("[TuringWallHotspotRaw] BEGIN\n\(raw)\n[TuringWallHotspotRaw] END")
         await debugArtifacts.writeRawResponse(raw)
-        let plan = try await decodeWithOneRepair(
+        let plan = await decodeRecoveringMalformedJSON(
             raw,
             scanID: context.perimeter.scanID,
             atlas: accepted.atlas
@@ -87,69 +88,197 @@ actor TuringStoryHotspotWallLayoutPlanner {
         )
     }
 
-    func replan(
-        previous: TuringStoryHotspotPlannerResult,
-        validationError: String
-    ) async throws -> TuringStoryHotspotPlan {
-        let template = try loadPrompt(named: "storyWallHotspotLayoutReplan")
-        let datasetJSON = try encodeCompact(previous.dataset)
-        let prompt = template
-            .replacingOccurrences(
-                of: "{{previousResponseJSON}}",
-                with: previous.rawResponse
-            )
-            .replacingOccurrences(
-                of: "{{validationErrorsJSON}}",
-                with: jsonString(validationError)
-            )
-            .replacingOccurrences(
-                of: "{{hotspotDatasetJSON}}",
-                with: datasetJSON
-            )
-        let budget = TuringStoryFoundationPromptBudget.evaluate(
-            prompt: prompt,
-            hotspotCount: previous.atlas.hotspots.count
-        )
-        logBudget(budget)
-        guard budget.withinBudget else {
-            throw TuringStoryHotspotLayoutError.compactHotspotPromptStillTooLarge
-        }
-        print("[TuringWallHotspot] replan request started freshSession=true")
-        let raw = try await runner.runPrompt(
-            prompt,
-            purpose: "storyWallHotspotLayoutReplan"
-        )
-        print("[TuringWallHotspotReplanRaw] BEGIN\n\(raw)\n[TuringWallHotspotReplanRaw] END")
-        await debugArtifacts.writeRawResponse(raw)
-        do { return try strictDecode(raw) }
-        catch {
-            throw TuringStoryHotspotLayoutError.secondPlanInvalid(error.localizedDescription)
-        }
-    }
-
-    private func decodeWithOneRepair(
+    private func decodeRecoveringMalformedJSON(
         _ raw: String,
         scanID: String,
         atlas: TuringStoryHotspotAtlas
-    ) async throws -> TuringStoryHotspotPlan {
-        do { return try strictDecode(raw) }
-        catch {
-            let grouped = Dictionary(grouping: atlas.hotspots, by: \.propID).mapValues {
-                $0.map(\.hotspotID).sorted()
-            }
-            let repairPrompt = """
-            Repair malformed JSON. Return JSON only with exact keys v,scan,a and exact a keys d,w,s,p.
-            Each value is null or [hotspotID,u]. Scan must be \(scanID).
-            Valid IDs: \(grouped)
-            Parse error: \(error.localizedDescription)
-            Malformed response: \(raw)
-            """
+    ) async -> TuringStoryHotspotPlan {
+        if let strict = try? strictDecode(raw) {
+            return strict
+        }
+
+        let normalized = mechanicallyNormalize(
+            raw,
+            scanID: scanID,
+            atlas: atlas
+        )
+        if normalized.selectionCount == TuringStoryPropID.allCases.count {
+            print(
+                "[TuringWallHotspotJSON] malformed response normalized mechanically selectionCount=\(normalized.selectionCount) repairRequired=false"
+            )
+            return normalized.plan
+        }
+
+        let validIDs = Dictionary(uniqueKeysWithValues: TuringStoryPropID.allCases.map { propID in
+            (
+                propID.shortID,
+                atlas.hotspots(for: propID).map(\.hotspotID).sorted()
+            )
+        })
+        let validIDsJSON = (try? encodeCompact(validIDs)) ?? "{}"
+        let repairPrompt = """
+        Repair a Story wall-placement JSON response without changing its selected hotspot IDs or u values.
+        Return JSON only. No markdown and no commentary.
+        Use exactly top-level keys "v", "scan", "a". Set "v" to 1 and "scan" to "\(scanID)".
+        "a" must contain exactly "d", "w", "s", "p". Each value is null or [hotspotID,u].
+        Valid hotspot IDs by prop: \(validIDsJSON)
+        Malformed response:
+        \(raw)
+        """
+
+        do {
             let repaired = try await runner.runPrompt(
                 repairPrompt,
                 purpose: "storyWallHotspotLayoutPlanner.jsonRepair"
             )
-            return try strictDecode(repaired)
+            print(
+                "[TuringWallHotspotJSONRepairRaw] BEGIN\n\(repaired)\n[TuringWallHotspotJSONRepairRaw] END"
+            )
+            if let strict = try? strictDecode(repaired) {
+                return strict
+            }
+            let repairedNormalization = mechanicallyNormalize(
+                repaired,
+                scanID: scanID,
+                atlas: atlas
+            )
+            if repairedNormalization.selectionCount >= normalized.selectionCount,
+               repairedNormalization.selectionCount > 0 {
+                print(
+                    "[TuringWallHotspotJSON] malformed repair normalized mechanically selectionCount=\(repairedNormalization.selectionCount)"
+                )
+                return repairedNormalization.plan
+            }
+        } catch {
+            print(
+                "[TuringWallHotspotJSON] repair request failed; using mechanically normalized original response error=\(error.localizedDescription)"
+            )
         }
+
+        print(
+            "[TuringWallHotspotJSON] malformed JSON did not fail placement selectionCount=\(normalized.selectionCount)"
+        )
+        return normalized.plan
+    }
+
+    private func mechanicallyNormalize(
+        _ raw: String,
+        scanID: String,
+        atlas: TuringStoryHotspotAtlas
+    ) -> (plan: TuringStoryHotspotPlan, selectionCount: Int) {
+        let object: [String: Any]? = {
+            guard let data = try? TuringJSONSanitizer.extractSingleTopLevelObject(from: raw),
+                  let json = try? JSONSerialization.jsonObject(with: data),
+                  let dictionary = json as? [String: Any] else {
+                return nil
+            }
+            return dictionary
+        }()
+        let nested = object?["a"] as? [String: Any]
+
+        func selection(for propID: TuringStoryPropID) -> TuringHotspotSelection? {
+            let validIDs = Set(atlas.hotspots(for: propID).map(\.hotspotID))
+            let nestedValue = nested?[propID.shortID]
+            let siblingValue = object?[propID.shortID]
+            let hotspotID = extractHotspotID(from: nestedValue, validIDs: validIDs)
+                ?? extractHotspotID(from: siblingValue, validIDs: validIDs)
+                ?? firstMentionedHotspotID(in: raw, validIDs: validIDs)
+            guard let hotspotID else { return nil }
+            let u = extractNormalizedPosition(from: nestedValue)
+                ?? extractNormalizedPosition(from: siblingValue)
+                ?? 0.5
+            return TuringHotspotSelection(
+                hotspotID: hotspotID,
+                normalizedPosition: min(1, max(0, u))
+            )
+        }
+
+        let door = selection(for: .door)
+        let window = selection(for: .window)
+        let walkieShelf = selection(for: .walkieShelf)
+        let poster = selection(for: .poster)
+        let plan = TuringStoryHotspotPlan(
+            v: 1,
+            scan: scanID,
+            a: .init(
+                d: door,
+                w: window,
+                s: walkieShelf,
+                p: poster
+            )
+        )
+        let selectionCount = [door, window, walkieShelf, poster]
+            .compactMap { $0 }
+            .count
+        return (plan, selectionCount)
+    }
+
+    private func extractHotspotID(
+        from value: Any?,
+        validIDs: Set<String>
+    ) -> String? {
+        guard let value else { return nil }
+        if let string = value as? String, validIDs.contains(string) {
+            return string
+        }
+        if let array = value as? [Any] {
+            for item in array {
+                if let hotspotID = extractHotspotID(from: item, validIDs: validIDs) {
+                    return hotspotID
+                }
+            }
+        }
+        if let dictionary = value as? [String: Any] {
+            for key in ["hotspotID", "hotspot", "id", "selection"] {
+                if let hotspotID = extractHotspotID(
+                    from: dictionary[key],
+                    validIDs: validIDs
+                ) {
+                    return hotspotID
+                }
+            }
+        }
+        return nil
+    }
+
+    private func extractNormalizedPosition(from value: Any?) -> Float? {
+        guard let value else { return nil }
+        if let array = value as? [Any] {
+            if array.count > 1, let number = number(from: array[1]) {
+                return number
+            }
+            return array.compactMap(number(from:)).last
+        }
+        if let dictionary = value as? [String: Any] {
+            for key in ["u", "normalizedPosition", "position"] {
+                if let number = number(from: dictionary[key]) {
+                    return number
+                }
+            }
+        }
+        return number(from: value)
+    }
+
+    private func number(from value: Any?) -> Float? {
+        if let number = value as? NSNumber {
+            return number.floatValue
+        }
+        if let string = value as? String {
+            return Float(string)
+        }
+        return nil
+    }
+
+    private func firstMentionedHotspotID(
+        in raw: String,
+        validIDs: Set<String>
+    ) -> String? {
+        validIDs.compactMap { hotspotID -> (String, String.Index)? in
+            guard let range = raw.range(of: "\"\(hotspotID)\"") else { return nil }
+            return (hotspotID, range.lowerBound)
+        }
+        .min { $0.1 < $1.1 }?
+        .0
     }
 
     private func strictDecode(_ raw: String) throws -> TuringStoryHotspotPlan {
@@ -186,12 +315,6 @@ actor TuringStoryHotspotWallLayoutPlanner {
             throw TuringStoryHotspotLayoutError.malformedResponse("Missing prompt \(name).txt")
         }
         return try String(contentsOf: url, encoding: .utf8)
-    }
-
-    private func jsonString(_ value: String) -> String {
-        guard let data = try? JSONEncoder().encode(value),
-              let string = String(data: data, encoding: .utf8) else { return "\"error\"" }
-        return string
     }
 
     private func logBudget(_ budget: TuringStoryFoundationPromptBudget.Result) {

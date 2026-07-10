@@ -213,37 +213,15 @@ final class TuringStoryWallLayoutCoordinator {
             )
 
             state = .validating
-            var acceptedPlan = plannerResult.plan
-            let validated: TuringStoryValidatedHotspotLayout
-            do {
-                validated = try validator.validate(
-                    plan: acceptedPlan,
-                    context: context,
-                    atlas: plannerResult.atlas,
-                    liveWalls: wallManager.wallCandidates
-                )
-                await artifacts.writeValidation(scanID: scanID, error: nil)
-            } catch {
-                await artifacts.writeValidation(scanID: scanID, error: error.localizedDescription)
-                acceptedPlan = try await planner.replan(
-                    previous: plannerResult,
-                    validationError: error.localizedDescription
-                )
-                do {
-                    validated = try validator.validate(
-                        plan: acceptedPlan,
-                        context: context,
-                        atlas: plannerResult.atlas,
-                        liveWalls: wallManager.wallCandidates
-                    )
-                    await artifacts.writeValidation(scanID: scanID, error: nil)
-                } catch {
-                    throw TuringStoryHotspotLayoutError.secondPlanInvalid(error.localizedDescription)
-                }
-            }
+            let acceptedPlan = plannerResult.plan
+            let validated = try validator.acceptPromptSelections(
+                plan: acceptedPlan,
+                context: context,
+                atlas: plannerResult.atlas
+            )
             await artifacts.writeAcceptedPlan(acceptedPlan)
             print(
-                "[TuringWallHotspot] plan validated placementVector=\(validated.placementVector.compactArray.map(String.init).joined(separator: ",")) hardOverlapCount=0"
+                "[TuringWallHotspot] prompt plan accepted semanticGates=false spatialReplan=false overlapGate=false placementVector=\(validated.placementVector.compactArray.map(String.init).joined(separator: ","))"
             )
 
             state = .preparingAssets
@@ -258,10 +236,6 @@ final class TuringStoryWallLayoutCoordinator {
             }
             TuringMemoryBudgetProbe.log(label: "afterStoryPropAssetPrepare")
             try Task.checkCancellation()
-            try validator.validateLiveWalls(
-                layout: validated,
-                liveWalls: wallManager.wallCandidates
-            )
             state = .committing
             print("[TuringWallHotspot] commit started order=door,window,walkieShelf,poster")
             try await commit(validated, wallManager: wallManager, atmosphere: atmosphere)

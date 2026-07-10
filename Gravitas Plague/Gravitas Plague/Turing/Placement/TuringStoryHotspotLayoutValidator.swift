@@ -33,6 +33,79 @@ struct TuringStoryHotspotLayoutValidator: Sendable {
     private let maximumWallCenterDrift: Float = 0.10
     private let maximumWallNormalDeltaDegrees: Float = 8.0
 
+    func acceptPromptSelections(
+        plan: TuringStoryHotspotPlan,
+        context: TuringStoryHotspotPlanningContext,
+        atlas: TuringStoryHotspotAtlas
+    ) throws -> TuringStoryValidatedHotspotLayout {
+        guard plan.v == 1 else {
+            throw TuringStoryHotspotLayoutError.malformedResponse("v must be 1")
+        }
+        guard plan.scan == context.perimeter.scanID else {
+            throw TuringStoryHotspotLayoutError.scanMismatch
+        }
+
+        let selections: [(TuringStoryPropID, TuringHotspotSelection?)] = [
+            (.door, plan.a.d),
+            (.window, plan.a.w),
+            (.walkieShelf, plan.a.s),
+            (.poster, plan.a.p)
+        ]
+        var accepted: [TuringStoryValidatedHotspotAssignment] = []
+
+        for (propID, selection) in selections {
+            guard let selection else { continue }
+            guard selection.normalizedPosition.isFinite else {
+                throw TuringStoryHotspotLayoutError.invalidNormalizedPosition(propID.rawValue)
+            }
+            guard let hotspot = atlas.hotspotByID[selection.hotspotID] else {
+                throw TuringStoryHotspotLayoutError.unknownHotspot(selection.hotspotID)
+            }
+            guard hotspot.propID == propID else {
+                throw TuringStoryHotspotLayoutError.hotspotPropMismatch(selection.hotspotID)
+            }
+            let u = min(1, max(0, selection.normalizedPosition))
+            let requestedX = hotspot.minimumLocalX + u *
+                (hotspot.maximumLocalX - hotspot.minimumLocalX)
+            let candidates = hotspot.exactPlacementIDs.compactMap {
+                context.catalog.placementByID[$0]
+            }
+            guard let exact = candidates.min(by: { lhs, rhs in
+                let lhsDistance = abs(lhs.localX - requestedX)
+                let rhsDistance = abs(rhs.localX - requestedX)
+                if lhsDistance != rhsDistance { return lhsDistance < rhsDistance }
+                return lhs.placementID < rhs.placementID
+            }) else {
+                throw TuringStoryHotspotLayoutError.placementResolutionFailed(
+                    selection.hotspotID
+                )
+            }
+            accepted.append(
+                TuringStoryValidatedHotspotAssignment(
+                    propID: propID,
+                    hotspotID: selection.hotspotID,
+                    normalizedPosition: u,
+                    placement: exact
+                )
+            )
+            print(
+                "[TuringWallHotspot] prompt selection accepted prop=\(propID.rawValue) hotspotID=\(selection.hotspotID) requestedU=\(selection.normalizedPosition) exactPlacementID=\(exact.placementID) localX=\(exact.localX) semanticGates=false"
+            )
+        }
+
+        let vector = TuringStoryFeasibilityVector(
+            door: plan.a.d == nil ? 0 : 1,
+            window: plan.a.w == nil ? 0 : 1,
+            walkieShelf: plan.a.s == nil ? 0 : 1,
+            poster: plan.a.p == nil ? 0 : 1
+        )
+        return TuringStoryValidatedHotspotLayout(
+            scanID: plan.scan,
+            assignments: accepted.sorted { $0.propID.priority < $1.propID.priority },
+            placementVector: vector
+        )
+    }
+
     func validate(
         plan: TuringStoryHotspotPlan,
         context: TuringStoryHotspotPlanningContext,
