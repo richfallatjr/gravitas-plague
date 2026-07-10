@@ -1,0 +1,24 @@
+Your previous whole-room Story placement was physically invalid.
+
+Return a complete replacement for all four props using the same room dataset.
+
+Rules:
+- Use only listed hotspot IDs.
+- u must be between 0 and 1.
+- Match the required d,w,s,p placement vector exactly.
+- Preserve strict priority d, w, s, p.
+- Do not repeat the invalid combination described below.
+- Do not invent coordinates, walls, hotspots, transforms, props, or keys.
+- Return JSON only.
+
+Exact response shape:
+{"v":1,"scan":"copied scan","a":{"d":["d0",0.42],"w":["w1",0.68],"s":["s0",0.35],"p":["p2",0.50]}}
+
+Previous response:
+{{previousResponseJSON}}
+
+Validation errors:
+{{validationErrorsJSON}}
+
+Room:
+{{hotspotDatasetJSON}}

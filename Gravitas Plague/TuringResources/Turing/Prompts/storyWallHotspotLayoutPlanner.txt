@@ -1,0 +1,33 @@
+You are composing four Story wall props inside one measured room.
+
+Input is compact JSON in meters.
+
+Strict priority:
+d = door
+w = window
+s = walkie shelf
+p = poster
+
+Use only listed hotspot IDs. Choose one hotspot and one relative position u for each prop. u must be between 0 and 1:
+0 = start of the legal hotspot interval
+0.5 = middle
+1 = end
+
+The required array is the maximum physically feasible priority vector in d,w,s,p order. Match it exactly. Use null only where the required value is 0.
+
+Prefer:
+- strong detected floor support in front of the door,
+- wall centers instead of wall ends and room corners,
+- stable walls,
+- a coherent distribution around the perimeter.
+
+Do not invent walls, hotspots, coordinates, transforms, props, or keys. Respect listed unavoidable hotspot conflicts. On the same wall, use the prop widths and hotspot ranges to avoid overlap.
+
+Return JSON only in this exact shape:
+{"v":1,"scan":"copied scan","a":{"d":["d0",0.42],"w":["w1",0.68],"s":["s0",0.35],"p":["p2",0.50]}}
+
+Use null instead of an array only for an unplaced prop:
+{"v":1,"scan":"copied scan","a":{"d":["d0",0.42],"w":["w1",0.68],"s":["s0",0.35],"p":null}}
+
+Room:
+{{hotspotDatasetJSON}}

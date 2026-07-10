@@ -75,6 +75,40 @@ final class TuringStoryWindowBundleController: ObservableObject {
         print("[TuringWindowPortal] installed")
     }
 
+    func prepareForPlannedPlacement() async throws {
+        let loadedRoot = try await loadBundleIfNeeded()
+        anchors = try resolveAnchors(in: loadedRoot)
+    }
+
+    func commitPlannedPlacement(
+        _ plannedPlacement: TuringStoryWindowBundlePlacement,
+        semanticReservation: WallLocalRect,
+        atmosphere: PortalHDRIAtmosphere
+    ) async throws {
+        guard let wallManager else { throw BundleError.noWallManager }
+        if anchors == nil { try await prepareForPlannedPlacement() }
+        guard let resolvedAnchors = anchors,
+              let transform = worldTransform(
+                placement: plannedPlacement,
+                wallManager: wallManager
+              ) else { throw BundleError.noPlacement }
+        root.setTransformMatrix(transform, relativeTo: nil)
+        root.isEnabled = true
+        placement = plannedPlacement
+        isPlaced = true
+        activeAtmosphere = atmosphere
+        registerOccupancy(
+            placement: plannedPlacement,
+            semanticReservation: semanticReservation
+        )
+        logBottomPlacementProof(placement: plannedPlacement, wallManager: wallManager)
+        await bindRuntimeMaterialsAndPortal(
+            anchors: resolvedAnchors,
+            atmosphere: atmosphere,
+            placement: plannedPlacement
+        )
+    }
+
     func placeOnBestWallIfNeeded(
         playerPosition: SIMD3<Float>,
         playerForward: SIMD3<Float>,
@@ -929,15 +963,17 @@ final class TuringStoryWindowBundleController: ObservableObject {
     }
 
     private func registerOccupancy(
-        placement: TuringStoryWindowBundlePlacement
+        placement: TuringStoryWindowBundlePlacement,
+        semanticReservation: WallLocalRect? = nil
     ) {
         occupancyRegistry?.unregister(id: occupancyID)
         occupancyRegistry?.register(
             id: occupancyID,
             wallID: placement.wallID,
             kind: .storyWindowBundle,
-            rect: turingWindowWallRect(for: placement),
-            padding: TuringStoryWindowBundleTuning.occupancyPaddingMeters,
+            rect: semanticReservation ?? turingWindowWallRect(for: placement),
+            padding: semanticReservation == nil
+                ? TuringStoryWindowBundleTuning.occupancyPaddingMeters : 0,
             label: "Turing Story window portal bundle"
         )
     }

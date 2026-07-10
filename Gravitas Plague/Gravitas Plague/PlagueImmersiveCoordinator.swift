@@ -124,6 +124,35 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let turingWindowBundleController = TuringStoryWindowBundleController()
     private let turingDoorBundleController = TuringStoryDoorBundleController()
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
+    private lazy var turingStoryWallLayoutCoordinator = TuringStoryWallLayoutCoordinator(
+        doorController: turingDoorBundleController,
+        windowController: turingWindowBundleController,
+        walkieController: turingWalkieBundleController,
+        posterController: wallPosterUIController,
+        onCommitted: { [weak self] scanID in
+            guard let self else { return }
+            self.configureTuringWalkieAudioAndInteraction(
+                reason: "hotspotLayout.\(scanID)",
+                attempt: 1
+            )
+            self.forestEnvironmentController.applyIBLReceiverRecursively(
+                root: self.wallPosterUIController.root
+            )
+            self.onWallPosterUIActiveChanged?(true)
+            self.turingHUDDelayedClearTask?.cancel()
+            self.turingHUDDelayedClearTask = nil
+            self.instructionHUD.clear()
+            print("[TuringWallHotspot] placement HUD cleared scanID=\(scanID)")
+        },
+        onFailed: { [weak self] scanID, error in
+            self?.showTemporaryInstructionHUD(
+                "Prop placement failure. Scan again to retry.",
+                clearAfterSeconds: 5.0,
+                reason: "hotspotLayoutFailed.\(scanID)"
+            )
+            print("[TuringWallHotspot] placement failure surfaced scanID=\(scanID) error=\(error)")
+        }
+    )
     private let hordeRoomScanTracker = HordeRoomScanTracker()
     private let turingPlacementRoomScanTracker = HordeRoomScanTracker()
     private let enemyBodySeparationResolver = HordeEnemyBodySeparationResolver()
@@ -749,7 +778,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                   action: retry_missing_story_props_without_rescan
                 """
             )
-            requestMissingTuringStoryPropPlacements(
+            turingStoryWallLayoutCoordinator.resetForRetry()
+            requestTuringStoryGlobalWallLayout(
                 reason: "cachedPlacementScan.\(reason)"
             )
             return
@@ -788,7 +818,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         roomSkinningCoordinator.startHordeRoomScanOnly()
 
         showInstructionHUD(
-            "Spin around in a full 360 degree circle to place the Turing props."
+            "Spin around in a full 360 degree circle to place the room props."
         )
 
         print(
@@ -817,11 +847,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         if percent >= 50,
            !turingPlacementRoomScanTracker.isComplete {
             showInstructionHUD(
-                "Keep turning. Turing wall placement is still mapping the room. \(percent)%"
+                "Keep turning. Prop placement is still mapping the room. \(percent)%"
             )
         } else if !turingPlacementRoomScanTracker.isComplete {
             showInstructionHUD(
-                "Spin around in a full 360 degree circle to place the Turing props. \(percent)%"
+                "Spin around in a full 360 degree circle to place the room props. \(percent)%"
             )
         }
 
@@ -838,7 +868,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         guard roomSkinningCoordinator.wallManager.floorCandidates.values
             .contains(where: { $0.isUsableFloor }) else {
             showInstructionHUD(
-                "Look down briefly. I need the floor before placing the Turing props."
+                "Look down briefly. I need the floor before placing the room props."
             )
 
             if !turingWaitingForPlacementFloorPromptShown {
@@ -869,7 +899,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         pendingTuringPlacementScanReasons.removeAll()
 
         showTemporaryInstructionHUD(
-            "Room mapped. Placing Turing props.",
+            "Room mapped. Placing props.",
             clearAfterSeconds: 2.0,
             reason: "turingPlacementScanComplete"
         )
@@ -885,7 +915,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             """
         )
 
-        requestMissingTuringStoryPropPlacements(
+        requestTuringStoryGlobalWallLayout(
             reason: "turingRoomScanComplete.\(reasons)"
         )
     }
@@ -912,52 +942,27 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     }
 
     private var turingStoryPropsArePlaced: Bool {
-        turingWalkieBundleController.isPlaced &&
+        turingStoryWallLayoutCoordinator.state == .complete &&
+            turingWalkieBundleController.isPlaced &&
             turingWindowBundleController.isPlaced &&
-            turingDoorBundleController.isPlaced
+            turingDoorBundleController.isPlaced &&
+            wallPosterUIController.isLocked
     }
 
-    private func requestMissingTuringStoryPropPlacements(
+    private func requestTuringStoryGlobalWallLayout(
         reason: String
     ) {
-        var requested: [String] = []
-
-        if !turingWalkieBundleController.isPlaced {
-            requested.append("walkie")
-            requestStoryWalkieBundlePlacement(
-                reason: reason
-            )
-        }
-
-        if !turingWindowBundleController.isPlaced {
-            requested.append("window")
-            requestStoryWindowBundlePlacement(
-                reason: reason
-            )
-        }
-
-        if !turingDoorBundleController.isPlaced {
-            requested.append("door")
-            requestStoryDoorBundlePlacement(
-                reason: reason
-            )
-        }
-
-        if requested.isEmpty {
-            clearTuringPlacementHUDIfAllPropsPlaced(
-                reason: "missingPlacementRequest.none.\(reason)"
-            )
-        }
-
-        print(
-            """
-            [TuringRoomScan] missing story prop placement requested
-              reason: \(reason)
-              requested: \(requested.isEmpty ? "none" : requested.joined(separator: ","))
-              walkiePlaced: \(turingWalkieBundleController.isPlaced)
-              windowPlaced: \(turingWindowBundleController.isPlaced)
-              doorPlaced: \(turingDoorBundleController.isPlaced)
-            """
+        let pose = spatialProvider.currentPoseOrFallback()
+        roomSkinningCoordinator.wallManager.updateViewerPositionForWallSelection(
+            pose.headPosition
+        )
+        turingStoryWallLayoutCoordinator.planAndCommit(
+            wallManager: roomSkinningCoordinator.wallManager,
+            occupancyRegistry: wallPropOccupancyRegistry,
+            viewerPosition: pose.headPosition,
+            viewerForward: pose.headForward,
+            atmosphere: currentStoryWindowAtmosphere,
+            reason: reason
         )
     }
 
@@ -981,135 +986,6 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               doorPlaced: true
             """
         )
-    }
-
-    private func requestStoryWalkieBundlePlacement(
-        reason: String
-    ) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-
-            for attempt in 1...12 {
-                let pose = self.spatialProvider.currentPoseOrFallback()
-                self.roomSkinningCoordinator.wallManager
-                    .updateViewerPositionForWallSelection(
-                        pose.headPosition
-                    )
-                let placed = await self.turingWalkieBundleController
-                    .placeOnBestWallIfNeeded(
-                        playerPosition: pose.headPosition,
-                        playerForward: pose.headForward
-                    )
-
-                if placed {
-                    self.configureTuringWalkieAudioAndInteraction(
-                        reason: reason,
-                        attempt: attempt
-                    )
-                    self.clearTuringPlacementHUDIfAllPropsPlaced(
-                        reason: "walkiePlacementReady.\(reason)"
-                    )
-                    return
-                }
-
-                try? await Task.sleep(nanoseconds: 500_000_000)
-            }
-
-            print("""
-            [TuringWalkieBundle] placement not available after retries
-              reason: \(reason)
-            """)
-        }
-    }
-
-    private func requestStoryWindowBundlePlacement(
-        reason: String
-    ) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-
-            for attempt in 1...12 {
-                let pose = self.spatialProvider.currentPoseOrFallback()
-                self.roomSkinningCoordinator.wallManager
-                    .updateViewerPositionForWallSelection(
-                        pose.headPosition
-                    )
-                let placed = await self.turingWindowBundleController
-                    .placeOnBestWallIfNeeded(
-                        playerPosition: pose.headPosition,
-                        playerForward: pose.headForward,
-                        atmosphere: self.currentStoryWindowAtmosphere
-                    )
-
-                if placed {
-                    print(
-                        """
-                        [TuringWindowPortal] placement ready
-                          reason: \(reason)
-                          attempt: \(attempt)
-                        """
-                    )
-                    self.clearTuringPlacementHUDIfAllPropsPlaced(
-                        reason: "windowPlacementReady.\(reason)"
-                    )
-                    return
-                }
-
-                try? await Task.sleep(nanoseconds: 500_000_000)
-            }
-
-            print(
-                """
-                [TuringWindowPortal] placement not available after retries
-                  reason: \(reason)
-                """
-            )
-        }
-    }
-
-    private func requestStoryDoorBundlePlacement(
-        reason: String
-    ) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-
-            for attempt in 1...12 {
-                let pose = self.spatialProvider.currentPoseOrFallback()
-                self.roomSkinningCoordinator.wallManager
-                    .updateViewerPositionForWallSelection(
-                        pose.headPosition
-                    )
-                let placed = await self.turingDoorBundleController
-                    .placeOnBestWallIfNeeded(
-                        playerPosition: pose.headPosition,
-                        playerForward: pose.headForward,
-                        atmosphere: self.currentStoryWindowAtmosphere
-                    )
-
-                if placed {
-                    print(
-                        """
-                        [TuringDoorBundle] placement ready
-                          reason: \(reason)
-                          attempt: \(attempt)
-                        """
-                    )
-                    self.clearTuringPlacementHUDIfAllPropsPlaced(
-                        reason: "doorPlacementReady.\(reason)"
-                    )
-                    return
-                }
-
-                try? await Task.sleep(nanoseconds: 500_000_000)
-            }
-
-            print(
-                """
-                [TuringDoorBundle] placement not available after retries
-                  reason: \(reason)
-                """
-            )
-        }
     }
 
     func toggleTuringStoryDoor(
@@ -1742,6 +1618,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     func shutdown() {
         onYouDiedWorldCardCleanupRequested?()
         stopHordeBenchmark()
+        turingStoryWallLayoutCoordinator.cancel(reason: "immersiveShutdown")
         roomSkinningCoordinator.cancelRoomSkinning()
         turingStoryPlacementScanCompleted = false
         jockRetargetController?.hide()
@@ -1783,6 +1660,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
 
         stopHordeBenchmark()
+        turingStoryWallLayoutCoordinator.cancel(reason: "prepareForUserQuitOrClose")
         cancelTuringStoryPlacementRoomScan(
             reason: "prepareForUserQuitOrClose"
         )
@@ -2868,6 +2746,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         currentPose: PhaseOneSpawnPose,
         date: Date
     ) {
+        if turingStoryWallLayoutCoordinator.isPlanningOrCommitting {
+            return
+        }
+
         if wallPosterUIController.isLocked {
             return
         }

@@ -74,6 +74,34 @@ final class TuringStoryWalkieBundleController: ObservableObject {
         print("[TuringWalkieBundle] installed")
     }
 
+    func prepareForPlannedPlacement() async throws {
+        let loadedRoot = try await loadBundleIfNeeded()
+        anchors = try resolveAnchors(in: loadedRoot)
+    }
+
+    func commitPlannedPlacement(
+        _ plannedPlacement: TuringStoryWallBundlePlacement,
+        semanticReservation: WallLocalRect
+    ) async throws {
+        guard let wallManager else { throw BundleError.noWallManager }
+        if anchors == nil { try await prepareForPlannedPlacement() }
+        guard let resolvedAnchors = anchors,
+              let transform = worldTransform(
+                placement: plannedPlacement,
+                wallManager: wallManager
+              ) else { throw BundleError.noPlacement }
+        root.setTransformMatrix(transform, relativeTo: nil)
+        root.isEnabled = true
+        placement = plannedPlacement
+        isPlaced = true
+        registerOccupancy(
+            placement: plannedPlacement,
+            semanticReservation: semanticReservation
+        )
+        resolvedAnchors.walkieAudioEmitter.components.set(SpatialAudioComponent())
+        resolvedAnchors.dadFrameAudioEmitter.components.set(SpatialAudioComponent())
+    }
+
     func placeOnBestWallIfNeeded(
         playerPosition: SIMD3<Float>,
         playerForward: SIMD3<Float>
@@ -746,15 +774,17 @@ final class TuringStoryWalkieBundleController: ObservableObject {
     }
 
     private func registerOccupancy(
-        placement: TuringStoryWallBundlePlacement
+        placement: TuringStoryWallBundlePlacement,
+        semanticReservation: WallLocalRect? = nil
     ) {
         occupancyRegistry?.unregister(id: occupancyID)
         occupancyRegistry?.register(
             id: occupancyID,
             wallID: placement.wallID,
             kind: .storyWalkieBundle,
-            rect: turingWalkieWallRect(for: placement),
-            padding: TuringStoryWalkieBundleTuning.occupancyPaddingMeters,
+            rect: semanticReservation ?? turingWalkieWallRect(for: placement),
+            padding: semanticReservation == nil
+                ? TuringStoryWalkieBundleTuning.occupancyPaddingMeters : 0,
             label: "Turing Story walkie-talkie shelf bundle"
         )
     }

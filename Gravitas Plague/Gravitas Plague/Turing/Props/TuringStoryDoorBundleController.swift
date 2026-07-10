@@ -82,8 +82,14 @@ final class TuringStoryDoorBundleController: ObservableObject {
         let audioEmitter: Entity
         let placementBounds: Entity?
         let glass: Entity?
-        let portalSlab: Entity?
+        let portalOnlyEntities: [Entity]
     }
+
+    private static let portalOnlyEntityNames = [
+        "TuringStoryDoorPortalSlab_Root",
+        "TuringStoryDoorPortalFence_Root",
+        "TuringStoryDoorPortalFirewood_Root"
+    ]
 
     let root = Entity()
     private let portalWorldRoot = Entity()
@@ -126,6 +132,43 @@ final class TuringStoryDoorBundleController: ObservableObject {
         }
 
         print("[TuringDoorBundle] installed")
+    }
+
+    func prepareForPlannedPlacement() async throws {
+        config = loadConfig()
+        let loadedRoot = try await loadBundleIfNeeded()
+        anchors = try resolveAnchors(in: loadedRoot)
+    }
+
+    func commitPlannedPlacement(
+        _ plannedPlacement: TuringStoryDoorBundlePlacement,
+        semanticReservation: WallLocalRect,
+        atmosphere: PortalHDRIAtmosphere
+    ) async throws {
+        guard let wallManager else { throw BundleError.noWallManager }
+        if anchors == nil { try await prepareForPlannedPlacement() }
+        guard let resolvedAnchors = anchors,
+              let transform = worldTransform(
+                placement: plannedPlacement,
+                wallManager: wallManager
+              ) else { throw BundleError.noPlacement }
+        root.setTransformMatrix(transform, relativeTo: nil)
+        root.isEnabled = true
+        placement = plannedPlacement
+        isPlaced = true
+        activeAtmosphere = atmosphere
+        registerOccupancy(
+            placement: plannedPlacement,
+            semanticReservation: semanticReservation
+        )
+        logFloorSnapProof(placement: plannedPlacement, wallManager: wallManager)
+        await bindRuntimeMaterialsAndPortal(
+            anchors: resolvedAnchors,
+            atmosphere: atmosphere,
+            placement: plannedPlacement
+        )
+        installAnimationController(anchors: resolvedAnchors)
+        iconController.install(anchor: resolvedAnchors.iconAnchor)
     }
 
     func placeOnBestWallIfNeeded(
@@ -344,7 +387,7 @@ final class TuringStoryDoorBundleController: ObservableObject {
         root.addChild(entity)
         root.addChild(portalWorldRoot)
         updateLoadedVisualBounds()
-        prunePortalSlabFromPassthroughIfPresent(in: entity)
+        prunePortalOnlyEntitiesFromPassthrough(in: entity)
         applyOcclusionPlaneMaterialIfPresent(
             in: entity,
             bundleURL: url
@@ -680,9 +723,9 @@ final class TuringStoryDoorBundleController: ObservableObject {
         ) else {
             throw BundleError.missingRequiredEntity("TuringStoryDoorPortalPlane")
         }
-        let portalSlab = root.turingDoorFindEntity(
-            named: "TuringStoryDoorPortalSlab_Root"
-        )
+        let portalOnlyEntities = Self.portalOnlyEntityNames.compactMap {
+            root.turingDoorFindEntity(named: $0)
+        }
         let iconAnchor = proceduralAnchorIfMissing(
             named: "TuringStoryDoorIconAnchor",
             under: root,
@@ -713,7 +756,7 @@ final class TuringStoryDoorBundleController: ObservableObject {
             glass: root.turingDoorFindEntity(
                 named: "TuringStoryDoorGlass"
             ),
-            portalSlab: portalSlab
+            portalOnlyEntities: portalOnlyEntities
         )
 
         print(
@@ -726,7 +769,7 @@ final class TuringStoryDoorBundleController: ObservableObject {
               iconAnchor: \(anchors.iconAnchor.name)
               audioEmitter: \(anchors.audioEmitter.name)
               placementBounds: \(anchors.placementBounds?.name ?? "nil")
-              portalSlab: \(anchors.portalSlab?.name ?? "nil")
+              portalOnlyEntities: \(anchors.portalOnlyEntities.map(\.name).joined(separator: ","))
               portalSource: authored
             """
         )
@@ -871,7 +914,7 @@ final class TuringStoryDoorBundleController: ObservableObject {
                 )
             )
             if let anchors {
-                installPortalSlabCloneIfPresent(anchors: anchors)
+                installPortalOnlyClones(anchors: anchors)
             }
         } catch {
             print(
@@ -884,75 +927,61 @@ final class TuringStoryDoorBundleController: ObservableObject {
         }
     }
 
-    private func prunePortalSlabFromPassthroughIfPresent(
+    private func prunePortalOnlyEntitiesFromPassthrough(
         in bundleRoot: Entity
     ) {
-        guard let portalSlab = bundleRoot.turingDoorFindEntity(
-            named: "TuringStoryDoorPortalSlab_Root"
-        ) else {
+        for entityName in Self.portalOnlyEntityNames {
+            guard let source = bundleRoot.turingDoorFindEntity(named: entityName) else {
+                print(
+                    """
+                    [TuringDoorPortal] portal-only entity missing
+                      entity: \(entityName)
+                      action: passthrough_prune_skipped
+                      required: false
+                    """
+                )
+                continue
+            }
+
+            source.isEnabled = false
+
             print(
                 """
-                [TuringDoorPortal] portal slab missing
-                  entity: TuringStoryDoorPortalSlab_Root
-                  action: passthrough_prune_skipped
-                  required: false
+                [TuringDoorPortal] portal-only entity pruned from passthrough render
+                  entity: \(entityName)
+                  action: source_entity_disabled
+                  passthroughPreserved: frame_and_panel
+                  portalCloneExpected: true
                 """
             )
-            return
         }
-
-        portalSlab.isEnabled = false
-
-        print(
-            """
-            [TuringDoorPortal] portal slab pruned from passthrough render
-              entity: TuringStoryDoorPortalSlab_Root
-              action: source_entity_disabled
-              passthroughPreserved: frame_and_panel
-              portalCloneExpected: true
-            """
-        )
     }
 
-    private func installPortalSlabCloneIfPresent(
+    private func installPortalOnlyClones(
         anchors: Anchors
     ) {
-        guard let sourceSlab = anchors.portalSlab else {
+        for source in anchors.portalOnlyEntities {
+            let cloneName = "\(source.name)_PortalClone"
+            portalWorldRoot.findEntity(named: cloneName)?.removeFromParent()
+
+            let sourceTransform = source.transformMatrix(relativeTo: portalWorldRoot)
+            let clone = source.clone(recursive: true)
+            clone.name = cloneName
+            setEnabledRecursively(clone, isEnabled: true)
+            portalWorldRoot.addChild(clone)
+            clone.setTransformMatrix(sourceTransform, relativeTo: portalWorldRoot)
+
             print(
                 """
-                [TuringDoorPortal] portal slab clone skipped
-                  source: nil
-                  entity: TuringStoryDoorPortalSlab_Root
+                [TuringDoorPortal] portal-only entity cloned into portal world
+                  source: \(source.name)
+                  clone: \(cloneName)
+                  sourcePassthroughEnabled: \(source.isEnabled)
+                  parent: TuringStoryDoorPortalWorldRoot
+                  transformBasis: source_relative_to_portalWorldRoot
                 """
             )
-            return
         }
-
-        let cloneName = "TuringStoryDoorPortalSlab_Root_PortalClone"
-        portalWorldRoot.findEntity(named: cloneName)?.removeFromParent()
-
-        let clone = sourceSlab.clone(recursive: true)
-        clone.name = cloneName
-        setEnabledRecursively(
-            clone,
-            isEnabled: true
-        )
-        portalWorldRoot.addChild(clone)
-        clone.setTransformMatrix(
-            sourceSlab.transformMatrix(relativeTo: portalWorldRoot),
-            relativeTo: portalWorldRoot
-        )
-
-        print(
-            """
-            [TuringDoorPortal] portal slab cloned into portal world
-              source: TuringStoryDoorPortalSlab_Root
-              clone: \(cloneName)
-              sourcePassthroughEnabled: \(sourceSlab.isEnabled)
-              parent: TuringStoryDoorPortalWorldRoot
-              transformBasis: source_relative_to_portalWorldRoot
-            """
-        )
     }
 
     private func setEnabledRecursively(
@@ -1168,15 +1197,16 @@ final class TuringStoryDoorBundleController: ObservableObject {
     }
 
     private func registerOccupancy(
-        placement: TuringStoryDoorBundlePlacement
+        placement: TuringStoryDoorBundlePlacement,
+        semanticReservation: WallLocalRect? = nil
     ) {
         occupancyRegistry?.unregister(id: occupancyID)
         occupancyRegistry?.register(
             id: occupancyID,
             wallID: placement.wallID,
             kind: .storyDoorBundle,
-            rect: turingDoorWallRect(for: placement),
-            padding: config.occupancyPaddingMeters,
+            rect: semanticReservation ?? turingDoorWallRect(for: placement),
+            padding: semanticReservation == nil ? config.occupancyPaddingMeters : 0,
             label: "Turing Story door portal bundle"
         )
     }

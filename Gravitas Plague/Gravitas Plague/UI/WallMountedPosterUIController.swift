@@ -83,6 +83,41 @@ final class WallMountedPosterUIController: ObservableObject {
         print("[WallPosterUI] installed")
     }
 
+    func currentPlacementForStoryLayoutRollback() -> WallPosterPlacement? {
+        currentPlacement
+    }
+
+    @discardableResult
+    func commitPlannedStoryPlacement(
+        _ placement: WallPosterPlacement,
+        semanticReservation: WallLocalRect
+    ) -> Bool {
+        guard placementState == .notPlaced,
+              committedPlacement == nil,
+              let transform = worldTransform(for: placement) else { return false }
+        root.isEnabled = false
+        rebuildPosterIfNeeded(width: placement.width, height: placement.height)
+        guard let occupancyID = registerPosterOccupancy(
+            placement: placement,
+            semanticReservation: semanticReservation
+        ) else { return false }
+        root.setTransformMatrix(transform, relativeTo: nil)
+        currentPlacement = placement
+        committedPlacement = CommittedWallPosterPlacement(
+            candidatePlacement: placement,
+            worldTransform: transform,
+            occupancyID: occupancyID
+        )
+        placementState = .locked
+        lastAppliedPosition = SIMD3<Float>(
+            transform.columns.3.x,
+            transform.columns.3.y,
+            transform.columns.3.z
+        )
+        root.isEnabled = true
+        return true
+    }
+
     @discardableResult
     func placeOnBestWall(
         playerPosition: SIMD3<Float>,
@@ -491,7 +526,8 @@ final class WallMountedPosterUIController: ObservableObject {
 
 private extension WallMountedPosterUIController {
     func registerPosterOccupancy(
-        placement: WallPosterPlacement
+        placement: WallPosterPlacement,
+        semanticReservation: WallLocalRect? = nil
     ) -> UUID? {
         guard let occupancyRegistry else {
             hasRegisteredOccupancy = false
@@ -514,19 +550,21 @@ private extension WallMountedPosterUIController {
             WallStickerStyle.stickerSizeMeters * 1.95 +
             WallStickerStyle.stickerSpacingMeters
 
-        let rect = WallLocalRect(
+        let visualRect = WallLocalRect(
             minX: placement.localX - placement.width * 0.5 - 0.08,
             minY: placement.localY - placement.height * 0.5 - stickerDepth,
             maxX: placement.localX + placement.width * 0.5 + 0.08,
             maxY: placement.localY + placement.height * 0.5 + 0.08
         )
+        let rect = semanticReservation ?? visualRect
 
         occupancyRegistry.register(
             id: posterOccupancyID,
             wallID: placement.wallID,
             kind: .wallPoster,
             rect: rect,
-            padding: WallPosterPlacementTuning.occupancyPaddingMeters,
+            padding: semanticReservation == nil
+                ? WallPosterPlacementTuning.occupancyPaddingMeters : 0,
             label: "RealityKit wall poster UI + stickers"
         )
         hasRegisteredOccupancy = true
