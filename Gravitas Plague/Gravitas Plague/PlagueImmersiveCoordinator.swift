@@ -132,7 +132,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         onCommitted: { [weak self] scanID in
             guard let self else { return }
             self.configureTuringWalkieAudioAndInteraction(
-                reason: "hotspotLayout.\(scanID)",
+                reason: "sliceLayout.\(scanID)",
                 attempt: 1
             )
             self.forestEnvironmentController.applyIBLReceiverRecursively(
@@ -142,19 +142,20 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             self.turingHUDDelayedClearTask?.cancel()
             self.turingHUDDelayedClearTask = nil
             self.instructionHUD.clear()
-            print("[TuringWallHotspot] placement HUD cleared scanID=\(scanID)")
+            print("[TuringWallSlices] placement HUD cleared scanID=\(scanID)")
         },
         onFailed: { [weak self] scanID, error in
             self?.showTemporaryInstructionHUD(
                 "Prop placement failure. Scan again to retry.",
                 clearAfterSeconds: 5.0,
-                reason: "hotspotLayoutFailed.\(scanID)"
+                reason: "sliceLayoutFailed.\(scanID)"
             )
-            print("[TuringWallHotspot] placement failure surfaced scanID=\(scanID) error=\(error)")
+            print("[TuringWallSlices] placement failure surfaced scanID=\(scanID) error=\(error)")
         }
     )
     private let hordeRoomScanTracker = HordeRoomScanTracker()
     private let turingPlacementRoomScanTracker = HordeRoomScanTracker()
+    private let turingStoryScanSpinTracker = TuringStoryScanSpinTracker()
     private let enemyBodySeparationResolver = HordeEnemyBodySeparationResolver()
     private let instructionHUD = PlagueHeadTrackedInstructionHUD()
     private var turingHUDDelayedClearTask: Task<Void, Never>?
@@ -166,6 +167,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private var turingWaitingForPlacementRoomScan = false
     private var turingWaitingForPlacementFloorPromptShown = false
     private var turingStoryPlacementScanCompleted = false
+    private var turingStoryPlacementSpinResult: TuringStoryScanSpinResult?
     private var pendingTuringPlacementScanReasons: [String] = []
 
     private var architectureFrameIndex = 0
@@ -815,6 +817,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         turingWaitingForPlacementRoomScan = true
         turingWaitingForPlacementFloorPromptShown = false
         turingPlacementRoomScanTracker.begin()
+        turingStoryScanSpinTracker.begin(
+            headForward: spatialProvider.currentPoseOrFallback().headForward
+        )
         roomSkinningCoordinator.startHordeRoomScanOnly()
 
         showInstructionHUD(
@@ -840,6 +845,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         turingPlacementRoomScanTracker.updateHeadForward(
             currentPose.headForward
+        )
+        turingStoryScanSpinTracker.update(
+            headForward: currentPose.headForward
         )
 
         let percent = Int(turingPlacementRoomScanTracker.progress * 100)
@@ -893,6 +901,25 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             separator: ","
         )
 
+        do {
+            turingStoryPlacementSpinResult = try turingStoryScanSpinTracker.finish()
+        } catch {
+            print("[TuringWallSlices] scan spin capture failed error=\(error.localizedDescription)")
+            showTemporaryInstructionHUD(
+                "Prop placement needs another room scan.",
+                clearAfterSeconds: 5.0,
+                reason: "sliceSpinCaptureFailed"
+            )
+            turingWaitingForPlacementRoomScan = false
+            pendingTuringPlacementScanReasons.removeAll()
+            return
+        }
+        if let spin = turingStoryPlacementSpinResult {
+            print(
+                "[TuringWallSlices] scan spin captured startYawRadians=\(spin.startYawRadians) accumulatedYawRadians=\(spin.accumulatedYawRadians) direction=\(spin.direction.rawValue)"
+            )
+        }
+
         turingWaitingForPlacementRoomScan = false
         turingWaitingForPlacementFloorPromptShown = false
         turingStoryPlacementScanCompleted = true
@@ -932,6 +959,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         turingWaitingForPlacementFloorPromptShown = false
         pendingTuringPlacementScanReasons.removeAll()
         turingPlacementRoomScanTracker.cancel()
+        turingStoryScanSpinTracker.reset()
 
         print(
             """
@@ -952,6 +980,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private func requestTuringStoryGlobalWallLayout(
         reason: String
     ) {
+        guard let spin = turingStoryPlacementSpinResult else {
+            print("[TuringWallSlices] layout request ignored reason=missingFrozenSpin")
+            return
+        }
         let pose = spatialProvider.currentPoseOrFallback()
         roomSkinningCoordinator.wallManager.updateViewerPositionForWallSelection(
             pose.headPosition
@@ -961,6 +993,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             occupancyRegistry: wallPropOccupancyRegistry,
             viewerPosition: pose.headPosition,
             viewerForward: pose.headForward,
+            spin: spin,
             atmosphere: currentStoryWindowAtmosphere,
             reason: reason
         )
@@ -1621,6 +1654,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         turingStoryWallLayoutCoordinator.cancel(reason: "immersiveShutdown")
         roomSkinningCoordinator.cancelRoomSkinning()
         turingStoryPlacementScanCompleted = false
+        turingStoryPlacementSpinResult = nil
+        turingStoryScanSpinTracker.reset()
         jockRetargetController?.hide()
         spatialProvider.onPlaneAnchorUpdate = nil
         spatialProvider.stop()
@@ -1668,6 +1703,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             reason: "prepareForUserQuitOrClose"
         )
         turingStoryPlacementScanCompleted = false
+        turingStoryPlacementSpinResult = nil
+        turingStoryScanSpinTracker.reset()
         jockRetargetController?.stopFollowDemo()
         jockRetargetController?.stopClip()
         jockRetargetController?.hide()

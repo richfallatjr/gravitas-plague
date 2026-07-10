@@ -12,53 +12,83 @@ final class TuringAudioSessionCoordinator {
     private init() {}
 
     func configureForLaunch() {
-        applyPolicy(reason: "launch")
+        print("""
+        [TuringAudioSession] launch policy passive
+          playbackMutatesSession: false
+          systemCapturePreserved: true
+        """)
     }
 
     func beginRecording(owner: String) {
-        recordingOwners.insert(owner)
-        applyPolicy(reason: "beginRecording.\(owner)")
+        let inserted = recordingOwners.insert(owner).inserted
+        guard inserted else { return }
+
+        if recordingOwners.count == 1 {
+            applyRecordingPolicy(reason: "beginRecording.\(owner)")
+        } else {
+            logOwnerChange(reason: "beginRecording.\(owner)")
+        }
     }
 
     func endRecording(owner: String) {
         recordingOwners.remove(owner)
-        applyPolicy(reason: "endRecording.\(owner)")
+        print("""
+        [TuringAudioSession] recording owner ended
+          reason: endRecording.\(owner)
+          sessionMutation: false
+          recordingOwners: \(recordingOwners.sorted().joined(separator: ","))
+          playbackOwners: \(playbackOwners.sorted().joined(separator: ","))
+        """)
     }
 
     func beginPlayback(owner: String) {
         playbackOwners.insert(owner)
-        applyPolicy(reason: "beginPlayback.\(owner)")
+        logOwnerChange(reason: "beginPlayback.\(owner)")
     }
 
     func endPlayback(owner: String) {
         playbackOwners.remove(owner)
-        applyPolicy(reason: "endPlayback.\(owner)")
+        logOwnerChange(reason: "endPlayback.\(owner)")
     }
 
-    private func applyPolicy(reason: String) {
+    private func logOwnerChange(reason: String) {
+        print("""
+        [TuringAudioSession] owner state changed
+          reason: \(reason)
+          sessionMutation: false
+          recordingOwners: \(recordingOwners.sorted().joined(separator: ","))
+          playbackOwners: \(playbackOwners.sorted().joined(separator: ","))
+        """)
+    }
+
+    private func applyRecordingPolicy(reason: String) {
 #if os(iOS) || os(tvOS) || os(visionOS)
         let session = AVAudioSession.sharedInstance()
-        let hasRecordingOwner = recordingOwners.isEmpty == false
-        let category: AVAudioSession.Category = hasRecordingOwner
-            ? .playAndRecord
-            : .ambient
-        let options: AVAudioSession.CategoryOptions = hasRecordingOwner
-            ? [.mixWithOthers, .allowBluetooth, .defaultToSpeaker]
-            : [.mixWithOthers]
+        let category: AVAudioSession.Category = .playAndRecord
+        let options: AVAudioSession.CategoryOptions = [
+            .mixWithOthers,
+            .allowBluetooth,
+            .defaultToSpeaker,
+        ]
 
         do {
-            try session.setCategory(
-                category,
-                mode: .default,
-                options: options
-            )
+            let categoryChanged = session.category != category || session.mode != .default
+            if categoryChanged {
+                try session.setCategory(
+                    category,
+                    mode: .default,
+                    options: options
+                )
+            }
             try session.setActive(true)
             lastAppliedCategoryRawValue = category.rawValue
 
             print("""
-            [TuringAudioSession] configured
+            [TuringAudioSession] recording configured
               reason: \(reason)
               category: \(category.rawValue)
+              categoryChanged: \(categoryChanged)
+              playbackMutatesSession: false
               recordingOwners: \(recordingOwners.sorted().joined(separator: ","))
               playbackOwners: \(playbackOwners.sorted().joined(separator: ","))
             """)

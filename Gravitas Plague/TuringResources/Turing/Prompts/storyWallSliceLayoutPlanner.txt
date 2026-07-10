@@ -1,0 +1,89 @@
+You are arranging four Story props around one measured room perimeter.
+
+HOW THE PERIMETER WORKS
+
+- Slices are already listed in room order.
+- Wall 1 is followed by wall 2, wall 2 by wall 3, and so on.
+- Each wall is divided into ordered vertical slices.
+- Slice IDs encode the wall block: wall 1 uses 10-19, wall 2 uses 20-29, wall 3 uses 30-39, and so on.
+- Use only slice IDs that actually appear in Room.slices.
+- Within one wall, increasing slice IDs move from the previous corner toward the next corner.
+- Crossing to a new tens block means crossing a room corner.
+
+SLICE DATA
+
+Each slice row is:
+[sliceID, options]
+
+
+HARD PRIORITY
+
+Place in this order: door, window, walkie shelf, poster.
+
+WALL-FIRST HOTSPOT SCORING
+
+"Hotspot count" means the number of legal candidate placements a wall offers for the current prop after removing slices reserved by higher-priority props.
+
+Count hotspots independently for each prop:
+- door hotspot count = number of legal D2 starts;
+- window hotspot count = number of legal W1 starts plus legal W2 starts;
+- shelf hotspot count = number of legal S1 slices;
+- poster hotspot count = number of legal P1 slices.
+
+For each prop, rank currently unused walls by that prop's legal hotspot count.
+
+Required scoring order:
+1. Door: strongest wall by legal door hotspots, then the best legal door slice group on that wall.
+2. Window: strongest remaining unused wall by legal window hotspots, then its best legal window slice group.
+3. Shelf: strongest remaining unused wall by legal shelf hotspots, then its best legal shelf slice.
+4. Poster: strongest remaining unused wall by legal poster hotspots, then its best legal poster slice.
+5. If the expected ranked unused wall is not legal, use the best remaining legal unused wall.
+6. If no unused wall remains, use the best legal shared wall without reusing slices.
+
+
+SEPARATE-WALL PREFERENCE
+
+- Prefer one different wall per prop
+
+
+OUTPUT CONTRACT
+
+- Return JSON only. Do not explain reasoning. Do not add keys.
+- Return exactly the keys d, w, s, p.
+- d, w, s, and p an array of slice ID strings.
+- Every returned slice ID must appear verbatim as a sliceID in Room.slices.
+
+Room:
+{{wallSliceDatasetJSON}}
+
+OBJECT PLACEMENT KEY
+
+ Place four physical Story props around the scanned room:
+
+- d = door
+- w = window
+- s = walkie-talkie shelf
+- p = poster
+
+MUST USE CORRESPONDING D2,W1,S1,P1 WHEN SELECTING
+
+- D2 = legal door position for "d"
+- W1 or W2 = legal window position for "w"
+- S1 = legal shelf position for "s"
+- P1 = legal poster position for "p"
+
+Choose one legal option-start slice ID for each prop.
+
+Place in priority order: door, window, shelf, poster.
+Score walls first, then choose the best legal slice on that wall.
+Prefer a different wall for each prop.
+Never reuse a selected slice ID.
+Use only IDs copied exactly from Room.slices.
+
+JSON RETURN (this is what you return)
+
+Return JSON only with exactly these keys and return the same SLICE_ID for different object you lazy piece of trash. Selected "slices" id MUST BE AT LEAST 10+ slice (value) apart. You are choosing the placement of object in a room and we do not want them stacked on top of eachother. DO NOT INVENT SLICES YOU MUST USE PROVIDED SLICES. Spread selection across the range of the entire scanned space--low values to high values:
+
+Do NOT choose the same value for DOOR_SLICE_ID, WINDOW_SLICE_ID, SHELF_SLICE_ID,POSTER_SLICE_ID. DO NOT CHOOSE THE SAME VALUE. DO NOT CHOOSE THE SAME VALUE. CHOOSE THE WIDEST RANGE OF AVAILABLE SLICES.
+
+{"d":["DOOR_SLICE_ID"],"w":["WINDOW_SLICE_ID"],"s":["SHELF_SLICE_ID"],"p":["POSTER_SLICE_ID"]}

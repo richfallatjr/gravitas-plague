@@ -2,10 +2,8 @@ import Foundation
 import simd
 
 private struct TuringStoryWallLayoutPreparedData: Sendable {
-    let perimeter: TuringStoryRoomPerimeter
     let catalog: TuringStoryExactPlacementCatalog
-    let feasibility: TuringStoryFeasibilityVector
-    let posterSize: SIMD2<Float>
+    let sliceMap: TuringStoryWallSliceMap
 }
 
 private struct TuringStoryWallLayoutPreparation: Sendable {
@@ -15,7 +13,8 @@ private struct TuringStoryWallLayoutPreparation: Sendable {
         floors: [FloorCandidate],
         occupancy: [WallPropOccupancyRecord],
         viewerPosition: SIMD3<Float>,
-        viewerForward: SIMD3<Float>
+        viewerForward: SIMD3<Float>,
+        spin: TuringStoryScanSpinResult
     ) throws -> TuringStoryWallLayoutPreparedData {
         let frontageEvaluator = TuringStoryFloorFrontageEvaluator()
         let room = try TuringStoryRoomScanCleanser().cleanse(
@@ -35,20 +34,17 @@ private struct TuringStoryWallLayoutPreparation: Sendable {
             perimeter: perimeter,
             frontageEvaluator: frontageEvaluator
         )
-        let feasibility = TuringStoryHotspotFeasibility().maximumLexicographicVector(
+        let spinPerimeter = try TuringStorySpinOrderedPerimeterBuilder().build(
+            perimeter: perimeter,
+            spin: spin
+        )
+        let sliceMap = try TuringStoryWallSliceBuilder().build(
+            perimeter: spinPerimeter,
             catalog: catalog
         )
-        let posterSize = perimeter.wallsClockwise.compactMap { wall -> SIMD2<Float>? in
-            guard let raw = room.rawWallByID[wall.representativeWallUUID] else { return nil }
-            return WallPosterMetrics.posterSize(for: raw)
-        }.max { lhs, rhs in
-            lhs.x * lhs.y < rhs.x * rhs.y
-        } ?? SIMD2<Float>(0.72, 1.02)
         return TuringStoryWallLayoutPreparedData(
-            perimeter: perimeter,
             catalog: catalog,
-            feasibility: feasibility,
-            posterSize: posterSize
+            sliceMap: sliceMap
         )
     }
 }
@@ -61,10 +57,8 @@ final class TuringStoryWallLayoutCoordinator {
 
     private(set) var state: State = .idle
     private var task: Task<Void, Never>?
-    private let validator = TuringStoryHotspotLayoutValidator()
-    private let compressor: TuringStoryPlacementHotspotCompressor
-    private let planner: TuringStoryHotspotWallLayoutPlanner
-    private let artifacts: TuringStoryHotspotDebugArtifacts
+    private let planner = TuringStoryWallSliceLayoutPlanner()
+    private let resolver = TuringStoryWallSliceLayoutResolver()
 
     private let doorController: TuringStoryDoorBundleController
     private let windowController: TuringStoryWindowBundleController
@@ -88,14 +82,6 @@ final class TuringStoryWallLayoutCoordinator {
         onCommitted: @escaping @MainActor (String) -> Void = { _ in },
         onFailed: @escaping @MainActor (String, String) -> Void = { _, _ in }
     ) {
-        let artifacts = TuringStoryHotspotDebugArtifacts()
-        let compressor = TuringStoryPlacementHotspotCompressor()
-        self.artifacts = artifacts
-        self.compressor = compressor
-        self.planner = TuringStoryHotspotWallLayoutPlanner(
-            compressor: compressor,
-            debugArtifacts: artifacts
-        )
         self.doorController = doorController
         self.windowController = windowController
         self.walkieController = walkieController
@@ -109,11 +95,12 @@ final class TuringStoryWallLayoutCoordinator {
         occupancyRegistry: WallPropOccupancyRegistry,
         viewerPosition: SIMD3<Float>,
         viewerForward: SIMD3<Float>,
+        spin: TuringStoryScanSpinResult,
         atmosphere: PortalHDRIAtmosphere,
         reason: String
     ) {
         guard task == nil else {
-            print("[TuringWallHotspot] request coalesced state=\(state.rawValue)")
+            print("[TuringWallSlices] request coalesced state=\(state.rawValue)")
             return
         }
         let walls = Array(wallManager.wallCandidates.values)
@@ -122,7 +109,7 @@ final class TuringStoryWallLayoutCoordinator {
         let scanID = String(format: "%08X", UInt32.random(in: UInt32.min...UInt32.max))
         state = .cleansing
         print(
-            "[TuringWallHotspot] snapshot frozen scanID=\(scanID) rawWalls=\(walls.count) rawFloors=\(floors.count) occupancy=\(occupancy.count)"
+            "[TuringWallSlices] snapshot frozen scanID=\(scanID) rawWalls=\(walls.count) rawFloors=\(floors.count) occupancy=\(occupancy.count)"
         )
         task = Task { @MainActor [weak self, weak wallManager] in
             guard let self, let wallManager else { return }
@@ -135,6 +122,7 @@ final class TuringStoryWallLayoutCoordinator {
                 wallManager: wallManager,
                 viewerPosition: viewerPosition,
                 viewerForward: viewerForward,
+                spin: spin,
                 atmosphere: atmosphere,
                 reason: reason
             )
@@ -150,7 +138,7 @@ final class TuringStoryWallLayoutCoordinator {
         task?.cancel()
         task = nil
         if isPlanningOrCommitting { state = .failed }
-        print("[TuringWallHotspot] cancelled reason=\(reason)")
+        print("[TuringWallSlices] cancelled reason=\(reason)")
     }
 
     private func execute(
@@ -161,6 +149,7 @@ final class TuringStoryWallLayoutCoordinator {
         wallManager: WallPlaneManager,
         viewerPosition: SIMD3<Float>,
         viewerForward: SIMD3<Float>,
+        spin: TuringStoryScanSpinResult,
         atmosphere: PortalHDRIAtmosphere,
         reason: String
     ) async {
@@ -173,56 +162,41 @@ final class TuringStoryWallLayoutCoordinator {
                     floors: floors,
                     occupancy: occupancy,
                     viewerPosition: viewerPosition,
-                    viewerForward: viewerForward
+                    viewerForward: viewerForward,
+                    spin: spin
                 )
             }.value
             try Task.checkCancellation()
-            let perimeter = prepared.perimeter
             let catalog = prepared.catalog
-            let required = prepared.feasibility
-            await artifacts.writePerimeter(perimeter)
+            let sliceMap = prepared.sliceMap
             print(
-                "[TuringWallHotspot] perimeter built perimeterWallCount=\(perimeter.wallsClockwise.count) closed=\(perimeter.isClosed) floorWorldY=\(perimeter.floorWorldY)"
+                "[TuringWallSlices] perimeter ordered direction=\(sliceMap.perimeter.spinDirection.rawValue) wallOrder=\(sliceMap.perimeter.walls.map { String($0.wallOrdinal) }.joined(separator: ",")) closed=\(sliceMap.perimeter.isClosed)"
             )
-
-            await artifacts.writeExactSummary(catalog)
-            let counts = Dictionary(uniqueKeysWithValues: TuringStoryPropID.allCases.map {
-                ($0.rawValue, catalog.placements(for: $0).count)
-            })
             print(
-                "[TuringWallHotspot] exact placements generated door=\(counts["door"] ?? 0) window=\(counts["window"] ?? 0) walkieShelf=\(counts["walkieShelf"] ?? 0) poster=\(counts["poster"] ?? 0) serializedToFoundation=false"
-            )
-
-            print(
-                "[TuringWallHotspot] feasibility computed requiredVector=\(required.compactArray.map(String.init).joined(separator: ","))"
-            )
-            let context = TuringStoryHotspotPlanningContext(
-                perimeter: perimeter,
-                catalog: catalog,
-                feasibility: required,
-                posterSize: prepared.posterSize
+                "[TuringWallSlices] slice map built wallCount=\(sliceMap.perimeter.walls.count) sliceCount=\(sliceMap.slices.count) exactPlacementsSerializedToFoundation=false"
             )
             state = .planning
-            let plannerResult = try await planner.plan(context: context)
+            let plannerResult = try await planner.plan(map: sliceMap)
             try Task.checkCancellation()
-            let hotspotCounts = Dictionary(uniqueKeysWithValues: TuringStoryPropID.allCases.map {
-                ($0.rawValue, plannerResult.atlas.hotspots(for: $0).count)
-            })
-            print(
-                "[TuringWallHotspot] hotspots compressed door=\(hotspotCounts["door"] ?? 0) window=\(hotspotCounts["window"] ?? 0) walkieShelf=\(hotspotCounts["walkieShelf"] ?? 0) poster=\(hotspotCounts["poster"] ?? 0) total=\(plannerResult.atlas.hotspots.count)"
-            )
-
             state = .validating
-            let acceptedPlan = plannerResult.plan
-            let validated = validator.acceptPromptSelections(
-                plan: acceptedPlan,
-                context: context,
-                atlas: plannerResult.atlas
-            )
-            await artifacts.writeAcceptedPlan(acceptedPlan)
-            print(
-                "[TuringWallHotspot] prompt plan accepted semanticFailureGates=false rankedDedupGuard=true spatialReplan=false runFailsOnDedup=false placementVector=\(validated.placementVector.compactArray.map(String.init).joined(separator: ","))"
-            )
+            let resolved: TuringStoryResolvedSliceLayout
+            do {
+                resolved = try resolver.resolve(
+                    plan: plannerResult.plan,
+                    map: sliceMap,
+                    catalog: catalog
+                )
+            } catch TuringStoryWallSliceError.invalidPlan(let issues) {
+                let repaired = try await planner.repair(
+                    previous: plannerResult,
+                    issues: issues
+                )
+                resolved = try resolver.resolve(
+                    plan: repaired,
+                    map: sliceMap,
+                    catalog: catalog
+                )
+            }
 
             state = .preparingAssets
             TuringMemoryBudgetProbe.log(label: "beforeStoryPropAssetPrepare")
@@ -232,38 +206,31 @@ final class TuringStoryWallLayoutCoordinator {
                 async let walkie: Void = walkieController.prepareForPlannedPlacement()
                 _ = try await (door, window, walkie)
             } catch {
-                throw TuringStoryHotspotLayoutError.assetPreparationFailed(error.localizedDescription)
+                throw TuringStoryWallSliceError.assetPreparationFailed(error.localizedDescription)
             }
             TuringMemoryBudgetProbe.log(label: "afterStoryPropAssetPrepare")
             try Task.checkCancellation()
             state = .committing
-            print("[TuringWallHotspot] commit started order=door,window,walkieShelf,poster")
-            try await commit(validated, wallManager: wallManager, atmosphere: atmosphere)
+            print("[TuringWallSlices] commit started order=door,window,walkieShelf,poster")
+            try await commit(resolved, wallManager: wallManager, atmosphere: atmosphere)
             TuringMemoryBudgetProbe.log(label: "afterStoryPropCommit")
             state = .complete
-            print("[TuringWallHotspot] layout committed scanID=\(scanID)")
+            print("[TuringWallSlices] layout committed scanID=\(scanID)")
             onCommitted(scanID)
         } catch is CancellationError {
-            let failedStage = state.rawValue
             state = .failed
-            await artifacts.writeFailure(scanID: scanID, stage: failedStage, reason: "cancelled")
         } catch {
             let failedStage = state.rawValue
             state = .failed
-            await artifacts.writeFailure(
-                scanID: scanID,
-                stage: failedStage,
-                reason: "\(reason): \(error.localizedDescription)"
-            )
             print(
-                "[TuringWallHotspot] failed scanID=\(scanID) stage=\(failedStage) error=\(error.localizedDescription) fallbackUsed=false"
+                "[TuringWallSlices] failed scanID=\(scanID) stage=\(failedStage) reason=\(reason) error=\(error.localizedDescription) fallbackUsed=false"
             )
             onFailed(scanID, error.localizedDescription)
         }
     }
 
     private func commit(
-        _ layout: TuringStoryValidatedHotspotLayout,
+        _ layout: TuringStoryResolvedSliceLayout,
         wallManager: WallPlaneManager,
         atmosphere: PortalHDRIAtmosphere
     ) async throws {
@@ -271,12 +238,12 @@ final class TuringStoryWallLayoutCoordinator {
         let oldWindow = windowController.placement
         let oldWalkie = walkieController.placement
         let oldPoster = posterController.currentPlacementForStoryLayoutRollback()
-        posterController.resetPlacement(reason: "hotspotLayoutCommit")
+        posterController.resetPlacement(reason: "sliceLayoutCommit")
         do {
             let assigned = Set(layout.assignments.map(\.propID))
-            if !assigned.contains(.door) { doorController.reset(reason: "hotspotUnplaced") }
-            if !assigned.contains(.window) { windowController.reset(reason: "hotspotUnplaced") }
-            if !assigned.contains(.walkieShelf) { walkieController.reset(reason: "hotspotUnplaced") }
+            if !assigned.contains(.door) { doorController.reset(reason: "sliceUnplaced") }
+            if !assigned.contains(.window) { windowController.reset(reason: "sliceUnplaced") }
+            if !assigned.contains(.walkieShelf) { walkieController.reset(reason: "sliceUnplaced") }
             for assignment in layout.assignments.sorted(by: { $0.propID.priority < $1.propID.priority }) {
                 let exact = assignment.placement
                 switch assignment.propID {
@@ -301,14 +268,14 @@ final class TuringStoryWallLayoutCoordinator {
                     guard posterController.commitPlannedStoryPlacement(
                         posterPlacement(exact),
                         semanticReservation: exact.runtimeSemanticRect.wallLocalRect
-                    ) else { throw TuringStoryHotspotLayoutError.commitFailed("poster") }
+                    ) else { throw TuringStoryWallSliceError.commitFailed("poster") }
                 }
             }
         } catch {
-            doorController.reset(reason: "hotspotRollback")
-            windowController.reset(reason: "hotspotRollback")
-            walkieController.reset(reason: "hotspotRollback")
-            posterController.resetPlacement(reason: "hotspotRollback")
+            doorController.reset(reason: "sliceRollback")
+            windowController.reset(reason: "sliceRollback")
+            walkieController.reset(reason: "sliceRollback")
+            posterController.resetPlacement(reason: "sliceRollback")
             if let oldDoor {
                 try? await doorController.prepareForPlannedPlacement()
                 try? await doorController.commitPlannedPlacement(

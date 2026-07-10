@@ -1,0 +1,42 @@
+Correct the previous Story wall-slice layout.
+
+The room dataset and perimeter rules are authoritative.
+
+Remember:
+- hotspot count is the prop-specific legal candidate count after higher-priority reservations;
+- door chooses the wall with the most legal D2 starts;
+- window chooses the strongest remaining unused wall by W1/W2 count;
+- shelf chooses the strongest remaining unused wall by S1 count;
+- poster chooses the strongest remaining unused wall by P1 count;
+- recompute wall ranking after every reservation;
+- if a ranked unused wall is not legal, use the best remaining legal unused wall;
+- use a shared wall only when no legal unused wall remains;
+- changing tens blocks crosses a corner;
+- a numeric wall block does not imply that every possible slice ID exists;
+- no selected slice ID may appear more than once;
+- door returns one slice advertising D2;
+- window returns one slice advertising W1 or W2;
+- shelf uses one S1 slice;
+- poster uses one P1 slice;
+- preserve priority: door, window, shelf, poster;
+- return a complete replacement, not a patch.
+
+Previous response:
+{{previousResponseJSON}}
+
+Problems to correct:
+{{repairIssuesJSON}}
+
+Room:
+{{wallSliceDatasetJSON}}
+
+OUTPUT CONTRACT
+
+- Return JSON only with exactly the keys d, w, s, p.
+- d, w, s, and p must each be null or an array of slice ID strings.
+- If Problems says a prop was null despite a legal choice, that prop must be non-null in the replacement.
+- Each non-null d, w, s, or p array contains one selected option-start slice ID.
+- Every returned slice ID must appear verbatim as a sliceID in Room.slices.
+- Do not reuse any ID identified as unknown in Problems to correct.
+- Never infer, increment, complete, or invent a slice ID from a wall block.
+- No illustrative slice IDs are provided. Choose only from Room.slices.
