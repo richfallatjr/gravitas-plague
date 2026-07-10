@@ -11,6 +11,15 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
     var providerID: String { Self.providerID }
 
     let atmosphere: PortalHDRIAtmosphere
+    let domeCenterOffsetZ: Float
+
+    init(
+        atmosphere: PortalHDRIAtmosphere,
+        domeCenterOffsetZ: Float = 0.0
+    ) {
+        self.atmosphere = atmosphere
+        self.domeCenterOffsetZ = domeCenterOffsetZ
+    }
 
     @MainActor
     static func clearSharedResourceCache(
@@ -36,7 +45,8 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
         let dome = try makeInsideFacingHDRIDome(
             texture: resources.visibleTexture,
             resourceName: resources.name,
-            atmosphere: atmosphere
+            atmosphere: atmosphere,
+            centerOffsetZ: domeCenterOffsetZ
         )
 
         portalWorld.addChild(dome)
@@ -74,6 +84,7 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
               atmosphere: \(atmosphere.rawValue)
               exr: \(atmosphere.exrResourceName).exr
               dome: true
+              domeCenterOffsetZ: \(domeCenterOffsetZ)
               projectedGroundDisc: \(context.groundDiscEnabled)
               floorY: \(context.floorY)
               groundRadius: \(context.groundDiscRadius)
@@ -90,6 +101,11 @@ private enum PortalHDRIDomeOrientation {
     static var yRotationRadians: Float {
         yRotationDegrees * .pi / 180.0
     }
+}
+
+enum PortalHDRIDomePlacementTuning {
+    static let radiusMeters: Float = 12.0
+    static let storyOpeningCenterOffsetZ: Float = -9.0
 }
 
 private struct LoadedPortalEXRResources {
@@ -234,7 +250,8 @@ private extension HDRIDomePortalContentProvider {
     func makeInsideFacingHDRIDome(
         texture: TextureResource,
         resourceName: String,
-        atmosphere: PortalHDRIAtmosphere
+        atmosphere: PortalHDRIAtmosphere,
+        centerOffsetZ: Float
     ) throws -> ModelEntity {
         var material = UnlitMaterial()
         material.color = .init(
@@ -248,7 +265,7 @@ private extension HDRIDomePortalContentProvider {
         )
         material.faceCulling = .none
 
-        let radius: Float = 12.0
+        let radius = PortalHDRIDomePlacementTuning.radiusMeters
 
         let dome = ModelEntity(
             mesh: .generateSphere(radius: radius),
@@ -256,6 +273,7 @@ private extension HDRIDomePortalContentProvider {
         )
 
         dome.name = "PortalHDRIDome_\(resourceName)"
+        dome.position.z = centerOffsetZ
         dome.scale = SIMD3<Float>(-1, 1, 1)
         dome.orientation = simd_quatf(
             angle: PortalHDRIDomeOrientation.yRotationRadians,
@@ -267,6 +285,9 @@ private extension HDRIDomePortalContentProvider {
             [PortalHDRI] visible EXR dome created
               atmosphere: \(atmosphere.rawValue)
               radius: \(radius)
+              centerOffsetZ: \(centerOffsetZ)
+              centerOffsetFractionOfRadius: \(abs(centerOffsetZ) / radius)
+              forwardDepthFractionOfDiameter: \((radius - centerOffsetZ) / (radius * 2.0))
               negativeXScale: true
               yRotationDegrees: \(PortalHDRIDomeOrientation.yRotationDegrees)
               faceCulling: none

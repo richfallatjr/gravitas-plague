@@ -24,7 +24,9 @@ struct TuringStoryWindowPortalContentProvider: PortalContentProvider {
         )
 
         let hdriProvider = HDRIDomePortalContentProvider(
-            atmosphere: atmosphere
+            atmosphere: atmosphere,
+            domeCenterOffsetZ:
+                PortalHDRIDomePlacementTuning.storyOpeningCenterOffsetZ
         )
         try await hdriProvider.populatePortalWorld(
             portalWorld: portalWorld,
@@ -72,6 +74,7 @@ struct TuringStoryWindowPortalContentProvider: PortalContentProvider {
             [TuringWindowPortal] portal world populated
               atmosphere: \(atmosphere.rawValue)
               domeEXR: \(atmosphere.exrResourceName).exr
+              domeCenterOffsetZ: \(PortalHDRIDomePlacementTuning.storyOpeningCenterOffsetZ)
               ground: \(groundTextureName).png
               groundMode: horde_faded_disc
               featherRingCount: 8
