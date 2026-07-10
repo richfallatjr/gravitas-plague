@@ -247,6 +247,7 @@ final class TuringStoryWallLayoutCoordinator {
             )
 
             state = .preparingAssets
+            TuringMemoryBudgetProbe.log(label: "beforeStoryPropAssetPrepare")
             do {
                 async let door: Void = doorController.prepareForPlannedPlacement()
                 async let window: Void = windowController.prepareForPlannedPlacement()
@@ -255,6 +256,7 @@ final class TuringStoryWallLayoutCoordinator {
             } catch {
                 throw TuringStoryHotspotLayoutError.assetPreparationFailed(error.localizedDescription)
             }
+            TuringMemoryBudgetProbe.log(label: "afterStoryPropAssetPrepare")
             try Task.checkCancellation()
             try validator.validateLiveWalls(
                 layout: validated,
@@ -263,6 +265,7 @@ final class TuringStoryWallLayoutCoordinator {
             state = .committing
             print("[TuringWallHotspot] commit started order=door,window,walkieShelf,poster")
             try await commit(validated, wallManager: wallManager, atmosphere: atmosphere)
+            TuringMemoryBudgetProbe.log(label: "afterStoryPropCommit")
             state = .complete
             print("[TuringWallHotspot] layout committed scanID=\(scanID)")
             onCommitted(scanID)

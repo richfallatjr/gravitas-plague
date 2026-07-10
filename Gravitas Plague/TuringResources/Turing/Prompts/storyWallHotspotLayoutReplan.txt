@@ -7,7 +7,11 @@ Rules:
 - u must be between 0 and 1.
 - Match the required d,w,s,p placement vector exactly.
 - Preserve strict priority d, w, s, p.
-- Do not repeat the invalid combination described below.
+- For every prop whose previous value is not null, choose a different hotspot ID than that prop used in the previous response.
+- Changing only u is forbidden. The replacement hotspot ID itself must be different for each previously placed prop.
+- Never select both hotspot IDs from any pair listed in conflicts.
+- When selected hotspots are on the same wall, use their ranges, chosen u values, and prop widths to ensure the resulting props do not overlap.
+- Do not repeat any hotspot ID for the same prop from the previous response, even if only one pair caused the validation error.
 - Do not invent coordinates, walls, hotspots, transforms, props, or keys.
 - Return JSON only.
 

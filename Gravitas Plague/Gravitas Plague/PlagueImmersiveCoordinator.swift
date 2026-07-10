@@ -1633,6 +1633,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         turingWalkieBundleController.reset(reason: "immersiveShutdown")
         turingWindowBundleController.reset(reason: "immersiveShutdown")
         turingDoorBundleController.reset(reason: "immersiveShutdown")
+        HDRIDomePortalContentProvider.clearSharedResourceCache(
+            reason: "immersiveShutdown"
+        )
         Task { @MainActor in
             TuringStoryWalkieAudioRoute.clear(reason: "immersiveShutdown")
         }

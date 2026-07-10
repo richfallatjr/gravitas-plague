@@ -21,7 +21,13 @@ Prefer:
 - stable walls,
 - a coherent distribution around the perimeter.
 
-Do not invent walls, hotspots, coordinates, transforms, props, or keys. Respect listed unavoidable hotspot conflicts. On the same wall, use the prop widths and hotspot ranges to avoid overlap.
+Do not invent walls, hotspots, coordinates, transforms, props, or keys.
+
+Before returning:
+- Never select both hotspot IDs from any pair listed in conflicts.
+- Treat every selected hotspot as an exclusive physical reservation.
+- When selected hotspots are on the same wall, use their ranges, chosen u values, and prop widths to ensure the resulting props do not overlap.
+- If two props would overlap, move one prop to a different hotspot ID. Do not try to fix an overlap only by making a tiny u adjustment.
 
 Return JSON only in this exact shape:
 {"v":1,"scan":"copied scan","a":{"d":["d0",0.42],"w":["w1",0.68],"s":["s0",0.35],"p":["p2",0.50]}}

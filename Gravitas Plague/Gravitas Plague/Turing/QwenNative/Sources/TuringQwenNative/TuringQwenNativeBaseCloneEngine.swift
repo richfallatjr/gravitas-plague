@@ -134,21 +134,25 @@ public actor TuringQwenNativeBaseCloneEngine {
         let decodeReferenceRows = Array(referenceRows.suffix(Self.decodeReferenceContextRows))
         let rowsForDecode = decodeReferenceRows + generatedRows
 
+        let decodeQueuedAt = Date()
         print("""
-        [TuringQwenNativeBaseClone] decode started
+        [TuringQwenNativeBaseClone] decode queued
           referenceRows: \(referenceRows.count)
           decodeReferenceRows: \(decodeReferenceRows.count)
           generatedRows: \(generatedRows.count)
           totalRows: \(rowsForDecode.count)
           decodeFullReference: false
           trimReferenceAfterDecode: true
+          decoderConcurrencyPolicy: serializedHighWatermarkStage
+          qwenGenerationConcurrencyUnchanged: true
         """)
 
         let decodeStart = Date()
-        let fullAudio = try TuringQwenNativeSpeechDecoder.decode(
+        let fullAudio = try await TuringQwenNativeSpeechDecodeGate.shared.decode(
             codebookRows: rowsForDecode,
             modelRoot: modelRoot,
-            performanceMode: prompt.performanceMode
+            performanceMode: prompt.performanceMode,
+            queuedAt: decodeQueuedAt
         )
         let decodeSeconds = Date().timeIntervalSince(decodeStart)
         let trimmedSamples = try TuringQwenNativeBaseCloneDecodeTrimmer.trimReferencePrefix(

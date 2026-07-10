@@ -13,6 +13,14 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
     let atmosphere: PortalHDRIAtmosphere
 
     @MainActor
+    static func clearSharedResourceCache(
+        reason: String
+    ) {
+        PortalHDRIResourceCache.entry = nil
+        print("[PortalHDRI] shared resource cache cleared reason=\(reason)")
+    }
+
+    @MainActor
     func populatePortalWorld(
         portalWorld: Entity,
         context: PortalContentContext
@@ -86,9 +94,18 @@ private enum PortalHDRIDomeOrientation {
 
 private struct LoadedPortalEXRResources {
     let name: String
-    let cgImage: CGImage
     let visibleTexture: TextureResource
     let environment: EnvironmentResource
+}
+
+@MainActor
+private enum PortalHDRIResourceCache {
+    struct Entry {
+        let key: String
+        let resources: LoadedPortalEXRResources
+    }
+
+    static var entry: Entry?
 }
 
 private extension HDRIDomePortalContentProvider {
@@ -123,6 +140,22 @@ private extension HDRIDomePortalContentProvider {
             "\(atmosphere.exrResourceName)_\(resourceStamp)_portal_visible_texture"
         let environmentName =
             "\(atmosphere.exrResourceName)_\(resourceStamp)_portal_ibl"
+        let cacheKey = "\(atmosphere.rawValue)|\(resourceStamp)"
+
+        if let cached = PortalHDRIResourceCache.entry,
+           cached.key == cacheKey {
+            print(
+                """
+                [PortalHDRI] shared resource cache hit
+                  atmosphere: \(atmosphere.rawValue)
+                  resourceStamp: \(resourceStamp)
+                  exrDecodeAvoided: true
+                  textureRecreationAvoided: true
+                  environmentRecreationAvoided: true
+                """
+            )
+            return cached.resources
+        }
 
         guard let source = CGImageSourceCreateWithURL(
             url as CFURL,
@@ -177,12 +210,24 @@ private extension HDRIDomePortalContentProvider {
             withName: environmentName
         )
 
-        return LoadedPortalEXRResources(
+        let resources = LoadedPortalEXRResources(
             name: atmosphere.exrResourceName,
-            cgImage: cgImage,
             visibleTexture: texture,
             environment: environment
         )
+        PortalHDRIResourceCache.entry = .init(
+            key: cacheKey,
+            resources: resources
+        )
+        print(
+            """
+            [PortalHDRI] shared resource cache populated
+              atmosphere: \(atmosphere.rawValue)
+              resourceStamp: \(resourceStamp)
+              retainedCGImage: false
+            """
+        )
+        return resources
     }
 
     @MainActor

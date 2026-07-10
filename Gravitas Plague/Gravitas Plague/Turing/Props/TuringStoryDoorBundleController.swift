@@ -72,6 +72,11 @@ final class TuringStoryDoorBundleController: ObservableObject {
         )
     }
 
+    struct PortalOnlyEntity {
+        let source: Entity
+        let authoredPortalTransform: simd_float4x4
+    }
+
     struct Anchors {
         let bundleRoot: Entity
         let frameRoot: Entity
@@ -82,7 +87,7 @@ final class TuringStoryDoorBundleController: ObservableObject {
         let audioEmitter: Entity
         let placementBounds: Entity?
         let glass: Entity?
-        let portalOnlyEntities: [Entity]
+        let portalOnlyEntities: [PortalOnlyEntity]
     }
 
     private static let portalOnlyEntityNames = [
@@ -723,8 +728,12 @@ final class TuringStoryDoorBundleController: ObservableObject {
         ) else {
             throw BundleError.missingRequiredEntity("TuringStoryDoorPortalPlane")
         }
-        let portalOnlyEntities = Self.portalOnlyEntityNames.compactMap {
-            root.turingDoorFindEntity(named: $0)
+        let portalOnlyEntities = Self.portalOnlyEntityNames.compactMap { name -> PortalOnlyEntity? in
+            guard let source = root.turingDoorFindEntity(named: name) else { return nil }
+            return PortalOnlyEntity(
+                source: source,
+                authoredPortalTransform: source.transformMatrix(relativeTo: portalWorldRoot)
+            )
         }
         let iconAnchor = proceduralAnchorIfMissing(
             named: "TuringStoryDoorIconAnchor",
@@ -769,7 +778,7 @@ final class TuringStoryDoorBundleController: ObservableObject {
               iconAnchor: \(anchors.iconAnchor.name)
               audioEmitter: \(anchors.audioEmitter.name)
               placementBounds: \(anchors.placementBounds?.name ?? "nil")
-              portalOnlyEntities: \(anchors.portalOnlyEntities.map(\.name).joined(separator: ","))
+              portalOnlyEntities: \(anchors.portalOnlyEntities.map { $0.source.name }.joined(separator: ","))
               portalSource: authored
             """
         )
@@ -914,7 +923,7 @@ final class TuringStoryDoorBundleController: ObservableObject {
                 )
             )
             if let anchors {
-                installPortalOnlyClones(anchors: anchors)
+                installPortalOnlyEntities(anchors: anchors)
             }
         } catch {
             print(
@@ -951,34 +960,32 @@ final class TuringStoryDoorBundleController: ObservableObject {
                   entity: \(entityName)
                   action: source_entity_disabled
                   passthroughPreserved: frame_and_panel
-                  portalCloneExpected: true
+                  portalWorldInstallExpected: true
                 """
             )
         }
     }
 
-    private func installPortalOnlyClones(
+    private func installPortalOnlyEntities(
         anchors: Anchors
     ) {
-        for source in anchors.portalOnlyEntities {
-            let cloneName = "\(source.name)_PortalClone"
-            portalWorldRoot.findEntity(named: cloneName)?.removeFromParent()
-
-            let sourceTransform = source.transformMatrix(relativeTo: portalWorldRoot)
-            let clone = source.clone(recursive: true)
-            clone.name = cloneName
-            setEnabledRecursively(clone, isEnabled: true)
-            portalWorldRoot.addChild(clone)
-            clone.setTransformMatrix(sourceTransform, relativeTo: portalWorldRoot)
+        for record in anchors.portalOnlyEntities {
+            let source = record.source
+            source.removeFromParent()
+            setEnabledRecursively(source, isEnabled: true)
+            portalWorldRoot.addChild(source)
+            source.setTransformMatrix(
+                record.authoredPortalTransform,
+                relativeTo: portalWorldRoot
+            )
 
             print(
                 """
-                [TuringDoorPortal] portal-only entity cloned into portal world
+                [TuringDoorPortal] portal-only entity moved into portal world
                   source: \(source.name)
-                  clone: \(cloneName)
-                  sourcePassthroughEnabled: \(source.isEnabled)
                   parent: TuringStoryDoorPortalWorldRoot
-                  transformBasis: source_relative_to_portalWorldRoot
+                  transformBasis: cached_authored_source_relative_to_portalWorldRoot
+                  duplicateEntityGraph: false
                 """
             )
         }
