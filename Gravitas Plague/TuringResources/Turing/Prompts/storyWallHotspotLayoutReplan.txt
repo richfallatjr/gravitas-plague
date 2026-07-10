@@ -21,9 +21,10 @@ Rules:
 - When selected hotspots are on the same wall, use their ranges, chosen u values, and prop widths to ensure the resulting props do not overlap.
 - Do not repeat any hotspot ID for the same prop from the previous response, even if only one pair caused the validation error.
 - Do not invent coordinates, walls, hotspots, transforms, props, or keys.
-- Return JSON only with exactly top-level keys "v", "scan", "a" and exactly "a" keys "d", "w", "s", "p".
-- v is 1. Copy Room.scan exactly into scan. a contains exactly d, w, s, p.
+- Return JSON only with exactly top-level keys "v", "scan", "a", "b". Both "a" and "b" contain exactly "d", "w", "s", "p".
+- v is 1. Copy Room.scan exactly into scan. "a" is candidate one and "b" is candidate two.
 - Each placed prop value is [one listed hotspot ID for that prop, chosen u]. Each unplaced prop value is null.
+- Candidate two for each prop must use a different hotspot ID and wall ID from candidate one.
 - Do not copy hotspot IDs or u values from these instructions. Select them from Room.
 
 Previous response:

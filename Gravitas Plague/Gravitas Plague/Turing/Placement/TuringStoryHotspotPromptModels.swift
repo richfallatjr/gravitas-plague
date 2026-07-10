@@ -113,6 +113,19 @@ struct TuringStoryHotspotPlan: Codable, Sendable {
     let v: Int
     let scan: String
     let a: Assignments
+    let b: Assignments?
+
+    init(
+        v: Int,
+        scan: String,
+        a: Assignments,
+        b: Assignments? = nil
+    ) {
+        self.v = v
+        self.scan = scan
+        self.a = a
+        self.b = b
+    }
 
     struct Assignments: Codable, Sendable {
         let d: TuringHotspotSelection?

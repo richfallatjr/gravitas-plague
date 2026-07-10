@@ -13,7 +13,7 @@ w = window
 s = walkie shelf
 p = poster
 
-Use only listed hotspot IDs. Choose one hotspot and one relative position u for each prop. u must be between 0 and 1:
+Use only listed hotspot IDs. Choose two ranked hotspot candidates and one relative position u for each prop. u must be between 0 and 1:
 0 = start of the legal hotspot interval
 0.5 = middle
 1 = end
@@ -30,21 +30,24 @@ Do not invent walls, hotspots, coordinates, transforms, props, or keys.
 
 Before returning:
 - The third value in each hotspot row is its wall ID.
-- Every non-null prop must select a hotspot on a different wall ID. Never place two props on the same wall ID.
-- When required is [1,1,1,1], the four selected hotspots must use four distinct wall IDs.
+- Candidate one for every non-null prop must use a different wall ID from every other prop's candidate one.
+- Candidate two for a prop must use a different hotspot ID and a different wall ID from that prop's candidate one.
+- Prefer candidate two on a wall not used by any higher-priority prop's candidate one.
+- When required is [1,1,1,1], the four candidate-one hotspots must use four distinct wall IDs.
 - Never select both hotspot IDs from any pair listed in conflicts.
 - Treat every selected hotspot as an exclusive physical reservation.
 - When selected hotspots are on the same wall, use their ranges, chosen u values, and prop widths to ensure the resulting props do not overlap.
 - If two props would overlap, move one prop to a different hotspot ID. Do not try to fix an overlap only by making a tiny u adjustment.
 
 Return JSON only with exactly these keys:
-- key spelling: "v", "scan", "a", "d", "w", "s", "p"
-- top level: v, scan, a
+- key spelling: "v", "scan", "a", "b", "d", "w", "s", "p"
+- top level: v, scan, a, b
 - v: 1
 - scan: copy Room.scan exactly
-- a: exactly d, w, s, p
-- each placed prop value: [one listed hotspot ID for that prop, chosen u]
-- each unplaced prop value: null
+- a: candidate one, with exactly d, w, s, p
+- b: candidate two, with exactly d, w, s, p
+- each placed prop value in a and b: [one listed hotspot ID for that prop, chosen u]
+- each unplaced prop value in a and b: null
 
 Do not copy hotspot IDs or u values from these instructions. Select them from Room.
 

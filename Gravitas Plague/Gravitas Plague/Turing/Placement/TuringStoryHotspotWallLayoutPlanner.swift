@@ -65,7 +65,7 @@ actor TuringStoryHotspotWallLayoutPlanner {
         await debugArtifacts.writePrompt(accepted.prompt)
         await debugArtifacts.writeBudget(accepted.budget)
         print(
-            "[TuringWallHotspot] Foundation request started freshSession=true responseSchema=hotspotPlusNormalizedPosition"
+            "[TuringWallHotspot] Foundation request started freshSession=true responseSchema=rankedHotspotCandidates candidateCountPerProp=2"
         )
         let raw = try await runner.runPrompt(
             accepted.prompt,
@@ -93,7 +93,8 @@ actor TuringStoryHotspotWallLayoutPlanner {
         scanID: String,
         atlas: TuringStoryHotspotAtlas
     ) async -> TuringStoryHotspotPlan {
-        if let strict = try? strictDecode(raw) {
+        if let strict = try? strictDecode(raw),
+           candidateCount(in: strict) == TuringStoryPropID.allCases.count * 2 {
             return strict
         }
 
@@ -102,9 +103,9 @@ actor TuringStoryHotspotWallLayoutPlanner {
             scanID: scanID,
             atlas: atlas
         )
-        if normalized.selectionCount == TuringStoryPropID.allCases.count {
+        if normalized.candidateCount == TuringStoryPropID.allCases.count * 2 {
             print(
-                "[TuringWallHotspotJSON] malformed response normalized mechanically selectionCount=\(normalized.selectionCount) repairRequired=false"
+                "[TuringWallHotspotJSON] response normalized mechanically candidateCount=\(normalized.candidateCount) repairRequired=false"
             )
             return normalized.plan
         }
@@ -119,8 +120,9 @@ actor TuringStoryHotspotWallLayoutPlanner {
         let repairPrompt = """
         Repair a Story wall-placement JSON response without changing its selected hotspot IDs or u values.
         Return JSON only. No markdown and no commentary.
-        Use exactly top-level keys "v", "scan", "a". Set "v" to 1 and "scan" to "\(scanID)".
-        "a" must contain exactly "d", "w", "s", "p". Each value is null or [hotspotID,u].
+        Use exactly top-level keys "v", "scan", "a", "b". Set "v" to 1 and "scan" to "\(scanID)".
+        "a" is candidate one and "b" is candidate two. Both must contain exactly "d", "w", "s", "p".
+        Each value is null or [hotspotID,u]. Candidate two must preserve the original second choice when present.
         Valid hotspot IDs by prop: \(validIDsJSON)
         Malformed response:
         \(raw)
@@ -134,7 +136,8 @@ actor TuringStoryHotspotWallLayoutPlanner {
             print(
                 "[TuringWallHotspotJSONRepairRaw] BEGIN\n\(repaired)\n[TuringWallHotspotJSONRepairRaw] END"
             )
-            if let strict = try? strictDecode(repaired) {
+            if let strict = try? strictDecode(repaired),
+               candidateCount(in: strict) > 0 {
                 return strict
             }
             let repairedNormalization = mechanicallyNormalize(
@@ -142,10 +145,10 @@ actor TuringStoryHotspotWallLayoutPlanner {
                 scanID: scanID,
                 atlas: atlas
             )
-            if repairedNormalization.selectionCount >= normalized.selectionCount,
-               repairedNormalization.selectionCount > 0 {
+            if repairedNormalization.candidateCount >= normalized.candidateCount,
+               repairedNormalization.candidateCount > 0 {
                 print(
-                    "[TuringWallHotspotJSON] malformed repair normalized mechanically selectionCount=\(repairedNormalization.selectionCount)"
+                    "[TuringWallHotspotJSON] malformed repair normalized mechanically candidateCount=\(repairedNormalization.candidateCount)"
                 )
                 return repairedNormalization.plan
             }
@@ -156,7 +159,7 @@ actor TuringStoryHotspotWallLayoutPlanner {
         }
 
         print(
-            "[TuringWallHotspotJSON] malformed JSON did not fail placement selectionCount=\(normalized.selectionCount)"
+            "[TuringWallHotspotJSON] malformed JSON did not fail placement candidateCount=\(normalized.candidateCount)"
         )
         return normalized.plan
     }
@@ -165,7 +168,7 @@ actor TuringStoryHotspotWallLayoutPlanner {
         _ raw: String,
         scanID: String,
         atlas: TuringStoryHotspotAtlas
-    ) -> (plan: TuringStoryHotspotPlan, selectionCount: Int) {
+    ) -> (plan: TuringStoryHotspotPlan, candidateCount: Int) {
         let object: [String: Any]? = {
             guard let data = try? TuringJSONSanitizer.extractSingleTopLevelObject(from: raw),
                   let json = try? JSONSerialization.jsonObject(with: data),
@@ -174,15 +177,21 @@ actor TuringStoryHotspotWallLayoutPlanner {
             }
             return dictionary
         }()
-        let nested = object?["a"] as? [String: Any]
+        let primaryValues = normalizeAssignmentContainer(object?["a"])
+        let secondaryValues = normalizeAssignmentContainer(object?["b"])
 
-        func selection(for propID: TuringStoryPropID) -> TuringHotspotSelection? {
+        func selection(
+            for propID: TuringStoryPropID,
+            values: [String: Any]?,
+            siblingFallback: Bool,
+            textFallback: Bool
+        ) -> TuringHotspotSelection? {
             let validIDs = Set(atlas.hotspots(for: propID).map(\.hotspotID))
-            let nestedValue = nested?[propID.shortID]
-            let siblingValue = object?[propID.shortID]
+            let nestedValue = values?[propID.shortID]
+            let siblingValue = siblingFallback ? object?[propID.shortID] : nil
             let hotspotID = extractHotspotID(from: nestedValue, validIDs: validIDs)
                 ?? extractHotspotID(from: siblingValue, validIDs: validIDs)
-                ?? firstMentionedHotspotID(in: raw, validIDs: validIDs)
+                ?? (textFallback ? firstMentionedHotspotID(in: raw, validIDs: validIDs) : nil)
             guard let hotspotID else { return nil }
             let u = extractNormalizedPosition(from: nestedValue)
                 ?? extractNormalizedPosition(from: siblingValue)
@@ -193,10 +202,66 @@ actor TuringStoryHotspotWallLayoutPlanner {
             )
         }
 
-        let door = selection(for: .door)
-        let window = selection(for: .window)
-        let walkieShelf = selection(for: .walkieShelf)
-        let poster = selection(for: .poster)
+        let door = selection(
+            for: .door,
+            values: primaryValues,
+            siblingFallback: true,
+            textFallback: true
+        )
+        let window = selection(
+            for: .window,
+            values: primaryValues,
+            siblingFallback: true,
+            textFallback: true
+        )
+        let walkieShelf = selection(
+            for: .walkieShelf,
+            values: primaryValues,
+            siblingFallback: true,
+            textFallback: true
+        )
+        let poster = selection(
+            for: .poster,
+            values: primaryValues,
+            siblingFallback: true,
+            textFallback: true
+        )
+        let secondaryDoor = selection(
+            for: .door,
+            values: secondaryValues,
+            siblingFallback: false,
+            textFallback: false
+        )
+        let secondaryWindow = selection(
+            for: .window,
+            values: secondaryValues,
+            siblingFallback: false,
+            textFallback: false
+        )
+        let secondaryWalkieShelf = selection(
+            for: .walkieShelf,
+            values: secondaryValues,
+            siblingFallback: false,
+            textFallback: false
+        )
+        let secondaryPoster = selection(
+            for: .poster,
+            values: secondaryValues,
+            siblingFallback: false,
+            textFallback: false
+        )
+        let secondaryAssignments: TuringStoryHotspotPlan.Assignments? = {
+            guard [secondaryDoor, secondaryWindow, secondaryWalkieShelf, secondaryPoster]
+                .contains(where: { $0 != nil }) else {
+                return nil
+            }
+            return .init(
+                d: secondaryDoor,
+                w: secondaryWindow,
+                s: secondaryWalkieShelf,
+                p: secondaryPoster
+            )
+        }()
         let plan = TuringStoryHotspotPlan(
             v: 1,
             scan: scanID,
@@ -205,12 +270,80 @@ actor TuringStoryHotspotWallLayoutPlanner {
                 w: window,
                 s: walkieShelf,
                 p: poster
-            )
+            ),
+            b: secondaryAssignments
         )
-        let selectionCount = [door, window, walkieShelf, poster]
+        let candidateCount = [
+            door,
+            window,
+            walkieShelf,
+            poster,
+            secondaryDoor,
+            secondaryWindow,
+            secondaryWalkieShelf,
+            secondaryPoster
+        ]
             .compactMap { $0 }
             .count
-        return (plan, selectionCount)
+        return (plan, candidateCount)
+    }
+
+    private func normalizeAssignmentContainer(
+        _ value: Any?
+    ) -> [String: Any]? {
+        if let dictionary = value as? [String: Any] {
+            return dictionary
+        }
+        guard let array = value as? [Any] else { return nil }
+
+        var normalized: [String: Any] = [:]
+        var index = 0
+        while index < array.count {
+            if let pair = array[index] as? [Any],
+               let hotspotID = pair.first as? String,
+               let propKey = propKey(for: hotspotID) {
+                normalized[propKey] = pair
+                index += 1
+                continue
+            }
+            guard let hotspotID = array[index] as? String,
+                  let propKey = propKey(for: hotspotID) else {
+                index += 1
+                continue
+            }
+            if index + 1 < array.count,
+               number(from: array[index + 1]) != nil {
+                normalized[propKey] = [hotspotID, array[index + 1]]
+                index += 2
+            } else {
+                normalized[propKey] = hotspotID
+                index += 1
+            }
+        }
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func propKey(for hotspotID: String) -> String? {
+        guard let first = hotspotID.first else { return nil }
+        switch first {
+        case "d", "w", "s", "p": return String(first)
+        default: return nil
+        }
+    }
+
+    private func candidateCount(in plan: TuringStoryHotspotPlan) -> Int {
+        [
+            plan.a.d,
+            plan.a.w,
+            plan.a.s,
+            plan.a.p,
+            plan.b?.d,
+            plan.b?.w,
+            plan.b?.s,
+            plan.b?.p
+        ]
+        .compactMap { $0 }
+        .count
     }
 
     private func extractHotspotID(
@@ -285,11 +418,15 @@ actor TuringStoryHotspotWallLayoutPlanner {
         let data = try TuringJSONSanitizer.extractSingleTopLevelObject(from: raw)
         let object = try JSONSerialization.jsonObject(with: data)
         guard let top = object as? [String: Any],
-              Set(top.keys) == Set(["v", "scan", "a"]),
+              Set(top.keys).isSubset(of: Set(["v", "scan", "a", "b"])),
+              Set(top.keys).isSuperset(of: Set(["v", "scan", "a"])),
               let assignments = top["a"] as? [String: Any],
-              Set(assignments.keys) == Set(["d", "w", "s", "p"]) else {
+              Set(assignments.keys) == Set(["d", "w", "s", "p"]),
+              (top["b"] == nil || (top["b"] as? [String: Any]).map {
+                  Set($0.keys) == Set(["d", "w", "s", "p"])
+              } == true) else {
             throw TuringStoryHotspotLayoutError.malformedResponse(
-                "Response keys must be exactly v,scan,a and d,w,s,p."
+                "Response keys must be v,scan,a with optional b; a and b keys must be d,w,s,p."
             )
         }
         return try JSONDecoder().decode(TuringStoryHotspotPlan.self, from: data)

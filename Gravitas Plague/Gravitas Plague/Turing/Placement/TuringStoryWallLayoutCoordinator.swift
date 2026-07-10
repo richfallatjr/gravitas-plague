@@ -214,14 +214,14 @@ final class TuringStoryWallLayoutCoordinator {
 
             state = .validating
             let acceptedPlan = plannerResult.plan
-            let validated = try validator.acceptPromptSelections(
+            let validated = validator.acceptPromptSelections(
                 plan: acceptedPlan,
                 context: context,
                 atlas: plannerResult.atlas
             )
             await artifacts.writeAcceptedPlan(acceptedPlan)
             print(
-                "[TuringWallHotspot] prompt plan accepted semanticGates=false spatialReplan=false overlapGate=false placementVector=\(validated.placementVector.compactArray.map(String.init).joined(separator: ","))"
+                "[TuringWallHotspot] prompt plan accepted semanticFailureGates=false rankedDedupGuard=true spatialReplan=false runFailsOnDedup=false placementVector=\(validated.placementVector.compactArray.map(String.init).joined(separator: ","))"
             )
 
             state = .preparingAssets
