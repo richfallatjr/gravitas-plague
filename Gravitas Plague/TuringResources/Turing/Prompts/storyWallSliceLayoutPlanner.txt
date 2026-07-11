@@ -52,6 +52,13 @@ OUTPUT CONTRACT
 Room:
 {{wallSliceDatasetJSON}}
 
+AVAILABLE SLICE IDS
+
+{{availableSliceIDs}}
+
+Every returned value must be copied from this exact list. The list ends at its
+actual final value; do not continue the numeric pattern beyond that value.
+
 OBJECT PLACEMENT KEY
 
  Place four physical Story props around the scanned room:
@@ -78,7 +85,7 @@ Use only IDs copied exactly from Room.slices.
 
 JSON RETURN (this is what you return)
 
-Return JSON only with exactly these keys and return the same SLICE_ID for different object you lazy piece of trash. Selected "slices" id MUST BE AT LEAST 10+ slice (value) apart. You are choosing the placement of object in a room and we do not want them stacked on top of eachother. DO NOT INVENT SLICES YOU MUST USE PROVIDED SLICES. Spread selection across the range of the entire scanned space--low values to high values:
+Return JSON only with exactly these keys and do not return the same SLICE_ID for different objects. Selected "slices" id MUST BE AT LEAST 10+ slice (value) apart. You are choosing the placement of objects in a room and we do not want them stacked on top of each other. DO NOT INVENT SLICES; YOU MUST USE PROVIDED SLICES. Spread selection across the range of the entire scanned space--low values to high values:
 
 Do NOT choose the same value for DOOR_SLICE_ID, WINDOW_SLICE_ID, SHELF_SLICE_ID,POSTER_SLICE_ID. DO NOT CHOOSE THE SAME VALUE. DO NOT CHOOSE THE SAME VALUE. CHOOSE THE WIDEST RANGE OF AVAILABLE SLICES.
 

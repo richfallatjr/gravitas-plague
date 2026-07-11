@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "scriptPointID": "prologue.scriptPoint03",
+  "prerecordingID": "prologue.walkie.bigMike.scriptPoint03.001",
+  "prerecordingOutputContext": "walkieSpatial",
+  "responseVoicePromptID": "prologue.bigMike.scriptPoint03.followUp.001",
+  "responseSpeakerID": "big_mike",
+  "responseComputeStart": "whenPriorGeneratedPlanIsReady",
+  "responsePlaybackGate": "afterPrerecordingActualCompletion",
+  "nextScriptPointID": null,
+  "automaticAdvance": false,
+  "conversationRemainsEnabled": true
+}

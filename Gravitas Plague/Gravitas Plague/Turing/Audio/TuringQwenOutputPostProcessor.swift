@@ -69,6 +69,82 @@ enum TuringQwenOutputPostProcessor {
         )
     }
 
+    static func processForPlayback(
+        _ audio: TuringComputeGapGeneratedAudio,
+        policy: TuringQwenOutputProcessingPolicy,
+        reason: String
+    ) async -> TuringComputeGapGeneratedAudio {
+        let rate = policy.playbackRate
+
+        guard shouldProcess(rate: rate) else {
+            logBypassed(
+                reason: reason,
+                segmentIndex: audio.segmentIndex,
+                rate: rate,
+                sampleCount: audio.samples.count,
+                sampleRate: audio.sampleRate,
+                channelCount: audio.channelCount
+            )
+
+            print("""
+            [TuringQwenPostProcess] voice policy bypassed
+              voiceID: \(policy.voiceID)
+              rate: \(String(format: "%.3f", rate))
+              segmentIndex: \(audio.segmentIndex)
+            """)
+
+            return audio
+        }
+
+        let segmentIndex = audio.segmentIndex
+        let sampleRate = audio.sampleRate
+        let channelCount = audio.channelCount
+        let samples = audio.samples
+        let started = Date()
+
+        let processedSamples = await Task.detached(
+            priority: .userInitiated
+        ) {
+            stretch(
+                samples: samples,
+                channelCount: Int(channelCount),
+                rate: rate
+            )
+        }.value
+
+        let elapsed = Date().timeIntervalSince(started)
+        let inputDuration = durationSeconds(
+            sampleCount: samples.count,
+            sampleRate: sampleRate,
+            channelCount: channelCount
+        )
+        let outputDuration = durationSeconds(
+            sampleCount: processedSamples.count,
+            sampleRate: sampleRate,
+            channelCount: channelCount
+        )
+
+        print("""
+        [TuringQwenPostProcess] voice policy applied
+          voiceID: \(policy.voiceID)
+          reason: \(reason)
+          segmentIndex: \(segmentIndex)
+          rate: \(String(format: "%.3f", rate))
+          inputSampleCount: \(samples.count)
+          outputSampleCount: \(processedSamples.count)
+          inputDurationSeconds: \(String(format: "%.3f", inputDuration))
+          outputDurationSeconds: \(String(format: "%.3f", outputDuration))
+          processingSeconds: \(String(format: "%.3f", elapsed))
+        """)
+
+        return TuringComputeGapGeneratedAudio(
+            segmentIndex: segmentIndex,
+            samples: processedSamples,
+            sampleRate: sampleRate,
+            channelCount: channelCount
+        )
+    }
+
     static func processSamplesForPlayback(
         samples: [Float],
         sampleRate: Int,

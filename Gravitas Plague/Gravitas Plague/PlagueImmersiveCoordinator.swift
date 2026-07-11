@@ -1240,8 +1240,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         print("""
         [TuringScriptTrigger] physical anchors registered
-          walkieTalkie: TuringStoryWalkieTalkie_IconAnchor
-          dadFrame: TuringStoryDadFrame_IconAnchor
+          walkieTalkie: \(turingWalkieBundleController.walkieIconAnchor?.name ?? "nil")
+          dadFrame: \(turingWalkieBundleController.dadFrameIconAnchor?.name ?? "nil")
           reason: \(reason)
           placementAttempt: \(attempt)
         """)

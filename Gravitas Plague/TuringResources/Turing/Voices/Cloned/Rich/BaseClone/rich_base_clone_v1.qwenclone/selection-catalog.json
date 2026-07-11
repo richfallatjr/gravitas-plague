@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "voiceID": "rich_base_clone_v1",
+  "defaultVariantID": "rich_reference_01",
+  "variants": [
+    {
+      "variantID": "rich_reference_01",
+      "displayName": "Rich Reference 01",
+      "enabled": true
+    }
+  ]
+}

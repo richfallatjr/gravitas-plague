@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "prologue.bigMike.scriptPoint03.followUp.001",
+  "speakerID": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "characterProfileID": "big_mike",
+  "outputContext": "walkieSpatial",
+  "conversationKey": "dialogue.big_mike.rich",
+  "intent": "Continue after the authored ScriptPoint03 PR. State that the car-alarm reaction does not prove a rule. Report the antigen-drone claim and ham-beacon idea only as unconfirmed radio chatter. Tell Rich to locate and quietly prepare his ham-radio equipment without transmitting. Keep Mike direct, protective, skeptical, and under pressure. Do not invent scientific certainty, a cure, a confirmed drone, or additional casualties.",
+  "emotion": "protective, tactical, breath controlled after immediate danger, skeptical and urgent",
+  "seedIntent": "Mike is relieved that Rich listened, stayed off the windows, and began checking the radio instead of going outside. He has now answered Rich's immediate question with the strongest fact he has: Mrs. Dempsey turned toward a car-alarm chirp. Mike does not know whether that means sound attracts the infected, whether she recognized something, or whether the timing was coincidence.\n\nAt Mike's own location, the danger is becoming immediate. Something hit the service door. There is more than one set of feet in the alley, and one pattern seems to stop when Mike stops. His military and security habits are taking over: move away from glass, count sounds, protect entrances, keep the channel clear, and do not mistake a suspicion for proof. His fear appears as clipped orders and irritation.\n\nMike has also heard fragmented county-radio traffic claiming Gravitas Corporation is deploying antigen drones. Separate ham operators suggested that a beacon may be required to call one. Mike does not trust either report yet. His generated continuation should label both as unconfirmed, tell Rich to find and quietly prepare the ham-radio gear, and order him not to transmit again until Mike gives the word."
+}

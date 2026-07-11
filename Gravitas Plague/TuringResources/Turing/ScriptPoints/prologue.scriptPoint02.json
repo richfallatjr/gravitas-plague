@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "scriptPointID": "prologue.scriptPoint02",
+  "prerecordingID": "prologue.walkie.rich.scriptPoint02.001",
+  "prerecordingOutputContext": "walkieOutgoingGlobal",
+  "responseVoicePromptID": "prologue.rich.scriptPoint02.followUp.001",
+  "responseSpeakerID": "rich",
+  "responseComputeStart": "whenPrerecordingStarts",
+  "responsePlaybackGate": "afterPrerecordingActualCompletion",
+  "nextScriptPointID": "prologue.scriptPoint03",
+  "automaticAdvance": true,
+  "conversationRemainsEnabled": false
+}

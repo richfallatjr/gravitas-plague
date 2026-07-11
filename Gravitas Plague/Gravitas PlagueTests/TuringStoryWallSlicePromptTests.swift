@@ -26,6 +26,13 @@ final class TuringStoryWallSlicePromptTests: XCTestCase {
     XCTAssertTrue(planner.contains("largest score"))
     XCTAssertTrue(planner.contains("largest wall surface area"))
     XCTAssertTrue(planner.contains("Every returned slice ID must appear verbatim"))
+    XCTAssertTrue(planner.contains("{{availableSliceIDs}}"))
+    XCTAssertTrue(planner.contains("do not continue the numeric pattern"))
+    XCTAssertFalse(
+      planner.contains(
+        "exactly these keys and return the same SLICE_ID for different object"
+      )
+    )
     XCTAssertTrue(planner.contains("exactly the keys d, w, s, p"))
     XCTAssertTrue(repair.contains("{{primaryPrompt}}"))
     XCTAssertTrue(repair.contains("{{previousResponseJSON}}"))

@@ -1,25 +1,6 @@
 import AVFoundation
 import Foundation
 
-public struct TuringComputeGapGeneratedAudio: Sendable {
-    public let segmentIndex: Int
-    public let samples: [Float]
-    public let sampleRate: Double
-    public let channelCount: AVAudioChannelCount
-
-    public init(
-        segmentIndex: Int,
-        samples: [Float],
-        sampleRate: Double,
-        channelCount: AVAudioChannelCount = 1
-    ) {
-        self.segmentIndex = segmentIndex
-        self.samples = samples
-        self.sampleRate = sampleRate
-        self.channelCount = channelCount
-    }
-}
-
 @MainActor
 final class TuringStoryWalkiePlaybackCoordinator {
     struct Policy: Sendable {
@@ -80,6 +61,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
     private var runID: String?
     private var expectedSegmentCount: Int?
     private var nextPlaybackSegmentIndex = 0
+    private var completedGeneratedPlaybackCount = 0
     private var activeComputeSegments = Set<Int>()
     private var pendingGenerated: [Int: GeneratedClip] = [:]
     private var pendingPrerecording: PrerecordingClip?
@@ -116,6 +98,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
         self.runID = runID
         self.expectedSegmentCount = expectedSegmentCount
         self.nextPlaybackSegmentIndex = 0
+        self.completedGeneratedPlaybackCount = 0
         self.activeComputeSegments.removeAll(keepingCapacity: true)
         self.pendingGenerated.removeAll(keepingCapacity: true)
         self.pendingPrerecording = nil
@@ -198,6 +181,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
             """)
             let processedAudio = await TuringQwenOutputPostProcessor.processForPlayback(
                 audio,
+                policy: .bigMike,
                 reason: "storyWalkiePlayback"
             )
             print("""
@@ -271,6 +255,10 @@ final class TuringStoryWalkiePlaybackCoordinator {
         await withCheckedContinuation { continuation in
             waitContinuations.append(continuation)
         }
+    }
+
+    func completedGeneratedSegmentCount() -> Int {
+        completedGeneratedPlaybackCount
     }
 
     func runCancelled(reason: String) async {
@@ -641,6 +629,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
               willAdvanceToSegmentIndex: \(segmentIndex + 1)
             """)
             nextPlaybackSegmentIndex = segmentIndex + 1
+            completedGeneratedPlaybackCount += 1
             activeItem = .none
             print("""
             [TuringPlaybackRebuild] generated playback completed

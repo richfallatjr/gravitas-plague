@@ -517,9 +517,11 @@ final class TuringStoryWalkieBundleController:
             under: walkieRoot,
             fallbackLocalPosition: SIMD3<Float>(0, 0, 0.02)
         )
-        let walkieIconAnchor = proceduralAnchor(
-            named: "TuringStoryWalkieTalkie_IconAnchor",
-            under: walkieRoot,
+        let walkieIconAnchor = authoredIconAnchor(
+            named: "TuringStoryWalkieTalkieIcon_Root",
+            legacyName: "TuringStoryWalkieTalkie_IconAnchor",
+            under: root,
+            fallbackParent: walkieRoot,
             fallbackLocalPosition: SIMD3<Float>(0, 0.08, 0.10)
         )
         let dadFrameAudioEmitter = proceduralAnchor(
@@ -527,9 +529,11 @@ final class TuringStoryWalkieBundleController:
             under: dadFrameRoot,
             fallbackLocalPosition: SIMD3<Float>(0, 0, 0.02)
         )
-        let dadFrameIconAnchor = proceduralAnchor(
-            named: "TuringStoryDadFrame_IconAnchor",
-            under: dadFrameRoot,
+        let dadFrameIconAnchor = authoredIconAnchor(
+            named: "TuringStoryDadFrameIcon_Root",
+            legacyName: "TuringStoryDadFrame_IconAnchor",
+            under: root,
+            fallbackParent: dadFrameRoot,
             fallbackLocalPosition: SIMD3<Float>(0, 0.10, 0.08)
         )
 
@@ -616,6 +620,40 @@ final class TuringStoryWalkieBundleController:
         """)
 
         return entity
+    }
+
+    private func authoredIconAnchor(
+        named authoredName: String,
+        legacyName: String,
+        under bundleRoot: Entity,
+        fallbackParent: Entity,
+        fallbackLocalPosition: SIMD3<Float>
+    ) -> Entity {
+        if let authored = bundleRoot.turingFindEntity(named: authoredName) {
+            print("""
+            [TuringWalkieBundle] authored icon anchor resolved
+              expected: \(authoredName)
+              actual: \(authored.name)
+              source: USDZ
+            """)
+            return authored
+        }
+
+        if let legacy = bundleRoot.turingFindEntity(named: legacyName) {
+            print("""
+            [TuringWalkieBundle] legacy icon anchor resolved
+              expected: \(authoredName)
+              actual: \(legacy.name)
+              source: USDZ
+            """)
+            return legacy
+        }
+
+        return proceduralAnchor(
+            named: legacyName,
+            under: fallbackParent,
+            fallbackLocalPosition: fallbackLocalPosition
+        )
     }
 
     private func choosePlacement(

@@ -1,0 +1,30 @@
+{
+  "allowFallback": false,
+  "allowPrerecordedDialoguePlayback": false,
+  "characterID": "rich",
+  "displayName": "Rich Reference 01",
+  "kind": "baseCloneReferenceVariant",
+  "language": "english",
+  "qwenArtifacts": {
+    "manifestSHA256": "aa58320b3bb0fbde06dc14051a0fc7c38902d2d98c5f199385853b7b16b16907",
+    "mode": "icl",
+    "path": "qwen_artifacts/clone_prompt_manifest.json",
+    "referenceCodesPath": "qwen_artifacts/reference_codes.i32le",
+    "referenceTextTokensPath": "qwen_artifacts/ref_text_tokens.i32le",
+    "safetensorsSHA256": "b66a2236d2b94df1b20ab3c3cbab8c10e6f98eebbcef1d6b8cb9e230dffc268b",
+    "speakerEmbeddingPath": "qwen_artifacts/speaker_embedding.f32le",
+    "status": "precomputed"
+  },
+  "reference": {
+    "channels": 1,
+    "normalizedAudioPath": "ref_audio/normalized/ref_24000_mono.wav",
+    "normalizedFormat": "wav_float32_le",
+    "originalAudioPath": "ref_audio/original/rich-clone-ref-fast.mp3",
+    "sampleRate": 24000,
+    "textPath": "ref_text.txt"
+  },
+  "schemaVersion": 1,
+  "sourceProvider": "local_recording",
+  "variantID": "rich_reference_01",
+  "voiceID": "rich_base_clone_v1"
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "prologue.walkie.bigMike.scriptPoint03.001",
+  "speaker": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "voiceVariantID": "broadcast_reference_fast_01",
+  "audioFile": "pr-big-mike-script-point-03.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Copy. Keep the transmitter cold. I saw Mrs. Dempsey in the street, barefoot, staring at your house. A car alarm chirped two doors down and she turned toward it before the second beep. Then she walked face-first into a parked sedan hard enough to open her cheek and kept moving. That part I saw myself. Now something just hit my service door, so I’m stepping away from the glass. Stay dark, stay locked, and don’t key up again yet.",
+  "summary": "Big Mike answers Rich's question with his direct observation of Mrs. Dempsey reacting to a car alarm, then reports an immediate threat at his service door and orders Rich to stay dark.",
+  "voicePromptIntent": "The generated Big Mike continuation is owned by prologue.bigMike.scriptPoint03.followUp.001. This authored PR is the first fixed part of Big Mike's response.",
+  "defaultEmotion": "protective, factual, quietly alarmed, tactical"
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "prologue.walkie.rich.scriptPoint02.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-script-point-02.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Yeah, Mike, I’m here. Power died about ten minutes ago. Front deadbolt’s set, back latch too. The crank radio is pulling pieces of county traffic and one clean Gravitas message, which somehow makes me trust it less. Backup battery’s at forty-two percent. I heard a hard scrape outside, then something hit a car, but I stayed off the glass. I’m at the bench now, checking the ham set. Give me a second—the receive meter just moved.",
+  "summary": "Rich reports his locks, dead mains power, partial crank-radio reception, a low backup battery, unseen sounds outside, and the first movement on his ham receiver meter.",
+  "voicePromptIntent": "The generated Rich continuation is owned by prologue.rich.scriptPoint02.followUp.001. This authored PR is the first fixed part of the same outgoing Rich transmission.",
+  "defaultEmotion": "relieved, tired, quick, skeptical, increasingly alert"
+}

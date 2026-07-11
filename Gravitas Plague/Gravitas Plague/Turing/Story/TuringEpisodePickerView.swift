@@ -108,6 +108,23 @@ struct TuringEpisodePickerView: View {
                     .buttonStyle(.bordered)
                     .disabled(qwenNativeRunningPreset != nil || turingDialogueBusy)
 
+                    Button {
+                        runScriptPoint02And03()
+                    } label: {
+                        HStack(spacing: 8) {
+                            if turingDialogueBusy {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                            Text("Run ScriptPoint02 + ScriptPoint03")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(
+                        qwenNativeRunningPreset != nil ||
+                        turingDialogueBusy
+                    )
+
                     Divider()
                         .padding(.vertical, 4)
 
@@ -391,6 +408,40 @@ struct TuringEpisodePickerView: View {
         }
     }
 
+    private func runScriptPoint02And03() {
+        guard qwenNativeRunningPreset == nil,
+              turingDialogueBusy == false else {
+            return
+        }
+
+        turingDialogueBusy = true
+        qwenDebugStatus = "Running ScriptPoint02 + ScriptPoint03"
+
+        session.send(
+            .requestTuringStoryPlacementRoomScan(
+                "qwenTestButton.scriptPoint02And03"
+            )
+        )
+
+        Task.detached(priority: .userInitiated) {
+            let result = await TuringScriptPoint02And03FlowController
+                .shared
+                .run(
+                    seedStore: TuringConversationSeedStore.shared
+                )
+
+            if result.succeeded {
+                await TuringScriptPointProgressionController.shared
+                    .markCompletedByManualRun()
+            }
+
+            await MainActor.run {
+                turingDialogueBusy = false
+                qwenDebugStatus = result.pickerStatus
+            }
+        }
+    }
+
     private func startBigMikeDictation() {
         guard qwenNativeRunningPreset == nil,
               turingDialogueBusy == false else {
@@ -558,61 +609,51 @@ struct TuringEpisodePickerView: View {
         )
 
         Task.detached(priority: .userInitiated) {
-            do {
-                let context = await TuringConversationSeedStore.shared.context(
-                    for: "big_mike"
-                )
-                let request = ConversationPromptNoBibleRequest(
-                    id: "story.picker.phase3light.conversation.001",
-                    speaker: "Big Mike",
-                    voiceID: "big_mike_base_clone_v1",
-                    voiceVariantID: "broadcast_reading_lazy",
-                    characterProfileID: "big_mike",
-                    playerDictation: playerDictation,
-                    episodeStateForWordsOnly: "Rich is checking in with Big Mike during the early Gravitas Plague emergency. Big Mike is nearby, protective, tired, and trying to keep Rich calm and alive.",
-                    emotion: "protective, grounded, tired",
-                    prerecordingTranscript: context.prerecordingTranscript,
-                    lastVoicePromptSeed: context.lastVoicePromptSeed
-                )
-                let service = TuringDialogueService()
-                let plan = try await service.generateConversationNoBible(
-                    request
-                )
-                let result = await TuringNativeQwenHelloWorldCanary
-                    .runDialogueSegments(
-                        plan.segments,
-                        runID: "bigMikeConversationNoBible",
-                        source: "conversationPrompt_playerTurn_noBible",
-                        onFirstSegmentReady: {
-                            session.publishTuringDictationEvent(
-                                .responseSegmentZeroReady(clearAfterSeconds: 2.0)
-                            )
-                            try? await Task.sleep(nanoseconds: 2_000_000_000)
-                        }
+            let result = await TuringBigMikeConversationRunner.run(
+                playerDictation: playerDictation,
+                seedStore: TuringConversationSeedStore.shared,
+                onSegmentZeroReady: {
+                    session.publishTuringDictationEvent(
+                        .responseSegmentZeroReady(
+                            clearAfterSeconds: 2.0
+                        )
                     )
+                }
+            )
 
-                await TuringWalkieCommsFXController.shared
-                    .stopAmbientWalkieStatic(
+            if result.succeeded {
+                await MainActor.run {
+                    session.publishTuringDictationEvent(
+                        .responseAudioFinished
+                    )
+                    radioStaticLeadIn.stop(
                         reason: "responseAudioFinished"
                     )
-
-                await MainActor.run {
-                    session.publishTuringDictationEvent(.responseAudioFinished)
-                    radioStaticLeadIn.stop(reason: "responseAudioFinished")
-                    turingDialogueBusy = false
-                    qwenDebugStatus = result.pickerStatus
+                    qwenDebugStatus =
+                        "Big Mike response complete; starting ScriptPoint02"
                 }
-            } catch {
-                await TuringWalkieCommsFXController.shared
-                    .stopAmbientWalkieStatic(
-                        reason: "conversationFailed"
+
+                let progressionResult = await
+                    TuringScriptPointProgressionController.shared
+                    .triggerAfterFirstSuccessfulWalkieCustomMessage(
+                        seedStore: TuringConversationSeedStore.shared
                     )
 
                 await MainActor.run {
                     turingDialogueBusy = false
-                    radioStaticLeadIn.stop(reason: "conversationFailed")
-                    session.publishTuringDictationEvent(.failed(error.localizedDescription))
-                    qwenDebugStatus = "Failed: \(error.localizedDescription)"
+                    qwenDebugStatus = progressionResult?.pickerStatus
+                        ?? result.pickerStatus
+                }
+            } else {
+                await MainActor.run {
+                    turingDialogueBusy = false
+                    radioStaticLeadIn.stop(
+                        reason: "conversationFailed"
+                    )
+                    qwenDebugStatus = result.pickerStatus
+                    session.publishTuringDictationEvent(
+                        .failed(result.pickerStatus)
+                    )
                 }
             }
         }

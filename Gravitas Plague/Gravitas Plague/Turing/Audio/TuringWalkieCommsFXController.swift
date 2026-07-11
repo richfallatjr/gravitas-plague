@@ -81,6 +81,29 @@ final class TuringWalkieCommsFXController {
         await startSendingLeadIn(reason: reason)
     }
 
+    func startResponseLeadInAfterExternalSend(
+        reason: String
+    ) async {
+        // The Rich coordinator already played send-comm globally. Start only
+        // the existing spatial response lead-in; never replay the chirp.
+        await startAmbientWalkieStatic(
+            reason: "externalSend.\(reason)"
+        )
+        await startSendingLeadIn(
+            reason: "externalSend.\(reason)"
+        )
+
+        print("""
+        [TuringWalkieComms] response lead-in started after external send
+          reason: \(reason)
+          sendCommReplayed: false
+          ambientStatic: true
+          sendingStatic: true
+          randomBursts: true
+          stopCondition: firstBigMikePlayback
+        """)
+    }
+
     func startSendingLeadIn(reason: String) async {
         guard state != .sendingLeadIn else {
             return

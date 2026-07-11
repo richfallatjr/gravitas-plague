@@ -1,0 +1,50 @@
+{
+  "artifactKind": "qwen3_tts_base_voice_clone_prompt",
+  "artifacts": {
+    "refTextTokens": "ref_text_tokens.i32le",
+    "refTextTokensDType": "int32",
+    "refTextTokensShape": [
+      1,
+      66
+    ],
+    "referenceCodes": "reference_codes.i32le",
+    "referenceCodesDType": "int32",
+    "referenceCodesShape": [
+      222,
+      16
+    ],
+    "safetensors": "clone_artifacts.safetensors",
+    "speakerEmbedding": "speaker_embedding.f32le",
+    "speakerEmbeddingDType": "float32",
+    "speakerEmbeddingShape": [
+      2048
+    ]
+  },
+  "authoringModel": "/Users/richardfallat/Projects/dev/turing-native-qwen-cloner/Authoring/Models/Qwen3-TTS-12Hz-1.7B-Base",
+  "characterID": "rich",
+  "createdBy": "Tools/precompute_qwen_base_clone_artifacts.py",
+  "createdOn": "Mac.lan",
+  "iclMode": true,
+  "language": "English",
+  "mode": "icl",
+  "officialSemantics": {
+    "decodeRule": "decode ref_code + generated_codes, then trim waveform proportionally by ref_code row count",
+    "runtimeAPIEquivalent": "Qwen3TTSModel.generate_voice_clone(text, language, voice_clone_prompt=prompt_items)",
+    "sourceAPI": "Qwen3TTSModel.create_voice_clone_prompt(ref_audio, ref_text, x_vector_only_mode=False)"
+  },
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "pythonVersion": "3.13.5 (main, Jun 11 2025, 15:36:57) [Clang 17.0.0 (clang-1700.0.13.3)]",
+  "reference": {
+    "audioPath": "../ref_audio/normalized/ref_24000_mono.wav",
+    "audioSHA256": "0bf5dcf9dc8a24a8bf5dd5ce869f8b9b416ddebc423429e3a7c7127390a71a07",
+    "textPath": "../ref_text.txt",
+    "textSHA256": "9db57040fcb7f5993da693cb5c6c52913ebb3843d1ad261a44e491b8d800726e",
+    "textUTF8Bytes": 275
+  },
+  "runtimeModelID": "qwen3-tts-12hz-1.7b-base-4bit",
+  "runtimeQuantization": "4bit",
+  "schemaVersion": 1,
+  "variantID": "rich_reference_01",
+  "voiceID": "rich_base_clone_v1",
+  "xVectorOnlyMode": false
+}
