@@ -1,6 +1,7 @@
+import Combine
 import Foundation
 import RealityKit
-import UIKit
+import SwiftUI
 import simd
 
 enum TuringStoryPlacementAdjustmentBarVisualState: Sendable, Equatable {
@@ -65,8 +66,10 @@ struct TuringStoryAdjustmentBarPoseResolver: Sendable {
     static let collisionHeight: Float = 0.055
     static let collisionDepth: Float = 0.025
     static let wallOutwardOffset: Float = 0.020
-    static let belowVisualOffset: Float = 0.060
-    static let doorCenterAboveFloor: Float = 0.120
+    static let windowBelowVisualOffset: Float = 0.030
+    static let shelfBelowVisualOffset: Float = 0.060
+    static let posterBelowStickerGap: Float = 0.040
+    static let doorCenterBelowFloor: Float = 6.0 * 0.0254
     static let floorVisualClearance: Float = 0.010
 
     func visualWidth(
@@ -93,32 +96,52 @@ struct TuringStoryAdjustmentBarPoseResolver: Sendable {
         )
 
         let localY: Float
+        let clampsAboveFloor: Bool
         switch slot.placement {
         case .door(let placement):
+            clampsAboveFloor = false
             if let floorY = placement.floorWorldY ?? wall.floorWorldY,
-                abs(up.y) > 0.05
-            {
-                localY = (floorY + Self.doorCenterAboveFloor - wall.center.y) / up.y
+               abs(up.y) > 0.05 {
+                localY = (
+                    floorY - Self.doorCenterBelowFloor - wall.center.y
+                ) / up.y
             } else {
-                localY = placement.localY - placement.height * 0.5 + Self.doorCenterAboveFloor
+                localY = placement.localY - placement.height * 0.5
+                    - Self.doorCenterBelowFloor
             }
 
         case .window(let placement):
-            localY = placement.localY - placement.height * 0.5 - Self.belowVisualOffset
+            clampsAboveFloor = true
+            localY = placement.localY - placement.height * 0.5
+                - Self.windowBelowVisualOffset
 
         case .walkieShelf(let placement):
-            localY = placement.localY - placement.height * 0.5 - Self.belowVisualOffset
+            clampsAboveFloor = true
+            localY = placement.localY - placement.height * 0.5
+                - Self.shelfBelowVisualOffset
 
         case .poster(let placement):
-            localY = placement.localY - placement.height * 0.5 - Self.belowVisualOffset
+            clampsAboveFloor = true
+            let stickerSize = min(
+                WallStickerStyle.stickerSizeMeters,
+                placement.height * 0.105
+            )
+            let stickerBottomDepth = stickerSize * 1.40
+            localY = placement.localY - placement.height * 0.5
+                - stickerBottomDepth - Self.posterBelowStickerGap
         }
 
-        var position =
-            wall.center + right * slot.placement.localX + up * localY + normal
-            * (slot.placement.depthOffset + Self.wallOutwardOffset)
+        var position = wall.center
+            + right * slot.placement.localX
+            + up * localY
+            + normal * (
+                slot.placement.depthOffset + Self.wallOutwardOffset
+            )
 
-        if let floorY = slot.placement.floorWorldY ?? wall.floorWorldY {
-            let minimumY = floorY + Self.visibleHeight * 0.5 + Self.floorVisualClearance
+        if clampsAboveFloor,
+           let floorY = slot.placement.floorWorldY ?? wall.floorWorldY {
+            let minimumY = floorY + Self.visibleHeight * 0.5
+                + Self.floorVisualClearance
             if position.y < minimumY, abs(up.y) > 0.05 {
                 position += up * ((minimumY - position.y) / up.y)
             }
@@ -142,45 +165,42 @@ struct TuringStoryAdjustmentBarPoseResolver: Sendable {
 }
 
 @MainActor
-enum TuringStoryAdjustmentBarMaterialFactory {
-    static func make(
-        opacity: Float
-    ) -> PhysicallyBasedMaterial {
-        var material = TuringStoryWindowGlassMaterialFactory.makeGlassMaterial()
-        material.baseColor = .init(
-            tint: UIColor(
-                white: 1.0,
-                alpha: CGFloat(opacity)
-            )
-        )
-        material.blending = .transparent(
-            opacity: .init(floatLiteral: opacity)
-        )
-        material.faceCulling = .none
-        return material
-    }
+private final class TuringStoryAdjustmentBarAppearance: ObservableObject {
+    @Published var widthPoints: CGFloat
+    @Published var opacity: Double = 0.58
+    @Published var scale: CGFloat = 1.0
+    @Published var indicatorOpacity: Double = 0.55
 
-    static func makeIndicator(
-        opacity: Float
-    ) -> UnlitMaterial {
-        var material = UnlitMaterial()
-        material.color = .init(
-            tint: UIColor(
-                white: 1.0,
-                alpha: CGFloat(opacity)
-            )
+    init(widthMeters: Float) {
+        widthPoints = CGFloat(widthMeters * 1_000.0)
+    }
+}
+
+private struct TuringStoryAdjustmentBarSwiftUIView: View {
+    @ObservedObject var appearance: TuringStoryAdjustmentBarAppearance
+
+    var body: some View {
+        HStack {
+            Capsule()
+                .fill(.white.opacity(appearance.indicatorOpacity))
+                .frame(width: 32, height: 4)
+        }
+        .frame(
+            width: appearance.widthPoints,
+            height: 25
         )
-        material.blending = .transparent(
-            opacity: .init(floatLiteral: opacity)
-        )
-        return material
+        .glassBackgroundEffect()
+        .opacity(appearance.opacity)
+        .scaleEffect(appearance.scale)
+        .animation(.easeInOut(duration: 0.12), value: appearance.opacity)
+        .animation(.easeInOut(duration: 0.12), value: appearance.scale)
+        .allowsHitTesting(false)
     }
 }
 
 @MainActor
 final class TuringStoryPlacementAdjustmentBarPresenter:
-    TuringStoryPlacementAdjustmentBarPresenting
-{
+    TuringStoryPlacementAdjustmentBarPresenting {
 
     private static let registerAdjustmentBarComponentOnce: Void = {
         TuringStoryPlacementAdjustmentBarComponent.registerComponent()
@@ -188,8 +208,8 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
 
     private final class BarRecord {
         let container: Entity
-        let visual: ModelEntity
-        let indicator: ModelEntity
+        let attachment: Entity
+        let appearance: TuringStoryAdjustmentBarAppearance
         var slot: TuringStoryRuntimeSlot
         var visibleSize: SIMD3<Float>
         var collisionSize: SIMD3<Float>
@@ -198,15 +218,15 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
 
         init(
             container: Entity,
-            visual: ModelEntity,
-            indicator: ModelEntity,
+            attachment: Entity,
+            appearance: TuringStoryAdjustmentBarAppearance,
             slot: TuringStoryRuntimeSlot,
             visibleSize: SIMD3<Float>,
             collisionSize: SIMD3<Float>
         ) {
             self.container = container
-            self.visual = visual
-            self.indicator = indicator
+            self.attachment = attachment
+            self.appearance = appearance
             self.slot = slot
             self.visibleSize = visibleSize
             self.collisionSize = collisionSize
@@ -214,9 +234,7 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
     }
 
     private weak var wallProvider:
-        (
-            any TuringStoryAdjustmentWallProviding
-        )?
+        (any TuringStoryAdjustmentWallProviding)?
     private let root = Entity()
     private let poseResolver = TuringStoryAdjustmentBarPoseResolver()
     private var records: [TuringStoryPropID: BarRecord] = [:]
@@ -250,10 +268,9 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
 
         for propID in TuringStoryPropID.allCases {
             guard let slot = activeSlots[propID],
-                let wall = wallProvider?.turingStoryAdjustmentWallBasis(
+                  let wall = wallProvider?.turingStoryAdjustmentWallBasis(
                     for: slot.wallID
-                )
-            else {
+                  ) else {
                 continue
             }
             let record = makeRecord(slot: slot)
@@ -274,10 +291,9 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
         duration: TimeInterval
     ) {
         guard let record = records[slot.propID],
-            let wall = wallProvider?.turingStoryAdjustmentWallBasis(
+              let wall = wallProvider?.turingStoryAdjustmentWallBasis(
                 for: slot.wallID
-            )
-        else {
+              ) else {
             return
         }
         record.slot = slot
@@ -299,10 +315,9 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
         slot: TuringStoryRuntimeSlot
     ) {
         guard let record = records[slot.propID],
-            let wall = wallProvider?.turingStoryAdjustmentWallBasis(
+              let wall = wallProvider?.turingStoryAdjustmentWallBasis(
                 for: slot.wallID
-            )
-        else {
+              ) else {
             return
         }
         record.slot = slot
@@ -317,16 +332,22 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
         for propID: TuringStoryPropID
     ) -> SIMD3<Float> {
         guard let record = records[propID] else {
-            return SIMD3<Float>(1, 0, 0)
+            return SIMD3<Float>(-1, 0, 0)
         }
         let matrix = record.container.transformMatrix(relativeTo: nil)
-        let right = SIMD3<Float>(
+        let authoredRight = SIMD3<Float>(
             matrix.columns.0.x,
             matrix.columns.0.y,
             matrix.columns.0.z
         )
-        let length = simd_length(right)
-        return length > 0.000_01 ? right / length : SIMD3<Float>(1, 0, 0)
+        let length = simd_length(authoredRight)
+        guard length > 0.000_01 else {
+            return SIMD3<Float>(-1, 0, 0)
+        }
+
+        // The scan's authored wall-right basis runs opposite the user's
+        // perceived left-to-right drag direction in the immersive view.
+        return -(authoredRight / length)
     }
 
     func setVisualState(
@@ -346,10 +367,9 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
         snapFlashTasks[propID] = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 120_000_000)
             guard !Task.isCancelled,
-                let self,
-                let current = self.records[propID],
-                current.state == .snapping
-            else {
+                  let self,
+                  let current = self.records[propID],
+                  current.state == .snapping else {
                 return
             }
             self.applyVisualState(.pinched, to: current)
@@ -372,11 +392,11 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
         } else {
             record.container.components.remove(InputTargetComponent.self)
             record.container.components.remove(HoverEffectComponent.self)
-            setVisualMaterial(
-                opacity: 0.08,
+            applyAppearance(
+                opacity: 0.25,
                 scale: 1.0,
-                indicatorOpacity: 0.12,
-                record: record
+                indicatorOpacity: 0.20,
+                to: record
             )
         }
     }
@@ -421,41 +441,25 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
             )
         )
 
-        let visual = ModelEntity(
-            mesh: .generateBox(
-                size: visibleSize,
-                cornerRadius: 0.008
-            ),
-            materials: [
-                TuringStoryAdjustmentBarMaterialFactory.make(opacity: 0.18)
-            ]
+        let appearance = TuringStoryAdjustmentBarAppearance(
+            widthMeters: width
         )
-        visual.name = "TuringStoryPlacementAdjustmentBar_Visual"
-        visual.components.remove(InputTargetComponent.self)
-        visual.components.remove(CollisionComponent.self)
-        container.addChild(visual)
-
-        let indicator = ModelEntity(
-            mesh: .generateBox(
-                size: SIMD3<Float>(0.018, 0.008, 0.008),
-                cornerRadius: 0.003
-            ),
-            materials: [
-                TuringStoryAdjustmentBarMaterialFactory.makeIndicator(
-                    opacity: 0.30
+        let attachment = Entity()
+        attachment.name = "TuringStoryPlacementAdjustmentBar_SwiftUI"
+        attachment.components.set(
+            ViewAttachmentComponent(
+                rootView: TuringStoryAdjustmentBarSwiftUIView(
+                    appearance: appearance
                 )
-            ]
+            )
         )
-        indicator.name = "TuringStoryPlacementAdjustmentBar_GrabIndicator"
-        indicator.position.z = visibleSize.z * 0.5 + 0.0045
-        indicator.components.remove(InputTargetComponent.self)
-        indicator.components.remove(CollisionComponent.self)
-        container.addChild(indicator)
+        attachment.position.z = visibleSize.z * 0.5 + 0.003
+        container.addChild(attachment)
 
         return BarRecord(
             container: container,
-            visual: visual,
-            indicator: indicator,
+            attachment: attachment,
+            appearance: appearance,
             slot: slot,
             visibleSize: visibleSize,
             collisionSize: collisionSize
@@ -482,19 +486,13 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
             TuringStoryAdjustmentBarPoseResolver.collisionDepth
         )
 
-        if var model = record.visual.components[ModelComponent.self] {
-            model.mesh = .generateBox(
-                size: visibleSize,
-                cornerRadius: 0.008
-            )
-            record.visual.components.set(model)
-        }
         record.container.components.set(
             CollisionComponent(
                 shapes: [.generateBox(size: collisionSize)]
             )
         )
-        record.indicator.position.z = visibleSize.z * 0.5 + 0.0045
+        record.appearance.widthPoints = CGFloat(width * 1_000.0)
+        record.attachment.position.z = visibleSize.z * 0.5 + 0.003
         record.visibleSize = visibleSize
         record.collisionSize = collisionSize
     }
@@ -505,77 +503,62 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
     ) {
         record.state = state
         guard record.interactionEnabled else {
-            setVisualMaterial(
-                opacity: 0.08,
+            applyAppearance(
+                opacity: 0.25,
                 scale: 1.0,
-                indicatorOpacity: 0.12,
-                record: record
+                indicatorOpacity: 0.20,
+                to: record
             )
             return
         }
 
         switch state {
         case .idle:
-            setVisualMaterial(
-                opacity: 0.18,
+            applyAppearance(
+                opacity: 0.58,
                 scale: 1.0,
-                indicatorOpacity: 0.30,
-                record: record
+                indicatorOpacity: 0.55,
+                to: record
             )
         case .hover:
-            setVisualMaterial(
-                opacity: 0.40,
+            applyAppearance(
+                opacity: 0.82,
                 scale: 1.03,
-                indicatorOpacity: 0.55,
-                record: record
+                indicatorOpacity: 0.72,
+                to: record
             )
         case .pinched:
-            setVisualMaterial(
-                opacity: 0.65,
+            applyAppearance(
+                opacity: 1.0,
                 scale: 1.05,
-                indicatorOpacity: 0.75,
-                record: record
+                indicatorOpacity: 0.90,
+                to: record
             )
         case .snapping:
-            setVisualMaterial(
-                opacity: 0.65,
+            applyAppearance(
+                opacity: 1.0,
                 scale: 1.05,
                 indicatorOpacity: 1.0,
-                record: record
+                to: record
             )
         }
     }
 
-    private func setVisualMaterial(
-        opacity: Float,
-        scale: Float,
-        indicatorOpacity: Float,
-        record: BarRecord
+    private func applyAppearance(
+        opacity: Double,
+        scale: CGFloat,
+        indicatorOpacity: Double,
+        to record: BarRecord
     ) {
-        if var model = record.visual.components[ModelComponent.self] {
-            model.materials = [
-                TuringStoryAdjustmentBarMaterialFactory.make(opacity: opacity)
-            ]
-            record.visual.components.set(model)
-        }
-        if var model = record.indicator.components[ModelComponent.self] {
-            model.materials = [
-                TuringStoryAdjustmentBarMaterialFactory.makeIndicator(
-                    opacity: indicatorOpacity
-                )
-            ]
-            record.indicator.components.set(model)
-        }
-        record.visual.scale = SIMD3<Float>(repeating: scale)
-        record.indicator.scale = SIMD3<Float>(repeating: scale)
+        record.appearance.opacity = opacity
+        record.appearance.scale = scale
+        record.appearance.indicatorOpacity = indicatorOpacity
     }
 
     private func clearRecords() {
         root.children.removeAll()
         records.removeAll()
     }
-
-    // MARK: - Internal test inspection
 
     var installedBarCount: Int {
         records.count
@@ -589,8 +572,14 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
 
     func visualEntity(
         for propID: TuringStoryPropID
-    ) -> ModelEntity? {
-        records[propID]?.visual
+    ) -> Entity? {
+        records[propID]?.attachment
+    }
+
+    func visualState(
+        for propID: TuringStoryPropID
+    ) -> TuringStoryPlacementAdjustmentBarVisualState? {
+        records[propID]?.state
     }
 
     func visibleSize(
@@ -605,4 +594,3 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
         records[propID]?.collisionSize
     }
 }
-

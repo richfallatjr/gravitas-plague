@@ -111,7 +111,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
     }
 
     func beginRun(runID: String, expectedSegmentCount: Int?) async {
-        await runCancelled(reason: "beginNewRun", endPlaybackOwner: false)
+        await runCancelled(reason: "beginNewRun")
 
         self.runID = runID
         self.expectedSegmentCount = expectedSegmentCount
@@ -138,10 +138,6 @@ final class TuringStoryWalkiePlaybackCoordinator {
             withIntermediateDirectories: true
         )
         self.runDirectory = directory
-
-        TuringAudioSessionCoordinator.shared.beginPlayback(
-            owner: "TuringStoryWalkiePlaybackCoordinator"
-        )
 
         print("""
         [TuringPlaybackRebuild] run started
@@ -278,10 +274,6 @@ final class TuringStoryWalkiePlaybackCoordinator {
     }
 
     func runCancelled(reason: String) async {
-        await runCancelled(reason: reason, endPlaybackOwner: true)
-    }
-
-    private func runCancelled(reason: String, endPlaybackOwner: Bool) async {
         guard runActive || activeItem != .none else { return }
         print("""
         [TuringPlaybackTrace] run cancellation requested
@@ -303,11 +295,6 @@ final class TuringStoryWalkiePlaybackCoordinator {
         prerecordingHasPlayed = false
         skippedSegments.removeAll(keepingCapacity: false)
         activeComputeSegments.removeAll(keepingCapacity: false)
-        if endPlaybackOwner {
-            TuringAudioSessionCoordinator.shared.endPlayback(
-                owner: "TuringStoryWalkiePlaybackCoordinator"
-            )
-        }
         print("""
         [TuringPlaybackRebuild] run cancelled
           reason: \(reason)
@@ -719,9 +706,6 @@ final class TuringStoryWalkiePlaybackCoordinator {
     private func finishRun(reason: String) async {
         guard runActive else { return }
         runActive = false
-        TuringAudioSessionCoordinator.shared.endPlayback(
-            owner: "TuringStoryWalkiePlaybackCoordinator"
-        )
         cleanupAllWAVs(reason: "finish.\(reason)")
         print("""
         [TuringPlaybackRebuild] run finished

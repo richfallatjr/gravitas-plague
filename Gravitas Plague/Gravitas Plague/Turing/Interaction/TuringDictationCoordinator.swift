@@ -66,9 +66,6 @@ final class TuringDictationCoordinator: ObservableObject {
         status = .finishing
         tearDownAudioEngine()
         recognitionRequest?.endAudio()
-        TuringAudioSessionCoordinator.shared.endRecording(
-            owner: "TuringDictation"
-        )
 
         try? await Task.sleep(nanoseconds: 300_000_000)
 
@@ -100,9 +97,6 @@ final class TuringDictationCoordinator: ObservableObject {
     func cancel(reason: String) async {
         tearDownAudioEngine()
         recognitionRequest?.endAudio()
-        TuringAudioSessionCoordinator.shared.endRecording(
-            owner: "TuringDictation"
-        )
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil
@@ -150,9 +144,6 @@ final class TuringDictationCoordinator: ObservableObject {
         recognitionTask = nil
         recognitionRequest = nil
         tearDownAudioEngine()
-        try configureAudioSessionForRecording()
-
-        print("[TuringDictation] audio session configured for recording")
 
         let recognizer = SFSpeechRecognizer(
             locale: Locale(identifier: "en_US")
@@ -227,14 +218,6 @@ final class TuringDictationCoordinator: ObservableObject {
         stopAudioCapture()
         audioEngine?.reset()
         audioEngine = nil
-    }
-
-    private func configureAudioSessionForRecording() throws {
-#if os(iOS) || os(visionOS) || os(tvOS)
-        TuringAudioSessionCoordinator.shared.beginRecording(
-            owner: "TuringDictation"
-        )
-#endif
     }
 
     private func bestTranscript() -> String {

@@ -289,12 +289,6 @@ final class GravitasDemoAudioController {
     func prepareIfNeeded() {
         guard !hasPrepared else { return }
 
-        do {
-            try configureAudioSession()
-        } catch {
-            print("[Gravitas Audio] Audio session configuration failed: \(error)")
-        }
-
         backgroundMusicPlayer = makeOptionalAVAudioPlayer(
             file: backgroundMusicFile,
             volume: 0.30,
@@ -1874,10 +1868,6 @@ final class GravitasDemoAudioController {
         }
 
         activeCharacterVocalBySourceID.removeAll()
-    }
-
-    private func configureAudioSession() throws {
-        TuringAudioSessionCoordinator.shared.configureForLaunch()
     }
 
     private func makeOptionalSpatialResource(

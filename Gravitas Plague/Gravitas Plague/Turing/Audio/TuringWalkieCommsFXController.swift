@@ -15,7 +15,6 @@ final class TuringWalkieCommsFXController {
     private var randomBurstTask: Task<Void, Never>?
     private var lastBurstURL: URL?
     private var activeBurstHandleID: UUID?
-    private var activeBurstPlaybackOwner: String?
     private var sendingStaticActive = false
 
     private init() {}
@@ -126,13 +125,6 @@ final class TuringWalkieCommsFXController {
             )
             self.activeBurstHandleID = nil
         }
-        if let activeBurstPlaybackOwner {
-            TuringAudioSessionCoordinator.shared.endPlayback(
-                owner: activeBurstPlaybackOwner
-            )
-            self.activeBurstPlaybackOwner = nil
-        }
-
         await TuringStoryWalkieAudioRoute.stopSendingStaticLoop(
             reason: reason
         )
@@ -186,12 +178,6 @@ final class TuringWalkieCommsFXController {
             )
             self.activeBurstHandleID = nil
         }
-        if let activeBurstPlaybackOwner {
-            TuringAudioSessionCoordinator.shared.endPlayback(
-                owner: activeBurstPlaybackOwner
-            )
-            self.activeBurstPlaybackOwner = nil
-        }
         await TuringStoryWalkieAudioRoute.stopSendingStaticLoop(reason: reason)
         await TuringStoryWalkieAudioRoute.stopAmbientWalkieStaticLoop(
             reason: reason
@@ -237,24 +223,17 @@ final class TuringWalkieCommsFXController {
                 """)
 
                 let label = url.deletingPathExtension().lastPathComponent
-                let owner = "TuringWalkieCommsFX.randomBurst.\(label)"
-                self.activeBurstPlaybackOwner = owner
                 self.activeBurstHandleID = try? self.playOneShotNoWait(
                     fileURL: url,
                     kind: .commSFX,
                     label: label,
-                    owner: owner,
                     completion: { [weak self] completedID in
                         guard self?.activeBurstHandleID == completedID else {
                             return
                         }
                         self?.activeBurstHandleID = nil
-                        self?.activeBurstPlaybackOwner = nil
                     }
                 )
-                if self.activeBurstHandleID == nil {
-                    self.activeBurstPlaybackOwner = nil
-                }
             }
         }
     }
@@ -282,26 +261,14 @@ final class TuringWalkieCommsFXController {
                     return
                 }
 
-                let owner = "TuringWalkieCommsFX.\(label)"
-                TuringAudioSessionCoordinator.shared.beginPlayback(owner: owner)
-                do {
-                    _ = try clipPlayer.playOneShot(
-                        fileURL: fileURL,
-                        kind: kind,
-                        label: label,
-                        completion: { completedID in
-                            TuringAudioSessionCoordinator.shared.endPlayback(
-                                owner: owner
-                            )
-                            continuation.resume(returning: completedID)
-                        }
-                    )
-                } catch {
-                    TuringAudioSessionCoordinator.shared.endPlayback(
-                        owner: owner
-                    )
-                    throw error
-                }
+                _ = try clipPlayer.playOneShot(
+                    fileURL: fileURL,
+                    kind: kind,
+                    label: label,
+                    completion: { completedID in
+                        continuation.resume(returning: completedID)
+                    }
+                )
             } catch {
                 continuation.resume(throwing: error)
             }
@@ -313,7 +280,6 @@ final class TuringWalkieCommsFXController {
         fileURL: URL,
         kind: TuringWalkieOneShotClipPlayer.ClipKind,
         label: String,
-        owner: String,
         completion: @escaping @MainActor (UUID) -> Void
     ) throws -> UUID {
         guard let clipPlayer = TuringStoryWalkieAudioRoute
@@ -321,22 +287,11 @@ final class TuringWalkieCommsFXController {
             throw TuringWalkieAudioError.playbackStartFailed(label)
         }
 
-        TuringAudioSessionCoordinator.shared.beginPlayback(owner: owner)
-        do {
-            return try clipPlayer.playOneShot(
-                fileURL: fileURL,
-                kind: kind,
-                label: label,
-                completion: { completedID in
-                    TuringAudioSessionCoordinator.shared.endPlayback(
-                        owner: owner
-                    )
-                    completion(completedID)
-                }
-            )
-        } catch {
-            TuringAudioSessionCoordinator.shared.endPlayback(owner: owner)
-            throw error
-        }
+        return try clipPlayer.playOneShot(
+            fileURL: fileURL,
+            kind: kind,
+            label: label,
+            completion: completion
+        )
     }
 }

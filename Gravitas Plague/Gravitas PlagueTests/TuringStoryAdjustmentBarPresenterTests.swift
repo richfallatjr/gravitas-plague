@@ -36,22 +36,23 @@ final class TuringStoryAdjustmentBarPresenterTests: XCTestCase {
         }
     }
 
-    func testBarsUseGlassDerivedMaterialStates() {
+    func testBarsUseSwiftUIGlassAttachments() {
         let setup = makePresenterSetup()
         setup.presenter.show(activeSlots: setup.activeSlots)
         setup.presenter.setVisualState(.pinched, propID: .window)
 
         guard let visual = setup.presenter.visualEntity(for: .window),
-            let model = visual.components[ModelComponent.self]
+            visual.components[ViewAttachmentComponent.self] != nil
         else {
-            return XCTFail("Missing window bar model")
+            return XCTFail("Missing SwiftUI glass attachment")
         }
-        XCTAssertTrue(model.materials.first is PhysicallyBasedMaterial)
-        XCTAssertEqual(visual.scale.x, 1.05, accuracy: 0.0001)
-        XCTAssertEqual(visual.scale.y, 1.05, accuracy: 0.0001)
+        XCTAssertEqual(
+            setup.presenter.visualState(for: .window),
+            .pinched
+        )
     }
 
-    func testDoorBarStaysAboveFloor() {
+    func testDoorBarIsSixInchesBelowFloor() {
         let setup = makePresenterSetup(floorWorldY: 0.40)
         setup.presenter.show(activeSlots: setup.activeSlots)
 
@@ -59,10 +60,51 @@ final class TuringStoryAdjustmentBarPresenterTests: XCTestCase {
             return XCTFail("Missing door bar")
         }
         let y = door.transformMatrix(relativeTo: nil).columns.3.y
-        XCTAssertGreaterThanOrEqual(
+        XCTAssertEqual(
             y,
-            0.40 + TuringStoryAdjustmentBarPoseResolver.visibleHeight * 0.5
-                + TuringStoryAdjustmentBarPoseResolver.floorVisualClearance - 0.0001
+            0.40 - TuringStoryAdjustmentBarPoseResolver.doorCenterBelowFloor,
+            accuracy: 0.0001
+        )
+    }
+
+    func testWindowBarUsesHalfOriginalGap() {
+        XCTAssertEqual(
+            TuringStoryAdjustmentBarPoseResolver.windowBelowVisualOffset,
+            0.030,
+            accuracy: 0.0001
+        )
+    }
+
+    func testPosterBarSitsBelowStickerRow() {
+        let setup = makePresenterSetup()
+        setup.presenter.show(activeSlots: setup.activeSlots)
+
+        guard let poster = setup.presenter.barEntity(for: .poster),
+              let slot = setup.activeSlots[.poster],
+              case .poster(let placement) = slot.placement else {
+            return XCTFail("Missing poster bar")
+        }
+        let y = poster.transformMatrix(relativeTo: nil).columns.3.y
+        let stickerSize = min(
+            WallStickerStyle.stickerSizeMeters,
+            placement.height * 0.105
+        )
+        let stickerBottomY = 1.2 + placement.localY
+            - placement.height * 0.5 - stickerSize * 1.40
+        XCTAssertLessThan(
+            y,
+            stickerBottomY - 0.039
+        )
+    }
+
+    func testProductionDragAxisReversesAuthoredWallRight() {
+        let setup = makePresenterSetup()
+        setup.presenter.show(activeSlots: setup.activeSlots)
+
+        XCTAssertEqual(
+            setup.presenter.worldRightAxis(for: .window).x,
+            -1,
+            accuracy: 0.0001
         )
     }
 
@@ -170,4 +212,3 @@ final class TuringStoryAdjustmentBarPresenterTests: XCTestCase {
         )
     }
 }
-

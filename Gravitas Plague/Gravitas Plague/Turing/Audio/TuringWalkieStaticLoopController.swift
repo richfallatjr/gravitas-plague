@@ -119,9 +119,6 @@ final class TuringWalkieStaticLoopController {
         let controller = lane.playAudio(resource)
         controller.gain = gainDB
         loopControllersByLaneName[laneName] = controller
-        TuringAudioSessionCoordinator.shared.beginPlayback(
-            owner: "TuringWalkieStaticLoopController.\(laneName)"
-        )
 
         print("""
         [TuringRadioStaticLeadIn] started
@@ -145,9 +142,6 @@ final class TuringWalkieStaticLoopController {
         }
 
         controller.stop()
-        TuringAudioSessionCoordinator.shared.endPlayback(
-            owner: "TuringWalkieStaticLoopController.\(laneName)"
-        )
         print("""
         [TuringRadioStaticLeadIn] stopped
           reason: \(reason)
