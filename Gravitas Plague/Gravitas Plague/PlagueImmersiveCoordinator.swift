@@ -124,13 +124,27 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let turingWindowBundleController = TuringStoryWindowBundleController()
     private let turingDoorBundleController = TuringStoryDoorBundleController()
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
+    private lazy var turingStoryPlacementAdjustmentCoordinator =
+        TuringStoryPlacementAdjustmentCoordinator(
+            wallProvider: roomSkinningCoordinator.wallManager,
+            occupancyRegistry: wallPropOccupancyRegistry,
+            adapters: [
+                .door: turingDoorBundleController,
+                .window: turingWindowBundleController,
+                .walkieShelf: turingWalkieBundleController,
+                .poster: wallPosterUIController
+            ]
+        )
     private lazy var turingStoryWallLayoutCoordinator = TuringStoryWallLayoutCoordinator(
         doorController: turingDoorBundleController,
         windowController: turingWindowBundleController,
         walkieController: turingWalkieBundleController,
         posterController: wallPosterUIController,
-        onCommitted: { [weak self] scanID in
+        onCommitted: { [weak self] scanID, adjustmentSeed in
             guard let self else { return }
+            self.turingStoryPlacementAdjustmentCoordinator.activate(
+                seed: adjustmentSeed
+            )
             self.configureTuringWalkieAudioAndInteraction(
                 reason: "sliceLayout.\(scanID)",
                 attempt: 1
@@ -152,6 +166,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             )
         },
         onFailed: { [weak self] scanID, error in
+            self?.turingStoryPlacementAdjustmentCoordinator.cancel(
+                reason: "initialLayoutFailed.\(scanID)"
+            )
             self?.showTemporaryInstructionHUD(
                 "Prop placement failure. Scan again to retry.",
                 clearAfterSeconds: 5.0,
@@ -357,6 +374,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             wallManager: roomSkinningCoordinator.wallManager,
             occupancyRegistry: wallPropOccupancyRegistry
         )
+        turingStoryPlacementAdjustmentCoordinator.install(
+            sceneRoot: root
+        )
         forestEnvironmentController.applyIBLReceiverRecursively(
             root: wallPosterUIController.root
         )
@@ -450,6 +470,32 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     ) {
         roomSkinningCoordinator.endDoorHandleDrag(
             shouldConfirm: shouldConfirm
+        )
+    }
+
+    func beginTuringPlacementAdjustment(
+        propID: TuringStoryPropID,
+        worldPoint: SIMD3<Float>
+    ) {
+        turingStoryPlacementAdjustmentCoordinator.begin(
+            propID: propID,
+            worldPoint: worldPoint
+        )
+    }
+
+    func updateTuringPlacementAdjustment(
+        worldPoint: SIMD3<Float>
+    ) {
+        turingStoryPlacementAdjustmentCoordinator.update(
+            worldPoint: worldPoint
+        )
+    }
+
+    func endTuringPlacementAdjustment(
+        commit: Bool
+    ) {
+        turingStoryPlacementAdjustmentCoordinator.end(
+            commit: commit
         )
     }
 
@@ -788,6 +834,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             """)
             return
         }
+
+        turingStoryPlacementAdjustmentCoordinator.cancel(
+            reason: "debugRoomRescan.\(reason)"
+        )
 
         turingDebugRescanAttempt += 1
         let attempt = turingDebugRescanAttempt
@@ -1779,6 +1829,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     }
 
     func shutdown() {
+        turingStoryPlacementAdjustmentCoordinator.cancel(
+            reason: "immersiveShutdown"
+        )
         onYouDiedWorldCardCleanupRequested?()
         stopHordeBenchmark()
         turingStoryWallLayoutCoordinator.cancel(reason: "immersiveShutdown")
@@ -1816,6 +1869,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     }
 
     private func prepareForUserQuitOrClose() {
+        turingStoryPlacementAdjustmentCoordinator.cancel(
+            reason: "userQuitOrClose"
+        )
         print(
             """
             [PlagueApp] immersive cleanup starting

@@ -36,7 +36,7 @@ enum WallStickerStyle {
     static let stickerSpacingMeters: Float = 0.035
 }
 
-struct WallPosterPlacement {
+struct WallPosterPlacement: Sendable {
     var wallID: UUID
     var localX: Float
     var localY: Float

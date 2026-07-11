@@ -17,6 +17,7 @@ struct PlagueImmersiveView: View {
     @State private var youDiedWorldAnchor: AnchorEntity?
     @State private var youDiedWorldCardPresenter = YouDiedWorldCardPresenter()
     @State private var walkieMicHoldActive = false
+    @State private var placementAdjustmentDragActive = false
 
     private let frameTimer = Timer.publish(
         every: 1.0 / 60.0,
@@ -186,6 +187,53 @@ struct PlagueImmersiveView: View {
                     print("[TuringWalkieBundle] mic billboard hold ended")
                 }
         )
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .targetedToEntity(
+                    where: .has(
+                        TuringStoryPlacementAdjustmentBarComponent.self
+                    )
+                )
+                .onChanged { value in
+                    guard let component = value.entity.components[
+                        TuringStoryPlacementAdjustmentBarComponent.self
+                    ] else {
+                        return
+                    }
+
+                    let point = value.convert(
+                        value.location3D,
+                        from: .local,
+                        to: .scene
+                    )
+                    let worldPoint = SIMD3<Float>(
+                        Float(point.x),
+                        Float(point.y),
+                        Float(point.z)
+                    )
+
+                    if placementAdjustmentDragActive {
+                        coordinator.updateTuringPlacementAdjustment(
+                            worldPoint: worldPoint
+                        )
+                    } else {
+                        placementAdjustmentDragActive = true
+                        coordinator.beginTuringPlacementAdjustment(
+                            propID: component.propID,
+                            worldPoint: worldPoint
+                        )
+                    }
+                }
+                .onEnded { _ in
+                    guard placementAdjustmentDragActive else {
+                        return
+                    }
+                    placementAdjustmentDragActive = false
+                    coordinator.endTuringPlacementAdjustment(
+                        commit: true
+                    )
+                }
+        )
         .preferredSurroundingsEffect(
             deathPresentationController.surroundingsEffect
                 ?? damageTintController.surroundingsEffect
@@ -293,6 +341,7 @@ struct PlagueImmersiveView: View {
             )
         }
         .onDisappear {
+            placementAdjustmentDragActive = false
             coordinator.onYouDiedWorldCardCleanupRequested?()
             coordinator.onYouDiedWorldCardRequested = nil
             coordinator.onYouDiedWorldCardCleanupRequested = nil

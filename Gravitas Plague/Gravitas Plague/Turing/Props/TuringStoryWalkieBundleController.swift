@@ -5,7 +5,9 @@ import simd
 import UIKit
 
 @MainActor
-final class TuringStoryWalkieBundleController: ObservableObject {
+final class TuringStoryWalkieBundleController:
+    ObservableObject,
+    TuringStoryAdjustablePlacementController {
     enum BundleError: LocalizedError {
         case missingUSDZ(String)
         case missingRequiredEntity(String)
@@ -46,6 +48,8 @@ final class TuringStoryWalkieBundleController: ObservableObject {
     private weak var occupancyRegistry: WallPropOccupancyRegistry?
 
     private let occupancyID = UUID()
+    private var committedAdjustmentTransform: simd_float4x4?
+    private var committedAdjustmentSlot: TuringStoryRuntimeSlot?
     private(set) var placement: TuringStoryWallBundlePlacement?
     private(set) var isPlaced = false
 
@@ -94,6 +98,8 @@ final class TuringStoryWalkieBundleController: ObservableObject {
         root.isEnabled = true
         placement = plannedPlacement
         isPlaced = true
+        committedAdjustmentTransform = transform
+        committedAdjustmentSlot = nil
         registerOccupancy(
             placement: plannedPlacement,
             semanticReservation: semanticReservation
@@ -138,6 +144,8 @@ final class TuringStoryWalkieBundleController: ObservableObject {
             root.isEnabled = true
             placement = selectedPlacement
             isPlaced = true
+            committedAdjustmentTransform = transform
+            committedAdjustmentSlot = nil
 
             registerOccupancy(placement: selectedPlacement)
             resolvedAnchors.walkieAudioEmitter.components.set(SpatialAudioComponent())
@@ -177,6 +185,8 @@ final class TuringStoryWalkieBundleController: ObservableObject {
         anchors = nil
         placement = nil
         isPlaced = false
+        committedAdjustmentTransform = nil
+        committedAdjustmentSlot = nil
 
         print("""
         [TuringWalkieBundle] reset
@@ -786,6 +796,105 @@ final class TuringStoryWalkieBundleController: ObservableObject {
             padding: semanticReservation == nil
                 ? TuringStoryWalkieBundleTuning.occupancyPaddingMeters : 0,
             label: "Turing Story walkie-talkie shelf bundle"
+        )
+    }
+    var adjustmentPropID: TuringStoryPropID { .walkieShelf }
+
+    var adjustmentRoot: Entity { root }
+
+    var adjustmentOccupancyID: UUID { occupancyID }
+
+    func currentPlacementSlot() -> TuringStoryRuntimeSlot? {
+        committedAdjustmentSlot
+    }
+
+    func adjustmentWorldTransform(
+        for placement: TuringStoryWallBundlePlacement
+    ) throws -> simd_float4x4 {
+        guard let wallManager else {
+            throw TuringStoryPlacementAdjustmentError.missingWallManager
+        }
+        guard let transform = worldTransform(
+            placement: placement,
+            wallManager: wallManager
+        ) else {
+            throw TuringStoryPlacementAdjustmentError
+                .placementTransformUnavailable(
+                    slotID: "walkieShelf:\(placement.wallID)"
+                )
+        }
+        return transform
+    }
+
+    func adoptCommittedAdjustmentSlot(
+        _ slot: TuringStoryRuntimeSlot
+    ) throws {
+        guard slot.propID == .walkieShelf,
+              case .walkieShelf = slot.placement else {
+            throw TuringStoryPlacementAdjustmentError.wrongPlacementType(
+                expected: .walkieShelf,
+                slotID: slot.slotID
+            )
+        }
+        committedAdjustmentSlot = slot
+        committedAdjustmentTransform = root.transformMatrix(relativeTo: nil)
+    }
+
+    func previewPlannedPlacement(
+        _ slot: TuringStoryRuntimeSlot,
+        duration: TimeInterval
+    ) {
+        guard slot.propID == .walkieShelf,
+              case .walkieShelf = slot.placement else {
+            print(
+                "[TuringPlacementAdjust] shelf preview rejected slot=\(slot.slotID) reason=wrongPlacementType"
+            )
+            return
+        }
+        root.move(
+            to: Transform(matrix: slot.worldTransform),
+            relativeTo: nil,
+            duration: duration,
+            timingFunction: .easeInOut
+        )
+    }
+
+    func commitAdjustedPlacement(
+        _ slot: TuringStoryRuntimeSlot
+    ) throws {
+        guard slot.propID == .walkieShelf,
+              case .walkieShelf(let adjusted) = slot.placement else {
+            throw TuringStoryPlacementAdjustmentError.wrongPlacementType(
+                expected: .walkieShelf,
+                slotID: slot.slotID
+            )
+        }
+        guard occupancyRegistry != nil else {
+            throw TuringStoryPlacementAdjustmentError
+                .occupancyRegistrationFailed(.walkieShelf)
+        }
+
+        root.setTransformMatrix(slot.worldTransform, relativeTo: nil)
+        root.isEnabled = true
+        placement = adjusted
+        isPlaced = true
+        registerOccupancy(
+            placement: adjusted,
+            semanticReservation: slot.semanticReservation
+        )
+        committedAdjustmentTransform = slot.worldTransform
+        committedAdjustmentSlot = slot
+    }
+
+    func cancelPlacementPreview() {
+        guard let committedAdjustmentTransform else {
+            return
+        }
+        root.move(
+            to: Transform(matrix: committedAdjustmentTransform),
+            relativeTo: nil,
+            duration: 0.18,
+            timingFunction: .easeInOut
         )
     }
 }

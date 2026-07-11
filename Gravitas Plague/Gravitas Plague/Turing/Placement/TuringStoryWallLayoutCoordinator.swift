@@ -64,7 +64,10 @@ final class TuringStoryWallLayoutCoordinator {
     private let windowController: TuringStoryWindowBundleController
     private let walkieController: TuringStoryWalkieBundleController
     private let posterController: WallMountedPosterUIController
-    private let onCommitted: @MainActor (String) -> Void
+    private let onCommitted: @MainActor (
+        String,
+        TuringStoryPlacementAdjustmentSeed
+    ) -> Void
     private let onFailed: @MainActor (String, String) -> Void
 
     var isPlanningOrCommitting: Bool {
@@ -79,7 +82,10 @@ final class TuringStoryWallLayoutCoordinator {
         windowController: TuringStoryWindowBundleController,
         walkieController: TuringStoryWalkieBundleController,
         posterController: WallMountedPosterUIController,
-        onCommitted: @escaping @MainActor (String) -> Void = { _ in },
+        onCommitted: @escaping @MainActor (
+            String,
+            TuringStoryPlacementAdjustmentSeed
+        ) -> Void = { _, _ in },
         onFailed: @escaping @MainActor (String, String) -> Void = { _, _ in }
     ) {
         self.doorController = doorController
@@ -210,13 +216,27 @@ final class TuringStoryWallLayoutCoordinator {
             }
             TuringMemoryBudgetProbe.log(label: "afterStoryPropAssetPrepare")
             try Task.checkCancellation()
+
+            let adjustmentSeed = try TuringStoryPlacementCandidateCacheBuilder().build(
+                scanID: scanID,
+                catalog: catalog,
+                sliceMap: sliceMap,
+                resolvedLayout: resolved,
+                wallManager: wallManager,
+                doorController: doorController,
+                windowController: windowController,
+                walkieController: walkieController,
+                posterController: posterController
+            )
+
+            try Task.checkCancellation()
             state = .committing
             print("[TuringWallSlices] commit started order=door,window,walkieShelf,poster")
             try await commit(resolved, wallManager: wallManager, atmosphere: atmosphere)
             TuringMemoryBudgetProbe.log(label: "afterStoryPropCommit")
             state = .complete
             print("[TuringWallSlices] layout committed scanID=\(scanID)")
-            onCommitted(scanID)
+            onCommitted(scanID, adjustmentSeed)
         } catch is CancellationError {
             state = .failed
         } catch {

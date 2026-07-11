@@ -9,7 +9,9 @@ enum WallPosterPlacementState: String {
 }
 
 @MainActor
-final class WallMountedPosterUIController: ObservableObject {
+final class WallMountedPosterUIController:
+    ObservableObject,
+    TuringStoryAdjustablePlacementController {
     private struct CommittedWallPosterPlacement {
         let candidatePlacement: WallPosterPlacement
         let worldTransform: simd_float4x4
@@ -32,6 +34,11 @@ final class WallMountedPosterUIController: ObservableObject {
     private var committedPlacement: CommittedWallPosterPlacement?
     private var lastAppliedPosition: SIMD3<Float>?
     private let posterOccupancyID = UUID()
+    private var committedAdjustmentTransform: simd_float4x4?
+    private var committedAdjustmentSlot: TuringStoryRuntimeSlot?
+    private var committedAdjustmentContentScale = SIMD3<Float>(repeating: 1)
+    private var adjustmentPreviewInFlight = false
+    private var adjustmentPreviewCompletionTask: Task<Void, Never>?
     private(set) var hasRegisteredOccupancy = false
 
     var isLocked: Bool {
@@ -101,6 +108,7 @@ final class WallMountedPosterUIController: ObservableObject {
             placement: placement,
             semanticReservation: semanticReservation
         ) else { return false }
+        contentRoot.transform = .identity
         root.setTransformMatrix(transform, relativeTo: nil)
         currentPlacement = placement
         committedPlacement = CommittedWallPosterPlacement(
@@ -114,6 +122,10 @@ final class WallMountedPosterUIController: ObservableObject {
             transform.columns.3.y,
             transform.columns.3.z
         )
+        committedAdjustmentTransform = transform
+        committedAdjustmentSlot = nil
+        committedAdjustmentContentScale = contentRoot.scale
+        adjustmentPreviewInFlight = false
         root.isEnabled = true
         return true
     }
@@ -174,6 +186,7 @@ final class WallMountedPosterUIController: ObservableObject {
             return false
         }
 
+        contentRoot.transform = .identity
         root.setTransformMatrix(
             transform,
             relativeTo: nil
@@ -191,6 +204,10 @@ final class WallMountedPosterUIController: ObservableObject {
             transform.columns.3.y,
             transform.columns.3.z
         )
+        committedAdjustmentTransform = transform
+        committedAdjustmentSlot = nil
+        committedAdjustmentContentScale = contentRoot.scale
+        adjustmentPreviewInFlight = false
         root.isEnabled = true
 
         print(
@@ -224,6 +241,8 @@ final class WallMountedPosterUIController: ObservableObject {
     func resetPlacement(
         reason: String
     ) {
+        adjustmentPreviewCompletionTask?.cancel()
+        adjustmentPreviewCompletionTask = nil
         if let committedPlacement {
             occupancyRegistry?.unregister(
                 id: committedPlacement.occupancyID
@@ -240,9 +259,14 @@ final class WallMountedPosterUIController: ObservableObject {
         placementState = .notPlaced
         lastAppliedPosition = nil
         hasRegisteredOccupancy = false
+        committedAdjustmentTransform = nil
+        committedAdjustmentSlot = nil
+        committedAdjustmentContentScale = SIMD3<Float>(repeating: 1)
+        adjustmentPreviewInFlight = false
         posterEntity = nil
         buttonEntities.removeAll()
         contentRoot.children.removeAll()
+        contentRoot.transform = .identity
         root.isEnabled = false
         root.transform = .identity
 
@@ -259,6 +283,9 @@ final class WallMountedPosterUIController: ObservableObject {
         file: StaticString = #fileID,
         line: UInt = #line
     ) {
+        guard !adjustmentPreviewInFlight else {
+            return
+        }
         guard let committedPlacement else {
             return
         }
@@ -283,6 +310,178 @@ final class WallMountedPosterUIController: ObservableObject {
         }
     }
     #endif
+
+    var adjustmentPropID: TuringStoryPropID { .poster }
+
+    var adjustmentRoot: Entity { root }
+
+    var adjustmentOccupancyID: UUID { posterOccupancyID }
+
+    func currentPlacementSlot() -> TuringStoryRuntimeSlot? {
+        committedAdjustmentSlot
+    }
+
+    func adjustmentWorldTransform(
+        for placement: WallPosterPlacement
+    ) throws -> simd_float4x4 {
+        guard wallManager != nil else {
+            throw TuringStoryPlacementAdjustmentError.missingWallManager
+        }
+        guard let transform = worldTransform(for: placement) else {
+            throw TuringStoryPlacementAdjustmentError
+                .placementTransformUnavailable(
+                    slotID: "poster:\(placement.wallID)"
+                )
+        }
+        return transform
+    }
+
+    func adoptCommittedAdjustmentSlot(
+        _ slot: TuringStoryRuntimeSlot
+    ) throws {
+        guard slot.propID == .poster,
+              case .poster = slot.placement else {
+            throw TuringStoryPlacementAdjustmentError.wrongPlacementType(
+                expected: .poster,
+                slotID: slot.slotID
+            )
+        }
+        guard currentPosterSize != nil else {
+            throw TuringStoryPlacementAdjustmentError.posterBaseSizeUnavailable
+        }
+        committedAdjustmentSlot = slot
+        committedAdjustmentTransform = root.transformMatrix(relativeTo: nil)
+        committedAdjustmentContentScale = contentRoot.scale
+        adjustmentPreviewInFlight = false
+    }
+
+    func previewPlannedPlacement(
+        _ slot: TuringStoryRuntimeSlot,
+        duration: TimeInterval
+    ) {
+        guard slot.propID == .poster,
+              case .poster(let adjusted) = slot.placement,
+              let scale = try? adjustmentContentScale(for: adjusted) else {
+            print(
+                "[TuringPlacementAdjust] poster preview rejected slot=\(slot.slotID) reason=wrongPlacementTypeOrMissingBaseSize"
+            )
+            return
+        }
+
+        adjustmentPreviewCompletionTask?.cancel()
+        adjustmentPreviewCompletionTask = nil
+        adjustmentPreviewInFlight = true
+
+        root.move(
+            to: Transform(matrix: slot.worldTransform),
+            relativeTo: nil,
+            duration: duration,
+            timingFunction: .easeInOut
+        )
+        var contentTransform = contentRoot.transform
+        contentTransform.scale = scale
+        contentRoot.move(
+            to: contentTransform,
+            relativeTo: root,
+            duration: duration,
+            timingFunction: .easeInOut
+        )
+    }
+
+    func commitAdjustedPlacement(
+        _ slot: TuringStoryRuntimeSlot
+    ) throws {
+        guard slot.propID == .poster,
+              case .poster(let adjusted) = slot.placement else {
+            throw TuringStoryPlacementAdjustmentError.wrongPlacementType(
+                expected: .poster,
+                slotID: slot.slotID
+            )
+        }
+        guard occupancyRegistry != nil else {
+            throw TuringStoryPlacementAdjustmentError
+                .occupancyRegistrationFailed(.poster)
+        }
+        let targetScale = try adjustmentContentScale(for: adjusted)
+        guard let occupancyID = registerPosterOccupancy(
+            placement: adjusted,
+            semanticReservation: slot.semanticReservation
+        ) else {
+            throw TuringStoryPlacementAdjustmentError
+                .occupancyRegistrationFailed(.poster)
+        }
+
+        adjustmentPreviewCompletionTask?.cancel()
+        adjustmentPreviewCompletionTask = nil
+        root.setTransformMatrix(slot.worldTransform, relativeTo: nil)
+        contentRoot.scale = targetScale
+        currentPlacement = adjusted
+        committedPlacement = CommittedWallPosterPlacement(
+            candidatePlacement: adjusted,
+            worldTransform: slot.worldTransform,
+            occupancyID: occupancyID
+        )
+        placementState = .locked
+        lastAppliedPosition = SIMD3<Float>(
+            slot.worldTransform.columns.3.x,
+            slot.worldTransform.columns.3.y,
+            slot.worldTransform.columns.3.z
+        )
+        root.isEnabled = true
+        committedAdjustmentTransform = slot.worldTransform
+        committedAdjustmentSlot = slot
+        committedAdjustmentContentScale = targetScale
+        adjustmentPreviewInFlight = false
+    }
+
+    func cancelPlacementPreview() {
+        guard let committedAdjustmentTransform else {
+            return
+        }
+
+        adjustmentPreviewCompletionTask?.cancel()
+        adjustmentPreviewInFlight = true
+        root.move(
+            to: Transform(matrix: committedAdjustmentTransform),
+            relativeTo: nil,
+            duration: 0.18,
+            timingFunction: .easeInOut
+        )
+        var contentTransform = contentRoot.transform
+        contentTransform.scale = committedAdjustmentContentScale
+        contentRoot.move(
+            to: contentTransform,
+            relativeTo: root,
+            duration: 0.18,
+            timingFunction: .easeInOut
+        )
+
+        adjustmentPreviewCompletionTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(
+                nanoseconds: 220_000_000
+            )
+            guard !Task.isCancelled else {
+                return
+            }
+            self?.adjustmentPreviewInFlight = false
+            self?.adjustmentPreviewCompletionTask = nil
+        }
+    }
+
+    private func adjustmentContentScale(
+        for placement: WallPosterPlacement
+    ) throws -> SIMD3<Float> {
+        guard let baseSize = currentPosterSize,
+              baseSize.x > 0.0001,
+              baseSize.y > 0.0001 else {
+            throw TuringStoryPlacementAdjustmentError.posterBaseSizeUnavailable
+        }
+        return SIMD3<Float>(
+            placement.width / baseSize.x,
+            placement.height / baseSize.y,
+            1
+        )
+    }
 
     private func choosePlacement(
         wallManager: WallPlaneManager,

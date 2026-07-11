@@ -5,7 +5,9 @@ import simd
 import UIKit
 
 @MainActor
-final class TuringStoryWindowBundleController: ObservableObject {
+final class TuringStoryWindowBundleController:
+    ObservableObject,
+    TuringStoryAdjustablePlacementController {
     enum BundleError: LocalizedError {
         case missingUSDZ(String)
         case missingRequiredEntity(String)
@@ -44,6 +46,8 @@ final class TuringStoryWindowBundleController: ObservableObject {
     private weak var occupancyRegistry: WallPropOccupancyRegistry?
 
     private let occupancyID = UUID()
+    private var committedAdjustmentTransform: simd_float4x4?
+    private var committedAdjustmentSlot: TuringStoryRuntimeSlot?
     private(set) var placement: TuringStoryWindowBundlePlacement?
     private(set) var isPlaced = false
     private var activeAtmosphere: PortalHDRIAtmosphere = .night
@@ -96,6 +100,8 @@ final class TuringStoryWindowBundleController: ObservableObject {
         root.isEnabled = true
         placement = plannedPlacement
         isPlaced = true
+        committedAdjustmentTransform = transform
+        committedAdjustmentSlot = nil
         activeAtmosphere = atmosphere
         registerOccupancy(
             placement: plannedPlacement,
@@ -151,6 +157,8 @@ final class TuringStoryWindowBundleController: ObservableObject {
             root.isEnabled = true
             placement = selectedPlacement
             isPlaced = true
+            committedAdjustmentTransform = transform
+            committedAdjustmentSlot = nil
             activeAtmosphere = atmosphere
 
             registerOccupancy(placement: selectedPlacement)
@@ -226,6 +234,8 @@ final class TuringStoryWindowBundleController: ObservableObject {
         anchors = nil
         placement = nil
         isPlaced = false
+        committedAdjustmentTransform = nil
+        committedAdjustmentSlot = nil
         portalWorldRoot.children.removeAll()
         portalWorldRoot.components.set(WorldComponent())
 
@@ -988,6 +998,105 @@ final class TuringStoryWindowBundleController: ObservableObject {
         return atan2(
             wallForward.x,
             wallForward.z
+        )
+    }
+    var adjustmentPropID: TuringStoryPropID { .window }
+
+    var adjustmentRoot: Entity { root }
+
+    var adjustmentOccupancyID: UUID { occupancyID }
+
+    func currentPlacementSlot() -> TuringStoryRuntimeSlot? {
+        committedAdjustmentSlot
+    }
+
+    func adjustmentWorldTransform(
+        for placement: TuringStoryWindowBundlePlacement
+    ) throws -> simd_float4x4 {
+        guard let wallManager else {
+            throw TuringStoryPlacementAdjustmentError.missingWallManager
+        }
+        guard let transform = worldTransform(
+            placement: placement,
+            wallManager: wallManager
+        ) else {
+            throw TuringStoryPlacementAdjustmentError
+                .placementTransformUnavailable(
+                    slotID: "window:\(placement.wallID)"
+                )
+        }
+        return transform
+    }
+
+    func adoptCommittedAdjustmentSlot(
+        _ slot: TuringStoryRuntimeSlot
+    ) throws {
+        guard slot.propID == .window,
+              case .window = slot.placement else {
+            throw TuringStoryPlacementAdjustmentError.wrongPlacementType(
+                expected: .window,
+                slotID: slot.slotID
+            )
+        }
+        committedAdjustmentSlot = slot
+        committedAdjustmentTransform = root.transformMatrix(relativeTo: nil)
+    }
+
+    func previewPlannedPlacement(
+        _ slot: TuringStoryRuntimeSlot,
+        duration: TimeInterval
+    ) {
+        guard slot.propID == .window,
+              case .window = slot.placement else {
+            print(
+                "[TuringPlacementAdjust] window preview rejected slot=\(slot.slotID) reason=wrongPlacementType"
+            )
+            return
+        }
+        root.move(
+            to: Transform(matrix: slot.worldTransform),
+            relativeTo: nil,
+            duration: duration,
+            timingFunction: .easeInOut
+        )
+    }
+
+    func commitAdjustedPlacement(
+        _ slot: TuringStoryRuntimeSlot
+    ) throws {
+        guard slot.propID == .window,
+              case .window(let adjusted) = slot.placement else {
+            throw TuringStoryPlacementAdjustmentError.wrongPlacementType(
+                expected: .window,
+                slotID: slot.slotID
+            )
+        }
+        guard occupancyRegistry != nil else {
+            throw TuringStoryPlacementAdjustmentError
+                .occupancyRegistrationFailed(.window)
+        }
+
+        root.setTransformMatrix(slot.worldTransform, relativeTo: nil)
+        root.isEnabled = true
+        placement = adjusted
+        isPlaced = true
+        registerOccupancy(
+            placement: adjusted,
+            semanticReservation: slot.semanticReservation
+        )
+        committedAdjustmentTransform = slot.worldTransform
+        committedAdjustmentSlot = slot
+    }
+
+    func cancelPlacementPreview() {
+        guard let committedAdjustmentTransform else {
+            return
+        }
+        root.move(
+            to: Transform(matrix: committedAdjustmentTransform),
+            relativeTo: nil,
+            duration: 0.18,
+            timingFunction: .easeInOut
         )
     }
 }

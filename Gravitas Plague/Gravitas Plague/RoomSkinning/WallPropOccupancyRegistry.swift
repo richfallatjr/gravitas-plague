@@ -160,8 +160,18 @@ final class WallPropOccupancyRegistry {
         wallID: UUID,
         candidate: WallLocalRect,
         candidateKind: WallPropOccupancyKind,
-        ignoredIDs: Set<UUID> = []
+        ignoredIDs: Set<UUID> = [],
+        emitDiagnostics: Bool = true
     ) -> Bool {
+        func reject(
+            _ message: @autoclosure () -> String
+        ) -> Bool {
+            if emitDiagnostics {
+                print(message())
+            }
+            return true
+        }
+
         for record in records(wallID: wallID) {
             guard !ignoredIDs.contains(record.id) else {
                 continue
@@ -175,7 +185,7 @@ final class WallPropOccupancyRegistry {
 
             if candidateKind == .hordePortal,
                record.kind == .wallPoster {
-                print(
+                return reject(
                     """
                     [WallOccupancy] HARD REJECT portal overlaps poster
                       candidateKind: \(candidateKind.rawValue)
@@ -185,7 +195,6 @@ final class WallPropOccupancyRegistry {
                       occupied: \(occupied)
                     """
                 )
-                return true
             }
 
             if candidateKind == .storyWalkieBundle,
@@ -195,7 +204,7 @@ final class WallPropOccupancyRegistry {
                    .storyPortal,
                    .storyWalkieBundle
                ].contains(record.kind) {
-                print(
+                return reject(
                     """
                     [WallOccupancy] HARD REJECT story walkie bundle overlaps occupied wall prop
                       candidateKind: \(candidateKind.rawValue)
@@ -205,7 +214,6 @@ final class WallPropOccupancyRegistry {
                       occupied: \(occupied)
                     """
                 )
-                return true
             }
 
             if record.kind == .storyWalkieBundle,
@@ -214,7 +222,7 @@ final class WallPropOccupancyRegistry {
                    .hordePortal,
                    .storyPortal
                ].contains(candidateKind) {
-                print(
+                return reject(
                     """
                     [WallOccupancy] HARD REJECT candidate overlaps story walkie bundle
                       candidateKind: \(candidateKind.rawValue)
@@ -224,7 +232,6 @@ final class WallPropOccupancyRegistry {
                       occupied: \(occupied)
                     """
                 )
-                return true
             }
 
             if candidateKind == .storyWindowBundle,
@@ -236,7 +243,7 @@ final class WallPropOccupancyRegistry {
                    .storyWindowBundle,
                    .storyDoorBundle
                ].contains(record.kind) {
-                print(
+                return reject(
                     """
                     [WallOccupancy] HARD REJECT story window bundle overlaps occupied wall prop
                       candidateKind: \(candidateKind.rawValue)
@@ -246,7 +253,6 @@ final class WallPropOccupancyRegistry {
                       occupied: \(occupied)
                     """
                 )
-                return true
             }
 
             if record.kind == .storyWindowBundle,
@@ -257,7 +263,7 @@ final class WallPropOccupancyRegistry {
                    .storyWalkieBundle,
                    .storyDoorBundle
                ].contains(candidateKind) {
-                print(
+                return reject(
                     """
                     [WallOccupancy] HARD REJECT candidate overlaps story window bundle
                       candidateKind: \(candidateKind.rawValue)
@@ -267,7 +273,6 @@ final class WallPropOccupancyRegistry {
                       occupied: \(occupied)
                     """
                 )
-                return true
             }
 
             if candidateKind == .storyDoorBundle,
@@ -279,7 +284,7 @@ final class WallPropOccupancyRegistry {
                    .storyWindowBundle,
                    .storyDoorBundle
                ].contains(record.kind) {
-                print(
+                return reject(
                     """
                     [WallOccupancy] HARD REJECT story door bundle overlaps occupied wall prop
                       candidateKind: \(candidateKind.rawValue)
@@ -289,7 +294,6 @@ final class WallPropOccupancyRegistry {
                       occupied: \(occupied)
                     """
                 )
-                return true
             }
 
             if record.kind == .storyDoorBundle,
@@ -300,7 +304,7 @@ final class WallPropOccupancyRegistry {
                    .storyWalkieBundle,
                    .storyWindowBundle
                ].contains(candidateKind) {
-                print(
+                return reject(
                     """
                     [WallOccupancy] HARD REJECT candidate overlaps story door bundle
                       candidateKind: \(candidateKind.rawValue)
@@ -310,12 +314,11 @@ final class WallPropOccupancyRegistry {
                       occupied: \(occupied)
                     """
                 )
-                return true
             }
 
             if candidateKind == .hordePortal,
                record.kind == .hordePortal {
-                print(
+                return reject(
                     """
                     [WallOccupancy] HARD REJECT portal overlaps portal
                       recordLabel: \(record.label)
@@ -323,12 +326,11 @@ final class WallPropOccupancyRegistry {
                       occupied: \(occupied)
                     """
                 )
-                return true
             }
 
             if candidateKind == .wallPoster,
                record.kind == .hordePortal {
-                print(
+                return reject(
                     """
                     [WallOccupancy] HARD REJECT poster overlaps portal
                       recordLabel: \(record.label)
@@ -336,7 +338,6 @@ final class WallPropOccupancyRegistry {
                       occupied: \(occupied)
                     """
                 )
-                return true
             }
         }
 
