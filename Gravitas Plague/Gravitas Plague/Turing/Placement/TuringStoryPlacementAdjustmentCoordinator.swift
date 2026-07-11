@@ -360,7 +360,11 @@ final class TuringStoryPlacementAdjustmentCoordinator {
         rhs: TuringStoryRuntimeSlot
     ) -> Bool {
         if lhs.wallOrdinal != rhs.wallOrdinal {
-            return lhs.wallOrdinal < rhs.wallOrdinal
+            // The captured spin ordinal advances opposite the user's
+            // perceived left-to-right traversal around the room. Keep
+            // positions within each wall ordered left-to-right, but traverse
+            // wall groups in descending ordinal order at wall boundaries.
+            return lhs.wallOrdinal > rhs.wallOrdinal
         }
         if abs(lhs.routeOrder - rhs.routeOrder) > 0.000_001 {
             return lhs.routeOrder < rhs.routeOrder
@@ -380,4 +384,3 @@ final class TuringStoryPlacementAdjustmentCoordinator {
         activeSlotByProp[propID]
     }
 }
-

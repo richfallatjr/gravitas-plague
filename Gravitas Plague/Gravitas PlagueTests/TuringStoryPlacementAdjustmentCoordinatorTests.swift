@@ -83,6 +83,81 @@ final class TuringStoryPlacementAdjustmentCoordinatorTests: XCTestCase {
         XCTAssertEqual(setup.adapter.previewedSlots.last?.slotID, "w:0")
     }
 
+    func testWallBoundaryTraversalMatchesVisualLeftAndRight() {
+        let registry = WallPropOccupancyRegistry()
+        let bars = TuringStoryPlacementMockBars()
+        let adapter = TuringStoryPlacementMockAdapter(
+            propID: .window,
+            occupancyRegistry: registry
+        )
+        let currentWall = UUID()
+        let nextWall = UUID()
+        let currentLeft = slot(
+            "w:current:left",
+            .window,
+            currentWall,
+            2,
+            2.1,
+            -0.8
+        )
+        let currentRight = slot(
+            "w:current:right",
+            .window,
+            currentWall,
+            2,
+            2.2,
+            0.8
+        )
+        let nextLeft = slot(
+            "w:next:left",
+            .window,
+            nextWall,
+            1,
+            1.1,
+            -0.8
+        )
+        let nextRight = slot(
+            "w:next:right",
+            .window,
+            nextWall,
+            1,
+            1.2,
+            0.8
+        )
+        let coordinator = makeCoordinator(
+            registry: registry,
+            bars: bars,
+            adapters: [.window: adapter]
+        )
+        activate(
+            coordinator,
+            registry: registry,
+            routes: [
+                .window: [
+                    currentLeft,
+                    currentRight,
+                    nextLeft,
+                    nextRight,
+                ]
+            ],
+            active: [.window: currentRight],
+            adapters: [.window: adapter]
+        )
+
+        coordinator.begin(propID: .window, worldPoint: .zero)
+        coordinator.update(worldPoint: SIMD3<Float>(0.066, 0, 0))
+        XCTAssertEqual(
+            adapter.previewedSlots.last?.slotID,
+            nextLeft.slotID
+        )
+
+        coordinator.update(worldPoint: SIMD3<Float>(0.0, 0, 0))
+        XCTAssertEqual(
+            adapter.previewedSlots.last?.slotID,
+            currentRight.slotID
+        )
+    }
+
     func testPreviewDoesNotMutateOccupancy() {
         let setup = makeSinglePropSetup(activeIndex: 0)
         let before = setup.registry.recordsByID[
@@ -415,4 +490,3 @@ final class TuringStoryPlacementAdjustmentCoordinatorTests: XCTestCase {
         )
     }
 }
-
