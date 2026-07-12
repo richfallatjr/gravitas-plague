@@ -103,19 +103,44 @@ actor TuringBaseCloneCharacterRenderer {
           instancePool: freshPool
         )
 
+      // Rich's authored clone contains 222 aligned reference rows. Applying
+      // Big Mike's 160-row optimization changes that conditioning window.
+      let referenceRowLimit: Int?
+      let referenceWindowStrategy: TuringQwenNativeReferenceWindowStrategy
+      switch character {
+      case .rich:
+        referenceRowLimit = nil
+        referenceWindowStrategy = .full
+      case .bigMike:
+        referenceRowLimit = 160
+        referenceWindowStrategy = .suffix
+      }
+
       let requests = segments.enumerated().map {
         index,
         segment in
 
-        TuringQwenNativeBaseCloneSegmentRequest(
+        print(
+          """
+          [TuringCharacterRenderer] exact Qwen input
+            character: \(character.rawValue)
+            runID: \(runID)
+            segmentIndex: \(index)
+            textUTF16: \(segment.text.utf16.count)
+            BEGIN_TEXT
+          \(segment.text)
+            END_TEXT
+          """)
+
+        return TuringQwenNativeBaseCloneSegmentRequest(
           segmentIndex: index,
           text: segment.text,
           language: "english",
           cloneProfile: profile,
           maxNewRows: 160,
           performanceMode: .performance,
-          referenceRowLimit: 160,
-          referenceWindowStrategy: .suffix
+          referenceRowLimit: referenceRowLimit,
+          referenceWindowStrategy: referenceWindowStrategy
         )
       }
 
@@ -129,6 +154,8 @@ actor TuringBaseCloneCharacterRenderer {
           requestedInstanceCount: 2
           sharedWeights: false
           fallbackUsed: false
+          referenceRowLimit: \(referenceRowLimit.map(String.init) ?? "full")
+          referenceWindowStrategy: \(referenceWindowStrategy.rawValue)
         """)
 
       let attemptState = TuringCharacterRenderAttemptState()
