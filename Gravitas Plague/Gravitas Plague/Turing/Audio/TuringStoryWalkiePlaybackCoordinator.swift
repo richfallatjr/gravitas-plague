@@ -960,6 +960,12 @@ final class TuringStoryWalkiePlaybackCoordinator {
               pendingNextReady: \(pendingGenerated[nextPlaybackSegmentIndex] != nil)
             """)
             if isPrerecordingToInitialGeneratedBridgeWaiting {
+                if policy.deadAirAfterFillerEnabled {
+                    startDeadAir(
+                        reason: "prerecordingToFirstGenerated.afterFiller"
+                    )
+                    return
+                }
                 await reconcile(
                     reason: "prerecordingToFirstGenerated.fillerCompleted"
                 )

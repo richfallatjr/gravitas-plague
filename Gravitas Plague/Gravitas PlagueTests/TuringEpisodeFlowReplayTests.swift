@@ -107,14 +107,15 @@ final class TuringEpisodeFlowReplayTests:
                                 character
                         ]
                     ),
-                dialogueService:
+                dialogueServiceFactory: {
                     ControlledVoicePromptService(
                         recorder: recorder,
                         behavior: .immediate(
                             TuringFlowTestFixtures
                                 .plan
                         )
-                    ),
+                    )
+                },
                 routeResolver:
                     StubFlowRouteResolver(
                         route: route

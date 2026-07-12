@@ -43,9 +43,33 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
                 throw TuringRuntimeError.foundationUnavailable
             }
 
+            let sessionID = UUID().uuidString
             let session = LanguageModelSession()
-            let response = try await session.respond(to: prompt)
-            return response.content
+            print("""
+            [TuringFoundation] fresh session created
+              purpose: \(purpose)
+              sessionID: \(sessionID)
+            """)
+
+            do {
+                let response = try await session.respond(
+                    to: prompt
+                )
+                print("""
+                [TuringFoundation] fresh session completed
+                  purpose: \(purpose)
+                  sessionID: \(sessionID)
+                """)
+                return response.content
+            } catch {
+                print("""
+                [TuringFoundation] fresh session failed
+                  purpose: \(purpose)
+                  sessionID: \(sessionID)
+                  error: \(error.localizedDescription)
+                """)
+                throw error
+            }
         }
 #endif
 

@@ -426,6 +426,9 @@ struct TuringEpisodePickerView: View {
         )
 
         Task.detached(priority: .userInitiated) {
+            await TuringEpisodeFlowController.shared.resetEpisode(
+                reason: "debugScriptPoint02"
+            )
             let result = await TuringEpisodeFlowController.shared.start(
                 scriptPointID: "prologue.scriptPoint02",
                 trigger: .manualDebug,

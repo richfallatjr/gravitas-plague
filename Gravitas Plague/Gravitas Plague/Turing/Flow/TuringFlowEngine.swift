@@ -60,8 +60,8 @@ actor TuringFlowEngine {
         any TuringVoicePromptTriggerLoading
     private let characterRuntimeStore:
         any TuringCharacterRuntimeProviding
-    private let dialogueService:
-        any TuringFlowVoicePromptGenerating
+    private let dialogueServiceFactory:
+        @Sendable () -> any TuringFlowVoicePromptGenerating
     private let routeResolver:
         any TuringFlowRouteResolving
     private let rendererFactory:
@@ -87,9 +87,12 @@ actor TuringFlowEngine {
         characterRuntimeStore:
             any TuringCharacterRuntimeProviding =
                 TuringCharacterRuntimeStore(),
-        dialogueService:
-            any TuringFlowVoicePromptGenerating =
-                TuringDialogueService(),
+        dialogueServiceFactory:
+            @escaping @Sendable () -> any TuringFlowVoicePromptGenerating = {
+                TuringDialogueService(
+                    runner: TuringFoundationModelsRunner()
+                )
+            },
         routeResolver:
             any TuringFlowRouteResolving =
                 TuringDefaultFlowRouteResolver(),
@@ -106,7 +109,8 @@ actor TuringFlowEngine {
         self.voicePromptStore = voicePromptStore
         self.characterRuntimeStore =
             characterRuntimeStore
-        self.dialogueService = dialogueService
+        self.dialogueServiceFactory =
+            dialogueServiceFactory
         self.routeResolver = routeResolver
         self.rendererFactory = rendererFactory
         self.seedStore = seedStore
@@ -252,7 +256,7 @@ actor TuringFlowEngine {
                         conversationKey:
                             descriptor.transmission
                                 .conversationKey,
-                        historyLimit: 12,
+                        historyLimit: 6,
                         prerecording:
                             prerecording
                     )
@@ -273,6 +277,9 @@ actor TuringFlowEngine {
                     TuringVoicePromptPlan,
                     Error
                 > {
+                let dialogueService =
+                    dialogueServiceFactory()
+
                 TuringFlowLog.event(
                     "Foundation started",
                     identity: identity,
@@ -290,7 +297,11 @@ actor TuringFlowEngine {
                                 flowContext
                                     .dialogueHistory
                                     .count
-                            )
+                                )
+                        ),
+                        (
+                            "freshDialogueService",
+                            "true"
                         )
                     ]
                 )
@@ -298,7 +309,7 @@ actor TuringFlowEngine {
                 return Task.detached(
                     priority: .userInitiated
                 ) {
-                    try await self.dialogueService
+                    try await dialogueService
                         .generateVoicePrompt(
                             VoicePromptRequest(
                                 id:

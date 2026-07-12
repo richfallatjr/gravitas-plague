@@ -504,8 +504,9 @@ final class TuringFlowEngineParityTests:
                             character
                     ]
                 ),
-            dialogueService:
-                dialogueService,
+            dialogueServiceFactory: {
+                dialogueService
+            },
             routeResolver:
                 StubFlowRouteResolver(
                     route: route
