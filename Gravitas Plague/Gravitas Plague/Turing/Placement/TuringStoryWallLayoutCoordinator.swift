@@ -59,6 +59,7 @@ final class TuringStoryWallLayoutCoordinator {
     private var task: Task<Void, Never>?
     private let planner = TuringStoryWallSliceLayoutPlanner()
     private let resolver = TuringStoryWallSliceLayoutResolver()
+    private let deterministicFallback = TuringStoryDeterministicWallSliceFallback()
 
     private let doorController: TuringStoryDoorBundleController
     private let windowController: TuringStoryWindowBundleController
@@ -186,23 +187,53 @@ final class TuringStoryWallLayoutCoordinator {
                 "[TuringWallSlices] slice map built wallCount=\(sliceMap.perimeter.walls.count) sliceCount=\(sliceMap.slices.count) exactPlacementsSerializedToFoundation=false"
             )
             state = .planning
-            let plannerResult = try await planner.plan(map: sliceMap)
-            try Task.checkCancellation()
-            state = .validating
             let resolved: TuringStoryResolvedSliceLayout
             do {
-                resolved = try resolver.resolve(
+                let plannerResult = try await planner.plan(map: sliceMap)
+                try Task.checkCancellation()
+                state = .validating
+                let primary = try resolver.resolve(
                     plan: plannerResult.plan,
                     map: sliceMap,
                     catalog: catalog
                 )
-            } catch TuringStoryWallSliceError.invalidPlan(let issues) {
-                let repaired = try await planner.repair(
-                    previous: plannerResult,
-                    issues: issues
+                let assigned = Set(primary.assignments.map(\.propID))
+                let missing = Set(TuringStoryPropID.allCases).subtracting(assigned)
+                guard missing.isEmpty else {
+                    throw TuringStoryWallSliceError.invalidPlan(
+                        [
+                            "Foundation omitted props: "
+                                + missing.sorted { $0.priority < $1.priority }
+                                    .map(\.rawValue)
+                                    .joined(separator: ",")
+                        ]
+                    )
+                }
+                let requiredDistinctWallCount = min(
+                    TuringStoryPropID.allCases.count,
+                    sliceMap.perimeter.walls.count
                 )
-                resolved = try resolver.resolve(
-                    plan: repaired,
+                guard primary.distinctWallCount >= requiredDistinctWallCount else {
+                    throw TuringStoryWallSliceError.invalidPlan(
+                        [
+                            "Foundation clustered props on \(primary.distinctWallCount) walls; "
+                                + "deterministic distribution requires \(requiredDistinctWallCount)."
+                        ]
+                    )
+                }
+                resolved = primary
+            } catch {
+                try Task.checkCancellation()
+                state = .validating
+                print(
+                    """
+                    [TuringWallFallback] primary plan unavailable
+                      reason: \(error.localizedDescription)
+                      foundationRetryUsed: false
+                      action: deterministicScoredWallDistribution
+                    """
+                )
+                resolved = try deterministicFallback.resolve(
                     map: sliceMap,
                     catalog: catalog
                 )
@@ -247,7 +278,7 @@ final class TuringStoryWallLayoutCoordinator {
             let failedStage = state.rawValue
             state = .failed
             print(
-                "[TuringWallSlices] failed scanID=\(scanID) stage=\(failedStage) reason=\(reason) error=\(error.localizedDescription) fallbackUsed=false"
+                "[TuringWallSlices] failed scanID=\(scanID) stage=\(failedStage) reason=\(reason) error=\(error.localizedDescription)"
             )
             onFailed(scanID, error.localizedDescription)
         }

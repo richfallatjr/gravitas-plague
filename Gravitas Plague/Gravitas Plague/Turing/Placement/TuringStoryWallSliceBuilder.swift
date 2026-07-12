@@ -4,14 +4,13 @@ import simd
 struct TuringStoryWallSliceBuilder: Sendable {
     static let targetSliceWidthMeters: Float = 0.9144
     static let maximumSlicesPerWall = 10
-    static let maximumPerimeterWalls = 12
 
     func build(
         perimeter: TuringStorySpinOrderedPerimeter,
         catalog: TuringStoryExactPlacementCatalog
     ) throws -> TuringStoryWallSliceMap {
         var slices: [TuringStoryWallSlice] = []
-        for wall in perimeter.walls.prefix(Self.maximumPerimeterWalls) {
+        for wall in perimeter.walls {
             let approximateCount = Int(
                 (wall.widthMeters / Self.targetSliceWidthMeters).rounded()
             )

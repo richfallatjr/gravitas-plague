@@ -17,7 +17,8 @@ struct TuringStoryWallSliceLayoutResolver: Sendable {
   func resolve(
     plan: TuringStoryWallSlicePlan,
     map: TuringStoryWallSliceMap,
-    catalog: TuringStoryExactPlacementCatalog
+    catalog: TuringStoryExactPlacementCatalog,
+    fallbackUsed: Bool = false
   ) throws -> TuringStoryResolvedSliceLayout {
     var issues: [String] = []
 
@@ -131,7 +132,7 @@ struct TuringStoryWallSliceLayoutResolver: Sendable {
       distinctWallCount: wallOrdinals.count,
       reusedSliceCount: reusedSliceCount
     )
-    print("[TuringWallSlices] plan resolved fallbackUsed=false")
+    print("[TuringWallSlices] plan resolved fallbackUsed=\(fallbackUsed)")
     return TuringStoryResolvedSliceLayout(
       scanID: map.perimeter.scanID,
       assignments: assignments.sorted { $0.propID.priority < $1.propID.priority },

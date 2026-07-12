@@ -40,67 +40,19 @@ actor TuringStoryWallSliceLayoutPlanner {
                 rawResponse: raw,
                 dataset: dataset,
                 datasetJSON: datasetJSON,
-                renderedPrompt: prompt,
-                repairUsed: false
+                renderedPrompt: prompt
             )
         } catch {
-            let repaired = try await repair(
-                previousResponse: raw,
-                issues: ["Malformed JSON: \(error.localizedDescription)"],
-                datasetJSON: datasetJSON
+            print(
+                """
+                [TuringWallSlices] primary response rejected
+                  reason: \(error.localizedDescription)
+                  foundationRetryUsed: false
+                  nextAction: deterministicFallback
+                """
             )
-            return TuringStoryWallSlicePlannerResult(
-                plan: repaired.plan,
-                rawResponse: repaired.raw,
-                dataset: dataset,
-                datasetJSON: datasetJSON,
-                renderedPrompt: prompt,
-                repairUsed: true
-            )
+            throw error
         }
-    }
-
-    func repair(
-        previous: TuringStoryWallSlicePlannerResult,
-        issues: [String]
-    ) async throws -> TuringStoryWallSlicePlan {
-        guard previous.repairUsed == false else {
-            throw TuringStoryWallSliceError.invalidPlan(issues)
-        }
-        return try await repair(
-            previousResponse: previous.rawResponse,
-            issues: issues,
-            datasetJSON: previous.datasetJSON
-        ).plan
-    }
-
-    private func repair(
-        previousResponse: String,
-        issues: [String],
-        datasetJSON: String
-    ) async throws -> (plan: TuringStoryWallSlicePlan, raw: String) {
-        let template = try loadPrompt(named: "storyWallSliceLayoutRepair")
-        let primaryTemplate = try loadPrompt(named: "storyWallSliceLayoutPlanner")
-        let primaryPrompt = primaryTemplate.replacingOccurrences(
-            of: "{{wallSliceDatasetJSON}}",
-            with: datasetJSON
-        )
-        let issuesJSON = try encode(issues)
-        let prompt = template
-            .replacingOccurrences(of: "{{previousResponseJSON}}", with: previousResponse)
-            .replacingOccurrences(of: "{{repairIssuesJSON}}", with: issuesJSON)
-            .replacingOccurrences(of: "{{primaryPrompt}}", with: primaryPrompt)
-        try preflight(prompt)
-        print("[TuringWallSlices] repair started freshSession=true")
-        let raw = try await runner.runPrompt(
-            prompt,
-            purpose: "storyWallSliceLayoutRepair"
-        )
-        print("[TuringWallSlicesRepairRaw] BEGIN\n\(raw)\n[TuringWallSlicesRepairRaw] END")
-        await artifacts.writeRaw(raw)
-        let plan = try decode(raw)
-        await artifacts.writePlan(plan)
-        return (plan, raw)
     }
 
     private func decode(_ raw: String) throws -> TuringStoryWallSlicePlan {

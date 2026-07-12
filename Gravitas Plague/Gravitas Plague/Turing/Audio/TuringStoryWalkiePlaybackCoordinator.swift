@@ -116,6 +116,20 @@ final class TuringStoryWalkiePlaybackCoordinator {
         TuringStoryWalkiePlaybackCoordinator()
     }
 
+    static func makeBigMikeTuringFlowCoordinator()
+        -> TuringStoryWalkiePlaybackCoordinator
+    {
+        TuringStoryWalkiePlaybackCoordinator(
+            policy: bigMikeTuringFlowPolicy
+        )
+    }
+
+    static var bigMikeTuringFlowPolicy: Policy {
+        var policy = Policy()
+        policy.chainFillerFromPrerecordingToFirstGenerated = true
+        return policy
+    }
+
     static func makeRichGlobalCoordinator() -> TuringStoryWalkiePlaybackCoordinator {
         var policy = Policy()
         policy.voiceRoute = .playerHeadTracked
@@ -305,6 +319,47 @@ final class TuringStoryWalkiePlaybackCoordinator {
         allComputeFinished = true
         print("[TuringPlaybackRebuild] qwen compute all finished")
         await reconcile(reason: "computeAllFinished")
+    }
+
+    func qwenComputeFailed(
+        expectedSegmentCount count: Int,
+        reason: String
+    ) async {
+        guard runActive else { return }
+
+        expectedSegmentCount = max(0, count)
+        let activeGeneratedIndex: Int?
+        if case .generated(let segmentIndex, _, _, _) = activeItem {
+            activeGeneratedIndex = segmentIndex
+        } else {
+            activeGeneratedIndex = nil
+        }
+
+        var newlySkipped: [Int] = []
+        if count > nextPlaybackSegmentIndex {
+            for index in nextPlaybackSegmentIndex..<count {
+                let alreadyPrepared = pendingGenerated[index] != nil
+                let currentlyPlaying = activeGeneratedIndex == index
+                guard alreadyPrepared == false, currentlyPlaying == false else {
+                    continue
+                }
+                if skippedSegments.insert(index).inserted {
+                    newlySkipped.append(index)
+                }
+            }
+        }
+
+        activeComputeSegments.removeAll(keepingCapacity: false)
+        allComputeFinished = true
+        print("""
+        [TuringPlaybackRebuild] qwen terminal failure reconciled
+          reason: \(reason)
+          expectedSegmentCount: \(count)
+          newlySkippedSegments: \(newlySkipped)
+          pendingGenerated: \(pendingGenerated.keys.sorted())
+          activeGeneratedSegment: \(activeGeneratedIndex.map(String.init) ?? "none")
+        """)
+        await reconcile(reason: "computeTerminalFailure")
     }
 
     func waitUntilPlaybackFinished() async {

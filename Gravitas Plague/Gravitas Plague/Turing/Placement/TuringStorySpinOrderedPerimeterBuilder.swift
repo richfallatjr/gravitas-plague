@@ -29,7 +29,7 @@ struct TuringStorySpinOrderedPerimeterBuilder: Sendable {
             return lhs.representativeWallUUID.uuidString < rhs.representativeWallUUID.uuidString
         }
 
-        let walls = ordered.prefix(12).enumerated().map { offset, wall in
+        let walls = ordered.enumerated().map { offset, wall in
             let ordinal = offset + 1
             let start = spin.direction == .clockwise ? wall.startXZ : wall.endXZ
             let end = spin.direction == .clockwise ? wall.endXZ : wall.startXZ

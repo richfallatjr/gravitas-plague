@@ -1,0 +1,1249 @@
+TURING FLOW SCRIPTPOINT01 / SCRIPTPOINT02 / SCRIPTPOINT03
+DIVERGENCE AUDIT AND STANDARDIZATION IMPLEMENTATION HANDOFF
+
+Date: 2026-07-12
+Repository: /Users/richardfallat/Projects/dev/gravitas-plague
+
+======================================================================
+1. PURPOSE
+======================================================================
+
+This handoff documents why ScriptPoint01 is the only proven Turing Flow,
+why ScriptPoint02 and ScriptPoint03 are not standardized copies of that
+flow, whether 02/03 use Fresh2, why ScriptPoint03 can sound like its PR is
+repeated, and how to replace all point-specific orchestration with one
+data-driven engine that supports an unlimited number of script points and
+voice clones.
+
+This is an architecture and implementation handoff. It does not authorize
+changes to room scanning, room placement, wall layout, portals, props,
+Foundation prompt wording, clone artifacts, Qwen internals, or audio assets.
+
+======================================================================
+2. EXECUTIVE VERDICT
+======================================================================
+
+2.1 Does ScriptPoint02 use Fresh2?
+
+Yes.
+
+The active call chain is:
+
+  TuringScriptPoint02And03FlowController
+    -> TuringRichQwenRenderer
+    -> TuringBaseCloneCharacterRenderer(character: .rich)
+    -> TuringQwenNativeGenerationSchedulerFactory.makeFresh2Pool()
+    -> warmLoadExactlyRequestedInstances(...)
+    -> makeFresh2Scheduler(instancePool:)
+    -> scheduler.renderSegments(...)
+
+The runtime logs confirm:
+
+  [TuringQwenFresh2] pool ready
+    requestedInstanceCount: 2
+    actualInstanceCount: 2
+    sharedWeights: false
+    fallbackUsed: false
+
+2.2 Does ScriptPoint03 use Fresh2?
+
+Yes, when its Foundation plan succeeds and its renderer task reaches Qwen.
+
+The active call chain is:
+
+  TuringScriptPoint02And03FlowController
+    -> TuringBigMikeQwenRenderer
+    -> TuringBaseCloneCharacterRenderer(character: .bigMike)
+    -> makeFresh2Pool()
+    -> makeFresh2Scheduler(instancePool:)
+    -> scheduler.renderSegments(...)
+
+2.3 Is 02/03 implemented using the same Turing Flow machinery as 01?
+
+No.
+
+ScriptPoint01 delegates the PR + Foundation + Fresh2 + playback lifecycle to
+an existing reusable function:
+
+  TuringNativeQwenHelloWorldCanary.runVoicePromptAfterPrerecording(...)
+
+ScriptPoint02 and ScriptPoint03 reimplement that lifecycle manually inside a
+single 600-line point-specific actor:
+
+  TuringScriptPoint02And03FlowController
+
+That controller manually owns two descriptors, two prerecordings, two
+Foundation tasks, two renderer tasks, two playback coordinators, comm SFX,
+seed updates, delays, progression, error reconciliation, and cancellation.
+
+The result is not three instances of one workflow. It is one established
+workflow plus a second custom workflow that happens to contain two points.
+
+2.4 Why can ScriptPoint03 sound like it plays the PR twice?
+
+The current ScriptPoint03 code queues the authored PR audio once. There is no
+second enqueuePrerecording call inside the local ScriptPoint03 block.
+
+However, it constructs this Foundation context:
+
+  let bigMikeContext = """
+    RICH AUTHORED OUTGOING PR:
+    \(richPrerecording.transcript)
+
+    RICH GENERATED CONTINUATION:
+    \(generatedRichTranscript)
+
+    BIG MIKE AUTHORED PR THAT WILL PLAY BEFORE HIS GENERATED CONTINUATION:
+    \(bigMikePrerecording.transcript)
+    """
+
+It then passes that entire value as prerecordingTranscript for the Big Mike
+voicePrompt. The shared prompt says not to repeat recent context, but does not
+make the authored PR a structured, immutable "already spoken" field. The
+Foundation response can therefore restate the authored PR. Qwen then renders
+that restatement, producing the audible effect of PR -> same PR again.
+
+There is a second possible duplication class: the combined controller can be
+invoked automatically through TuringScriptPointProgressionController or
+manually through TuringEpisodePickerView. The controller's running flag blocks
+simultaneous calls, but a later invocation can replay both points. Existing
+logs do not provide a single flowInstanceID across every event, so this cannot
+be distinguished from generated-text repetition by ear alone.
+
+The architect must instrument both identities:
+
+  flowInstanceID
+  scriptPointID
+  prerecordingPlaybackHandleID
+  Foundation response segment text
+  generated playback segment text hash
+
+Do not claim duplicate audio enqueue unless two distinct prerecording handle
+IDs are observed for the same flowInstanceID and scriptPointID.
+
+======================================================================
+3. THE ACTUAL SCRIPTPOINT01 MACHINERY
+======================================================================
+
+ScriptPoint01 currently consists of two related stages.
+
+Stage A, authored PR plus generated voicePrompt:
+
+  TuringPrerecordingSeededPromptRunner.runBigMikeRichContact(...)
+    1. Loads the Big Mike PR descriptor and audio.
+    2. Stores transcript context.
+    3. Starts a fresh Foundation voicePrompt Task.
+    4. Immediately delegates playback and Qwen orchestration to
+       runVoicePromptAfterPrerecording(...).
+
+Current code, reduced only for formatting:
+
+  let voicePromptTask = Task.detached(priority: .userInitiated) {
+      try await service.generateVoicePrompt(
+          VoicePromptRequest(
+              id: "voicePrompt.bigMike.afterRichContact.001",
+              speaker: "Big Mike",
+              voiceID: prerecording.voiceID,
+              voiceVariantID: prerecording.voiceVariantID,
+              characterProfileID: "big_mike",
+              intent: prerecording.voicePromptIntent,
+              emotion: prerecording.defaultEmotion,
+              prerecordingTranscript: prerecording.transcript,
+              voicePromptSeedIntent: prerecording.summary
+          )
+      )
+  }
+
+  return await TuringNativeQwenHelloWorldCanary
+      .runVoicePromptAfterPrerecording(
+          runID: prerecording.prerecordingID,
+          prerecordingID: prerecording.prerecordingID,
+          prerecordingAudioURL: prerecordingAudioURL,
+          voicePromptTask: voicePromptTask,
+          seedStore: seedStore,
+          seedKey: seedKey
+      )
+
+Inside runVoicePromptAfterPrerecording, ScriptPoint01 uses one coherent
+orchestration function:
+
+  await playback.beginRun(runID: runID, expectedSegmentCount: nil)
+  await playback.enqueuePrerecording(
+      id: prerecordingID,
+      fileURL: prerecordingAudioURL
+  )
+
+  let plan = try await voicePromptTask.value
+  await seedStore.updateSeed(plan.conversationSeed, for: seedKey)
+
+  let pool = try TuringQwenNativeGenerationSchedulerFactory.makeFresh2Pool()
+  try await pool.warmLoadExactlyRequestedInstances(
+      modelRoot: stagedRoot,
+      cloneProfile: cloneProfile,
+      variantID: cloneProfile.defaultVariantID,
+      performanceMode: .performance
+  )
+
+  let scheduler = TuringQwenNativeGenerationSchedulerFactory
+      .makeFresh2Scheduler(instancePool: pool)
+
+  _ = try await renderFreshBaseCloneRequests(
+      requests,
+      scheduler: scheduler,
+      gapAudio: playback,
+      runID: runID,
+      skipQwenSegmentFailures: true
+  )
+
+  await playback.qwenComputeAllFinished()
+  await playback.waitUntilPlaybackFinished()
+  await pool.unloadAll(reason: "voicePromptAfterPrerecording.\(runID)")
+
+Stage B, custom player conversation and generated Big Mike reply:
+
+  TuringBigMikeConversationRunner.run(...)
+    1. Builds one Foundation conversation request.
+    2. Uses TuringBigMikeQwenRenderer.
+    3. Publishes every Qwen event to one playback coordinator.
+    4. Waits for actual playback completion.
+    5. Only then dispatches ScriptPoint02 progression.
+
+Relevant code:
+
+  let playback = await MainActor.run {
+      TuringStoryWalkiePlaybackCoordinator.makeBigMikeCoordinator()
+  }
+
+  let plan = try await TuringDialogueService()
+      .generateConversationNoBible(request)
+
+  await playback.beginRun(
+      runID: "bigMikeConversationNoBible",
+      expectedSegmentCount: plan.segments.count
+  )
+
+  try await TuringBigMikeQwenRenderer().render(
+      segments: plan.segments,
+      runID: "bigMikeConversationNoBible",
+      onStarted: { index in
+          await playback.qwenComputeStarted(segmentIndex: index)
+      },
+      onFinished: { index, audio in
+          await playback.qwenComputeFinished(
+              segmentIndex: index,
+              audio: audio
+          )
+      },
+      onSkipped: { index, reason in
+          await playback.qwenComputeSkipped(
+              segmentIndex: index,
+              reason: reason
+          )
+      }
+  )
+
+  await playback.qwenComputeAllFinished()
+  await playback.waitUntilPlaybackFinished()
+
+  await TuringScriptPointProgressionController.shared
+      .triggerAfterFirstSuccessfulWalkieCustomMessage(seedStore: seedStore)
+
+The important ScriptPoint01 property is not that every detail is perfect. It
+is that one orchestration owner carries the run from compute input through
+actual playback completion before progression.
+
+======================================================================
+4. THE ACTUAL SCRIPTPOINT02 MACHINERY
+======================================================================
+
+ScriptPoint02 is manually implemented in
+TuringScriptPoint02And03FlowController.run(...).
+
+Current sequence:
+
+  playScriptedOpenComm
+    -> create Rich playback coordinator
+    -> begin Rich run
+    -> enqueue Rich PR
+    -> start Foundation Task
+    -> await Foundation plan
+    -> set expected segment count
+    -> create TuringRichQwenRenderer
+    -> render with Fresh2
+    -> publish segment events to Rich playback coordinator
+    -> wait for Rich generation task
+    -> wait for Rich playback completion
+    -> validate completed generated count
+    -> playScriptedSendComm
+    -> manually construct ScriptPoint03 context and begin next point
+
+This does use Fresh2 through TuringBaseCloneCharacterRenderer. Current shared
+renderer code:
+
+  let freshPool = try TuringQwenNativeGenerationSchedulerFactory
+      .makeFresh2Pool()
+
+  try await freshPool.warmLoadExactlyRequestedInstances(
+      modelRoot: stagedModel,
+      cloneProfile: profile,
+      variantID: profile.defaultVariantID,
+      performanceMode: .performance
+  )
+
+  let scheduler = TuringQwenNativeGenerationSchedulerFactory
+      .makeFresh2Scheduler(instancePool: freshPool)
+
+  let report = try await scheduler.renderSegments(
+      requests,
+      runID: runID,
+      skipSegmentFailures: true,
+      onSegmentStarted: ...,
+      onSegmentFinished: ...,
+      onSegmentSkipped: ...
+  )
+
+The Fresh2 scheduler itself starts exactly one worker loop for each warmed
+instance:
+
+  try await withThrowingTaskGroup(of: Void.self) { group in
+      for instance in instances {
+          group.addTask {
+              while let requestIndex = await workQueue.nextIndex() {
+                  let request = requests[requestIndex]
+                  let audio = try await instance.generate(request)
+                  try await onSegmentFinished(result)
+              }
+          }
+      }
+      try await group.waitForAll()
+  }
+
+Therefore, the current defect is not "02 does not call Fresh2." The defect is
+that the point lifecycle around Fresh2 is bespoke and not the ScriptPoint01
+runner.
+
+Additional ScriptPoint02 divergence:
+
+  - Rich Qwen has a special one-retry branch not used for Big Mike.
+  - Rich clone selection lives in a switch statement, not a character registry.
+  - Rich uses playerHeadTracked playback and Rich filler policy.
+  - Open/send comm SFX are manually placed around the flow.
+  - A combined controller owns ScriptPoint03 creation directly.
+  - Error cleanup previously canceled an active Rich PR.
+  - Progression is not a generic nextScriptPointID engine.
+
+======================================================================
+5. THE ACTUAL SCRIPTPOINT03 MACHINERY
+======================================================================
+
+Current ScriptPoint03 starts only after ScriptPoint02 has completely generated
+and played Rich TTS and played send-comm.
+
+It then:
+
+  start Big Mike Foundation Task
+    -> run fixed 10-second response lead-in
+    -> create a new Big Mike playback coordinator
+    -> begin run
+    -> enqueue authored Big Mike PR
+    -> create renderer Task
+    -> renderer Task waits for Foundation plan
+    -> render plan with Big Mike Fresh2
+    -> publish Qwen events directly to playback
+    -> wait for playback completion
+    -> declare microphone open in logs
+
+The current code no longer uses the same ScriptPoint01 helper. It manually
+rebuilds its behavior:
+
+  let createdPoint03Playback = await MainActor.run {
+      TuringStoryWalkiePlaybackCoordinator
+          .makeBigMikeTuringFlowCoordinator()
+  }
+
+  await createdPoint03Playback.beginRun(
+      runID: point03.scriptPointID,
+      expectedSegmentCount: nil
+  )
+
+  await createdPoint03Playback.enqueuePrerecording(
+      id: bigMikePrerecording.prerecordingID,
+      fileURL: bigMikePrerecordingURL
+  )
+
+  let createdBigMikeRendererTask = Task {
+      let plan = try await createdBigMikePlanTask.value
+      await createdPoint03Playback.setExpectedGeneratedSegmentCount(
+          plan.segments.count
+      )
+
+      try await TuringBigMikeQwenRenderer().render(
+          segments: plan.segments,
+          runID: bigMikeTrigger.voicePromptID,
+          onStarted: ...,
+          onFinished: ...,
+          onSkipped: ...
+      )
+
+      await createdPoint03Playback.qwenComputeAllFinished()
+      return plan
+  }
+
+  await createdPoint03Playback.waitUntilPlaybackFinished()
+
+This superficially resembles ScriptPoint01, but similarity is copied code,
+not shared machinery.
+
+======================================================================
+6. DIVERGENCE MATRIX
+======================================================================
+
+Concern                         ScriptPoint01                 ScriptPoint02/03
+------------------------------  ----------------------------  -----------------------------
+Top-level owner                 Seeded runner + canary        One custom combined actor
+Point count per owner           One                          Two hardcoded IDs
+Descriptor-driven progression   No, legacy entry             Partially read, manually run
+Foundation/Qwen orchestration   Reusable helper               Reimplemented inline
+Fresh2                          Direct helper construction    Shared renderer abstraction
+Clone selection                 Big Mike helper               enum switch rich/bigMike
+Future character support        Not generic                   Closed enum, not generic
+PR playback                     One helper-owned run          Manually queued per point
+Filler bridge                   Playback policy               Point-specific policy factories
+Actual completion gate          One helper waits              Multiple tasks and manual waits
+Comm SFX                        Existing walkie flow           Manually sequenced in controller
+Seed ownership                  Legacy key big_mike           dialogue.big_mike.rich
+Progression                     Conversation completion       Hardcoded point02 -> point03
+Failure cleanup                 Helper-local                  Cross-point catch block
+Replay identity                 runID only                    No flowInstanceID
+Duplicate diagnosis             Limited                      Cannot distinguish invocation/content
+Tests                           Mature component pieces        No full 01/02/03 parity harness
+Production suitability          Debug/canary dependency       Point-specific production code
+
+======================================================================
+7. ROOT DISEASE
+======================================================================
+
+The root disease is orchestration duplication.
+
+The project has reusable low-level parts:
+
+  - Foundation dialogue service
+  - prerecording store
+  - character profile store
+  - clone profile loader
+  - Fresh2 pool and scheduler
+  - generated segment callbacks
+  - actual-completion playback coordinator
+  - filler policy
+  - comm SFX controller
+  - seed store
+
+But there is no single production TuringFlow engine that composes those parts.
+Each milestone therefore creates a new orchestration path. That produces:
+
+  1. Different compute overlap timing.
+  2. Different failure cleanup.
+  3. Different PR preservation rules.
+  4. Different filler behavior.
+  5. Different route selection.
+  6. Different progression semantics.
+  7. Different seed keys.
+  8. Different logging.
+  9. Point-specific retry behavior.
+ 10. No scalable path for ScriptPoint04 or a third character.
+
+Patching ScriptPoint02And03FlowController cannot solve this structurally. It
+can only make one hardcoded pair behave better.
+
+======================================================================
+8. REQUIRED STANDARDIZED TURING FLOW
+======================================================================
+
+Every prerecording-driven Turing Flow must be the same state machine:
+
+  load descriptor
+    -> resolve character runtime
+    -> create one flowInstanceID
+    -> start optional pre-roll SFX
+    -> start Foundation Task
+    -> queue and play PR immediately
+    -> while PR plays, await Foundation and begin Fresh2 when plan is ready
+    -> publish Qwen outputs to the same playback run
+    -> after PR, bridge with the configured filler policy
+    -> play generated segments in order to actual completion
+    -> play optional post-roll SFX
+    -> update conversation seed
+    -> open or close the interaction gate
+    -> dispatch generic nextScriptPointID
+
+No ScriptPoint-specific Swift orchestration is allowed.
+
+The only point-specific inputs are data:
+
+  - prerecordingID
+  - response prompt ID
+  - character ID
+  - output route
+  - filler profile
+  - pre/post SFX policy
+  - delay/lead-in policy
+  - conversation key
+  - next point
+  - interaction gate after completion
+
+======================================================================
+9. PROPOSED DATA CONTRACT
+======================================================================
+
+Replace the narrow two-point descriptor with a general descriptor.
+
+  struct TuringFlowDescriptor: Codable, Sendable, Hashable {
+      let schemaVersion: Int
+      let scriptPointID: String
+      let trigger: Trigger
+      let transmission: Transmission
+      let progression: Progression
+
+      struct Trigger: Codable, Sendable, Hashable {
+          let kind: Kind
+          let delaySeconds: Double
+
+          enum Kind: String, Codable, Sendable {
+              case userPlay
+              case priorConversationPlaybackCompleted
+              case priorScriptPointCompleted
+              case manualDebug
+          }
+      }
+
+      struct Transmission: Codable, Sendable, Hashable {
+          let prerecordingID: String
+          let voicePromptID: String
+          let characterID: String
+          let conversationKey: String
+          let outputRoute: TuringVoiceOutputContext
+          let computeStart: ComputeStart
+          let fillerMode: FillerMode
+          let commSFX: CommSFX
+          let fixedLeadInSeconds: Double?
+      }
+
+      struct Progression: Codable, Sendable, Hashable {
+          let nextScriptPointID: String?
+          let automaticAdvance: Bool
+          let interactionGateAfterCompletion: InteractionGate
+      }
+
+      enum ComputeStart: String, Codable, Sendable {
+          case withPrerecording
+          case beforePrerecording
+          case afterPriorPoint
+      }
+
+      enum FillerMode: String, Codable, Sendable {
+          case onePrerollThenComputeGap
+          case continuousFromPrerecordingToGenerated
+          case none
+      }
+
+      enum InteractionGate: String, Codable, Sendable {
+          case closed
+          case microphone
+          case play
+      }
+
+      struct CommSFX: Codable, Sendable, Hashable {
+          let openBeforePrerecording: Bool
+          let sendAfterGenerated: Bool
+          let sendingLeadInAfterGeneratedSeconds: Double?
+      }
+  }
+
+Example ScriptPoint02:
+
+  {
+    "schemaVersion": 2,
+    "scriptPointID": "prologue.scriptPoint02",
+    "trigger": {
+      "kind": "priorConversationPlaybackCompleted",
+      "delaySeconds": 2.0
+    },
+    "transmission": {
+      "prerecordingID": "prologue.walkie.rich.scriptPoint02.001",
+      "voicePromptID": "prologue.rich.scriptPoint02.followUp.001",
+      "characterID": "rich",
+      "conversationKey": "dialogue.big_mike.rich",
+      "outputRoute": "walkieOutgoingGlobal",
+      "computeStart": "withPrerecording",
+      "fillerMode": "continuousFromPrerecordingToGenerated",
+      "commSFX": {
+        "openBeforePrerecording": true,
+        "sendAfterGenerated": true,
+        "sendingLeadInAfterGeneratedSeconds": 10.0
+      },
+      "fixedLeadInSeconds": null
+    },
+    "progression": {
+      "nextScriptPointID": "prologue.scriptPoint03",
+      "automaticAdvance": true,
+      "interactionGateAfterCompletion": "closed"
+    }
+  }
+
+Example ScriptPoint03:
+
+  {
+    "schemaVersion": 2,
+    "scriptPointID": "prologue.scriptPoint03",
+    "trigger": {
+      "kind": "priorScriptPointCompleted",
+      "delaySeconds": 0.0
+    },
+    "transmission": {
+      "prerecordingID": "prologue.walkie.bigMike.scriptPoint03.001",
+      "voicePromptID": "prologue.bigMike.scriptPoint03.followUp.001",
+      "characterID": "big_mike",
+      "conversationKey": "dialogue.big_mike.rich",
+      "outputRoute": "walkieSpatial",
+      "computeStart": "beforePrerecording",
+      "fillerMode": "continuousFromPrerecordingToGenerated",
+      "commSFX": {
+        "openBeforePrerecording": false,
+        "sendAfterGenerated": false,
+        "sendingLeadInAfterGeneratedSeconds": null
+      },
+      "fixedLeadInSeconds": 10.0
+    },
+    "progression": {
+      "nextScriptPointID": null,
+      "automaticAdvance": false,
+      "interactionGateAfterCompletion": "microphone"
+    }
+  }
+
+======================================================================
+10. CHARACTER RUNTIME REGISTRY
+======================================================================
+
+The current renderer has a closed enum:
+
+  enum Character {
+      case rich
+      case bigMike
+  }
+
+That does not support an episodic game with unlimited clone voices. Replace it
+with a registry keyed by characterID.
+
+  struct TuringCharacterRuntimeDefinition: Sendable {
+      let characterID: String
+      let displayName: String
+      let voiceID: String
+      let outputProcessingPolicy: TuringQwenOutputProcessingPolicy
+      let fillerDirectoryCandidates: [String]
+      let generatedGainDB: Float
+      let prerecordingGainDB: Float
+      let fillerGainDB: Float
+      let cloneProfileLoader: @Sendable (URL) throws
+          -> TuringQwenNativeCloneProfile
+  }
+
+  struct TuringCharacterRuntimeRegistry: Sendable {
+      private let definitions: [String: TuringCharacterRuntimeDefinition]
+
+      func require(_ characterID: String)
+          throws -> TuringCharacterRuntimeDefinition
+      {
+          guard let definition = definitions[characterID] else {
+              throw TuringRuntimeError.invalidConfig(
+                  "No Turing character runtime for \(characterID)."
+              )
+          }
+          return definition
+      }
+  }
+
+The generic renderer accepts a runtime definition. It does not switch on Rich
+or Big Mike:
+
+  actor TuringCharacterQwenRenderer {
+      private let runtime: TuringCharacterRuntimeDefinition
+      private let resources: TuringBaseCloneRuntimeResources
+      private let arbiter: TuringQwenCharacterPoolArbiter
+
+      func render(
+          segments: [TuringSpeechSegment],
+          runID: String,
+          sink: any TuringGeneratedSegmentSink
+      ) async throws {
+          await arbiter.acquire(owner: "\(runtime.characterID).\(runID)")
+          defer {
+              Task {
+                  await arbiter.release(
+                      owner: "\(runtime.characterID).\(runID)"
+                  )
+              }
+          }
+
+          let bundleRoot = try requireBundleRoot()
+          let profile = try runtime.cloneProfileLoader(bundleRoot)
+          let stagedModel = try resources.stageWritableModel(
+              from: resources.locateBundledModel()
+          )
+
+          let pool = try TuringQwenNativeGenerationSchedulerFactory
+              .makeFresh2Pool()
+          defer {
+              Task {
+                  await pool.unloadAll(reason: "flowFinished.\(runID)")
+              }
+          }
+
+          try await pool.warmLoadExactlyRequestedInstances(
+              modelRoot: stagedModel,
+              cloneProfile: profile,
+              variantID: profile.defaultVariantID,
+              performanceMode: .performance
+          )
+
+          let scheduler = TuringQwenNativeGenerationSchedulerFactory
+              .makeFresh2Scheduler(instancePool: pool)
+          let requests = makeRequests(
+              segments: segments,
+              profile: profile
+          )
+
+          _ = try await scheduler.renderSegments(
+              requests,
+              runID: runID,
+              skipSegmentFailures: true,
+              onSegmentStarted: { _, index in
+                  await sink.computeStarted(index: index)
+              },
+              onSegmentFinished: { result in
+                  await sink.computeFinished(
+                      index: result.segmentIndex,
+                      audio: .init(
+                          segmentIndex: result.segmentIndex,
+                          samples: result.audio.samples,
+                          sampleRate: Double(result.audio.sampleRate),
+                          channelCount: 1
+                      )
+                  )
+              },
+              onSegmentSkipped: { skipped in
+                  await sink.computeSkipped(
+                      index: skipped.segmentIndex,
+                      reason: skipped.errorDescription
+                  )
+              }
+          )
+      }
+  }
+
+Do not use detached defer Tasks exactly as shown without reviewing actor
+lifetime and structured cleanup. The important contract is one generic
+renderer and guaranteed pool unload/release on every exit.
+
+======================================================================
+11. ONE PRODUCTION TURING FLOW ENGINE
+======================================================================
+
+Add one actor:
+
+  actor TuringFlowEngine {
+      static let shared = TuringFlowEngine(...)
+
+      private var activeFlow: ActiveFlow?
+      private var completedScriptPointIDs = Set<String>()
+
+      func run(
+          scriptPointID: String,
+          trigger: TuringFlowTriggerSource
+      ) async -> TuringFlowResult
+  }
+
+Core implementation shape:
+
+  func run(
+      scriptPointID: String,
+      trigger: TuringFlowTriggerSource
+  ) async -> TuringFlowResult {
+      let descriptor = try descriptorStore.require(scriptPointID)
+      let flowInstanceID = UUID()
+
+      guard activeFlow == nil else {
+          return .ignored(.anotherFlowActive)
+      }
+
+      activeFlow = ActiveFlow(
+          flowInstanceID: flowInstanceID,
+          scriptPointID: scriptPointID,
+          state: .loading
+      )
+      defer { activeFlow = nil }
+
+      do {
+          let prerecording = try prerecordingStore.descriptor(
+              id: descriptor.transmission.prerecordingID
+          )
+          let prerecordingURL = try prerecordingStore.audioURL(
+              for: prerecording
+          )
+          let prompt = try voicePromptStore.descriptor(
+              id: descriptor.transmission.voicePromptID
+          )
+          let runtime = try characterRegistry.require(
+              descriptor.transmission.characterID
+          )
+
+          try validateIdentity(
+              descriptor: descriptor,
+              prerecording: prerecording,
+              prompt: prompt,
+              runtime: runtime
+          )
+
+          let playback = await playbackFactory.make(
+              descriptor: descriptor,
+              character: runtime,
+              flowInstanceID: flowInstanceID
+          )
+
+          await interactionGate.setBusy(
+              true,
+              owner: flowInstanceID
+          )
+          defer {
+              Task {
+                  await interactionGate.setBusy(
+                      false,
+                      owner: flowInstanceID
+                  )
+              }
+          }
+
+          if descriptor.transmission.commSFX.openBeforePrerecording {
+              try await commSFX.playScriptedOpenComm(
+                  reason: "flow.\(flowInstanceID).open"
+              )
+          }
+
+          let planTask = Task {
+              try await dialogueService.generateVoicePrompt(
+                  makeVoicePromptRequest(
+                      descriptor: descriptor,
+                      prerecording: prerecording,
+                      prompt: prompt
+                  )
+              )
+          }
+
+          await playback.beginRun(
+              runID: flowInstanceID.uuidString,
+              expectedSegmentCount: nil
+          )
+          await playback.enqueuePrerecording(
+              id: prerecording.prerecordingID,
+              fileURL: prerecordingURL
+          )
+
+          let completionTask = Task {
+              await playback.waitUntilPlaybackFinished()
+          }
+
+          let plan = try await planTask.value
+          await playback.setExpectedGeneratedSegmentCount(
+              plan.segments.count
+          )
+          await seedStore.updateSeed(
+              plan.conversationSeed,
+              for: descriptor.transmission.conversationKey
+          )
+
+          let renderer = rendererFactory.make(runtime: runtime)
+          do {
+              try await renderer.render(
+                  segments: plan.segments,
+                  runID: flowInstanceID.uuidString,
+                  sink: playback
+              )
+              await playback.qwenComputeAllFinished()
+          } catch {
+              await playback.qwenComputeFailed(
+                  expectedSegmentCount: plan.segments.count,
+                  reason: error.localizedDescription
+              )
+              throw error
+          }
+
+          await completionTask.value
+
+          if descriptor.transmission.commSFX.sendAfterGenerated {
+              try await commSFX.playScriptedSendComm(
+                  reason: "flow.\(flowInstanceID).send"
+              )
+          }
+
+          completedScriptPointIDs.insert(scriptPointID)
+          await applyCompletionGate(descriptor.progression)
+
+          if descriptor.progression.automaticAdvance,
+             let next = descriptor.progression.nextScriptPointID {
+              return await runNextAfterCurrentUnwinds(
+                  next,
+                  parentFlowInstanceID: flowInstanceID
+              )
+          }
+
+          return .succeeded(scriptPointID)
+      } catch {
+          return await finishFailedFlowWithoutCuttingActiveMedia(
+              flowInstanceID: flowInstanceID,
+              scriptPointID: scriptPointID,
+              error: error
+          )
+      }
+  }
+
+Important implementation note:
+
+The recursive run shown above must not execute while activeFlow still owns the
+current point. In production, queue nextScriptPointID and let a serial episode
+coordinator start it after the current engine call releases ownership.
+
+======================================================================
+12. PR CONTEXT MUST BE STRUCTURED
+======================================================================
+
+Do not concatenate multiple speakers and an authored outgoing PR into one
+untyped prerecordingTranscript string.
+
+Replace:
+
+  let bigMikeContext = """
+    RICH AUTHORED OUTGOING PR:
+    ...
+    RICH GENERATED CONTINUATION:
+    ...
+    BIG MIKE AUTHORED PR THAT WILL PLAY BEFORE HIS GENERATED CONTINUATION:
+    ...
+  """
+
+With:
+
+  struct TuringVoicePromptContext: Codable, Sendable {
+      let dialogueHistory: [Turn]
+      let authoredPrerecording: AuthoredPrerecording
+
+      struct Turn: Codable, Sendable {
+          let speakerID: String
+          let text: String
+          let source: Source
+      }
+
+      struct AuthoredPrerecording: Codable, Sendable {
+          let prerecordingID: String
+          let speakerID: String
+          let transcript: String
+          let alreadySpoken: Bool
+          let generatedResponseMustContinueAfterIt: Bool
+      }
+  }
+
+Render it into the Foundation prompt with an explicit contract:
+
+  Authored current-speaker prerecording already played or is playing:
+  """
+  {{authoredPrerecordingTranscript}}
+  """
+
+  Continue after it. Do not restate, paraphrase, summarize, or replay any
+  sentence from the authored prerecording. Return only new spoken words.
+
+This is a prompt responsibility, not a runtime semantic failure gate. Log the
+raw response and exact TTS inputs so repetition is diagnosable.
+
+======================================================================
+13. PLAYBACK OWNERSHIP CONTRACT
+======================================================================
+
+One Turing Flow point owns one playback coordinator instance.
+
+The coordinator must own:
+
+  - one prerecording item
+  - generated segment ordering
+  - filler/dead-air policy
+  - exact active playback handle
+  - actual completion matching
+  - WAV cleanup after completion
+  - completion waiters
+
+The engine must never:
+
+  - enqueue the same prerecording twice for one flowInstanceID
+  - create a second generated playback owner
+  - advance on duration estimates
+  - cancel valid PR playback because Foundation or Qwen failed
+  - start nextScriptPointID before actual playback completion
+  - treat a log message such as microphoneGate=open as an actual UI state
+
+Add idempotency to enqueuePrerecording:
+
+  private var acceptedPrerecordingID: String?
+
+  func enqueuePrerecording(id: String, fileURL: URL) async {
+      guard acceptedPrerecordingID == nil else {
+          print("[TuringFlow] duplicate prerecording enqueue ignored ...")
+          return
+      }
+      acceptedPrerecordingID = id
+      ...
+  }
+
+This guard is not a substitute for fixing duplicate flow invocation. It makes
+one run locally idempotent and produces evidence.
+
+======================================================================
+14. FAILURE CONTRACT
+======================================================================
+
+Foundation failure after PR starts:
+
+  - PR continues to actual completion.
+  - No generated TTS is expected.
+  - Playback run is terminalized with expected count zero.
+  - Point result records generatedPlanFailed.
+  - Do not call runCancelled on the active PR.
+
+Qwen partial failure:
+
+  - Prepared successful segments play in order.
+  - Failed indices are marked skipped.
+  - PR and active generated audio are never interrupted.
+  - Point result records partialGeneratedFailure.
+
+Qwen total failure:
+
+  - PR completes.
+  - Filler does not run forever.
+  - Every unresolved expected index is reconciled.
+  - Point result records generatedAudioFailed.
+
+Playback backend failure:
+
+  - This is the only media-layer failure allowed to stop the current item.
+  - The exact handle, route, source URL, and backend status must be logged.
+
+Progression failure:
+
+  - Completed point remains completed.
+  - Next point can be retried by ID.
+  - Completed PR/TTS is never replayed implicitly.
+
+======================================================================
+15. REQUIRED IDENTITY LOGGING
+======================================================================
+
+Every event must include:
+
+  flowInstanceID
+  scriptPointID
+  characterID
+  prerecordingID
+  voicePromptID
+  playbackRunID
+
+Required logs:
+
+  [TuringFlow] point started
+  [TuringFlow] Foundation started
+  [TuringFlow] prerecording enqueued
+  [TuringFlow] prerecording playback started
+  [TuringFlow] Foundation response accepted
+  [TuringFlow] Fresh2 pool ready
+  [TuringFlow] generated segment published
+  [TuringFlow] prerecording playback completed
+  [TuringFlow] generated playback started
+  [TuringFlow] generated playback completed
+  [TuringFlow] point completed
+  [TuringFlow] next point scheduled
+
+For ScriptPoint03 repetition diagnosis, also log:
+
+  authoredPRTranscriptSHA256
+  foundationSegmentTextSHA256
+  qwenInputTextSHA256
+
+The raw Foundation return and exact Qwen text are already logged elsewhere.
+Retain those logs.
+
+======================================================================
+16. MIGRATION PLAN
+======================================================================
+
+Phase 1: parity harness
+
+  - Freeze current ScriptPoint01 behavior in integration tests.
+  - Capture event order, route, filler policy, Fresh2 instance count, and actual
+    playback completion.
+
+Phase 2: generic engine behind ScriptPoint01
+
+  - Move the proven PR + Foundation + Fresh2 + playback sequence into the new
+    production TuringFlowEngine.
+  - Do not keep the canary as the production orchestration owner.
+  - Prove parity before moving 02/03.
+
+Phase 3: migrate ScriptPoint02
+
+  - Use the Rich character runtime definition.
+  - Keep Rich head-tracked output, Rich filler directory, 0.85 output
+    processing, open/send SFX, and continuous PR-to-generated filler.
+  - Delete Rich-specific orchestration from the combined controller.
+
+Phase 4: migrate ScriptPoint03
+
+  - Use the Big Mike runtime definition.
+  - Use structured dialogue context.
+  - Keep Big Mike spatial walkie output and 10-second response lead-in.
+  - Open the conversation microphone only after actual point completion.
+
+Phase 5: remove old paths
+
+Delete from the active runtime:
+
+  - TuringScriptPoint02And03FlowController
+  - point-specific renderer wrappers if the generic renderer fully replaces them
+  - point-specific progression code
+  - duplicate helper bridges used only by the old flow
+
+Do not delete diagnostic tools until parity is proven.
+
+======================================================================
+17. ACCEPTANCE TESTS
+======================================================================
+
+17.1 Fresh2 for every generated point
+
+For ScriptPoint01, ScriptPoint02, and ScriptPoint03, assert:
+
+  requestedInstanceCount == 2
+  actualInstanceCount == 2
+  sharedWeights == false
+  fallbackUsed == false
+
+17.2 PR exactly once
+
+For each flowInstanceID:
+
+  prerecording enqueue count == 1
+  prerecording playback start count == 1
+  prerecording playback completion count == 1
+  start handle ID == completion handle ID
+
+17.3 Foundation/Qwen overlap
+
+Assert:
+
+  prerecordingPlaybackStartedAt <= foundationCompletedAt
+  qwenMayStartBeforePrerecordingCompleted
+  generatedPlaybackStartsAfterPrerecordingCompleted
+
+17.4 Turing Flow order
+
+ScriptPoint02:
+
+  open comm
+  Rich PR
+  Rich filler bridge as configured
+  Rich generated TTS in segment order
+  send comm
+  next point scheduled
+
+ScriptPoint03:
+
+  fixed response lead-in
+  Big Mike PR
+  Big Mike filler bridge as configured
+  Big Mike generated TTS in segment order
+  microphone enabled
+
+17.5 No PR content repetition
+
+Use a Foundation fixture that attempts to copy the PR. Prompt tests must prove
+the rendered prompt marks the PR already spoken. Runtime should log the output;
+do not add a semantic failure gate unless separately approved.
+
+17.6 Failure preservation
+
+Inject Foundation failure and Qwen failure at every stage. Assert:
+
+  active PR is not canceled
+  active generated clip is not canceled
+  completion waiter terminates
+  filler cannot run forever
+  next point does not start early
+
+17.7 Unlimited character registry
+
+Register a third fixture character without adding a switch case or new flow
+controller. Assert the generic renderer loads its clone profile and Fresh2.
+
+17.8 Replay prevention
+
+Trigger the same scriptPointID automatically and manually. Assert completed
+policy and active flow identity produce an explicit ignored or replay result,
+never an accidental second run.
+
+======================================================================
+18. HARD BOUNDARIES
+======================================================================
+
+This refactor must not alter:
+
+  - room scan behavior
+  - wall placement
+  - placement retries or fallback
+  - door/window/walkie/poster geometry
+  - portal rendering
+  - Foundation prompt prose except the explicit structured already-spoken PR
+    contract approved for repetition prevention
+  - clone artifacts
+  - model files
+  - Fresh2 implementation
+  - output slowdown policies
+  - filler assets or weights
+  - walkie emitter placement
+  - Rich head-tracked emitter placement
+
+======================================================================
+19. ARCHITECT SUMMARY
+======================================================================
+
+ScriptPoint02 and ScriptPoint03 do use Fresh2. The logs and code confirm two
+fresh instances, no shared weights, and no fallback.
+
+They still diverge materially from ScriptPoint01 because they do not use one
+shared Turing Flow orchestration engine. They are manually implemented as a
+hardcoded pair inside TuringScriptPoint02And03FlowController.
+
+ScriptPoint03 queues its PR file once in the local block. The most concrete
+repetition hazard is that the same full authored PR transcript is inserted
+into the generated follow-up context, allowing Foundation output to restate it.
+Sequential later invocations are also possible and cannot currently be ruled
+out without a flowInstanceID in every log.
+
+The correct fix is not another ScriptPoint03 patch. The correct fix is:
+
+  one descriptor format
+  one character runtime registry
+  one generic Fresh2 character renderer
+  one production TuringFlowEngine
+  one playback coordinator per point
+  one progression owner
+  one identity and logging contract
+
+Then ScriptPoint01, ScriptPoint02, ScriptPoint03, and every future episodic
+point are data passed through the same machinery.

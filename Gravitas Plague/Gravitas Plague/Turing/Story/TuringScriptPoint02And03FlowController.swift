@@ -28,14 +28,15 @@ actor TuringScriptPoint02And03FlowController {
     let scriptPoint03ID = "prologue.scriptPoint03"
 
     var richPlayback: TuringStoryWalkiePlaybackCoordinator?
+    var richCompletionTask: Task<Void, Never>?
+    var richExpectedSegmentCount: Int?
     var scriptPoint03Playback: TuringStoryWalkiePlaybackCoordinator?
     var scriptPoint03CompletionTask: Task<Void, Never>?
-    var deferredBigMikeBridge: TuringDeferredBigMikePlaybackBridge?
 
     var richPlanTask: Task<TuringVoicePromptPlan, Error>?
     var richRendererTask: Task<Void, Error>?
     var bigMikePlanTask: Task<TuringVoicePromptPlan, Error>?
-    var bigMikeRendererTask: Task<Void, Error>?
+    var bigMikeRendererTask: Task<TuringVoicePromptPlan, Error>?
 
     do {
       let point02 = try scriptPointStore.descriptor(
@@ -99,6 +100,10 @@ actor TuringScriptPoint02And03FlowController {
         id: richPrerecording.prerecordingID,
         fileURL: richPrerecordingURL
       )
+      let createdRichCompletionTask = Task {
+        await createdRichPlayback.waitUntilPlaybackFinished()
+      }
+      richCompletionTask = createdRichCompletionTask
 
       print(
         """
@@ -151,9 +156,12 @@ actor TuringScriptPoint02And03FlowController {
       do {
         richPlan = try await createdRichPlanTask.value
       } catch {
-        await createdRichPlayback.setExpectedGeneratedSegmentCount(0)
-        await createdRichPlayback.qwenComputeAllFinished()
-        await createdRichPlayback.waitUntilPlaybackFinished()
+        richExpectedSegmentCount = 0
+        await createdRichPlayback.qwenComputeFailed(
+          expectedSegmentCount: 0,
+          reason: error.localizedDescription
+        )
+        await createdRichCompletionTask.value
         print(
           """
           [TuringScriptPoint02] Foundation failed after PR started
@@ -196,6 +204,7 @@ actor TuringScriptPoint02And03FlowController {
       await createdRichPlayback.setExpectedGeneratedSegmentCount(
         richPlan.segments.count
       )
+      richExpectedSegmentCount = richPlan.segments.count
 
       let bigMikeContext = """
         RICH AUTHORED OUTGOING PR:
@@ -234,7 +243,10 @@ actor TuringScriptPoint02And03FlowController {
           )
           await createdRichPlayback.qwenComputeAllFinished()
         } catch {
-          await createdRichPlayback.qwenComputeAllFinished()
+          await createdRichPlayback.qwenComputeFailed(
+            expectedSegmentCount: richPlan.segments.count,
+            reason: error.localizedDescription
+          )
           throw error
         }
       }
@@ -251,7 +263,7 @@ actor TuringScriptPoint02And03FlowController {
         richGenerationFailure = error
       }
 
-      await createdRichPlayback.waitUntilPlaybackFinished()
+      await createdRichCompletionTask.value
       if let richGenerationFailure {
         print(
           """
@@ -288,11 +300,6 @@ actor TuringScriptPoint02And03FlowController {
           automaticAdvanceTo: \(point03.scriptPointID)
         """)
 
-      let createdBridge = await MainActor.run {
-        TuringDeferredBigMikePlaybackBridge()
-      }
-      deferredBigMikeBridge = createdBridge
-
       let createdBigMikePlanTask = Task.detached(
         priority: .userInitiated
       ) {
@@ -312,17 +319,47 @@ actor TuringScriptPoint02And03FlowController {
       }
       bigMikePlanTask = createdBigMikePlanTask
 
+      await TuringWalkieCommsFXController.shared
+        .runFixedResponseLeadInAfterExternalSend(
+          reason: "scriptPoint02RichTransmissionFinished",
+          durationSeconds: 10
+        )
+
+      let createdPoint03Playback = await MainActor.run {
+        TuringStoryWalkiePlaybackCoordinator
+          .makeBigMikeTuringFlowCoordinator()
+      }
+      scriptPoint03Playback = createdPoint03Playback
+
+      await createdPoint03Playback.beginRun(
+        runID: point03.scriptPointID,
+        expectedSegmentCount: nil
+      )
+      await createdPoint03Playback.enqueuePrerecording(
+        id: bigMikePrerecording.prerecordingID,
+        fileURL: bigMikePrerecordingURL
+      )
+
       let createdBigMikeRendererTask = Task {
         let plan: TuringVoicePromptPlan
 
         do {
           plan = try await createdBigMikePlanTask.value
         } catch {
-          await createdBridge.qwenComputeAllFinished()
+          await createdPoint03Playback.setExpectedGeneratedSegmentCount(0)
+          await createdPoint03Playback.qwenComputeAllFinished()
           throw error
         }
 
-        await createdBridge.setExpectedGeneratedSegmentCount(
+        guard plan.segments.isEmpty == false else {
+          await createdPoint03Playback.setExpectedGeneratedSegmentCount(0)
+          await createdPoint03Playback.qwenComputeAllFinished()
+          throw TuringRuntimeError.invalidConfig(
+            "ScriptPoint03 voicePrompt returned no Big Mike TTS segments."
+          )
+        }
+
+        await createdPoint03Playback.setExpectedGeneratedSegmentCount(
           plan.segments.count
         )
         await seedStore.updateSeed(
@@ -339,8 +376,9 @@ actor TuringScriptPoint02And03FlowController {
           """
           [TuringScriptPoint03] Big Mike voicePrompt plan ready
             generatedSegmentCount: \(plan.segments.count)
-            computeWindow: fixedTenSecondSendingLeadIn
-            playbackSinkAttached: deferred
+            foundationComputeOverlap: sendingLeadInAndPrerecording
+            qwenComputeOverlap: prerecordingPlayback
+            playbackSink: directTuringFlowCoordinator
           """)
 
         let renderer = TuringBigMikeQwenRenderer()
@@ -350,54 +388,34 @@ actor TuringScriptPoint02And03FlowController {
             segments: plan.segments,
             runID: bigMikeTrigger.voicePromptID,
             onStarted: { index in
-              await createdBridge.qwenComputeStarted(
+              await createdPoint03Playback.qwenComputeStarted(
                 segmentIndex: index
               )
             },
             onFinished: { index, audio in
-              await createdBridge.qwenComputeFinished(
+              await createdPoint03Playback.qwenComputeFinished(
                 segmentIndex: index,
                 audio: audio
               )
             },
             onSkipped: { index, reason in
-              await createdBridge.qwenComputeSkipped(
+              await createdPoint03Playback.qwenComputeSkipped(
                 segmentIndex: index,
                 reason: reason
               )
             }
           )
-          await createdBridge.qwenComputeAllFinished()
+          await createdPoint03Playback.qwenComputeAllFinished()
+          return plan
         } catch {
-          await createdBridge.qwenComputeAllFinished()
+          await createdPoint03Playback.qwenComputeFailed(
+            expectedSegmentCount: plan.segments.count,
+            reason: error.localizedDescription
+          )
           throw error
         }
       }
       bigMikeRendererTask = createdBigMikeRendererTask
-
-      await TuringWalkieCommsFXController.shared
-        .runFixedResponseLeadInAfterExternalSend(
-          reason: "scriptPoint02RichTransmissionFinished",
-          durationSeconds: 10
-        )
-
-      let createdPoint03Playback = await MainActor.run {
-        TuringStoryWalkiePlaybackCoordinator
-          .makeBigMikeCoordinator()
-      }
-      scriptPoint03Playback = createdPoint03Playback
-
-      await createdPoint03Playback.beginRun(
-        runID: point03.scriptPointID,
-        expectedSegmentCount: nil
-      )
-      await createdPoint03Playback.enqueuePrerecording(
-        id: bigMikePrerecording.prerecordingID,
-        fileURL: bigMikePrerecordingURL
-      )
-      await createdBridge.attach(
-        to: createdPoint03Playback
-      )
 
       let point03CompletionTask = Task {
         await createdPoint03Playback.waitUntilPlaybackFinished()
@@ -415,14 +433,17 @@ actor TuringScriptPoint02And03FlowController {
           responseCharacter: big_mike
           generatedRoute: spatialWalkie
           sendingLeadInCompletedSeconds: 10.000
-          voicePromptComputeStartedDuringLeadIn: true
+          voicePromptFoundationStartedDuringLeadIn: true
+          qwenEventsRoutedDirectlyToPlayback: true
+          turingFlow: prerecording,computeGapFiller,generatedTTS,microphoneOpen
           continuedQuestionsEnabled: \(point03.conversationRemainsEnabled)
         """)
 
       let bigMikeGenerationFailure: Error?
+      var bigMikePlan: TuringVoicePromptPlan?
 
       do {
-        try await createdBigMikeRendererTask.value
+        bigMikePlan = try await createdBigMikeRendererTask.value
         bigMikeGenerationFailure = nil
       } catch {
         bigMikeGenerationFailure = error
@@ -442,11 +463,31 @@ actor TuringScriptPoint02And03FlowController {
         )
       }
 
+      guard let bigMikePlan else {
+        return .failed(
+          "ScriptPoint03 PR completed, but no Big Mike voicePrompt plan was available."
+        )
+      }
+
+      let bigMikePlaybackCount = await createdPoint03Playback
+        .completedGeneratedSegmentCount()
+      guard bigMikePlaybackCount == bigMikePlan.segments.count else {
+        return .failed(
+          "ScriptPoint03 Big Mike TTS playback was incomplete. Expected "
+            + "\(bigMikePlan.segments.count), played \(bigMikePlaybackCount)."
+        )
+      }
+
       print(
         """
         [TuringScriptPoint03] completed
+          prerecordingCompleted: true
+          generatedSegmentCount: \(bigMikePlan.segments.count)
+          generatedPlaybackCount: \(bigMikePlaybackCount)
+          generatedCompletionSource: actualPlaybackCompletion
           conversationKey: \(TuringDialogueThreadIdentity.bigMikeRich)
           continuedQuestionsEnabled: \(point03.conversationRemainsEnabled)
+          microphoneGate: open
         """)
 
       return .succeeded(
@@ -458,9 +499,22 @@ actor TuringScriptPoint02And03FlowController {
       bigMikePlanTask?.cancel()
       bigMikeRendererTask?.cancel()
 
-      if let richPlayback {
+      if let richPlayback, let richCompletionTask {
+        await richPlayback.qwenComputeFailed(
+          expectedSegmentCount: richExpectedSegmentCount ?? 0,
+          reason: error.localizedDescription
+        )
+        await richCompletionTask.value
+        print(
+          """
+          [TuringScriptPoint02] failure cleanup preserved active Rich playback
+            prerecordingAllowedToFinish: true
+            activePlaybackCancelled: false
+            expectedGeneratedSegmentCount: \(richExpectedSegmentCount ?? 0)
+          """)
+      } else if let richPlayback {
         await richPlayback.runCancelled(
-          reason: "scriptPoint02And03Failed"
+          reason: "scriptPoint02And03FailedBeforeRichPrerecordingQueued"
         )
       }
 
@@ -474,10 +528,6 @@ actor TuringScriptPoint02And03FlowController {
           reason: "scriptPoint02And03FailedBeforePoint03Playback"
         )
       }
-
-      await deferredBigMikeBridge?.cancel(
-        reason: "scriptPoint02And03Failed"
-      )
 
       await TuringWalkieCommsFXController.shared.stopAll(
         reason: "scriptPoint02And03Failed"

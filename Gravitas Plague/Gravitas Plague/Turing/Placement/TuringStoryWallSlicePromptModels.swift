@@ -75,7 +75,6 @@ enum TuringStoryWallSlicePromptBudget {
   static let hardPromptTokens = 2_300
   static let minimumReservedTokens = 1_200
   static let maximumPromptUTF8Bytes = 8_500
-  static let maximumPerimeterWalls = 12
   static let maximumSlicesPerWall = 10
   static let maximumTotalSlices = 120
   static let contextSize = 4_096
@@ -109,5 +108,4 @@ struct TuringStoryWallSlicePlannerResult: Sendable {
   let dataset: TuringStoryWallSlicePromptDataset
   let datasetJSON: String
   let renderedPrompt: String
-  let repairUsed: Bool
 }

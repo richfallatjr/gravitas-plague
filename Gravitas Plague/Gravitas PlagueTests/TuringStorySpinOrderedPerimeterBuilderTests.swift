@@ -40,6 +40,42 @@ final class TuringStorySpinOrderedPerimeterBuilderTests: XCTestCase {
         XCTAssertEqual(result.walls.map(\.wallOrdinal), [1, 2])
     }
 
+    func testSpinRouteRetainsAllFourteenDetectedWalls() throws {
+        let perimeterWalls = (0..<14).map { index in
+            let angle = Float(index) / 14 * 2 * Float.pi
+            let id = UUID()
+            let raw = TuringStoryPlacementTestSupport.wallCandidate(
+                id: id,
+                center: SIMD3<Float>(sin(angle) * 3, 1.3, cos(angle) * 3)
+            )
+            return wall(id: "wall-\(index)", raw: raw)
+        }
+        let perimeter = TuringStoryRoomPerimeter(
+            scanID: "fourteen-walls",
+            floorWorldY: 0,
+            roomCenterXZ: .zero,
+            isClosed: true,
+            wallsClockwise: perimeterWalls,
+            wallIDBySourceUUID: Dictionary(
+                uniqueKeysWithValues: perimeterWalls.map {
+                    ($0.representativeWallUUID, $0.wallID)
+                }
+            )
+        )
+
+        let result = try TuringStorySpinOrderedPerimeterBuilder().build(
+            perimeter: perimeter,
+            spin: TuringStoryScanSpinResult(
+                startYawRadians: 0,
+                accumulatedYawRadians: -2 * .pi,
+                direction: .clockwise
+            )
+        )
+
+        XCTAssertEqual(result.walls.count, 14)
+        XCTAssertEqual(result.walls.map(\.wallOrdinal), Array(1...14))
+    }
+
     private func wall(id: String, raw: WallCandidate) -> TuringStoryPerimeterWall {
         let canonical = TuringStoryPlacementTestSupport.canonicalWall(source: raw)
         let half = canonical.right * (canonical.width * 0.5)

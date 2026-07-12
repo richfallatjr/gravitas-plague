@@ -5,6 +5,16 @@ import XCTest
 
 @MainActor
 final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
+  func testBigMikeTuringFlowRequiresFillerBetweenPRAndGeneratedTTS() {
+    let policy = TuringStoryWalkiePlaybackCoordinator
+      .bigMikeTuringFlowPolicy
+
+    XCTAssertEqual(policy.voiceRoute.rawValue, "walkieSpatial")
+    XCTAssertEqual(policy.firstSegmentPrerollFillerCount, 1)
+    XCTAssertTrue(policy.chainFillerFromPrerecordingToFirstGenerated)
+    XCTAssertTrue(policy.completeCurrentFillerBeforeGeneratedSpeech)
+  }
+
   func testRichPRAndGeneratedSegmentsUseScriptPoint01CoordinatorInOrder()
     async throws
   {
@@ -186,6 +196,46 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
     await coordinator.waitUntilPlaybackFinished()
 
     XCTAssertEqual(fakePlayer.startedClips.map(\.kind), [.prerecording])
+    XCTAssertTrue(fakePlayer.cancelReasons.isEmpty)
+    let completedCount = await coordinator.completedGeneratedSegmentCount()
+    XCTAssertEqual(completedCount, 0)
+  }
+
+  func testTerminalRendererFailureCannotLeavePRFlowWaitingForever()
+    async throws
+  {
+    let fakePlayer = FakeRichGlobalClipPlayer()
+    let rootURL = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    var policy = TuringStoryWalkiePlaybackCoordinator.Policy()
+    policy.voiceRoute = .playerGlobal
+    policy.deadAirAfterFillerEnabled = false
+    policy.fillerDirectoryCandidates = []
+
+    let coordinator = TuringStoryWalkiePlaybackCoordinator(
+      policy: policy,
+      rootURL: rootURL,
+      globalPlayer: fakePlayer
+    )
+
+    await coordinator.beginRun(
+      runID: "test.scriptPoint03.terminalRendererFailure",
+      expectedSegmentCount: nil
+    )
+    await coordinator.enqueuePrerecording(
+      id: "prologue.walkie.bigMike.scriptPoint03.001",
+      fileURL: URL(fileURLWithPath: "/tmp/pr-big-mike-script-point-03.mp3")
+    )
+    await coordinator.setExpectedGeneratedSegmentCount(3)
+    await coordinator.qwenComputeFailed(
+      expectedSegmentCount: 3,
+      reason: "test warm-load failure"
+    )
+
+    XCTAssertEqual(fakePlayer.startedClips.map(\.kind), [.prerecording])
+    fakePlayer.completeActive()
+    await coordinator.waitUntilPlaybackFinished()
+
     XCTAssertTrue(fakePlayer.cancelReasons.isEmpty)
     let completedCount = await coordinator.completedGeneratedSegmentCount()
     XCTAssertEqual(completedCount, 0)
