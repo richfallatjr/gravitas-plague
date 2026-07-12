@@ -803,7 +803,9 @@ final class TuringStoryWalkieBundleController:
         placement: TuringStoryWallBundlePlacement,
         wallManager: WallPlaneManager
     ) -> simd_float4x4? {
-        guard let wall = wallManager.wallCandidates[placement.wallID] else {
+        guard let wall = wallManager.wallCandidateForPlacement(
+            id: placement.wallID
+        ) else {
             return nil
         }
 

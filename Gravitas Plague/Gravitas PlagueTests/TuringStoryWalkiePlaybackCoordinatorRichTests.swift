@@ -11,12 +11,14 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
     let fakePlayer = FakeRichGlobalClipPlayer()
     let rootURL = FileManager.default.temporaryDirectory
       .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let fillerDirectory = try makeFillerDirectory(in: rootURL)
     var policy = TuringStoryWalkiePlaybackCoordinator.Policy()
     policy.voiceRoute = .playerGlobal
     policy.outputProcessingPolicy = .rich
     policy.firstSegmentPrerollFillerCount = 1
+    policy.chainFillerFromPrerecordingToFirstGenerated = true
     policy.deadAirAfterFillerEnabled = false
-    policy.fillerDirectoryCandidates = []
+    policy.fillerDirectoryCandidates = [fillerDirectory.path]
 
     let coordinator = TuringStoryWalkiePlaybackCoordinator(
       policy: policy,
@@ -55,6 +57,10 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
 
     fakePlayer.completeActive()
     await settle()
+    XCTAssertEqual(fakePlayer.startedClips.last?.kind, .filler)
+
+    fakePlayer.completeActive()
+    await settle()
     XCTAssertEqual(fakePlayer.startedClips.last?.label, "segment_0000")
 
     fakePlayer.completeActive()
@@ -66,10 +72,72 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
 
     XCTAssertEqual(
       fakePlayer.startedClips.map(\.kind),
-      [.prerecording, .generated, .generated]
+      [.prerecording, .filler, .generated, .generated]
     )
     let completedCount = await coordinator.completedGeneratedSegmentCount()
     XCTAssertEqual(completedCount, 2)
+  }
+
+  func testRichPRChainsFillerUntilFirstGeneratedSegmentIsReady()
+    async throws
+  {
+    let fakePlayer = FakeRichGlobalClipPlayer()
+    let rootURL = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let fillerDirectory = try makeFillerDirectory(in: rootURL)
+    var policy = TuringStoryWalkiePlaybackCoordinator.Policy()
+    policy.voiceRoute = .playerGlobal
+    policy.outputProcessingPolicy = .rich
+    policy.firstSegmentPrerollFillerCount = 1
+    policy.chainFillerFromPrerecordingToFirstGenerated = true
+    policy.deadAirAfterFillerEnabled = true
+    policy.fillerDirectoryCandidates = [fillerDirectory.path]
+
+    let coordinator = TuringStoryWalkiePlaybackCoordinator(
+      policy: policy,
+      rootURL: rootURL,
+      globalPlayer: fakePlayer
+    )
+
+    await coordinator.beginRun(
+      runID: "test.scriptPoint02.continuousPRBridge",
+      expectedSegmentCount: nil
+    )
+    await coordinator.enqueuePrerecording(
+      id: "prologue.walkie.rich.scriptPoint02.001",
+      fileURL: URL(fileURLWithPath: "/tmp/pr-rich-script-point-02.mp3")
+    )
+
+    fakePlayer.completeActive()
+    await settle()
+    XCTAssertEqual(fakePlayer.startedClips.map(\.kind), [.prerecording, .filler])
+
+    fakePlayer.completeActive()
+    await settle()
+    XCTAssertEqual(
+      fakePlayer.startedClips.map(\.kind),
+      [.prerecording, .filler, .filler]
+    )
+
+    await coordinator.setExpectedGeneratedSegmentCount(1)
+    await coordinator.qwenComputeStarted(segmentIndex: 0)
+    await coordinator.qwenComputeFinished(
+      segmentIndex: 0,
+      audio: generatedAudio(index: 0)
+    )
+    await coordinator.qwenComputeAllFinished()
+
+    XCTAssertEqual(fakePlayer.startedClips.last?.kind, .filler)
+    fakePlayer.completeActive()
+    await settle()
+    XCTAssertEqual(fakePlayer.startedClips.last?.kind, .generated)
+
+    fakePlayer.completeActive()
+    await coordinator.waitUntilPlaybackFinished()
+    XCTAssertEqual(
+      fakePlayer.startedClips.map(\.kind),
+      [.prerecording, .filler, .filler, .generated]
+    )
   }
 
   func testRichGenerationFailureDoesNotCancelActivePrerecording()
@@ -133,6 +201,21 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
       sampleRate: 24_000,
       channelCount: 1
     )
+  }
+
+  private func makeFillerDirectory(in rootURL: URL) throws -> URL {
+    let directory = rootURL.appendingPathComponent(
+      "rich-filler",
+      isDirectory: true
+    )
+    try FileManager.default.createDirectory(
+      at: directory,
+      withIntermediateDirectories: true
+    )
+    try Data([0]).write(
+      to: directory.appendingPathComponent("rich-filler-test_1.mp3")
+    )
+    return directory
   }
 
   private func settle() async {

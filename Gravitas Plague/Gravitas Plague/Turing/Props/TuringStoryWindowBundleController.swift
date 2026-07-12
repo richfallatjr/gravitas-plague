@@ -896,7 +896,9 @@ final class TuringStoryWindowBundleController:
         placement: TuringStoryWindowBundlePlacement,
         wallManager: WallPlaneManager
     ) -> simd_float4x4? {
-        guard let wall = wallManager.wallCandidates[placement.wallID] else {
+        guard let wall = wallManager.wallCandidateForPlacement(
+            id: placement.wallID
+        ) else {
             return nil
         }
 
@@ -921,7 +923,9 @@ final class TuringStoryWindowBundleController:
         placement: TuringStoryWindowBundlePlacement,
         wallManager: WallPlaneManager
     ) {
-        guard let wall = wallManager.wallCandidates[placement.wallID] else {
+        guard let wall = wallManager.wallCandidateForPlacement(
+            id: placement.wallID
+        ) else {
             return
         }
 

@@ -113,6 +113,10 @@ final class TuringStoryWallLayoutCoordinator {
         let floors = Array(wallManager.floorCandidates.values)
         let occupancy = Array(occupancyRegistry.recordsByID.values)
         let scanID = String(format: "%08X", UInt32.random(in: UInt32.min...UInt32.max))
+        wallManager.retainPlacementWallSnapshot(
+            walls,
+            reason: "storyLayout.\(scanID)"
+        )
         state = .cleansing
         print(
             "[TuringWallSlices] snapshot frozen scanID=\(scanID) rawWalls=\(walls.count) rawFloors=\(floors.count) occupancy=\(occupancy.count)"
@@ -338,7 +342,9 @@ final class TuringStoryWallLayoutCoordinator {
         _ exact: TuringStoryExactPlacement,
         wallManager: WallPlaneManager
     ) -> TuringStoryDoorBundlePlacement {
-        let normal = wallManager.wallCandidates[exact.wallUUID]?.normal ?? SIMD3<Float>(0, 0, 1)
+        let normal = wallManager.wallCandidateForPlacement(
+            id: exact.wallUUID
+        )?.normal ?? SIMD3<Float>(0, 0, 1)
         return TuringStoryDoorBundlePlacement(
             wallID: exact.wallUUID,
             localX: exact.runtimeLocalX,
@@ -355,7 +361,9 @@ final class TuringStoryWallLayoutCoordinator {
         _ exact: TuringStoryExactPlacement,
         wallManager: WallPlaneManager
     ) -> TuringStoryWindowBundlePlacement {
-        let normal = wallManager.wallCandidates[exact.wallUUID]?.normal ?? SIMD3<Float>(0, 0, 1)
+        let normal = wallManager.wallCandidateForPlacement(
+            id: exact.wallUUID
+        )?.normal ?? SIMD3<Float>(0, 0, 1)
         return TuringStoryWindowBundlePlacement(
             wallID: exact.wallUUID,
             localX: exact.runtimeLocalX,

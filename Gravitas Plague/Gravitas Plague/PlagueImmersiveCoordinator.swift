@@ -839,6 +839,10 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         turingStoryPlacementAdjustmentCoordinator.cancel(
             reason: "debugRoomRescan.\(reason)"
         )
+        roomSkinningCoordinator.wallManager
+            .clearRetainedPlacementWallSnapshot(
+                reason: "debugRoomRescan.\(reason)"
+            )
 
         turingDebugRescanAttempt += 1
         let attempt = turingDebugRescanAttempt

@@ -4,6 +4,39 @@ import simd
 @testable import Gravitas_Plague
 
 final class TuringStoryPlacementCandidateCacheTests: XCTestCase {
+    @MainActor
+    func testRetainedPlacementWallSurvivesLiveAnchorReplacement() {
+        let manager = WallPlaneManager()
+        let wallID = UUID()
+        let wall = WallCandidate(
+            id: wallID,
+            anchorID: UUID(),
+            worldTransform: matrix_identity_float4x4,
+            center: .zero,
+            normal: SIMD3<Float>(0, 0, 1),
+            up: SIMD3<Float>(0, 1, 0),
+            right: SIMD3<Float>(1, 0, 0),
+            width: 3,
+            height: 2.5,
+            stabilityScore: 1,
+            lastUpdated: Date()
+        )
+
+        manager.retainPlacementWallSnapshot(
+            [wall],
+            reason: "unitTest"
+        )
+        XCTAssertEqual(
+            manager.wallCandidateForPlacement(id: wallID)?.id,
+            wallID
+        )
+
+        manager.clearRetainedPlacementWallSnapshot(
+            reason: "unitTestComplete"
+        )
+        XCTAssertNil(manager.wallCandidateForPlacement(id: wallID))
+    }
+
     func testAssemblerRetainsEveryCatalogCandidate() throws {
         let wall = UUID()
         let slots = [
@@ -41,6 +74,29 @@ final class TuringStoryPlacementCandidateCacheTests: XCTestCase {
             seed.candidatesByProp[.poster]?.map(\.slotID),
             ["p:2", "p:1", "p:3"]
         )
+    }
+
+    func testCatalogRouteFilterSkipsPlacementsOutsideSpinRoute() {
+        let routedWall = UUID()
+        let excludedWall = UUID()
+        let routed = makeExactPlacement(
+            wallID: routedWall,
+            semanticMinX: -0.5,
+            semanticMaxX: 0.5
+        )
+        let excluded = makeExactPlacement(
+            wallID: excludedWall,
+            semanticMinX: -0.5,
+            semanticMaxX: 0.5
+        )
+
+        let filtered = TuringStoryPlacementCatalogRouteFilter.placements(
+            from: [routed, excluded],
+            routedWallIDs: [routedWall]
+        )
+
+        XCTAssertEqual(filtered.count, 1)
+        XCTAssertEqual(filtered.first?.wallUUID, routedWall)
     }
 
     func testCoveredSlicesUseCanonicalSemanticRect() {
@@ -262,4 +318,3 @@ final class TuringStoryPlacementCandidateCacheTests: XCTestCase {
         )
     }
 }
-

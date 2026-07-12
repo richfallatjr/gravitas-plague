@@ -11,6 +11,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
 
     struct Policy: Sendable {
         var firstSegmentPrerollFillerCount = 1
+        var chainFillerFromPrerecordingToFirstGenerated = false
         var chainFillerWhileComputeWithoutSpeech = true
         var completeCurrentFillerBeforeGeneratedSpeech = true
         var deadAirAfterFillerEnabled = true
@@ -119,6 +120,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
         var policy = Policy()
         policy.voiceRoute = .playerHeadTracked
         policy.outputProcessingPolicy = .rich
+        policy.chainFillerFromPrerecordingToFirstGenerated = true
         policy.generatedGainDB = 0
         policy.prerecordingGainDB = 0
         policy.fillerGainDB = -6
@@ -178,6 +180,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
           fillerClipCount: \(Set(fillerFiles).count)
           weightedFillerEntryCount: \(fillerFiles.count)
           firstSegmentPrerollFillerCount: \(policy.firstSegmentPrerollFillerCount)
+          chainFillerFromPrerecordingToFirstGenerated: \(policy.chainFillerFromPrerecordingToFirstGenerated)
         """)
 
         await reconcile(reason: "runStarted")
@@ -370,6 +373,16 @@ final class TuringStoryWalkiePlaybackCoordinator {
            pendingGenerated[nextPlaybackSegmentIndex] != nil {
             firstPrerollRemaining -= 1
             await startFiller(reason: "firstSegmentPreroll.generatedReady")
+            return
+        }
+
+        if isPrerecordingToInitialGeneratedBridgeWaiting {
+            if firstPrerollRemaining > 0 {
+                firstPrerollRemaining -= 1
+            }
+            await startFiller(
+                reason: "prerecordingToFirstGenerated.computeBridge"
+            )
             return
         }
 
@@ -755,7 +768,6 @@ final class TuringStoryWalkiePlaybackCoordinator {
         )
             where activeHandleID == handleID:
             prerecordingHasPlayed = true
-            firstPrerollRemaining = 0
             activeItem = .none
             print("""
             [TuringPlaybackRebuild] prerecording playback completed
@@ -764,7 +776,8 @@ final class TuringStoryWalkiePlaybackCoordinator {
               file: \(fileURL.lastPathComponent)
               elapsedSeconds: \(String(format: "%.3f", Date().timeIntervalSince(startedAt)))
               completionSource: \(completionSourceLogName)
-              initialPrerollSatisfied: true
+              fillerBridgeRequired: \(policy.chainFillerFromPrerecordingToFirstGenerated)
+              firstPrerollRemaining: \(firstPrerollRemaining)
             """)
             await reconcile(reason: "prerecordingCompleted")
 
@@ -811,6 +824,12 @@ final class TuringStoryWalkiePlaybackCoordinator {
               elapsedSeconds: \(String(format: "%.3f", elapsed))
               pendingNextReady: \(pendingGenerated[nextPlaybackSegmentIndex] != nil)
             """)
+            if isPrerecordingToInitialGeneratedBridgeWaiting {
+                await reconcile(
+                    reason: "prerecordingToFirstGenerated.fillerCompleted"
+                )
+                return
+            }
             if pendingGenerated[nextPlaybackSegmentIndex] == nil,
                activeComputeSegments.isEmpty == false,
                policy.deadAirAfterFillerEnabled {
@@ -845,6 +864,21 @@ final class TuringStoryWalkiePlaybackCoordinator {
 
     private var shouldUseDeadAirWhileWaitingForInitialGeneratedSegment: Bool {
         nextPlaybackSegmentIndex == 0 && pendingGenerated[0] == nil
+    }
+
+    private var isPrerecordingToInitialGeneratedBridgeWaiting: Bool {
+        guard policy.chainFillerFromPrerecordingToFirstGenerated,
+              prerecordingHasPlayed,
+              nextPlaybackSegmentIndex == 0,
+              pendingGenerated[0] == nil,
+              allComputeFinished == false else {
+            return false
+        }
+
+        if let expectedSegmentCount {
+            return expectedSegmentCount > 0
+        }
+        return true
     }
 
     private func finishRun(reason: String) async {

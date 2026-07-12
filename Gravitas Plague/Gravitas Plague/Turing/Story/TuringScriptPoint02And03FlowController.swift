@@ -138,6 +138,15 @@ actor TuringScriptPoint02And03FlowController {
       }
       richPlanTask = createdRichPlanTask
 
+      print(
+        """
+        [TuringScriptPoint02] Rich voicePrompt compute launched during PR playback
+          prerecordingID: \(richPrerecording.prerecordingID)
+          FoundationTaskStarted: true
+          playbackOwner: TuringStoryWalkiePlaybackCoordinator
+          fillerBridgeAfterPR: continuousUntilGeneratedSegment0Ready
+        """)
+
       let richPlan: TuringVoicePromptPlan
       do {
         richPlan = try await createdRichPlanTask.value

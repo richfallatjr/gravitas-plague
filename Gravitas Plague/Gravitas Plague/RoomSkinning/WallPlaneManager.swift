@@ -25,6 +25,7 @@ final class WallPlaneManager: ObservableObject {
     @Published private(set) var floorCandidates: [UUID: FloorCandidate] = [:]
 
     private var lastKnownViewerPosition = SIMD3<Float>(0, 1.55, 0)
+    private var retainedPlacementWallCandidates: [UUID: WallCandidate] = [:]
 
     var lastKnownViewerYForPlanning: Float {
         lastKnownViewerPosition.y
@@ -51,7 +52,40 @@ final class WallPlaneManager: ObservableObject {
     func stop() {
         wallCandidates.removeAll()
         floorCandidates.removeAll()
+        retainedPlacementWallCandidates.removeAll()
         roomSkinningPlaneLog("[RoomSkinning] plane detection stopped")
+    }
+
+    func retainPlacementWallSnapshot(
+        _ walls: [WallCandidate],
+        reason: String
+    ) {
+        retainedPlacementWallCandidates = Dictionary(
+            uniqueKeysWithValues: walls.map { ($0.id, $0) }
+        )
+        print(
+            """
+            [RoomSkinning] placement wall snapshot retained
+              reason: \(reason)
+              retainedWallCount: \(retainedPlacementWallCandidates.count)
+            """
+        )
+    }
+
+    func clearRetainedPlacementWallSnapshot(reason: String) {
+        let removedCount = retainedPlacementWallCandidates.count
+        retainedPlacementWallCandidates.removeAll()
+        print(
+            """
+            [RoomSkinning] placement wall snapshot cleared
+              reason: \(reason)
+              removedWallCount: \(removedCount)
+            """
+        )
+    }
+
+    func wallCandidateForPlacement(id: UUID) -> WallCandidate? {
+        wallCandidates[id] ?? retainedPlacementWallCandidates[id]
     }
 
     func handlePlaneAnchorUpdate(

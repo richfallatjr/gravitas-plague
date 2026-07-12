@@ -94,6 +94,18 @@ struct TuringStoryPlacementCandidateCacheAssembler: Sendable {
     }
 }
 
+/// The exact-placement catalog is generated before the perimeter is reduced to
+/// the bounded spin route sent to Foundation Models. Candidates on walls that
+/// are not in that route cannot be reached by the adjustment UI.
+enum TuringStoryPlacementCatalogRouteFilter {
+    static func placements(
+        from catalogPlacements: [TuringStoryExactPlacement],
+        routedWallIDs: Set<UUID>
+    ) -> [TuringStoryExactPlacement] {
+        catalogPlacements.filter { routedWallIDs.contains($0.wallUUID) }
+    }
+}
+
 enum TuringStoryPlacementRouteMath {
     private static let epsilon: Float = 0.000_5
 
@@ -184,8 +196,29 @@ struct TuringStoryPlacementCandidateCacheBuilder {
             poster: posterController
         )
 
+        let routedWallIDs = Set(
+            sliceMap.perimeter.walls.map(\.representativeWallUUID)
+        )
+        let routedCatalogPlacements =
+            TuringStoryPlacementCatalogRouteFilter.placements(
+                from: catalog.placements,
+                routedWallIDs: routedWallIDs
+            )
+        let skippedOutsideSpinRoute =
+            catalog.placements.count - routedCatalogPlacements.count
+
+        print(
+            """
+            [TuringPlacementAdjust] catalog filtered to spin route
+              totalCatalogPlacements: \(catalog.placements.count)
+              routedCatalogPlacements: \(routedCatalogPlacements.count)
+              skippedOutsideSpinRoute: \(skippedOutsideSpinRoute)
+              routedWallCount: \(routedWallIDs.count)
+            """
+        )
+
         var catalogSlotsByProp: [TuringStoryPropID: [TuringStoryRuntimeSlot]] = [:]
-        for exact in catalog.placements {
+        for exact in routedCatalogPlacements {
             let slot = try materialize(
                 exact: exact,
                 forcedSliceIDs: nil,
@@ -249,7 +282,9 @@ struct TuringStoryPlacementCandidateCacheBuilder {
         else {
             throw TuringStoryPlacementAdjustmentError.missingWall(exact.wallUUID)
         }
-        guard let liveWall = wallManager.wallCandidates[exact.wallUUID] else {
+        guard let liveWall = wallManager.wallCandidateForPlacement(
+            id: exact.wallUUID
+        ) else {
             throw TuringStoryPlacementAdjustmentError.missingWall(exact.wallUUID)
         }
 
@@ -380,4 +415,3 @@ struct TuringStoryPlacementCandidateCacheBuilder {
         )
     }
 }
-

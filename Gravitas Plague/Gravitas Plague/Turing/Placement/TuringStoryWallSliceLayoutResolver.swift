@@ -32,10 +32,31 @@ struct TuringStoryWallSliceLayoutResolver: Sendable {
 
     for (propID, ids) in requested {
       guard let ids, ids.isEmpty == false else { continue }
-      let slices = ids.compactMap { sliceByID[$0] }
-      if slices.count != ids.count {
-        let unknown = ids.filter { sliceByID[$0] == nil }
-        issues.append("\(propID.rawValue) used unknown slices \(unknown.joined(separator: ","))")
+      var slices: [TuringStoryWallSlice] = []
+      for id in ids {
+        if let exact = sliceByID[id] {
+          slices.append(exact)
+          continue
+        }
+        guard let projected = nearestKnownSlice(
+          forUnknownID: id,
+          map: map
+        ) else {
+          issues.append("\(propID.rawValue) used unresolvable slice \(id)")
+          continue
+        }
+        slices.append(projected)
+        print(
+          """
+          [TuringWallSlices] unknown numeric slice projected
+            prop: \(propID.rawValue)
+            requestedSliceID: \(id)
+            projectedSliceID: \(projected.sliceID)
+            projectedWall: \(projected.wallOrdinal)
+            runFails: false
+          """)
+      }
+      if slices.isEmpty {
         continue
       }
       validatedGroups.append((propID, slices))
@@ -116,6 +137,31 @@ struct TuringStoryWallSliceLayoutResolver: Sendable {
       assignments: assignments.sorted { $0.propID.priority < $1.propID.priority },
       distinctWallCount: wallOrdinals.count
     )
+  }
+
+  private func nearestKnownSlice(
+    forUnknownID id: String,
+    map: TuringStoryWallSliceMap
+  ) -> TuringStoryWallSlice? {
+    guard let numericID = Int(id) else {
+      return nil
+    }
+
+    let requestedWallOrdinal = numericID / 10
+    let sameWall = map.slices.filter {
+      $0.wallOrdinal == requestedWallOrdinal
+    }
+    guard sameWall.isEmpty == false else {
+      return nil
+    }
+    return sameWall.min {
+      let lhsDistance = abs($0.numericSliceID - numericID)
+      let rhsDistance = abs($1.numericSliceID - numericID)
+      if lhsDistance != rhsDistance {
+        return lhsDistance < rhsDistance
+      }
+      return $0.numericSliceID < $1.numericSliceID
+    }
   }
 
   private func projectedPlacement(

@@ -1188,7 +1188,9 @@ private extension WallMountedPosterUIController {
         for placement: WallPosterPlacement
     ) -> simd_float4x4? {
         guard let wallManager,
-              let wall = wallManager.wallCandidates[placement.wallID] else {
+              let wall = wallManager.wallCandidateForPlacement(
+                id: placement.wallID
+              ) else {
             return nil
         }
 

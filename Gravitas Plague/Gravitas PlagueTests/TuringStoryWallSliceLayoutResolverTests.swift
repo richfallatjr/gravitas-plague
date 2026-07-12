@@ -20,6 +20,33 @@ final class TuringStoryWallSliceLayoutResolverTests: XCTestCase {
         )
     }
 
+    func testUnknownNumericSliceProjectsToNearestKnownSliceOnRequestedWall()
+        throws
+    {
+        let fixture = try makeSliceFixture()
+        let known = try XCTUnwrap(fixture.map.slices.last)
+        let requested = String(known.wallOrdinal * 10 + 9)
+        let plan = TuringStoryWallSlicePlan(
+            d: [requested],
+            w: nil,
+            s: nil,
+            p: nil
+        )
+
+        let result = try TuringStoryWallSliceLayoutResolver().resolve(
+            plan: plan,
+            map: fixture.map,
+            catalog: fixture.catalog
+        )
+
+        XCTAssertEqual(result.assignments.count, 1)
+        XCTAssertEqual(result.assignments[0].propID, .door)
+        XCTAssertEqual(
+            result.assignments[0].sliceIDs,
+            [known.sliceID]
+        )
+    }
+
     func testValidSlicesResolveWithoutChoosingReplacementSlices() throws {
         let fixture = try makeSliceFixture()
         let plan = TuringStoryWallSlicePlan(
