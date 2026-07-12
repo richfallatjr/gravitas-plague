@@ -19,6 +19,8 @@ struct TuringStoryWallSliceLayoutResolver: Sendable {
     map: TuringStoryWallSliceMap,
     catalog: TuringStoryExactPlacementCatalog
   ) throws -> TuringStoryResolvedSliceLayout {
+    var issues: [String] = []
+
     let requested: [(TuringStoryPropID, [String]?)] = [
       (.door, plan.d),
       (.window, plan.w),
@@ -27,46 +29,20 @@ struct TuringStoryWallSliceLayoutResolver: Sendable {
     ]
     let sliceByID = map.sliceByID
     var validatedGroups: [(TuringStoryPropID, [TuringStoryWallSlice])] = []
-    var consumedSliceIDs = Set<String>()
 
     for (propID, ids) in requested {
       guard let ids, ids.isEmpty == false else { continue }
-      var slices: [TuringStoryWallSlice] = []
-
-      for id in ids {
-        if let known = sliceByID[id] {
-          slices.append(known)
-          consumedSliceIDs.insert(known.sliceID)
-          continue
-        }
-
-        guard let projected = nearestAvailableSlice(
-          requestedID: id,
-          slices: map.slices,
-          excluding: consumedSliceIDs
-        ) else {
-          print(
-            "[TuringWallSlices] unknown slice ignored prop=\(propID.rawValue) requested=\(id) runFails=false"
-          )
-          continue
-        }
-
-        slices.append(projected)
-        consumedSliceIDs.insert(projected.sliceID)
-        print(
-          """
-          [TuringWallSlices] unknown slice projected by response cleanser
-            prop: \(propID.rawValue)
-            requestedSliceID: \(id)
-            projectedSliceID: \(projected.sliceID)
-            projectionRule: nearestActualUnusedSlice
-            runFails: false
-          """)
+      let slices = ids.compactMap { sliceByID[$0] }
+      if slices.count != ids.count {
+        let unknown = ids.filter { sliceByID[$0] == nil }
+        issues.append("\(propID.rawValue) used unknown slices \(unknown.joined(separator: ","))")
+        continue
       }
+      validatedGroups.append((propID, slices))
+    }
 
-      if slices.isEmpty == false {
-        validatedGroups.append((propID, slices))
-      }
+    guard issues.isEmpty else {
+      throw TuringStoryWallSliceError.invalidPlan(issues)
     }
 
     let assignments: [TuringStoryResolvedSliceAssignment] =
@@ -140,35 +116,6 @@ struct TuringStoryWallSliceLayoutResolver: Sendable {
       assignments: assignments.sorted { $0.propID.priority < $1.propID.priority },
       distinctWallCount: wallOrdinals.count
     )
-  }
-
-  private func nearestAvailableSlice(
-    requestedID: String,
-    slices: [TuringStoryWallSlice],
-    excluding consumedSliceIDs: Set<String>
-  ) -> TuringStoryWallSlice? {
-    let available = slices.filter {
-      consumedSliceIDs.contains($0.sliceID) == false
-    }
-    guard available.isEmpty == false else {
-      return slices.first
-    }
-
-    guard let requestedNumber = Int(requestedID) else {
-      return available.first
-    }
-
-    return available.min { lhs, rhs in
-      let lhsNumber = Int(lhs.sliceID) ?? Int.max
-      let rhsNumber = Int(rhs.sliceID) ?? Int.max
-      let lhsDistance = abs(lhsNumber - requestedNumber)
-      let rhsDistance = abs(rhsNumber - requestedNumber)
-
-      if lhsDistance != rhsDistance {
-        return lhsDistance < rhsDistance
-      }
-      return lhs.sliceID < rhs.sliceID
-    }
   }
 
   private func projectedPlacement(

@@ -112,6 +112,12 @@ final class FakeGeneratedAudioPlaybackSink:
 
   private(set) var events: [String] = []
 
+  func setExpectedGeneratedSegmentCount(
+    _ count: Int
+  ) async {
+    events.append("expected:\(count)")
+  }
+
   func qwenComputeStarted(
     segmentIndex: Int
   ) async {

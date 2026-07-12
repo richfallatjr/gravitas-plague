@@ -629,20 +629,8 @@ struct TuringEpisodePickerView: View {
                     radioStaticLeadIn.stop(
                         reason: "responseAudioFinished"
                     )
-                    qwenDebugStatus =
-                        "Big Mike response complete; starting ScriptPoint02"
-                }
-
-                let progressionResult = await
-                    TuringScriptPointProgressionController.shared
-                    .triggerAfterFirstSuccessfulWalkieCustomMessage(
-                        seedStore: TuringConversationSeedStore.shared
-                    )
-
-                await MainActor.run {
                     turingDialogueBusy = false
-                    qwenDebugStatus = progressionResult?.pickerStatus
-                        ?? result.pickerStatus
+                    qwenDebugStatus = result.pickerStatus
                 }
             } else {
                 await MainActor.run {

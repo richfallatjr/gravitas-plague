@@ -104,6 +104,60 @@ final class TuringWalkieCommsFXController {
         """)
     }
 
+    func runFixedResponseLeadInAfterExternalSend(
+        reason: String,
+        durationSeconds: TimeInterval
+    ) async {
+        let duration = max(0, durationSeconds)
+        let startedAt = Date()
+
+        await startAmbientWalkieStatic(
+            reason: "externalSend.\(reason)"
+        )
+        await startSendingLeadIn(
+            reason: "externalSend.\(reason)"
+        )
+
+        print("""
+        [TuringWalkieComms] fixed response lead-in started
+          reason: \(reason)
+          requestedSeconds: \(String(format: "%.3f", duration))
+          sendCommReplayed: false
+          ambientStatic: true
+          sendingStatic: true
+          randomBursts: true
+          stopCondition: fixedDuration
+        """)
+
+        do {
+            try await Task.sleep(for: .seconds(duration))
+        } catch {
+            await stopSendingLeadIn(
+                reason: "fixedResponseLeadInCancelled.\(reason)"
+            )
+            print("""
+            [TuringWalkieComms] fixed response lead-in cancelled
+              reason: \(reason)
+              elapsedSeconds: \(String(format: "%.3f", Date().timeIntervalSince(startedAt)))
+            """)
+            return
+        }
+
+        await stopSendingLeadIn(
+            reason: "fixedResponseLeadInCompleted.\(reason)"
+        )
+
+        print("""
+        [TuringWalkieComms] fixed response lead-in completed
+          reason: \(reason)
+          requestedSeconds: \(String(format: "%.3f", duration))
+          elapsedSeconds: \(String(format: "%.3f", Date().timeIntervalSince(startedAt)))
+          ambientStaticContinues: true
+          sendingStaticStopped: true
+          randomBurstsStopped: true
+        """)
+    }
+
     func startSendingLeadIn(reason: String) async {
         guard state != .sendingLeadIn else {
             return

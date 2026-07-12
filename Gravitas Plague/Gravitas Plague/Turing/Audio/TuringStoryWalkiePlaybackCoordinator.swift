@@ -152,6 +152,17 @@ final class TuringStoryWalkiePlaybackCoordinator {
         await reconcile(reason: "prerecordingQueued")
     }
 
+    func setExpectedGeneratedSegmentCount(_ count: Int) async {
+        guard runActive else { return }
+        expectedSegmentCount = max(0, count)
+        print("""
+        [TuringPlaybackRebuild] expected generated count set
+          expectedSegmentCount: \(expectedSegmentCount ?? 0)
+          nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+        """)
+        await reconcile(reason: "expectedGeneratedCountSet")
+    }
+
     func qwenComputeStarted(segmentIndex: Int) async {
         guard runActive else { return }
         activeComputeSegments.insert(segmentIndex)

@@ -11,6 +11,7 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
     var deadAirMinSeconds = 0.5
     var deadAirMaxSeconds = 4.0
     var avoidImmediateFillerRepeat = true
+    var allowSkippedGeneratedSegments = false
 
     var generatedGainDB: Float = 0
     var fillerGainDB: Float = -6
@@ -28,6 +29,7 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
     case duplicatePrerecording
     case unexpectedPrerecording
     case playbackFailed(String)
+    case generatedSegmentFailed(Int, String)
 
     var errorDescription: String? {
       switch self {
@@ -49,6 +51,8 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
         return "Rich playback received a prerecording for a run that did not declare one."
       case .playbackFailed(let label):
         return "Rich global playback failed: \(label)."
+      case .generatedSegmentFailed(let index, let reason):
+        return "Rich generated segment \(index) failed: \(reason)"
       }
     }
   }
@@ -103,6 +107,7 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
   private var postPrerecordingBridgeFillerAvailable = false
 
   private var nextPlaybackSegmentIndex = 0
+  private var completedGeneratedPlaybackCount = 0
   private var activeComputeSegments = Set<Int>()
   private var pendingGenerated: [Int: GeneratedClip] = [:]
   private var skippedSegments = Set<Int>()
@@ -132,7 +137,7 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
     )
   ) {
     self.policy = policy
-    self.player = player ?? TuringRichGlobalOneShotClipPlayer()
+    self.player = player ?? TuringRichRoutedOneShotClipPlayer()
     self.fillerCatalog = fillerCatalog
     self.transmissionProvider = transmissionProvider
     self.rootURL = rootURL
@@ -158,6 +163,7 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
     postPrerecordingBridgeFillerAvailable = false
 
     nextPlaybackSegmentIndex = 0
+    completedGeneratedPlaybackCount = 0
     activeComputeSegments.removeAll(keepingCapacity: true)
     pendingGenerated.removeAll(keepingCapacity: true)
     skippedSegments.removeAll(keepingCapacity: true)
@@ -172,7 +178,7 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
     deadAirTask?.cancel()
     deadAirTask = nil
 
-    if outputContext == .walkieOutgoingGlobal {
+    if outputContext == .walkieOutgoingHeadset {
       walkieEnvelope = try transmissionProvider.makeEnvelope()
     } else {
       walkieEnvelope = nil
@@ -204,9 +210,11 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
         expectedSegmentCount: \(expectedSegmentCount.map(String.init) ?? "streaming")
         playbackGateOpen: \(playbackGateOpen)
         prerecordingExpected: \(prerecordingExpected)
-        walkieEnvelopeEnabled: \(outputContext == .walkieOutgoingGlobal)
-        route: global
-        spatialEmitter: none
+        walkieEnvelopeEnabled: \(outputContext == .walkieOutgoingHeadset)
+        richVoiceRoute: headTrackedSpatial
+        richVoiceEmitter: TuringRichHeadset_AudioEmitter
+        commSFXRoute: spatialWalkie
+        commSFXEmitter: TuringStoryWalkieTalkie_AudioEmitter
         fillerClipCount: \(fillerCatalog.uniqueFileCount)
         weightedFillerEntryCount: \(fillerCatalog.weightedEntryCount)
       """)
@@ -248,12 +256,27 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
       [TuringRichPlayback] prerecording queued
         id: \(id)
         file: \(fileURL.lastPathComponent)
-        route: global
-        spatialEmitter: none
-        playsAfterOpenComm: \(outputContext == .walkieOutgoingGlobal)
+        route: headTrackedSpatial
+        spatialEmitter: TuringRichHeadset_AudioEmitter
+        playsAfterOpenComm: \(outputContext == .walkieOutgoingHeadset)
       """)
 
     await reconcile(reason: "prerecordingQueued")
+  }
+
+  func setExpectedGeneratedSegmentCount(_ count: Int) async {
+    guard runActive else {
+      return
+    }
+
+    expectedSegmentCount = max(0, count)
+    print(
+      """
+      [TuringRichPlayback] expected generated count set
+        expectedSegmentCount: \(expectedSegmentCount ?? 0)
+        nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+      """)
+    await reconcile(reason: "expectedGeneratedCountSet")
   }
 
   func releasePlaybackGate(reason: String) async {
@@ -361,6 +384,21 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
     }
 
     activeComputeSegments.remove(segmentIndex)
+
+    guard policy.allowSkippedGeneratedSegments else {
+      print(
+        """
+        [TuringRichPlayback] qwen segment failure rejected
+          segmentIndex: \(segmentIndex)
+          reason: \(reason)
+          runMayAdvanceFromPROnly: false
+        """)
+      failRun(
+        PlaybackError.generatedSegmentFailed(segmentIndex, reason)
+      )
+      return
+    }
+
     skippedSegments.insert(segmentIndex)
 
     print(
@@ -397,6 +435,10 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
     if let terminalError {
       throw terminalError
     }
+  }
+
+  func completedGeneratedSegmentCount() -> Int {
+    completedGeneratedPlaybackCount
   }
 
   func cancelRun(reason: String) async {
@@ -442,7 +484,7 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
       nextPlaybackSegmentIndex += 1
     }
 
-    if outputContext == .walkieOutgoingGlobal,
+    if outputContext == .walkieOutgoingHeadset,
       walkieOpenCompleted == false
     {
       await startWalkieOpen(reason: reason)
@@ -485,7 +527,7 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
     }
 
     if generationAndPlaybackBodyFinished {
-      if outputContext == .walkieOutgoingGlobal,
+      if outputContext == .walkieOutgoingHeadset,
         walkieSendCompleted == false
       {
         await startWalkieSend(reason: reason)
@@ -560,8 +602,8 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
         """
         [TuringRichPlayback] walkie open started
           reason: \(reason)
-          route: global
-          spatialEmitter: none
+          route: spatialWalkie
+          spatialEmitter: TuringStoryWalkieTalkie_AudioEmitter
         """)
     } catch {
       failRun(error)
@@ -600,9 +642,9 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
           id: \(clip.id)
           reason: \(reason)
           file: \(clip.fileURL.lastPathComponent)
-          route: global
-          spatialEmitter: none
-          completionSource: AVAudioPlayerDelegate
+          route: headTrackedSpatial
+          spatialEmitter: TuringRichHeadset_AudioEmitter
+          completionSource: AudioPlaybackController.completionHandler
         """)
     } catch {
       failRun(error)
@@ -641,8 +683,8 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
         """
         [TuringRichPlayback] walkie send started
           reason: \(reason)
-          route: global
-          spatialEmitter: none
+          route: spatialWalkie
+          spatialEmitter: TuringStoryWalkieTalkie_AudioEmitter
         """)
     } catch {
       failRun(error)
@@ -692,8 +734,8 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
         [TuringRichPlayback] filler started
           reason: \(reason)
           clip: \(fillerURL.lastPathComponent)
-          route: global
-          spatialEmitter: none
+          route: headTrackedSpatial
+          spatialEmitter: TuringRichHeadset_AudioEmitter
         """)
 
       return true
@@ -745,8 +787,8 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
           file: \(clip.fileURL.lastPathComponent)
           frameCount: \(clip.frameCount)
           sampleRate: \(clip.sampleRate)
-          route: global
-          spatialEmitter: none
+          route: headTrackedSpatial
+          spatialEmitter: TuringRichHeadset_AudioEmitter
         """)
     } catch {
       cleanupWAV(
@@ -835,7 +877,7 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
       print(
         """
         [TuringRichPlayback] walkie open completed
-          completionSource: AVAudioPlayerDelegate
+          completionSource: AudioPlaybackController.completionHandler
         """)
 
       await reconcile(reason: "walkieOpenCompleted")
@@ -865,9 +907,9 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
         [TuringRichPlayback] prerecording completed
           id: \(id)
           file: \(fileURL.lastPathComponent)
-          route: global
-          spatialEmitter: none
-          completionSource: AVAudioPlayerDelegate
+          route: headTrackedSpatial
+          spatialEmitter: TuringRichHeadset_AudioEmitter
+          completionSource: AudioPlaybackController.completionHandler
           suppressMandatoryInitialFiller: true
         """)
 
@@ -881,7 +923,7 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
         """
         [TuringRichPlayback] filler completed
           successfully: \(successfully)
-          completionSource: AVAudioPlayerDelegate
+          completionSource: AudioPlaybackController.completionHandler
         """)
 
       if pendingGenerated[nextPlaybackSegmentIndex] == nil,
@@ -915,13 +957,15 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
         reason: "generatedPlaybackCompleted"
       )
       nextPlaybackSegmentIndex = index + 1
+      completedGeneratedPlaybackCount += 1
 
       print(
         """
         [TuringRichPlayback] generated playback completed
           segmentIndex: \(index)
           nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
-          completionSource: AVAudioPlayerDelegate
+          completedGeneratedPlaybackCount: \(completedGeneratedPlaybackCount)
+          completionSource: AudioPlaybackController.completionHandler
           successfully: true
         """)
 
@@ -942,7 +986,7 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
       print(
         """
         [TuringRichPlayback] walkie send completed
-          completionSource: AVAudioPlayerDelegate
+          completionSource: AudioPlaybackController.completionHandler
         """)
 
       await reconcile(reason: "walkieSendCompleted")
@@ -1011,8 +1055,10 @@ final class TuringRichGlobalPlaybackCoordinator: TuringGeneratedAudioPlaybackSin
         runID: \(runID ?? "nil")
         reason: \(reason)
         outputContext: \(outputContext.rawValue)
-        route: global
-        spatialEmitter: none
+        richVoiceRoute: headTrackedSpatial
+        richVoiceEmitter: TuringRichHeadset_AudioEmitter
+        commSFXRoute: spatialWalkie
+        commSFXEmitter: TuringStoryWalkieTalkie_AudioEmitter
       """)
 
     resumeWaiters()

@@ -17,14 +17,10 @@ actor TuringStoryWallSliceLayoutPlanner {
     func plan(map: TuringStoryWallSliceMap) async throws -> TuringStoryWallSlicePlannerResult {
         let dataset = TuringStoryWallSlicePromptDataset.make(from: map)
         let datasetJSON = try encode(dataset)
-        let availableSliceIDs = dataset.slices
-            .map(\.id)
-            .joined(separator: ",")
         let template = try loadPrompt(named: "storyWallSliceLayoutPlanner")
-        let prompt = renderPrimaryPrompt(
-            template: template,
-            datasetJSON: datasetJSON,
-            availableSliceIDs: availableSliceIDs
+        let prompt = template.replacingOccurrences(
+            of: "{{wallSliceDatasetJSON}}",
+            with: datasetJSON
         )
         try preflight(prompt)
         await artifacts.writeDataset(dataset)
@@ -51,8 +47,7 @@ actor TuringStoryWallSliceLayoutPlanner {
             let repaired = try await repair(
                 previousResponse: raw,
                 issues: ["Malformed JSON: \(error.localizedDescription)"],
-                datasetJSON: datasetJSON,
-                availableSliceIDs: availableSliceIDs
+                datasetJSON: datasetJSON
             )
             return TuringStoryWallSlicePlannerResult(
                 plan: repaired.plan,
@@ -75,25 +70,20 @@ actor TuringStoryWallSliceLayoutPlanner {
         return try await repair(
             previousResponse: previous.rawResponse,
             issues: issues,
-            datasetJSON: previous.datasetJSON,
-            availableSliceIDs: previous.dataset.slices
-                .map(\.id)
-                .joined(separator: ",")
+            datasetJSON: previous.datasetJSON
         ).plan
     }
 
     private func repair(
         previousResponse: String,
         issues: [String],
-        datasetJSON: String,
-        availableSliceIDs: String
+        datasetJSON: String
     ) async throws -> (plan: TuringStoryWallSlicePlan, raw: String) {
         let template = try loadPrompt(named: "storyWallSliceLayoutRepair")
         let primaryTemplate = try loadPrompt(named: "storyWallSliceLayoutPlanner")
-        let primaryPrompt = renderPrimaryPrompt(
-            template: primaryTemplate,
-            datasetJSON: datasetJSON,
-            availableSliceIDs: availableSliceIDs
+        let primaryPrompt = primaryTemplate.replacingOccurrences(
+            of: "{{wallSliceDatasetJSON}}",
+            with: datasetJSON
         )
         let issuesJSON = try encode(issues)
         let prompt = template
@@ -111,22 +101,6 @@ actor TuringStoryWallSliceLayoutPlanner {
         let plan = try decode(raw)
         await artifacts.writePlan(plan)
         return (plan, raw)
-    }
-
-    private func renderPrimaryPrompt(
-        template: String,
-        datasetJSON: String,
-        availableSliceIDs: String
-    ) -> String {
-        template
-            .replacingOccurrences(
-                of: "{{wallSliceDatasetJSON}}",
-                with: datasetJSON
-            )
-            .replacingOccurrences(
-                of: "{{availableSliceIDs}}",
-                with: availableSliceIDs
-            )
     }
 
     private func decode(_ raw: String) throws -> TuringStoryWallSlicePlan {

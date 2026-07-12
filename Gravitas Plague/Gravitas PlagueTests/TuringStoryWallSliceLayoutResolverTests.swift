@@ -2,30 +2,22 @@ import XCTest
 @testable import Gravitas_Plague
 
 final class TuringStoryWallSliceLayoutResolverTests: XCTestCase {
-    func testUnknownNumericSliceProjectsToNearestActualUnusedSlice() throws {
+    func testUnknownSliceRequiresPromptRepair() throws {
         let fixture = try makeSliceFixture()
-        let requestedUnknownID = "999"
-        let expected = try XCTUnwrap(
-            fixture.map.slices.max {
-                (Int($0.sliceID) ?? Int.min) < (Int($1.sliceID) ?? Int.min)
-            }
-        )
         let plan = TuringStoryWallSlicePlan(
-            d: [requestedUnknownID],
-            w: nil,
-            s: nil,
+            d: ["missing"],
+            w: ["12"],
+            s: ["13"],
             p: nil
         )
 
-        let result = try TuringStoryWallSliceLayoutResolver().resolve(
-            plan: plan,
-            map: fixture.map,
-            catalog: fixture.catalog
+        XCTAssertThrowsError(
+            try TuringStoryWallSliceLayoutResolver().resolve(
+                plan: plan,
+                map: fixture.map,
+                catalog: fixture.catalog
+            )
         )
-
-        XCTAssertEqual(result.assignments.count, 1)
-        XCTAssertEqual(result.assignments[0].propID, .door)
-        XCTAssertEqual(result.assignments[0].sliceIDs, [expected.sliceID])
     }
 
     func testValidSlicesResolveWithoutChoosingReplacementSlices() throws {

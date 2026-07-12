@@ -345,6 +345,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
 
         let head = makeHeadAnchor()
         instructionHUD.ensure(on: head)
+        TuringRichHeadsetAudioRoute.install(on: head)
 
         roomSkinningCoordinator.installIfNeeded(sceneRoot: root)
         hordePortalManager.install(
@@ -1856,6 +1857,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
         Task { @MainActor in
             TuringStoryWalkieAudioRoute.clear(reason: "immersiveShutdown")
+            TuringRichHeadsetAudioRoute.clear(reason: "immersiveShutdown")
         }
         onWallPosterUIActiveChanged?(false)
 

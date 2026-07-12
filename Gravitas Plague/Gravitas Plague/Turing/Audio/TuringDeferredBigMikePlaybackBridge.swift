@@ -3,6 +3,7 @@ import Foundation
 @MainActor
 final class TuringDeferredBigMikePlaybackBridge {
   private enum Event {
+    case expectedSegmentCount(Int)
     case started(Int)
     case finished(
       Int,
@@ -18,6 +19,12 @@ final class TuringDeferredBigMikePlaybackBridge {
   private var target: (any TuringGeneratedAudioPlaybackSink)?
   private var bufferedEvents: [Event] = []
   private var cancelled = false
+
+  func setExpectedGeneratedSegmentCount(
+    _ count: Int
+  ) async {
+    await submit(.expectedSegmentCount(count))
+  }
 
   func qwenComputeStarted(
     segmentIndex: Int
@@ -123,6 +130,9 @@ final class TuringDeferredBigMikePlaybackBridge {
     to target: any TuringGeneratedAudioPlaybackSink
   ) async {
     switch event {
+    case .expectedSegmentCount(let count):
+      await target.setExpectedGeneratedSegmentCount(count)
+
     case .started(let index):
       await target.qwenComputeStarted(
         segmentIndex: index

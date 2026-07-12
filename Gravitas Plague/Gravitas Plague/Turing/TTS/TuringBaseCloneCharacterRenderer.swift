@@ -131,6 +131,8 @@ actor TuringBaseCloneCharacterRenderer {
           fallbackUsed: false
         """)
 
+      let attemptState = TuringCharacterRenderAttemptState()
+      let isRich = character == .rich
       let report = try await scheduler.renderSegments(
         requests,
         runID: runID,
@@ -142,6 +144,7 @@ actor TuringBaseCloneCharacterRenderer {
           await onStarted(segmentIndex)
         },
         onSegmentFinished: { result in
+          await attemptState.recordSuccess(result.segmentIndex)
           await onFinished(
             result.segmentIndex,
             TuringComputeGapGeneratedAudio(
@@ -155,14 +158,87 @@ actor TuringBaseCloneCharacterRenderer {
           )
         },
         onSegmentSkipped: { skipped in
-          await onSkipped(
-            skipped.segmentIndex,
-            skipped.errorDescription
-          )
+          if isRich {
+            await attemptState.recordSkipped(
+              skipped.segmentIndex,
+              reason: skipped.errorDescription
+            )
+          } else {
+            await onSkipped(
+              skipped.segmentIndex,
+              skipped.errorDescription
+            )
+          }
         }
       )
 
       report.log()
+
+      if isRich {
+        let skipped = await attemptState.skippedSnapshot()
+        if skipped.isEmpty == false {
+          let retryRequests = requests.filter {
+            skipped[$0.segmentIndex] != nil
+          }
+          print(
+            """
+            [TuringCharacterRenderer] retrying skipped Rich segments
+              runID: \(runID)
+              retryCount: \(retryRequests.count)
+              segmentIndices: \(retryRequests.map(\.segmentIndex).sorted())
+              retryLimit: 1
+            """)
+
+          let retryState = TuringCharacterRenderAttemptState()
+          let retryReport = try await scheduler.renderSegments(
+            retryRequests,
+            runID: "\(runID).richRetry1",
+            skipSegmentFailures: true,
+            onSegmentStarted: { _, segmentIndex in
+              await onStarted(segmentIndex)
+            },
+            onSegmentFinished: { result in
+              await retryState.recordSuccess(result.segmentIndex)
+              await attemptState.recordSuccess(result.segmentIndex)
+              await onFinished(
+                result.segmentIndex,
+                TuringComputeGapGeneratedAudio(
+                  segmentIndex: result.segmentIndex,
+                  samples: result.audio.samples,
+                  sampleRate: Double(result.audio.sampleRate),
+                  channelCount: 1
+                )
+              )
+            },
+            onSegmentSkipped: { finalSkip in
+              await retryState.recordSkipped(
+                finalSkip.segmentIndex,
+                reason: finalSkip.errorDescription
+              )
+              await onSkipped(
+                finalSkip.segmentIndex,
+                finalSkip.errorDescription
+              )
+            }
+          )
+          retryReport.log()
+
+          let finalSkipped = await retryState.skippedSnapshot()
+          if finalSkipped.isEmpty == false {
+            throw TuringRuntimeError.playbackFailed(
+              "Rich Qwen failed after one retry for segments: "
+                + finalSkipped.keys.sorted().map(String.init).joined(separator: ", ")
+            )
+          }
+        }
+
+        let successful = await attemptState.successfulIndices()
+        guard successful.isEmpty == false else {
+          throw TuringRuntimeError.playbackFailed(
+            "Rich Qwen produced no generated voicePrompt audio."
+          )
+        }
+      }
 
       await freshPool.unloadAll(
         reason: "\(character.rawValue)Finished.\(runID)"
@@ -184,5 +260,30 @@ actor TuringBaseCloneCharacterRenderer {
       await arbiter.release(owner: owner)
       throw error
     }
+  }
+}
+
+private actor TuringCharacterRenderAttemptState {
+  private var successes = Set<Int>()
+  private var skipped: [Int: String] = [:]
+
+  func recordSuccess(_ segmentIndex: Int) {
+    successes.insert(segmentIndex)
+    skipped.removeValue(forKey: segmentIndex)
+  }
+
+  func recordSkipped(_ segmentIndex: Int, reason: String) {
+    guard successes.contains(segmentIndex) == false else {
+      return
+    }
+    skipped[segmentIndex] = reason
+  }
+
+  func successfulIndices() -> Set<Int> {
+    successes
+  }
+
+  func skippedSnapshot() -> [Int: String] {
+    skipped
   }
 }

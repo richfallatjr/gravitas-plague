@@ -174,9 +174,24 @@ enum TuringBigMikeConversationRunner {
             "bigMikeConversationFinished"
         )
 
-      return .succeeded(
-        "Finished Big Mike conversation response"
-      )
+      print(
+        """
+        [TuringBigMikeConversation] dispatching script completion
+          event: scriptPoint01ConversationVoicePlaybackCompleted
+          completionSource: actualPlaybackCompletion
+          uiOwner: false
+        """)
+
+      if let progressionResult = await
+        TuringScriptPointProgressionController.shared
+        .triggerAfterFirstSuccessfulWalkieCustomMessage(
+          seedStore: seedStore
+        )
+      {
+        return progressionResult
+      }
+
+      return .succeeded("Finished Big Mike conversation response")
     } catch {
       await playback.runCancelled(
         reason:

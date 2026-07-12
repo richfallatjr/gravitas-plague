@@ -15,6 +15,7 @@ final class TuringDeferredBigMikePlaybackBridgeTests:
     let sink =
       FakeGeneratedAudioPlaybackSink()
 
+    await bridge.setExpectedGeneratedSegmentCount(2)
     await bridge.qwenComputeStarted(
       segmentIndex: 1
     )
@@ -48,6 +49,7 @@ final class TuringDeferredBigMikePlaybackBridgeTests:
     XCTAssertEqual(
       sink.events,
       [
+        "expected:2",
         "started:1",
         "finished:1:2",
         "started:0",

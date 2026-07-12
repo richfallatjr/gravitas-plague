@@ -2,6 +2,8 @@ import Foundation
 
 @MainActor
 protocol TuringGeneratedAudioPlaybackSink: AnyObject {
+  func setExpectedGeneratedSegmentCount(_ count: Int) async
+
   func qwenComputeStarted(segmentIndex: Int) async
 
   func qwenComputeFinished(
@@ -15,6 +17,10 @@ protocol TuringGeneratedAudioPlaybackSink: AnyObject {
   ) async
 
   func qwenComputeAllFinished() async
+}
+
+extension TuringGeneratedAudioPlaybackSink {
+  func setExpectedGeneratedSegmentCount(_ count: Int) async {}
 }
 
 extension TuringStoryWalkiePlaybackCoordinator:

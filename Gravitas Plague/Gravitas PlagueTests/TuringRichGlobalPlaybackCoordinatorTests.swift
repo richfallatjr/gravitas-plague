@@ -37,7 +37,7 @@ final class TuringRichGlobalPlaybackCoordinatorTests: XCTestCase {
 
     try await coordinator.beginRun(
       runID: "test.scriptPoint02",
-      outputContext: .walkieOutgoingGlobal,
+      outputContext: .walkieOutgoingHeadset,
       expectedSegmentCount: 2,
       playbackInitiallyBlocked: false,
       expectsPrerecording: true
@@ -312,6 +312,39 @@ final class TuringRichGlobalPlaybackCoordinatorTests: XCTestCase {
         $0.label == "segment_0001"
       }
     )
+  }
+
+  func testSkippedRichSegmentCannotCompleteAsPROnlySuccess() async throws {
+    let fakePlayer = FakeRichGlobalClipPlayer()
+    let tempRoot = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    var policy = TuringRichGlobalPlaybackCoordinator.Policy()
+    policy.firstSegmentPrerollFillerCount = 0
+    policy.deadAirAfterFillerEnabled = false
+
+    let coordinator = TuringRichGlobalPlaybackCoordinator(
+      policy: policy,
+      player: fakePlayer,
+      fillerCatalog: TuringRichFillerCatalog(weightedEntries: []),
+      rootURL: tempRoot
+    )
+
+    try await coordinator.beginRun(
+      runID: "test.rich.skipRejected",
+      outputContext: .roomGlobal,
+      expectedSegmentCount: 1
+    )
+    await coordinator.qwenComputeStarted(segmentIndex: 0)
+    await coordinator.qwenComputeSkipped(
+      segmentIndex: 0,
+      reason: "eosBeforeGeneratedAudio"
+    )
+    await coordinator.waitUntilPlaybackFinished()
+
+    XCTAssertThrowsError(try coordinator.throwIfFailed())
+    let completed = await coordinator.completedGeneratedSegmentCount()
+    XCTAssertEqual(completed, 0)
+    XCTAssertTrue(fakePlayer.startedClips.isEmpty)
   }
 
   private func generatedAudio(

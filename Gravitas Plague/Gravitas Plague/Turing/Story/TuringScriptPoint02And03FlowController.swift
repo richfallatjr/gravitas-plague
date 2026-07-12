@@ -87,7 +87,7 @@ actor TuringScriptPoint02And03FlowController {
 
       try await createdRichPlayback.beginRun(
         runID: point02.scriptPointID,
-        outputContext: .walkieOutgoingGlobal,
+        outputContext: .walkieOutgoingHeadset,
         expectedSegmentCount: nil,
         playbackInitiallyBlocked: false,
         expectsPrerecording: true
@@ -103,7 +103,10 @@ actor TuringScriptPoint02And03FlowController {
           scriptPointID: \(point02.scriptPointID)
           prerecordingID: \(richPrerecording.prerecordingID)
           prerecordingSpeaker: rich
-          prerecordingRoute: global
+          prerecordingRoute: headTrackedSpatial
+          prerecordingEmitter: TuringRichHeadset_AudioEmitter
+          commSFXRoute: spatialWalkie
+          commSFXEmitter: TuringStoryWalkieTalkie_AudioEmitter
           responseVoicePromptID: \(richTrigger.voicePromptID)
           responseCharacter: rich
           sequence: openComm,richPR,richGenerated,sendComm
@@ -157,8 +160,12 @@ actor TuringScriptPoint02And03FlowController {
           generatedSegmentCount: \(richPlan.segments.count)
           generatedUTF16: \(generatedRichTranscript.utf16.count)
           completeTransmissionUTF16: \(completeRichTransmission.utf16.count)
-          BigMikeFoundationStartsNow: true
+          BigMikeFoundationDeferredUntilRichSendCompletes: true
         """)
+
+      await createdRichPlayback.setExpectedGeneratedSegmentCount(
+        richPlan.segments.count
+      )
 
       let bigMikeContext = """
         RICH AUTHORED OUTGOING PR:
@@ -170,25 +177,6 @@ actor TuringScriptPoint02And03FlowController {
         BIG MIKE AUTHORED PR THAT WILL PLAY BEFORE HIS GENERATED CONTINUATION:
         \(bigMikePrerecording.transcript)
         """
-
-      let createdBigMikePlanTask = Task.detached(
-        priority: .userInitiated
-      ) {
-        try await dialogueService.generateVoicePrompt(
-          VoicePromptRequest(
-            id: bigMikeTrigger.voicePromptID,
-            speaker: TuringBigMikeVoiceIdentity.displayName,
-            voiceID: bigMikeTrigger.voiceID,
-            voiceVariantID: TuringBigMikeVoiceIdentity.defaultVariantID,
-            characterProfileID: bigMikeTrigger.characterProfileID,
-            intent: bigMikeTrigger.intent,
-            emotion: bigMikeTrigger.emotion,
-            prerecordingTranscript: bigMikeContext,
-            voicePromptSeedIntent: bigMikeTrigger.seedIntent
-          )
-        )
-      }
-      bigMikePlanTask = createdBigMikePlanTask
 
       let richRenderer = TuringRichQwenRenderer()
       let createdRichRendererTask = Task {
@@ -224,13 +212,54 @@ actor TuringScriptPoint02And03FlowController {
 
       // Rich owns the only resident Fresh2 character pool until all Rich
       // segments have been generated and the pool has unloaded. Rich's
-      // already-authored/global playback may continue after this task.
+      // already-authored/head-tracked playback may continue after this task.
       try await createdRichRendererTask.value
+
+      await createdRichPlayback.waitUntilPlaybackFinished()
+      try await createdRichPlayback.throwIfFailed()
+      let richPlaybackCount = await createdRichPlayback
+        .completedGeneratedSegmentCount()
+      guard richPlaybackCount == richPlan.segments.count else {
+        throw TuringRuntimeError.playbackFailed(
+          "ScriptPoint02 requires every Rich voicePrompt segment to play. "
+            + "Expected \(richPlan.segments.count), played \(richPlaybackCount)."
+        )
+      }
+
+      print(
+        """
+        [TuringScriptPoint02] completed
+          RichPrerecordingCompleted: true
+          RichGeneratedCompleted: true
+          RichGeneratedPlaybackCount: \(richPlaybackCount)
+          RichSendCommCompleted: true
+          playerInteractionGate: false
+          automaticAdvanceTo: \(point03.scriptPointID)
+        """)
 
       let createdBridge = await MainActor.run {
         TuringDeferredBigMikePlaybackBridge()
       }
       deferredBigMikeBridge = createdBridge
+
+      let createdBigMikePlanTask = Task.detached(
+        priority: .userInitiated
+      ) {
+        try await dialogueService.generateVoicePrompt(
+          VoicePromptRequest(
+            id: bigMikeTrigger.voicePromptID,
+            speaker: TuringBigMikeVoiceIdentity.displayName,
+            voiceID: bigMikeTrigger.voiceID,
+            voiceVariantID: TuringBigMikeVoiceIdentity.defaultVariantID,
+            characterProfileID: bigMikeTrigger.characterProfileID,
+            intent: bigMikeTrigger.intent,
+            emotion: bigMikeTrigger.emotion,
+            prerecordingTranscript: bigMikeContext,
+            voicePromptSeedIntent: bigMikeTrigger.seedIntent
+          )
+        )
+      }
+      bigMikePlanTask = createdBigMikePlanTask
 
       let createdBigMikeRendererTask = Task {
         let plan: TuringVoicePromptPlan
@@ -242,6 +271,9 @@ actor TuringScriptPoint02And03FlowController {
           throw error
         }
 
+        await createdBridge.setExpectedGeneratedSegmentCount(
+          plan.segments.count
+        )
         await seedStore.updateSeed(
           plan.conversationSeed,
           for: TuringDialogueThreadIdentity.bigMikeRich
@@ -251,6 +283,14 @@ actor TuringScriptPoint02And03FlowController {
           transcript: bigMikePrerecording.transcript,
           for: TuringDialogueThreadIdentity.bigMikeRich
         )
+
+        print(
+          """
+          [TuringScriptPoint03] Big Mike voicePrompt plan ready
+            generatedSegmentCount: \(plan.segments.count)
+            computeWindow: fixedTenSecondSendingLeadIn
+            playbackSinkAttached: deferred
+          """)
 
         let renderer = TuringBigMikeQwenRenderer()
 
@@ -284,22 +324,10 @@ actor TuringScriptPoint02And03FlowController {
       }
       bigMikeRendererTask = createdBigMikeRendererTask
 
-      await createdRichPlayback.waitUntilPlaybackFinished()
-      try await createdRichPlayback.throwIfFailed()
-
-      print(
-        """
-        [TuringScriptPoint02] completed
-          RichPrerecordingCompleted: true
-          RichGeneratedCompleted: true
-          RichSendCommCompleted: true
-          playerInteractionGate: false
-          automaticAdvanceTo: \(point03.scriptPointID)
-        """)
-
       await TuringWalkieCommsFXController.shared
-        .startResponseLeadInAfterExternalSend(
-          reason: "scriptPoint02RichTransmissionFinished"
+        .runFixedResponseLeadInAfterExternalSend(
+          reason: "scriptPoint02RichTransmissionFinished",
+          durationSeconds: 10
         )
 
       let createdPoint03Playback = await MainActor.run {
@@ -335,6 +363,8 @@ actor TuringScriptPoint02And03FlowController {
           responseVoicePromptID: \(bigMikeTrigger.voicePromptID)
           responseCharacter: big_mike
           generatedRoute: spatialWalkie
+          sendingLeadInCompletedSeconds: 10.000
+          voicePromptComputeStartedDuringLeadIn: true
           continuedQuestionsEnabled: \(point03.conversationRemainsEnabled)
         """)
 
@@ -420,17 +450,17 @@ actor TuringScriptPoint02And03FlowController {
     richTrigger: TuringVoicePromptTriggerDescriptor,
     bigMikeTrigger: TuringVoicePromptTriggerDescriptor
   ) throws {
-    guard point02.prerecordingOutputContext == .walkieOutgoingGlobal,
+    guard point02.prerecordingOutputContext == .walkieOutgoingHeadset,
       point02.responseSpeakerID == TuringRichVoiceIdentity.speakerID,
       richPrerecording.speaker == TuringRichVoiceIdentity.speakerID,
       richPrerecording.voiceID == TuringRichVoiceIdentity.voiceID,
       richTrigger.speakerID == TuringRichVoiceIdentity.speakerID,
       richTrigger.voiceID == TuringRichVoiceIdentity.voiceID,
       richTrigger.characterProfileID == TuringRichVoiceIdentity.characterID,
-      richTrigger.outputContext == .walkieOutgoingGlobal
+      richTrigger.outputContext == .walkieOutgoingHeadset
     else {
       throw TuringRuntimeError.invalidConfig(
-        "ScriptPoint02 must be Rich PR plus Rich global Turing continuation."
+        "ScriptPoint02 must use Rich head-tracked voice plus spatial walkie comm SFX."
       )
     }
 
