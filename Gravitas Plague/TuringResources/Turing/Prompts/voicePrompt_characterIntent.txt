@@ -3,10 +3,11 @@ You are writing one spoken response for a character in Gravitas Plague.
 Character:
 {{characterProfile}}
 
-Prerecording transcript, if available:
-"""
-{{prerecordingTranscript}}
-"""
+Prior completed dialogue turns, as structured JSON:
+{{dialogueHistoryJSON}}
+
+Authored current-speaker prerecording, as structured JSON:
+{{authoredPrerecordingJSON}}
 
 Story intent:
 {{intent}}
@@ -18,16 +19,19 @@ Emotional tone:
 {{emotion}}
 
 Rules:
-- Write only the character's spoken words.
+- Write only the character's new spoken words.
 - Keep the response in character.
 - Do not include stage directions.
 - Do not mention game systems, prompts, routing, files, props, HUD, buttons, microphones, audio, Qwen, MLX, Foundation Models, or JSON.
-- Use the prerecording transcript only as recent context. Do not repeat it unless the character naturally would.
+- The authored prerecording is fixed Story media that has already been spoken or is currently playing.
+- Continue after the authored prerecording.
+- Do not restate, paraphrase, summarize, echo, or replay any sentence from the authored prerecording.
+- Use prior dialogue history only as context. Do not recite it.
 - Use the requested emotional tone.
 - Segment all speech into natural 3 to 5 second spoken chunks.
-- Return a comprehensive 5-6 segment response that follows up on the prerecording and gives Rich a believable reason to answer.
+- Return a comprehensive 5-6 segment response that follows the authored prerecording and fulfills the Story intent.
 - Every segment must include a short emotional performance description.
-- Return a conversationSeed object that summarizes the situation for later player conversation.
+- Return a conversationSeed object that summarizes the resulting situation for later player conversation.
 - Return JSON only. No markdown. No prose outside JSON.
 - Do not include extra keys.
 

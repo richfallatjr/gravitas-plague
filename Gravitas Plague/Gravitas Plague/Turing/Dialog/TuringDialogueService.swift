@@ -18,11 +18,30 @@ actor TuringDialogueService {
         let profile = try characterStore.profile(
             id: request.characterProfileID
         )
+        let dialogueHistoryJSON: String
+        let authoredPrerecordingJSON: String
+
+        if let flowContext = request.flowContext {
+            dialogueHistoryJSON = flowContext.dialogueHistoryJSON
+            authoredPrerecordingJSON = flowContext.authoredPrerecordingJSON
+        } else {
+            dialogueHistoryJSON = "[]"
+            authoredPrerecordingJSON = TuringVoicePromptContext
+                .AuthoredPrerecording(
+                    prerecordingID: "",
+                    speakerID: "",
+                    transcript: request.prerecordingTranscript ?? "",
+                    alreadySpoken: true,
+                    generatedResponseMustContinueAfterIt: true
+                )
+                .promptJSON
+        }
         let prompt = try Self.renderPrompt(
             resourcePath: "Turing/Prompts/voicePrompt_characterIntent.txt",
             replacements: [
                 "{{characterProfile}}": profile.voicePromptPromptText,
-                "{{prerecordingTranscript}}": request.prerecordingTranscript ?? "",
+                "{{dialogueHistoryJSON}}": dialogueHistoryJSON,
+                "{{authoredPrerecordingJSON}}": authoredPrerecordingJSON,
                 "{{intent}}": request.intent,
                 "{{voicePromptSeedIntent}}": request.voicePromptSeedIntent ?? "",
                 "{{emotion}}": request.emotion
@@ -37,6 +56,13 @@ actor TuringDialogueService {
           promptTemplate: voicePrompt_characterIntent
           profileContext: voicePromptSafe
           prerecordingTranscriptUTF16: \((request.prerecordingTranscript ?? "").utf16.count)
+          structuredFlowContext: \(request.flowContext != nil)
+          dialogueHistoryTurnCount: \(request.flowContext?.dialogueHistory.count ?? 0)
+          authoredPRTranscriptSHA256: \(TuringFlowHash.sha256(
+              request.flowContext?.authoredPrerecording.transcript
+                  ?? request.prerecordingTranscript
+                  ?? ""
+          ))
         """)
 
         let raw: String
@@ -97,6 +123,14 @@ actor TuringDialogueService {
             purpose: "TuringVoicePrompt",
             segments: plan.segments
         )
+        for (index, segment) in plan.segments.enumerated() {
+            print("""
+            [TuringFlow] Foundation response segment accepted
+              requestID: \(request.id)
+              segmentIndex: \(index)
+              foundationSegmentTextSHA256: \(TuringFlowHash.sha256(segment.text))
+            """)
+        }
 
         return plan
     }
@@ -129,27 +163,31 @@ actor TuringDialogueService {
           prerecordingTranscriptUTF16: \((request.prerecordingTranscript ?? "").utf16.count)
         """)
 
-        let plan: TuringDialoguePlan
+        let raw: String
         do {
-            let raw = try await runner.runPrompt(
+            raw = try await runner.runPrompt(
                 prompt,
                 purpose: "conversationPrompt_playerTurn_noBible"
             )
-            Self.logRawResponse(
-                raw,
-                name: "conversationPrompt_playerTurn_noBible",
-                promptCharacters: prompt.utf16.count
-            )
-            plan = try await decodePlanWithOneRepair(
-                raw: raw,
-                purpose: "TuringConversationNoBible"
-            )
         } catch {
-            guard TuringFoundationGuardrailPolicy.isGuardrailError(error) else {
-                throw error
+            if TuringFoundationGuardrailPolicy.isGuardrailError(error) {
+                throw TuringRuntimeError.foundationJSONGateFailed(
+                    "conversationPrompt guardrails triggered: \(error.localizedDescription)"
+                )
             }
-            plan = Self.bigMikeConversationGuardrailPlan(error: error)
+            throw error
         }
+
+        Self.logRawResponse(
+            raw,
+            name: "conversationPrompt_playerTurn_noBible",
+            promptCharacters: prompt.utf16.count
+        )
+
+        let plan = try await decodePlanWithOneRepair(
+            raw: raw,
+            purpose: "TuringConversationNoBible"
+        )
 
         print("""
         [TuringConversationNoBible] gate passed
@@ -161,27 +199,6 @@ actor TuringDialogueService {
         )
 
         return plan
-    }
-
-    private static func bigMikeConversationGuardrailPlan(
-        error: Error
-    ) -> TuringDialoguePlan {
-        print("""
-        [TuringConversationNoBible] Foundation guardrails triggered
-          fallbackResponse: \(TuringFoundationGuardrailPolicy.bigMikeConversationResponse)
-          qwenWillGenerateFallbackResponse: true
-          error: \(error.localizedDescription)
-        """)
-
-        return TuringDialoguePlan(
-            schemaVersion: 1,
-            segments: [
-                TuringSpeechSegment(
-                    text: TuringFoundationGuardrailPolicy.bigMikeConversationResponse,
-                    emotion: "firm"
-                )
-            ]
-        )
     }
 
     private func decodePlanWithOneRepair(

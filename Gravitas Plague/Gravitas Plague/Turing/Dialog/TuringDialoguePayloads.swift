@@ -10,6 +10,34 @@ struct VoicePromptRequest: Codable, Sendable, Hashable {
     let emotion: String
     let prerecordingTranscript: String?
     let voicePromptSeedIntent: String?
+
+    /// Production Turing Flow uses this structured context. Legacy diagnostics
+    /// may leave it nil and continue using prerecordingTranscript.
+    let flowContext: TuringVoicePromptContext?
+
+    init(
+        id: String,
+        speaker: String,
+        voiceID: String,
+        voiceVariantID: String?,
+        characterProfileID: String,
+        intent: String,
+        emotion: String,
+        prerecordingTranscript: String?,
+        voicePromptSeedIntent: String?,
+        flowContext: TuringVoicePromptContext? = nil
+    ) {
+        self.id = id
+        self.speaker = speaker
+        self.voiceID = voiceID
+        self.voiceVariantID = voiceVariantID
+        self.characterProfileID = characterProfileID
+        self.intent = intent
+        self.emotion = emotion
+        self.prerecordingTranscript = prerecordingTranscript
+        self.voicePromptSeedIntent = voicePromptSeedIntent
+        self.flowContext = flowContext
+    }
 }
 
 struct ConversationPromptNoBibleRequest: Codable, Sendable, Hashable {

@@ -31,7 +31,7 @@ public struct TuringQwenNativeCloneProfileLoader: Sendable {
     )
   }
 
-  private func loadBaseCloneProfile(
+  public func loadBaseCloneProfile(
     from bundleRoot: URL,
     profileResourcePath: String,
     expectedVoiceID: String,

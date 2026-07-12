@@ -8,6 +8,8 @@ import simd
 
 struct PlagueImmersiveView: View {
     @ObservedObject var session: PlagueDemoSession
+    @ObservedObject private var turingFlowGate =
+        TuringFlowInteractionGateController.shared
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.openWindow) private var openWindow
@@ -163,6 +165,14 @@ struct PlagueImmersiveView: View {
             DragGesture(minimumDistance: 0)
                 .targetedToEntity(where: .has(TuringStoryWalkieMicBillboardComponent.self))
                 .onChanged { _ in
+                    guard turingFlowGate.microphoneEnabled else {
+                        print("""
+                        [TuringFlowGate] RealityKit microphone hold ignored
+                          reason: interactionGateClosed
+                          state: \(turingFlowGate.state.rawValue)
+                        """)
+                        return
+                    }
                     guard !walkieMicHoldActive else {
                         return
                     }
@@ -341,6 +351,7 @@ struct PlagueImmersiveView: View {
             )
         }
         .onDisappear {
+            walkieMicHoldActive = false
             placementAdjustmentDragActive = false
             coordinator.onYouDiedWorldCardCleanupRequested?()
             coordinator.onYouDiedWorldCardRequested = nil
@@ -351,6 +362,11 @@ struct PlagueImmersiveView: View {
             coordinator.shutdown()
             session.setWallPosterUIInactiveIfAllowed()
             session.forestImmersiveDidClose()
+            Task {
+                await TuringEpisodeFlowController.shared.resetEpisode(
+                    reason: "immersiveViewDisappeared"
+                )
+            }
         }
     }
 }

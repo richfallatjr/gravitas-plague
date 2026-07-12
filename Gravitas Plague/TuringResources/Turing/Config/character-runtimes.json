@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "characters": [
+    {
+      "characterID": "big_mike",
+      "displayName": "Big Mike",
+      "voiceID": "big_mike_base_clone_v1",
+      "cloneProfileResourcePath": "Turing/Voices/Cloned/BigMike/BaseClone/big_mike_base_clone_v1.qwenclone",
+      "allowedOutputRoutes": [
+        "walkieSpatial"
+      ],
+      "outputProcessing": {
+        "playbackRate": 0.85
+      },
+      "qwen": {
+        "maxNewRows": 160,
+        "useExactReferenceRowCount": true,
+        "referenceWindowStrategy": "full",
+        "skipSegmentFailures": true
+      },
+      "audio": {
+        "generatedGainDB": 0,
+        "prerecordingGainDB": -6,
+        "fillerGainDB": -6,
+        "fillerDirectoryCandidates": [
+          "Turing/Audio/big-mike-filler",
+          "Turing/big-mike-filler",
+          "big-mike-filler"
+        ],
+        "fillerExtensions": [
+          "wav",
+          "mp3",
+          "m4a",
+          "aiff",
+          "caf"
+        ]
+      }
+    },
+    {
+      "characterID": "rich",
+      "displayName": "Rich",
+      "voiceID": "rich_base_clone_v1",
+      "cloneProfileResourcePath": "Turing/Voices/Cloned/Rich/BaseClone/rich_base_clone_v1.qwenclone",
+      "allowedOutputRoutes": [
+        "roomGlobal",
+        "walkieOutgoingGlobal",
+        "walkieOutgoingHeadset"
+      ],
+      "outputProcessing": {
+        "playbackRate": 0.85
+      },
+      "qwen": {
+        "maxNewRows": 160,
+        "useExactReferenceRowCount": true,
+        "referenceWindowStrategy": "full",
+        "skipSegmentFailures": true
+      },
+      "audio": {
+        "generatedGainDB": 0,
+        "prerecordingGainDB": 0,
+        "fillerGainDB": -6,
+        "fillerDirectoryCandidates": [
+          "Turing/Audio/rich-filler",
+          "Turing/rich-filler",
+          "rich-filler"
+        ],
+        "fillerExtensions": [
+          "wav",
+          "mp3",
+          "m4a",
+          "aiff",
+          "caf"
+        ]
+      }
+    }
+  ]
+}

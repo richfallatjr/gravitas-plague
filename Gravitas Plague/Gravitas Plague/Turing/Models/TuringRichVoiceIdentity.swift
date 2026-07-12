@@ -1,49 +1,68 @@
 import Foundation
 
 enum TuringRichVoiceIdentity {
-  static let characterID = "rich"
-  static let speakerID = "rich"
-  static let voiceID = "rich_base_clone_v1"
-  static let displayName = "Rich"
-  static let defaultVariantID = "rich_reference_01"
+    static let characterID = "rich"
+    static let speakerID = "rich"
+    static let voiceID = "rich_base_clone_v1"
+    static let displayName = "Rich"
 
-  static let cloneProfileResourcePath =
-    "Turing/Voices/Cloned/Rich/BaseClone/rich_base_clone_v1.qwenclone"
+    static let cloneProfileResourcePath =
+        "Turing/Voices/Cloned/Rich/BaseClone/rich_base_clone_v1.qwenclone"
 
-  static let fillerDirectoryCandidates = [
-    "Turing/Audio/rich-filler",
-    "Turing/rich-filler",
-    "rich-filler",
-  ]
+    static let fillerDirectoryCandidates = [
+        "Turing/Audio/rich-filler",
+        "Turing/rich-filler",
+        "rich-filler"
+    ]
 }
 
 enum TuringBigMikeVoiceIdentity {
-  static let characterID = "big_mike"
-  static let speakerID = "big_mike"
-  static let voiceID = "big_mike_base_clone_v1"
-  static let displayName = "Big Mike"
-  static let defaultVariantID = "broadcast_reference_fast_01"
+    static let characterID = "big_mike"
+    static let speakerID = "big_mike"
+    static let voiceID = "big_mike_base_clone_v1"
+    static let displayName = "Big Mike"
 }
 
 enum TuringDialogueThreadIdentity {
-  static let bigMikeRich = "dialogue.big_mike.rich"
+    static let bigMikeRich = "dialogue.big_mike.rich"
 }
 
-enum TuringVoiceOutputContext: String, Codable, Sendable, Hashable {
-  // Rich object reactions use this unless a descriptor explicitly opts in
-  // to another route.
-  case roomGlobal
+/// Extensible route identifier.
+///
+/// New prop-specific Rich routes are registered by string ID in
+/// `TuringFlowRouteRegistry`. Adding a route never requires a new ScriptPoint
+/// runner or a change to `TuringFlowEngine`.
+struct TuringVoiceOutputContext:
+    RawRepresentable,
+    Codable,
+    Sendable,
+    Hashable,
+    CustomStringConvertible
+{
+    let rawValue: String
 
-  // Rich speaking through the walkie. Voice remains global at the player;
-  // the open/send comm SFX remain spatial at the authored walkie prop.
-  case walkieOutgoingGlobal
+    init(rawValue: String) {
+        self.rawValue = rawValue
+    }
 
-  // Retained for decoding older authored descriptors. It is not used by
-  // the active ScriptPoint02 route.
-  case walkieOutgoingHeadset
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        rawValue = try container.decode(String.self)
+    }
 
-  // Remote Big Mike speech at the authored walkie emitter.
-  case walkieSpatial
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+
+    var description: String {
+        rawValue
+    }
+
+    static let roomGlobal = Self(rawValue: "roomGlobal")
+    static let walkieOutgoingGlobal = Self(rawValue: "walkieOutgoingGlobal")
+    static let walkieOutgoingHeadset = Self(rawValue: "walkieOutgoingHeadset")
+    static let walkieSpatial = Self(rawValue: "walkieSpatial")
 }
 
 typealias TuringRichOutputContext = TuringVoiceOutputContext

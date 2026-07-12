@@ -72,6 +72,8 @@ final class TuringStoryWalkiePlaybackCoordinator {
     private var runDirectory: URL?
     private var runActive = false
     private var runID: String?
+    private var flowIdentity: TuringFlowIdentity?
+    private var acceptedPrerecordingID: String?
     private var expectedSegmentCount: Int?
     private var nextPlaybackSegmentIndex = 0
     private var completedGeneratedPlaybackCount = 0
@@ -151,10 +153,15 @@ final class TuringStoryWalkiePlaybackCoordinator {
         )
     }
 
+    func configureFlowIdentity(_ identity: TuringFlowIdentity) {
+        flowIdentity = identity
+    }
+
     func beginRun(runID: String, expectedSegmentCount: Int?) async {
         await runCancelled(reason: "beginNewRun")
 
         self.runID = runID
+        self.acceptedPrerecordingID = nil
         self.expectedSegmentCount = expectedSegmentCount
         self.nextPlaybackSegmentIndex = 0
         self.completedGeneratedPlaybackCount = 0
@@ -202,6 +209,20 @@ final class TuringStoryWalkiePlaybackCoordinator {
 
     func enqueuePrerecording(id: String, fileURL: URL) async {
         guard runActive else { return }
+        guard acceptedPrerecordingID == nil else {
+            if let flowIdentity {
+                TuringFlowLog.event(
+                    "duplicate prerecording enqueue ignored",
+                    identity: flowIdentity,
+                    fields: [
+                        ("acceptedPrerecordingID", acceptedPrerecordingID ?? "none"),
+                        ("rejectedPrerecordingID", id)
+                    ]
+                )
+            }
+            return
+        }
+        acceptedPrerecordingID = id
         pendingPrerecording = PrerecordingClip(
             id: id,
             fileURL: fileURL
@@ -212,6 +233,13 @@ final class TuringStoryWalkiePlaybackCoordinator {
           file: \(fileURL.lastPathComponent)
           playsBeforeGenerated: true
         """)
+        if let flowIdentity {
+            TuringFlowLog.event(
+                "prerecording enqueued",
+                identity: flowIdentity,
+                fields: [("file", fileURL.lastPathComponent)]
+            )
+        }
         await reconcile(reason: "prerecordingQueued")
     }
 
@@ -270,6 +298,16 @@ final class TuringStoryWalkiePlaybackCoordinator {
                 segmentIndex: segmentIndex
             )
             pendingGenerated[segmentIndex] = clip
+            if let flowIdentity {
+                TuringFlowLog.event(
+                    "generated segment published",
+                    identity: flowIdentity,
+                    fields: [
+                        ("segmentIndex", String(segmentIndex)),
+                        ("file", clip.fileURL.lastPathComponent)
+                    ]
+                )
+            }
             print("""
             [TuringPlaybackRebuild] generated wav written
               segmentIndex: \(segmentIndex)
@@ -607,6 +645,16 @@ final class TuringStoryWalkiePlaybackCoordinator {
                 fileURL: clip.fileURL,
                 startedAt: Date()
             )
+            if let flowIdentity {
+                TuringFlowLog.event(
+                    "prerecording playback started",
+                    identity: flowIdentity,
+                    fields: [
+                        ("prerecordingPlaybackHandleID", handleID.uuidString),
+                        ("file", clip.fileURL.lastPathComponent)
+                    ]
+                )
+            }
             print("""
             [TuringPlaybackRebuild] prerecording playback started
               id: \(clip.id)
@@ -666,6 +714,17 @@ final class TuringStoryWalkiePlaybackCoordinator {
                 fileURL: clip.fileURL,
                 startedAt: startedAt
             )
+            if let flowIdentity {
+                TuringFlowLog.event(
+                    "generated playback started",
+                    identity: flowIdentity,
+                    fields: [
+                        ("segmentIndex", String(clip.segmentIndex)),
+                        ("generatedPlaybackHandleID", handleID.uuidString),
+                        ("file", clip.fileURL.lastPathComponent)
+                    ]
+                )
+            }
             print("""
             [TuringPlaybackRebuild] generated playback started
               segmentIndex: \(clip.segmentIndex)
@@ -824,6 +883,16 @@ final class TuringStoryWalkiePlaybackCoordinator {
             where activeHandleID == handleID:
             prerecordingHasPlayed = true
             activeItem = .none
+            if let flowIdentity {
+                TuringFlowLog.event(
+                    "prerecording playback completed",
+                    identity: flowIdentity,
+                    fields: [
+                        ("prerecordingPlaybackHandleID", handleID.uuidString),
+                        ("file", fileURL.lastPathComponent)
+                    ]
+                )
+            }
             print("""
             [TuringPlaybackRebuild] prerecording playback completed
               id: \(id)
@@ -854,6 +923,17 @@ final class TuringStoryWalkiePlaybackCoordinator {
             nextPlaybackSegmentIndex = segmentIndex + 1
             completedGeneratedPlaybackCount += 1
             activeItem = .none
+            if let flowIdentity {
+                TuringFlowLog.event(
+                    "generated playback completed",
+                    identity: flowIdentity,
+                    fields: [
+                        ("segmentIndex", String(segmentIndex)),
+                        ("generatedPlaybackHandleID", handleID.uuidString),
+                        ("file", fileURL.lastPathComponent)
+                    ]
+                )
+            }
             print("""
             [TuringPlaybackRebuild] generated playback completed
               segmentIndex: \(segmentIndex)

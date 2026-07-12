@@ -7,6 +7,8 @@ struct TuringEpisodePickerView: View {
     @State private var openingEpisodeID: TuringEpisodeID?
     @State private var selectedEpisodeID: TuringEpisodeID? = .prologue
 #if DEBUG || GR_TURING_DIAGNOSTICS
+    @ObservedObject private var turingFlowGate =
+        TuringFlowInteractionGateController.shared
     @StateObject private var dictationCoordinator = TuringDictationCoordinator()
     @StateObject private var radioStaticLeadIn = TuringRadioStaticLeadInController()
     @State private var qwenNativeRunningPreset: TuringNativeQwenVoiceDesignCanaryPreset?
@@ -109,14 +111,14 @@ struct TuringEpisodePickerView: View {
                     .disabled(qwenNativeRunningPreset != nil || turingDialogueBusy)
 
                     Button {
-                        runScriptPoint02And03()
+                        runScriptPoint02()
                     } label: {
                         HStack(spacing: 8) {
                             if turingDialogueBusy {
                                 ProgressView()
                                     .controlSize(.small)
                             }
-                            Text("Run ScriptPoint02 + ScriptPoint03")
+                            Text("Run ScriptPoint02")
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -131,7 +133,9 @@ struct TuringEpisodePickerView: View {
                     HStack(spacing: 12) {
                         TuringDictateButton(
                             isRecording: dictationCoordinator.isRecording,
-                            isBusy: qwenNativeRunningPreset != nil || turingDialogueBusy,
+                            isBusy: qwenNativeRunningPreset != nil ||
+                                turingDialogueBusy ||
+                                !turingFlowGate.microphoneEnabled,
                             onPressStarted: {
                                 startBigMikeDictation()
                             },
@@ -390,50 +394,43 @@ struct TuringEpisodePickerView: View {
                 "qwenTestButton.bigMikeRichContactPrerecordingSeed"
             )
         )
-        radioStaticLeadIn.start(reason: "bigMikeRichContactPrerecordingSeedStarted")
-
         Task.detached(priority: .userInitiated) {
+            await TuringEpisodeFlowController.shared.resetEpisode(
+                reason: "debugScriptPoint01"
+            )
             let result = await TuringPrerecordingSeededPromptRunner
                 .runBigMikeRichContact(
                     seedStore: TuringConversationSeedStore.shared
                 )
 
             await MainActor.run {
-                radioStaticLeadIn.stop(
-                    reason: "bigMikeRichContactPrerecordingSeedFinished"
-                )
                 turingDialogueBusy = false
                 qwenDebugStatus = result.pickerStatus
             }
         }
     }
 
-    private func runScriptPoint02And03() {
+    private func runScriptPoint02() {
         guard qwenNativeRunningPreset == nil,
               turingDialogueBusy == false else {
             return
         }
 
         turingDialogueBusy = true
-        qwenDebugStatus = "Running ScriptPoint02 + ScriptPoint03"
+        qwenDebugStatus = "Running ScriptPoint02"
 
         session.send(
             .requestTuringStoryPlacementRoomScan(
-                "qwenTestButton.scriptPoint02And03"
+                "qwenTestButton.scriptPoint02"
             )
         )
 
         Task.detached(priority: .userInitiated) {
-            let result = await TuringScriptPoint02And03FlowController
-                .shared
-                .run(
-                    seedStore: TuringConversationSeedStore.shared
-                )
-
-            if result.succeeded {
-                await TuringScriptPointProgressionController.shared
-                    .markCompletedByManualRun()
-            }
+            let result = await TuringEpisodeFlowController.shared.start(
+                scriptPointID: "prologue.scriptPoint02",
+                trigger: .manualDebug,
+                allowExplicitReplay: true
+            )
 
             await MainActor.run {
                 turingDialogueBusy = false
@@ -443,6 +440,14 @@ struct TuringEpisodePickerView: View {
     }
 
     private func startBigMikeDictation() {
+        guard turingFlowGate.microphoneEnabled else {
+            print("""
+            [TuringFlowGate] microphone request ignored
+              reason: interactionGateClosed
+              state: \(turingFlowGate.state.rawValue)
+            """)
+            return
+        }
         guard qwenNativeRunningPreset == nil,
               turingDialogueBusy == false else {
             return
@@ -718,6 +723,9 @@ struct TuringEpisodePickerView: View {
             }
         }
 
+        await TuringEpisodeFlowController.shared.resetEpisode(
+            reason: "startStoryEpisode.\(episode.id.rawValue)"
+        )
         session.startStoryEpisode(
             episode.id
         )

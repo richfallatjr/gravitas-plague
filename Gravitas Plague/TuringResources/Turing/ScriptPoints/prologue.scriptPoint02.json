@@ -1,13 +1,28 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "scriptPointID": "prologue.scriptPoint02",
-  "prerecordingID": "prologue.walkie.rich.scriptPoint02.001",
-  "prerecordingOutputContext": "walkieOutgoingGlobal",
-  "responseVoicePromptID": "prologue.rich.scriptPoint02.followUp.001",
-  "responseSpeakerID": "rich",
-  "responseComputeStart": "whenPrerecordingStarts",
-  "responsePlaybackGate": "afterPrerecordingActualCompletion",
-  "nextScriptPointID": "prologue.scriptPoint03",
-  "automaticAdvance": true,
-  "conversationRemainsEnabled": false
+  "trigger": {
+    "kind": "priorConversationPlaybackCompleted",
+    "delaySeconds": 2
+  },
+  "transmission": {
+    "prerecordingID": "prologue.walkie.rich.scriptPoint02.001",
+    "voicePromptID": "prologue.rich.scriptPoint02.followUp.001",
+    "characterID": "rich",
+    "conversationKey": "dialogue.big_mike.rich",
+    "outputRoute": "walkieOutgoingGlobal",
+    "computeStart": "withPrerecording",
+    "fillerMode": "continuousFromPrerecordingToGenerated",
+    "commSFX": {
+      "openBeforePrerecording": true,
+      "sendAfterGenerated": true,
+      "sendingLeadInAfterGeneratedSeconds": null
+    },
+    "fixedLeadInSeconds": null
+  },
+  "progression": {
+    "nextScriptPointID": "prologue.scriptPoint03",
+    "automaticAdvance": true,
+    "interactionGateAfterCompletion": "closed"
+  }
 }
