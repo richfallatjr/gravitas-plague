@@ -59,6 +59,7 @@ final class TuringRichGlobalOneShotClipPlayer: NSObject,
     let label: String
     let fileURL: URL
     let startedAt: Date
+    let expectedDurationSeconds: TimeInterval
     let completion:
       @MainActor (
         TuringRichGlobalClipHandle,
@@ -99,6 +100,7 @@ final class TuringRichGlobalOneShotClipPlayer: NSObject,
       label: label,
       fileURL: fileURL,
       startedAt: Date(),
+      expectedDurationSeconds: player.duration,
       completion: completion
     )
 
@@ -118,6 +120,7 @@ final class TuringRichGlobalOneShotClipPlayer: NSObject,
         route: global
         spatialEmitter: none
         gainDB: \(String(format: "%.1f", gainDB))
+        expectedDurationSeconds: \(String(format: "%.3f", player.duration))
         completionSource: AVAudioPlayerDelegate
       """)
 
@@ -198,6 +201,8 @@ final class TuringRichGlobalOneShotClipPlayer: NSObject,
         label: \(active.label)
         successfully: \(successfully)
         elapsedSeconds: \(String(format: "%.3f", elapsed))
+        expectedDurationSeconds: \(String(format: "%.3f", active.expectedDurationSeconds))
+        completionFraction: \(String(format: "%.3f", active.expectedDurationSeconds > 0 ? elapsed / active.expectedDurationSeconds : 0))
         completionSource: AVAudioPlayerDelegate
       """)
 

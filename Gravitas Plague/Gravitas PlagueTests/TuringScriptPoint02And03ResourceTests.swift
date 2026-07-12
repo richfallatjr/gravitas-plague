@@ -15,7 +15,7 @@ final class TuringScriptPoint02And03ResourceTests: XCTestCase {
       "VoicePrompts/prologue.rich.scriptPoint02.followUp.001.json"
     )
 
-    XCTAssertEqual(point.prerecordingOutputContext, .walkieOutgoingHeadset)
+    XCTAssertEqual(point.prerecordingOutputContext, .walkieOutgoingGlobal)
     XCTAssertEqual(point.responseSpeakerID, "rich")
     XCTAssertEqual(point.responseComputeStart, .whenPrerecordingStarts)
     XCTAssertEqual(
@@ -34,7 +34,7 @@ final class TuringScriptPoint02And03ResourceTests: XCTestCase {
     )
     XCTAssertEqual(trigger.speakerID, "rich")
     XCTAssertEqual(trigger.voiceID, "rich_base_clone_v1")
-    XCTAssertEqual(trigger.outputContext, .walkieOutgoingHeadset)
+    XCTAssertEqual(trigger.outputContext, .walkieOutgoingGlobal)
     XCTAssertEqual(
       trigger.conversationKey,
       "dialogue.big_mike.rich"

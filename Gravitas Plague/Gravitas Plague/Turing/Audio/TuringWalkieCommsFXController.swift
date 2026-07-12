@@ -53,6 +53,46 @@ final class TuringWalkieCommsFXController {
         }
     }
 
+    func playScriptedOpenComm(reason: String) async throws {
+        let url = try assetStore.openCommURL()
+        print("""
+        [TuringWalkieComms] scripted open comm started
+          reason: \(reason)
+          file: \(url.lastPathComponent)
+          route: spatialWalkie
+        """)
+        _ = try await playOneShotAndWait(
+            fileURL: url,
+            kind: .commSFX,
+            label: "open-comm"
+        )
+        print("""
+        [TuringWalkieComms] scripted open comm completed
+          reason: \(reason)
+          completionSource: AudioPlaybackController.completionHandler
+        """)
+    }
+
+    func playScriptedSendComm(reason: String) async throws {
+        let url = try assetStore.sendCommURL()
+        print("""
+        [TuringWalkieComms] scripted send comm started
+          reason: \(reason)
+          file: \(url.lastPathComponent)
+          route: spatialWalkie
+        """)
+        _ = try await playOneShotAndWait(
+            fileURL: url,
+            kind: .commSFX,
+            label: "send-comm"
+        )
+        print("""
+        [TuringWalkieComms] scripted send comm completed
+          reason: \(reason)
+          completionSource: AudioPlaybackController.completionHandler
+        """)
+    }
+
     func playSendCommAndStartSendingLeadIn(reason: String) async {
         do {
             let url = try assetStore.sendCommURL()
@@ -84,8 +124,8 @@ final class TuringWalkieCommsFXController {
     func startResponseLeadInAfterExternalSend(
         reason: String
     ) async {
-        // The Rich coordinator already played send-comm globally. Start only
-        // the existing spatial response lead-in; never replay the chirp.
+        // ScriptPoint02 already played send-comm spatially. Start only the
+        // existing response lead-in; never replay the chirp.
         await startAmbientWalkieStatic(
             reason: "externalSend.\(reason)"
         )

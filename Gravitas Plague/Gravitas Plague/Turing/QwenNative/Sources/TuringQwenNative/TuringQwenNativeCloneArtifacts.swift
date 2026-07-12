@@ -18,13 +18,14 @@ public struct TuringQwenNativeCloneArtifactsLoader: Sendable {
     public init() {}
 
     public func load(
-        from variant: TuringQwenNativeCloneProfile.Variant
+        from variant: TuringQwenNativeCloneProfile.Variant,
+        expectedVoiceID: String
     ) throws -> TuringQwenNativeCloneArtifacts {
         let artifactsRoot = variant.rootURL.appendingPathComponent("qwen_artifacts", isDirectory: true)
         let manifestURL = artifactsRoot.appendingPathComponent("clone_prompt_manifest.json")
         guard FileManager.default.fileExists(atPath: manifestURL.path) else {
             throw TuringQwenNativeError.nativeGenerationNotImplemented(
-                "Missing Big Mike Qwen clone artifacts. Run Scripts/precompute_big_mike_qwenclone.sh."
+                "Missing Qwen clone artifacts for \(expectedVoiceID)."
             )
         }
 
@@ -35,13 +36,13 @@ public struct TuringQwenNativeCloneArtifactsLoader: Sendable {
         guard manifest.isBaseCloneICL,
               manifest.xVectorOnlyMode == false else {
             throw TuringQwenNativeError.invalidConfig(
-                "Big Mike clone artifacts must be baseCloneICL with xVectorOnlyMode false."
+                "Clone artifacts for \(expectedVoiceID) must be baseCloneICL with xVectorOnlyMode false."
             )
         }
-        guard manifest.voiceID == "big_mike_base_clone_v1",
+        guard manifest.voiceID == expectedVoiceID,
               manifest.variantID == variant.variantID else {
             throw TuringQwenNativeError.invalidConfig(
-                "Clone artifact manifest does not match requested variant \(variant.variantID)."
+                "Clone artifact manifest identity mismatch. Expected voice \(expectedVoiceID), variant \(variant.variantID); found voice \(manifest.voiceID), variant \(manifest.variantID)."
             )
         }
 

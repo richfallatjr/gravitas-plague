@@ -18,17 +18,20 @@ struct TuringQwenNativeBaseCloneConditioningBuilder: Sendable {
         profile: TuringQwenNativeCloneProfile
     ) throws -> TuringQwenNativeBaseCloneConditioning {
         let variant = try profile.requireVariant(profile.defaultVariantID)
-        let artifacts = try artifactsLoader.load(from: variant)
+        let artifacts = try artifactsLoader.load(
+            from: variant,
+            expectedVoiceID: profile.voiceID
+        )
 
         guard artifacts.xVectorOnlyMode == false else {
             throw TuringQwenNativeError.invalidConfig(
-                "Big Mike Base clone must use baseCloneICL artifacts, not xVectorOnlyMode."
+                "Base clone \(profile.voiceID) must use baseCloneICL artifacts, not xVectorOnlyMode."
             )
         }
         guard artifacts.referenceRowCount > 0,
               artifacts.codebookCount == 16 else {
             throw TuringQwenNativeError.invalidConfig(
-                "Big Mike Base clone artifacts must include non-empty reference_codes rows_x_codebooks with 16 codebooks."
+                "Base clone \(profile.voiceID) artifacts must include non-empty reference_codes rows_x_codebooks with 16 codebooks."
             )
         }
 

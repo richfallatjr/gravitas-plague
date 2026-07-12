@@ -3,6 +3,11 @@ import Foundation
 
 @MainActor
 final class TuringStoryWalkiePlaybackCoordinator {
+    enum VoiceRoute: String, Sendable {
+        case walkieSpatial
+        case playerGlobal
+    }
+
     struct Policy: Sendable {
         var firstSegmentPrerollFillerCount = 1
         var chainFillerWhileComputeWithoutSpeech = true
@@ -11,6 +16,11 @@ final class TuringStoryWalkiePlaybackCoordinator {
         var deadAirMinSeconds = 0.5
         var deadAirMaxSeconds = 4.0
         var avoidImmediateFillerRepeat = true
+        var voiceRoute: VoiceRoute = .walkieSpatial
+        var outputProcessingPolicy = TuringQwenOutputProcessingPolicy.bigMike
+        var generatedGainDB: Float = 0
+        var prerecordingGainDB: Float = -6
+        var fillerGainDB: Float = -6
         var fillerDirectoryCandidates = [
             "Turing/Audio/big-mike-filler",
             "Turing/big-mike-filler",
@@ -56,6 +66,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
 
     private let policy: Policy
     private let rootURL: URL
+    private let globalPlayer: (any TuringRichGlobalClipPlaying)?
     private var runDirectory: URL?
     private var runActive = false
     private var runID: String?
@@ -78,10 +89,14 @@ final class TuringStoryWalkiePlaybackCoordinator {
     init(
         policy: Policy = Policy(),
         rootURL: URL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("TuringStoryWalkiePlayback", isDirectory: true)
+            .appendingPathComponent("TuringStoryWalkiePlayback", isDirectory: true),
+        globalPlayer: (any TuringRichGlobalClipPlaying)? = nil
     ) {
         self.policy = policy
         self.rootURL = rootURL
+        self.globalPlayer = policy.voiceRoute == .playerGlobal
+            ? (globalPlayer ?? TuringRichGlobalOneShotClipPlayer())
+            : nil
         self.fillerFiles = Self.discoverFillerFiles(
             candidates: policy.fillerDirectoryCandidates,
             allowedExtensions: policy.fillerExtensions
@@ -90,6 +105,26 @@ final class TuringStoryWalkiePlaybackCoordinator {
 
     static func makeBigMikeCoordinator() -> TuringStoryWalkiePlaybackCoordinator {
         TuringStoryWalkiePlaybackCoordinator()
+    }
+
+    static func makeRichGlobalCoordinator() -> TuringStoryWalkiePlaybackCoordinator {
+        var policy = Policy()
+        policy.voiceRoute = .playerGlobal
+        policy.outputProcessingPolicy = .rich
+        policy.generatedGainDB = 0
+        policy.prerecordingGainDB = 0
+        policy.fillerGainDB = -6
+        policy.fillerDirectoryCandidates = TuringRichVoiceIdentity
+            .fillerDirectoryCandidates
+
+        return TuringStoryWalkiePlaybackCoordinator(
+            policy: policy,
+            rootURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent(
+                    "TuringRichStoryPlayback",
+                    isDirectory: true
+                )
+        )
     }
 
     func beginRun(runID: String, expectedSegmentCount: Int?) async {
@@ -127,7 +162,10 @@ final class TuringStoryWalkiePlaybackCoordinator {
           runID: \(runID)
           expectedSegmentCount: \(expectedSegmentCount.map(String.init) ?? "streaming")
           playbackOwner: TuringStoryWalkiePlaybackCoordinator
-          spatialEmitter: TuringStoryWalkieTalkie_AudioEmitter
+          voiceRoute: \(policy.voiceRoute.rawValue)
+          spatialEmitter: \(voiceEmitterLogName)
+          completionSource: \(completionSourceLogName)
+          outputVoiceID: \(policy.outputProcessingPolicy.voiceID)
           qwenScheduler: fresh2
           fillerClipCount: \(Set(fillerFiles).count)
           weightedFillerEntryCount: \(fillerFiles.count)
@@ -192,7 +230,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
             """)
             let processedAudio = await TuringQwenOutputPostProcessor.processForPlayback(
                 audio,
-                policy: .bigMike,
+                policy: policy.outputProcessingPolicy,
                 reason: "storyWalkiePlayback"
             )
             print("""
@@ -286,8 +324,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
         activeItem = .cancelled
         deadAirTask?.cancel()
         deadAirTask = nil
-        TuringStoryWalkieAudioRoute.makeActiveClipPlayer()?
-            .cancelAll(reason: reason)
+        cancelActivePlayback(reason: reason)
         cleanupAllWAVs(reason: "cancel.\(reason)")
         pendingGenerated.removeAll(keepingCapacity: false)
         pendingPrerecording = nil
@@ -358,6 +395,101 @@ final class TuringStoryWalkiePlaybackCoordinator {
         }
     }
 
+    private func playOneShot(
+        fileURL: URL,
+        kind: TuringWalkieOneShotClipPlayer.ClipKind,
+        label: String,
+        completion: @escaping @MainActor (UUID, Bool) -> Void
+    ) throws -> UUID {
+        switch policy.voiceRoute {
+        case .walkieSpatial:
+            guard let clipPlayer = TuringStoryWalkieAudioRoute
+                .makeActiveClipPlayer() else {
+                throw TuringWalkieAudioError.missingWalkieEmitter
+            }
+            return try clipPlayer.playOneShot(
+                fileURL: fileURL,
+                kind: kind,
+                label: label,
+                completion: { handleID in
+                    completion(handleID, true)
+                }
+            )
+
+        case .playerGlobal:
+            guard let globalPlayer else {
+                throw NSError(
+                    domain: "TuringPlaybackRebuild",
+                    code: 20,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Missing global playback endpoint for \(label)."
+                    ]
+                )
+            }
+            let globalKind: TuringRichGlobalClipKind
+            let gainDB: Float
+            switch kind {
+            case .generated:
+                globalKind = .generated
+                gainDB = policy.generatedGainDB
+            case .prerecording:
+                globalKind = .prerecording
+                gainDB = policy.prerecordingGainDB
+            case .filler:
+                globalKind = .filler
+                gainDB = policy.fillerGainDB
+            case .commSFX:
+                throw NSError(
+                    domain: "TuringPlaybackRebuild",
+                    code: 21,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Walkie comm SFX cannot use the global Rich voice route."
+                    ]
+                )
+            }
+            let handle = try globalPlayer.play(
+                fileURL: fileURL,
+                kind: globalKind,
+                label: label,
+                gainDB: gainDB,
+                completion: { handle, successfully in
+                    completion(handle.id, successfully)
+                }
+            )
+            return handle.id
+        }
+    }
+
+    private func cancelActivePlayback(reason: String) {
+        switch policy.voiceRoute {
+        case .walkieSpatial:
+            TuringStoryWalkieAudioRoute.makeActiveClipPlayer()?
+                .cancelAll(reason: reason)
+        case .playerGlobal:
+            globalPlayer?.cancelActive(reason: reason)
+        }
+    }
+
+    private var voiceEmitterLogName: String {
+        switch policy.voiceRoute {
+        case .walkieSpatial:
+            return "TuringStoryWalkieTalkie_AudioEmitter"
+        case .playerGlobal:
+            return "none"
+        }
+    }
+
+    private var completionSourceLogName: String {
+        switch policy.voiceRoute {
+        case .walkieSpatial:
+            return "AudioPlaybackController.completionHandler"
+        case .playerGlobal:
+            return "AVAudioPlayerDelegate.audioPlayerDidFinishPlaying"
+        }
+    }
+
     private func startPrerecording(
         _ clip: PrerecordingClip,
         reason: String
@@ -366,17 +498,6 @@ final class TuringStoryWalkiePlaybackCoordinator {
             pendingPrerecording = clip
             return
         }
-        guard let clipPlayer = TuringStoryWalkieAudioRoute.makeActiveClipPlayer() else {
-            print("""
-            [TuringPlaybackRebuild] prerecording playback blocked
-              id: \(clip.id)
-              reason: missingWalkieClipPlayer
-              requiredEmitter: TuringStoryWalkieTalkie_AudioEmitter
-            """)
-            await runCancelled(reason: "missingWalkieClipPlayer.prerecording.\(clip.id)")
-            return
-        }
-
         do {
             await notifyFirstPlaybackStarting(kind: "prerecording")
             print("""
@@ -387,13 +508,16 @@ final class TuringStoryWalkiePlaybackCoordinator {
               nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
               pendingGenerated: \(pendingGenerated.keys.sorted())
             """)
-            let handleID = try clipPlayer.playOneShot(
+            let handleID = try playOneShot(
                 fileURL: clip.fileURL,
                 kind: .prerecording,
                 label: clip.id,
-                completion: { [weak self] handleID in
+                completion: { [weak self] handleID, successfully in
                     Task { @MainActor in
-                        await self?.playbackCompleted(handleID: handleID)
+                        await self?.playbackCompleted(
+                            handleID: handleID,
+                            successfully: successfully
+                        )
                     }
                 }
             )
@@ -409,7 +533,9 @@ final class TuringStoryWalkiePlaybackCoordinator {
               handleID: \(handleID.uuidString)
               reason: \(reason)
               file: \(clip.fileURL.lastPathComponent)
-              spatialEmitter: TuringStoryWalkieTalkie_AudioEmitter
+              voiceRoute: \(policy.voiceRoute.rawValue)
+              spatialEmitter: \(voiceEmitterLogName)
+              completionSource: \(completionSourceLogName)
               completionGate: coordinatorActiveHandleMatch
             """)
         } catch {
@@ -428,18 +554,6 @@ final class TuringStoryWalkiePlaybackCoordinator {
             pendingGenerated[clip.segmentIndex] = clip
             return
         }
-        guard let clipPlayer = TuringStoryWalkieAudioRoute.makeActiveClipPlayer() else {
-            cleanupWAV(clip.fileURL, reason: "missingWalkieClipPlayer")
-            print("""
-            [TuringPlaybackRebuild] generated playback blocked
-              segmentIndex: \(clip.segmentIndex)
-              reason: missingWalkieClipPlayer
-              requiredEmitter: TuringStoryWalkieTalkie_AudioEmitter
-            """)
-            await runCancelled(reason: "missingWalkieClipPlayer.generated.\(clip.segmentIndex)")
-            return
-        }
-
         do {
             await notifyFirstPlaybackStarting(kind: "generated")
             print("""
@@ -452,13 +566,16 @@ final class TuringStoryWalkiePlaybackCoordinator {
               nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
               pendingGenerated: \(pendingGenerated.keys.sorted())
             """)
-            let handleID = try clipPlayer.playOneShot(
+            let handleID = try playOneShot(
                 fileURL: clip.fileURL,
                 kind: .generated,
                 label: String(format: "segment_%04d", clip.segmentIndex),
-                completion: { [weak self] handleID in
+                completion: { [weak self] handleID, successfully in
                     Task { @MainActor in
-                        await self?.playbackCompleted(handleID: handleID)
+                        await self?.playbackCompleted(
+                            handleID: handleID,
+                            successfully: successfully
+                        )
                     }
                 }
             )
@@ -475,7 +592,9 @@ final class TuringStoryWalkiePlaybackCoordinator {
               handleID: \(handleID.uuidString)
               reason: \(reason)
               file: \(clip.fileURL.lastPathComponent)
-              spatialEmitter: TuringStoryWalkieTalkie_AudioEmitter
+              voiceRoute: \(policy.voiceRoute.rawValue)
+              spatialEmitter: \(voiceEmitterLogName)
+              completionSource: \(completionSourceLogName)
               completionGate: coordinatorActiveHandleMatch
             """)
         } catch {
@@ -498,16 +617,6 @@ final class TuringStoryWalkiePlaybackCoordinator {
             }
             return
         }
-        guard let clipPlayer = TuringStoryWalkieAudioRoute.makeActiveClipPlayer() else {
-            print("""
-            [TuringPlaybackRebuild] filler blocked
-              reason: missingWalkieClipPlayer
-              requiredEmitter: TuringStoryWalkieTalkie_AudioEmitter
-            """)
-            await runCancelled(reason: "missingWalkieClipPlayer.filler")
-            return
-        }
-
         do {
             await notifyFirstPlaybackStarting(kind: "filler")
             print("""
@@ -517,13 +626,16 @@ final class TuringStoryWalkiePlaybackCoordinator {
               nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
               pendingNextReady: \(pendingGenerated[nextPlaybackSegmentIndex] != nil)
             """)
-            let handleID = try clipPlayer.playOneShot(
+            let handleID = try playOneShot(
                 fileURL: fillerURL,
                 kind: .filler,
                 label: fillerURL.deletingPathExtension().lastPathComponent,
-                completion: { [weak self] handleID in
+                completion: { [weak self] handleID, successfully in
                     Task { @MainActor in
-                        await self?.playbackCompleted(handleID: handleID)
+                        await self?.playbackCompleted(
+                            handleID: handleID,
+                            successfully: successfully
+                        )
                     }
                 }
             )
@@ -538,7 +650,9 @@ final class TuringStoryWalkiePlaybackCoordinator {
               reason: \(reason)
               clip: \(fillerURL.lastPathComponent)
               handleID: \(handleID.uuidString)
-              spatialEmitter: TuringStoryWalkieTalkie_AudioEmitter
+              voiceRoute: \(policy.voiceRoute.rawValue)
+              spatialEmitter: \(voiceEmitterLogName)
+              completionSource: \(completionSourceLogName)
             """)
         } catch {
             print("""
@@ -594,14 +708,32 @@ final class TuringStoryWalkiePlaybackCoordinator {
         )
     }
 
-    private func playbackCompleted(handleID: UUID) async {
+    private func playbackCompleted(
+        handleID: UUID,
+        successfully: Bool
+    ) async {
         print("""
         [TuringPlaybackTrace] coordinator completion received
           handleID: \(handleID.uuidString)
+          successfully: \(successfully)
           activeItemBeforeMatch: \(activeItemLog)
           nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
           pendingGenerated: \(pendingGenerated.keys.sorted())
         """)
+
+        guard successfully else {
+            print("""
+            [TuringPlaybackRebuild] playback completion rejected
+              handleID: \(handleID.uuidString)
+              activeItem: \(activeItemLog)
+              reason: playbackBackendReportedFailure
+            """)
+            await runCancelled(
+                reason: "playbackBackendFailure.\(handleID.uuidString)"
+            )
+            return
+        }
+
         switch activeItem {
         case .prerecording(
             let id,
@@ -619,7 +751,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
               handleID: \(handleID.uuidString)
               file: \(fileURL.lastPathComponent)
               elapsedSeconds: \(String(format: "%.3f", Date().timeIntervalSince(startedAt)))
-              completionSource: actualPlaybackCompletion
+              completionSource: \(completionSourceLogName)
               initialPrerollSatisfied: true
             """)
             await reconcile(reason: "prerecordingCompleted")
@@ -646,7 +778,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
             [TuringPlaybackRebuild] generated playback completed
               segmentIndex: \(segmentIndex)
               handleID: \(handleID.uuidString)
-              completionSource: actualPlaybackCompletion
+              completionSource: \(completionSourceLogName)
               nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
             """)
             cleanupWAV(fileURL, reason: "generatedPlaybackCompleted")

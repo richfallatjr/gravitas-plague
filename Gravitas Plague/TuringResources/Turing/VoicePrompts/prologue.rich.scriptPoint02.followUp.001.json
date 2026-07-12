@@ -4,7 +4,7 @@
   "speakerID": "rich",
   "voiceID": "rich_base_clone_v1",
   "characterProfileID": "rich",
-  "outputContext": "walkieOutgoingHeadset",
+  "outputContext": "walkieOutgoingGlobal",
   "conversationKey": "dialogue.big_mike.rich",
   "intent": "Continue Rich's same outgoing transmission after the authored PR. Say that the receive side appears alive but the transmitter is still uncertain. Ask Big Mike what he personally saw and what stimulus the woman reacted to: sound, light, movement, or voice. Use no more than one brief dry observation. Do not repeat the whole PR, narrate Rich's actions, or write Big Mike's lines.",
   "emotion": "relieved to hear Mike, tired, skeptical, quick, controlled, increasingly alert",

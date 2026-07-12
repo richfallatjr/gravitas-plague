@@ -34,8 +34,12 @@ enum TuringVoiceOutputContext: String, Codable, Sendable, Hashable {
   // to another route.
   case roomGlobal
 
-  // Rich speaking through the walkie. Voice is head-tracked at the player;
+  // Rich speaking through the walkie. Voice remains global at the player;
   // the open/send comm SFX remain spatial at the authored walkie prop.
+  case walkieOutgoingGlobal
+
+  // Retained for decoding older authored descriptors. It is not used by
+  // the active ScriptPoint02 route.
   case walkieOutgoingHeadset
 
   // Remote Big Mike speech at the authored walkie emitter.

@@ -40,5 +40,43 @@ struct TuringQwenNativeRichCloneProfileTests {
                 atPath: variant.speakerEmbeddingURL.path
             )
         )
+
+        let artifacts = try TuringQwenNativeCloneArtifactsLoader().load(
+            from: variant,
+            expectedVoiceID: profile.voiceID
+        )
+        #expect(artifacts.voiceID == profile.voiceID)
+        #expect(artifacts.variantID == variant.variantID)
+        #expect(artifacts.referenceRowCount > 0)
+        #expect(artifacts.codebookCount == 16)
+    }
+
+    @Test
+    func genericArtifactIdentityValidationStillLoadsBigMike() throws {
+        let testDirectory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+        let projectDirectory = testDirectory
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let resourceRoot = projectDirectory.appendingPathComponent(
+            "TuringResources",
+            isDirectory: true
+        )
+
+        let profile = try TuringQwenNativeCloneProfileLoader()
+            .loadBigMikeBaseCloneProfile(from: resourceRoot)
+        let variant = try profile.requireVariant(profile.defaultVariantID)
+        let artifacts = try TuringQwenNativeCloneArtifactsLoader().load(
+            from: variant,
+            expectedVoiceID: profile.voiceID
+        )
+
+        #expect(artifacts.voiceID == profile.voiceID)
+        #expect(artifacts.variantID == profile.defaultVariantID)
+        #expect(artifacts.referenceRowCount > 0)
+        #expect(artifacts.codebookCount == 16)
     }
 }

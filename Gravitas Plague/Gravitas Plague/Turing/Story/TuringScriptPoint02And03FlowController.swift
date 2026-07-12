@@ -27,7 +27,7 @@ actor TuringScriptPoint02And03FlowController {
     let scriptPoint02ID = "prologue.scriptPoint02"
     let scriptPoint03ID = "prologue.scriptPoint03"
 
-    var richPlayback: TuringRichGlobalPlaybackCoordinator?
+    var richPlayback: TuringStoryWalkiePlaybackCoordinator?
     var scriptPoint03Playback: TuringStoryWalkiePlaybackCoordinator?
     var scriptPoint03CompletionTask: Task<Void, Never>?
     var deferredBigMikeBridge: TuringDeferredBigMikePlaybackBridge?
@@ -80,19 +80,22 @@ actor TuringScriptPoint02And03FlowController {
         for: TuringDialogueThreadIdentity.bigMikeRich
       )
 
+      try await TuringWalkieCommsFXController.shared
+        .playScriptedOpenComm(
+          reason: "scriptPoint02RichTransmissionStarted"
+        )
+
       let createdRichPlayback = await MainActor.run {
-        TuringRichGlobalPlaybackCoordinator()
+        TuringStoryWalkiePlaybackCoordinator
+          .makeRichGlobalCoordinator()
       }
       richPlayback = createdRichPlayback
 
-      try await createdRichPlayback.beginRun(
+      await createdRichPlayback.beginRun(
         runID: point02.scriptPointID,
-        outputContext: .walkieOutgoingHeadset,
-        expectedSegmentCount: nil,
-        playbackInitiallyBlocked: false,
-        expectsPrerecording: true
+        expectedSegmentCount: nil
       )
-      try await createdRichPlayback.enqueuePrerecording(
+      await createdRichPlayback.enqueuePrerecording(
         id: richPrerecording.prerecordingID,
         fileURL: richPrerecordingURL
       )
@@ -103,8 +106,10 @@ actor TuringScriptPoint02And03FlowController {
           scriptPointID: \(point02.scriptPointID)
           prerecordingID: \(richPrerecording.prerecordingID)
           prerecordingSpeaker: rich
-          prerecordingRoute: headTrackedSpatial
-          prerecordingEmitter: TuringRichHeadset_AudioEmitter
+          prerecordingRoute: global
+          prerecordingEmitter: none
+          prerecordingCompletionSource: AVAudioPlayerDelegate
+          playbackOwner: TuringStoryWalkiePlaybackCoordinator
           commSFXRoute: spatialWalkie
           commSFXEmitter: TuringStoryWalkieTalkie_AudioEmitter
           responseVoicePromptID: \(richTrigger.voicePromptID)
@@ -133,7 +138,23 @@ actor TuringScriptPoint02And03FlowController {
       }
       richPlanTask = createdRichPlanTask
 
-      let richPlan = try await createdRichPlanTask.value
+      let richPlan: TuringVoicePromptPlan
+      do {
+        richPlan = try await createdRichPlanTask.value
+      } catch {
+        await createdRichPlayback.setExpectedGeneratedSegmentCount(0)
+        await createdRichPlayback.qwenComputeAllFinished()
+        await createdRichPlayback.waitUntilPlaybackFinished()
+        print(
+          """
+          [TuringScriptPoint02] Foundation failed after PR started
+            prerecordingAllowedToFinish: true
+            prerecordingCompletionWaited: true
+            generatedContinuationStarted: false
+            error: \(error.localizedDescription)
+          """)
+        throw error
+      }
       await seedStore.updateSeed(
         richPlan.conversationSeed,
         for: TuringDialogueThreadIdentity.bigMikeRich
@@ -212,11 +233,27 @@ actor TuringScriptPoint02And03FlowController {
 
       // Rich owns the only resident Fresh2 character pool until all Rich
       // segments have been generated and the pool has unloaded. Rich's
-      // already-authored/head-tracked playback may continue after this task.
-      try await createdRichRendererTask.value
+      // already-authored/global playback may continue after this task.
+      let richGenerationFailure: Error?
+      do {
+        try await createdRichRendererTask.value
+        richGenerationFailure = nil
+      } catch {
+        richGenerationFailure = error
+      }
 
       await createdRichPlayback.waitUntilPlaybackFinished()
-      try await createdRichPlayback.throwIfFailed()
+      if let richGenerationFailure {
+        print(
+          """
+          [TuringScriptPoint02] Rich generation failed
+            prerecordingAllowedToFinish: true
+            prerecordingCompletionWaited: true
+            generatedContinuationCompleted: false
+            error: \(richGenerationFailure.localizedDescription)
+          """)
+        throw richGenerationFailure
+      }
       let richPlaybackCount = await createdRichPlayback
         .completedGeneratedSegmentCount()
       guard richPlaybackCount == richPlan.segments.count else {
@@ -225,6 +262,11 @@ actor TuringScriptPoint02And03FlowController {
             + "Expected \(richPlan.segments.count), played \(richPlaybackCount)."
         )
       }
+
+      try await TuringWalkieCommsFXController.shared
+        .playScriptedSendComm(
+          reason: "scriptPoint02RichTransmissionCompleted"
+        )
 
       print(
         """
@@ -408,7 +450,7 @@ actor TuringScriptPoint02And03FlowController {
       bigMikeRendererTask?.cancel()
 
       if let richPlayback {
-        await richPlayback.cancelRun(
+        await richPlayback.runCancelled(
           reason: "scriptPoint02And03Failed"
         )
       }
@@ -450,17 +492,17 @@ actor TuringScriptPoint02And03FlowController {
     richTrigger: TuringVoicePromptTriggerDescriptor,
     bigMikeTrigger: TuringVoicePromptTriggerDescriptor
   ) throws {
-    guard point02.prerecordingOutputContext == .walkieOutgoingHeadset,
+    guard point02.prerecordingOutputContext == .walkieOutgoingGlobal,
       point02.responseSpeakerID == TuringRichVoiceIdentity.speakerID,
       richPrerecording.speaker == TuringRichVoiceIdentity.speakerID,
       richPrerecording.voiceID == TuringRichVoiceIdentity.voiceID,
       richTrigger.speakerID == TuringRichVoiceIdentity.speakerID,
       richTrigger.voiceID == TuringRichVoiceIdentity.voiceID,
       richTrigger.characterProfileID == TuringRichVoiceIdentity.characterID,
-      richTrigger.outputContext == .walkieOutgoingHeadset
+      richTrigger.outputContext == .walkieOutgoingGlobal
     else {
       throw TuringRuntimeError.invalidConfig(
-        "ScriptPoint02 must use Rich head-tracked voice plus spatial walkie comm SFX."
+        "ScriptPoint02 must use Rich global voice plus spatial walkie comm SFX."
       )
     }
 
