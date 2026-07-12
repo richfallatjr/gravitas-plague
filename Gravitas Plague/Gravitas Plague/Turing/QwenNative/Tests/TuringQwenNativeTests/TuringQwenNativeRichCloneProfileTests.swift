@@ -47,7 +47,7 @@ struct TuringQwenNativeRichCloneProfileTests {
         )
         #expect(artifacts.voiceID == profile.voiceID)
         #expect(artifacts.variantID == variant.variantID)
-        #expect(artifacts.referenceRowCount > 0)
+        #expect(artifacts.referenceRowCount == 178)
         #expect(artifacts.codebookCount == 16)
     }
 

@@ -6,12 +6,12 @@
   "kind": "baseCloneReferenceVariant",
   "language": "english",
   "qwenArtifacts": {
-    "manifestSHA256": "aa58320b3bb0fbde06dc14051a0fc7c38902d2d98c5f199385853b7b16b16907",
+    "manifestSHA256": "50a7da5ffec28d16eb7e43c107ff97b6273ab790dca5ed14197ea03f2ba75f48",
     "mode": "icl",
     "path": "qwen_artifacts/clone_prompt_manifest.json",
     "referenceCodesPath": "qwen_artifacts/reference_codes.i32le",
     "referenceTextTokensPath": "qwen_artifacts/ref_text_tokens.i32le",
-    "safetensorsSHA256": "b66a2236d2b94df1b20ab3c3cbab8c10e6f98eebbcef1d6b8cb9e230dffc268b",
+    "safetensorsSHA256": "b1aa4601740f868b22dbdaaf0075ebc0c189b3015b1eb72a3c4863b946ad5f4b",
     "speakerEmbeddingPath": "qwen_artifacts/speaker_embedding.f32le",
     "status": "precomputed"
   },

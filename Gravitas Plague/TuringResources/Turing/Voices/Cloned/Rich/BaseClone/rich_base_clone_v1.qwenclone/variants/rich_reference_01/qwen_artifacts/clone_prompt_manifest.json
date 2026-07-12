@@ -10,7 +10,7 @@
     "referenceCodes": "reference_codes.i32le",
     "referenceCodesDType": "int32",
     "referenceCodesShape": [
-      222,
+      178,
       16
     ],
     "safetensors": "clone_artifacts.safetensors",
@@ -36,7 +36,7 @@
   "pythonVersion": "3.13.5 (main, Jun 11 2025, 15:36:57) [Clang 17.0.0 (clang-1700.0.13.3)]",
   "reference": {
     "audioPath": "../ref_audio/normalized/ref_24000_mono.wav",
-    "audioSHA256": "0bf5dcf9dc8a24a8bf5dd5ce869f8b9b416ddebc423429e3a7c7127390a71a07",
+    "audioSHA256": "0502083802e2667237dbaa2f447c59f1dabc854492aeb1b9d0f853c7fe4c71e1",
     "textPath": "../ref_text.txt",
     "textSHA256": "9db57040fcb7f5993da693cb5c6c52913ebb3843d1ad261a44e491b8d800726e",
     "textUTF8Bytes": 275

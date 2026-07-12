@@ -37,7 +37,7 @@
       "voiceID": "rich_base_clone_v1",
       "characterID": "rich",
       "resourcePath": "Turing/Voices/Cloned/Rich/BaseClone/rich_base_clone_v1.qwenclone",
-      "revision": "sha256:1f21ee9efbdec10880d0d63836d629e9c8fb5998883314bd31ba0f5b08a8dd99",
+      "revision": "sha256:bff36aac5647fcc4c32b64b6fee2473d621f28246b340716c50f4d5997aa765a",
       "defaultVariantID": "rich_reference_01",
       "selectionCatalogPath": "selection-catalog.json"
     }

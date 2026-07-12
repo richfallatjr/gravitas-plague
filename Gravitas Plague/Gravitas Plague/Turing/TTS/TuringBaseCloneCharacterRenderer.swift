@@ -103,18 +103,21 @@ actor TuringBaseCloneCharacterRenderer {
           instancePool: freshPool
         )
 
-      // Rich's authored clone contains 222 aligned reference rows. Applying
-      // Big Mike's 160-row optimization changes that conditioning window.
-      let referenceRowLimit: Int?
-      let referenceWindowStrategy: TuringQwenNativeReferenceWindowStrategy
-      switch character {
-      case .rich:
-        referenceRowLimit = nil
-        referenceWindowStrategy = .full
-      case .bigMike:
-        referenceRowLimit = 160
-        referenceWindowStrategy = .suffix
-      }
+      let selectedVariant = try profile.requireVariant(
+        profile.defaultVariantID
+      )
+      let selectedArtifacts =
+        try TuringQwenNativeCloneArtifactsLoader().load(
+          from: selectedVariant,
+          expectedVoiceID: profile.voiceID
+        )
+
+      // Use the exact authored row count for every clone. This is 159 for
+      // Big Mike and 178 for the current Rich reference.
+      let referenceRowLimit: Int? =
+        selectedArtifacts.referenceRowCount
+      let referenceWindowStrategy:
+        TuringQwenNativeReferenceWindowStrategy = .full
 
       let requests = segments.enumerated().map {
         index,

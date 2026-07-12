@@ -6,6 +6,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
     enum VoiceRoute: String, Sendable {
         case walkieSpatial
         case playerGlobal
+        case playerHeadTracked
     }
 
     struct Policy: Sendable {
@@ -94,9 +95,16 @@ final class TuringStoryWalkiePlaybackCoordinator {
     ) {
         self.policy = policy
         self.rootURL = rootURL
-        self.globalPlayer = policy.voiceRoute == .playerGlobal
-            ? (globalPlayer ?? TuringRichGlobalOneShotClipPlayer())
-            : nil
+        switch policy.voiceRoute {
+        case .walkieSpatial:
+            self.globalPlayer = nil
+        case .playerGlobal:
+            self.globalPlayer = globalPlayer
+                ?? TuringRichGlobalOneShotClipPlayer()
+        case .playerHeadTracked:
+            self.globalPlayer = globalPlayer
+                ?? TuringRichRoutedOneShotClipPlayer()
+        }
         self.fillerFiles = Self.discoverFillerFiles(
             candidates: policy.fillerDirectoryCandidates,
             allowedExtensions: policy.fillerExtensions
@@ -109,7 +117,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
 
     static func makeRichGlobalCoordinator() -> TuringStoryWalkiePlaybackCoordinator {
         var policy = Policy()
-        policy.voiceRoute = .playerGlobal
+        policy.voiceRoute = .playerHeadTracked
         policy.outputProcessingPolicy = .rich
         policy.generatedGainDB = 0
         policy.prerecordingGainDB = 0
@@ -416,7 +424,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
                 }
             )
 
-        case .playerGlobal:
+        case .playerGlobal, .playerHeadTracked:
             guard let globalPlayer else {
                 throw NSError(
                     domain: "TuringPlaybackRebuild",
@@ -467,7 +475,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
         case .walkieSpatial:
             TuringStoryWalkieAudioRoute.makeActiveClipPlayer()?
                 .cancelAll(reason: reason)
-        case .playerGlobal:
+        case .playerGlobal, .playerHeadTracked:
             globalPlayer?.cancelActive(reason: reason)
         }
     }
@@ -478,6 +486,8 @@ final class TuringStoryWalkiePlaybackCoordinator {
             return "TuringStoryWalkieTalkie_AudioEmitter"
         case .playerGlobal:
             return "none"
+        case .playerHeadTracked:
+            return "TuringRichHeadset_AudioEmitter"
         }
     }
 
@@ -487,6 +497,8 @@ final class TuringStoryWalkiePlaybackCoordinator {
             return "AudioPlaybackController.completionHandler"
         case .playerGlobal:
             return "AVAudioPlayerDelegate.audioPlayerDidFinishPlaying"
+        case .playerHeadTracked:
+            return "AudioPlaybackController.completionHandler"
         }
     }
 

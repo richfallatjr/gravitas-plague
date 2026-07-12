@@ -106,9 +106,9 @@ actor TuringScriptPoint02And03FlowController {
           scriptPointID: \(point02.scriptPointID)
           prerecordingID: \(richPrerecording.prerecordingID)
           prerecordingSpeaker: rich
-          prerecordingRoute: global
-          prerecordingEmitter: none
-          prerecordingCompletionSource: AVAudioPlayerDelegate
+          prerecordingRoute: headTrackedSpatial
+          prerecordingEmitter: TuringRichHeadset_AudioEmitter
+          prerecordingCompletionSource: AudioPlaybackController.completionHandler
           playbackOwner: TuringStoryWalkiePlaybackCoordinator
           commSFXRoute: spatialWalkie
           commSFXEmitter: TuringStoryWalkieTalkie_AudioEmitter
@@ -233,7 +233,7 @@ actor TuringScriptPoint02And03FlowController {
 
       // Rich owns the only resident Fresh2 character pool until all Rich
       // segments have been generated and the pool has unloaded. Rich's
-      // already-authored/global playback may continue after this task.
+      // already-authored/head-tracked playback may continue after this task.
       let richGenerationFailure: Error?
       do {
         try await createdRichRendererTask.value
@@ -502,7 +502,7 @@ actor TuringScriptPoint02And03FlowController {
       richTrigger.outputContext == .walkieOutgoingGlobal
     else {
       throw TuringRuntimeError.invalidConfig(
-        "ScriptPoint02 must use Rich global voice plus spatial walkie comm SFX."
+        "ScriptPoint02 must use Rich player-head voice plus spatial walkie comm SFX."
       )
     }
 
