@@ -327,6 +327,12 @@ final class TuringBigMikeWalkieFlowRoute:
         descriptor: TuringFlowDescriptor,
         identity: TuringFlowIdentity
     ) async throws {
+        await TuringWalkieCommsFXController.shared
+            .startAmbientWalkieStatic(
+                reason:
+                    "flow.\(identity.flowInstanceID.uuidString).bigMike"
+            )
+
         guard descriptor.transmission.commSFX
             .openBeforePrerecording else {
             return
