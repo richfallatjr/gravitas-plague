@@ -119,4 +119,51 @@ final class TuringFlowInteractionGateControllerTests:
 
         XCTAssertEqual(controller.state, .play)
     }
+
+    func testProgressionFailureRestoresMicrophone()
+        async {
+        let controller =
+            TuringFlowInteractionGateController.shared
+        await controller.reset(reason: "test")
+
+        let identity =
+            TuringFlowIdentity(
+                scriptPointID:
+                    "prologue.scriptPoint03",
+                characterID: "big_mike",
+                prerecordingID:
+                    "prologue.scriptPoint03.pr",
+                voicePromptID:
+                    "prologue.scriptPoint03.prompt"
+            )
+
+        controller.beginFlow(identity: identity)
+        controller.failFlow(
+            identity: identity,
+            reason: "partialGeneratedFailure"
+        )
+        XCTAssertEqual(controller.state, .closed)
+
+        controller.restoreMicrophoneAfterProgressionFailure(
+            conversationRunID: UUID(),
+            reason: "scriptPoint03 failed"
+        )
+
+        XCTAssertEqual(controller.state, .microphone)
+        XCTAssertTrue(controller.microphoneEnabled)
+    }
+
+    func testTerminalMicrophoneInvariantRepairsClosedGate()
+        async {
+        let controller =
+            TuringFlowInteractionGateController.shared
+        await controller.reset(reason: "test")
+
+        controller.ensureMicrophoneAvailable(
+            reason: "terminalPointCompleted.test"
+        )
+
+        XCTAssertEqual(controller.state, .microphone)
+        XCTAssertTrue(controller.microphoneEnabled)
+    }
 }

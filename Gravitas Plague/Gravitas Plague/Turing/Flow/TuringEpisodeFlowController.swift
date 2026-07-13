@@ -151,6 +151,16 @@ actor TuringEpisodeFlowController {
             guard let nextScriptPointID =
                     progression.nextScriptPointID else {
                 pendingConversationAdvance = nil
+                if progression
+                    .interactionGateAfterCompletion ==
+                    .microphone {
+                    await TuringFlowInteractionGateController
+                        .shared
+                        .ensureMicrophoneAvailable(
+                            reason:
+                                "terminalPointCompleted.\(descriptor.scriptPointID)"
+                        )
+                }
                 return result.voiceRunResult
             }
 

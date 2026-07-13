@@ -284,6 +284,16 @@ enum TuringFlowConversationRunner {
                             request
                                 .conversationKey
                     ) {
+                if progression.succeeded == false {
+                    await TuringFlowInteractionGateController
+                        .shared
+                        .restoreMicrophoneAfterProgressionFailure(
+                            conversationRunID:
+                                conversationRunID,
+                            reason:
+                                progression.pickerStatus
+                        )
+                }
                 return progression
             }
 

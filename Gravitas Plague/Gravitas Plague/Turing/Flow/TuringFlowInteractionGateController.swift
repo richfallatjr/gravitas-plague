@@ -135,10 +135,45 @@ final class TuringFlowInteractionGateController:
         conversationRunID: UUID
     ) {
         state = .microphone
+        ownerFlowInstanceID = nil
         publish(
             reason:
                 "conversationCompleted.\(conversationRunID.uuidString)"
         )
+    }
+
+    func restoreMicrophoneAfterProgressionFailure(
+        conversationRunID: UUID,
+        reason: String
+    ) {
+        state = .microphone
+        ownerFlowInstanceID = nil
+        publish(
+            reason:
+                "progressionFailed.\(conversationRunID.uuidString).\(reason)"
+        )
+
+        print("""
+        [TuringFlowGate] microphone recovered after progression failure
+          conversationRunID: \(conversationRunID.uuidString)
+          state: \(state.rawValue)
+          reason: \(reason)
+        """)
+    }
+
+    func ensureMicrophoneAvailable(reason: String) {
+        let previousState = state
+        state = .microphone
+        ownerFlowInstanceID = nil
+        publish(reason: reason)
+
+        print("""
+        [TuringFlowGate] terminal microphone verified
+          previousState: \(previousState.rawValue)
+          state: \(state.rawValue)
+          repaired: \(previousState != .microphone)
+          reason: \(reason)
+        """)
     }
 
     func closeForScheduledProgression(
