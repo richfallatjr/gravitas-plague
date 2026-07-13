@@ -73,6 +73,15 @@ struct TuringFlowDescriptor: Codable, Sendable, Hashable {
     }
 }
 
+extension TuringFlowDescriptor.Progression {
+    var effectiveInteractionGateAfterCompletion:
+        InteractionGate {
+        automaticAdvance && nextScriptPointID != nil
+            ? .closed
+            : interactionGateAfterCompletion
+    }
+}
+
 enum TuringFlowTriggerSource: Sendable, Hashable {
     case userPlay
     case priorConversationPlaybackCompleted(parentScriptPointID: String)

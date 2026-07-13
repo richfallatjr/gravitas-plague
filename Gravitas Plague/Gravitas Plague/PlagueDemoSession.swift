@@ -23,7 +23,7 @@ enum PlagueFeatureFlags {
     static let unlockHordeMode = true
     static let showStoryEpisodePicker = true
     static let defaultStoryEpisodeID = TuringEpisodeID.prologue
-    static let phase0PrologueRunsInSwiftUIPickerOnly = true
+    static let phase0PrologueRunsInSwiftUIPickerOnly = false
     static let showStoryRoomSkinningControls = false
     static let showQwenHelloWorldInEpisodePicker = true
     static let showForestDayNightToggle = false
@@ -297,14 +297,24 @@ final class PlagueDemoSession: ObservableObject {
         case .story:
             experienceMode = .story
             activeMode = .none
-            statusMessage = "Select a Story episode."
+            statusMessage = "Starting the Prologue."
             isStoryEpisodePickerPresented = false
-            send(.requestStoryWalkieBundlePlacement)
+            let episodeID =
+                PlagueFeatureFlags.defaultStoryEpisodeID
 
-            if !PlagueFeatureFlags.showStoryEpisodePicker {
-                startStoryEpisode(
-                    PlagueFeatureFlags.defaultStoryEpisodeID
-                )
+            Task { @MainActor [weak self] in
+                await TuringEpisodeFlowController.shared
+                    .resetEpisode(
+                        reason:
+                            "storyModeSelected.\(episodeID.rawValue)"
+                    )
+
+                guard let self,
+                      self.selectedOperationMode == .story else {
+                    return
+                }
+
+                self.startStoryEpisode(episodeID)
             }
 
         case .horde:

@@ -3,29 +3,21 @@ import RealityKit
 import UIKit
 import simd
 
-struct TuringStoryWalkieMicBillboardComponent: Component {
-}
-
-extension Notification.Name {
-    static let turingStoryWalkieMicHoldBegan =
-        Notification.Name("turingStoryWalkieMicHoldBegan")
-
-    static let turingStoryWalkieMicHoldEnded =
-        Notification.Name("turingStoryWalkieMicHoldEnded")
-}
-
 @MainActor
 final class TuringStoryPropBillboardIconController {
-    private var micIconEntity: ModelEntity?
+    typealias Presentation = TuringStoryWalkiePresentation
 
-    func installWalkieMicIcon(
-        anchor: Entity,
-        target: TuringScriptTriggerTarget,
-        onHoldBegan: @escaping @MainActor () -> Void,
-        onHoldEnded: @escaping @MainActor () -> Void
+    private var iconEntity: ModelEntity?
+    private var physicalHitTarget: Entity?
+    private var cachedIconMaterials:
+        [String: UnlitMaterial] = [:]
+
+    func install(
+        iconAnchor: Entity,
+        walkieRoot: Entity
     ) {
-        removeWalkieMicIcon()
-        TuringStoryWalkieMicBillboardComponent.registerComponent()
+        remove()
+        TuringStoryWalkieActionComponents.registerIfNeeded()
 
         let visualSize = WallStickerStyle.stickerSizeMeters * 0.5
         let icon = ModelEntity(
@@ -33,15 +25,14 @@ final class TuringStoryPropBillboardIconController {
                 width: visualSize,
                 height: visualSize
             ),
-            materials: [makeMicrophoneMaterial()]
+            materials: [iconMaterial(symbolName: "play.circle")]
         )
-        icon.name = "TuringStoryWalkieTalkie_MicHitTarget"
+        icon.name = "TuringStoryWalkieTalkie_ActionIcon"
         icon.position = .zero
         icon.orientation = simd_quatf(
             angle: Float.pi / 2.0,
             axis: SIMD3<Float>(1, 0, 0)
         )
-        icon.components.set(TuringStoryWalkieMicBillboardComponent())
         icon.components.set(InputTargetComponent())
         icon.components.set(
             CollisionComponent(
@@ -56,29 +47,143 @@ final class TuringStoryPropBillboardIconController {
                 ]
             )
         )
-        anchor.addChild(icon)
-        micIconEntity = icon
+        let hitTarget = makePhysicalHitTarget(
+            walkieRoot: walkieRoot
+        )
+        iconAnchor.addChild(icon)
+        walkieRoot.addChild(hitTarget)
+
+        iconEntity = icon
+        physicalHitTarget = hitTarget
+        apply(.hidden)
 
         print("""
-        [TuringWalkieBundle] mic billboard installed
-          anchor: \(anchor.name)
-          target: \(target.rawValue)
-          icon: mic.circle
-          style: doorSticker
+        [TuringWalkieState] action targets installed
+          iconAnchor: \(iconAnchor.name)
+          walkieRoot: \(walkieRoot.name)
+          physicalTarget: \(hitTarget.name)
           visualSizeMeters: \(visualSize)
           hitTargetSizeMeters: \(WallStickerStyle.stickerSizeMeters)
-          axisCorrection: x_plus_90_to_wall_normal
         """)
     }
 
-    func removeWalkieMicIcon() {
-        micIconEntity?.removeFromParent()
-        micIconEntity = nil
+    func apply(_ presentation: Presentation) {
+        guard let iconEntity,
+              let physicalHitTarget else {
+            return
+        }
+
+        removeActionComponents(from: iconEntity)
+        removeActionComponents(from: physicalHitTarget)
+
+        switch presentation {
+        case .hidden:
+            iconEntity.isEnabled = false
+            physicalHitTarget.isEnabled = false
+
+        case .play:
+            updateIconMaterial(
+                symbolName: "play.circle",
+                on: iconEntity
+            )
+            iconEntity.components.set(
+                TuringStoryWalkiePlayComponent()
+            )
+            physicalHitTarget.components.set(
+                TuringStoryWalkiePlayComponent()
+            )
+            iconEntity.isEnabled = true
+            physicalHitTarget.isEnabled = true
+
+        case .microphone:
+            updateIconMaterial(
+                symbolName: "mic.circle",
+                on: iconEntity
+            )
+            iconEntity.components.set(
+                TuringStoryWalkieMicrophoneComponent()
+            )
+            physicalHitTarget.components.set(
+                TuringStoryWalkieMicrophoneComponent()
+            )
+            iconEntity.isEnabled = true
+            physicalHitTarget.isEnabled = true
+        }
     }
 
-    private func makeMicrophoneMaterial() -> UnlitMaterial {
+    func remove() {
+        if let iconEntity {
+            removeActionComponents(from: iconEntity)
+        }
+        if let physicalHitTarget {
+            removeActionComponents(from: physicalHitTarget)
+        }
+        iconEntity?.removeFromParent()
+        physicalHitTarget?.removeFromParent()
+        iconEntity = nil
+        physicalHitTarget = nil
+    }
+
+    private func makePhysicalHitTarget(
+        walkieRoot: Entity
+    ) -> Entity {
+        let bounds = walkieRoot.visualBounds(
+            recursive: true,
+            relativeTo: walkieRoot,
+            excludeInactive: false
+        )
+        let minimumSize = SIMD3<Float>(0.08, 0.12, 0.05)
+        let size = SIMD3<Float>(
+            max(bounds.extents.x, minimumSize.x),
+            max(bounds.extents.y, minimumSize.y),
+            max(bounds.extents.z, minimumSize.z)
+        )
+
+        let target = Entity()
+        target.name = "TuringStoryWalkieTalkie_PhysicalHitTarget"
+        target.position = bounds.center
+        target.components.set(InputTargetComponent())
+        target.components.set(
+            CollisionComponent(
+                shapes: [.generateBox(size: size)]
+            )
+        )
+        return target
+    }
+
+    private func removeActionComponents(from entity: Entity) {
+        entity.components.remove(
+            TuringStoryWalkiePlayComponent.self
+        )
+        entity.components.remove(
+            TuringStoryWalkieMicrophoneComponent.self
+        )
+    }
+
+    private func updateIconMaterial(
+        symbolName: String,
+        on icon: ModelEntity
+    ) {
+        guard var model = icon.components[ModelComponent.self] else {
+            return
+        }
+        model.materials = [
+            iconMaterial(symbolName: symbolName)
+        ]
+        icon.components.set(model)
+    }
+
+    private func iconMaterial(
+        symbolName: String
+    ) -> UnlitMaterial {
+        if let cached = cachedIconMaterials[symbolName] {
+            return cached
+        }
+
         var material = UnlitMaterial()
-        if let texture = try? makeMicrophoneTexture() {
+        if let texture = try? makeSymbolTexture(
+            symbolName: symbolName
+        ) {
             material.color = .init(
                 tint: WallStickerStyle.twoStopsDownTint,
                 texture: .init(texture)
@@ -92,20 +197,23 @@ final class TuringStoryPropBillboardIconController {
             opacity: .init(floatLiteral: 0.92)
         )
         material.faceCulling = .none
+        cachedIconMaterials[symbolName] = material
         return material
     }
 
-    private func makeMicrophoneTexture() throws -> TextureResource {
+    private func makeSymbolTexture(
+        symbolName: String
+    ) throws -> TextureResource {
         let configuration = UIImage.SymbolConfiguration(
             pointSize: 190,
             weight: .semibold
         )
         guard let symbol = UIImage(
-            systemName: "mic.circle",
+            systemName: symbolName,
             withConfiguration: configuration
         ) else {
             throw TuringRuntimeError.invalidConfig(
-                "Unable to render the mic.circle Story walkie icon."
+                "Unable to render the \(symbolName) Story walkie icon."
             )
         }
 
@@ -140,13 +248,13 @@ final class TuringStoryPropBillboardIconController {
 
         guard let cgImage = image.cgImage else {
             throw TuringRuntimeError.invalidConfig(
-                "Unable to create the Story walkie microphone texture."
+                "Unable to create the Story walkie \(symbolName) texture."
             )
         }
 
         return try TextureResource(
             image: cgImage,
-            withName: "turing_story_walkie_mic_circle_sticker",
+            withName: "turing_story_walkie_\(symbolName)_sticker",
             options: .init(semantic: .color)
         )
     }

@@ -23,6 +23,6 @@
   "progression": {
     "nextScriptPointID": "prologue.scriptPoint03",
     "automaticAdvance": true,
-    "interactionGateAfterCompletion": "closed"
+    "interactionGateAfterCompletion": "microphone"
   }
 }

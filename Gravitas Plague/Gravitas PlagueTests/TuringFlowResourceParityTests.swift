@@ -85,6 +85,11 @@ final class TuringFlowResourceParityTests:
         XCTAssertEqual(
             point02.progression
                 .interactionGateAfterCompletion,
+            .microphone
+        )
+        XCTAssertEqual(
+            point02.progression
+                .effectiveInteractionGateAfterCompletion,
             .closed
         )
 

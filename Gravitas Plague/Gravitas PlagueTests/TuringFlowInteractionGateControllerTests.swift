@@ -85,4 +85,38 @@ final class TuringFlowInteractionGateControllerTests:
             controller.microphoneEnabled
         )
     }
+
+    func testPlayClaimIsSynchronousAndAcceptsOnlyOnce()
+        async {
+        let controller =
+            TuringFlowInteractionGateController.shared
+        await controller.reset(reason: "test")
+
+        controller.armPlay(reason: "testReady")
+
+        XCTAssertTrue(
+            controller.claimPlay(reason: "firstTap")
+        )
+        XCTAssertEqual(controller.state, .busy)
+        XCTAssertFalse(
+            controller.claimPlay(reason: "secondTap")
+        )
+    }
+
+    func testFailedUnownedPlayClaimCanRestorePlay()
+        async {
+        let controller =
+            TuringFlowInteractionGateController.shared
+        await controller.reset(reason: "test")
+
+        controller.armPlay(reason: "testReady")
+        XCTAssertTrue(
+            controller.claimPlay(reason: "testTap")
+        )
+        controller.restorePlayAfterFailedClaim(
+            reason: "testFailure"
+        )
+
+        XCTAssertEqual(controller.state, .play)
+    }
 }

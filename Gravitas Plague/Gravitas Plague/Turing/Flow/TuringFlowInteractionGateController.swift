@@ -35,6 +35,47 @@ final class TuringFlowInteractionGateController:
 
     private init() {}
 
+    func armPlay(reason: String) {
+        guard state == .closed else {
+            print("""
+            [TuringFlowGate] play arm ignored
+              state: \(state.rawValue)
+              reason: \(reason)
+            """)
+            return
+        }
+
+        state = .play
+        ownerFlowInstanceID = nil
+        publish(reason: "playArmed.\(reason)")
+    }
+
+    func claimPlay(reason: String) -> Bool {
+        guard state == .play else {
+            print("""
+            [TuringFlowGate] play claim ignored
+              state: \(state.rawValue)
+              reason: \(reason)
+            """)
+            return false
+        }
+
+        state = .busy
+        ownerFlowInstanceID = nil
+        publish(reason: "playClaimed.\(reason)")
+        return true
+    }
+
+    func restorePlayAfterFailedClaim(reason: String) {
+        guard state == .busy,
+              ownerFlowInstanceID == nil else {
+            return
+        }
+
+        state = .play
+        publish(reason: "playClaimFailed.\(reason)")
+    }
+
     func beginFlow(
         identity: TuringFlowIdentity
     ) {

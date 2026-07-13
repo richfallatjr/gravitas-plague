@@ -739,11 +739,31 @@ actor TuringFlowEngine {
                 succeeded: true
             )
 
+            let authoredGate =
+                descriptor.progression
+                    .interactionGateAfterCompletion
+            let suppressInteractionForAutomaticAdvance =
+                descriptor.progression
+                    .automaticAdvance &&
+                descriptor.progression
+                    .nextScriptPointID != nil
+            let effectiveGate = descriptor.progression
+                .effectiveInteractionGateAfterCompletion
+
+            print("""
+            [TuringFlowGate] completion override
+              scriptPointID: \(descriptor.scriptPointID)
+              authoredGate: \(authoredGate.rawValue)
+              effectiveGate: \(effectiveGate.rawValue)
+              automaticAdvance: \(descriptor.progression.automaticAdvance)
+              nextScriptPointID: \(descriptor.progression.nextScriptPointID ?? "none")
+              reason: \(suppressInteractionForAutomaticAdvance ? "automaticAdvance" : "normalCompletion")
+            """)
+
             await TuringFlowInteractionGateController
                 .shared
                 .applyCompletionGate(
-                    descriptor.progression
-                        .interactionGateAfterCompletion,
+                    effectiveGate,
                     identity: identity
                 )
 
@@ -763,9 +783,7 @@ actor TuringFlowEngine {
                     ),
                     (
                         "interactionGate",
-                        descriptor.progression
-                            .interactionGateAfterCompletion
-                            .rawValue
+                        effectiveGate.rawValue
                     ),
                     (
                         "nextScriptPointID",

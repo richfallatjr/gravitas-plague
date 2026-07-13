@@ -8,8 +8,6 @@ import simd
 
 struct PlagueImmersiveView: View {
     @ObservedObject var session: PlagueDemoSession
-    @ObservedObject private var turingFlowGate =
-        TuringFlowInteractionGateController.shared
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.openWindow) private var openWindow
@@ -18,7 +16,6 @@ struct PlagueImmersiveView: View {
     @StateObject private var deathPresentationController = DeathPresentationController()
     @State private var youDiedWorldAnchor: AnchorEntity?
     @State private var youDiedWorldCardPresenter = YouDiedWorldCardPresenter()
-    @State private var walkieMicHoldActive = false
     @State private var placementAdjustmentDragActive = false
 
     private let frameTimer = Timer.publish(
@@ -162,39 +159,42 @@ struct PlagueImmersiveView: View {
                 }
         )
         .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .targetedToEntity(where: .has(TuringStoryWalkieMicBillboardComponent.self))
-                .onChanged { _ in
-                    guard turingFlowGate.microphoneEnabled else {
-                        print("""
-                        [TuringFlowGate] RealityKit microphone hold ignored
-                          reason: interactionGateClosed
-                          state: \(turingFlowGate.state.rawValue)
-                        """)
-                        return
-                    }
-                    guard !walkieMicHoldActive else {
-                        return
-                    }
-
-                    walkieMicHoldActive = true
-                    NotificationCenter.default.post(
-                        name: .turingStoryWalkieMicHoldBegan,
-                        object: nil
+            TapGesture()
+                .targetedToEntity(
+                    where: .has(
+                        TuringStoryWalkiePlayComponent.self
                     )
-                    print("[TuringWalkieBundle] mic billboard hold began")
+                )
+                .onEnded { _ in
+                    Task { @MainActor in
+                        coordinator.turingWalkiePlayTapped(
+                            source: "realityKit"
+                        )
+                    }
+                }
+        )
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .targetedToEntity(
+                    where: .has(
+                        TuringStoryWalkieMicrophoneComponent.self
+                    )
+                )
+                .onChanged { _ in
+                    Task { @MainActor in
+                        coordinator
+                            .turingWalkieMicrophoneHoldBegan(
+                                source: "realityKit"
+                            )
+                    }
                 }
                 .onEnded { _ in
-                    guard walkieMicHoldActive else {
-                        return
+                    Task { @MainActor in
+                        coordinator
+                            .turingWalkieMicrophoneHoldEnded(
+                                source: "realityKit"
+                            )
                     }
-
-                    walkieMicHoldActive = false
-                    NotificationCenter.default.post(
-                        name: .turingStoryWalkieMicHoldEnded,
-                        object: nil
-                    )
-                    print("[TuringWalkieBundle] mic billboard hold ended")
                 }
         )
         .simultaneousGesture(
@@ -293,6 +293,9 @@ struct PlagueImmersiveView: View {
             }
         }
         .onAppear {
+            coordinator.configureTuringWalkieInteractionEventSink(
+                session
+            )
             coordinator.deathPresentationController = deathPresentationController
             coordinator.onPlayerDamaged = { amount in
                 let intensity = min(max(Double(amount) / 50.0, 0.35), 1.0)
@@ -351,7 +354,6 @@ struct PlagueImmersiveView: View {
             )
         }
         .onDisappear {
-            walkieMicHoldActive = false
             placementAdjustmentDragActive = false
             coordinator.onYouDiedWorldCardCleanupRequested?()
             coordinator.onYouDiedWorldCardRequested = nil

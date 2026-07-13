@@ -164,22 +164,6 @@ struct TuringEpisodePickerView: View {
                 session.publishTuringDictationEvent(event)
             }
         }
-#if DEBUG || GR_TURING_DIAGNOSTICS
-        .onReceive(
-            NotificationCenter.default.publisher(
-                for: .turingStoryWalkieMicHoldBegan
-            )
-        ) { _ in
-            startBigMikeDictation()
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(
-                for: .turingStoryWalkieMicHoldEnded
-            )
-        ) { _ in
-            finishBigMikeDictationAndSend()
-        }
-#endif
     }
 
     private func episodeButton(

@@ -55,6 +55,7 @@ final class TuringStoryWalkieBundleController:
 
     var walkieAudioEmitter: Entity? { anchors?.walkieAudioEmitter }
     var walkieIconAnchor: Entity? { anchors?.walkieIconAnchor }
+    var walkieRoot: Entity? { anchors?.walkieRoot }
     var dadFrameAudioEmitter: Entity? { anchors?.dadFrameAudioEmitter }
     var dadFrameIconAnchor: Entity? { anchors?.dadFrameIconAnchor }
 
