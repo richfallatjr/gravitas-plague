@@ -121,29 +121,6 @@ final class TuringWalkieCommsFXController {
         await startSendingLeadIn(reason: reason)
     }
 
-    func startResponseLeadInAfterExternalSend(
-        reason: String
-    ) async {
-        // ScriptPoint02 already played send-comm spatially. Start only the
-        // existing response lead-in; never replay the chirp.
-        await startAmbientWalkieStatic(
-            reason: "externalSend.\(reason)"
-        )
-        await startSendingLeadIn(
-            reason: "externalSend.\(reason)"
-        )
-
-        print("""
-        [TuringWalkieComms] response lead-in started after external send
-          reason: \(reason)
-          sendCommReplayed: false
-          ambientStatic: true
-          sendingStatic: true
-          randomBursts: true
-          stopCondition: firstBigMikePlayback
-        """)
-    }
-
     func runFixedResponseLeadInAfterExternalSend(
         reason: String,
         durationSeconds: TimeInterval
@@ -198,7 +175,7 @@ final class TuringWalkieCommsFXController {
         """)
     }
 
-    func startSendingLeadIn(reason: String) async {
+    private func startSendingLeadIn(reason: String) async {
         guard state != .sendingLeadIn else {
             return
         }
@@ -216,7 +193,7 @@ final class TuringWalkieCommsFXController {
                 [TuringWalkieComms] sending static loop started
                   reason: \(reason)
                   file: \(url.lastPathComponent)
-                  stopCondition: firstPlaybackOrFirstFiller
+                  stopCondition: incomingBigMikeGeneratedSegmentZeroOrFixedDuration
                 """)
             }
         } catch {

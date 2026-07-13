@@ -290,11 +290,12 @@ final class TuringBigMikeWalkieFlowRoute:
         character: TuringCharacterRuntimeDefinition,
         identity: TuringFlowIdentity
     ) throws -> any TuringFlowPlaybackControlling {
-        let policy = TuringFlowPlaybackPolicyBuilder.make(
+        var policy = TuringFlowPlaybackPolicyBuilder.make(
             descriptor: descriptor,
             character: character,
             voiceRoute: .walkieSpatial
         )
+        policy.stopSendingStaticBeforeGeneratedSegmentZero = true
 
         return TuringStoryWalkiePlaybackCoordinator(
             policy: policy,

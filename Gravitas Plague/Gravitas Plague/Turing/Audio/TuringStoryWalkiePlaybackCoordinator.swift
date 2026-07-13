@@ -23,6 +23,7 @@ final class TuringStoryWalkiePlaybackCoordinator {
         var generatedGainDB: Float = 0
         var prerecordingGainDB: Float = -6
         var fillerGainDB: Float = -6
+        var stopSendingStaticBeforeGeneratedSegmentZero = false
         var fillerDirectoryCandidates = [
             "Turing/Audio/big-mike-filler",
             "Turing/big-mike-filler",
@@ -617,7 +618,6 @@ final class TuringStoryWalkiePlaybackCoordinator {
             return
         }
         do {
-            await notifyFirstPlaybackStarting(kind: "prerecording")
             print("""
             [TuringPlaybackTrace] prerecording playback request
               id: \(clip.id)
@@ -683,7 +683,22 @@ final class TuringStoryWalkiePlaybackCoordinator {
             return
         }
         do {
-            await notifyFirstPlaybackStarting(kind: "generated")
+            if clip.segmentIndex == 0,
+               policy.stopSendingStaticBeforeGeneratedSegmentZero {
+                await TuringWalkieCommsFXController.shared
+                    .stopSendingLeadIn(
+                        reason:
+                            "incomingGeneratedSegmentZero.\(runID ?? "unknownRun")"
+                    )
+                print("""
+                [TuringPlaybackRebuild] sending static cutoff reached
+                  runID: \(runID ?? "unknownRun")
+                  segmentIndex: \(clip.segmentIndex)
+                  stopped: sending-static-loop.mp3
+                  ambientStaticContinues: true
+                  boundary: incomingBigMikeGeneratedPlaybackStart
+                """)
+            }
             print("""
             [TuringPlaybackTrace] generated playback request
               segmentIndex: \(clip.segmentIndex)
@@ -757,7 +772,6 @@ final class TuringStoryWalkiePlaybackCoordinator {
             return
         }
         do {
-            await notifyFirstPlaybackStarting(kind: "filler")
             print("""
             [TuringPlaybackTrace] filler playback request
               reason: \(reason)
@@ -839,12 +853,6 @@ final class TuringStoryWalkiePlaybackCoordinator {
           id: \(id.uuidString)
         """)
         await reconcile(reason: "deadAirFinished")
-    }
-
-    private func notifyFirstPlaybackStarting(kind: String) async {
-        await TuringWalkieCommsFXController.shared.stopSendingLeadIn(
-            reason: "firstPlaybackStarting.\(kind)"
-        )
     }
 
     private func playbackCompleted(
