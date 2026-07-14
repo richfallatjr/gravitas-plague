@@ -159,7 +159,8 @@ final class Battle01Coordinator {
 
             let enemy = try await enemyFactory.prepare(
                 definition: definition,
-                doorContext: doorContext
+                doorContext: doorContext,
+                battleInstanceID: instanceID
             )
             try Task.checkCancellation()
             guard battleInstanceID == instanceID else { return }

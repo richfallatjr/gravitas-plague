@@ -30,7 +30,8 @@ final class Battle01EnemyFactory {
 
     func prepare(
         definition: Battle01Definition,
-        doorContext: TuringStoryDoorBattlePortalContext
+        doorContext: TuringStoryDoorBattlePortalContext,
+        battleInstanceID: UUID
     ) async throws -> Battle01PreparedEnemy {
         let attributes = try CharacterAttributeStore.shared.attributes(for: .grandma)
         guard attributes.asset.usdz == definition.enemy.sourceAsset else {
@@ -49,20 +50,52 @@ final class Battle01EnemyFactory {
         )
         try await source.loadIfNeeded()
         source.prepareFreshStoryBattleSpawn()
+        source.configureIncomingPunchPolicy(
+            .storyGrandmaThreeX,
+            storyBattleInstanceID: battleInstanceID
+        )
+
+        print("""
+        [Battle01GrandmaHit] policy installed
+          battleInstanceID: \(battleInstanceID.uuidString)
+          enemyID: \(enemyID.uuidString)
+          policy: storyGrandmaThreeX
+          damageAcceptanceProbability: 0.33333333
+          portalMirrorHasPolicy: false
+        """)
 
         if source.rootEntity.parent == nil {
             sceneRoot.addChild(source.rootEntity)
         }
+        let a1World = doorContext.zombieA1.position(relativeTo: nil)
+        let a2World = doorContext.zombieA2.position(relativeTo: nil)
+        let routeToDoor = PhaseOneMath.normalizedOrFallback(
+            SIMD3<Float>(
+                a2World.x - a1World.x,
+                0,
+                a2World.z - a1World.z
+            ),
+            fallback: SIMD3<Float>(0, 0, -1)
+        )
+        let initialForward = -routeToDoor
+        let initialYawRadians = PhaseOneMath.yawRadiansForNegativeZForward(
+            worldForward: initialForward
+        )
+        let authoredA1Orientation = doorContext.zombieA1.orientation(relativeTo: nil)
+
         source.rootEntity.setPosition(
-            doorContext.zombieA1.position(relativeTo: nil),
+            a1World,
             relativeTo: nil
         )
         source.rootEntity.setOrientation(
-            doorContext.zombieA1.orientation(relativeTo: nil),
+            simd_quatf(
+                angle: initialYawRadians,
+                axis: SIMD3<Float>(0, 1, 0)
+            ),
             relativeTo: nil
         )
         source.lockRootToFloorY(
-            doorContext.zombieA1.position(relativeTo: nil).y
+            a1World.y
         )
         source.show()
         source.setCombatEnabled(false)
@@ -93,6 +126,11 @@ final class Battle01EnemyFactory {
           sourceVisible: false
           mirrorID: \(mirror.id.uuidString)
           secondAnimationClock: false
+          authoredA1Orientation: \(authoredA1Orientation)
+          initialForward: \(initialForward)
+          initialYawDegrees: \(initialYawRadians * 180 / .pi)
+          pitchRollRemoved: true
+          orientationBasis: opposite_a1_to_a2_route
         """)
 
         return Battle01PreparedEnemy(

@@ -27,9 +27,6 @@ final class Battle01StoryCombatAdapter: Battle01StoryCombatControlling {
             self.active = false
             self.context?.onEnemyDeathAnimationCompleted()
         }
-        enemy.setIncomingPunchPolicy(
-            .storyGrandmaRandomDamageReaction(probability: 0.33)
-        )
         try enemy.activateStoryCombat()
 
         print("""
@@ -37,7 +34,7 @@ final class Battle01StoryCombatAdapter: Battle01StoryCombatControlling {
           battleInstanceID: \(context.battleInstanceID.uuidString)
           enemyID: \(enemy.hordeBenchmarkID.uuidString)
           hordeWaveOwner: false
-          randomHeadPunchDamageReactionProbability: 0.33
+          incomingPunchPolicyOwnedByFactory: true
           headSnapAlwaysLayered: true
         """)
     }

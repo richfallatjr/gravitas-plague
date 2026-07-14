@@ -13,11 +13,6 @@ struct JockGroundingProfile {
 
 @MainActor
 final class JockRetargetTestController {
-    enum IncomingPunchPolicy {
-        case standard
-        case storyGrandmaRandomDamageReaction(probability: Float)
-    }
-
     private enum FollowDemoState: Equatable {
         case inactive
         case idleStopped
@@ -103,7 +98,11 @@ final class JockRetargetTestController {
     private(set) var rootMotionEnabled = true
     private(set) var groundingProfile = JockGroundingProfile.defaultInfected
     private var rootYawRadians: Float = 0
-    private var incomingPunchPolicy: IncomingPunchPolicy = .standard
+    private var incomingPunchPolicy: JockIncomingPunchPolicy = .legacyHorde
+    private var storyHeadPunchDamageRoller: any JockHeadPunchDamageRolling =
+        JockSystemHeadPunchDamageRoller()
+    private var lastStoryHeadPunchRollAtBySourceID: [UUID: TimeInterval] = [:]
+    private var storyBattleInstanceIDForHitDiagnostics: UUID?
 
     private struct ScriptedClipCompletionObserver {
         let token: UUID
@@ -199,6 +198,10 @@ final class JockRetargetTestController {
 
     private(set) var debugStatus: String = "Retarget test not loaded."
 
+    var incomingPunchPolicyForDiagnostics: JockIncomingPunchPolicy {
+        incomingPunchPolicy
+    }
+
     var debugHitStatus: String {
         switch combatState {
         case .normal:
@@ -257,6 +260,13 @@ final class JockRetargetTestController {
     private func resetHitSelectionMemory() {
         lastHitClipIDBySide.removeAll()
         lastHitClipIDByBucket.removeAll()
+    }
+
+    private func resetIncomingPunchPolicyForDefaultRuntime() {
+        incomingPunchPolicy = .legacyHorde
+        storyHeadPunchDamageRoller = JockSystemHeadPunchDamageRoller()
+        lastStoryHeadPunchRollAtBySourceID.removeAll(keepingCapacity: false)
+        storyBattleInstanceIDForHitDiagnostics = nil
     }
 
     private func resetCombatRuntime(resetHitCount: Bool = true) {
@@ -822,6 +832,7 @@ final class JockRetargetTestController {
         hitsToKill: Int,
         attributes: CharacterAttributes? = nil
     ) {
+        resetIncomingPunchPolicyForDefaultRuntime()
         characterArchetype = archetype
         characterAttributes = attributes
         hordeID = id
@@ -887,6 +898,7 @@ final class JockRetargetTestController {
         hitsToKill: Int,
         attributes: CharacterAttributes
     ) {
+        resetIncomingPunchPolicyForDefaultRuntime()
         characterArchetype = archetype
         characterAttributes = attributes
         hordeID = id
@@ -903,7 +915,6 @@ final class JockRetargetTestController {
         clearEnemyDamageCooldown()
         didPlayDeathAudio = false
         rootEntity.name = "StoryBattle_\(archetype.rawValue)_\(id.uuidString.prefix(8))"
-        incomingPunchPolicy = .storyGrandmaRandomDamageReaction(probability: 0.33)
 
         print("""
         [Battle01] Story enemy identity configured
@@ -911,11 +922,12 @@ final class JockRetargetTestController {
           characterID: \(attributes.characterID)
           hitsToKill: \(self.hitsToKill)
           hordeOwner: false
-          headPunchDamageReactionProbability: 0.33
+          incomingPunchPolicy: legacyHorde_until_factory_configuration
         """)
     }
 
     func prepareFreshStoryBattleSpawn() {
+        resetIncomingPunchPolicyForDefaultRuntime()
         acceptedHitCount = 0
         clearEnemyDamageCooldown()
         lifecycleState = .alive
@@ -944,8 +956,22 @@ final class JockRetargetTestController {
         isVisible = true
     }
 
-    func setIncomingPunchPolicy(_ policy: IncomingPunchPolicy) {
+    func configureIncomingPunchPolicy(
+        _ policy: JockIncomingPunchPolicy,
+        storyBattleInstanceID: UUID? = nil,
+        damageRoller: (any JockHeadPunchDamageRolling)? = nil
+    ) {
         incomingPunchPolicy = policy
+        storyBattleInstanceIDForHitDiagnostics = storyBattleInstanceID
+        storyHeadPunchDamageRoller = damageRoller ?? JockSystemHeadPunchDamageRoller()
+        lastStoryHeadPunchRollAtBySourceID.removeAll(keepingCapacity: false)
+
+        print("""
+        [JockIncomingPunchPolicy] configured
+          enemyID: \(hordeID.uuidString)
+          policy: \(String(describing: policy))
+          storyBattleInstanceID: \(storyBattleInstanceID?.uuidString ?? "none")
+        """)
     }
 
     func prepareFreshHordeSpawn(
@@ -954,6 +980,7 @@ final class JockRetargetTestController {
         hitsToKill: Int,
         initialLifecycle: HordeEnemyLifecycleState = .portalIngress
     ) throws {
+        resetIncomingPunchPolicyForDefaultRuntime()
         hordeID = enemyID
         hordeSpawnIndex = spawnIndex
         self.hitsToKill = max(1, hitsToKill)
@@ -1047,6 +1074,7 @@ final class JockRetargetTestController {
 
     func hide() {
         isVisible = false
+        resetIncomingPunchPolicyForDefaultRuntime()
         externalMotionDriven = false
         rootMotionEnabled = true
         isPlayingPacingLoop = false
@@ -3419,6 +3447,11 @@ final class JockRetargetTestController {
         )
     }
 
+    private enum JockAcceptedDamageSource: String {
+        case legacyHorde
+        case storyRandomOneThirdHeadPunch
+    }
+
     private func handleHitEvent(
         _ event: JockHandHitDetector.HitEvent
     ) {
@@ -3437,10 +3470,10 @@ final class JockRetargetTestController {
             return
         }
 
-        if case .dead = combatState {
-            return
-        }
+        guard lifecycleState == .alive else { return }
+        if case .dead = combatState { return }
 
+        var headSnapClipID: String?
         if event.region == .head {
             print(
                 """
@@ -3451,35 +3484,29 @@ final class JockRetargetTestController {
                   spawnIndex: \(hordeSpawnIndex)
                 """
             )
+            onPunchHit?(event.region)
+            headSnapClipID = triggerHeadSnapSubAnimation(for: event.side)
         }
 
-        onPunchHit?(event.region)
-        triggerHeadSnapSubAnimation(for: event.side)
+        switch incomingPunchPolicy {
+        case .legacyHorde:
+            handleLegacyHordeDamageHit(event)
 
-        if case .storyGrandmaRandomDamageReaction(let probability) = incomingPunchPolicy,
-           event.region == .head {
-            let roll = Float.random(in: 0..<1)
-            guard roll < probability else {
-                print("""
-                [Battle01Combat] head punch feedback only
-                  enemyID: \(hordeID.uuidString)
-                  roll: \(roll)
-                  damageReactionProbability: \(probability)
-                  damageApplied: false
-                  attackInterrupted: false
-                  headSnapLayered: true
-                """)
-                return
-            }
+        case .storyGrandmaThreeX:
+            handleStoryGrandmaThreeXHit(
+                event,
+                headSnapClipID: headSnapClipID
+            )
+        }
+    }
 
-            print("""
-            [Battle01Combat] head punch damage reaction accepted
-              enemyID: \(hordeID.uuidString)
-              roll: \(roll)
-              damageReactionProbability: \(probability)
-              damageApplied: true
-              fullBodyReactionAllowed: true
-            """)
+    private func handleLegacyHordeDamageHit(
+        _ event: JockHandHitDetector.HitEvent
+    ) {
+        // Preserve the pre-policy behavior for any future non-head event.
+        if event.region != .head {
+            onPunchHit?(event.region)
+            _ = triggerHeadSnapSubAnimation(for: event.side)
         }
 
         let now = CACurrentMediaTime()
@@ -3487,16 +3514,139 @@ final class JockRetargetTestController {
             sourceID: hordeID,
             now: now
         )
-        let acceptedDamageHitCount = damageGate.accepted
+
+        performDamageHit(
+            event,
+            at: now,
+            damageAccepted: damageGate.accepted,
+            elapsedSinceAcceptedDamage: damageGate.elapsedSinceAcceptedDamage,
+            source: .legacyHorde
+        )
+    }
+
+    private func handleStoryGrandmaThreeXHit(
+        _ event: JockHandHitDetector.HitEvent,
+        headSnapClipID: String?
+    ) {
+        guard event.region == .head else {
+            handleLegacyHordeDamageHit(event)
+            return
+        }
+
+        let now = CACurrentMediaTime()
+        let acceptedCountBefore = acceptedHitCount
+        let attackWasActiveBefore: Bool
+        if case .attacking = combatState {
+            attackWasActiveBefore = activeAttack != nil
+        } else {
+            attackWasActiveBefore = false
+        }
+        let baseClipBefore = driver?.currentActiveClipID
+
+        let temporalGateAccepted = shouldEvaluateStoryHeadPunch(
+            sourceID: hordeID,
+            now: now
+        )
+        let decision = JockStoryHeadPunchDecisionEvaluator.resolve(
+            temporalGateAccepted: temporalGateAccepted,
+            damageRoller: storyHeadPunchDamageRoller
+        )
+
+        if decision == .duplicateFeedbackOnly {
+            logStoryHeadPunchDecision(
+                event: event,
+                decision: decision,
+                temporalGateAccepted: false,
+                randomRollPerformed: false,
+                randomRollAccepted: nil,
+                attackWasActiveBefore: attackWasActiveBefore,
+                attackWasCanceled: false,
+                acceptedHitCountBefore: acceptedCountBefore,
+                baseAnimationClipIDBefore: baseClipBefore,
+                headSnapClipID: headSnapClipID
+            )
+            return
+        }
+
+        if decision == .overlayOnly {
+            logStoryHeadPunchDecision(
+                event: event,
+                decision: decision,
+                temporalGateAccepted: true,
+                randomRollPerformed: true,
+                randomRollAccepted: false,
+                attackWasActiveBefore: attackWasActiveBefore,
+                attackWasCanceled: false,
+                acceptedHitCountBefore: acceptedCountBefore,
+                baseAnimationClipIDBefore: baseClipBefore,
+                headSnapClipID: headSnapClipID
+            )
+            return
+        }
+
+        performAcceptedDamageHit(
+            event,
+            acceptedAt: now,
+            source: .storyRandomOneThirdHeadPunch
+        )
+
+        logStoryHeadPunchDecision(
+            event: event,
+            decision: .damageAndInterrupt,
+            temporalGateAccepted: true,
+            randomRollPerformed: true,
+            randomRollAccepted: true,
+            attackWasActiveBefore: attackWasActiveBefore,
+            attackWasCanceled: attackWasActiveBefore,
+            acceptedHitCountBefore: acceptedCountBefore,
+            baseAnimationClipIDBefore: baseClipBefore,
+            headSnapClipID: headSnapClipID
+        )
+    }
+
+    private func shouldEvaluateStoryHeadPunch(
+        sourceID: UUID,
+        now: TimeInterval
+    ) -> Bool {
+        let isEligible = JockStoryHeadPunchTemporalGate.isEligible(
+            previousEvaluationAt: lastStoryHeadPunchRollAtBySourceID[sourceID],
+            now: now,
+            cooldown: Self.enemyDamageCooldownSeconds
+        )
+        guard isEligible else {
+            return false
+        }
+
+        lastStoryHeadPunchRollAtBySourceID[sourceID] = now
+        return true
+    }
+
+    private func performAcceptedDamageHit(
+        _ event: JockHandHitDetector.HitEvent,
+        acceptedAt now: TimeInterval,
+        source: JockAcceptedDamageSource
+    ) {
+        performDamageHit(
+            event,
+            at: now,
+            damageAccepted: true,
+            elapsedSinceAcceptedDamage: nil,
+            source: source
+        )
+    }
+
+    private func performDamageHit(
+        _ event: JockHandHitDetector.HitEvent,
+        at now: TimeInterval,
+        damageAccepted: Bool,
+        elapsedSinceAcceptedDamage: TimeInterval?,
+        source: JockAcceptedDamageSource
+    ) {
+        let acceptedDamageHitCount = damageAccepted
             ? acceptedHitCount + 1
             : acceptedHitCount
-        let shouldDie =
-            damageGate.accepted &&
-            acceptedDamageHitCount >= hitsToKill
-
-        let finalDamage: JockHitDamageLevel = shouldDie
-            ? .death
-            : event.damageLevel
+        let shouldDie = damageAccepted && acceptedDamageHitCount >= hitsToKill
+        let finalDamage: JockHitDamageLevel = shouldDie ? .death : event.damageLevel
         let isStrongHit = attackConfiguration.escalationDamageLevels.contains(finalDamage)
         let authoredClipSide = authoredHitClipSide(
             forDetectedFaceSide: event.side
@@ -3508,9 +3658,7 @@ final class JockRetargetTestController {
         }
 
         if case .attacking = combatState {
-            cancelActiveAttackForPlayerHit(
-                isStrongHit: isStrongHit
-            )
+            cancelActiveAttackForPlayerHit(isStrongHit: isStrongHit)
         }
 
         if shouldDie {
@@ -3527,10 +3675,9 @@ final class JockRetargetTestController {
 
         followDemoState = .idleStopped
         followDelayElapsed = 0
-
         driver?.locomotionDeltaHandler = nil
 
-        if damageGate.accepted {
+        if damageAccepted {
             lastDamageAcceptedAtBySourceID[hordeID] = now
             acceptedHitCount = acceptedDamageHitCount
 
@@ -3538,6 +3685,7 @@ final class JockRetargetTestController {
                 """
                 [EnemyDamage] accepted
                   sourceID: \(hordeID)
+                  acceptedDamageSource: \(source.rawValue)
                   cooldownSeconds: \(String(format: "%.2f", Self.enemyDamageCooldownSeconds))
                 """
             )
@@ -3546,7 +3694,7 @@ final class JockRetargetTestController {
                 """
                 [EnemyDamage] suppressed duplicate
                   sourceID: \(hordeID)
-                  elapsedSinceAcceptedDamage: \(String(format: "%.3f", damageGate.elapsedSinceAcceptedDamage ?? 0))
+                  elapsedSinceAcceptedDamage: \(String(format: "%.3f", elapsedSinceAcceptedDamage ?? 0))
                   cooldownSeconds: \(String(format: "%.2f", Self.enemyDamageCooldownSeconds))
                   feedbackPreserved: true
                 """
@@ -3571,21 +3719,17 @@ final class JockRetargetTestController {
               hordeWave: \(hordeWave)
               hordeSpawnIndex: \(hordeSpawnIndex)
               infectedHitsToKill: \(hitsToKill)
-              temporalCooldown: \(damageGate.accepted ? "accepted_damage" : "suppressed_damage_only")
+              acceptedDamageSource: \(source.rawValue)
+              temporalCooldown: \(damageAccepted ? "accepted_damage" : "suppressed_damage_only")
               hitReactionCanBeInterrupted: true
             """
         )
 
-        applyHitKnockback(
-            damage: finalDamage
-        )
+        applyHitKnockback(damage: finalDamage)
 
         if shouldDie {
             playDeathAudioOnce()
-
-            completeBenchmarkEnemyKill(
-                selectedClipID: selectedClipID
-            )
+            completeBenchmarkEnemyKill(selectedClipID: selectedClipID)
             return
         }
 
@@ -3618,6 +3762,46 @@ final class JockRetargetTestController {
             locomotionPolicy: .ignoreClipLocomotion,
             runtimeOverride: followVisualRuntimeOverride()
         )
+    }
+
+    private func logStoryHeadPunchDecision(
+        event: JockHandHitDetector.HitEvent,
+        decision: JockStoryHeadPunchDecision,
+        temporalGateAccepted: Bool,
+        randomRollPerformed: Bool,
+        randomRollAccepted: Bool?,
+        attackWasActiveBefore: Bool,
+        attackWasCanceled: Bool,
+        acceptedHitCountBefore: Int,
+        baseAnimationClipIDBefore: String?,
+        headSnapClipID: String?
+    ) {
+        print("""
+        [Battle01GrandmaHit] head punch resolved
+          battleInstanceID: \(storyBattleInstanceIDForHitDiagnostics?.uuidString ?? "none")
+          enemyID: \(hordeID.uuidString)
+          decision: \(decision.rawValue)
+          temporalGateAccepted: \(temporalGateAccepted)
+          randomRollPerformed: \(randomRollPerformed)
+          randomRollAccepted: \(randomRollAccepted.map(String.init) ?? "nil")
+          configuredDamageProbability: 0.33333333
+          headSnapTriggered: \(headSnapClipID != nil)
+          headSnapClipID: \(headSnapClipID ?? "none")
+          eventSide: \(event.side.rawValue)
+          eventHand: \(event.hand)
+          eventVelocityMetersPerSecond: \(event.velocityMetersPerSecond)
+          eventDamageLevel: \(event.damageLevel.rawValue)
+          baseAnimationClipIDBefore: \(baseAnimationClipIDBefore ?? "none")
+          baseAnimationClipIDAfter: \(driver?.currentActiveClipID ?? "none")
+          baseAnimationContinued: \(decision != .damageAndInterrupt)
+          attackWasActiveBefore: \(attackWasActiveBefore)
+          attackWasCanceled: \(attackWasCanceled)
+          damagePointApplied: \(decision == .damageAndInterrupt)
+          fullBodyDamageReactionStarted: \(decision == .damageAndInterrupt)
+          acceptedHitCountBefore: \(acceptedHitCountBefore)
+          acceptedHitCountAfter: \(acceptedHitCount)
+          hitsToKill: \(hitsToKill)
+        """)
     }
 
     private func completeBenchmarkEnemyKill(
@@ -3778,12 +3962,13 @@ final class JockRetargetTestController {
         return available.randomElement()
     }
 
+    @discardableResult
     private func triggerHeadSnapSubAnimation(
         for side: JockHitSide
-    ) {
+    ) -> String? {
         guard let clipID = selectHeadSnapSubAnimationClipID(for: side),
               let clip = clipsByID[clipID] else {
-            return
+            return nil
         }
 
         driver?.triggerSubAnimation(clip)
@@ -3795,6 +3980,8 @@ final class JockRetargetTestController {
               clipID: \(clipID)
             """
         )
+
+        return clipID
     }
 
     private func authoredHitClipSide(
