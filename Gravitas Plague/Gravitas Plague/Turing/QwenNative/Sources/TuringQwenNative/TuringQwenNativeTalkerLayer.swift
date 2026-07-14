@@ -261,6 +261,36 @@ enum TuringQwenNativeTalkerForwardRunner {
         segmentCache: TuringQwenNativeSegmentRuntimeCache? = nil,
         performanceMode: TuringQwenNativePerformanceMode = .diagnostic
     ) throws -> TuringQwenNativeGeneratedStepOutput {
+        var samplingContext = TuringQwenNativeSamplingContext(
+            seed: 0x9E37_79B9_7F4A_7C15
+        )
+
+        return try forwardOneStep(
+            inputEmbedding: inputEmbedding,
+            previousState: previousState,
+            config: config,
+            weightsStore: weightsStore,
+            resolvedWeights: resolvedWeights,
+            codePredictorWeights: codePredictorWeights,
+            segmentCache: segmentCache,
+            performanceMode: performanceMode,
+            samplingPolicy: .greedy,
+            samplingContext: &samplingContext
+        )
+    }
+
+    static func forwardOneStep(
+        inputEmbedding: MLXArray,
+        previousState: TuringQwenNativeTalkerGenerationState,
+        config: TuringQwenNativeConfig,
+        weightsStore: TuringQwenNativeWeightsStore,
+        resolvedWeights: TuringQwenNativeTalkerResolvedWeights? = nil,
+        codePredictorWeights: TuringQwenNativeCodePredictorResolvedWeights? = nil,
+        segmentCache: TuringQwenNativeSegmentRuntimeCache? = nil,
+        performanceMode: TuringQwenNativePerformanceMode = .diagnostic,
+        samplingPolicy: TuringQwenNativeSamplingPolicy,
+        samplingContext: inout TuringQwenNativeSamplingContext
+    ) throws -> TuringQwenNativeGeneratedStepOutput {
         let stepStart = Date()
         guard inputEmbedding.shape == [1, 1, config.talkerConfig.hiddenSize] else {
             throw TuringQwenNativeError.invalidConfig(
@@ -338,7 +368,9 @@ enum TuringQwenNativeTalkerForwardRunner {
         let firstCodecToken = try TuringQwenNativeCodecSampler.selectFirstCodecToken(
             logits: logits,
             sequenceLength: 1,
-            vocabSize: config.talkerConfig.vocabSize
+            vocabSize: config.talkerConfig.vocabSize,
+            samplingConfiguration: samplingPolicy.talker,
+            samplingContext: &samplingContext
         ).tokenID
         let codePredictorStart = Date()
         let codeGroup = try TuringQwenNativeCodePredictor.generateCodeGroup(
@@ -349,7 +381,9 @@ enum TuringQwenNativeTalkerForwardRunner {
             expectedFixtureRowIndex: nil,
             resolvedWeights: codePredictorWeights,
             segmentCache: segmentCache,
-            performanceMode: performanceMode
+            performanceMode: performanceMode,
+            samplingConfiguration: samplingPolicy.codePredictor,
+            samplingContext: &samplingContext
         )
         let codePredictorSeconds = Date().timeIntervalSince(codePredictorStart)
         let nextPosition = previousState.position + 1

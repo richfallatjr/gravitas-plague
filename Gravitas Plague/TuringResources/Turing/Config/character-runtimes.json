@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "characters": [
     {
       "characterID": "big_mike",
@@ -16,7 +16,30 @@
         "maxNewRows": 160,
         "useExactReferenceRowCount": true,
         "referenceWindowStrategy": "full",
-        "skipSegmentFailures": true
+        "skipSegmentFailures": true,
+        "decoding": {
+          "talker": {
+            "mode": "greedy",
+            "backend": "materializedHostTopK",
+            "temperature": 1.0,
+            "topK": 1,
+            "topP": 1.0,
+            "repetitionPenalty": 1.0
+          },
+          "codePredictor": {
+            "mode": "greedy",
+            "backend": "materializedHostTopK",
+            "temperature": 1.0,
+            "topK": 1,
+            "topP": 1.0,
+            "repetitionPenalty": 1.0
+          }
+        },
+        "qualityGate": {
+          "requireEOSBeforeDecode": false,
+          "minimumPeakAbs": 0.0,
+          "minimumRMS": 0.0
+        }
       },
       "audio": {
         "generatedGainDB": 0,
@@ -53,7 +76,30 @@
         "maxNewRows": 160,
         "useExactReferenceRowCount": true,
         "referenceWindowStrategy": "full",
-        "skipSegmentFailures": true
+        "skipSegmentFailures": true,
+        "decoding": {
+          "talker": {
+            "mode": "temperatureTopP",
+            "backend": "materializedHostTopK",
+            "temperature": 0.9,
+            "topK": 50,
+            "topP": 1.0,
+            "repetitionPenalty": 1.05
+          },
+          "codePredictor": {
+            "mode": "greedy",
+            "backend": "materializedHostTopK",
+            "temperature": 1.0,
+            "topK": 1,
+            "topP": 1.0,
+            "repetitionPenalty": 1.0
+          }
+        },
+        "qualityGate": {
+          "requireEOSBeforeDecode": true,
+          "minimumPeakAbs": 0.001,
+          "minimumRMS": 0.0001
+        }
       },
       "audio": {
         "generatedGainDB": 0,

@@ -119,6 +119,12 @@ public actor TuringQwenNativeBaseCloneEngine {
           performanceMode: \(prompt.performanceMode.rawValue)
           referenceRowLimit: \(prompt.referenceRowLimit.map(String.init) ?? "full")
           referenceWindowStrategy: \(prompt.referenceWindowStrategy.rawValue)
+          samplingTalkerMode: \(prompt.samplingPolicy.talker.mode.rawValue)
+          samplingTalkerBackend: \(prompt.samplingPolicy.talker.backend.rawValue)
+          samplingCodePredictorMode: \(prompt.samplingPolicy.codePredictor.mode.rawValue)
+          samplingCodePredictorBackend: \(prompt.samplingPolicy.codePredictor.backend.rawValue)
+          samplingSeed: \(prompt.samplingSeed)
+          requireEOSBeforeDecode: \(prompt.generationQualityPolicy.requireEOSBeforeDecode)
           rawReferenceRuntime: false
           precomputedCloneArtifacts: true
         """)
@@ -127,6 +133,12 @@ public actor TuringQwenNativeBaseCloneEngine {
         let generated: GeneratedCodebookForDecode
         do {
             generated = try generateCodebookForDecode(prompt)
+            try prompt.generationQualityPolicy.validateBeforeDecode(
+                voiceID: prompt.cloneProfile.voiceID,
+                generatedRowCount: generated.generatedRows.count,
+                maxNewRows: prompt.maxNewRows,
+                reachedEOS: generated.reachedEOS
+            )
         } catch {
             await TuringQwenNativeSpeechDecodeGate.shared.cancelGeneration(
                 reason: error.localizedDescription
@@ -173,6 +185,13 @@ public actor TuringQwenNativeBaseCloneEngine {
         let audio = TuringQwenNativeAudio(
             samples: trimmedSamples,
             sampleRate: fullAudio.sampleRate
+        )
+        try prompt.generationQualityPolicy.validateAfterDecode(
+            voiceID: prompt.cloneProfile.voiceID,
+            generatedRowCount: generatedRows.count,
+            peakAbs: audio.peakAbs,
+            rms: audio.rms,
+            durationSeconds: audio.durationSeconds
         )
         let renderSeconds = Date().timeIntervalSince(renderStart)
         let realTimeFactor = TuringQwenNativeRealtimeBudgetProbe.realTimeFactor(
@@ -227,6 +246,7 @@ public actor TuringQwenNativeBaseCloneEngine {
 
         print("""
         [TuringQwenNativeBaseClone] generation finished
+          reachedEOS: \(generated.reachedEOS)
           generatedRows: \(generatedRows.count)
           sampleRate: \(audio.sampleRate)
           sampleCount: \(audio.samples.count)
@@ -237,6 +257,7 @@ public actor TuringQwenNativeBaseCloneEngine {
           decodeSeconds: \(String(format: "%.3f", decodeSeconds))
           renderSeconds: \(String(format: "%.3f", renderSeconds))
           realTimeFactor: \(String(format: "%.3f", realTimeFactor))
+          qualityGatePassed: true
         """)
 
         return audio
@@ -263,6 +284,10 @@ public actor TuringQwenNativeBaseCloneEngine {
         }
 
         let promptStart = Date()
+        try prompt.samplingPolicy.validate()
+        var samplingContext = TuringQwenNativeSamplingContext(
+            seed: prompt.samplingSeed
+        )
         let prepared = try prepareBaseClonePrompt(prompt)
         let resident = try loadResidentWeights()
         let staticPromptContext = try cachedStaticPromptContext(
@@ -343,17 +368,27 @@ public actor TuringQwenNativeBaseCloneEngine {
             codecHeadWeight: resident.talkerWeights.codecHeadWeight,
             performanceMode: prompt.performanceMode
         )
-        eval(logits)
+        if prompt.samplingPolicy.talker.mode == .greedy {
+            eval(logits)
+        }
         let firstCodecToken = try TuringQwenNativeCodecSampler.selectFirstCodecToken(
             logits: logits,
             sequenceLength: talkerOutput.sequenceLength,
-            vocabSize: config.talkerConfig.vocabSize
+            vocabSize: config.talkerConfig.vocabSize,
+            samplingConfiguration: prompt.samplingPolicy.talker,
+            samplingContext: &samplingContext
         )
 
         print("""
         [TuringQwenNativeBaseClone] first codec token selected
           tokenID: \(firstCodecToken.tokenID)
-          sampling: greedy_argmax
+          sampling: \(prompt.samplingPolicy.talker.mode.rawValue)
+          backend: \(prompt.samplingPolicy.talker.backend.rawValue)
+          samplingSeed: \(prompt.samplingSeed)
+          temperature: \(prompt.samplingPolicy.talker.temperature)
+          topK: \(prompt.samplingPolicy.talker.topK)
+          topP: \(prompt.samplingPolicy.talker.topP)
+          repetitionPenalty: \(prompt.samplingPolicy.talker.repetitionPenalty)
         """)
 
         let dynamicCodebook = try generateDynamicCodebook(
@@ -363,6 +398,8 @@ public actor TuringQwenNativeBaseCloneEngine {
             promptInputs: promptInputs,
             maxNewRows: prompt.maxNewRows,
             performanceMode: prompt.performanceMode,
+            samplingPolicy: prompt.samplingPolicy,
+            samplingContext: &samplingContext,
             resident: resident
         )
         guard dynamicCodebook.rows.isEmpty == false else {
@@ -379,7 +416,8 @@ public actor TuringQwenNativeBaseCloneEngine {
             initialPromptSeconds: initialPromptSeconds,
             initialTalkerForwardSeconds: initialTalkerForwardSeconds,
             talkerOneStepTotalSeconds: dynamicCodebook.talkerOneStepTotalSeconds,
-            codePredictorTotalSeconds: dynamicCodebook.codePredictorTotalSeconds
+            codePredictorTotalSeconds: dynamicCodebook.codePredictorTotalSeconds,
+            reachedEOS: dynamicCodebook.reachedEOS
         )
     }
 
@@ -487,6 +525,7 @@ public actor TuringQwenNativeBaseCloneEngine {
         let rows: [TuringQwenNativeFirstCodeGroup]
         let talkerOneStepTotalSeconds: Double
         let codePredictorTotalSeconds: Double
+        let reachedEOS: Bool
     }
 
     private struct GeneratedCodebookForDecode: Sendable {
@@ -496,6 +535,7 @@ public actor TuringQwenNativeBaseCloneEngine {
         let initialTalkerForwardSeconds: Double
         let talkerOneStepTotalSeconds: Double
         let codePredictorTotalSeconds: Double
+        let reachedEOS: Bool
     }
 
     private struct StaticPromptContextKey: Hashable {
@@ -581,11 +621,14 @@ public actor TuringQwenNativeBaseCloneEngine {
         promptInputs: TuringQwenNativeTalkerPromptInputs,
         maxNewRows: Int,
         performanceMode: TuringQwenNativePerformanceMode,
+        samplingPolicy: TuringQwenNativeSamplingPolicy,
+        samplingContext: inout TuringQwenNativeSamplingContext,
         resident: TuringQwenNativeResidentResources
     ) throws -> DynamicCodebookResult {
         let targetRowCount = max(maxNewRows, 1)
         let generationStart = Date()
         var generatedRows: [TuringQwenNativeFirstCodeGroup] = []
+        var reachedEOS = false
         var talkerOneStepTotalSeconds: Double = 0
         var codePredictorTotalSeconds: Double = 0
         var generationState = initialGenerationState(
@@ -606,6 +649,8 @@ public actor TuringQwenNativeBaseCloneEngine {
           performanceMode: \(performanceMode.rawValue)
           fixtureRowsUsed: false
           codePredictorKVCache: oneStep
+          talkerSampling: \(samplingPolicy.talker.mode.rawValue)
+          codePredictorSampling: \(samplingPolicy.codePredictor.mode.rawValue)
           segmentRuntimeCache: enabled
           attentionKernel: \(performanceMode.shouldUseFastGroupedQueryAttention ? "mlxFastGroupedQuery" : "manualMatmulSoftmax")
           rmsNormKernel: \(performanceMode == .performance ? "mlxFast" : "manual")
@@ -621,7 +666,9 @@ public actor TuringQwenNativeBaseCloneEngine {
             expectedFixtureRowIndex: nil,
             resolvedWeights: resident.codePredictorWeights,
             segmentCache: segmentCache,
-            performanceMode: performanceMode
+            performanceMode: performanceMode,
+            samplingConfiguration: samplingPolicy.codePredictor,
+            samplingContext: &samplingContext
         )
         codePredictorTotalSeconds += Date().timeIntervalSince(firstCodeGroupStart)
         logGeneratedRow(
@@ -644,10 +691,12 @@ public actor TuringQwenNativeBaseCloneEngine {
               excludedFromDecode: \(stopReason == .eos)
             """)
             if stopReason == .eos {
+                reachedEOS = true
                 return DynamicCodebookResult(
                     rows: generatedRows,
                     talkerOneStepTotalSeconds: talkerOneStepTotalSeconds,
-                    codePredictorTotalSeconds: codePredictorTotalSeconds
+                    codePredictorTotalSeconds: codePredictorTotalSeconds,
+                    reachedEOS: reachedEOS
                 )
             }
         }
@@ -672,7 +721,9 @@ public actor TuringQwenNativeBaseCloneEngine {
                 resolvedWeights: resident.talkerWeights,
                 codePredictorWeights: resident.codePredictorWeights,
                 segmentCache: segmentCache,
-                performanceMode: performanceMode
+                performanceMode: performanceMode,
+                samplingPolicy: samplingPolicy,
+                samplingContext: &samplingContext
             )
             talkerOneStepTotalSeconds += nextStep.talkerStepSeconds
             codePredictorTotalSeconds += nextStep.codePredictorSeconds
@@ -697,6 +748,7 @@ public actor TuringQwenNativeBaseCloneEngine {
                   excludedFromDecode: \(stopReason == .eos)
                 """)
                 if stopReason == .eos {
+                    reachedEOS = true
                     break
                 }
             }
@@ -714,7 +766,8 @@ public actor TuringQwenNativeBaseCloneEngine {
         return DynamicCodebookResult(
             rows: generatedRows,
             talkerOneStepTotalSeconds: talkerOneStepTotalSeconds,
-            codePredictorTotalSeconds: codePredictorTotalSeconds
+            codePredictorTotalSeconds: codePredictorTotalSeconds,
+            reachedEOS: reachedEOS
         )
     }
 

@@ -189,6 +189,36 @@ enum TuringQwenNativeCodePredictor {
         segmentCache: TuringQwenNativeSegmentRuntimeCache? = nil,
         performanceMode: TuringQwenNativePerformanceMode = .diagnostic
     ) throws -> TuringQwenNativeFirstCodeGroup {
+        var samplingContext = TuringQwenNativeSamplingContext(
+            seed: 0x9E37_79B9_7F4A_7C15
+        )
+
+        return try generateCodeGroup(
+            firstCodecToken: firstCodecToken,
+            talkerLastHiddenState: talkerLastHiddenState,
+            config: config,
+            weightsStore: weightsStore,
+            expectedFixtureRowIndex: expectedFixtureRowIndex,
+            resolvedWeights: resolvedWeights,
+            segmentCache: segmentCache,
+            performanceMode: performanceMode,
+            samplingConfiguration: .greedy,
+            samplingContext: &samplingContext
+        )
+    }
+
+    static func generateCodeGroup(
+        firstCodecToken: Int,
+        talkerLastHiddenState: MLXArray,
+        config: TuringQwenNativeConfig,
+        weightsStore: TuringQwenNativeWeightsStore,
+        expectedFixtureRowIndex: Int? = nil,
+        resolvedWeights: TuringQwenNativeCodePredictorResolvedWeights? = nil,
+        segmentCache: TuringQwenNativeSegmentRuntimeCache? = nil,
+        performanceMode: TuringQwenNativePerformanceMode = .diagnostic,
+        samplingConfiguration: TuringQwenNativeTokenSamplerConfiguration,
+        samplingContext: inout TuringQwenNativeSamplingContext
+    ) throws -> TuringQwenNativeFirstCodeGroup {
         try generateCodeGroupCached(
             firstCodecToken: firstCodecToken,
             talkerLastHiddenState: talkerLastHiddenState,
@@ -197,7 +227,9 @@ enum TuringQwenNativeCodePredictor {
             expectedFixtureRowIndex: expectedFixtureRowIndex,
             resolvedWeights: resolvedWeights,
             segmentCache: segmentCache,
-            performanceMode: performanceMode
+            performanceMode: performanceMode,
+            samplingConfiguration: samplingConfiguration,
+            samplingContext: &samplingContext
         )
     }
 
@@ -210,6 +242,36 @@ enum TuringQwenNativeCodePredictor {
         resolvedWeights: TuringQwenNativeCodePredictorResolvedWeights? = nil,
         segmentCache: TuringQwenNativeSegmentRuntimeCache? = nil,
         performanceMode: TuringQwenNativePerformanceMode
+    ) throws -> TuringQwenNativeFirstCodeGroup {
+        var samplingContext = TuringQwenNativeSamplingContext(
+            seed: 0x9E37_79B9_7F4A_7C15
+        )
+
+        return try generateCodeGroupCached(
+            firstCodecToken: firstCodecToken,
+            talkerLastHiddenState: talkerLastHiddenState,
+            config: config,
+            weightsStore: weightsStore,
+            expectedFixtureRowIndex: expectedFixtureRowIndex,
+            resolvedWeights: resolvedWeights,
+            segmentCache: segmentCache,
+            performanceMode: performanceMode,
+            samplingConfiguration: .greedy,
+            samplingContext: &samplingContext
+        )
+    }
+
+    static func generateCodeGroupCached(
+        firstCodecToken: Int,
+        talkerLastHiddenState: MLXArray,
+        config: TuringQwenNativeConfig,
+        weightsStore: TuringQwenNativeWeightsStore,
+        expectedFixtureRowIndex: Int? = nil,
+        resolvedWeights: TuringQwenNativeCodePredictorResolvedWeights? = nil,
+        segmentCache: TuringQwenNativeSegmentRuntimeCache? = nil,
+        performanceMode: TuringQwenNativePerformanceMode,
+        samplingConfiguration: TuringQwenNativeTokenSamplerConfiguration,
+        samplingContext: inout TuringQwenNativeSamplingContext
     ) throws -> TuringQwenNativeFirstCodeGroup {
         let resolved = try resolvedWeights ?? TuringQwenNativeCodePredictorResolvedWeights(
             config: config,
@@ -267,7 +329,27 @@ enum TuringQwenNativeCodePredictor {
 
         for residualIndex in 1..<codePredictorConfig.numCodeGroups {
             let headIndex = residualIndex - 1
-            let nextTokenArray = try TuringQwenNativeSampler.greedyTokenArray(from: logits)
+            let nextTokenArray: MLXArray
+
+            switch samplingConfiguration.mode {
+            case .greedy:
+                nextTokenArray = TuringQwenNativeSampler.greedyTokenArray(
+                    from: logits
+                )
+            case .temperatureTopP:
+                guard let vocabSize = logits.shape.last, vocabSize > 0 else {
+                    throw TuringQwenNativeError.invalidConfig(
+                        "Code predictor logits have no vocabulary dimension."
+                    )
+                }
+                let sampled = try samplingContext.selectCodePredictorToken(
+                    logits: logits,
+                    configuration: samplingConfiguration,
+                    residualCodebookIndex: residualIndex,
+                    vocabSize: vocabSize
+                )
+                nextTokenArray = sampled.tokenArray
+            }
             tokenArrays.append(nextTokenArray)
 
             guard residualIndex < codePredictorConfig.numCodeGroups - 1 else {
