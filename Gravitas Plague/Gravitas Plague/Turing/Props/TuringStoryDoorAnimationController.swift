@@ -4,6 +4,17 @@ import simd
 
 @MainActor
 final class TuringStoryDoorAnimationController {
+    enum DoorAnimationError: LocalizedError {
+        case interrupted(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .interrupted(let reason):
+                return "Door opening was interrupted: \(reason)"
+            }
+        }
+    }
+
     enum DoorState: String, Sendable {
         case closed
         case opening
@@ -30,8 +41,10 @@ final class TuringStoryDoorAnimationController {
     private let openDuration: TimeInterval
     private let closeDuration: TimeInterval
     private let hingeRotationAxis = SIMD3<Float>(0, 0, 1)
-    private var state: DoorState = .closed
+    private(set) var state: DoorState = .closed
+    private var currentYawRadians: Float = 0
     private var animationTask: Task<Void, Never>?
+    private var openWaiters: [UUID: CheckedContinuation<Void, Error>] = [:]
     private var sfxControllersByID: [UUID: AudioPlaybackController] = [:]
     private var sfxEntitiesByID: [UUID: Entity] = [:]
 
@@ -67,6 +80,10 @@ final class TuringStoryDoorAnimationController {
     func open(
         reason: String
     ) {
+        guard state != .open,
+              state != .opening else {
+            return
+        }
         let openSFX = randomOpenSFX()
         startAnimation(
             targetState: .open,
@@ -82,6 +99,7 @@ final class TuringStoryDoorAnimationController {
     func close(
         reason: String
     ) {
+        failOpenWaiters(reason: "closeRequested.\(reason)")
         startAnimation(
             targetState: .closed,
             fromDegrees: currentYawDegrees(),
@@ -98,7 +116,24 @@ final class TuringStoryDoorAnimationController {
     ) {
         animationTask?.cancel()
         animationTask = nil
+        failOpenWaiters(reason: reason)
         stopSFX(reason: reason)
+    }
+
+    func openAndWait(
+        reason: String
+    ) async throws {
+        if state == .open {
+            return
+        }
+
+        let waiterID = UUID()
+        try await withCheckedThrowingContinuation { continuation in
+            openWaiters[waiterID] = continuation
+            if state != .opening {
+                open(reason: reason)
+            }
+        }
     }
 
     private func startAnimation(
@@ -161,6 +196,10 @@ final class TuringStoryDoorAnimationController {
             self.state = targetState
             self.animationTask = nil
 
+            if targetState == .open {
+                self.resumeOpenWaiters()
+            }
+
             if let completionSFX {
                 self.playSFX(
                     fileName: completionSFX,
@@ -186,6 +225,7 @@ final class TuringStoryDoorAnimationController {
     private func applyYaw(
         _ yaw: Float
     ) {
+        currentYawRadians = yaw
         hingePivot.transform.rotation =
             closedRotation *
             simd_quatf(
@@ -195,14 +235,24 @@ final class TuringStoryDoorAnimationController {
     }
 
     private func currentYawDegrees() -> Float {
-        switch state {
-        case .open,
-             .opening:
-            return openYawRadians * 180.0 / .pi
+        currentYawRadians * 180.0 / .pi
+    }
 
-        case .closed,
-             .closing:
-            return 0
+    private func resumeOpenWaiters() {
+        let waiters = openWaiters.values
+        openWaiters.removeAll(keepingCapacity: false)
+        for continuation in waiters {
+            continuation.resume()
+        }
+    }
+
+    private func failOpenWaiters(reason: String) {
+        let waiters = openWaiters.values
+        openWaiters.removeAll(keepingCapacity: false)
+        for continuation in waiters {
+            continuation.resume(
+                throwing: DoorAnimationError.interrupted(reason)
+            )
         }
     }
 

@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "battleID": "prologue.battle01.mrsDempsey",
+  "trigger": {
+    "scriptPointID": "prologue.scriptPoint03",
+    "requiresSuccessfulActualPlaybackCompletion": true
+  },
+  "enemy": {
+    "storyEnemyID": "mrs_dempsey",
+    "characterID": "grandma",
+    "sourceAsset": "grandma_biped.usdz",
+    "anchorIDs": ["zombie_a1", "zombie_a2", "zombie_a3"],
+    "idleClipID": "idle_01",
+    "idleDurationSeconds": 5.0,
+    "turnClipID": "turn_right_90",
+    "turnCount": 2,
+    "turnDegreesPerCompletion": 90.0,
+    "walkClipID": "unstable_walk_01",
+    "reuseExistingFollowSpeed": true,
+    "externalMotionDriven": true,
+    "rootMotionEnabledDuringPath": false,
+    "retainCorpseAfterDeath": true
+  },
+  "door": {
+    "autoOpenIfClosed": true,
+    "waitAtLastAnchorWhileOpening": true,
+    "lockPlayerInteractionDuringWaitAndCrossing": true,
+    "requireFullyOpenBeforeCrossing": true,
+    "requirePlayerGaze": false
+  },
+  "portalHandoff": {
+    "reuseHordeRenderMirror": true,
+    "sourceIsAnimationAuthority": true,
+    "sourceIsCombatAuthority": true,
+    "mirrorHasCollision": false,
+    "mirrorHasAudio": false,
+    "mirrorHasDamageAuthority": false,
+    "revealThresholdPortalLocalZMeters": -0.3048,
+    "exitThresholdPortalLocalZMeters": 0.45
+  },
+  "music": {
+    "file": "mrs-dempsey-prologue-battle.mp3",
+    "loop": false,
+    "trigger": "grandmaAtLastAnchorAndDoorFullyOpen",
+    "stop": "naturalFileCompletion"
+  },
+  "richPrerecording": {
+    "prerecordingID": "prologue.rich.battle01.mrsDempsey.001",
+    "delayAfterMusicPlaybackStartedSeconds": 5.0,
+    "outputRoute": "roomGlobal",
+    "playWalkieOpenSound": false,
+    "playWalkieSendSound": false,
+    "playStatic": false,
+    "generatePromptVoice": false
+  },
+  "turingInteraction": {
+    "preserveExistingGate": true,
+    "expectedGateAtStart": "microphone",
+    "allowBigMikeConversationDuringBattle": true
+  },
+  "completion": {
+    "startAnotherScriptPoint": false,
+    "removeCorpse": false,
+    "closeMicrophone": false,
+    "stateAfterMusicAndDeath": "postBattleHold"
+  }
+}

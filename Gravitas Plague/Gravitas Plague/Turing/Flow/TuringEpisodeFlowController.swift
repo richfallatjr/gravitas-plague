@@ -1,5 +1,17 @@
 import Foundation
 
+struct TuringScriptPointCompletionEvent: Sendable {
+    let eventID: UUID
+    let scriptPointID: String
+    let flowInstanceID: UUID
+    let triggerSource: TuringFlowTriggerSource
+}
+
+@MainActor
+protocol TuringScriptPointCompletionEventSink: AnyObject {
+    func scriptPointCompleted(_ event: TuringScriptPointCompletionEvent)
+}
+
 actor TuringEpisodeFlowController {
     static let shared =
         TuringEpisodeFlowController()
@@ -26,6 +38,8 @@ actor TuringEpisodeFlowController {
         Set<String>()
     private var pendingConversationAdvance:
         PendingConversationAdvance?
+    private var completionEventSink:
+        (any TuringScriptPointCompletionEventSink)?
 
     init(
         engine: TuringFlowEngine = .shared,
@@ -45,6 +59,12 @@ actor TuringEpisodeFlowController {
         self.seedStore = seedStore
         self.historyStore = historyStore
         self.catalogValidator = catalogValidator
+    }
+
+    func setCompletionEventSink(
+        _ sink: (any TuringScriptPointCompletionEventSink)?
+    ) {
+        completionEventSink = sink
     }
 
     func start(
@@ -161,6 +181,11 @@ actor TuringEpisodeFlowController {
                                 "terminalPointCompleted.\(descriptor.scriptPointID)"
                         )
                 }
+                await publishCompletion(
+                    result: result,
+                    scriptPointID: scheduledPointID,
+                    triggerSource: scheduledTrigger
+                )
                 return result.voiceRunResult
             }
 
@@ -228,6 +253,13 @@ actor TuringEpisodeFlowController {
                     """)
                 }
 
+
+                await publishCompletion(
+                    result: result,
+                    scriptPointID: scheduledPointID,
+                    triggerSource: scheduledTrigger
+                )
+
                 scheduledPointID =
                     nextScriptPointID
                 scheduledTrigger =
@@ -264,6 +296,13 @@ actor TuringEpisodeFlowController {
             } else {
                 pendingConversationAdvance = nil
             }
+
+
+            await publishCompletion(
+                result: result,
+                scriptPointID: scheduledPointID,
+                triggerSource: scheduledTrigger
+            )
 
             return result.voiceRunResult
         }
@@ -340,5 +379,29 @@ actor TuringEpisodeFlowController {
         completedScriptPointIDs.formUnion(
             scriptPointIDs
         )
+    }
+
+    private func publishCompletion(
+        result: TuringFlowResult,
+        scriptPointID: String,
+        triggerSource: TuringFlowTriggerSource
+    ) async {
+        guard let identity = result.identity else {
+            print("[TuringFlow] completion event omitted: successful result had no identity scriptPointID=\(scriptPointID)")
+            return
+        }
+        let event = TuringScriptPointCompletionEvent(
+            eventID: UUID(),
+            scriptPointID: scriptPointID,
+            flowInstanceID: identity.flowInstanceID,
+            triggerSource: triggerSource
+        )
+        await completionEventSink?.scriptPointCompleted(event)
+        print("""
+        [TuringFlow] actual script point completion published
+          scriptPointID: \(scriptPointID)
+          flowInstanceID: \(identity.flowInstanceID.uuidString)
+          trigger: \(triggerSource.logValue)
+        """)
     }
 }

@@ -90,6 +90,9 @@ final class TuringStoryDoorBundleController:
         let placementBounds: Entity?
         let glass: Entity?
         let portalOnlyEntities: [PortalOnlyEntity]
+        let zombieA1: Entity
+        let zombieA2: Entity
+        let zombieA3: Entity
     }
 
     private static let portalOnlyEntityNames = [
@@ -114,6 +117,7 @@ final class TuringStoryDoorBundleController:
     private(set) var isPlaced = false
     private var activeAtmosphere: PortalHDRIAtmosphere = .night
     private var animationController: TuringStoryDoorAnimationController?
+    private var battleInteractionLockOwnerIDs = Set<UUID>()
     private let iconController = TuringStoryDoorIconController()
     private var loadedVisualMinY: Float = 0
     private var loadedVisualMaxY: Float = TuringStoryDoorBundleTuning
@@ -296,6 +300,12 @@ final class TuringStoryDoorBundleController:
     func toggleDoor(
         reason: String
     ) {
+        guard battleInteractionLockOwnerIDs.isEmpty else {
+            print(
+                "[TuringDoorTrigger] ignored while Battle01 owns door interaction reason=\(reason)"
+            )
+            return
+        }
         print(
             """
             [TuringDoorTrigger] tapped
@@ -306,11 +316,93 @@ final class TuringStoryDoorBundleController:
         animationController?.toggle(reason: reason)
     }
 
+    var battleDoorState: TuringStoryDoorBattleState {
+        switch animationController?.state ?? .closed {
+        case .closed:
+            return .closed
+        case .opening:
+            return .opening
+        case .open:
+            return .open
+        case .closing:
+            return .closing
+        }
+    }
+
+    func setBattleInteractionLocked(
+        _ locked: Bool,
+        ownerID: UUID,
+        reason: String
+    ) {
+        if locked {
+            battleInteractionLockOwnerIDs.insert(ownerID)
+        } else {
+            battleInteractionLockOwnerIDs.remove(ownerID)
+        }
+
+        print("""
+        [TuringDoorBattle] interaction lock changed
+          locked: \(locked)
+          ownerID: \(ownerID.uuidString)
+          activeOwnerCount: \(battleInteractionLockOwnerIDs.count)
+          reason: \(reason)
+        """)
+    }
+
+    func openForBattle(
+        ownerID: UUID,
+        reason: String
+    ) async throws {
+        guard let animationController else {
+            throw BundleError.noPlacement
+        }
+
+        setBattleInteractionLocked(
+            true,
+            ownerID: ownerID,
+            reason: reason
+        )
+        try await animationController.openAndWait(
+            reason: "Battle01.\(reason)"
+        )
+        guard animationController.state == .open else {
+            throw BundleError.noPlacement
+        }
+    }
+
+    func battlePortalContext() throws -> TuringStoryDoorBattlePortalContext {
+        guard isPlaced,
+              let anchors else {
+            throw BundleError.noPlacement
+        }
+
+        for anchor in [anchors.zombieA1, anchors.zombieA2, anchors.zombieA3] {
+            print("""
+            [TuringDoorBattle] anchor resolved
+              name: \(anchor.name)
+              doorLocal: \(anchor.transformMatrix(relativeTo: root))
+              portalWorldLocal: \(anchor.transformMatrix(relativeTo: portalWorldRoot))
+              world: \(anchor.transformMatrix(relativeTo: nil))
+            """)
+        }
+
+        return TuringStoryDoorBattlePortalContext(
+            doorRoot: root,
+            portalWorldRoot: portalWorldRoot,
+            portalPlane: anchors.portalPlane,
+            zombieA1: anchors.zombieA1,
+            zombieA2: anchors.zombieA2,
+            zombieA3: anchors.zombieA3,
+            doorAudioEmitter: anchors.audioEmitter
+        )
+    }
+
     func reset(
         reason: String
     ) {
         animationController?.cancel(reason: reason)
         animationController = nil
+        battleInteractionLockOwnerIDs.removeAll(keepingCapacity: false)
         iconController.remove()
         occupancyRegistry?.unregister(id: occupancyID)
         root.children.removeAll()
@@ -738,6 +830,15 @@ final class TuringStoryDoorBundleController:
         ) else {
             throw BundleError.missingRequiredEntity("TuringStoryDoorPortalPlane")
         }
+        guard let zombieA1 = root.turingDoorFindEntity(named: "zombie_a1") else {
+            throw BundleError.missingRequiredEntity("zombie_a1")
+        }
+        guard let zombieA2 = root.turingDoorFindEntity(named: "zombie_a2") else {
+            throw BundleError.missingRequiredEntity("zombie_a2")
+        }
+        guard let zombieA3 = root.turingDoorFindEntity(named: "zombie_a3") else {
+            throw BundleError.missingRequiredEntity("zombie_a3")
+        }
         let portalOnlyEntities = Self.portalOnlyEntityNames.compactMap { name -> PortalOnlyEntity? in
             guard let source = root.turingDoorFindEntity(named: name) else { return nil }
             return PortalOnlyEntity(
@@ -775,7 +876,10 @@ final class TuringStoryDoorBundleController:
             glass: root.turingDoorFindEntity(
                 named: "TuringStoryDoorGlass"
             ),
-            portalOnlyEntities: portalOnlyEntities
+            portalOnlyEntities: portalOnlyEntities,
+            zombieA1: zombieA1,
+            zombieA2: zombieA2,
+            zombieA3: zombieA3
         )
 
         print(

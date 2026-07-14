@@ -123,6 +123,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let turingWalkieBundleController = TuringStoryWalkieBundleController()
     private let turingWindowBundleController = TuringStoryWindowBundleController()
     private let turingDoorBundleController = TuringStoryDoorBundleController()
+    private var battle01Coordinator: Battle01Coordinator?
+    private var prologueStoryActionRouter: PrologueStoryActionRouter?
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
     private lazy var turingStoryPlacementAdjustmentCoordinator =
         TuringStoryPlacementAdjustmentCoordinator(
@@ -376,6 +378,32 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             wallManager: roomSkinningCoordinator.wallManager,
             occupancyRegistry: wallPropOccupancyRegistry
         )
+        let battle01 = Battle01Coordinator(
+            sceneRoot: root,
+            door: turingDoorBundleController,
+            clock: ProductionBattleClock(),
+            onEnemyPrepared: { [weak self] enemyID, controller in
+                self?.prepareBattle01EnemyAudioAndCallbacks(
+                    enemyID: enemyID,
+                    controller: controller
+                )
+            },
+            onEnemyRemoved: { [weak self] enemyID in
+                self?.audioController.stopHostAudioSource(id: enemyID)
+            },
+            playerTargetProvider: { [weak self] in
+                self?.spatialProvider.currentPose()?.headPosition
+            },
+            onPlayerDamage: { [weak self] amount in
+                self?.audioController.playRandomPlayerDamageHit()
+                self?.onPlayerDamaged?(Int(amount))
+            }
+        )
+        let prologueRouter = PrologueStoryActionRouter(battle01: battle01)
+        battle01Coordinator = battle01
+        prologueStoryActionRouter = prologueRouter
+        await TuringEpisodeFlowController.shared
+            .setCompletionEventSink(prologueRouter)
         turingStoryPlacementAdjustmentCoordinator.install(
             sceneRoot: root
         )
@@ -598,6 +626,48 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
     }
 
+    private func prepareBattle01EnemyAudioAndCallbacks(
+        enemyID: UUID,
+        controller: JockRetargetTestController
+    ) {
+        forestEnvironmentController.applyIBLReceiverRecursively(
+            root: controller.rootEntity
+        )
+        audioController.attachHostAudioSource(
+            id: enemyID,
+            hostRootEntity: controller.rootEntity,
+            archetype: .grandma,
+            headAudioEntity: controller.characterAudioEmitter,
+            breathingStartDelay: 0
+        )
+        controller.onPunchHit = { [weak self, weak controller] region in
+            guard let controller else { return }
+            self?.audioController.playConfirmedCharacterFaceHitSound(
+                archetype: .grandma,
+                enemyID: controller.hordeBenchmarkID,
+                hitRegion: region,
+                sourceID: enemyID
+            )
+        }
+        controller.onCharacterDamageHit = { [weak self] in
+            self?.audioController.playCharacterDamageHit(
+                archetype: .grandma,
+                enemyID: enemyID,
+                sourceID: enemyID
+            )
+        }
+        controller.onCharacterDeath = { [weak self] in
+            self?.audioController.playCharacterDeath(
+                archetype: .grandma,
+                enemyID: enemyID,
+                sourceID: enemyID
+            )
+        }
+        controller.onAttackStarted = {
+            print("[Battle01] Grandma attack animation started")
+        }
+    }
+
     func handle(_ envelope: PlagueDemoSession.CommandEnvelope) {
         guard !handledCommandIDs.contains(envelope.id) else { return }
 
@@ -794,6 +864,12 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private func startStoryEpisode(
         _ episodeID: TuringEpisodeID
     ) {
+        battle01Coordinator?.cancel(
+            reason: "newStoryEpisode.\(episodeID.rawValue)"
+        )
+        prologueStoryActionRouter?.reset(
+            reason: "newStoryEpisode.\(episodeID.rawValue)"
+        )
         if hordeBenchmarkRunning {
             stopHordeBenchmark()
         }
@@ -842,6 +918,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         turingStoryPlacementAdjustmentCoordinator.cancel(
             reason: "debugRoomRescan.\(reason)"
         )
+        battle01Coordinator?.cancel(reason: "roomRescan.\(reason)")
+        prologueStoryActionRouter?.reset(reason: "roomRescan.\(reason)")
         roomSkinningCoordinator.wallManager
             .clearRetainedPlacementWallSnapshot(
                 reason: "debugRoomRescan.\(reason)"
@@ -1729,6 +1807,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
         let currentHeadPosition = currentPose?.headPosition
 
+        battle01Coordinator?.update(
+            deltaTime: TimeInterval(deltaTime),
+            playerTargetWorldPosition: currentHeadPosition
+        )
+
         if let currentPose {
             latestPlayerPoseSnapshot = timingProfiler.measure("snapshot.player_pose") {
                 makePlayerPoseSnapshot(
@@ -1871,6 +1954,13 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     }
 
     func shutdown() {
+        battle01Coordinator?.cancel(reason: "immersiveShutdown")
+        battle01Coordinator = nil
+        prologueStoryActionRouter = nil
+        Task {
+            await TuringEpisodeFlowController.shared
+                .setCompletionEventSink(nil)
+        }
         turingStoryPlacementAdjustmentCoordinator.cancel(
             reason: "immersiveShutdown"
         )
@@ -1916,6 +2006,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     }
 
     private func prepareForUserQuitOrClose() {
+        battle01Coordinator?.cancel(reason: "userQuitOrClose")
         turingStoryPlacementAdjustmentCoordinator.cancel(
             reason: "userQuitOrClose"
         )
@@ -2009,6 +2100,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     }
 
     private func beginHordeRoomScanForBenchmark() {
+        battle01Coordinator?.cancel(reason: "modeSwitchToHorde")
         guard !hordeWaitingForRoomScan else {
             print("[HordeRoomScan] Horde start ignored; scan already active")
             return

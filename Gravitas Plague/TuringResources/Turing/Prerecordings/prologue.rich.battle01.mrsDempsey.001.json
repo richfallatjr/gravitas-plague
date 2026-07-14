@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "prologue.rich.battle01.mrsDempsey.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": null,
+  "audioFile": "pr-rich-battle-mrs-dempsey.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Mrs. Dempsey. You need to back up. Don’t make me do this to you. You are not well. Mrs. Dempsey—look at me. It’s Rich. You know me. Jesus—Mike, she’s not stopping. She came through the doorway and she’s coming straight at me. Ma’am, get back! Get—off me! Damn it! Mike, she’s bleeding, and she doesn’t even feel it. I’m moving toward the kitchen. Mrs. Dempsey, last warning. I do not want to hurt you. Back up. Back up now!",
+  "summary": "Rich recognizes Mrs. Dempsey, tries to stop her without hurting her, and panics as she attacks through the doorway.",
+  "voicePromptIntent": "No generated continuation. Authored Battle01 media only.",
+  "defaultEmotion": "pleading, frightened, physically interrupted, forced into self-defense"
+}

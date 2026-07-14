@@ -13,6 +13,11 @@ struct JockGroundingProfile {
 
 @MainActor
 final class JockRetargetTestController {
+    enum IncomingPunchPolicy {
+        case standard
+        case storyGrandmaRandomDamageReaction(probability: Float)
+    }
+
     private enum FollowDemoState: Equatable {
         case inactive
         case idleStopped
@@ -98,6 +103,15 @@ final class JockRetargetTestController {
     private(set) var rootMotionEnabled = true
     private(set) var groundingProfile = JockGroundingProfile.defaultInfected
     private var rootYawRadians: Float = 0
+    private var incomingPunchPolicy: IncomingPunchPolicy = .standard
+
+    private struct ScriptedClipCompletionObserver {
+        let token: UUID
+        let clipID: String
+        let completion: @MainActor (UUID, Result<Void, Error>) -> Void
+    }
+
+    private var scriptedClipCompletionObserver: ScriptedClipCompletionObserver?
 
     private var isPlayingPacingLoop = false
     private var pacingLoopSteps: [JockPacingLoopStep] = JockPacingLoopStep.gravitasPresenceLoop
@@ -865,6 +879,73 @@ final class JockRetargetTestController {
               catalogue: \(HordeAttackAnimationCatalogue.allAttackClipIDs.joined(separator: ", "))
             """
         )
+    }
+
+    func configureStoryBattleIdentity(
+        id: UUID,
+        archetype: PlagueCharacterArchetype,
+        hitsToKill: Int,
+        attributes: CharacterAttributes
+    ) {
+        characterArchetype = archetype
+        characterAttributes = attributes
+        hordeID = id
+        hordeWave = 0
+        hordeSpawnIndex = 0
+        enemyBrainCommandDriven = false
+        self.hitsToKill = max(1, hitsToKill)
+        lifecycleState = .alive
+        hordeLifecycleState = .active
+        didStartDeathLifecycle = false
+        didFreezeAsCorpse = false
+        activeDeathClipID = nil
+        acceptedHitCount = 0
+        clearEnemyDamageCooldown()
+        didPlayDeathAudio = false
+        rootEntity.name = "StoryBattle_\(archetype.rawValue)_\(id.uuidString.prefix(8))"
+        incomingPunchPolicy = .storyGrandmaRandomDamageReaction(probability: 0.33)
+
+        print("""
+        [Battle01] Story enemy identity configured
+          enemyID: \(id.uuidString)
+          characterID: \(attributes.characterID)
+          hitsToKill: \(self.hitsToKill)
+          hordeOwner: false
+          headPunchDamageReactionProbability: 0.33
+        """)
+    }
+
+    func prepareFreshStoryBattleSpawn() {
+        acceptedHitCount = 0
+        clearEnemyDamageCooldown()
+        lifecycleState = .alive
+        hordeLifecycleState = .active
+        didStartDeathLifecycle = false
+        didFreezeAsCorpse = false
+        activeDeathClipID = nil
+        didPlayDeathAudio = false
+        resetCombatRuntime()
+        resetHitSelectionMemory()
+        followDemoState = .inactive
+        followDelayElapsed = 0
+        latestBrainFollowIntent = nil
+        latestHeadPosition = nil
+        playerAttackEnabled = false
+        enemyCollisionState = .active
+        enemyBodyCollisionParticipant = false
+        bodyCollisionBox?.setEnabled(false)
+        resetEnemyBodyCollisionRuntime()
+        scriptedClipCompletionObserver = nil
+        setRootMotionEnabled(false)
+        setExternalMotionDriven(true)
+        rootEntity.transform = Transform()
+        visualOffsetEntity.transform = Transform()
+        rootEntity.isEnabled = true
+        isVisible = true
+    }
+
+    func setIncomingPunchPolicy(_ policy: IncomingPunchPolicy) {
+        incomingPunchPolicy = policy
     }
 
     func prepareFreshHordeSpawn(
@@ -2727,6 +2808,113 @@ final class JockRetargetTestController {
         return Float(clip.timing.durationSeconds)
     }
 
+    func playScriptedIdleLoop() throws {
+        guard let clip = clipsByID["idle_01"] else {
+            throw RetargetError.clipNotFound("idle_01")
+        }
+        driver?.locomotionDeltaHandler = nil
+        driver?.playClip(
+            clip,
+            loop: true,
+            transition: true,
+            locomotionPolicy: .ignoreClipLocomotion,
+            runtimeOverride: followVisualRuntimeOverride()
+        )
+    }
+
+    func playScriptedRightTurn90(
+        token: UUID,
+        completion: @escaping @MainActor (UUID, Result<Void, Error>) -> Void
+    ) throws {
+        let clipID = "turn_right_90"
+        guard let clip = clipsByID[clipID] else {
+            throw RetargetError.clipNotFound(clipID)
+        }
+        scriptedClipCompletionObserver = ScriptedClipCompletionObserver(
+            token: token,
+            clipID: clipID,
+            completion: completion
+        )
+        driver?.locomotionDeltaHandler = nil
+        driver?.playClip(
+            clip,
+            loop: false,
+            transition: true,
+            locomotionPolicy: .ignoreClipLocomotion,
+            runtimeOverride: followVisualRuntimeOverride()
+        )
+    }
+
+    func cancelScriptedClipCompletion() {
+        scriptedClipCompletionObserver = nil
+    }
+
+    func playScriptedWalkLoop(
+        onAuthoredTravel: @escaping @MainActor (Float) -> Void
+    ) throws {
+        let clipID = "unstable_walk_01"
+        guard let clip = clipsByID[clipID] else {
+            throw RetargetError.clipNotFound(clipID)
+        }
+        driver?.locomotionDeltaHandler = { [weak self] delta in
+            guard let self else { return true }
+            let signed = delta.forwardMeters * self.followConfiguration.followForwardSign
+            let distance = min(
+                max(0, signed * self.followConfiguration.walkDistanceScale),
+                self.followConfiguration.maxStepMetersPerFrame
+            )
+            onAuthoredTravel(distance)
+            return true
+        }
+        driver?.playClip(
+            clip,
+            loop: true,
+            transition: true,
+            locomotionPolicy: .useClipLocomotion,
+            runtimeOverride: followVisualRuntimeOverride()
+        )
+    }
+
+    func stopScriptedLocomotion(reason: String) {
+        driver?.locomotionDeltaHandler = nil
+        driver?.stop()
+        print("[Battle01] scripted locomotion stopped reason=\(reason)")
+    }
+
+    func commitScriptedYawDegrees(_ degrees: Float) {
+        let forward = rootEntity.orientation(relativeTo: nil).act(
+            SIMD3<Float>(0, 0, -1)
+        )
+        let currentYaw = PhaseOneMath.yawRadiansForNegativeZForward(
+            worldForward: PhaseOneMath.normalizedOrFallback(
+                SIMD3<Float>(forward.x, 0, forward.z),
+                fallback: SIMD3<Float>(0, 0, -1)
+            )
+        )
+        rootYawRadians = PhaseOneMath.normalizedAngleRadians(
+            currentYaw + degrees * .pi / 180.0
+        )
+        rootEntity.setOrientation(
+            simd_quatf(angle: rootYawRadians, axis: SIMD3<Float>(0, 1, 0)),
+            relativeTo: nil
+        )
+    }
+
+    func steerScriptedRootTowardWorldDirection(
+        _ direction: SIMD3<Float>,
+        deltaTime: Float
+    ) {
+        steerRootTowardWorldDirection(direction, deltaTime: deltaTime)
+    }
+
+    func activateStoryCombat() throws {
+        setExternalMotionDriven(false)
+        setRootMotionEnabled(true)
+        playerAttackEnabled = true
+        setEnemyBodyCollisionParticipant(true, reason: "Battle01.portalExit")
+        try playFollowDemo(resetBenchmarkState: false)
+    }
+
     func finishHordePortalIngressAndStartFollow() throws {
         guard guardHordeWalkOrFollowAllowed(
             reason: "portal_exit_follow_start"
@@ -2881,6 +3069,15 @@ final class JockRetargetTestController {
     }
 
     private func handleJockClipCompleted(_ completedClip: JockAnimClip) {
+        if let observer = scriptedClipCompletionObserver,
+           completedClipMatches(
+               completedClip,
+               matchesExpectedClipID: observer.clipID
+           ) {
+            scriptedClipCompletionObserver = nil
+            observer.completion(observer.token, .success(()))
+        }
+
         if case .attacking = combatState,
            completedClipMatches(
             completedClip,
@@ -3256,6 +3453,35 @@ final class JockRetargetTestController {
             )
         }
 
+        onPunchHit?(event.region)
+        triggerHeadSnapSubAnimation(for: event.side)
+
+        if case .storyGrandmaRandomDamageReaction(let probability) = incomingPunchPolicy,
+           event.region == .head {
+            let roll = Float.random(in: 0..<1)
+            guard roll < probability else {
+                print("""
+                [Battle01Combat] head punch feedback only
+                  enemyID: \(hordeID.uuidString)
+                  roll: \(roll)
+                  damageReactionProbability: \(probability)
+                  damageApplied: false
+                  attackInterrupted: false
+                  headSnapLayered: true
+                """)
+                return
+            }
+
+            print("""
+            [Battle01Combat] head punch damage reaction accepted
+              enemyID: \(hordeID.uuidString)
+              roll: \(roll)
+              damageReactionProbability: \(probability)
+              damageApplied: true
+              fullBodyReactionAllowed: true
+            """)
+        }
+
         let now = CACurrentMediaTime()
         let damageGate = shouldAcceptEnemyDamage(
             sourceID: hordeID,
@@ -3267,10 +3493,6 @@ final class JockRetargetTestController {
         let shouldDie =
             damageGate.accepted &&
             acceptedDamageHitCount >= hitsToKill
-
-        onPunchHit?(
-            event.region
-        )
 
         let finalDamage: JockHitDamageLevel = shouldDie
             ? .death
@@ -3284,8 +3506,6 @@ final class JockRetargetTestController {
         if isStrongHit {
             escalateAfterHitReact = true
         }
-
-        triggerHeadSnapSubAnimation(for: event.side)
 
         if case .attacking = combatState {
             cancelActiveAttackForPlayerHit(
