@@ -87,6 +87,7 @@ final class Battle01Coordinator {
         playerTargetWorldPosition: SIMD3<Float>?
     ) {
         latestPlayerTarget = playerTargetWorldPosition
+        prepared?.portalMirror.refreshPortalLightingIfNeeded()
         switch state {
         case .portalIdleFacingAway, .turnOne, .turnTwo, .approachingDoor,
              .waitingForDoor, .openingDoor, .portalCrossing:

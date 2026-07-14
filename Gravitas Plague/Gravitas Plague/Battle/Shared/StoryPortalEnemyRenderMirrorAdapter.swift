@@ -10,6 +10,9 @@ final class StoryPortalEnemyRenderMirrorAdapter {
     private let portalWorldRoot: Entity
     private let portalPlane: HordePortalPlaneDescriptor
     private let mirror: HordePortalSkinnedRenderMirror
+    private let sourceIBLEntity = Entity()
+    private weak var boundIBLEntity: Entity?
+    private var didLogMissingIBL = false
     private(set) var sourceRevealed = false
     private(set) var exited = false
 
@@ -29,7 +32,9 @@ final class StoryPortalEnemyRenderMirrorAdapter {
             bodySizeMeters: source.portalMirrorBodySizeMeters()
         )
         self.id = mirror.id
+        sourceIBLEntity.name = "Battle01GrandmaSourceIBL"
         mirror.syncVisibleDuringIngress()
+        refreshPortalLightingIfNeeded()
     }
 
     var rootEntity: Entity { mirror.rootEntity }
@@ -44,6 +49,7 @@ final class StoryPortalEnemyRenderMirrorAdapter {
         revealThreshold: Float,
         exitThreshold: Float
     ) {
+        refreshPortalLightingIfNeeded()
         guard !exited else { return }
 
         let worldPosition = source.rootEntity.position(relativeTo: nil)
@@ -75,6 +81,64 @@ final class StoryPortalEnemyRenderMirrorAdapter {
     func cleanup(reason: String) {
         exited = true
         mirror.cleanup(reason: reason)
+        sourceIBLEntity.removeFromParent()
+    }
+
+    func refreshPortalLightingIfNeeded() {
+        if !exited, mirror.rootEntity.parent == nil {
+            portalWorldRoot.addChild(mirror.rootEntity)
+            mirror.syncVisibleDuringIngress()
+            print(
+                "[Battle01Lighting] Grandma portal mirror restored after portal-world reload"
+            )
+        }
+
+        guard let iblEntity = Self.firstIBLEntity(in: portalWorldRoot) else {
+            if !didLogMissingIBL {
+                didLogMissingIBL = true
+                print(
+                    "[Battle01Lighting] portal IBL unavailable; waiting for portal world population"
+                )
+            }
+            return
+        }
+
+        didLogMissingIBL = false
+        guard boundIBLEntity !== iblEntity else { return }
+        guard let iblComponent = iblEntity.components[ImageBasedLightComponent.self] else {
+            return
+        }
+
+        sourceIBLEntity.components.set(iblComponent)
+        if sourceIBLEntity.parent == nil {
+            source.rootEntity.parent?.addChild(sourceIBLEntity)
+        }
+
+        let sourceReceiverCount = Self.attachIBLReceiversRecursively(
+            under: source.rootEntity,
+            iblEntity: sourceIBLEntity
+        )
+        let mirrorReceiverCount = Self.attachIBLReceiversRecursively(
+            under: mirror.rootEntity,
+            iblEntity: iblEntity
+        )
+        let replacedPreviousIBL = boundIBLEntity != nil
+        boundIBLEntity = iblEntity
+
+        print(
+            """
+            [Battle01Lighting] Grandma bound to portal IBL
+              iblEntity: \(iblEntity.name)
+              sourceEnemyID: \(source.hordeBenchmarkID.uuidString)
+              sourceReceiverCount: \(sourceReceiverCount)
+              mirrorReceiverCount: \(mirrorReceiverCount)
+              replacedPreviousIBL: \(replacedPreviousIBL)
+              sourceIBLEntity: \(sourceIBLEntity.name)
+              mirrorIBLEntity: \(iblEntity.name)
+              sharedEnvironmentResource: true
+              receiverWorlds: source_room,mirror_portal
+            """
+        )
     }
 
     func roomSideTarget(distance: Float, floorY: Float) -> SIMD3<Float> {
@@ -97,5 +161,40 @@ final class StoryPortalEnemyRenderMirrorAdapter {
             pointWorld: point,
             roomNormalWorld: normal
         )
+    }
+
+    private static func firstIBLEntity(
+        in root: Entity
+    ) -> Entity? {
+        if root.components[ImageBasedLightComponent.self] != nil {
+            return root
+        }
+
+        for child in root.children {
+            if let found = firstIBLEntity(in: child) {
+                return found
+            }
+        }
+
+        return nil
+    }
+
+    @discardableResult
+    private static func attachIBLReceiversRecursively(
+        under root: Entity,
+        iblEntity: Entity
+    ) -> Int {
+        root.components.set(
+            ImageBasedLightReceiverComponent(
+                imageBasedLight: iblEntity
+            )
+        )
+
+        return root.children.reduce(1) { count, child in
+            count + attachIBLReceiversRecursively(
+                under: child,
+                iblEntity: iblEntity
+            )
+        }
     }
 }
