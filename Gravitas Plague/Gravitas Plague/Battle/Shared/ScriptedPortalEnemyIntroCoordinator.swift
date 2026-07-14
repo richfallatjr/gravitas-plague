@@ -63,7 +63,7 @@ final class ScriptedPortalEnemyIntroCoordinator {
             try await playRightTurn(
                 controller: prepared.sourceController,
                 turnIndex: turnIndex,
-                degrees: definition.enemy.turnDegreesPerCompletion
+                expectedDegrees: definition.enemy.turnDegreesPerCompletion
             )
         }
 
@@ -156,7 +156,7 @@ final class ScriptedPortalEnemyIntroCoordinator {
     private func playRightTurn(
         controller: JockRetargetTestController,
         turnIndex: Int,
-        degrees: Float
+        expectedDegrees: Float
     ) async throws {
         let token = UUID()
         print("[Battle01] turn started turnIndex=\(turnIndex) token=\(token.uuidString)")
@@ -175,9 +175,8 @@ final class ScriptedPortalEnemyIntroCoordinator {
             }
         }
         try Task.checkCancellation()
-        controller.commitScriptedYawDegrees(degrees)
         print(
-            "[Battle01] turn completed turnIndex=\(turnIndex) committedYawDegrees=\(Float(turnIndex) * degrees)"
+            "[Battle01] turn completed turnIndex=\(turnIndex) expectedDegrees=\(expectedDegrees) authoredRuntimeYawCommit=true manualYawCommit=false"
         )
     }
 

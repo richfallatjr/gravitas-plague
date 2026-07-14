@@ -32,6 +32,7 @@ final class JockRetargetTestController {
         case noSkinnedModelEntity(PlagueCharacterArchetype)
         case rigValidationFailed([String])
         case clipNotFound(String)
+        case runtimeOverrideNotFound(String)
         case pacingLoopMissingClips([String])
 
         var errorDescription: String? {
@@ -44,6 +45,8 @@ final class JockRetargetTestController {
                 return "Rig validation failed. Missing joints: \(missing.joined(separator: ", "))"
             case .clipNotFound(let id):
                 return "JockAsset clip not found: \(id)"
+            case .runtimeOverrideNotFound(let id):
+                return "JockAsset runtime override not found: \(id)"
             case .pacingLoopMissingClips(let ids):
                 return "Pacing loop is missing clips: \(ids.joined(separator: ", "))"
             }
@@ -2858,6 +2861,14 @@ final class JockRetargetTestController {
         guard let clip = clipsByID[clipID] else {
             throw RetargetError.clipNotFound(clipID)
         }
+        guard let authoredOverride = runtimeOverrides.clips[clipID] else {
+            throw RetargetError.runtimeOverrideNotFound(clipID)
+        }
+        let visualCorrection = followConfiguration.visualHeadingCorrectionDegrees
+        let battleTurnOverride = Self.scriptedTurnRuntimeOverride(
+            authoredOverride: authoredOverride,
+            visualHeadingCorrectionDegrees: visualCorrection
+        )
         scriptedClipCompletionObserver = ScriptedClipCompletionObserver(
             token: token,
             clipID: clipID,
@@ -2868,8 +2879,32 @@ final class JockRetargetTestController {
             clip,
             loop: false,
             transition: true,
-            locomotionPolicy: .ignoreClipLocomotion,
-            runtimeOverride: followVisualRuntimeOverride()
+            locomotionPolicy: .useClipLocomotion,
+            runtimeOverride: battleTurnOverride
+        )
+        print("""
+        [Battle01] authored turn clip started
+          clipID: \(clipID)
+          durationSeconds: \(clip.timing.durationSeconds)
+          authoredEntryHeadingDegrees: \(authoredOverride.entryHeadingDegrees)
+          authoredExitHeadingDegrees: \(authoredOverride.exitHeadingDegrees)
+          visualHeadingCorrectionDegrees: \(visualCorrection)
+          runtimeEntryHeadingDegrees: \(battleTurnOverride.entryHeadingDegrees)
+          runtimeExitHeadingDegrees: \(battleTurnOverride.exitHeadingDegrees)
+          commitRootYawOnCompletion: \(battleTurnOverride.commitRootYawOnCompletion)
+          manualYawCommit: false
+        """)
+    }
+
+    nonisolated static func scriptedTurnRuntimeOverride(
+        authoredOverride: JockRuntimeClipOverride,
+        visualHeadingCorrectionDegrees: Float
+    ) -> JockRuntimeClipOverride {
+        let correction = -visualHeadingCorrectionDegrees
+        return JockRuntimeClipOverride(
+            entryHeadingDegrees: authoredOverride.entryHeadingDegrees + correction,
+            exitHeadingDegrees: authoredOverride.exitHeadingDegrees + correction,
+            commitRootYawOnCompletion: authoredOverride.commitRootYawOnCompletion
         )
     }
 
@@ -2907,25 +2942,6 @@ final class JockRetargetTestController {
         driver?.locomotionDeltaHandler = nil
         driver?.stop()
         print("[Battle01] scripted locomotion stopped reason=\(reason)")
-    }
-
-    func commitScriptedYawDegrees(_ degrees: Float) {
-        let forward = rootEntity.orientation(relativeTo: nil).act(
-            SIMD3<Float>(0, 0, -1)
-        )
-        let currentYaw = PhaseOneMath.yawRadiansForNegativeZForward(
-            worldForward: PhaseOneMath.normalizedOrFallback(
-                SIMD3<Float>(forward.x, 0, forward.z),
-                fallback: SIMD3<Float>(0, 0, -1)
-            )
-        )
-        rootYawRadians = PhaseOneMath.normalizedAngleRadians(
-            currentYaw + degrees * .pi / 180.0
-        )
-        rootEntity.setOrientation(
-            simd_quatf(angle: rootYawRadians, axis: SIMD3<Float>(0, 1, 0)),
-            relativeTo: nil
-        )
     }
 
     func steerScriptedRootTowardWorldDirection(

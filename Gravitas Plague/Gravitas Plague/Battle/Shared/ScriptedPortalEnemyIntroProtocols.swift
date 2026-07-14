@@ -23,7 +23,6 @@ protocol ScriptedEnemyAnimating: AnyObject {
         onAuthoredTravel: @escaping @MainActor (Float) -> Void
     ) throws
     func stopScriptedLocomotion(reason: String)
-    func commitScriptedYawDegrees(_ degrees: Float)
     func steerScriptedRootTowardWorldDirection(
         _ direction: SIMD3<Float>,
         deltaTime: Float

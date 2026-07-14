@@ -41,11 +41,15 @@ final class Battle01EnemyFactory {
         }
 
         let enemyID = UUID()
+        let hordeHitsToKill = attributes.horde.hitsToKill.random()
+        let storyHitsToKill = Self.storyHitsToKill(
+            currentHitsToKill: hordeHitsToKill
+        )
         let source = JockRetargetTestController()
         source.configureStoryBattleIdentity(
             id: enemyID,
             archetype: .grandma,
-            hitsToKill: attributes.horde.hitsToKill.random(),
+            hitsToKill: storyHitsToKill,
             attributes: attributes
         )
         try await source.loadIfNeeded()
@@ -61,6 +65,9 @@ final class Battle01EnemyFactory {
           enemyID: \(enemyID.uuidString)
           policy: storyGrandmaThreeX
           damageAcceptanceProbability: 0.33333333
+          priorStoryHitsToKill: \(hordeHitsToKill)
+          storyHitsToKill: \(storyHitsToKill)
+          acceptedHitCapacityMultiplier: 2
           portalMirrorHasPolicy: false
         """)
 
@@ -139,5 +146,9 @@ final class Battle01EnemyFactory {
             sourceRoot: source.rootEntity,
             portalMirror: mirror
         )
+    }
+
+    nonisolated static func storyHitsToKill(currentHitsToKill: Int) -> Int {
+        max(1, currentHitsToKill) * 2
     }
 }

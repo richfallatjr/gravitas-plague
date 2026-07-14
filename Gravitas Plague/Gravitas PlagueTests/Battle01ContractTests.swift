@@ -26,6 +26,35 @@ final class Battle01ContractTests: XCTestCase {
         XCTAssertFalse(definition.portalHandoff.mirrorHasDamageAuthority)
     }
 
+    func testBattleTurnPreservesAuthoredYawWhileApplyingVisualCorrection() {
+        let authored = JockRuntimeClipOverride(
+            entryHeadingDegrees: 0,
+            exitHeadingDegrees: -90,
+            commitRootYawOnCompletion: true
+        )
+
+        let resolved = JockRetargetTestController.scriptedTurnRuntimeOverride(
+            authoredOverride: authored,
+            visualHeadingCorrectionDegrees: 180
+        )
+
+        XCTAssertEqual(resolved.entryHeadingDegrees, -180, accuracy: 0.0001)
+        XCTAssertEqual(resolved.exitHeadingDegrees, -270, accuracy: 0.0001)
+        XCTAssertEqual(resolved.yawDeltaDegrees, -90, accuracy: 0.0001)
+        XCTAssertTrue(resolved.commitRootYawOnCompletion)
+    }
+
+    func testStoryGrandmaAcceptedHitCapacityIsDoubled() {
+        XCTAssertEqual(
+            Battle01EnemyFactory.storyHitsToKill(currentHitsToKill: 3),
+            6
+        )
+        XCTAssertEqual(
+            Battle01EnemyFactory.storyHitsToKill(currentHitsToKill: 5),
+            10
+        )
+    }
+
     func testBattleMediaIsFileBackedAndNonGenerated() throws {
         let definition = try Battle01DefinitionStore().load()
         let soundtrackURL = try Battle01DefinitionStore().soundtrackURL(for: definition)
