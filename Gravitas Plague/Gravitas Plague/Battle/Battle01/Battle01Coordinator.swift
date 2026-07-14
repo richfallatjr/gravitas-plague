@@ -2,6 +2,29 @@ import Foundation
 import RealityKit
 import simd
 
+struct Battle01MusicStartGate: Equatable {
+    private(set) var scriptPoint03TTSCompleted = false
+    private(set) var startClaimed = false
+
+    mutating func recordScriptPoint03TTSCompletion() {
+        scriptPoint03TTSCompleted = true
+    }
+
+    mutating func claimIfEligible(
+        doorState: TuringStoryDoorBattleState,
+        mediaPrepared: Bool
+    ) -> Bool {
+        guard scriptPoint03TTSCompleted,
+              doorState == .open,
+              mediaPrepared,
+              !startClaimed else {
+            return false
+        }
+        startClaimed = true
+        return true
+    }
+}
+
 @MainActor
 final class Battle01Coordinator {
     typealias EnemyPreparedHook = @MainActor (UUID, JockRetargetTestController) -> Void
@@ -20,12 +43,21 @@ final class Battle01Coordinator {
     private let playerTargetProvider: @MainActor () -> SIMD3<Float>?
     private let onPlayerDamage: @MainActor (Float) -> Void
 
+    private struct SoundtrackStartContext {
+        let definition: Battle01Definition
+        let soundtrackURL: URL
+        let richDescriptor: TuringPrerecordingDescriptor
+        let richURL: URL
+    }
+
     private(set) var state: Battle01State = .unloaded
     private var battleInstanceID: UUID?
     private var startTask: Task<Void, Never>?
     private var richPRTask: Task<Void, Never>?
     private var prepared: Battle01PreparedEnemy?
     private var soundtrackStarted = false
+    private var musicStartGate = Battle01MusicStartGate()
+    private var soundtrackStartContext: SoundtrackStartContext?
     private var portalCrossingStarted = false
     private var latestPlayerTarget: SIMD3<Float>?
 
@@ -63,6 +95,19 @@ final class Battle01Coordinator {
         let instanceID = UUID()
         battleInstanceID = instanceID
         state = .preparing
+        switch trigger {
+        case .scriptPointCompleted(let event):
+            guard event.scriptPointID == "prologue.scriptPoint03" else {
+                battleInstanceID = nil
+                state = .unloaded
+                print("[Battle01] rejected non-ScriptPoint03 trigger scriptPointID=\(event.scriptPointID)")
+                return
+            }
+            musicStartGate.recordScriptPoint03TTSCompletion()
+        case .debug:
+            musicStartGate.recordScriptPoint03TTSCompletion()
+            print("[Battle01MusicGate] debug trigger simulates ScriptPoint03 TTS completion")
+        }
         Battle01EventLog.emit(
             "triggered after ScriptPoint03",
             instanceID: instanceID,
@@ -88,6 +133,7 @@ final class Battle01Coordinator {
     ) {
         latestPlayerTarget = playerTargetWorldPosition
         prepared?.portalMirror.refreshPortalLightingIfNeeded()
+        tryStartSoundtrackIfEligible(reason: "doorStateObserved")
         switch state {
         case .portalIdleFacingAway, .turnOne, .turnTwo, .approachingDoor,
              .waitingForDoor, .openingDoor, .portalCrossing:
@@ -131,6 +177,8 @@ final class Battle01Coordinator {
         startTask = nil
         richPRTask = nil
         soundtrackStarted = false
+        musicStartGate = Battle01MusicStartGate()
+        soundtrackStartContext = nil
         portalCrossingStarted = false
         latestPlayerTarget = nil
         state = .unloaded
@@ -146,6 +194,15 @@ final class Battle01Coordinator {
             )
             let richURL = try prerecordingStore.audioURL(for: richDescriptor)
             try soundtrack.prepare(fileURL: soundtrackURL)
+            soundtrackStartContext = SoundtrackStartContext(
+                definition: definition,
+                soundtrackURL: soundtrackURL,
+                richDescriptor: richDescriptor,
+                richURL: richURL
+            )
+            tryStartSoundtrackIfEligible(reason: "battleMediaPrepared")
+            guard state != .failed,
+                  battleInstanceID == instanceID else { return }
 
             Battle01EventLog.emit(
                 "anchors resolved",
@@ -204,14 +261,9 @@ final class Battle01Coordinator {
                     state: state
                 )
             }
-
-            try startSoundtrackAndScheduleRichPR(
-                instanceID: instanceID,
-                definition: definition,
-                soundtrackURL: soundtrackURL,
-                richDescriptor: richDescriptor,
-                richURL: richURL
-            )
+            tryStartSoundtrackIfEligible(reason: "doorOpenCompleted")
+            guard state != .failed,
+                  battleInstanceID == instanceID else { return }
 
             portalCrossingStarted = true
             try await intro.performPortalCrossing()
@@ -266,6 +318,43 @@ final class Battle01Coordinator {
             if battleInstanceID == instanceID {
                 cancel(reason: "runTaskCancelled")
             }
+        } catch {
+            fail(error, instanceID: instanceID)
+        }
+    }
+
+    private func tryStartSoundtrackIfEligible(reason: String) {
+        guard let instanceID = battleInstanceID else { return }
+        let doorState = door.battleDoorState
+        guard musicStartGate.claimIfEligible(
+            doorState: doorState,
+            mediaPrepared: soundtrackStartContext != nil
+        ) else {
+            return
+        }
+        guard let context = soundtrackStartContext else { return }
+
+        Battle01EventLog.emit(
+            "soundtrack trigger gate satisfied",
+            instanceID: instanceID,
+            state: state,
+            fields: [
+                ("scriptPoint03TTSCompleted", "true"),
+                ("doorState", doorState.rawValue),
+                ("reason", reason),
+                ("requiresGrandmaAtA3", "false"),
+                ("requiresPortalCrossing", "false")
+            ]
+        )
+
+        do {
+            try startSoundtrackAndScheduleRichPR(
+                instanceID: instanceID,
+                definition: context.definition,
+                soundtrackURL: context.soundtrackURL,
+                richDescriptor: context.richDescriptor,
+                richURL: context.richURL
+            )
         } catch {
             fail(error, instanceID: instanceID)
         }
@@ -371,5 +460,7 @@ final class Battle01Coordinator {
         prepared = nil
         startTask = nil
         richPRTask = nil
+        musicStartGate = Battle01MusicStartGate()
+        soundtrackStartContext = nil
     }
 }

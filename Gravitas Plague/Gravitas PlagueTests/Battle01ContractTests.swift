@@ -55,6 +55,40 @@ final class Battle01ContractTests: XCTestCase {
         )
     }
 
+    func testMusicRequiresScriptPoint03CompletionAndOpenDoor() {
+        var noScriptCompletion = Battle01MusicStartGate()
+        XCTAssertFalse(
+            noScriptCompletion.claimIfEligible(
+                doorState: .open,
+                mediaPrepared: true
+            )
+        )
+
+        var closedDoor = Battle01MusicStartGate()
+        closedDoor.recordScriptPoint03TTSCompletion()
+        XCTAssertFalse(
+            closedDoor.claimIfEligible(
+                doorState: .closed,
+                mediaPrepared: true
+            )
+        )
+
+        var eligible = Battle01MusicStartGate()
+        eligible.recordScriptPoint03TTSCompletion()
+        XCTAssertTrue(
+            eligible.claimIfEligible(
+                doorState: .open,
+                mediaPrepared: true
+            )
+        )
+        XCTAssertFalse(
+            eligible.claimIfEligible(
+                doorState: .open,
+                mediaPrepared: true
+            )
+        )
+    }
+
     func testBattleMediaIsFileBackedAndNonGenerated() throws {
         let definition = try Battle01DefinitionStore().load()
         let soundtrackURL = try Battle01DefinitionStore().soundtrackURL(for: definition)
