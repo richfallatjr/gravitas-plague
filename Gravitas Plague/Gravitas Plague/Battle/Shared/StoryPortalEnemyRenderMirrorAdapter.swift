@@ -10,7 +10,6 @@ final class StoryPortalEnemyRenderMirrorAdapter {
     private let portalWorldRoot: Entity
     private let portalPlane: HordePortalPlaneDescriptor
     private let mirror: HordePortalSkinnedRenderMirror
-    private let sourceIBLEntity = Entity()
     private weak var boundIBLEntity: Entity?
     private var didLogMissingIBL = false
     private(set) var sourceRevealed = false
@@ -24,6 +23,9 @@ final class StoryPortalEnemyRenderMirrorAdapter {
         self.source = source
         self.portalWorldRoot = portalWorldRoot
         self.portalPlane = Self.makePlaneDescriptor(portalPlaneEntity)
+        let removedSourceReceiverCount = Self.removeIBLReceiversRecursively(
+            under: source.rootEntity
+        )
         self.mirror = try HordePortalSkinnedRenderMirror(
             source: source,
             portalID: UUID(),
@@ -32,8 +34,10 @@ final class StoryPortalEnemyRenderMirrorAdapter {
             bodySizeMeters: source.portalMirrorBodySizeMeters()
         )
         self.id = mirror.id
-        sourceIBLEntity.name = "Battle01GrandmaSourceIBL"
         mirror.syncVisibleDuringIngress()
+        print(
+            "[Battle01Lighting] room-side Grandma portal receivers cleared count=\(removedSourceReceiverCount) lighting=automatic_passthrough"
+        )
         refreshPortalLightingIfNeeded()
     }
 
@@ -81,7 +85,6 @@ final class StoryPortalEnemyRenderMirrorAdapter {
     func cleanup(reason: String) {
         exited = true
         mirror.cleanup(reason: reason)
-        sourceIBLEntity.removeFromParent()
     }
 
     func refreshPortalLightingIfNeeded() {
@@ -105,19 +108,10 @@ final class StoryPortalEnemyRenderMirrorAdapter {
 
         didLogMissingIBL = false
         guard boundIBLEntity !== iblEntity else { return }
-        guard let iblComponent = iblEntity.components[ImageBasedLightComponent.self] else {
+        guard iblEntity.components[ImageBasedLightComponent.self] != nil else {
             return
         }
 
-        sourceIBLEntity.components.set(iblComponent)
-        if sourceIBLEntity.parent == nil {
-            source.rootEntity.parent?.addChild(sourceIBLEntity)
-        }
-
-        let sourceReceiverCount = Self.attachIBLReceiversRecursively(
-            under: source.rootEntity,
-            iblEntity: sourceIBLEntity
-        )
         let mirrorReceiverCount = Self.attachIBLReceiversRecursively(
             under: mirror.rootEntity,
             iblEntity: iblEntity
@@ -127,16 +121,16 @@ final class StoryPortalEnemyRenderMirrorAdapter {
 
         print(
             """
-            [Battle01Lighting] Grandma bound to portal IBL
+            [Battle01Lighting] Grandma portal mirror bound to portal IBL
               iblEntity: \(iblEntity.name)
               sourceEnemyID: \(source.hordeBenchmarkID.uuidString)
-              sourceReceiverCount: \(sourceReceiverCount)
+              sourceReceiverCount: 0
               mirrorReceiverCount: \(mirrorReceiverCount)
               replacedPreviousIBL: \(replacedPreviousIBL)
-              sourceIBLEntity: \(sourceIBLEntity.name)
               mirrorIBLEntity: \(iblEntity.name)
-              sharedEnvironmentResource: true
-              receiverWorlds: source_room,mirror_portal
+              sourceLighting: automatic_passthrough
+              mirrorLighting: portal_dome_ibl
+              receiverWorlds: mirror_portal_only
             """
         )
     }
@@ -195,6 +189,21 @@ final class StoryPortalEnemyRenderMirrorAdapter {
                 under: child,
                 iblEntity: iblEntity
             )
+        }
+    }
+
+    @discardableResult
+    private static func removeIBLReceiversRecursively(
+        under root: Entity
+    ) -> Int {
+        var removedCount = 0
+        if root.components[ImageBasedLightReceiverComponent.self] != nil {
+            root.components.remove(ImageBasedLightReceiverComponent.self)
+            removedCount = 1
+        }
+
+        return root.children.reduce(removedCount) { count, child in
+            count + removeIBLReceiversRecursively(under: child)
         }
     }
 }

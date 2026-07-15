@@ -1083,6 +1083,7 @@ final class TuringStoryDoorBundleController:
     private func installPortalOnlyEntities(
         anchors: Anchors
     ) {
+        let portalIBLEntity = firstPortalIBLEntity(in: portalWorldRoot)
         for record in anchors.portalOnlyEntities {
             let source = record.source
             source.removeFromParent()
@@ -1092,6 +1093,15 @@ final class TuringStoryDoorBundleController:
                 record.authoredPortalTransform,
                 relativeTo: portalWorldRoot
             )
+            let receiverCount: Int
+            if let portalIBLEntity {
+                receiverCount = attachPortalIBLReceiversRecursively(
+                    under: source,
+                    iblEntity: portalIBLEntity
+                )
+            } else {
+                receiverCount = 0
+            }
 
             print(
                 """
@@ -1100,7 +1110,41 @@ final class TuringStoryDoorBundleController:
                   parent: TuringStoryDoorPortalWorldRoot
                   transformBasis: cached_authored_source_relative_to_portalWorldRoot
                   duplicateEntityGraph: false
+                  portalIBLEntity: \(portalIBLEntity?.name ?? "missing")
+                  portalIBLReceiverCount: \(receiverCount)
                 """
+            )
+        }
+    }
+
+    private func firstPortalIBLEntity(
+        in root: Entity
+    ) -> Entity? {
+        if root.components[ImageBasedLightComponent.self] != nil {
+            return root
+        }
+        for child in root.children {
+            if let found = firstPortalIBLEntity(in: child) {
+                return found
+            }
+        }
+        return nil
+    }
+
+    @discardableResult
+    private func attachPortalIBLReceiversRecursively(
+        under root: Entity,
+        iblEntity: Entity
+    ) -> Int {
+        root.components.set(
+            ImageBasedLightReceiverComponent(
+                imageBasedLight: iblEntity
+            )
+        )
+        return root.children.reduce(1) { count, child in
+            count + attachPortalIBLReceiversRecursively(
+                under: child,
+                iblEntity: iblEntity
             )
         }
     }

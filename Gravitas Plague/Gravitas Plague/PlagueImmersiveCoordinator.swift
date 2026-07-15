@@ -639,8 +639,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         enemyID: UUID,
         controller: JockRetargetTestController
     ) {
-        forestEnvironmentController.applyIBLReceiverRecursively(
-            root: controller.rootEntity
+        print(
+            "[Battle01Lighting] room-side Grandma uses automatic passthrough lighting explicitIBLReceiver=false"
         )
         audioController.attachHostAudioSource(
             id: enemyID,
