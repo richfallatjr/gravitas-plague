@@ -10,7 +10,6 @@ struct TuringVoicePromptTriggerDescriptor: Codable, Sendable, Hashable {
   let conversationKey: String
   let intent: String
   let emotion: String
-  let seedIntent: String
 }
 
 struct TuringVoicePromptTriggerStore: Sendable {
@@ -38,7 +37,6 @@ struct TuringVoicePromptTriggerStore: Sendable {
       ("conversationKey", value.conversationKey),
       ("intent", value.intent),
       ("emotion", value.emotion),
-      ("seedIntent", value.seedIntent),
     ]
 
     for (label, rawValue) in required {

@@ -18,33 +18,12 @@ actor TuringDialogueService {
         let profile = try characterStore.profile(
             id: request.characterProfileID
         )
-        let dialogueHistoryJSON: String
-        let authoredPrerecordingJSON: String
-
-        if let flowContext = request.flowContext {
-            dialogueHistoryJSON = flowContext.dialogueHistoryJSON
-            authoredPrerecordingJSON = flowContext.authoredPrerecordingJSON
-        } else {
-            dialogueHistoryJSON = "[]"
-            authoredPrerecordingJSON = TuringVoicePromptContext
-                .AuthoredPrerecording(
-                    prerecordingID: "",
-                    speakerID: "",
-                    transcript: request.prerecordingTranscript ?? "",
-                    alreadySpoken: true,
-                    generatedResponseMustContinueAfterIt: true
-                )
-                .promptJSON
-        }
         let prompt = try Self.renderPrompt(
             resourcePath: "Turing/Prompts/voicePrompt_characterIntent.txt",
             replacements: [
                 "{{characterProfile}}": profile.voicePromptPromptText,
-                "{{dialogueHistoryJSON}}": dialogueHistoryJSON,
-                "{{authoredPrerecordingJSON}}": authoredPrerecordingJSON,
-                "{{intent}}": request.intent,
-                "{{voicePromptSeedIntent}}": request.voicePromptSeedIntent ?? "",
-                "{{emotion}}": request.emotion
+                "{{promptContext}}": request.promptContext,
+                "{{prerecordingTranscript}}": request.prerecordingTranscript
             ]
         )
 
@@ -55,14 +34,11 @@ actor TuringDialogueService {
           characterID: \(profile.characterID)
           promptTemplate: voicePrompt_characterIntent
           profileContext: voicePromptSafe
-          prerecordingTranscriptUTF16: \((request.prerecordingTranscript ?? "").utf16.count)
-          structuredFlowContext: \(request.flowContext != nil)
-          dialogueHistoryTurnCount: \(request.flowContext?.dialogueHistory.count ?? 0)
-          authoredPRTranscriptSHA256: \(TuringFlowHash.sha256(
-              request.flowContext?.authoredPrerecording.transcript
-                  ?? request.prerecordingTranscript
-                  ?? ""
-          ))
+          inputContract: characterProfile,promptContext,prerecordingTranscript
+          prerecordingTranscriptUTF16: \(request.prerecordingTranscript.utf16.count)
+          authoredPRTranscriptSHA256: \(TuringFlowHash.sha256(request.prerecordingTranscript))
+          dialogueHistoryIncluded: false
+          conversationSeedIncluded: false
         """)
 
         let raw: String
@@ -141,16 +117,13 @@ actor TuringDialogueService {
         let profile = try characterStore.profile(
             id: request.characterProfileID
         )
-        let seed = request.lastVoicePromptSeed ?? .empty
         let prompt = try Self.renderPrompt(
             resourcePath: "Turing/Prompts/conversationPrompt_playerTurn_noBible.txt",
             replacements: [
                 "{{characterProfile}}": profile.promptText,
-                "{{episodeStateForWordsOnly}}": request.episodeStateForWordsOnly,
-                "{{prerecordingTranscript}}": request.prerecordingTranscript ?? "",
-                "{{lastVoicePromptSeed}}": seed.promptJSON,
-                "{{playerDictation}}": request.playerDictation,
-                "{{emotion}}": request.emotion
+                "{{promptContext}}": request.promptContext,
+                "{{prerecordingTranscript}}": request.prerecordingTranscript,
+                "{{userInput}}": request.userInput
             ]
         )
 
@@ -159,8 +132,10 @@ actor TuringDialogueService {
           freshSession: true
           characterID: \(profile.characterID)
           promptTemplate: conversationPrompt_playerTurn_noBible
-          seedStatus: \(seed.isEmptySeed ? "empty" : "present")
-          prerecordingTranscriptUTF16: \((request.prerecordingTranscript ?? "").utf16.count)
+          inputContract: userInput,characterProfile,promptContext,prerecordingTranscript
+          prerecordingTranscriptUTF16: \(request.prerecordingTranscript.utf16.count)
+          dialogueHistoryIncluded: false
+          conversationSeedIncluded: false
         """)
 
         let raw: String

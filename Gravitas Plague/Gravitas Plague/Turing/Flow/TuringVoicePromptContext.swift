@@ -27,36 +27,6 @@ struct TuringVoicePromptContext: Codable, Sendable, Hashable {
         let generatedResponseMustContinueAfterIt: Bool
     }
 
-    var dialogueHistoryJSON: String {
-        Self.encodeJSON(dialogueHistory)
-    }
-
-    var authoredPrerecordingJSON: String {
-        Self.encodeJSON(authoredPrerecording)
-    }
-
-    private static func encodeJSON<T: Encodable>(_ value: T) -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(value),
-              let string = String(data: data, encoding: .utf8) else {
-            return "{}"
-        }
-        return string
-    }
-}
-
-
-extension TuringVoicePromptContext.AuthoredPrerecording {
-    var promptJSON: String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(self),
-              let string = String(data: data, encoding: .utf8) else {
-            return "{}"
-        }
-        return string
-    }
 }
 
 actor TuringDialogueHistoryStore {

@@ -7,6 +7,5 @@
   "outputContext": "walkieSpatial",
   "conversationKey": "dialogue.big_mike.rich",
   "intent": "You are asking if Rich can hear you. You are worried because you have not heard from Rich at your regular cadence and something may be wrong. Continue after the authored radio contact without repeating it. Give Rich a believable, direct reason to answer.",
-  "emotion": "worried, controlled, protective",
-  "seedIntent": "Big Mike checks whether Rich can hear him and is worried because Rich missed their regular contact cadence."
+  "emotion": "worried, controlled, protective"
 }

@@ -23,27 +23,6 @@ struct TuringConversationSeed: Codable, Sendable, Hashable {
             openThread.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    var promptJSON: String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(self),
-              let json = String(data: data, encoding: .utf8) else {
-            return "{}"
-        }
-        return json
-    }
-}
-
-struct TuringConversationPromptContext: Sendable, Hashable {
-    let prerecordingID: String?
-    let prerecordingTranscript: String
-    let lastVoicePromptSeed: TuringConversationSeed
-
-    static let empty = TuringConversationPromptContext(
-        prerecordingID: nil,
-        prerecordingTranscript: "",
-        lastVoicePromptSeed: .empty
-    )
 }
 
 actor TuringConversationSeedStore {
@@ -57,12 +36,8 @@ actor TuringConversationSeedStore {
         seedsByKey[key] ?? .empty
     }
 
-    func context(for key: String) -> TuringConversationPromptContext {
-        TuringConversationPromptContext(
-            prerecordingID: prerecordingIDByKey[key],
-            prerecordingTranscript: prerecordingTranscriptByKey[key] ?? "",
-            lastVoicePromptSeed: seedsByKey[key] ?? .empty
-        )
+    func prerecordingTranscript(for key: String) -> String {
+        prerecordingTranscriptByKey[key] ?? ""
     }
 
     func updateSeed(_ seed: TuringConversationSeed?, for key: String) {

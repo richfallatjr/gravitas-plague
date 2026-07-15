@@ -2,55 +2,29 @@ import Foundation
 
 struct VoicePromptRequest: Codable, Sendable, Hashable {
     let id: String
-    let speaker: String
-    let voiceID: String
-    let voiceVariantID: String?
     let characterProfileID: String
-    let intent: String
-    let emotion: String
-    let prerecordingTranscript: String?
-    let voicePromptSeedIntent: String?
-
-    /// Production Turing Flow uses this structured context. Legacy diagnostics
-    /// may leave it nil and continue using prerecordingTranscript.
-    let flowContext: TuringVoicePromptContext?
+    let promptContext: String
+    let prerecordingTranscript: String
 
     init(
         id: String,
-        speaker: String,
-        voiceID: String,
-        voiceVariantID: String?,
         characterProfileID: String,
-        intent: String,
-        emotion: String,
-        prerecordingTranscript: String?,
-        voicePromptSeedIntent: String?,
-        flowContext: TuringVoicePromptContext? = nil
+        promptContext: String,
+        prerecordingTranscript: String
     ) {
         self.id = id
-        self.speaker = speaker
-        self.voiceID = voiceID
-        self.voiceVariantID = voiceVariantID
         self.characterProfileID = characterProfileID
-        self.intent = intent
-        self.emotion = emotion
+        self.promptContext = promptContext
         self.prerecordingTranscript = prerecordingTranscript
-        self.voicePromptSeedIntent = voicePromptSeedIntent
-        self.flowContext = flowContext
     }
 }
 
 struct ConversationPromptNoBibleRequest: Codable, Sendable, Hashable {
     let id: String
-    let speaker: String
-    let voiceID: String
-    let voiceVariantID: String?
     let characterProfileID: String
-    let playerDictation: String
-    let episodeStateForWordsOnly: String
-    let emotion: String
-    let prerecordingTranscript: String?
-    let lastVoicePromptSeed: TuringConversationSeed?
+    let userInput: String
+    let promptContext: String
+    let prerecordingTranscript: String
 }
 
 struct TuringDialoguePlan: Codable, Sendable, Hashable {

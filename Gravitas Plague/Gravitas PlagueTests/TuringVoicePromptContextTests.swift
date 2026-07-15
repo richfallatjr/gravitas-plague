@@ -24,24 +24,14 @@ final class TuringVoicePromptContextTests:
                     )
             )
 
-        let json =
-            context
-                .authoredPrerecordingJSON
-
+        XCTAssertTrue(context.authoredPrerecording.alreadySpoken)
         XCTAssertTrue(
-            json.contains(
-                #""alreadySpoken" : true"#
-            )
+            context.authoredPrerecording
+                .generatedResponseMustContinueAfterIt
         )
-        XCTAssertTrue(
-            json.contains(
-                #""generatedResponseMustContinueAfterIt" : true"#
-            )
-        )
-        XCTAssertTrue(
-            json.contains(
-                "This line already played."
-            )
+        XCTAssertEqual(
+            context.authoredPrerecording.transcript,
+            "This line already played."
         )
     }
 

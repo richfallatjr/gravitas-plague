@@ -250,17 +250,6 @@ actor TuringFlowEngine {
                 character: character
             )
 
-            let flowContext =
-                await historyStore
-                    .makeVoicePromptContext(
-                        conversationKey:
-                            descriptor.transmission
-                                .conversationKey,
-                        historyLimit: 6,
-                        prerecording:
-                            prerecording
-                    )
-
             await seedStore.updatePrerecording(
                 id:
                     prerecording
@@ -292,12 +281,8 @@ actor TuringFlowEngine {
                             )
                         ),
                         (
-                            "dialogueHistoryTurnCount",
-                            String(
-                                flowContext
-                                    .dialogueHistory
-                                    .count
-                                )
+                            "promptInputContract",
+                            "characterProfile,promptContext,prerecordingTranscript"
                         ),
                         (
                             "freshDialogueService",
@@ -315,29 +300,20 @@ actor TuringFlowEngine {
                                 id:
                                     voicePrompt
                                         .voicePromptID,
-                                speaker:
-                                    character
-                                        .displayName,
-                                voiceID:
-                                    character.voiceID,
-                                voiceVariantID:
-                                    prerecording
-                                        .voiceVariantID,
                                 characterProfileID:
                                     voicePrompt
                                         .characterProfileID,
-                                intent:
-                                    voicePrompt.intent,
-                                emotion:
-                                    voicePrompt.emotion,
+                                promptContext:
+                                    """
+                                    Story intent:
+                                    \(voicePrompt.intent)
+
+                                    Emotional tone:
+                                    \(voicePrompt.emotion)
+                                    """,
                                 prerecordingTranscript:
                                     prerecording
-                                        .transcript,
-                                voicePromptSeedIntent:
-                                    voicePrompt
-                                        .seedIntent,
-                                flowContext:
-                                    flowContext
+                                        .transcript
                             )
                         )
                 }

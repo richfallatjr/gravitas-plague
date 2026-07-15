@@ -169,7 +169,7 @@ final class TuringFlowResourceParityTests:
         )
     }
 
-    func testPromptMarksCurrentPRAlreadySpoken()
+    func testVoicePromptUsesOnlyApprovedContextInputs()
         throws {
         let url =
             try TuringResourceLoader
@@ -195,14 +195,61 @@ final class TuringFlowResourceParityTests:
         )
         XCTAssertTrue(
             prompt.contains(
-                "{{authoredPrerecordingJSON}}"
+                "{{characterProfile}}"
             )
         )
         XCTAssertTrue(
             prompt.contains(
+                "{{promptContext}}"
+            )
+        )
+        XCTAssertTrue(
+            prompt.contains(
+                "{{prerecordingTranscript}}"
+            )
+        )
+        XCTAssertFalse(
+            prompt.contains(
                 "{{dialogueHistoryJSON}}"
             )
         )
+        XCTAssertFalse(
+            prompt.contains(
+                "{{authoredPrerecordingJSON}}"
+            )
+        )
+        XCTAssertFalse(
+            prompt.contains(
+                "{{voicePromptSeedIntent}}"
+            )
+        )
+    }
+
+    func testConversationPromptUsesOnlyApprovedContextInputs()
+        throws {
+        let url =
+            try TuringResourceLoader
+                .resourceURL(
+                    resourcePath:
+                        "Turing/Prompts/conversationPrompt_playerTurn_noBible.txt"
+                )
+        let prompt =
+            try String(
+                contentsOf: url,
+                encoding: .utf8
+            )
+
+        for placeholder in [
+            "{{userInput}}",
+            "{{characterProfile}}",
+            "{{promptContext}}",
+            "{{prerecordingTranscript}}"
+        ] {
+            XCTAssertTrue(prompt.contains(placeholder))
+        }
+        XCTAssertFalse(prompt.contains("{{lastVoicePromptSeed}}"))
+        XCTAssertFalse(prompt.contains("{{dialogueHistoryJSON}}"))
+        XCTAssertFalse(prompt.contains("{{episodeStateForWordsOnly}}"))
     }
 
     func testGenericEngineContainsNoProloguePointIDs()

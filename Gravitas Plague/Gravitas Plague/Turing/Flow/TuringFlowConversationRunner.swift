@@ -7,7 +7,6 @@ struct TuringFlowConversationRequest: Sendable {
     let playerDictation: String
     let episodeStateForWordsOnly: String
     let emotion: String
-    let voiceVariantID: String?
 }
 
 enum TuringFlowConversationRunner {
@@ -84,8 +83,8 @@ enum TuringFlowConversationRunner {
                     identity
                 )
 
-            let context =
-                await seedStore.context(
+            let prerecordingTranscript =
+                await seedStore.prerecordingTranscript(
                     for:
                         request.conversationKey
                 )
@@ -96,27 +95,20 @@ enum TuringFlowConversationRunner {
                         ConversationPromptNoBibleRequest(
                             id:
                                 "conversation.\(conversationRunID.uuidString)",
-                            speaker:
-                                runtime.displayName,
-                            voiceID:
-                                runtime.voiceID,
-                            voiceVariantID:
-                                request.voiceVariantID,
                             characterProfileID:
                                 runtime.characterID,
-                            playerDictation:
+                            userInput:
                                 text,
-                            episodeStateForWordsOnly:
-                                request
-                                    .episodeStateForWordsOnly,
-                            emotion:
-                                request.emotion,
+                            promptContext:
+                                """
+                                Story context:
+                                \(request.episodeStateForWordsOnly)
+
+                                Emotional tone:
+                                \(request.emotion)
+                                """,
                             prerecordingTranscript:
-                                context
-                                    .prerecordingTranscript,
-                            lastVoicePromptSeed:
-                                context
-                                    .lastVoicePromptSeed
+                                prerecordingTranscript
                         )
                     )
 

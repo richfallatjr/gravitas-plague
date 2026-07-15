@@ -21,8 +21,7 @@ enum TuringBigMikeConversationRunner {
                 episodeStateForWordsOnly:
                     "Rich and Big Mike are in an active early-outbreak radio conversation. Big Mike is nearby, protective, tired, uncertain about the Plague, and trying to keep Rich alive.",
                 emotion:
-                    "protective, grounded, tired, alert",
-                voiceVariantID: nil
+                    "protective, grounded, tired, alert"
             ),
             seedStore: seedStore,
             historyStore: .shared,

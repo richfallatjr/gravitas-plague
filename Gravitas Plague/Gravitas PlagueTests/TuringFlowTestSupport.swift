@@ -742,8 +742,7 @@ enum TuringFlowTestFixtures {
                 conversationKey,
             intent:
                 "Continue after the PR.",
-            emotion: "controlled",
-            seedIntent: "Test seed."
+            emotion: "controlled"
         )
     }
 

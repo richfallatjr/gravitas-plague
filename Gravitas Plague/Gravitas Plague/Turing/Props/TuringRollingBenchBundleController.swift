@@ -227,7 +227,7 @@ final class TuringRollingBenchBundleController:
         guard let loadedBundleRoot else { throw BundleError.noPlacement }
         anchors = try resolveAnchors(in: loadedBundleRoot)
         measureVisualBounds()
-        TuringMemoryBudgetProbe.log(label: "afterRollingBenchMVPPrune")
+        TuringMemoryBudgetProbe.log(label: "afterRollingBenchAuthoredHierarchyResolved")
         if !audioResourcesPrepared {
             try await radioController.prepareResources()
             audioResourcesPrepared = true
@@ -255,29 +255,9 @@ final class TuringRollingBenchBundleController:
             canonical: TuringRollingBenchEntityName.canonicalCartRoot,
             under: bundleRoot
         )
-        let generatorRoot = try requireEntity(
-            current: TuringRollingBenchEntityName.generatorRoot,
-            canonical: TuringRollingBenchEntityName.canonicalGeneratorRoot,
-            under: bundleRoot
-        )
-        let hamReceiverRoot = try requireEntity(
-            current: TuringRollingBenchEntityName.hamReceiverRoot,
-            canonical: TuringRollingBenchEntityName.canonicalHamReceiverRoot,
-            under: bundleRoot
-        )
         let crankRadioRoot = try requireEntity(
             current: TuringRollingBenchEntityName.crankRadioRoot,
             canonical: TuringRollingBenchEntityName.canonicalCrankRadioRoot,
-            under: bundleRoot
-        )
-        let antennaeRoot = try requireEntity(
-            current: TuringRollingBenchEntityName.antennaeRoot,
-            canonical: TuringRollingBenchEntityName.canonicalAntennaeRoot,
-            under: bundleRoot
-        )
-        let microphoneRoot = try requireEntity(
-            current: TuringRollingBenchEntityName.microphoneRoot,
-            canonical: TuringRollingBenchEntityName.canonicalMicrophoneRoot,
             under: bundleRoot
         )
         let crankRadioIconAnchor = try requireEntity(
@@ -285,22 +265,10 @@ final class TuringRollingBenchBundleController:
             canonical: TuringRollingBenchEntityName.canonicalCrankRadioIconAnchor,
             under: bundleRoot
         )
-        let microphoneIconAnchor = try requireEntity(
-            current: TuringRollingBenchEntityName.microphoneIconAnchor,
-            canonical: TuringRollingBenchEntityName.canonicalMicrophoneIconAnchor,
-            under: bundleRoot
-        )
 
-        let prunedEntities = [
-            generatorRoot,
-            hamReceiverRoot,
-            antennaeRoot,
-            microphoneRoot
-        ]
-        let prunedEntityNames = prunedEntities.map(\.name)
-        for entity in prunedEntities {
-            entity.removeFromParent()
-        }
+        let authoredTopLevelChildren = bundleRoot.children.map { child in
+            "\(child.name):enabled=\(child.isEnabled)"
+        }.joined(separator: ",")
 
         let passthroughLighting = configurePassthroughLighting(
             in: bundleRoot
@@ -312,15 +280,11 @@ final class TuringRollingBenchBundleController:
             [TuringRollingBench] anchors resolved
               bundleRoot: \(bundleRoot.name)
               cartRoot: \(cartRoot.name)
-              generatorRoot: \(generatorRoot.name)
-              hamReceiverRoot: \(hamReceiverRoot.name)
               crankRadioRoot: \(crankRadioRoot.name)
-              antennaeRoot: \(antennaeRoot.name)
-              microphoneRoot: \(microphoneRoot.name)
               crankRadioIconAnchor: \(crankRadioIconAnchor.name)
-              microphoneIconAnchor: \(microphoneIconAnchor.name)
-              prunedForMVP: \(prunedEntityNames.joined(separator: ","))
-              retainedVisualRoots: \(cartRoot.name),\(crankRadioRoot.name)
+              authoredHierarchyPreserved: true
+              runtimeGeometryPruning: false
+              authoredTopLevelChildren: \(authoredTopLevelChildren)
               proceduralAudioEmitter: \(emitter.name)
               automaticPassthroughLighting: true
               importedEnvironmentLightFound: \(passthroughLighting.lightFound)
