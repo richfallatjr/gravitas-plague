@@ -42,6 +42,13 @@ protocol TuringStoryAdjustmentWallProviding: AnyObject {
     ) -> TuringStoryAdjustmentWallBasis?
 }
 
+@MainActor
+protocol TuringStoryAdjustmentFrontEdgeProviding: AnyObject {
+    func turingStoryAdjustmentFrontEdgeOffset(
+        for propID: TuringStoryPropID
+    ) -> Float
+}
+
 extension WallPlaneManager: TuringStoryAdjustmentWallProviding {
     func turingStoryAdjustmentWallBasis(
         for wallID: UUID
@@ -70,6 +77,7 @@ struct TuringStoryAdjustmentBarPoseResolver: Sendable {
     static let shelfBelowVisualOffset: Float = 0.060
     static let posterBelowStickerGap: Float = 0.040
     static let doorCenterBelowFloor: Float = 6.0 * 0.0254
+    static let rollingBenchCenterBelowFloor: Float = 6.0 * 0.0254
     static let floorVisualClearance: Float = 0.010
 
     func visualWidth(
@@ -80,7 +88,8 @@ struct TuringStoryAdjustmentBarPoseResolver: Sendable {
 
     func worldTransform(
         slot: TuringStoryRuntimeSlot,
-        wall: TuringStoryAdjustmentWallBasis
+        wall: TuringStoryAdjustmentWallBasis,
+        frontEdgeOffset: Float = 0
     ) -> simd_float4x4 {
         let right = normalized(
             wall.right,
@@ -110,6 +119,18 @@ struct TuringStoryAdjustmentBarPoseResolver: Sendable {
                     - Self.doorCenterBelowFloor
             }
 
+        case .rollingBench(let placement):
+            clampsAboveFloor = false
+            if abs(up.y) > 0.05 {
+                localY = (
+                    placement.floorWorldY - Self.rollingBenchCenterBelowFloor
+                        - wall.center.y
+                ) / up.y
+            } else {
+                localY = placement.localY - placement.height * 0.5
+                    - Self.rollingBenchCenterBelowFloor
+            }
+
         case .window(let placement):
             clampsAboveFloor = true
             localY = placement.localY - placement.height * 0.5
@@ -136,6 +157,7 @@ struct TuringStoryAdjustmentBarPoseResolver: Sendable {
             + up * localY
             + normal * (
                 slot.placement.depthOffset + Self.wallOutwardOffset
+                    + frontEdgeOffset
             )
 
         if clampsAboveFloor,
@@ -235,15 +257,19 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
 
     private weak var wallProvider:
         (any TuringStoryAdjustmentWallProviding)?
+    private weak var frontEdgeProvider:
+        (any TuringStoryAdjustmentFrontEdgeProviding)?
     private let root = Entity()
     private let poseResolver = TuringStoryAdjustmentBarPoseResolver()
     private var records: [TuringStoryPropID: BarRecord] = [:]
     private var snapFlashTasks: [TuringStoryPropID: Task<Void, Never>] = [:]
 
     init(
-        wallProvider: any TuringStoryAdjustmentWallProviding
+        wallProvider: any TuringStoryAdjustmentWallProviding,
+        frontEdgeProvider: (any TuringStoryAdjustmentFrontEdgeProviding)? = nil
     ) {
         self.wallProvider = wallProvider
+        self.frontEdgeProvider = frontEdgeProvider
         _ = Self.registerAdjustmentBarComponentOnce
         root.name = "TuringStoryPlacementAdjustmentBars_Root"
         root.isEnabled = false
@@ -274,13 +300,16 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
                 continue
             }
             let record = makeRecord(slot: slot)
-            record.container.setTransformMatrix(
-                poseResolver.worldTransform(slot: slot, wall: wall),
-                relativeTo: nil
-            )
+            let transform = worldTransform(slot: slot, wall: wall)
+            record.container.setTransformMatrix(transform, relativeTo: nil)
             root.addChild(record.container)
             records[propID] = record
             applyVisualState(.idle, to: record)
+            let frontEdgeOffset = frontEdgeProvider?
+                .turingStoryAdjustmentFrontEdgeOffset(for: propID) ?? 0
+            print(
+                "[TuringPlacementAdjust] bar installed prop=\(propID.rawValue) worldPosition=\(transform.columns.3) frontEdgeOffsetMeters=\(frontEdgeOffset)"
+            )
         }
 
         root.isEnabled = !records.isEmpty
@@ -298,7 +327,7 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
         }
         record.slot = slot
         resizeIfNeeded(record: record, slot: slot)
-        let transform = poseResolver.worldTransform(slot: slot, wall: wall)
+        let transform = worldTransform(slot: slot, wall: wall)
         if duration <= 0 {
             record.container.setTransformMatrix(transform, relativeTo: nil)
         } else {
@@ -323,7 +352,7 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
         record.slot = slot
         resizeIfNeeded(record: record, slot: slot)
         record.container.setTransformMatrix(
-            poseResolver.worldTransform(slot: slot, wall: wall),
+            worldTransform(slot: slot, wall: wall),
             relativeTo: nil
         )
     }
@@ -463,6 +492,19 @@ final class TuringStoryPlacementAdjustmentBarPresenter:
             slot: slot,
             visibleSize: visibleSize,
             collisionSize: collisionSize
+        )
+    }
+
+    private func worldTransform(
+        slot: TuringStoryRuntimeSlot,
+        wall: TuringStoryAdjustmentWallBasis
+    ) -> simd_float4x4 {
+        let frontEdgeOffset = frontEdgeProvider?
+            .turingStoryAdjustmentFrontEdgeOffset(for: slot.propID) ?? 0
+        return poseResolver.worldTransform(
+            slot: slot,
+            wall: wall,
+            frontEdgeOffset: frontEdgeOffset
         )
     }
 

@@ -2,7 +2,7 @@ import XCTest
 @testable import Gravitas_Plague
 
 final class TuringStoryWallSliceLayoutResolverTests: XCTestCase {
-    func testDeterministicFallbackDistributesFourPropsAcrossFourteenWalls()
+    func testDeterministicFallbackDistributesFivePropsAcrossFourteenWalls()
         throws
     {
         let fixture = makeDistributedFallbackFixture(
@@ -15,14 +15,14 @@ final class TuringStoryWallSliceLayoutResolverTests: XCTestCase {
             map: fixture.map,
             catalog: fixture.catalog
         )
-        let selectedWallOrdinals = try [plan.d, plan.w, plan.s, plan.p].map { selection in
+        let selectedWallOrdinals = try [plan.d, plan.b, plan.w, plan.s, plan.p].map { selection in
             let ids = try XCTUnwrap(selection)
             let id = try XCTUnwrap(ids.first)
             return try XCTUnwrap(Int(id)) / 10
         }
 
-        XCTAssertEqual(selectedWallOrdinals, [8, 12, 1, 5])
-        XCTAssertEqual(Set(selectedWallOrdinals).count, 4)
+        XCTAssertEqual(selectedWallOrdinals, [8, 11, 14, 2, 5])
+        XCTAssertEqual(Set(selectedWallOrdinals).count, 5)
     }
 
     func testDeterministicFallbackStillReturnsEveryPropWithoutExactCatalog()
@@ -41,7 +41,7 @@ final class TuringStoryWallSliceLayoutResolverTests: XCTestCase {
 
         XCTAssertEqual(
             resolved.assignments.map(\.propID),
-            [.door, .window, .walkieShelf, .poster]
+            [.door, .rollingBench, .window, .walkieShelf, .poster]
         )
         XCTAssertEqual(
             Set(resolved.assignments.map { $0.placement.wallUUID }).count,

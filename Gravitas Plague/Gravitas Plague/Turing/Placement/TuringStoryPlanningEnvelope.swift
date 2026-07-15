@@ -2,6 +2,7 @@ import Foundation
 
 enum TuringStoryPropID: String, Codable, CaseIterable, Sendable, Hashable {
     case door
+    case rollingBench
     case window
     case walkieShelf
     case poster
@@ -9,6 +10,7 @@ enum TuringStoryPropID: String, Codable, CaseIterable, Sendable, Hashable {
     var shortID: String {
         switch self {
         case .door: return "d"
+        case .rollingBench: return "b"
         case .window: return "w"
         case .walkieShelf: return "s"
         case .poster: return "p"
@@ -18,15 +20,17 @@ enum TuringStoryPropID: String, Codable, CaseIterable, Sendable, Hashable {
     var priority: Int {
         switch self {
         case .door: return 1
-        case .window: return 2
-        case .walkieShelf: return 3
-        case .poster: return 4
+        case .rollingBench: return 2
+        case .window: return 3
+        case .walkieShelf: return 4
+        case .poster: return 5
         }
     }
 
     var occupancyKind: WallPropOccupancyKind {
         switch self {
         case .door: return .storyDoorBundle
+        case .rollingBench: return .storyRollingBenchBundle
         case .window: return .storyWindowBundle
         case .walkieShelf: return .storyWalkieBundle
         case .poster: return .wallPoster
@@ -61,6 +65,17 @@ struct TuringStoryPlanningEnvelope: Sendable, Hashable {
                 preferredFrontageDepthMeters: 0.90,
                 wallMarginMeters: TuringStoryDoorBundleTuning.wallMarginMeters,
                 depthOffsetMeters: TuringStoryDoorBundleTuning.depthOffset
+            ),
+            .init(
+                propID: .rollingBench,
+                minimumWidthMeters: TuringRollingBenchTuning.minimumReservationWidthMeters,
+                preferredWidthMeters: TuringRollingBenchTuning.preferredReservationWidthMeters,
+                maximumWidthMeters: TuringRollingBenchTuning.maximumReservationWidthMeters,
+                bottomAboveFloorMeters: TuringRollingBenchTuning.bottomAboveFloorMeters,
+                topAboveFloorMeters: TuringRollingBenchTuning.expectedHeightMeters,
+                preferredFrontageDepthMeters: TuringRollingBenchTuning.frontageDepthMeters,
+                wallMarginMeters: TuringRollingBenchTuning.wallMarginMeters,
+                depthOffsetMeters: TuringRollingBenchTuning.depthOffsetMeters
             ),
             .init(
                 propID: .window,

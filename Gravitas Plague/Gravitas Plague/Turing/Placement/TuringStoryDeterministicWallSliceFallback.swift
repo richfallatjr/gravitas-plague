@@ -94,6 +94,7 @@ struct TuringStoryDeterministicWallSliceFallback: Sendable {
 
         let plan = TuringStoryWallSlicePlan(
             d: selectedSliceByProp[.door].map { [$0] },
+            b: selectedSliceByProp[.rollingBench].map { [$0] },
             w: selectedSliceByProp[.window].map { [$0] },
             s: selectedSliceByProp[.walkieShelf].map { [$0] },
             p: selectedSliceByProp[.poster].map { [$0] }
@@ -249,6 +250,11 @@ struct TuringStoryDeterministicWallSliceFallback: Sendable {
                 + slice.wallCenterScore * 0.23
                 + slice.cornerClearanceScore * 0.17
                 + slice.wallStability * 0.18
+        case .rollingBench:
+            return slice.floorSupportScore * 0.36
+                + slice.wallCenterScore * 0.26
+                + slice.cornerClearanceScore * 0.18
+                + slice.wallStability * 0.20
         case .window:
             return slice.floorSupportScore * 0.18
                 + slice.wallCenterScore * 0.32

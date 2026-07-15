@@ -62,6 +62,7 @@ final class TuringStoryWallLayoutCoordinator {
     private let deterministicFallback = TuringStoryDeterministicWallSliceFallback()
 
     private let doorController: TuringStoryDoorBundleController
+    private let rollingBenchController: TuringRollingBenchBundleController
     private let windowController: TuringStoryWindowBundleController
     private let walkieController: TuringStoryWalkieBundleController
     private let posterController: WallMountedPosterUIController
@@ -80,6 +81,7 @@ final class TuringStoryWallLayoutCoordinator {
 
     init(
         doorController: TuringStoryDoorBundleController,
+        rollingBenchController: TuringRollingBenchBundleController,
         windowController: TuringStoryWindowBundleController,
         walkieController: TuringStoryWalkieBundleController,
         posterController: WallMountedPosterUIController,
@@ -90,6 +92,7 @@ final class TuringStoryWallLayoutCoordinator {
         onFailed: @escaping @MainActor (String, String) -> Void = { _, _ in }
     ) {
         self.doorController = doorController
+        self.rollingBenchController = rollingBenchController
         self.windowController = windowController
         self.walkieController = walkieController
         self.posterController = posterController
@@ -240,12 +243,31 @@ final class TuringStoryWallLayoutCoordinator {
             }
 
             state = .preparingAssets
+            print(
+                """
+                [TuringWallSlices] asset preparation started
+                  foundationPlanningComplete: true
+                  decodeConcurrency: 1
+                  order: door,window,walkieShelf,rollingBench
+                  rollingBenchLoadsLast: true
+                """
+            )
             TuringMemoryBudgetProbe.log(label: "beforeStoryPropAssetPrepare")
             do {
-                async let door: Void = doorController.prepareForPlannedPlacement()
-                async let window: Void = windowController.prepareForPlannedPlacement()
-                async let walkie: Void = walkieController.prepareForPlannedPlacement()
-                _ = try await (door, window, walkie)
+                try await doorController.prepareForPlannedPlacement()
+                TuringMemoryBudgetProbe.log(label: "afterStoryDoorAssetPrepare")
+                try Task.checkCancellation()
+
+                try await windowController.prepareForPlannedPlacement()
+                TuringMemoryBudgetProbe.log(label: "afterStoryWindowAssetPrepare")
+                try Task.checkCancellation()
+
+                try await walkieController.prepareForPlannedPlacement()
+                TuringMemoryBudgetProbe.log(label: "afterStoryWalkieAssetPrepare")
+                try Task.checkCancellation()
+
+                try await rollingBenchController.prepareForPlannedPlacement()
+                TuringMemoryBudgetProbe.log(label: "afterStoryRollingBenchAssetPrepare")
             } catch {
                 throw TuringStoryWallSliceError.assetPreparationFailed(error.localizedDescription)
             }
@@ -259,6 +281,7 @@ final class TuringStoryWallLayoutCoordinator {
                 resolvedLayout: resolved,
                 wallManager: wallManager,
                 doorController: doorController,
+                rollingBenchController: rollingBenchController,
                 windowController: windowController,
                 walkieController: walkieController,
                 posterController: posterController
@@ -266,7 +289,7 @@ final class TuringStoryWallLayoutCoordinator {
 
             try Task.checkCancellation()
             state = .committing
-            print("[TuringWallSlices] commit started order=door,window,walkieShelf,poster")
+            print("[TuringWallSlices] commit started order=door,rollingBench,window,walkieShelf,poster")
             try await commit(resolved, wallManager: wallManager, atmosphere: atmosphere)
             TuringMemoryBudgetProbe.log(label: "afterStoryPropCommit")
             state = .complete
@@ -290,6 +313,7 @@ final class TuringStoryWallLayoutCoordinator {
         atmosphere: PortalHDRIAtmosphere
     ) async throws {
         let oldDoor = doorController.placement
+        let oldRollingBench = rollingBenchController.placement
         let oldWindow = windowController.placement
         let oldWalkie = walkieController.placement
         let oldPoster = posterController.currentPlacementForStoryLayoutRollback()
@@ -297,6 +321,9 @@ final class TuringStoryWallLayoutCoordinator {
         do {
             let assigned = Set(layout.assignments.map(\.propID))
             if !assigned.contains(.door) { doorController.reset(reason: "sliceUnplaced") }
+            if !assigned.contains(.rollingBench) {
+                rollingBenchController.reset(reason: "sliceUnplaced")
+            }
             if !assigned.contains(.window) { windowController.reset(reason: "sliceUnplaced") }
             if !assigned.contains(.walkieShelf) { walkieController.reset(reason: "sliceUnplaced") }
             for assignment in layout.assignments.sorted(by: { $0.propID.priority < $1.propID.priority }) {
@@ -307,6 +334,11 @@ final class TuringStoryWallLayoutCoordinator {
                         doorPlacement(exact, wallManager: wallManager),
                         semanticReservation: exact.runtimeSemanticRect.wallLocalRect,
                         atmosphere: atmosphere
+                    )
+                case .rollingBench:
+                    try await rollingBenchController.commitPlannedPlacement(
+                        rollingBenchPlacement(exact),
+                        semanticReservation: exact.runtimeSemanticRect.wallLocalRect
                     )
                 case .window:
                     try await windowController.commitPlannedPlacement(
@@ -328,6 +360,7 @@ final class TuringStoryWallLayoutCoordinator {
             }
         } catch {
             doorController.reset(reason: "sliceRollback")
+            rollingBenchController.reset(reason: "sliceRollback")
             windowController.reset(reason: "sliceRollback")
             walkieController.reset(reason: "sliceRollback")
             posterController.resetPlacement(reason: "sliceRollback")
@@ -345,6 +378,13 @@ final class TuringStoryWallLayoutCoordinator {
                     oldWindow,
                     semanticReservation: turingWindowWallRect(for: oldWindow),
                     atmosphere: atmosphere
+                )
+            }
+            if let oldRollingBench {
+                try? await rollingBenchController.prepareForPlannedPlacement()
+                try? await rollingBenchController.commitPlannedPlacement(
+                    oldRollingBench,
+                    semanticReservation: turingRollingBenchWallRect(for: oldRollingBench)
                 )
             }
             if let oldWalkie {
@@ -404,6 +444,20 @@ final class TuringStoryWallLayoutCoordinator {
             height: exact.visualHeight,
             floorWorldY: exact.floorWorldY,
             worldYawRadians: atan2(normal.x, normal.z)
+        )
+    }
+
+    private func rollingBenchPlacement(
+        _ exact: TuringStoryExactPlacement
+    ) -> TuringRollingBenchBundlePlacement {
+        TuringRollingBenchBundlePlacement(
+            wallID: exact.wallUUID,
+            localX: exact.runtimeLocalX,
+            localY: exact.runtimeLocalY,
+            depthOffset: exact.depthOffset,
+            width: exact.visualWidth,
+            height: exact.visualHeight,
+            floorWorldY: exact.floorWorldY
         )
     }
 

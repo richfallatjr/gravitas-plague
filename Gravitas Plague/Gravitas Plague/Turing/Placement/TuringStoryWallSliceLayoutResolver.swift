@@ -24,6 +24,7 @@ struct TuringStoryWallSliceLayoutResolver: Sendable {
 
     let requested: [(TuringStoryPropID, [String]?)] = [
       (.door, plan.d),
+      (.rollingBench, plan.b),
       (.window, plan.w),
       (.walkieShelf, plan.s),
       (.poster, plan.p),
@@ -294,6 +295,11 @@ struct TuringStoryWallSliceLayoutResolver: Sendable {
         TuringStoryDoorBundleTuning.defaultWidthMeters,
         TuringStoryDoorBundleTuning.defaultHeightMeters
       )
+    case .rollingBench:
+      return SIMD2<Float>(
+        TuringRollingBenchTuning.preferredReservationWidthMeters,
+        TuringRollingBenchTuning.expectedHeightMeters
+      )
     case .window:
       return SIMD2<Float>(
         TuringStoryWindowBundleTuning.defaultWidthMeters,
@@ -316,6 +322,8 @@ struct TuringStoryWallSliceLayoutResolver: Sendable {
   ) -> Float {
     switch propID {
     case .door:
+      return floorWorldY + visualHeight * 0.5
+    case .rollingBench:
       return floorWorldY + visualHeight * 0.5
     case .window:
       return floorWorldY + TuringStoryWindowBundleTuning.preferredBottomHeightMeters + visualHeight
@@ -349,6 +357,8 @@ struct TuringStoryWallSliceLayoutResolver: Sendable {
       [TuringWallSlices] selections
         door: \(value(.door))
         doorWall: \(wall(.door))
+        rollingBench: \(value(.rollingBench))
+        benchWall: \(wall(.rollingBench))
         window: \(value(.window))
         windowWall: \(wall(.window))
         walkieShelf: \(value(.walkieShelf))

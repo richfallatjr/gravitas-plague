@@ -42,6 +42,7 @@ final class TuringStoryPlacementAdjustmentCoordinator {
 
     convenience init(
         wallProvider: any TuringStoryAdjustmentWallProviding,
+        frontEdgeProvider: (any TuringStoryAdjustmentFrontEdgeProviding)? = nil,
         occupancyRegistry: WallPropOccupancyRegistry,
         adapters: [TuringStoryPropID: any TuringStoryAdjustablePlacementController]
     ) {
@@ -49,7 +50,8 @@ final class TuringStoryPlacementAdjustmentCoordinator {
             occupancyRegistry: occupancyRegistry,
             adapters: adapters,
             bars: TuringStoryPlacementAdjustmentBarPresenter(
-                wallProvider: wallProvider
+                wallProvider: wallProvider,
+                frontEdgeProvider: frontEdgeProvider
             )
         )
     }

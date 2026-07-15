@@ -72,7 +72,11 @@ struct TuringStoryRoomScanCleanser: Sendable {
             throw TuringStoryHotspotLayoutError.noCanonicalWalls
         }
         let plannedKinds: Set<WallPropOccupancyKind> = [
-            .storyDoorBundle, .storyWindowBundle, .storyWalkieBundle, .wallPoster
+            .storyDoorBundle,
+            .storyRollingBenchBundle,
+            .storyWindowBundle,
+            .storyWalkieBundle,
+            .wallPoster
         ]
         return TuringStoryCleansedRoom(
             scanID: scanID,

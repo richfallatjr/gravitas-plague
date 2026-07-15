@@ -2,6 +2,7 @@ import Foundation
 
 enum TuringStoryWallSliceOption: String, Codable, Sendable, Hashable, CaseIterable {
     case doorTwo = "D2"
+    case benchOne = "B1"
     case windowOne = "W1"
     case windowTwo = "W2"
     case shelfOne = "S1"

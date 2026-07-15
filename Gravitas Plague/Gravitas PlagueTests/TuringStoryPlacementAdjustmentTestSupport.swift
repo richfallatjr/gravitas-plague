@@ -192,6 +192,18 @@ enum TuringStoryPlacementTestFactory {
                     worldYawRadians: 0
                 )
             )
+        case .rollingBench:
+            placement = .rollingBench(
+                TuringRollingBenchBundlePlacement(
+                    wallID: wallID,
+                    localX: localX,
+                    localY: localY,
+                    depthOffset: 0.018,
+                    width: width,
+                    height: height,
+                    floorWorldY: floorWorldY
+                )
+            )
         case .window:
             placement = .window(
                 TuringStoryWindowBundlePlacement(
@@ -256,4 +268,3 @@ enum TuringStoryPlacementTestFactory {
         )
     }
 }
-

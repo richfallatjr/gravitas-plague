@@ -157,6 +157,11 @@ struct TuringStoryExactPlacementGenerator: Sendable {
                 TuringStoryDoorBundleTuning.defaultWidthMeters,
                 TuringStoryDoorBundleTuning.defaultHeightMeters
             )
+        case .rollingBench:
+            return SIMD2<Float>(
+                TuringRollingBenchTuning.preferredReservationWidthMeters,
+                TuringRollingBenchTuning.expectedHeightMeters
+            )
         case .window:
             return SIMD2<Float>(
                 TuringStoryWindowBundleTuning.defaultWidthMeters,
@@ -180,6 +185,8 @@ struct TuringStoryExactPlacementGenerator: Sendable {
     ) -> Float {
         switch propID {
         case .door:
+            return floorY + visualHeight * 0.5
+        case .rollingBench:
             return floorY + visualHeight * 0.5
         case .window:
             return floorY + TuringStoryWindowBundleTuning.preferredBottomHeightMeters +
@@ -214,6 +221,9 @@ struct TuringStoryExactPlacementGenerator: Sendable {
         case .door:
             return floorFrontageScore * 0.42 + wallCenterScore * 0.23 +
                 cornerClearanceScore * 0.17 + wallStabilityScore * 0.18
+        case .rollingBench:
+            return floorFrontageScore * 0.36 + wallCenterScore * 0.26 +
+                cornerClearanceScore * 0.18 + wallStabilityScore * 0.20
         case .window:
             return floorFrontageScore * 0.18 + wallCenterScore * 0.32 +
                 cornerClearanceScore * 0.24 + wallStabilityScore * 0.26

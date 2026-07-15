@@ -44,9 +44,24 @@ struct TuringStoryWallSlicePromptDataset: Codable, Sendable {
 
 struct TuringStoryWallSlicePlan: Codable, Sendable {
   let d: [String]?
+  let b: [String]?
   let w: [String]?
   let s: [String]?
   let p: [String]?
+
+  init(
+    d: [String]?,
+    b: [String]? = nil,
+    w: [String]?,
+    s: [String]?,
+    p: [String]?
+  ) {
+    self.d = d
+    self.b = b
+    self.w = w
+    self.s = s
+    self.p = p
+  }
 }
 
 enum TuringStoryWallSliceError: LocalizedError {

@@ -37,12 +37,15 @@ struct TuringStoryWallSliceBuilder: Sendable {
                 let localMaxX = max(firstX, secondX)
                 let localCenterX = (localMinX + localMaxX) * 0.5
                 let numericSliceID = wall.wallOrdinal * 10 + localIndex
-                let floorCandidates = placements(
-                    propID: .door,
-                    wall: wall,
-                    interval: localMinX...localMaxX,
-                    catalog: catalog
-                )
+                let floorCandidates = [TuringStoryPropID.door, .rollingBench]
+                    .flatMap {
+                        placements(
+                            propID: $0,
+                            wall: wall,
+                            interval: localMinX...localMaxX,
+                            catalog: catalog
+                        )
+                    }
                 let floorSupport = floorCandidates.map(\.floorFrontageScore).max()
                     ?? wall.aggregateFloorFrontageScore
                 let floorKnown = floorCandidates.contains(where: \.floorEvidenceKnown)
@@ -57,6 +60,16 @@ struct TuringStoryWallSliceBuilder: Sendable {
                 )
                 let cornerScore = min(1, max(0, cornerClearance / 0.90))
                 var options: Set<TuringStoryWallSliceOption> = []
+
+                if hasPlacement(
+                    propID: .rollingBench,
+                    wall: wall,
+                    interval: localMinX...localMaxX,
+                    catalog: catalog,
+                    requireFloorSupport: true
+                ) {
+                    options.insert(.benchOne)
+                }
 
                 if hasPlacement(
                     propID: .window,

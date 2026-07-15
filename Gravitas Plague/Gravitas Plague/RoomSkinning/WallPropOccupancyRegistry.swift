@@ -8,6 +8,7 @@ enum WallPropOccupancyKind: String, Codable, Hashable, Sendable {
     case storyWalkieBundle
     case storyWindowBundle
     case storyDoorBundle
+    case storyRollingBenchBundle
     case killSwitch
     case other
 }
@@ -183,6 +184,29 @@ final class WallPropOccupancyRegistry {
                 continue
             }
 
+            let storyLayoutKinds: Set<WallPropOccupancyKind> = [
+                .wallPoster,
+                .hordePortal,
+                .storyPortal,
+                .storyWalkieBundle,
+                .storyWindowBundle,
+                .storyDoorBundle,
+                .storyRollingBenchBundle
+            ]
+            if (candidateKind == .storyRollingBenchBundle && storyLayoutKinds.contains(record.kind)) ||
+                (record.kind == .storyRollingBenchBundle && storyLayoutKinds.contains(candidateKind)) {
+                return reject(
+                    """
+                    [WallOccupancy] HARD REJECT rolling bench overlaps occupied wall prop
+                      candidateKind: \(candidateKind.rawValue)
+                      recordKind: \(record.kind.rawValue)
+                      recordLabel: \(record.label)
+                      candidate: \(candidate)
+                      occupied: \(occupied)
+                    """
+                )
+            }
+
             if candidateKind == .hordePortal,
                record.kind == .wallPoster {
                 return reject(
@@ -202,7 +226,8 @@ final class WallPropOccupancyRegistry {
                    .wallPoster,
                    .hordePortal,
                    .storyPortal,
-                   .storyWalkieBundle
+                   .storyWalkieBundle,
+                   .storyRollingBenchBundle
                ].contains(record.kind) {
                 return reject(
                     """
@@ -220,7 +245,8 @@ final class WallPropOccupancyRegistry {
                [
                    .wallPoster,
                    .hordePortal,
-                   .storyPortal
+                   .storyPortal,
+                   .storyRollingBenchBundle
                ].contains(candidateKind) {
                 return reject(
                     """
@@ -241,7 +267,8 @@ final class WallPropOccupancyRegistry {
                    .storyPortal,
                    .storyWalkieBundle,
                    .storyWindowBundle,
-                   .storyDoorBundle
+                   .storyDoorBundle,
+                   .storyRollingBenchBundle
                ].contains(record.kind) {
                 return reject(
                     """
@@ -261,7 +288,8 @@ final class WallPropOccupancyRegistry {
                    .hordePortal,
                    .storyPortal,
                    .storyWalkieBundle,
-                   .storyDoorBundle
+                   .storyDoorBundle,
+                   .storyRollingBenchBundle
                ].contains(candidateKind) {
                 return reject(
                     """
@@ -282,7 +310,8 @@ final class WallPropOccupancyRegistry {
                    .storyPortal,
                    .storyWalkieBundle,
                    .storyWindowBundle,
-                   .storyDoorBundle
+                   .storyDoorBundle,
+                   .storyRollingBenchBundle
                ].contains(record.kind) {
                 return reject(
                     """
@@ -302,7 +331,8 @@ final class WallPropOccupancyRegistry {
                    .hordePortal,
                    .storyPortal,
                    .storyWalkieBundle,
-                   .storyWindowBundle
+                   .storyWindowBundle,
+                   .storyRollingBenchBundle
                ].contains(candidateKind) {
                 return reject(
                     """

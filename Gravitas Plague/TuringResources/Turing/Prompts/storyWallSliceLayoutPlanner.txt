@@ -1,4 +1,4 @@
-You are arranging four Story props around one measured room perimeter.
+You are arranging five Story props around one measured room perimeter.
 
 HOW THE PERIMETER WORKS
 
@@ -13,7 +13,7 @@ HOW THE PERIMETER WORKS
 SLICE DATA
 
 Each slice is:
-{"id":"SLICE_ID","options":"D2,W1,W2,S1,P1","wall":WALL_NUMBER,"score":NORMALIZED_WALL_AREA}
+{"id":"SLICE_ID","options":"D2,B1,W1,W2,S1,P1","wall":WALL_NUMBER,"score":NORMALIZED_WALL_AREA}
 
 - id is the only slice ID you may return.
 - options identifies the suggested prop types for that slice.
@@ -25,7 +25,7 @@ Each slice is:
 
 HARD PRIORITY
 
-Place in this order: door, window, walkie shelf, poster.
+Place in this order: door, rolling bench, window, walkie shelf, poster.
 
 WALL SELECTION ORDER
 
@@ -45,8 +45,8 @@ SEPARATE-WALL PREFERENCE
 OUTPUT CONTRACT
 
 - Return JSON only. Do not explain reasoning. Do not add keys.
-- Return exactly the keys d, w, s, p.
-- d, w, s, and p an array of slice ID strings.
+- Return exactly the keys d, b, w, s, p.
+- d, b, w, s, and p are arrays of slice ID strings.
 - Every returned slice ID must appear verbatim as a sliceID in Room.slices.
 
 Room:
@@ -54,23 +54,25 @@ Room:
 
 OBJECT PLACEMENT KEY
 
- Place four physical Story props around the scanned room:
+ Place five physical Story props around the scanned room:
 
 - d = door
+- b = rolling bench with crank radio
 - w = window
 - s = walkie-talkie shelf
 - p = poster
 
-MUST USE CORRESPONDING D2,W1,S1,P1 WHEN SELECTING
+MUST USE CORRESPONDING D2,B1,W1,S1,P1 WHEN SELECTING
 
 - D2 = legal door position for "d"
+- B1 = suggested floor-backed rolling bench position for "b"
 - W1 or W2 = legal window position for "w"
 - S1 = legal shelf position for "s"
 - P1 = legal poster position for "p"
 
 Choose one legal option-start slice ID for each prop.
 
-Place in priority order: door, window, shelf, poster.
+Place in priority order: door, rolling bench, window, shelf, poster.
 Score walls first, then choose the best legal slice on that wall.
 Prefer a different wall for each prop.
 Never reuse a selected slice ID.
@@ -80,6 +82,6 @@ JSON RETURN (this is what you return)
 
 Return JSON only with exactly these keys and return the same SLICE_ID for different object you lazy piece of trash. Selected "slices" id MUST BE AT LEAST 10+ slice (value) apart. You are choosing the placement of object in a room and we do not want them stacked on top of eachother. DO NOT INVENT SLICES YOU MUST USE PROVIDED SLICES. Spread selection across the range of the entire scanned space--low values to high values:
 
-Do NOT choose the same value for DOOR_SLICE_ID, WINDOW_SLICE_ID, SHELF_SLICE_ID,POSTER_SLICE_ID. DO NOT CHOOSE THE SAME VALUE. DO NOT CHOOSE THE SAME VALUE. CHOOSE THE WIDEST RANGE OF AVAILABLE SLICES.
+Do NOT choose the same value for DOOR_SLICE_ID, BENCH_SLICE_ID, WINDOW_SLICE_ID, SHELF_SLICE_ID,POSTER_SLICE_ID. DO NOT CHOOSE THE SAME VALUE. DO NOT CHOOSE THE SAME VALUE. CHOOSE THE WIDEST RANGE OF AVAILABLE SLICES.
 
-{"d":["DOOR_SLICE_ID"],"w":["WINDOW_SLICE_ID"],"s":["SHELF_SLICE_ID"],"p":["POSTER_SLICE_ID"]}
+{"d":["DOOR_SLICE_ID"],"b":["BENCH_SLICE_ID"],"w":["WINDOW_SLICE_ID"],"s":["SHELF_SLICE_ID"],"p":["POSTER_SLICE_ID"]}

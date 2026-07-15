@@ -4,6 +4,7 @@ import simd
 
 enum TuringStoryRuntimePlacement: Sendable {
     case door(TuringStoryDoorBundlePlacement)
+    case rollingBench(TuringRollingBenchBundlePlacement)
     case window(TuringStoryWindowBundlePlacement)
     case walkieShelf(TuringStoryWallBundlePlacement)
     case poster(WallPosterPlacement)
@@ -11,6 +12,7 @@ enum TuringStoryRuntimePlacement: Sendable {
     var wallID: UUID {
         switch self {
         case .door(let value): return value.wallID
+        case .rollingBench(let value): return value.wallID
         case .window(let value): return value.wallID
         case .walkieShelf(let value): return value.wallID
         case .poster(let value): return value.wallID
@@ -20,6 +22,7 @@ enum TuringStoryRuntimePlacement: Sendable {
     var localX: Float {
         switch self {
         case .door(let value): return value.localX
+        case .rollingBench(let value): return value.localX
         case .window(let value): return value.localX
         case .walkieShelf(let value): return value.localX
         case .poster(let value): return value.localX
@@ -29,6 +32,7 @@ enum TuringStoryRuntimePlacement: Sendable {
     var localY: Float {
         switch self {
         case .door(let value): return value.localY
+        case .rollingBench(let value): return value.localY
         case .window(let value): return value.localY
         case .walkieShelf(let value): return value.localY
         case .poster(let value): return value.localY
@@ -38,6 +42,7 @@ enum TuringStoryRuntimePlacement: Sendable {
     var depthOffset: Float {
         switch self {
         case .door(let value): return value.depthOffset
+        case .rollingBench(let value): return value.depthOffset
         case .window(let value): return value.depthOffset
         case .walkieShelf(let value): return value.depthOffset
         case .poster(let value): return value.depthOffset
@@ -47,6 +52,7 @@ enum TuringStoryRuntimePlacement: Sendable {
     var visualWidth: Float {
         switch self {
         case .door(let value): return value.width
+        case .rollingBench(let value): return value.width
         case .window(let value): return value.width
         case .walkieShelf(let value): return value.width
         case .poster(let value): return value.width
@@ -56,6 +62,7 @@ enum TuringStoryRuntimePlacement: Sendable {
     var visualHeight: Float {
         switch self {
         case .door(let value): return value.height
+        case .rollingBench(let value): return value.height
         case .window(let value): return value.height
         case .walkieShelf(let value): return value.height
         case .poster(let value): return value.height
@@ -65,6 +72,7 @@ enum TuringStoryRuntimePlacement: Sendable {
     var floorWorldY: Float? {
         switch self {
         case .door(let value): return value.floorWorldY
+        case .rollingBench(let value): return value.floorWorldY
         case .window(let value): return value.floorWorldY
         case .walkieShelf(let value): return value.floorWorldY
         case .poster: return nil
@@ -167,4 +175,3 @@ protocol TuringStoryAdjustablePlacementController: AnyObject {
     /// visual scale. Occupancy remains untouched.
     func cancelPlacementPreview()
 }
-

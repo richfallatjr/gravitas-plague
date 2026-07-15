@@ -161,6 +161,25 @@ struct PlagueImmersiveView: View {
         .simultaneousGesture(
             TapGesture()
                 .targetedToEntity(
+                    where: .has(TuringRollingBenchDeviceActionComponent.self)
+                )
+                .onEnded { value in
+                    guard let component = value.entity.components[
+                        TuringRollingBenchDeviceActionComponent.self
+                    ] else {
+                        return
+                    }
+                    Task { @MainActor in
+                        coordinator.handleTuringRollingBenchAction(
+                            component,
+                            source: "realityKit"
+                        )
+                    }
+                }
+        )
+        .simultaneousGesture(
+            TapGesture()
+                .targetedToEntity(
                     where: .has(
                         TuringStoryWalkiePlayComponent.self
                     )

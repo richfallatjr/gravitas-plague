@@ -6,11 +6,11 @@ import simd
 
 @MainActor
 final class TuringStoryAdjustmentBarPresenterTests: XCTestCase {
-    func testCreatesExactlyFourBarsAfterFourPropCommit() {
+    func testCreatesExactlyFiveBarsAfterFivePropCommit() {
         let setup = makePresenterSetup()
         setup.presenter.show(activeSlots: setup.activeSlots)
 
-        XCTAssertEqual(setup.presenter.installedBarCount, 4)
+        XCTAssertEqual(setup.presenter.installedBarCount, 5)
     }
 
     func testEachBarHasCorrectComponentAndOversizedCollisionTarget() {
@@ -63,6 +63,43 @@ final class TuringStoryAdjustmentBarPresenterTests: XCTestCase {
         XCTAssertEqual(
             y,
             0.40 - TuringStoryAdjustmentBarPoseResolver.doorCenterBelowFloor,
+            accuracy: 0.0001
+        )
+    }
+
+    func testRollingBenchBarIsSixInchesBelowFloorAtFrontEdge() {
+        let wallID = UUID()
+        let wall = TuringStoryAdjustmentWallBasis(
+            wallID: wallID,
+            center: SIMD3<Float>(0, 1.2, 0),
+            right: SIMD3<Float>(1, 0, 0),
+            up: SIMD3<Float>(0, 1, 0),
+            normal: SIMD3<Float>(0, 0, 1),
+            floorWorldY: 0.40
+        )
+        let slot = TuringStoryPlacementTestFactory.slot(
+            id: "b:front",
+            propID: .rollingBench,
+            wallID: wallID,
+            wallOrdinal: 1,
+            routeOrder: 1.1,
+            floorWorldY: 0.40
+        )
+
+        let transform = TuringStoryAdjustmentBarPoseResolver().worldTransform(
+            slot: slot,
+            wall: wall,
+            frontEdgeOffset: 0.26
+        )
+
+        XCTAssertEqual(
+            transform.columns.3.y,
+            0.40 - TuringStoryAdjustmentBarPoseResolver.rollingBenchCenterBelowFloor,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            transform.columns.3.z,
+            0.018 + TuringStoryAdjustmentBarPoseResolver.wallOutwardOffset + 0.26,
             accuracy: 0.0001
         )
     }

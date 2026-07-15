@@ -123,15 +123,18 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let turingWalkieBundleController = TuringStoryWalkieBundleController()
     private let turingWindowBundleController = TuringStoryWindowBundleController()
     private let turingDoorBundleController = TuringStoryDoorBundleController()
+    private let turingRollingBenchBundleController = TuringRollingBenchBundleController()
     private var battle01Coordinator: Battle01Coordinator?
     private var prologueStoryActionRouter: PrologueStoryActionRouter?
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
     private lazy var turingStoryPlacementAdjustmentCoordinator =
         TuringStoryPlacementAdjustmentCoordinator(
             wallProvider: roomSkinningCoordinator.wallManager,
+            frontEdgeProvider: turingRollingBenchBundleController,
             occupancyRegistry: wallPropOccupancyRegistry,
             adapters: [
                 .door: turingDoorBundleController,
+                .rollingBench: turingRollingBenchBundleController,
                 .window: turingWindowBundleController,
                 .walkieShelf: turingWalkieBundleController,
                 .poster: wallPosterUIController
@@ -139,6 +142,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         )
     private lazy var turingStoryWallLayoutCoordinator = TuringStoryWallLayoutCoordinator(
         doorController: turingDoorBundleController,
+        rollingBenchController: turingRollingBenchBundleController,
         windowController: turingWindowBundleController,
         walkieController: turingWalkieBundleController,
         posterController: wallPosterUIController,
@@ -374,6 +378,11 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             occupancyRegistry: wallPropOccupancyRegistry
         )
         turingDoorBundleController.installIfNeeded(
+            sceneRoot: root,
+            wallManager: roomSkinningCoordinator.wallManager,
+            occupancyRegistry: wallPropOccupancyRegistry
+        )
+        turingRollingBenchBundleController.installIfNeeded(
             sceneRoot: root,
             wallManager: roomSkinningCoordinator.wallManager,
             occupancyRegistry: wallPropOccupancyRegistry
@@ -940,6 +949,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         turingDebugRescanAttempt += 1
         let attempt = turingDebugRescanAttempt
         let previousDoorPlaced = turingDoorBundleController.isPlaced
+        let previousRollingBenchPlaced = turingRollingBenchBundleController.isPlaced
         let previousWindowPlaced = turingWindowBundleController.isPlaced
         let previousWalkiePlaced = turingWalkieBundleController.isPlaced
         let previousPosterPlaced = wallPosterUIController.isLocked
@@ -957,6 +967,9 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             reason: "debugRoomRescan.\(attempt)"
         )
         turingDoorBundleController.reset(
+            reason: "debugRoomRescan.\(attempt)"
+        )
+        turingRollingBenchBundleController.reset(
             reason: "debugRoomRescan.\(attempt)"
         )
         turingWindowBundleController.reset(
@@ -981,6 +994,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
           attempt: \(attempt)
           reason: \(reason)
           previousDoorPlaced: \(previousDoorPlaced)
+          previousRollingBenchPlaced: \(previousRollingBenchPlaced)
           previousWindowPlaced: \(previousWindowPlaced)
           previousWalkiePlaced: \(previousWalkiePlaced)
           previousPosterPlaced: \(previousPosterPlaced)
@@ -1009,6 +1023,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
           scanID: \(scanID)
           outcome: \(outcome)
           doorPlaced: \(turingDoorBundleController.isPlaced)
+          rollingBenchPlaced: \(turingRollingBenchBundleController.isPlaced)
           windowPlaced: \(turingWindowBundleController.isPlaced)
           walkiePlaced: \(turingWalkieBundleController.isPlaced)
           posterPlaced: \(wallPosterUIController.isLocked)
@@ -1216,6 +1231,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             [TuringRoomScan] placement scan complete
               reasons: \(reasons)
               floorVerified: true
+              placingRollingBenchBundle: true
               placingWalkieBundle: true
               placingWindowBundle: true
               placingDoorBundle: true
@@ -1254,6 +1270,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             turingWalkieBundleController.isPlaced &&
             turingWindowBundleController.isPlaced &&
             turingDoorBundleController.isPlaced &&
+            turingRollingBenchBundleController.isPlaced &&
             wallPosterUIController.isLocked
     }
 
@@ -1297,6 +1314,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
               walkiePlaced: true
               windowPlaced: true
               doorPlaced: true
+              rollingBenchPlaced: true
             """
         )
     }
@@ -1305,6 +1323,26 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         reason: String
     ) {
         turingDoorBundleController.toggleDoor(reason: reason)
+    }
+
+    func handleTuringRollingBenchAction(
+        _ action: TuringRollingBenchDeviceActionComponent,
+        source: String
+    ) {
+        switch (action.deviceID, action.action) {
+        case (.crankRadio, .togglePlayback):
+            turingRollingBenchBundleController.radioController.toggle(
+                source: source
+            )
+        case (.hamReceiver, _), (.microphone, _):
+            print(
+                "[TuringRollingBench] future device action ignored deviceID=\(action.deviceID.rawValue) action=\(action.action.rawValue) source=\(source)"
+            )
+        case (.crankRadio, _):
+            print(
+                "[TuringRollingBench] unsupported crank-radio action action=\(action.action.rawValue) source=\(source)"
+            )
+        }
     }
 
     func configureTuringWalkieInteractionEventSink(
@@ -1996,6 +2034,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         turingWalkieBundleController.reset(reason: "immersiveShutdown")
         turingWindowBundleController.reset(reason: "immersiveShutdown")
         turingDoorBundleController.reset(reason: "immersiveShutdown")
+        turingRollingBenchBundleController.unload(reason: "immersiveShutdown")
         HDRIDomePortalContentProvider.clearSharedResourceCache(
             reason: "immersiveShutdown"
         )

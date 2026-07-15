@@ -59,9 +59,9 @@ actor TuringStoryWallSliceLayoutPlanner {
         let data = try TuringJSONSanitizer.extractSingleTopLevelObject(from: raw)
         let object = try JSONSerialization.jsonObject(with: data)
         guard let dictionary = object as? [String: Any],
-              Set(dictionary.keys) == Set(["d", "w", "s", "p"]) else {
+              Set(dictionary.keys) == Set(["d", "b", "w", "s", "p"]) else {
             throw TuringStoryWallSliceError.malformedResponse(
-                "Keys must be exactly d,w,s,p."
+                "Keys must be exactly d,b,w,s,p."
             )
         }
         return try JSONDecoder().decode(TuringStoryWallSlicePlan.self, from: data)

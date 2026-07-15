@@ -172,6 +172,7 @@ struct TuringStoryPlacementCandidateCacheBuilder {
         resolvedLayout: TuringStoryResolvedSliceLayout,
         wallManager: WallPlaneManager,
         doorController: TuringStoryDoorBundleController,
+        rollingBenchController: TuringRollingBenchBundleController,
         windowController: TuringStoryWindowBundleController,
         walkieController: TuringStoryWalkieBundleController,
         posterController: WallMountedPosterUIController
@@ -191,6 +192,7 @@ struct TuringStoryPlacementCandidateCacheBuilder {
 
         let controllers = ControllerSet(
             door: doorController,
+            rollingBench: rollingBenchController,
             window: windowController,
             walkie: walkieController,
             poster: posterController
@@ -252,6 +254,7 @@ struct TuringStoryPlacementCandidateCacheBuilder {
             [TuringPlacementAdjust] cache ready
               scanID: \(scanID)
               doorCandidates: \(seed.candidatesByProp[.door]?.count ?? 0)
+              rollingBenchCandidates: \(seed.candidatesByProp[.rollingBench]?.count ?? 0)
               windowCandidates: \(seed.candidatesByProp[.window]?.count ?? 0)
               shelfCandidates: \(seed.candidatesByProp[.walkieShelf]?.count ?? 0)
               posterCandidates: \(seed.candidatesByProp[.poster]?.count ?? 0)
@@ -263,6 +266,7 @@ struct TuringStoryPlacementCandidateCacheBuilder {
 
     private struct ControllerSet {
         let door: TuringStoryDoorBundleController
+        let rollingBench: TuringRollingBenchBundleController
         let window: TuringStoryWindowBundleController
         let walkie: TuringStoryWalkieBundleController
         let poster: WallMountedPosterUIController
@@ -352,6 +356,21 @@ struct TuringStoryPlacementCandidateCacheBuilder {
             )
             typedPlacement = .door(placement)
             transform = try controllers.door.adjustmentWorldTransform(
+                for: placement
+            )
+
+        case .rollingBench:
+            let placement = TuringRollingBenchBundlePlacement(
+                wallID: exact.wallUUID,
+                localX: exact.runtimeLocalX,
+                localY: exact.runtimeLocalY,
+                depthOffset: exact.depthOffset,
+                width: exact.visualWidth,
+                height: exact.visualHeight,
+                floorWorldY: exact.floorWorldY
+            )
+            typedPlacement = .rollingBench(placement)
+            transform = try controllers.rollingBench.adjustmentWorldTransform(
                 for: placement
             )
 
