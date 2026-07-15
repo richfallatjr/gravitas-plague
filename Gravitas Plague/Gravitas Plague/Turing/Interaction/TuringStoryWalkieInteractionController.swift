@@ -239,9 +239,17 @@ final class TuringStoryWalkieInteractionController {
                             .responseAudioFinished
                         )
                 } else {
+                    print("""
+                    [TuringWalkieState] downstream response failed
+                      source: \(source)
+                      dictationSucceeded: true
+                      error: \(result.pickerStatus)
+                    """)
                     self.eventSink?
                         .publishTuringDictationEvent(
-                            .failed(result.pickerStatus)
+                            .responseFailed(
+                                result.pickerStatus
+                            )
                         )
                 }
             } catch {

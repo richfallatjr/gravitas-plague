@@ -54,8 +54,10 @@ final class Battle01Coordinator {
     private var battleInstanceID: UUID?
     private var startTask: Task<Void, Never>?
     private var richPRTask: Task<Void, Never>?
+    private var aftermathTransitionTask: Task<Void, Never>?
     private var prepared: Battle01PreparedEnemy?
     private var soundtrackStarted = false
+    private var aftermathLoopStarted = false
     private var musicStartGate = Battle01MusicStartGate()
     private var soundtrackStartContext: SoundtrackStartContext?
     private var portalCrossingStarted = false
@@ -150,6 +152,7 @@ final class Battle01Coordinator {
         state = .cancelled
         startTask?.cancel()
         richPRTask?.cancel()
+        aftermathTransitionTask?.cancel()
         soundtrack.stop(reason: reason)
         richPR.cancel(reason: reason)
         combat.cancel(reason: reason)
@@ -176,7 +179,9 @@ final class Battle01Coordinator {
         battleInstanceID = nil
         startTask = nil
         richPRTask = nil
+        aftermathTransitionTask = nil
         soundtrackStarted = false
+        aftermathLoopStarted = false
         musicStartGate = Battle01MusicStartGate()
         soundtrackStartContext = nil
         portalCrossingStarted = false
@@ -189,11 +194,15 @@ final class Battle01Coordinator {
             let definition = try definitionStore.load()
             let doorContext = try door.battlePortalContext()
             let soundtrackURL = try definitionStore.soundtrackURL(for: definition)
+            let aftermathSoundtrackURL = try definitionStore.aftermathSoundtrackURL(
+                for: definition
+            )
             let richDescriptor = try prerecordingStore.descriptor(
                 id: definition.richPrerecording.prerecordingID
             )
             let richURL = try prerecordingStore.audioURL(for: richDescriptor)
             try soundtrack.prepare(fileURL: soundtrackURL)
+            try soundtrack.prepareAftermathLoop(fileURL: aftermathSoundtrackURL)
             soundtrackStartContext = SoundtrackStartContext(
                 definition: definition,
                 soundtrackURL: soundtrackURL,
@@ -304,6 +313,10 @@ final class Battle01Coordinator {
                             instanceID: instanceID,
                             state: self.state
                         )
+                        self.scheduleAftermathTransition(
+                            instanceID: instanceID,
+                            configuration: definition.aftermathMusic
+                        )
                         self.state = .postBattleHold
                         Battle01EventLog.emit(
                             "corpse retained",
@@ -320,6 +333,78 @@ final class Battle01Coordinator {
             }
         } catch {
             fail(error, instanceID: instanceID)
+        }
+    }
+
+    private func scheduleAftermathTransition(
+        instanceID: UUID,
+        configuration: Battle01Definition.AftermathMusic
+    ) {
+        guard aftermathTransitionTask == nil,
+              !aftermathLoopStarted else { return }
+
+        let minimumDelay = min(
+            configuration.delayAfterGrandmaDeathMinSeconds,
+            configuration.delayAfterGrandmaDeathMaxSeconds
+        )
+        let maximumDelay = max(
+            configuration.delayAfterGrandmaDeathMinSeconds,
+            configuration.delayAfterGrandmaDeathMaxSeconds
+        )
+        let delay = Double.random(in: minimumDelay...maximumDelay)
+
+        Battle01EventLog.emit(
+            "aftermath crossfade scheduled",
+            instanceID: instanceID,
+            state: state,
+            fields: [
+                ("delaySeconds", String(format: "%.3f", delay)),
+                ("delayRangeSeconds", "\(minimumDelay)...\(maximumDelay)"),
+                ("targetDecibels", String(configuration.targetDecibels)),
+                ("fadeDurationSeconds", String(configuration.crossfadeDurationSeconds))
+            ]
+        )
+
+        aftermathTransitionTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.clock.sleep(for: .seconds(delay))
+                try Task.checkCancellation()
+                guard self.battleInstanceID == instanceID else { return }
+
+                try self.soundtrack.crossfadeToAftermathLoop(
+                    battleInstanceID: instanceID,
+                    targetDecibels: configuration.targetDecibels,
+                    fadeDurationSeconds: configuration.crossfadeDurationSeconds
+                ) { [weak self] returnedID in
+                    guard let self,
+                          returnedID == instanceID,
+                          self.battleInstanceID == instanceID else { return }
+                    self.aftermathLoopStarted = true
+                    Battle01EventLog.emit(
+                        "aftermath loop started",
+                        instanceID: instanceID,
+                        state: self.state,
+                        fields: [
+                            ("file", configuration.file),
+                            ("targetDecibels", String(configuration.targetDecibels)),
+                            ("loop", "true"),
+                            ("stop", configuration.stop)
+                        ]
+                    )
+                }
+                self.aftermathTransitionTask = nil
+            } catch is CancellationError {
+                return
+            } catch {
+                self.aftermathTransitionTask = nil
+                Battle01EventLog.emit(
+                    "aftermath crossfade failed",
+                    instanceID: instanceID,
+                    state: self.state,
+                    fields: [("error", error.localizedDescription)]
+                )
+            }
         }
     }
 
@@ -460,6 +545,9 @@ final class Battle01Coordinator {
         prepared = nil
         startTask = nil
         richPRTask = nil
+        aftermathTransitionTask?.cancel()
+        aftermathTransitionTask = nil
+        aftermathLoopStarted = false
         musicStartGate = Battle01MusicStartGate()
         soundtrackStartContext = nil
     }

@@ -53,10 +53,17 @@ protocol Battle01StoryCombatControlling: AnyObject {
 @MainActor
 protocol Battle01SoundtrackControlling: AnyObject {
     func prepare(fileURL: URL) throws
+    func prepareAftermathLoop(fileURL: URL) throws
     func playOnce(
         battleInstanceID: UUID,
         onStarted: @escaping @MainActor (UUID) -> Void,
         onCompleted: @escaping @MainActor (UUID, Bool) -> Void
+    ) throws
+    func crossfadeToAftermathLoop(
+        battleInstanceID: UUID,
+        targetDecibels: Float,
+        fadeDurationSeconds: TimeInterval,
+        onStarted: @escaping @MainActor (UUID) -> Void
     ) throws
     func stop(reason: String)
 }

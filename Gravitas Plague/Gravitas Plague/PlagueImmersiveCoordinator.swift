@@ -748,11 +748,23 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             instructionHUD.clear()
             print("[TuringHUD] player dictation cleared")
 
-        case .failed:
+        case .responseFailed(let message):
+            turingHUDDelayedClearTask?.cancel()
+            turingHUDDelayedClearTask = nil
+            showInstructionHUD("Turing response failed.")
+            print("""
+            [TuringHUD] response failure shown
+              error: \(message)
+            """)
+
+        case .failed(let message):
             turingHUDDelayedClearTask?.cancel()
             turingHUDDelayedClearTask = nil
             showInstructionHUD("Dictation failed.")
-            print("[TuringHUD] player dictation shown state=failed")
+            print("""
+            [TuringHUD] player dictation shown state=failed
+              error: \(message)
+            """)
         }
     }
 

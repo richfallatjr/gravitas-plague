@@ -26,7 +26,11 @@ struct Battle01DefinitionStore: Sendable {
         guard definition.trigger.scriptPointID == "prologue.scriptPoint03",
               definition.enemy.anchorIDs == ["zombie_a1", "zombie_a2", "zombie_a3"],
               definition.enemy.turnCount == 2,
-              definition.music.loop == false else {
+              definition.music.loop == false,
+              definition.aftermathMusic.loop,
+              definition.aftermathMusic.delayAfterGrandmaDeathMinSeconds == 3,
+              definition.aftermathMusic.delayAfterGrandmaDeathMaxSeconds == 5,
+              definition.aftermathMusic.targetDecibels == -15 else {
             throw StoreError.invalidContract("authored trigger, anchors, turns, or music loop changed")
         }
         return definition
@@ -35,6 +39,12 @@ struct Battle01DefinitionStore: Sendable {
     func soundtrackURL(for definition: Battle01Definition) throws -> URL {
         try TuringResourceLoader.resourceURL(
             resourcePath: "Turing/Audio/battle01/\(definition.music.file)"
+        )
+    }
+
+    func aftermathSoundtrackURL(for definition: Battle01Definition) throws -> URL {
+        try TuringResourceLoader.resourceURL(
+            resourcePath: "Turing/Audio/battle01/\(definition.aftermathMusic.file)"
         )
     }
 }

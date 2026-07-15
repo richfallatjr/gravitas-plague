@@ -102,12 +102,48 @@ final class Battle01ContractTests: XCTestCase {
         XCTAssertGreaterThan(soundtrack.duration, 0)
         XCTAssertGreaterThan(rich.duration, 0)
         XCTAssertFalse(definition.music.loop)
-        XCTAssertEqual(definition.music.stop, "naturalFileCompletion")
+        XCTAssertEqual(
+            definition.music.trigger,
+            "scriptPoint03ActualTTSCompletionAndDoorOpen"
+        )
+        XCTAssertEqual(
+            definition.music.stop,
+            "aftermathCrossfadeOrNaturalFileCompletion"
+        )
+        XCTAssertEqual(definition.aftermathMusic.file, "cabin-aftermath-loop.mp3")
+        XCTAssertTrue(definition.aftermathMusic.loop)
+        XCTAssertEqual(
+            definition.aftermathMusic.delayAfterGrandmaDeathMinSeconds,
+            3,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            definition.aftermathMusic.delayAfterGrandmaDeathMaxSeconds,
+            5,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(definition.aftermathMusic.targetDecibels, -15, accuracy: 0.0001)
+        XCTAssertEqual(definition.aftermathMusic.stop, "prologueTeardown")
         XCTAssertEqual(definition.richPrerecording.outputRoute, "roomGlobal")
         XCTAssertFalse(definition.richPrerecording.playWalkieOpenSound)
         XCTAssertFalse(definition.richPrerecording.playWalkieSendSound)
         XCTAssertFalse(definition.richPrerecording.playStatic)
         XCTAssertFalse(definition.richPrerecording.generatePromptVoice)
+    }
+
+    func testAftermathMusicIsBundledAndAudible() throws {
+        let definition = try Battle01DefinitionStore().load()
+        let url = try Battle01DefinitionStore().aftermathSoundtrackURL(
+            for: definition
+        )
+        let player = try AVAudioPlayer(contentsOf: url)
+
+        XCTAssertGreaterThan(player.duration, 0)
+        XCTAssertEqual(
+            Battle01SoundtrackController.linearGain(decibels: -15),
+            0.17782794,
+            accuracy: 0.0001
+        )
     }
 
     func testRichPrerecordingDescriptorIsAuthoredRichAudio() throws {

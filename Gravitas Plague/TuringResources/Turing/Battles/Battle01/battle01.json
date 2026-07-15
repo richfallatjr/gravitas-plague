@@ -41,8 +41,18 @@
   "music": {
     "file": "mrs-dempsey-prologue-battle.mp3",
     "loop": false,
-    "trigger": "grandmaAtLastAnchorAndDoorFullyOpen",
-    "stop": "naturalFileCompletion"
+    "trigger": "scriptPoint03ActualTTSCompletionAndDoorOpen",
+    "stop": "aftermathCrossfadeOrNaturalFileCompletion"
+  },
+  "aftermathMusic": {
+    "file": "cabin-aftermath-loop.mp3",
+    "loop": true,
+    "trigger": "random3To5SecondsAfterGrandmaDeathAnimationCompletion",
+    "delayAfterGrandmaDeathMinSeconds": 3.0,
+    "delayAfterGrandmaDeathMaxSeconds": 5.0,
+    "crossfadeDurationSeconds": 2.5,
+    "targetDecibels": -15.0,
+    "stop": "prologueTeardown"
   },
   "richPrerecording": {
     "prerecordingID": "prologue.rich.battle01.mrsDempsey.001",

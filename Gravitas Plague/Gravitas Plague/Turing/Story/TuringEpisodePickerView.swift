@@ -632,7 +632,9 @@ struct TuringEpisodePickerView: View {
                     )
                     qwenDebugStatus = result.pickerStatus
                     session.publishTuringDictationEvent(
-                        .failed(result.pickerStatus)
+                        .responseFailed(
+                            result.pickerStatus
+                        )
                     )
                 }
             }

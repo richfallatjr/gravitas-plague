@@ -8,6 +8,7 @@ struct Battle01Definition: Codable, Sendable, Hashable {
     let door: Door
     let portalHandoff: PortalHandoff
     let music: Music
+    let aftermathMusic: AftermathMusic
     let richPrerecording: RichPrerecording
     let turingInteraction: TuringInteraction
     let completion: Completion
@@ -57,6 +58,17 @@ struct Battle01Definition: Codable, Sendable, Hashable {
         let file: String
         let loop: Bool
         let trigger: String
+        let stop: String
+    }
+
+    struct AftermathMusic: Codable, Sendable, Hashable {
+        let file: String
+        let loop: Bool
+        let trigger: String
+        let delayAfterGrandmaDeathMinSeconds: Double
+        let delayAfterGrandmaDeathMaxSeconds: Double
+        let crossfadeDurationSeconds: Double
+        let targetDecibels: Float
         let stop: String
     }
 
