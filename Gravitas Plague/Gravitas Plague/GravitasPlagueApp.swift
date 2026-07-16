@@ -2,6 +2,7 @@ import SwiftUI
 
 enum PlagueWindowID {
     static let control = "plague-control"
+    static let storyEpisodes = "plague-story-episodes"
     static let storyDebug = "plague-story-debug"
     static let leaderboards = "plague-leaderboards"
 }
@@ -31,6 +32,15 @@ struct GravitasPlagueApp: App {
         .defaultLaunchBehavior(.automatic)
         .restorationBehavior(.disabled)
 
+        WindowGroup(id: PlagueWindowID.storyEpisodes) {
+            TuringStoryEpisodePickerView(session: demoSession)
+        }
+        .defaultSize(width: 960, height: 640)
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
+
+#if DEBUG || GR_TURING_DIAGNOSTICS
         WindowGroup(id: PlagueWindowID.storyDebug) {
             TuringEpisodePickerView(session: demoSession)
                 .frame(minWidth: 520)
@@ -39,6 +49,7 @@ struct GravitasPlagueApp: App {
         .windowResizability(.contentSize)
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
+#endif
 
         WindowGroup(id: PlagueWindowID.leaderboards) {
             GameCenterLeaderboardsView()

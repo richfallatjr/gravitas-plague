@@ -268,14 +268,33 @@ enum TuringFlowConversationRunner {
               completionSource: actualPlaybackCompletion
             """)
 
-            if let progression =
-                await TuringEpisodeFlowController
-                    .shared
-                    .conversationPlaybackCompleted(
-                        conversationKey:
-                            request
-                                .conversationKey
-                    ) {
+            guard let pending = await TuringEpisodeFlowController.shared
+                .pendingConversationAdvanceContext(
+                    for: request.conversationKey
+                ) else {
+                await TuringFlowInteractionGateController.shared
+                    .restoreMicrophoneAfterConversation(
+                        conversationRunID: conversationRunID
+                    )
+                return .succeeded(
+                    "Finished \(runtime.displayName) conversation response"
+                )
+            }
+
+            try await TuringEpisodeFlowController.shared
+                .notifyConversationPlaybackCompleted(
+                    TuringConversationPlaybackCompletionEvent(
+                        eventID: UUID(),
+                        conversationRunID: conversationRunID,
+                        conversationKey: request.conversationKey,
+                        parentScriptPointID: pending.parentScriptPointID
+                    )
+                )
+
+            if let progression = await TuringEpisodeFlowController.shared
+                .conversationPlaybackCompleted(
+                    conversationKey: request.conversationKey
+                ) {
                 if progression.succeeded == false {
                     await TuringFlowInteractionGateController
                         .shared
@@ -289,15 +308,8 @@ enum TuringFlowConversationRunner {
                 return progression
             }
 
-            await TuringFlowInteractionGateController
-                .shared
-                .restoreMicrophoneAfterConversation(
-                    conversationRunID:
-                        conversationRunID
-                )
-
-            return .succeeded(
-                "Finished \(runtime.displayName) conversation response"
+            throw TuringRuntimeError.invalidConfig(
+                "Conversation checkpoint was saved but authored progression was unavailable."
             )
         } catch {
             await TuringWalkieCommsFXController

@@ -19,5 +19,6 @@ enum Battle01State: String, Sendable {
 
 enum Battle01Trigger: Sendable {
     case scriptPointCompleted(TuringScriptPointCompletionEvent)
+    case continuationRestore(snapshotSourceEventID: UUID)
     case debug
 }

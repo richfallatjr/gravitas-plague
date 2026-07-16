@@ -7,27 +7,43 @@ enum TuringEpisodeID: String, Codable, CaseIterable, Identifiable, Sendable {
 }
 
 struct TuringEpisodeDescriptor: Identifiable, Sendable, Equatable {
+    enum Availability: Sendable, Equatable {
+        case unlocked
+        case locked(reason: String)
+        case comingSoon
+    }
+
     let id: TuringEpisodeID
     let title: String
     let subtitle: String
-    let scriptResourcePath: String
-    let isUnlocked: Bool
+    let scriptResourcePath: String?
+    let availability: Availability
+    let stripArtwork: TuringEpisodeStripArtwork
+    let contentRevision: String
+
+    var isUnlocked: Bool {
+        availability == .unlocked
+    }
 }
 
 enum TuringEpisodeCatalog {
-    nonisolated static let developmentEpisodes: [TuringEpisodeDescriptor] = [
+    nonisolated static let productionEpisodes: [TuringEpisodeDescriptor] = [
         TuringEpisodeDescriptor(
             id: .prologue,
             title: "Prologue",
-            subtitle: "Turing system test bed",
+            subtitle: "They are not human—they are monsters",
             scriptResourcePath: "Turing/Scripts/Prologue/prologue.json",
-            isUnlocked: true
+            availability: .unlocked,
+            stripArtwork: .prologueStrip,
+            contentRevision: "prologue.v1"
         )
     ]
+
+    nonisolated static let developmentEpisodes = productionEpisodes
 
     nonisolated static func descriptor(
         for id: TuringEpisodeID
     ) -> TuringEpisodeDescriptor? {
-        developmentEpisodes.first { $0.id == id }
+        productionEpisodes.first { $0.id == id }
     }
 }

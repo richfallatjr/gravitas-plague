@@ -105,15 +105,6 @@ struct PlagueImmersiveView: View {
                     }
 
                     session.handleWallPosterAction(action)
-
-                    if action == .story,
-                       PlagueFeatureFlags.showStoryEpisodePicker {
-                        openWindow(id: PlagueWindowID.storyDebug)
-                        print("""
-                        [TuringStory] Story debug window opened from wall poster
-                          windowID: \(PlagueWindowID.storyDebug)
-                        """)
-                    }
                 }
         )
         .simultaneousGesture(
@@ -275,6 +266,15 @@ struct PlagueImmersiveView: View {
             guard let envelope = session.latestTuringDictationEvent else { return }
             coordinator.applyTuringDictationEventToExistingHUD(envelope.event)
         }
+        .onChange(of: session.storyEpisodePickerRequestRevision) { _, revision in
+            guard revision > 0 else { return }
+            openWindow(id: PlagueWindowID.storyEpisodes)
+            print("""
+            [TuringEpisodePicker] production window opened
+              windowID: \(PlagueWindowID.storyEpisodes)
+              revision: \(revision)
+            """)
+        }
         .onReceive(frameTimer) { date in
             coordinator.tick(at: date)
         }
@@ -349,6 +349,12 @@ struct PlagueImmersiveView: View {
                 } else {
                     session.setWallPosterUIInactiveIfAllowed()
                 }
+            }
+            coordinator.onTuringStoryStagePlacementCommitted = { source in
+                session.storyStagePlacementCommitted(source: source)
+            }
+            coordinator.onTuringStoryStagePlacementFailed = { error, source in
+                session.storyStagePlacementFailed(error, source: source)
             }
             coordinator.onRoomSkinningStatusChanged = { status in
                 session.roomSkinningStatus = status

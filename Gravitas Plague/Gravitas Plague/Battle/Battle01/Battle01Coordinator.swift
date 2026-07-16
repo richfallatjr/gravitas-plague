@@ -106,6 +106,9 @@ final class Battle01Coordinator {
                 return
             }
             musicStartGate.recordScriptPoint03TTSCompletion()
+        case .continuationRestore(let sourceEventID):
+            musicStartGate.recordScriptPoint03TTSCompletion()
+            print("[Battle01] continuation trigger sourceEventID=\(sourceEventID.uuidString)")
         case .debug:
             musicStartGate.recordScriptPoint03TTSCompletion()
             print("[Battle01MusicGate] debug trigger simulates ScriptPoint03 TTS completion")

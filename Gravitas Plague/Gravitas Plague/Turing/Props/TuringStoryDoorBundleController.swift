@@ -316,6 +316,25 @@ final class TuringStoryDoorBundleController:
         animationController?.toggle(reason: reason)
     }
 
+    func setDoorStateImmediatelyForStoryTeleport(
+        _ destination: TuringStoryDoorDestination,
+        teleportID: UUID
+    ) {
+        battleInteractionLockOwnerIDs.removeAll(keepingCapacity: false)
+        switch destination {
+        case .closed:
+            animationController?.setStateImmediatelyForStoryTeleport(
+                .closed,
+                teleportID: teleportID
+            )
+        case .open:
+            animationController?.setStateImmediatelyForStoryTeleport(
+                .open,
+                teleportID: teleportID
+            )
+        }
+    }
+
     var battleDoorState: TuringStoryDoorBattleState {
         switch animationController?.state ?? .closed {
         case .closed:

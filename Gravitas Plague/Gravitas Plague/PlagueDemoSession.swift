@@ -155,6 +155,7 @@ final class PlagueDemoSession: ObservableObject {
     @Published var activeMode: ActiveMode = .none
     @Published var selectedOperationMode: PlagueOperationMode?
     @Published var isStoryEpisodePickerPresented = false
+    @Published private(set) var storyEpisodePickerRequestRevision = 0
     @Published var selectedStoryEpisodeID: TuringEpisodeID?
     @Published var experienceMode: PlagueExperienceMode = .horde
     @Published var isPosterUIVisible = true
@@ -231,6 +232,7 @@ final class PlagueDemoSession: ObservableObject {
     private var controlWindowBackgroundIgnoreUntil: Date?
     private var controlWindowBackgroundIgnoreReason: String?
     private var controlWindowDismissedForWallUI = false
+    private var activeStoryStagePreparationGeneration: Int?
     private let lifetimeWavesClearedKey =
         "gravitas_plague_lifetime_waves_cleared"
     private let localHighestWaveReachedKey =
@@ -296,27 +298,7 @@ final class PlagueDemoSession: ObservableObject {
 
         switch mode {
         case .story:
-            experienceMode = .story
-            activeMode = .none
-            statusMessage = "Starting the Prologue."
-            isStoryEpisodePickerPresented = false
-            let episodeID =
-                PlagueFeatureFlags.defaultStoryEpisodeID
-
-            Task { @MainActor [weak self] in
-                await TuringEpisodeFlowController.shared
-                    .resetEpisode(
-                        reason:
-                            "storyModeSelected.\(episodeID.rawValue)"
-                    )
-
-                guard let self,
-                      self.selectedOperationMode == .story else {
-                    return
-                }
-
-                self.startStoryEpisode(episodeID)
-            }
+            requestStoryMode(source: "selectOperationMode")
 
         case .horde:
             experienceMode = .horde
@@ -328,6 +310,69 @@ final class PlagueDemoSession: ObservableObject {
         }
     }
 
+    func requestStoryMode(source: String) {
+        selectedOperationMode = .story
+        experienceMode = .story
+        activeMode = .none
+        statusMessage = "Preparing Story mode."
+        isStoryEpisodePickerPresented = false
+
+        let stage = TuringStoryStageCoordinator.shared
+        if stage.isEstablished {
+            requestStoryEpisodePicker(source: source)
+            return
+        }
+
+        if case .preparing = stage.state {
+            print("[TuringStoryStage] duplicate Story request joined active preparation source=\(source)")
+            return
+        }
+
+        let generation = stage.beginPreparation(reason: "storyMode.\(source)")
+        activeStoryStagePreparationGeneration = generation
+        send(.requestTuringStoryPlacementRoomScan("storyMode.\(source).generation.\(generation)"))
+    }
+
+    func storyStagePlacementCommitted(source: String) {
+        let stage = TuringStoryStageCoordinator.shared
+        guard case .preparing(let generation) = stage.state,
+              activeStoryStagePreparationGeneration == generation else {
+            print("[TuringStoryStage] unrelated placement commit ignored source=\(source) state=\(stage.state)")
+            return
+        }
+        stage.markEstablished(generation: generation)
+        activeStoryStagePreparationGeneration = nil
+        statusMessage = "Story room ready."
+        requestStoryEpisodePicker(source: source)
+    }
+
+    func storyStagePlacementFailed(_ error: Error, source: String) {
+        let stage = TuringStoryStageCoordinator.shared
+        guard case .preparing(let generation) = stage.state,
+              activeStoryStagePreparationGeneration == generation else {
+            print("[TuringStoryStage] unrelated placement failure ignored source=\(source) state=\(stage.state)")
+            return
+        }
+        stage.markFailed(generation: generation, error: error)
+        activeStoryStagePreparationGeneration = nil
+        statusMessage = "Story room placement failed."
+        print("[TuringStoryStage] placement failure surfaced source=\(source) error=\(error.localizedDescription)")
+    }
+
+    func requestStoryEpisodePicker(source: String) {
+        guard TuringStoryStageCoordinator.shared.isEstablished else {
+            print("[TuringEpisodePicker] presentation rejected reason=storyStageNotEstablished source=\(source)")
+            return
+        }
+        storyEpisodePickerRequestRevision &+= 1
+        print("""
+        [TuringEpisodePicker] presentation requested
+          source: \(source)
+          revision: \(storyEpisodePickerRequestRevision)
+          roomRescan: false
+        """)
+    }
+
     func handleWallPosterAction(
         _ action: WallPosterAction
     ) {
@@ -335,7 +380,7 @@ final class PlagueDemoSession: ObservableObject {
 
         switch action {
         case .story:
-            selectOperationMode(.story)
+            requestStoryMode(source: "realityKitWallPoster")
 
         case .horde:
             selectOperationMode(.horde)

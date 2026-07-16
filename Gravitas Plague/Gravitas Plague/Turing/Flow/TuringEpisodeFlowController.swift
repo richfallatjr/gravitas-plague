@@ -1,15 +1,25 @@
 import Foundation
 
-struct TuringScriptPointCompletionEvent: Sendable {
+struct TuringScriptPointCompletionEvent: Sendable, Equatable {
     let eventID: UUID
     let scriptPointID: String
     let flowInstanceID: UUID
     let triggerSource: TuringFlowTriggerSource
 }
 
+struct TuringConversationPlaybackCompletionEvent: Sendable, Equatable {
+    let eventID: UUID
+    let conversationRunID: UUID
+    let conversationKey: String
+    let parentScriptPointID: String
+}
+
 @MainActor
-protocol TuringScriptPointCompletionEventSink: AnyObject {
-    func scriptPointCompleted(_ event: TuringScriptPointCompletionEvent)
+protocol TuringPrologueCompletionEventSink: AnyObject {
+    func scriptPointCompleted(_ event: TuringScriptPointCompletionEvent) async throws
+    func conversationPlaybackCompleted(
+        _ event: TuringConversationPlaybackCompletionEvent
+    ) async throws
 }
 
 actor TuringEpisodeFlowController {
@@ -38,8 +48,8 @@ actor TuringEpisodeFlowController {
         Set<String>()
     private var pendingConversationAdvance:
         PendingConversationAdvance?
-    private var completionEventSink:
-        (any TuringScriptPointCompletionEventSink)?
+    private weak var completionEventSink:
+        (any TuringPrologueCompletionEventSink)?
 
     init(
         engine: TuringFlowEngine = .shared,
@@ -62,7 +72,7 @@ actor TuringEpisodeFlowController {
     }
 
     func setCompletionEventSink(
-        _ sink: (any TuringScriptPointCompletionEventSink)?
+        _ sink: (any TuringPrologueCompletionEventSink)?
     ) {
         completionEventSink = sink
     }
@@ -161,9 +171,19 @@ actor TuringEpisodeFlowController {
                 return result.voiceRunResult
             }
 
-            completedScriptPointIDs.insert(
-                scheduledPointID
-            )
+            do {
+                try await publishCompletion(
+                    result: result,
+                    scriptPointID: scheduledPointID,
+                    triggerSource: scheduledTrigger
+                )
+            } catch {
+                return .failed(
+                    "\(scheduledPointID) completed playback, but its checkpoint could not be saved: \(error.localizedDescription)"
+                )
+            }
+
+            completedScriptPointIDs.insert(scheduledPointID)
 
             let progression =
                 descriptor.progression
@@ -181,11 +201,6 @@ actor TuringEpisodeFlowController {
                                 "terminalPointCompleted.\(descriptor.scriptPointID)"
                         )
                 }
-                await publishCompletion(
-                    result: result,
-                    scriptPointID: scheduledPointID,
-                    triggerSource: scheduledTrigger
-                )
                 return result.voiceRunResult
             }
 
@@ -253,13 +268,6 @@ actor TuringEpisodeFlowController {
                     """)
                 }
 
-
-                await publishCompletion(
-                    result: result,
-                    scriptPointID: scheduledPointID,
-                    triggerSource: scheduledTrigger
-                )
-
                 scheduledPointID =
                     nextScriptPointID
                 scheduledTrigger =
@@ -297,15 +305,54 @@ actor TuringEpisodeFlowController {
                 pendingConversationAdvance = nil
             }
 
-
-            await publishCompletion(
-                result: result,
-                scriptPointID: scheduledPointID,
-                triggerSource: scheduledTrigger
-            )
-
             return result.voiceRunResult
         }
+    }
+
+    func startFromContinuation(
+        scriptPointID: String,
+        checkpoint: TuringPrologueCheckpoint
+    ) async -> TuringVoiceRunResult {
+        let allowed: Bool
+        switch (checkpoint, scriptPointID) {
+        case (.notStarted, "prologue.scriptPoint01"),
+             (.script01ConversationVoiceCompleted, "prologue.scriptPoint02"),
+             (.script02PromptVoiceCompleted, "prologue.scriptPoint03"):
+            allowed = true
+        default:
+            allowed = false
+        }
+
+        guard allowed else {
+            return .failed(
+                "Invalid continuation point \(scriptPointID) for \(checkpoint)."
+            )
+        }
+        return await start(
+            scriptPointID: scriptPointID,
+            trigger: .continuationRestore(checkpoint: checkpoint),
+            allowExplicitReplay: true
+        )
+    }
+
+    func pendingConversationAdvanceContext(
+        for conversationKey: String
+    ) -> TuringPendingConversationAdvanceContext? {
+        guard let pending = pendingConversationAdvance,
+              pending.conversationKey == conversationKey else {
+            return nil
+        }
+        return TuringPendingConversationAdvanceContext(
+            parentScriptPointID: pending.parentScriptPointID,
+            nextScriptPointID: pending.nextScriptPointID,
+            conversationKey: pending.conversationKey
+        )
+    }
+
+    func notifyConversationPlaybackCompleted(
+        _ event: TuringConversationPlaybackCompletionEvent
+    ) async throws {
+        try await completionEventSink?.conversationPlaybackCompleted(event)
     }
 
     func conversationPlaybackCompleted(
@@ -373,6 +420,40 @@ actor TuringEpisodeFlowController {
         """)
     }
 
+    func quiesceForStoryTeleport(reason: String) {
+        activeSequenceID = nil
+        pendingConversationAdvance = nil
+        print("[TuringFlow] quiesced for Story teleport reason=\(reason)")
+    }
+
+    func restore(
+        completedScriptPointIDs: Set<String>,
+        pendingConversationAdvance: RestoredPendingConversationAdvance?
+    ) async {
+        guard activeSequenceID == nil else {
+            assertionFailure("Cannot restore while a Turing Flow sequence is active.")
+            return
+        }
+        self.completedScriptPointIDs = completedScriptPointIDs
+        if let pendingConversationAdvance {
+            self.pendingConversationAdvance = PendingConversationAdvance(
+                parentScriptPointID: pendingConversationAdvance.parentScriptPointID,
+                nextScriptPointID: pendingConversationAdvance.nextScriptPointID,
+                conversationKey: pendingConversationAdvance.conversationKey
+            )
+        } else {
+            self.pendingConversationAdvance = nil
+        }
+        await seedStore.clearAll(reason: "storyTeleportRestore")
+        await historyStore.clearAll(reason: "storyTeleportRestore")
+        print("""
+        [TuringContinuation] episode flow restored
+          completedScriptPointIDs: \(completedScriptPointIDs.sorted())
+          pendingConversationParent: \(pendingConversationAdvance?.parentScriptPointID ?? "none")
+          pendingConversationNext: \(pendingConversationAdvance?.nextScriptPointID ?? "none")
+        """)
+    }
+
     func markCompletedForCompatibility(
         _ scriptPointIDs: [String]
     ) {
@@ -385,10 +466,10 @@ actor TuringEpisodeFlowController {
         result: TuringFlowResult,
         scriptPointID: String,
         triggerSource: TuringFlowTriggerSource
-    ) async {
+    ) async throws {
         guard let identity = result.identity else {
             print("[TuringFlow] completion event omitted: successful result had no identity scriptPointID=\(scriptPointID)")
-            return
+            throw TuringStoryContinuationError.noValidSnapshot
         }
         let event = TuringScriptPointCompletionEvent(
             eventID: UUID(),
@@ -396,7 +477,7 @@ actor TuringEpisodeFlowController {
             flowInstanceID: identity.flowInstanceID,
             triggerSource: triggerSource
         )
-        await completionEventSink?.scriptPointCompleted(event)
+        try await completionEventSink?.scriptPointCompleted(event)
         print("""
         [TuringFlow] actual script point completion published
           scriptPointID: \(scriptPointID)
@@ -404,4 +485,10 @@ actor TuringEpisodeFlowController {
           trigger: \(triggerSource.logValue)
         """)
     }
+}
+
+struct TuringPendingConversationAdvanceContext: Sendable, Equatable {
+    let parentScriptPointID: String
+    let nextScriptPointID: String
+    let conversationKey: String
 }

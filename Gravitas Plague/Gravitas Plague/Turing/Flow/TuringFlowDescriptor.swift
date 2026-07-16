@@ -86,6 +86,7 @@ enum TuringFlowTriggerSource: Sendable, Hashable {
     case userPlay
     case priorConversationPlaybackCompleted(parentScriptPointID: String)
     case priorScriptPointCompleted(parentScriptPointID: String)
+    case continuationRestore(checkpoint: TuringPrologueCheckpoint)
     case manualDebug
 }
 
@@ -98,6 +99,18 @@ extension TuringFlowTriggerSource {
             return .priorConversationPlaybackCompleted
         case .priorScriptPointCompleted:
             return .priorScriptPointCompleted
+        case .continuationRestore(let checkpoint):
+            switch checkpoint {
+            case .notStarted:
+                return .userPlay
+            case .script01ConversationVoiceCompleted:
+                return .priorConversationPlaybackCompleted
+            case .script02PromptVoiceCompleted:
+                return .priorScriptPointCompleted
+            case .script01PromptVoiceCompleted,
+                 .script03PromptVoiceCompleted:
+                return .userPlay
+            }
         case .manualDebug:
             return .manualDebug
         }
@@ -111,10 +124,13 @@ extension TuringFlowTriggerSource {
             return "priorConversationPlaybackCompleted.\(parent)"
         case .priorScriptPointCompleted(let parent):
             return "priorScriptPointCompleted.\(parent)"
+        case .continuationRestore(let checkpoint):
+            return "continuationRestore.\(checkpoint)"
         case .manualDebug:
             return "manualDebug"
         }
     }
+
 }
 
 protocol TuringFlowDescriptorLoading: Sendable {

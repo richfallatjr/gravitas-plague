@@ -50,6 +50,24 @@ final class TuringFlowInteractionGateController:
         publish(reason: "playArmed.\(reason)")
     }
 
+    func forcePlayForStoryTeleport(reason: String) {
+        precondition(ownerFlowInstanceID == nil)
+        state = .play
+        publish(reason: "storyTeleportPlay.\(reason)")
+    }
+
+    func forceMicrophoneForStoryTeleport(reason: String) {
+        precondition(ownerFlowInstanceID == nil)
+        state = .microphone
+        publish(reason: "storyTeleportMicrophone.\(reason)")
+    }
+
+    func forceClosedForStoryTeleport(reason: String) {
+        ownerFlowInstanceID = nil
+        state = .closed
+        publish(reason: "storyTeleportHidden.\(reason)")
+    }
+
     func claimPlay(reason: String) -> Bool {
         guard state == .play else {
             print("""

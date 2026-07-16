@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor
-final class PrologueStoryActionRouter: TuringScriptPointCompletionEventSink {
+final class PrologueStoryActionRouter {
     private let battle01: Battle01Coordinator
     private var handledEventIDs = Set<UUID>()
     private var battle01Triggered = false
@@ -18,6 +18,16 @@ final class PrologueStoryActionRouter: TuringScriptPointCompletionEventSink {
         }
         battle01Triggered = true
         battle01.start(trigger: .scriptPointCompleted(event))
+    }
+
+    func startBattle01FromContinuation(sourceEventID: UUID) {
+        guard battle01Triggered == false else { return }
+        battle01Triggered = true
+        battle01.start(
+            trigger: .continuationRestore(
+                snapshotSourceEventID: sourceEventID
+            )
+        )
     }
 
     func reset(reason: String) {

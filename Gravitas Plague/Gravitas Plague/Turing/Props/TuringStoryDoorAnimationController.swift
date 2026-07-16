@@ -120,6 +120,32 @@ final class TuringStoryDoorAnimationController {
         stopSFX(reason: reason)
     }
 
+    func setStateImmediatelyForStoryTeleport(
+        _ target: DoorState,
+        teleportID: UUID
+    ) {
+        animationTask?.cancel()
+        animationTask = nil
+        failOpenWaiters(reason: "storyTeleport.\(teleportID.uuidString)")
+        stopSFX(reason: "storyTeleport.\(teleportID.uuidString)")
+
+        switch target {
+        case .closed, .closing:
+            applyYaw(0)
+            state = .closed
+        case .open, .opening:
+            applyYaw(openYawRadians)
+            state = .open
+        }
+
+        print("""
+        [TuringDoorAnimation] Story teleport endpoint applied
+          teleportID: \(teleportID.uuidString)
+          state: \(state.rawValue)
+          animated: false
+        """)
+    }
+
     func openAndWait(
         reason: String
     ) async throws {

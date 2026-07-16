@@ -521,17 +521,10 @@ struct PlagueOperationModePosterMenu: View {
         }
 
         print("[PlagueMenu] selected operation mode: \(mode.rawValue)")
-        session.selectOperationMode(mode)
-
-        if mode == .story,
-           PlagueFeatureFlags.showStoryEpisodePicker {
-            openWindow(id: PlagueWindowID.storyDebug)
-            print("""
-            [TuringStory] Story debug window opened
-              windowID: \(PlagueWindowID.storyDebug)
-              immersiveSpaceStatus: \(String(describing: session.immersiveSpaceStatus))
-              sheetPickerUsed: false
-            """)
+        if mode == .story {
+            session.requestStoryMode(source: "swiftUIOperationPoster")
+        } else {
+            session.selectOperationMode(mode)
         }
     }
 }

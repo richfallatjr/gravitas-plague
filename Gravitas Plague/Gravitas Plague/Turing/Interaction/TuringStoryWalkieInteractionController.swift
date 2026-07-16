@@ -13,6 +13,10 @@ extension PlagueDemoSession:
 {
 }
 
+enum TuringStoryWalkiePlayAction: Sendable, Equatable {
+    case startScriptPoint(id: String, trigger: TuringFlowTriggerSource)
+}
+
 @MainActor
 final class TuringStoryWalkieInteractionController {
     private let gate: TuringFlowInteractionGateController
@@ -27,6 +31,7 @@ final class TuringStoryWalkieInteractionController {
     private var activeEpisodeID: TuringEpisodeID?
     private var walkieReady = false
     private var holdActive = false
+    private var pendingPlayAction: TuringStoryWalkiePlayAction?
 
     private var playStartTask: Task<Void, Never>?
     private var conversationTask: Task<Void, Never>?
@@ -70,9 +75,6 @@ final class TuringStoryWalkieInteractionController {
         renderGateState(
             reason: "episodeStarted.\(episodeID.rawValue)"
         )
-        armIfReady(
-            reason: "episodeStarted.\(episodeID.rawValue)"
-        )
     }
 
     func walkieInstalled(
@@ -94,12 +96,38 @@ final class TuringStoryWalkieInteractionController {
         """)
 
         renderGateState(reason: "walkieInstalled")
-        armIfReady(reason: "walkieInstalled")
+    }
+
+    func armPlay(action: TuringStoryWalkiePlayAction, reason: String) {
+        guard walkieReady else {
+            print("[TuringWalkieState] play arm rejected reason=walkieNotInstalled source=\(reason)")
+            return
+        }
+        pendingPlayAction = action
+        gate.forcePlayForStoryTeleport(reason: reason)
+        renderGateState(reason: reason)
+    }
+
+    func armMicrophone(reason: String) {
+        guard walkieReady else {
+            print("[TuringWalkieState] microphone arm rejected reason=walkieNotInstalled source=\(reason)")
+            return
+        }
+        pendingPlayAction = nil
+        gate.forceMicrophoneForStoryTeleport(reason: reason)
+        renderGateState(reason: reason)
+    }
+
+    func hideForStoryTeleport(reason: String) {
+        pendingPlayAction = nil
+        gate.forceClosedForStoryTeleport(reason: reason)
+        renderGateState(reason: reason)
     }
 
     func walkieRemoved(reason: String) {
         walkieReady = false
         holdActive = false
+        pendingPlayAction = nil
         dictationStartTask?.cancel()
         dictationStartTask = nil
         iconController.remove()
@@ -111,38 +139,72 @@ final class TuringStoryWalkieInteractionController {
     }
 
     func playTapped(source: String) {
-        guard activeEpisodeID == .prologue,
-              walkieReady,
+        guard walkieReady,
+              let action = pendingPlayAction,
               gate.claimPlay(reason: source) else {
             return
         }
 
+        pendingPlayAction = nil
+
         renderGateState(reason: "playClaimed.\(source)")
-        print("""
-        [TuringWalkieState] play accepted
-          source: \(source)
-          scriptPointID: prologue.scriptPoint01
-        """)
 
         playStartTask?.cancel()
-        playStartTask = Task { [weak self] in
+        playStartTask = Task { [weak self, action] in
             guard let self else {
                 return
             }
 
-            let result = await self.episodeFlow.start(
-                scriptPointID: "prologue.scriptPoint01",
-                trigger: .userPlay
-            )
+            let result: TuringVoiceRunResult
+            let scriptPointID: String
+            switch action {
+            case .startScriptPoint(let id, let trigger):
+                scriptPointID = id
+                print("""
+                [TuringWalkieState] play accepted
+                  source: \(source)
+                  scriptPointID: \(id)
+                  trigger: \(trigger.logValue)
+                """)
+                if case .continuationRestore(let checkpoint) = trigger {
+                    result = await self.episodeFlow.startFromContinuation(
+                        scriptPointID: id,
+                        checkpoint: checkpoint
+                    )
+                } else {
+                    result = await self.episodeFlow.start(
+                        scriptPointID: id,
+                        trigger: trigger
+                    )
+                }
+            }
 
             guard result.succeeded == false else {
                 return
             }
 
+            self.pendingPlayAction = action
             self.gate.restorePlayAfterFailedClaim(
-                reason: "scriptPoint01Failed.\(source)"
+                reason: "\(scriptPointID)Failed.\(source)"
             )
         }
+    }
+
+    func quiesceForStoryTeleport(reason: String) async {
+        holdActive = false
+        pendingPlayAction = nil
+        playStartTask?.cancel()
+        conversationTask?.cancel()
+        dictationStartTask?.cancel()
+        playStartTask = nil
+        conversationTask = nil
+        dictationStartTask = nil
+        await dictation.cancel(reason: reason)
+        await TuringWalkieCommsFXController.shared.stopAll(reason: reason)
+        TuringStoryWalkieAudioRoute.makeActiveClipPlayer()?.cancelAll(reason: reason)
+        gate.forceClosedForStoryTeleport(reason: reason)
+        renderGateState(reason: reason)
+        print("[TuringWalkieState] quiesced for Story teleport reason=\(reason)")
     }
 
     func microphoneHoldBegan(source: String) {
@@ -279,6 +341,7 @@ final class TuringStoryWalkieInteractionController {
         walkieReady = false
         activeEpisodeID = nil
         holdActive = false
+        pendingPlayAction = nil
 
         playStartTask?.cancel()
         conversationTask?.cancel()
@@ -318,16 +381,6 @@ final class TuringStoryWalkieInteractionController {
                 self?.renderGateState(reason: "gateChanged")
             }
         }
-    }
-
-    private func armIfReady(reason: String) {
-        guard activeEpisodeID == .prologue,
-              walkieReady else {
-            return
-        }
-
-        gate.armPlay(reason: reason)
-        renderGateState(reason: "playArm.\(reason)")
     }
 
     private func renderGateState(reason: String) {

@@ -6,7 +6,7 @@ import simd
 import UIKit
 
 @MainActor
-final class PlagueImmersiveCoordinator: ObservableObject {
+final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTeleportWorld {
     private struct HordeSpawnFailureRecord: Identifiable {
         let id = UUID()
         let wave: Int
@@ -126,6 +126,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     private let turingRollingBenchBundleController = TuringRollingBenchBundleController()
     private var battle01Coordinator: Battle01Coordinator?
     private var prologueStoryActionRouter: PrologueStoryActionRouter?
+    private var prologueCompletionCoordinator: TuringPrologueCompletionCoordinator?
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
     private lazy var turingStoryPlacementAdjustmentCoordinator =
         TuringStoryPlacementAdjustmentCoordinator(
@@ -163,6 +164,7 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             self.turingHUDDelayedClearTask = nil
             self.instructionHUD.clear()
             print("[TuringWallSlices] placement HUD cleared scanID=\(scanID)")
+            self.onTuringStoryStagePlacementCommitted?("sliceLayout.\(scanID)")
             self.finishTuringDebugRescanIfNeeded(
                 scanID: scanID,
                 outcome: "committed"
@@ -181,6 +183,14 @@ final class PlagueImmersiveCoordinator: ObservableObject {
                 reason: "sliceLayoutFailed.\(scanID)"
             )
             print("[TuringWallSlices] placement failure surfaced scanID=\(scanID) error=\(error)")
+            self?.onTuringStoryStagePlacementFailed?(
+                NSError(
+                    domain: "TuringStoryStage",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: error]
+                ),
+                "sliceLayout.\(scanID)"
+            )
             self?.finishTuringDebugRescanIfNeeded(
                 scanID: scanID,
                 outcome: "failed.\(error)"
@@ -257,6 +267,8 @@ final class PlagueImmersiveCoordinator: ObservableObject {
         }
     }
     var onWallPosterUIActiveChanged: ((Bool) -> Void)?
+    var onTuringStoryStagePlacementCommitted: ((String) -> Void)?
+    var onTuringStoryStagePlacementFailed: ((Error, String) -> Void)?
     var onHordeWaveReached: ((Int) -> Void)?
     var onHordeWaveCleared: ((Int) -> Void)?
     var onHordeSessionEnded: (() -> Void)?
@@ -409,10 +421,15 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             }
         )
         let prologueRouter = PrologueStoryActionRouter(battle01: battle01)
+        let completionCoordinator = TuringPrologueCompletionCoordinator(
+            battleRouter: prologueRouter
+        )
         battle01Coordinator = battle01
         prologueStoryActionRouter = prologueRouter
+        prologueCompletionCoordinator = completionCoordinator
         await TuringEpisodeFlowController.shared
-            .setCompletionEventSink(prologueRouter)
+            .setCompletionEventSink(completionCoordinator)
+        TuringStoryStateTeleportCoordinator.shared.attach(self)
         turingStoryPlacementAdjustmentCoordinator.install(
             sceneRoot: root
         )
@@ -1372,6 +1389,93 @@ final class PlagueImmersiveCoordinator: ObservableObject {
             .microphoneHoldEnded(source: source)
     }
 
+    func establishedLayoutFingerprint() throws -> TuringStoryEstablishedLayoutFingerprint {
+        guard turingStoryPropsArePlaced else {
+            throw TuringStoryContinuationError.storyStageNotEstablished
+        }
+        return TuringStoryEstablishedLayoutFingerprint(
+            doorWorldTransform: turingDoorBundleController.root.transformMatrix(relativeTo: nil),
+            windowWorldTransform: turingWindowBundleController.root.transformMatrix(relativeTo: nil),
+            walkieShelfWorldTransform: turingWalkieBundleController.root.transformMatrix(relativeTo: nil),
+            rollingBenchWorldTransform: turingRollingBenchBundleController.root.transformMatrix(relativeTo: nil),
+            posterWorldTransform: wallPosterUIController.root.transformMatrix(relativeTo: nil),
+            canonicalWallIDs: roomSkinningCoordinator.wallManager.wallCandidates.keys
+                .sorted { $0.uuidString < $1.uuidString },
+            occupancyIDs: wallPropOccupancyRegistry.recordsByID.keys
+                .sorted { $0.uuidString < $1.uuidString }
+        )
+    }
+
+    func quiesceStoryRuntime(teleportID: UUID) async throws {
+        let reason = "storyTeleport.\(teleportID.uuidString)"
+        await turingStoryWalkieInteractionController.quiesceForStoryTeleport(reason: reason)
+        await TuringEpisodeFlowController.shared.quiesceForStoryTeleport(reason: reason)
+        battle01Coordinator?.cancel(reason: reason)
+        prologueCompletionCoordinator?.reset(reason: reason)
+        print("""
+        [TuringStoryTeleport] transient runtime quiesced
+          teleportID: \(teleportID.uuidString)
+          placementReset: false
+          crankRadioPreserved: true
+        """)
+    }
+
+    func applyDoorDestination(
+        _ destination: TuringStoryDoorDestination?,
+        teleportID: UUID
+    ) async throws {
+        guard let destination else { return }
+        turingDoorBundleController.setDoorStateImmediatelyForStoryTeleport(
+            destination,
+            teleportID: teleportID
+        )
+    }
+
+    func applyBattleDestination(
+        _ destination: TuringStoryBattleDestination,
+        teleportID: UUID
+    ) async throws {
+        switch destination {
+        case .absent:
+            battle01Coordinator?.cancel(reason: "storyTeleport.absent.\(teleportID.uuidString)")
+            prologueStoryActionRouter?.reset(reason: "storyTeleport.absent")
+        case .battle01Start:
+            let sourceEventID = TuringStoryProgressStore.shared.snapshot?.sourceEventID ?? UUID()
+            prologueStoryActionRouter?.startBattle01FromContinuation(
+                sourceEventID: sourceEventID
+            )
+        case .battle01Ready, .battle01Combat, .battle01GrandmaDown:
+            throw TuringStoryContinuationError.unsupportedEpisode
+        }
+    }
+
+    func applyMediaDestination(
+        _ destination: TuringStoryMediaDestination,
+        teleportID: UUID
+    ) async throws {
+        // Battle media is owned by Battle01 and was either stopped by quiesce
+        // or started by the typed battle destination. The crank radio is not touched.
+        print("[TuringStoryTeleport] media destination=\(destination) teleportID=\(teleportID.uuidString)")
+    }
+
+    func applyWalkieDestination(
+        _ destination: TuringStoryWalkieDestination,
+        teleportID: UUID
+    ) async throws {
+        let reason = "storyTeleport.\(teleportID.uuidString)"
+        switch destination {
+        case .play(let scriptPointID, let trigger):
+            turingStoryWalkieInteractionController.armPlay(
+                action: .startScriptPoint(id: scriptPointID, trigger: trigger),
+                reason: reason
+            )
+        case .microphone:
+            turingStoryWalkieInteractionController.armMicrophone(reason: reason)
+        case .hidden:
+            turingStoryWalkieInteractionController.hideForStoryTeleport(reason: reason)
+        }
+    }
+
     @MainActor
     private func configureTuringWalkieAudioAndInteraction(
         reason: String,
@@ -2004,9 +2108,12 @@ final class PlagueImmersiveCoordinator: ObservableObject {
     }
 
     func shutdown() {
+        TuringStoryStateTeleportCoordinator.shared.detach(self)
+        TuringStoryStageCoordinator.shared.invalidate(reason: "immersiveShutdown")
         battle01Coordinator?.cancel(reason: "immersiveShutdown")
         battle01Coordinator = nil
         prologueStoryActionRouter = nil
+        prologueCompletionCoordinator = nil
         Task {
             await TuringEpisodeFlowController.shared
                 .setCompletionEventSink(nil)
