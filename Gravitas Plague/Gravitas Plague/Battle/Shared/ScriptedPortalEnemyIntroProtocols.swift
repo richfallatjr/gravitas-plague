@@ -48,6 +48,7 @@ protocol Battle01StoryCombatControlling: AnyObject {
     func update(deltaTime: TimeInterval)
     func disableCombat(reason: String)
     func cancel(reason: String)
+    func cancelAndRelease(reason: String)
 }
 
 @MainActor
@@ -59,12 +60,12 @@ protocol Battle01SoundtrackControlling: AnyObject {
         onStarted: @escaping @MainActor (UUID) -> Void,
         onCompleted: @escaping @MainActor (UUID, Bool) -> Void
     ) throws
-    func crossfadeToAftermathLoop(
+    func transferToAftermathLoop(
         battleInstanceID: UUID,
         targetDecibels: Float,
         fadeDurationSeconds: TimeInterval,
         onStarted: @escaping @MainActor (UUID) -> Void
-    ) throws
+    ) async throws
     func stop(reason: String)
 }
 

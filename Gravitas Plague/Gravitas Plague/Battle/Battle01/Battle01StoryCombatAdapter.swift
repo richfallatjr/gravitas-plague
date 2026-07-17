@@ -61,4 +61,8 @@ final class Battle01StoryCombatAdapter: Battle01StoryCombatControlling {
         enemy = nil
         context = nil
     }
+
+    func cancelAndRelease(reason: String) {
+        cancel(reason: reason)
+    }
 }

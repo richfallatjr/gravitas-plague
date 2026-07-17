@@ -758,6 +758,36 @@ final class JockRuntimeDriver {
         stop()
     }
 
+    @discardableResult
+    func releasePreparedRuntime(reason: String) -> Int {
+        stopAllPlaybackForCleanup()
+        let preparedCount = preparedClipsByID.count
+
+        onClipCompleted = nil
+        locomotionDeltaHandler = nil
+        preparedClipsByID.removeAll(keepingCapacity: false)
+        activeSubAnimations.removeAll(keepingCapacity: false)
+        transitionFromPose.removeAll(keepingCapacity: false)
+        transitionToPose.removeAll(keepingCapacity: false)
+        preserveTargetJointRotationCorrections.removeAll(keepingCapacity: false)
+        loggedPreservePolicyClipIDs.removeAll(keepingCapacity: false)
+        loggedPreserveRotationBasisDiagnostics.removeAll(keepingCapacity: false)
+        loggedDirectionRetargetPolicyClipIDs.removeAll(keepingCapacity: false)
+        loggedDirectionRetargetRootMotionClipIDs.removeAll(keepingCapacity: false)
+        loggedDirectionRetargetKneeDiagnostics.removeAll(keepingCapacity: false)
+        loggedDirectionRetargetEdgeDiagnostics.removeAll(keepingCapacity: false)
+        loggedSourceRestDeltaDiagnostics.removeAll(keepingCapacity: false)
+        loggedSourceRestDeltaJointDiagnostics.removeAll(keepingCapacity: false)
+        loggedSourceCompatiblePolicyClipIDs.removeAll(keepingCapacity: false)
+
+        print("""
+        [BattleRuntimeCleanup] animation driver released
+          preparedClipCount: \(preparedCount)
+          reason: \(reason)
+        """)
+        return preparedCount
+    }
+
     func resetToBasePoseForReuse() {
         resetForFreshHordeSpawn()
     }

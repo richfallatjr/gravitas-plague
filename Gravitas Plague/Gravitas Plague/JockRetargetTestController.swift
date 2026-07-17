@@ -12,7 +12,7 @@ struct JockGroundingProfile {
 }
 
 @MainActor
-final class JockRetargetTestController {
+final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     private enum FollowDemoState: Equatable {
         case inactive
         case idleStopped
@@ -94,6 +94,8 @@ final class JockRetargetTestController {
     )
     private var prewarmedCharacterEntityForLoad: Entity?
     private var loadedFromHordePrewarm = false
+    private var battleRuntimeIdentityStorage: BattleEnemyRuntimeIdentity?
+    private var completedBattleRuntimeRelease: BattleEnemyRuntimeReleaseResult?
 
     private var hasLoaded = false
     private var isVisible = false
@@ -897,6 +899,8 @@ final class JockRetargetTestController {
 
     func configureStoryBattleIdentity(
         id: UUID,
+        battleInstanceID: UUID,
+        enemyTypeID: String,
         archetype: PlagueCharacterArchetype,
         hitsToKill: Int,
         attributes: CharacterAttributes
@@ -917,6 +921,12 @@ final class JockRetargetTestController {
         acceptedHitCount = 0
         clearEnemyDamageCooldown()
         didPlayDeathAudio = false
+        battleRuntimeIdentityStorage = BattleEnemyRuntimeIdentity(
+            battleInstanceID: battleInstanceID,
+            enemyID: id,
+            enemyTypeID: enemyTypeID
+        )
+        completedBattleRuntimeRelease = nil
         rootEntity.name = "StoryBattle_\(archetype.rawValue)_\(id.uuidString.prefix(8))"
 
         print("""
@@ -2504,6 +2514,140 @@ final class JockRetargetTestController {
               lifecycle: cleanedUp
             """
         )
+    }
+
+    var battleRuntimeIdentity: BattleEnemyRuntimeIdentity {
+        guard let battleRuntimeIdentityStorage else {
+            preconditionFailure("Story enemy runtime identity was not configured.")
+        }
+        return battleRuntimeIdentityStorage
+    }
+
+    func releaseBattleRuntime(
+        reason: BattleEnemyReleaseReason,
+        retentionPolicy: BattleEnemyRetentionPolicy,
+        corpsePresenter: BattleCorpsePresentationController
+    ) async throws -> BattleEnemyRuntimeReleaseResult {
+        if let completedBattleRuntimeRelease {
+            return completedBattleRuntimeRelease
+        }
+        guard retentionPolicy != .reusablePool else {
+            throw BattleEnemyRuntimeReleaseError.invalidRetentionPolicy
+        }
+
+        let identity = battleRuntimeIdentity
+        let preparedClipCount = driver?.releasePreparedRuntime(
+            reason: "battleRelease.\(reason.rawValue)"
+        ) ?? 0
+        let collisionCount = bodyCollisionBox == nil ? 0 : 1
+        let audioCount = characterAudioEmitter == nil ? 0 : 1
+
+        hitDetector.stop()
+        scriptedClipCompletionObserver = nil
+        onPunchHit = nil
+        onCharacterDamageHit = nil
+        onCharacterDeath = nil
+        onPlayerDamaged = nil
+        onBenchmarkPlayerHit = nil
+        onBenchmarkPlayerDeath = nil
+        onBenchmarkEnemyKilled = nil
+        onBenchmarkEnemyDeathAnimationFinished = nil
+        onAttackStarted = nil
+
+        activeAttack = nil
+        latestBrainFollowIntent = nil
+        latestCrowdSnapshots.removeAll(keepingCapacity: false)
+        lastStoryHeadPunchRollAtBySourceID.removeAll(keepingCapacity: false)
+        lastDamageAcceptedAtBySourceID.removeAll(keepingCapacity: false)
+        loggedCharacterClipResolutionKeys.removeAll(keepingCapacity: false)
+        resetHitSelectionMemory()
+
+        let corpseInstalled: Bool
+        switch retentionPolicy {
+        case .remove:
+            corpseInstalled = false
+        case .staticCorpse(let resourcePath):
+            corpseInstalled = try await corpsePresenter.installStaticCorpse(
+                resourcePath: resourcePath,
+                sourceRoot: rootEntity,
+                enemyIdentity: identity
+            )
+        case .reusablePool:
+            preconditionFailure("Reusable pooling is not a final Story battle release policy.")
+        }
+
+        bodyCollisionBox?.setEnabled(false)
+        bodyCollisionBox?.root.removeFromParent()
+        characterAudioEmitter?.removeFromParent()
+        characterEntity?.removeFromParent()
+        modelEntity?.removeFromParent()
+        visualOffsetEntity.children.removeAll()
+        rootEntity.removeFromParent()
+        rootEntity.isEnabled = false
+
+        clipsByID.removeAll(keepingCapacity: false)
+        runtimeOverrides = JockRuntimeClipOverrides(
+            schema: "com.gravitas.jock_runtime_clip_overrides.v0",
+            clips: [:]
+        )
+        characterEntity = nil
+        modelEntity = nil
+        rigDefinition = nil
+        skeletonMap = nil
+        manifest = nil
+        adapter = nil
+        driver = nil
+        skeletonWorldPoseResolver = nil
+        characterAudioEmitter = nil
+        bodyCollisionBox = nil
+        prewarmedCharacterEntityForLoad = nil
+        characterAttributes = nil
+        hasLoaded = false
+        loadedFromHordePrewarm = false
+        isVisible = false
+        playerAttackEnabled = false
+        followDemoState = .inactive
+        combatState = .dead
+        lifecycleState = .despawned
+        hordeLifecycleState = .cleanedUp
+
+        let result = BattleEnemyRuntimeReleaseResult(
+            identity: identity,
+            heavyRuntimeReleased: true,
+            visibleRuntimeRemoved: true,
+            staticCorpseInstalled: corpseInstalled,
+            releasedPreparedClipCount: preparedClipCount,
+            releasedCollisionCount: collisionCount,
+            releasedAudioControllerCount: audioCount,
+            notes: ["all controller-owned Story battle runtime references cleared"]
+        )
+        completedBattleRuntimeRelease = result
+        assertNoHeavyRuntimeReferences()
+        TuringMemoryBudgetProbe.log(
+            label: "enemyRuntimeReleased.\(identity.enemyTypeID).\(identity.enemyID.uuidString)"
+        )
+        print("""
+        [BattleRuntimeCleanup] enemy runtime released
+          battleInstanceID: \(identity.battleInstanceID.uuidString)
+          enemyID: \(identity.enemyID.uuidString)
+          preparedClipCount: \(preparedClipCount)
+          collisionCount: \(collisionCount)
+          audioEmitterCount: \(audioCount)
+          staticCorpseInstalled: \(corpseInstalled)
+        """)
+        return result
+    }
+
+    func assertNoHeavyRuntimeReferences(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        assert(characterEntity == nil, "characterEntity retained", file: file, line: line)
+        assert(modelEntity == nil, "modelEntity retained", file: file, line: line)
+        assert(driver == nil, "driver retained", file: file, line: line)
+        assert(clipsByID.isEmpty, "animation clips retained", file: file, line: line)
+        assert(characterAudioEmitter == nil, "audio emitter retained", file: file, line: line)
+        assert(bodyCollisionBox == nil, "collision box retained", file: file, line: line)
     }
 
     func resetCloneBeforePoolReturn() {

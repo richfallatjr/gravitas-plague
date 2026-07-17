@@ -20,10 +20,8 @@ final class Battle01SoundtrackController: NSObject, Battle01SoundtrackControllin
     private var preparedURL: URL?
     private var preparedAftermathURL: URL?
     private var activePlayer: AVAudioPlayer?
-    private var aftermathPlayer: AVAudioPlayer?
     private var activeBattleInstanceID: UUID?
     private var onCompleted: (@MainActor (UUID, Bool) -> Void)?
-    private var crossfadeCleanupTask: Task<Void, Never>?
 
     func prepare(fileURL: URL) throws {
         let validator = try AVAudioPlayer(contentsOf: fileURL)
@@ -65,66 +63,55 @@ final class Battle01SoundtrackController: NSObject, Battle01SoundtrackControllin
         onStarted(battleInstanceID)
     }
 
-    func crossfadeToAftermathLoop(
+    func transferToAftermathLoop(
         battleInstanceID: UUID,
         targetDecibels: Float,
         fadeDurationSeconds: TimeInterval,
         onStarted: @escaping @MainActor (UUID) -> Void
-    ) throws {
-        guard aftermathPlayer == nil else { return }
+    ) async throws {
         guard let preparedAftermathURL else { throw SoundtrackError.notPrepared }
-
-        let incoming = try AVAudioPlayer(contentsOf: preparedAftermathURL)
-        incoming.delegate = self
-        incoming.numberOfLoops = -1
-        incoming.volume = 0
-        incoming.prepareToPlay()
-        guard incoming.play() else {
-            throw SoundtrackError.playbackDidNotStart
-        }
 
         let outgoing = activePlayer
         let fadeDuration = max(0, fadeDurationSeconds)
         let targetGain = Self.linearGain(decibels: targetDecibels)
-        aftermathPlayer = incoming
-        incoming.setVolume(targetGain, fadeDuration: fadeDuration)
         outgoing?.setVolume(0, fadeDuration: fadeDuration)
+        await StoryAftermathMusicActor.shared.playLoop(
+            fileURL: preparedAftermathURL,
+            targetVolume: targetGain,
+            fadeDuration: fadeDuration
+        )
         onStarted(battleInstanceID)
 
-        crossfadeCleanupTask?.cancel()
-        crossfadeCleanupTask = Task { @MainActor [weak self, weak outgoing] in
-            guard fadeDuration > 0 else {
-                self?.finishOutgoingCrossfade(player: outgoing)
-                return
-            }
-            do {
-                try await Task.sleep(for: .seconds(fadeDuration))
-            } catch {
-                return
-            }
-            self?.finishOutgoingCrossfade(player: outgoing)
+        if fadeDuration > 0 {
+            try await Task.sleep(for: .seconds(fadeDuration))
         }
+        outgoing?.stop()
+        activePlayer = nil
+        activeBattleInstanceID = nil
+        onCompleted = nil
+        preparedURL = nil
+        self.preparedAftermathURL = nil
 
         print("""
-        [Battle01] aftermath crossfade started
+        [Battle01] aftermath ownership transferred
           file: \(preparedAftermathURL.lastPathComponent)
           targetDecibels: \(targetDecibels)
           targetLinearGain: \(targetGain)
           fadeDurationSeconds: \(fadeDuration)
           loopsUntilPrologueTeardown: true
-          attackTrackFadingOut: \(outgoing != nil)
+          attackTrackReleased: true
+          battleCallbacksReleased: true
+          owner: StoryAftermathMusicActor
         """)
     }
 
     func stop(reason: String) {
-        crossfadeCleanupTask?.cancel()
-        crossfadeCleanupTask = nil
         activePlayer?.stop()
-        aftermathPlayer?.stop()
         activePlayer = nil
-        aftermathPlayer = nil
         activeBattleInstanceID = nil
         onCompleted = nil
+        preparedURL = nil
+        preparedAftermathURL = nil
         print("[Battle01] soundtrack stopped reason=\(reason)")
     }
 
@@ -149,11 +136,6 @@ final class Battle01SoundtrackController: NSObject, Battle01SoundtrackControllin
     }
 
     private func finish(player: AVAudioPlayer, successfully: Bool) {
-        if aftermathPlayer === player {
-            aftermathPlayer = nil
-            print("[Battle01] aftermath loop ended unexpectedly success=\(successfully)")
-            return
-        }
         guard activePlayer === player,
               let instanceID = activeBattleInstanceID else { return }
         let completion = onCompleted
@@ -161,17 +143,6 @@ final class Battle01SoundtrackController: NSObject, Battle01SoundtrackControllin
         activeBattleInstanceID = nil
         onCompleted = nil
         completion?(instanceID, successfully)
-    }
-
-    private func finishOutgoingCrossfade(player: AVAudioPlayer?) {
-        guard let player else { return }
-        player.stop()
-        if activePlayer === player {
-            activePlayer = nil
-            activeBattleInstanceID = nil
-            onCompleted = nil
-        }
-        print("[Battle01] attack soundtrack crossfade completed and outgoing player stopped")
     }
 
     nonisolated static func linearGain(decibels: Float) -> Float {

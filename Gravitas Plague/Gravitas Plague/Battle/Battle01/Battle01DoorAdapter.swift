@@ -29,7 +29,9 @@ protocol TuringStoryDoorBattleControlling: AnyObject {
     func acquireBattlePortal(ownerID: UUID, reason: String) async throws
     func releaseBattlePortal(ownerID: UUID, reason: String)
     func openForBattle(ownerID: UUID, reason: String) async throws
+    func closeForBattleAndUnloadPortal(ownerID: UUID, reason: String) async throws
     func battlePortalContext() throws -> TuringStoryDoorBattlePortalContext
+    var battlePortalFullExteriorResident: Bool { get }
 }
 
 extension TuringStoryDoorBundleController: TuringStoryDoorBattleControlling {}

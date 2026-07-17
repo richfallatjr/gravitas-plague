@@ -30,7 +30,7 @@ final class Battle01Coordinator {
     typealias EnemyPreparedHook = @MainActor (UUID, JockRetargetTestController) -> Void
     typealias EnemyRemovedHook = @MainActor (UUID) -> Void
     typealias EnemyMemoryPresenceHook = @MainActor (Bool, String) -> Void
-    typealias PostBattleHoldHook = @MainActor (UUID) -> Void
+    typealias PostBattleHoldHook = @MainActor (BattleRuntimeReleasedEvent) -> Void
 
     private let definitionStore = Battle01DefinitionStore()
     private let enemyFactory: Battle01EnemyFactory
@@ -39,6 +39,9 @@ final class Battle01Coordinator {
     private let combat: any Battle01StoryCombatControlling
     private let soundtrack: any Battle01SoundtrackControlling
     private let richPR: any Battle01RichPrerecordingPlaying
+    private let enemyRegistry: BattleEnemyRuntimeRegistry
+    private let corpsePresenter: BattleCorpsePresentationController
+    private let runtimeCleanup: BattleRuntimeCleanupCoordinator
     private let prerecordingStore = TuringPrerecordingStore()
     private let clock: any BattleClock
     private let onEnemyRemoved: EnemyRemovedHook
@@ -59,8 +62,7 @@ final class Battle01Coordinator {
     private var startTask: Task<Void, Never>?
     private var richPRTask: Task<Void, Never>?
     private var aftermathTransitionTask: Task<Void, Never>?
-    private var corpseRemovalTask: Task<Void, Never>?
-    private var enemyReleaseVerificationTask: Task<Void, Never>?
+    private var runtimeCleanupTask: Task<Void, Never>?
     private var prepared: Battle01PreparedEnemy?
     private var soundtrackStarted = false
     private var aftermathLoopStarted = false
@@ -87,6 +89,14 @@ final class Battle01Coordinator {
         self.combat = Battle01StoryCombatAdapter()
         self.soundtrack = Battle01SoundtrackController()
         self.richPR = Battle01RichPrerecordingController()
+        let enemyRegistry = BattleEnemyRuntimeRegistry()
+        let corpsePresenter = BattleCorpsePresentationController(storyRoot: sceneRoot)
+        self.enemyRegistry = enemyRegistry
+        self.corpsePresenter = corpsePresenter
+        self.runtimeCleanup = BattleRuntimeCleanupCoordinator(
+            registry: enemyRegistry,
+            corpsePresenter: corpsePresenter
+        )
         self.enemyFactory = Battle01EnemyFactory(
             sceneRoot: sceneRoot,
             onPrepared: onEnemyPrepared
@@ -106,8 +116,8 @@ final class Battle01Coordinator {
         }
 
         let instanceID = UUID()
-        enemyReleaseVerificationTask?.cancel()
-        enemyReleaseVerificationTask = nil
+        runtimeCleanupTask?.cancel()
+        runtimeCleanupTask = nil
         battleInstanceID = instanceID
         state = .preparing
         switch trigger {
@@ -170,22 +180,19 @@ final class Battle01Coordinator {
     func cancel(reason: String) {
         guard state != .unloaded else { return }
         state = .cancelled
+        let cancelledInstanceID = battleInstanceID
+        let cancelledEnemyID = prepared?.enemyID
         startTask?.cancel()
         richPRTask?.cancel()
         aftermathTransitionTask?.cancel()
-        corpseRemovalTask?.cancel()
-        enemyReleaseVerificationTask?.cancel()
+        runtimeCleanupTask?.cancel()
         soundtrack.stop(reason: reason)
         richPR.cancel(reason: reason)
-        combat.cancel(reason: reason)
-        intro.cancel(reason: reason, removeSource: false)
+        combat.cancelAndRelease(reason: reason)
+        intro.cancelAndRelease(reason: reason)
+        prepared = nil
 
-        if let instanceID = battleInstanceID {
-            door.setBattleInteractionLocked(
-                false,
-                ownerID: instanceID,
-                reason: reason
-            )
+        if let instanceID = cancelledInstanceID {
             Battle01EventLog.emit(
                 "cancelled",
                 instanceID: instanceID,
@@ -194,18 +201,21 @@ final class Battle01Coordinator {
             )
         }
 
-        releasePreparedEnemy(reason: "cancel.\(reason)")
-        if let instanceID = battleInstanceID {
-            door.releaseBattlePortal(
-                ownerID: instanceID,
-                reason: "cancel.\(reason)"
-            )
+        if let cancelledEnemyID {
+            onEnemyRemoved(cancelledEnemyID)
+        }
+        if let instanceID = cancelledInstanceID {
+            runtimeCleanupTask = Task { @MainActor [weak self] in
+                await self?.releaseCancelledRuntime(
+                    instanceID: instanceID,
+                    reason: reason
+                )
+            }
         }
         battleInstanceID = nil
         startTask = nil
         richPRTask = nil
         aftermathTransitionTask = nil
-        corpseRemovalTask = nil
         soundtrackStarted = false
         aftermathLoopStarted = false
         musicStartGate = Battle01MusicStartGate()
@@ -259,8 +269,29 @@ final class Battle01Coordinator {
                 doorContext: doorContext,
                 battleInstanceID: instanceID
             )
-            try Task.checkCancellation()
-            guard battleInstanceID == instanceID else { return }
+            guard Task.isCancelled == false,
+                  battleInstanceID == instanceID else {
+                await releaseUnregisteredPreparedEnemy(
+                    enemy,
+                    reason: "cancelledBeforeRegistryOwnership"
+                )
+                throw CancellationError()
+            }
+            let enemyLease = BattleEnemyRuntimeLease(
+                identity: enemy.sourceController.battleRuntimeIdentity,
+                controller: enemy.sourceController,
+                portalMirror: enemy.portalMirror
+            )
+            do {
+                try enemyRegistry.register(enemyLease)
+            } catch {
+                await releaseUnregisteredPreparedEnemy(
+                    enemy,
+                    lease: enemyLease,
+                    reason: "registryRejected"
+                )
+                throw error
+            }
             prepared = enemy
 
             intro.install(
@@ -309,10 +340,11 @@ final class Battle01Coordinator {
             try Task.checkCancellation()
             guard battleInstanceID == instanceID else { return }
 
-            door.releaseBattlePortal(
-                ownerID: instanceID,
-                reason: "portalCrossingCompleted"
-            )
+            print("""
+            [TuringDoorPortal] battle lease retained through combat
+              ownerID: \(instanceID.uuidString)
+              releaseBoundary: closeAnimationAndSFXCompletion
+            """)
 
             door.setBattleInteractionLocked(
                 false,
@@ -352,9 +384,8 @@ final class Battle01Coordinator {
                             instanceID: instanceID,
                             configuration: definition.aftermathMusic
                         )
-                        self.state = .postBattleHold
-                        self.onPostBattleHold(instanceID)
-                        self.scheduleCorpseRemoval(
+                        self.state = .releasingBattleRuntime
+                        self.scheduleRuntimeCleanup(
                             instanceID: instanceID,
                             delaySeconds: definition.enemy.corpseRemovalDelaySeconds
                         )
@@ -407,7 +438,7 @@ final class Battle01Coordinator {
                 try Task.checkCancellation()
                 guard self.battleInstanceID == instanceID else { return }
 
-                try self.soundtrack.crossfadeToAftermathLoop(
+                try await self.soundtrack.transferToAftermathLoop(
                     battleInstanceID: instanceID,
                     targetDecibels: configuration.targetDecibels,
                     fadeDurationSeconds: configuration.crossfadeDurationSeconds
@@ -443,14 +474,14 @@ final class Battle01Coordinator {
         }
     }
 
-    private func scheduleCorpseRemoval(
+    private func scheduleRuntimeCleanup(
         instanceID: UUID,
         delaySeconds: Double
     ) {
-        corpseRemovalTask?.cancel()
+        runtimeCleanupTask?.cancel()
         let delay = max(0, delaySeconds)
         Battle01EventLog.emit(
-            "Grandma body removal scheduled",
+            "battle runtime cleanup scheduled",
             instanceID: instanceID,
             state: state,
             fields: [
@@ -459,28 +490,118 @@ final class Battle01Coordinator {
             ]
         )
 
-        corpseRemovalTask = Task { @MainActor [weak self] in
+        runtimeCleanupTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 try await self.clock.sleep(for: .seconds(delay))
                 try Task.checkCancellation()
                 guard self.battleInstanceID == instanceID else { return }
 
-                self.combat.cancel(reason: "Battle01.deathCleanup")
-                self.intro.cancel(
-                    reason: "Battle01.deathCleanup",
-                    removeSource: false
+                if let aftermathTransitionTask = self.aftermathTransitionTask {
+                    await aftermathTransitionTask.value
+                }
+                try Task.checkCancellation()
+                guard self.battleInstanceID == instanceID else { return }
+
+                let beforeRelease = BattleRuntimeMemorySnapshot.capture(
+                    label: "beforeBattle01RuntimeTeardown"
                 )
-                self.releasePreparedEnemy(
-                    reason: "deathAnimationCompletedPlusFiveSeconds"
+
+                self.richPRTask?.cancel()
+                self.richPRTask = nil
+                self.richPR.cancel(reason: "Battle01.deathCleanup")
+                self.combat.cancelAndRelease(reason: "Battle01.deathCleanup")
+                self.intro.cancelAndRelease(reason: "Battle01.deathCleanup")
+                let enemyID = self.prepared?.enemyID
+                self.prepared = nil
+                if let enemyID {
+                    self.onEnemyRemoved(enemyID)
+                }
+
+                Battle01EventLog.emit(
+                    "door close requested before exterior teardown",
+                    instanceID: instanceID,
+                    state: self.state,
+                    fields: [
+                        ("doorState", self.door.battleDoorState.rawValue),
+                        ("requiresAnimationCompletion", "true"),
+                        ("requiresSFXCompletion", "true")
+                    ]
                 )
-                self.corpseRemovalTask = nil
+                do {
+                    try await self.door.closeForBattleAndUnloadPortal(
+                        ownerID: instanceID,
+                        reason: "deathAnimationCompletedPlusFiveSeconds"
+                    )
+                } catch {
+                    let musicStillPlaying = await StoryAftermathMusicActor.shared.isPlaying()
+                    _ = try? await self.runtimeCleanup.releaseBattle(
+                        battleInstanceID: instanceID,
+                        reason: .neutralized,
+                        retentionPolicy: .remove,
+                        fullPortalReleased: false,
+                        musicStillPlaying: musicStillPlaying,
+                        beforeSnapshot: beforeRelease
+                    )
+                    throw error
+                }
+                try Task.checkCancellation()
+                _ = BattleRuntimeMemorySnapshot.capture(
+                    label: "afterBattle01FullPortalReleased"
+                )
+                let musicStillPlaying = await StoryAftermathMusicActor.shared.isPlaying()
+                let report = try await self.runtimeCleanup.releaseBattle(
+                    battleInstanceID: instanceID,
+                    reason: .neutralized,
+                    retentionPolicy: .remove,
+                    fullPortalReleased: !self.door.battlePortalFullExteriorResident,
+                    musicStillPlaying: musicStillPlaying,
+                    beforeSnapshot: beforeRelease
+                )
+
+                self.door.setBattleInteractionLocked(
+                    false,
+                    ownerID: instanceID,
+                    reason: "battleRuntimeReleased"
+                )
+                self.startTask = nil
+                self.richPRTask?.cancel()
+                self.richPRTask = nil
+                self.aftermathTransitionTask = nil
+                self.soundtrackStartContext = nil
+                self.portalCrossingStarted = false
+                self.latestPlayerTarget = nil
+                self.soundtrackStarted = false
+                self.state = .postBattleAudioOnly
+                self.setEnemyMemoryPresence(
+                    false,
+                    reason: "battleRuntimeReleased"
+                )
+
+                let event = BattleRuntimeReleasedEvent(
+                    eventID: UUID(),
+                    battleInstanceID: instanceID,
+                    releaseReport: report
+                )
+                Battle01EventLog.emit(
+                    "BattleRuntimeReleasedEvent",
+                    instanceID: instanceID,
+                    state: self.state,
+                    fields: [
+                        ("enemyRegistryCount", "0"),
+                        ("fullPortalResident", String(self.door.battlePortalFullExteriorResident)),
+                        ("musicStillPlaying", String(musicStillPlaying))
+                    ]
+                )
+                self.onPostBattleHold(event)
+                self.runtimeCleanupTask = nil
             } catch is CancellationError {
                 return
             } catch {
-                self.corpseRemovalTask = nil
+                self.runtimeCleanupTask = nil
+                self.state = .failed
                 Battle01EventLog.emit(
-                    "Grandma body removal failed",
+                    "battle runtime cleanup failed",
                     instanceID: instanceID,
                     state: self.state,
                     fields: [("error", error.localizedDescription)]
@@ -489,68 +610,59 @@ final class Battle01Coordinator {
         }
     }
 
-    private func releasePreparedEnemy(reason: String) {
-        guard let enemyID = prepared?.enemyID else {
-            setEnemyMemoryPresence(false, reason: reason)
-            return
-        }
-
-        weak var releasedController = prepared?.sourceController
-        weak var releasedRoot = prepared?.sourceRoot
-        let releaseInstanceID = battleInstanceID
-        prepared?.portalMirror.cleanup(reason: reason)
-        prepared?.sourceController.forceCleanupFromHordeScene(reason: reason)
-        onEnemyRemoved(enemyID)
-        prepared = nil
-
-        if let instanceID = battleInstanceID {
-            Battle01EventLog.emit(
-                "Grandma body ownership dropped",
-                instanceID: instanceID,
-                state: state,
-                fields: [
-                    ("enemyID", enemyID.uuidString),
-                    ("removedFromScene", "true"),
-                    ("coordinatorRetainsPreparedEnemy", "false"),
-                    ("reason", reason)
-                ]
+    private func releaseCancelledRuntime(
+        instanceID: UUID,
+        reason: String
+    ) async {
+        await StoryAftermathMusicActor.shared.stop(reason: "battleCancelled.\(reason)")
+        do {
+            try await door.closeForBattleAndUnloadPortal(
+                ownerID: instanceID,
+                reason: "cancel.\(reason)"
             )
+        } catch {
+            door.releaseBattlePortal(ownerID: instanceID, reason: "cancelCloseFailure.\(reason)")
+            print("[BattleRuntimeCleanup] cancellation door close failed error=\(error.localizedDescription)")
         }
-
-        enemyReleaseVerificationTask?.cancel()
-        enemyReleaseVerificationTask = Task { @MainActor [weak self, weak releasedController, weak releasedRoot] in
-            guard let self else { return }
-            var checks = 0
-            while Task.isCancelled == false,
-                  (releasedController != nil || releasedRoot != nil) {
-                checks += 1
-                try? await Task.sleep(for: .milliseconds(100))
-            }
-            guard Task.isCancelled == false else { return }
-
-            TuringMemoryBudgetProbe.log(
-                label: "afterBattle01AuthoritativeGrandmaReleased"
+        do {
+            _ = try await runtimeCleanup.releaseBattle(
+                battleInstanceID: instanceID,
+                reason: .battleCancelled,
+                retentionPolicy: .remove,
+                fullPortalReleased: !door.battlePortalFullExteriorResident,
+                musicStillPlaying: false
             )
-            if let instanceID = self.battleInstanceID {
-                Battle01EventLog.emit(
-                    "Grandma body released",
-                    instanceID: instanceID,
-                    state: self.state,
-                    fields: [
-                        ("enemyID", enemyID.uuidString),
-                        ("controllerDeallocated", "true"),
-                        ("rootEntityDeallocated", "true"),
-                        ("releaseChecks", String(checks)),
-                        ("reason", reason)
-                    ]
-                )
-            }
-            guard self.battleInstanceID == nil ||
-                    self.battleInstanceID == releaseInstanceID else {
-                return
-            }
-            self.setEnemyMemoryPresence(false, reason: reason)
-            self.enemyReleaseVerificationTask = nil
+        } catch {
+            print("[BattleRuntimeCleanup] cancellation cleanup failed error=\(error.localizedDescription)")
+        }
+        door.setBattleInteractionLocked(
+            false,
+            ownerID: instanceID,
+            reason: "cancelCleanupFinished.\(reason)"
+        )
+        setEnemyMemoryPresence(false, reason: "cancelCleanupFinished.\(reason)")
+        runtimeCleanupTask = nil
+    }
+
+    private func releaseUnregisteredPreparedEnemy(
+        _ enemy: Battle01PreparedEnemy,
+        lease: BattleEnemyRuntimeLease? = nil,
+        reason: String
+    ) async {
+        onEnemyRemoved(enemy.enemyID)
+        let releaseLease = lease ?? BattleEnemyRuntimeLease(
+            identity: enemy.sourceController.battleRuntimeIdentity,
+            controller: enemy.sourceController,
+            portalMirror: enemy.portalMirror
+        )
+        do {
+            _ = try await releaseLease.release(
+                reason: .battleCancelled,
+                retentionPolicy: .remove,
+                corpsePresenter: corpsePresenter
+            )
+        } catch {
+            print("[BattleRuntimeCleanup] unregistered enemy release failed reason=\(reason) error=\(error.localizedDescription)")
         }
     }
 
@@ -679,36 +791,12 @@ final class Battle01Coordinator {
     private func fail(_ error: Error, instanceID: UUID) {
         guard battleInstanceID == instanceID else { return }
         state = .failed
-        soundtrack.stop(reason: "failure")
-        richPR.cancel(reason: "failure")
-        combat.cancel(reason: "failure")
-        intro.cancel(reason: "failure", removeSource: false)
-        door.setBattleInteractionLocked(
-            false,
-            ownerID: instanceID,
-            reason: "failure"
-        )
         Battle01EventLog.emit(
             "failed",
             instanceID: instanceID,
             state: state,
             fields: [("error", error.localizedDescription)]
         )
-        corpseRemovalTask?.cancel()
-        corpseRemovalTask = nil
-        enemyReleaseVerificationTask?.cancel()
-        enemyReleaseVerificationTask = nil
-        releasePreparedEnemy(reason: "failure")
-        door.releaseBattlePortal(
-            ownerID: instanceID,
-            reason: "failure"
-        )
-        startTask = nil
-        richPRTask = nil
-        aftermathTransitionTask?.cancel()
-        aftermathTransitionTask = nil
-        aftermathLoopStarted = false
-        musicStartGate = Battle01MusicStartGate()
-        soundtrackStartContext = nil
+        cancel(reason: "failure.\(error.localizedDescription)")
     }
 }

@@ -48,6 +48,8 @@ final class Battle01EnemyFactory {
         let source = JockRetargetTestController()
         source.configureStoryBattleIdentity(
             id: enemyID,
+            battleInstanceID: battleInstanceID,
+            enemyTypeID: definition.enemy.storyEnemyID,
             archetype: .grandma,
             hitsToKill: storyHitsToKill,
             attributes: attributes

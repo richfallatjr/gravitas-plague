@@ -102,6 +102,10 @@ final class StoryPortalEnemyRenderMirrorAdapter {
         """)
     }
 
+    func removeAndRelease(reason: String) {
+        cleanup(reason: reason)
+    }
+
     func refreshPortalLightingIfNeeded() {
         guard !exited,
               let mirror else { return }

@@ -153,6 +153,10 @@ final class ScriptedPortalEnemyIntroCoordinator {
         onStateChange = nil
     }
 
+    func cancelAndRelease(reason: String) {
+        cancel(reason: reason, removeSource: false)
+    }
+
     private func playRightTurn(
         controller: JockRetargetTestController,
         turnIndex: Int,

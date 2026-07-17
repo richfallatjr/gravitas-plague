@@ -10,7 +10,7 @@ final class TuringStoryDoorAnimationController {
         var errorDescription: String? {
             switch self {
             case .interrupted(let reason):
-                return "Door opening was interrupted: \(reason)"
+                return "Door animation was interrupted: \(reason)"
             }
         }
     }
@@ -46,8 +46,11 @@ final class TuringStoryDoorAnimationController {
     private var currentYawRadians: Float = 0
     private var animationTask: Task<Void, Never>?
     private var openWaiters: [UUID: CheckedContinuation<Void, Error>] = [:]
+    private var closeWaiters: [UUID: CheckedContinuation<Void, Error>] = [:]
     private var sfxControllersByID: [UUID: AudioPlaybackController] = [:]
     private var sfxEntitiesByID: [UUID: Entity] = [:]
+    private var pendingCloseSFXIDs = Set<UUID>()
+    private var closeVisualAnimationCompleted = false
 
     init(
         hingePivot: Entity,
@@ -87,6 +90,9 @@ final class TuringStoryDoorAnimationController {
               state != .opening else {
             return
         }
+        failCloseWaiters(reason: "openRequested.\(reason)")
+        pendingCloseSFXIDs.removeAll(keepingCapacity: false)
+        closeVisualAnimationCompleted = false
         let openSFX = randomOpenSFX()
         startAnimation(
             targetState: .open,
@@ -102,6 +108,10 @@ final class TuringStoryDoorAnimationController {
     func close(
         reason: String
     ) {
+        guard state != .closed else {
+            resumeCloseWaiters()
+            return
+        }
         failOpenWaiters(reason: "closeRequested.\(reason)")
         startAnimation(
             targetState: .closed,
@@ -120,6 +130,8 @@ final class TuringStoryDoorAnimationController {
         animationTask?.cancel()
         animationTask = nil
         failOpenWaiters(reason: reason)
+        failCloseWaiters(reason: reason)
+        closeVisualAnimationCompleted = false
         stopSFX(reason: reason)
     }
 
@@ -130,6 +142,8 @@ final class TuringStoryDoorAnimationController {
         animationTask?.cancel()
         animationTask = nil
         failOpenWaiters(reason: "storyTeleport.\(teleportID.uuidString)")
+        failCloseWaiters(reason: "storyTeleport.\(teleportID.uuidString)")
+        closeVisualAnimationCompleted = false
         stopSFX(reason: "storyTeleport.\(teleportID.uuidString)")
 
         switch target {
@@ -166,6 +180,18 @@ final class TuringStoryDoorAnimationController {
         }
     }
 
+    func closeAndWait(reason: String) async throws {
+        if state == .closed { return }
+
+        let waiterID = UUID()
+        try await withCheckedThrowingContinuation { continuation in
+            closeWaiters[waiterID] = continuation
+            if state != .closing {
+                close(reason: reason)
+            }
+        }
+    }
+
     private func startAnimation(
         targetState: DoorState,
         fromDegrees: Float,
@@ -179,12 +205,17 @@ final class TuringStoryDoorAnimationController {
         let startYaw = fromDegrees * .pi / 180.0
         let endYaw = toDegrees * .pi / 180.0
         let startingState: DoorState = targetState == .open ? .opening : .closing
+        if targetState == .closed {
+            pendingCloseSFXIDs.removeAll(keepingCapacity: false)
+            closeVisualAnimationCompleted = false
+        }
         state = startingState
         onStateChanged(state)
 
         playSFX(
             fileName: startSFX,
-            label: targetState == .open ? "door.open.creak" : "door.close.squeak"
+            label: targetState == .open ? "door.open.creak" : "door.close.squeak",
+            participatesInCloseCompletion: targetState == .closed
         )
 
         print(
@@ -224,33 +255,24 @@ final class TuringStoryDoorAnimationController {
                 }
             }
 
-            self.state = targetState
             self.animationTask = nil
-            self.onStateChanged(self.state)
-
             if targetState == .open {
+                self.state = .open
+                self.onStateChanged(self.state)
                 self.resumeOpenWaiters()
+                print("[TuringDoorAnimation] open completed state=\(self.state.rawValue)")
+            } else {
+                self.closeVisualAnimationCompleted = true
+                if let completionSFX {
+                    self.playSFX(
+                        fileName: completionSFX,
+                        label: "door.close.contact",
+                        participatesInCloseCompletion: true
+                    )
+                    print("[TuringDoorAnimation] close contact sfx=\(completionSFX)")
+                }
+                self.finalizeCloseIfReady()
             }
-
-            if let completionSFX {
-                self.playSFX(
-                    fileName: completionSFX,
-                    label: "door.close.contact"
-                )
-                print(
-                    """
-                    [TuringDoorAnimation] close contact
-                      sfx: \(completionSFX)
-                    """
-                )
-            }
-
-            print(
-                """
-                [TuringDoorAnimation] \(targetState == .open ? "open" : "close") completed
-                  state: \(self.state.rawValue)
-                """
-            )
         }
     }
 
@@ -288,10 +310,47 @@ final class TuringStoryDoorAnimationController {
         }
     }
 
+    private func resumeCloseWaiters() {
+        let waiters = closeWaiters.values
+        closeWaiters.removeAll(keepingCapacity: false)
+        for continuation in waiters {
+            continuation.resume()
+        }
+    }
+
+    private func failCloseWaiters(reason: String) {
+        let waiters = closeWaiters.values
+        closeWaiters.removeAll(keepingCapacity: false)
+        for continuation in waiters {
+            continuation.resume(
+                throwing: DoorAnimationError.interrupted(reason)
+            )
+        }
+    }
+
+    private func finalizeCloseIfReady() {
+        guard closeVisualAnimationCompleted,
+              pendingCloseSFXIDs.isEmpty,
+              state == .closing else { return }
+
+        state = .closed
+        closeVisualAnimationCompleted = false
+        onStateChanged(state)
+        resumeCloseWaiters()
+        print("""
+        [TuringDoorAnimation] close completed
+          state: \(state.rawValue)
+          closeSFXActualCompletion: true
+          portalUnloadMayProceed: true
+        """)
+    }
+
+    @discardableResult
     private func playSFX(
         fileName: String,
-        label: String
-    ) {
+        label: String,
+        participatesInCloseCompletion: Bool = false
+    ) -> UUID? {
         guard let url = resolveSFXURL(fileName: fileName) else {
             print(
                 """
@@ -301,7 +360,7 @@ final class TuringStoryDoorAnimationController {
                   animationContinues: true
                 """
             )
-            return
+            return nil
         }
 
         do {
@@ -322,11 +381,16 @@ final class TuringStoryDoorAnimationController {
             controller.gain = -6.0
             sfxControllersByID[id] = controller
             sfxEntitiesByID[id] = sfxEntity
+            if participatesInCloseCompletion {
+                pendingCloseSFXIDs.insert(id)
+            }
             controller.completionHandler = { [weak self] in
                 Task { @MainActor in
-                    self?.sfxControllersByID.removeValue(forKey: id)
-                    self?.sfxEntitiesByID.removeValue(forKey: id)?
-                        .removeFromParent()
+                    guard let self else { return }
+                    self.sfxControllersByID.removeValue(forKey: id)
+                    self.sfxEntitiesByID.removeValue(forKey: id)?.removeFromParent()
+                    self.pendingCloseSFXIDs.remove(id)
+                    self.finalizeCloseIfReady()
                 }
             }
 
@@ -339,6 +403,7 @@ final class TuringStoryDoorAnimationController {
                   emitter: TuringStoryDoorAudioEmitter
                 """
             )
+            return id
         } catch {
             print(
                 """
@@ -348,6 +413,7 @@ final class TuringStoryDoorAnimationController {
                   animationContinues: true
                 """
             )
+            return nil
         }
     }
 
@@ -362,6 +428,7 @@ final class TuringStoryDoorAnimationController {
         }
         sfxControllersByID.removeAll(keepingCapacity: false)
         sfxEntitiesByID.removeAll(keepingCapacity: false)
+        pendingCloseSFXIDs.removeAll(keepingCapacity: false)
 
         print(
             """

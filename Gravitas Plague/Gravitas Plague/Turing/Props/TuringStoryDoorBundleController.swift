@@ -74,9 +74,20 @@ final class TuringStoryDoorBundleController:
         )
     }
 
-    struct PortalOnlyEntity {
-        let source: Entity
+    final class PortalOnlyEntity {
+        let name: String
         let authoredPortalTransform: simd_float4x4
+        var source: Entity?
+
+        init(
+            name: String,
+            source: Entity,
+            authoredPortalTransform: simd_float4x4
+        ) {
+            self.name = name
+            self.source = source
+            self.authoredPortalTransform = authoredPortalTransform
+        }
     }
 
     struct Anchors {
@@ -369,6 +380,12 @@ final class TuringStoryDoorBundleController:
         }
     }
 
+    var battlePortalFullExteriorResident: Bool {
+        portalWorldLoaded ||
+            portalWorldRoot.children.isEmpty == false ||
+            (anchors?.portalOnlyEntities.contains { $0.source != nil } ?? false)
+    }
+
     func setBattleInteractionLocked(
         _ locked: Bool,
         ownerID: UUID,
@@ -445,6 +462,36 @@ final class TuringStoryDoorBundleController:
         guard animationController.state == .open else {
             throw BundleError.noPlacement
         }
+    }
+
+    func closeForBattleAndUnloadPortal(
+        ownerID: UUID,
+        reason: String
+    ) async throws {
+        guard let animationController else {
+            throw BundleError.noPlacement
+        }
+
+        setBattleInteractionLocked(true, ownerID: ownerID, reason: reason)
+        portalRequiredByDoorState = animationController.state != .closed
+        battlePortalOwnerIDs.remove(ownerID)
+        reconcilePortalDemand(reason: "battleCloseLeaseReleased.\(reason)")
+        try await animationController.closeAndWait(
+            reason: "Battle01.\(reason)"
+        )
+        guard animationController.state == .closed,
+              battlePortalFullExteriorResident == false else {
+            throw BundleError.noPlacement
+        }
+        print("""
+        [TuringDoorPortal] battle close and unload completed
+          ownerID: \(ownerID.uuidString)
+          doorState: \(battleDoorState.rawValue)
+          closeAnimationCompleted: true
+          closeSFXActualCompletion: true
+          fullExteriorResident: \(battlePortalFullExteriorResident)
+          reason: \(reason)
+        """)
     }
 
     func battlePortalContext() throws -> TuringStoryDoorBattlePortalContext {
@@ -554,16 +601,7 @@ final class TuringStoryDoorBundleController:
             return loadedBundleRoot
         }
 
-        let url = Bundle.main.url(
-            forResource: "turing_story_door_bundle_v1",
-            withExtension: "usdz",
-            subdirectory: "Turing/Props"
-        ) ?? Bundle.main.url(
-            forResource: "turing_story_door_bundle_v1",
-            withExtension: "usdz"
-        )
-
-        guard let url else {
+        guard let url = doorBundleURL() else {
             throw BundleError.missingUSDZ("turing_story_door_bundle_v1.usdz")
         }
 
@@ -927,6 +965,7 @@ final class TuringStoryDoorBundleController:
         let portalOnlyEntities = Self.portalOnlyEntityNames.compactMap { name -> PortalOnlyEntity? in
             guard let source = root.turingDoorFindEntity(named: name) else { return nil }
             return PortalOnlyEntity(
+                name: name,
                 source: source,
                 authoredPortalTransform: source.transformMatrix(relativeTo: portalWorldRoot)
             )
@@ -977,7 +1016,7 @@ final class TuringStoryDoorBundleController:
               iconAnchor: \(anchors.iconAnchor.name)
               audioEmitter: \(anchors.audioEmitter.name)
               placementBounds: \(anchors.placementBounds?.name ?? "nil")
-              portalOnlyEntities: \(anchors.portalOnlyEntities.map { $0.source.name }.joined(separator: ","))
+              portalOnlyEntities: \(anchors.portalOnlyEntities.map(\.name).joined(separator: ","))
               portalSource: authored
             """
         )
@@ -1225,6 +1264,11 @@ final class TuringStoryDoorBundleController:
                 throw CancellationError()
             }
             if let anchors = self.anchors {
+                try await self.rehydratePortalOnlyEntitiesIfNeeded(
+                    anchors: anchors,
+                    reason: reason
+                )
+                try Task.checkCancellation()
                 self.installPortalOnlyEntities(anchors: anchors)
                 self.setEnabledRecursively(anchors.portalPlane, isEnabled: true)
             }
@@ -1278,8 +1322,10 @@ final class TuringStoryDoorBundleController:
         if let anchors {
             setEnabledRecursively(anchors.portalPlane, isEnabled: false)
             for record in anchors.portalOnlyEntities {
-                removePortalIBLReceiversRecursively(from: record.source)
-                record.source.removeFromParent()
+                guard let source = record.source else { continue }
+                removePortalIBLReceiversRecursively(from: source)
+                source.removeFromParent()
+                record.source = nil
             }
         }
         let removedChildCount = portalWorldRoot.children.count
@@ -1290,6 +1336,7 @@ final class TuringStoryDoorBundleController:
         [TuringDoorPortal] exterior unloaded
           reason: \(reason)
           removedPortalWorldChildren: \(removedChildCount)
+          retainedPortalOnlySources: \(anchors?.portalOnlyEntities.filter { $0.source != nil }.count ?? 0)
           doorState: \(battleDoorState.rawValue)
           activeBattleOwnerCount: \(battlePortalOwnerIDs.count)
         """)
@@ -1337,7 +1384,10 @@ final class TuringStoryDoorBundleController:
     ) {
         let portalIBLEntity = firstPortalIBLEntity(in: portalWorldRoot)
         for record in anchors.portalOnlyEntities {
-            let source = record.source
+            guard let source = record.source else {
+                print("[TuringDoorPortal] ERROR portal-only source unavailable entity=\(record.name)")
+                continue
+            }
             source.removeFromParent()
             setEnabledRecursively(source, isEnabled: true)
             portalWorldRoot.addChild(source)
@@ -1367,6 +1417,51 @@ final class TuringStoryDoorBundleController:
                 """
             )
         }
+    }
+
+    private func rehydratePortalOnlyEntitiesIfNeeded(
+        anchors: Anchors,
+        reason: String
+    ) async throws {
+        let missing = anchors.portalOnlyEntities.filter { $0.source == nil }
+        guard missing.isEmpty == false else { return }
+        guard let url = doorBundleURL() else {
+            throw BundleError.missingUSDZ("turing_story_door_bundle_v1.usdz")
+        }
+
+        let reloadRoot = try await Entity(contentsOf: url)
+        try Task.checkCancellation()
+        let resolved = try missing.map { record -> (PortalOnlyEntity, Entity) in
+            guard let source = reloadRoot.turingDoorFindEntity(named: record.name) else {
+                throw BundleError.missingRequiredEntity(record.name)
+            }
+            return (record, source)
+        }
+        for (record, source) in resolved {
+            source.removeFromParent()
+            setEnabledRecursively(source, isEnabled: false)
+            record.source = source
+        }
+
+        print("""
+        [TuringDoorPortal] portal-only authored entities rehydrated
+          reason: \(reason)
+          sourceUSDZ: \(url.lastPathComponent)
+          entityCount: \(missing.count)
+          entities: \(missing.map(\.name).joined(separator: ","))
+          passthroughAttached: false
+        """)
+    }
+
+    private func doorBundleURL() -> URL? {
+        Bundle.main.url(
+            forResource: "turing_story_door_bundle_v1",
+            withExtension: "usdz",
+            subdirectory: "Turing/Props"
+        ) ?? Bundle.main.url(
+            forResource: "turing_story_door_bundle_v1",
+            withExtension: "usdz"
+        )
     }
 
     private func firstPortalIBLEntity(

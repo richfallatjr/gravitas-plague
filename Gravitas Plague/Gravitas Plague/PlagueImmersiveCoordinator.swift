@@ -419,14 +419,14 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                         reason: reason
                     )
             },
-            onPostBattleHold: { [weak self] instanceID in
+            onPostBattleHold: { [weak self] event in
                 self?.turingStoryWalkieInteractionController.armPlay(
                     action: .startScriptPoint(
                         id: "prologue.scriptPoint04",
                         trigger: .userPlay
                     ),
                     reason:
-                        "battle01.postBattleHold.\(instanceID.uuidString)"
+                        "battle01.runtimeReleased.\(event.battleInstanceID.uuidString)"
                 )
             },
             playerTargetProvider: { [weak self] in

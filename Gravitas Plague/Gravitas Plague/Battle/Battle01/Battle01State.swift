@@ -12,7 +12,8 @@ enum Battle01State: String, Sendable {
     case portalCrossing
     case combat
     case grandmaDown
-    case postBattleHold
+    case releasingBattleRuntime
+    case postBattleAudioOnly
     case failed
     case cancelled
 }
