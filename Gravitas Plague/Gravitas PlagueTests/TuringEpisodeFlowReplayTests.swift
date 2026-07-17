@@ -80,8 +80,6 @@ final class TuringEpisodeFlowReplayTests:
             )
         let seedStore =
             TuringConversationSeedStore()
-        let historyStore =
-            TuringDialogueHistoryStore()
         let engine =
             TuringFlowEngine(
                 descriptorStore:
@@ -129,9 +127,7 @@ final class TuringEpisodeFlowReplayTests:
                         ],
                         failureMessage: nil
                 ),
-                seedStore: seedStore,
-                historyStore:
-                    historyStore
+                seedStore: seedStore
             )
         let episode =
             TuringEpisodeFlowController(
@@ -139,8 +135,6 @@ final class TuringEpisodeFlowReplayTests:
                 descriptorStore:
                     descriptorStore,
                 seedStore: seedStore,
-                historyStore:
-                    historyStore,
                 catalogValidator: nil
             )
 

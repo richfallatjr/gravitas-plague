@@ -1,17 +1,6 @@
 import Foundation
 import MLX
 
-public struct TuringQwenNativeFreshSegmentResult: Sendable {
-    public let instanceID: TuringQwenNativeFreshInstanceID
-    public let segmentIndex: Int
-    public let audio: TuringQwenNativeAudio
-    public let renderSeconds: Double
-
-    public var audioDurationSeconds: Double {
-        audio.durationSeconds
-    }
-}
-
 public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
     public let requestedInstanceCount: Int
     public let actualInstanceCount: Int
@@ -25,6 +14,10 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
     public let sampledPeakResidentSizeMB: Double
     public let peakMLXActiveMemoryMB: Double
     public let peakMLXCacheMemoryMB: Double
+    public let peakRenderConcurrency: Int
+    public let peakDecodeConcurrency: Int
+    public let sameSegmentRenderDecodeOverlapCount: Int
+    public let crossSegmentRenderDecodeOverlapCount: Int
     public let endPhysFootprintMB: Double
     public let endResidentSizeMB: Double
     public let fallbackUsed: Bool
@@ -41,6 +34,10 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
         sampledPeakResidentSizeMB: Double,
         peakMLXActiveMemoryMB: Double,
         peakMLXCacheMemoryMB: Double,
+        peakRenderConcurrency: Int,
+        peakDecodeConcurrency: Int,
+        sameSegmentRenderDecodeOverlapCount: Int,
+        crossSegmentRenderDecodeOverlapCount: Int,
         fallbackUsed: Bool
     ) {
         self.requestedInstanceCount = requestedInstanceCount
@@ -57,6 +54,10 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
         self.sampledPeakResidentSizeMB = sampledPeakResidentSizeMB
         self.peakMLXActiveMemoryMB = peakMLXActiveMemoryMB
         self.peakMLXCacheMemoryMB = peakMLXCacheMemoryMB
+        self.peakRenderConcurrency = peakRenderConcurrency
+        self.peakDecodeConcurrency = peakDecodeConcurrency
+        self.sameSegmentRenderDecodeOverlapCount = sameSegmentRenderDecodeOverlapCount
+        self.crossSegmentRenderDecodeOverlapCount = crossSegmentRenderDecodeOverlapCount
         let endMemory = TuringQwenNativeProcessMemoryProbe.snapshot()
         self.endPhysFootprintMB = endMemory.physFootprintMB
         self.endResidentSizeMB = endMemory.residentSizeMB
@@ -78,6 +79,10 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
           sampledPeakResidentSizeMB: \(String(format: "%.1f", sampledPeakResidentSizeMB))
           peakMLXActiveMemoryMB: \(String(format: "%.1f", peakMLXActiveMemoryMB))
           peakMLXCacheMemoryMB: \(String(format: "%.1f", peakMLXCacheMemoryMB))
+          peakRenderConcurrency: \(peakRenderConcurrency)
+          peakDecodeConcurrency: \(peakDecodeConcurrency)
+          sameSegmentRenderDecodeOverlapCount: \(sameSegmentRenderDecodeOverlapCount)
+          crossSegmentRenderDecodeOverlapCount: \(crossSegmentRenderDecodeOverlapCount)
           endPhysFootprintMB: \(String(format: "%.1f", endPhysFootprintMB))
           endResidentSizeMB: \(String(format: "%.1f", endResidentSizeMB))
           fallbackUsed: \(fallbackUsed)

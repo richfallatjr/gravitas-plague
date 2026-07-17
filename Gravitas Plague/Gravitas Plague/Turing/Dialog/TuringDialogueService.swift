@@ -132,10 +132,14 @@ actor TuringDialogueService {
           freshSession: true
           characterID: \(profile.characterID)
           promptTemplate: conversationPrompt_playerTurn_noBible
-          inputContract: userInput,characterProfile,promptContext,prerecordingTranscript
+          inputContract: userInput,characterProfile,promptVoiceSeed,prerecordingTranscript
           prerecordingTranscriptUTF16: \(request.prerecordingTranscript.utf16.count)
           dialogueHistoryIncluded: false
-          conversationSeedIncluded: false
+          promptVoiceSeedIncluded: true
+          promptVoiceID: \(request.promptVoiceID)
+          generatedConversationSeedIncluded: false
+          promptContextSource: authoredPromptVoiceSeed
+          promptContextSHA256: \(TuringFlowHash.sha256(request.promptContext))
         """)
 
         let raw: String

@@ -6,6 +6,9 @@ enum TuringPrologueCheckpoint: Int, Codable, Sendable, Comparable, CaseIterable 
     case script01ConversationVoiceCompleted = 20
     case script02PromptVoiceCompleted = 30
     case script03PromptVoiceCompleted = 40
+    case script04PromptVoiceCompleted = 50
+    case script04ConversationVoiceCompleted = 60
+    case script05PromptVoiceCompleted = 70
 
     static func < (lhs: Self, rhs: Self) -> Bool {
         lhs.rawValue < rhs.rawValue

@@ -100,6 +100,21 @@ enum TuringQwenNativeSpeechDecoder {
         )
         let reader = TuringQwenNativeSafetensorsReader(index: tensorIndex)
 
+        return try decodeRows(
+            codebookRows,
+            config: config,
+            reader: reader,
+            performanceMode: performanceMode
+        )
+    }
+
+    static func decodeRows(
+        _ codebookRows: [[Int]],
+        config: TuringQwenNativeSpeechTokenizerConfig,
+        reader: TuringQwenNativeSafetensorsReader,
+        performanceMode: TuringQwenNativePerformanceMode = .diagnostic
+    ) throws -> TuringQwenNativeAudio {
+
         guard codebookRows.isEmpty == false else {
             throw TuringQwenNativeError.emptyAudio
         }

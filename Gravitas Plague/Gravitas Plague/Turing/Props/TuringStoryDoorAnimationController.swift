@@ -40,6 +40,7 @@ final class TuringStoryDoorAnimationController {
     private let openYawRadians: Float
     private let openDuration: TimeInterval
     private let closeDuration: TimeInterval
+    private let onStateChanged: (DoorState) -> Void
     private let hingeRotationAxis = SIMD3<Float>(0, 0, 1)
     private(set) var state: DoorState = .closed
     private var currentYawRadians: Float = 0
@@ -53,7 +54,8 @@ final class TuringStoryDoorAnimationController {
         audioEmitter: Entity,
         openYawDegrees: Float = -145.0,
         openDuration: TimeInterval = 1.15,
-        closeDuration: TimeInterval = 0.95
+        closeDuration: TimeInterval = 0.95,
+        onStateChanged: @escaping (DoorState) -> Void = { _ in }
     ) {
         self.hingePivot = hingePivot
         self.audioEmitter = audioEmitter
@@ -61,6 +63,7 @@ final class TuringStoryDoorAnimationController {
         self.openYawRadians = openYawDegrees * .pi / 180.0
         self.openDuration = openDuration
         self.closeDuration = closeDuration
+        self.onStateChanged = onStateChanged
     }
 
     func toggle(
@@ -137,6 +140,7 @@ final class TuringStoryDoorAnimationController {
             applyYaw(openYawRadians)
             state = .open
         }
+        onStateChanged(state)
 
         print("""
         [TuringDoorAnimation] Story teleport endpoint applied
@@ -176,6 +180,7 @@ final class TuringStoryDoorAnimationController {
         let endYaw = toDegrees * .pi / 180.0
         let startingState: DoorState = targetState == .open ? .opening : .closing
         state = startingState
+        onStateChanged(state)
 
         playSFX(
             fileName: startSFX,
@@ -221,6 +226,7 @@ final class TuringStoryDoorAnimationController {
 
             self.state = targetState
             self.animationTask = nil
+            self.onStateChanged(self.state)
 
             if targetState == .open {
                 self.resumeOpenWaiters()

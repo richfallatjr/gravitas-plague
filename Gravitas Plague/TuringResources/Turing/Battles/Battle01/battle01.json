@@ -19,7 +19,8 @@
     "reuseExistingFollowSpeed": true,
     "externalMotionDriven": true,
     "rootMotionEnabledDuringPath": false,
-    "retainCorpseAfterDeath": true
+    "retainCorpseAfterDeath": false,
+    "corpseRemovalDelaySeconds": 5.0
   },
   "door": {
     "autoOpenIfClosed": true,
@@ -70,7 +71,7 @@
   },
   "completion": {
     "startAnotherScriptPoint": false,
-    "removeCorpse": false,
+    "removeCorpse": true,
     "closeMicrophone": false,
     "stateAfterMusicAndDeath": "postBattleHold"
   }

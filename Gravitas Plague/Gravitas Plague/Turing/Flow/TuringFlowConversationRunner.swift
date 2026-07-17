@@ -5,15 +5,12 @@ struct TuringFlowConversationRequest: Sendable {
     let outputRoute: TuringVoiceOutputContext
     let conversationKey: String
     let playerDictation: String
-    let episodeStateForWordsOnly: String
-    let emotion: String
 }
 
 enum TuringFlowConversationRunner {
     static func run(
         request: TuringFlowConversationRequest,
         seedStore: TuringConversationSeedStore = .shared,
-        historyStore: TuringDialogueHistoryStore = .shared,
         onSegmentZeroReady:
             (@MainActor @Sendable () -> Void)? = nil
     ) async -> TuringVoiceRunResult {
@@ -88,6 +85,29 @@ enum TuringFlowConversationRunner {
                     for:
                         request.conversationKey
                 )
+            guard let promptVoiceSeed =
+                await seedStore.promptVoiceSeed(
+                    for:
+                        request.conversationKey
+                ) else {
+                throw TuringRuntimeError.invalidConfig(
+                    "Conversation requires the authored promptVoice seed for \(request.conversationKey)."
+                )
+            }
+            let promptContext =
+                promptVoiceSeed.promptContext
+
+            print("""
+            [TuringFlow] conversation prompt context resolved
+              conversationRunID: \(conversationRunID.uuidString)
+              conversationKey: \(request.conversationKey)
+              source: authoredPromptVoiceSeed
+              voicePromptID: \(promptVoiceSeed.voicePromptID)
+              promptContextSHA256: \(TuringFlowHash.sha256(promptContext))
+              fabricatedStoryContextIncluded: false
+              fabricatedEmotionIncluded: false
+              dialogueHistoryIncluded: false
+            """)
 
             let plan =
                 try await TuringDialogueService()
@@ -100,15 +120,11 @@ enum TuringFlowConversationRunner {
                             userInput:
                                 text,
                             promptContext:
-                                """
-                                Story context:
-                                \(request.episodeStateForWordsOnly)
-
-                                Emotional tone:
-                                \(request.emotion)
-                                """,
+                                promptContext,
                             prerecordingTranscript:
-                                prerecordingTranscript
+                                prerecordingTranscript,
+                            promptVoiceID:
+                                promptVoiceSeed.voicePromptID
                         )
                     )
 
@@ -239,18 +255,6 @@ enum TuringFlowConversationRunner {
                     "Conversation generated speech was incomplete. Expected \(plan.segments.count), played \(completed), skipped \(report.skippedSegmentIndices.sorted())."
                 )
             }
-
-            await historyStore.appendConversation(
-                conversationKey:
-                    request.conversationKey,
-                playerText: text,
-                responseSpeakerID:
-                    runtime.characterID,
-                responseSegments:
-                    plan.segments,
-                conversationRunID:
-                    conversationRunID
-            )
 
             await route.finish(
                 descriptor:

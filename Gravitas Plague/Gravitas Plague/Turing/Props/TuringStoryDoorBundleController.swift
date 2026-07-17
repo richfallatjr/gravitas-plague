@@ -118,6 +118,11 @@ final class TuringStoryDoorBundleController:
     private var activeAtmosphere: PortalHDRIAtmosphere = .night
     private var animationController: TuringStoryDoorAnimationController?
     private var battleInteractionLockOwnerIDs = Set<UUID>()
+    private var battlePortalOwnerIDs = Set<UUID>()
+    private var portalRequiredByDoorState = false
+    private var portalWorldLoaded = false
+    private var portalLoadTask: Task<Void, Error>?
+    private var portalOpenRequestTask: Task<Void, Never>?
     private let iconController = TuringStoryDoorIconController()
     private var loadedVisualMinY: Float = 0
     private var loadedVisualMaxY: Float = TuringStoryDoorBundleTuning
@@ -284,15 +289,19 @@ final class TuringStoryDoorBundleController:
         }
 
         activeAtmosphere = atmosphere
-        await reloadPortalWorld(
-            atmosphere: atmosphere,
-            placement: placement
-        )
+        if portalWorldLoaded {
+            await reloadPortalWorld(
+                atmosphere: atmosphere,
+                placement: placement
+            )
+        }
 
         print(
             """
             [TuringDoorPortal] atmosphere changed
               atmosphere: \(atmosphere.rawValue)
+              portalWorldLoaded: \(portalWorldLoaded)
+              reloadDeferredUntilNextDemand: \(!portalWorldLoaded)
             """
         )
     }
@@ -313,7 +322,16 @@ final class TuringStoryDoorBundleController:
               reason: \(reason)
             """
         )
-        animationController?.toggle(reason: reason)
+        switch animationController?.state ?? .closed {
+        case .closed:
+            requestDoorOpen(reason: reason)
+        case .closing:
+            requestDoorOpen(reason: reason)
+        case .opening, .open:
+            portalOpenRequestTask?.cancel()
+            portalOpenRequestTask = nil
+            animationController?.close(reason: reason)
+        }
     }
 
     func setDoorStateImmediatelyForStoryTeleport(
@@ -327,11 +345,14 @@ final class TuringStoryDoorBundleController:
                 .closed,
                 teleportID: teleportID
             )
+            reconcilePortalDemand(reason: "storyTeleport.closed")
         case .open:
+            portalRequiredByDoorState = true
             animationController?.setStateImmediatelyForStoryTeleport(
                 .open,
                 teleportID: teleportID
             )
+            requestPortalLoadIfNeeded(reason: "storyTeleport.open")
         }
     }
 
@@ -368,6 +389,42 @@ final class TuringStoryDoorBundleController:
         """)
     }
 
+    func acquireBattlePortal(
+        ownerID: UUID,
+        reason: String
+    ) async throws {
+        battlePortalOwnerIDs.insert(ownerID)
+        do {
+            try await ensurePortalWorldLoaded(reason: "battleAcquire.\(reason)")
+            print("""
+            [TuringDoorPortal] battle lease acquired
+              ownerID: \(ownerID.uuidString)
+              activeBattleOwnerCount: \(battlePortalOwnerIDs.count)
+              portalWorldLoaded: \(portalWorldLoaded)
+              reason: \(reason)
+            """)
+        } catch {
+            battlePortalOwnerIDs.remove(ownerID)
+            reconcilePortalDemand(reason: "battleAcquireFailed.\(reason)")
+            throw error
+        }
+    }
+
+    func releaseBattlePortal(
+        ownerID: UUID,
+        reason: String
+    ) {
+        battlePortalOwnerIDs.remove(ownerID)
+        print("""
+        [TuringDoorPortal] battle lease released
+          ownerID: \(ownerID.uuidString)
+          activeBattleOwnerCount: \(battlePortalOwnerIDs.count)
+          doorState: \(battleDoorState.rawValue)
+          reason: \(reason)
+        """)
+        reconcilePortalDemand(reason: "battleRelease.\(reason)")
+    }
+
     func openForBattle(
         ownerID: UUID,
         reason: String
@@ -381,6 +438,7 @@ final class TuringStoryDoorBundleController:
             ownerID: ownerID,
             reason: reason
         )
+        try await ensurePortalWorldLoaded(reason: "Battle01.\(reason).doorOpen")
         try await animationController.openAndWait(
             reason: "Battle01.\(reason)"
         )
@@ -391,7 +449,8 @@ final class TuringStoryDoorBundleController:
 
     func battlePortalContext() throws -> TuringStoryDoorBattlePortalContext {
         guard isPlaced,
-              let anchors else {
+              let anchors,
+              portalWorldLoaded else {
             throw BundleError.noPlacement
         }
 
@@ -422,6 +481,13 @@ final class TuringStoryDoorBundleController:
         animationController?.cancel(reason: reason)
         animationController = nil
         battleInteractionLockOwnerIDs.removeAll(keepingCapacity: false)
+        battlePortalOwnerIDs.removeAll(keepingCapacity: false)
+        portalRequiredByDoorState = false
+        portalOpenRequestTask?.cancel()
+        portalOpenRequestTask = nil
+        portalLoadTask?.cancel()
+        portalLoadTask = nil
+        portalWorldLoaded = false
         iconController.remove()
         occupancyRegistry?.unregister(id: occupancyID)
         root.children.removeAll()
@@ -987,10 +1053,7 @@ final class TuringStoryDoorBundleController:
             to: anchors.portalPlane
         )
 
-        await reloadPortalWorld(
-            atmosphere: atmosphere,
-            placement: placement
-        )
+        unloadPortalWorld(reason: "initialClosedPlacement")
 
         print(
             """
@@ -1000,6 +1063,8 @@ final class TuringStoryDoorBundleController:
               target: TuringStoryDoorPortalWorldRoot
               occlusionEnabled: true
               portalModelComponentsUpdated: \(portalModelCount)
+              exteriorLifecycle: demand_loaded
+              initialState: unloaded_closed
             """
         )
     }
@@ -1042,6 +1107,7 @@ final class TuringStoryDoorBundleController:
         atmosphere: PortalHDRIAtmosphere,
         placement: TuringStoryDoorBundlePlacement
     ) async {
+        portalWorldLoaded = false
         let provider = TuringStoryDoorPortalContentProvider(
             atmosphere: atmosphere,
             worldYawRadians: placement.worldYawRadians
@@ -1055,9 +1121,22 @@ final class TuringStoryDoorBundleController:
                     height: placement.height
                 )
             )
+            guard portalDemandActive else {
+                unloadPortalWorld(reason: "atmosphereReloadDemandEnded")
+                return
+            }
             if let anchors {
                 installPortalOnlyEntities(anchors: anchors)
+                setEnabledRecursively(anchors.portalPlane, isEnabled: true)
             }
+            portalWorldLoaded = true
+            print("""
+            [TuringDoorPortal] exterior loaded
+              atmosphere: \(atmosphere.rawValue)
+              reason: atmosphereReload
+              activeBattleOwnerCount: \(battlePortalOwnerIDs.count)
+              doorState: \(battleDoorState.rawValue)
+            """)
         } catch {
             print(
                 """
@@ -1066,6 +1145,160 @@ final class TuringStoryDoorBundleController:
                   error: \(error.localizedDescription)
                 """
             )
+        }
+    }
+
+    private func requestDoorOpen(reason: String) {
+        guard portalOpenRequestTask == nil else {
+            print("[TuringDoorPortal] duplicate open request ignored reason=\(reason)")
+            return
+        }
+        portalRequiredByDoorState = true
+        portalOpenRequestTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.portalOpenRequestTask = nil }
+            do {
+                try await self.ensurePortalWorldLoaded(reason: "doorOpen.\(reason)")
+                try Task.checkCancellation()
+                guard self.portalRequiredByDoorState else { return }
+                self.animationController?.open(reason: reason)
+            } catch is CancellationError {
+                self.reconcilePortalDemand(reason: "doorOpenCancelled.\(reason)")
+            } catch {
+                self.portalRequiredByDoorState = false
+                self.reconcilePortalDemand(reason: "doorOpenFailed.\(reason)")
+                print("""
+                [TuringDoorPortal] ERROR open blocked because exterior failed to load
+                  reason: \(reason)
+                  error: \(error.localizedDescription)
+                """)
+            }
+        }
+    }
+
+    private func requestPortalLoadIfNeeded(reason: String) {
+        guard portalWorldLoaded == false,
+              portalLoadTask == nil else { return }
+        Task { @MainActor [weak self] in
+            do {
+                try await self?.ensurePortalWorldLoaded(reason: reason)
+            } catch {
+                print("""
+                [TuringDoorPortal] ERROR deferred exterior load failed
+                  reason: \(reason)
+                  error: \(error.localizedDescription)
+                """)
+            }
+        }
+    }
+
+    private func ensurePortalWorldLoaded(reason: String) async throws {
+        if portalWorldLoaded { return }
+        if let portalLoadTask {
+            try await portalLoadTask.value
+            guard portalWorldLoaded else {
+                throw BundleError.noPlacement
+            }
+            return
+        }
+        guard let placement, anchors != nil else {
+            throw BundleError.noPlacement
+        }
+
+        let atmosphere = activeAtmosphere
+        let task = Task { @MainActor [weak self] in
+            guard let self else { throw CancellationError() }
+            let provider = TuringStoryDoorPortalContentProvider(
+                atmosphere: atmosphere,
+                worldYawRadians: placement.worldYawRadians
+            )
+            try await provider.populatePortalWorld(
+                portalWorld: self.portalWorldRoot,
+                context: .forDoor(
+                    width: placement.width,
+                    height: placement.height
+                )
+            )
+            try Task.checkCancellation()
+            guard self.portalDemandActive else {
+                self.unloadPortalWorld(reason: "demandEndedDuringLoad.\(reason)")
+                throw CancellationError()
+            }
+            if let anchors = self.anchors {
+                self.installPortalOnlyEntities(anchors: anchors)
+                self.setEnabledRecursively(anchors.portalPlane, isEnabled: true)
+            }
+            self.portalWorldLoaded = true
+            print("""
+            [TuringDoorPortal] exterior loaded
+              atmosphere: \(atmosphere.rawValue)
+              reason: \(reason)
+              activeBattleOwnerCount: \(self.battlePortalOwnerIDs.count)
+              doorState: \(self.battleDoorState.rawValue)
+            """)
+        }
+        portalLoadTask = task
+        do {
+            try await task.value
+            portalLoadTask = nil
+        } catch {
+            portalLoadTask = nil
+            if portalDemandActive == false {
+                unloadPortalWorld(reason: "loadFailedWithoutDemand.\(reason)")
+            }
+            throw error
+        }
+    }
+
+    private var portalDemandActive: Bool {
+        portalRequiredByDoorState || battlePortalOwnerIDs.isEmpty == false
+    }
+
+    private func doorAnimationStateChanged(
+        _ state: TuringStoryDoorAnimationController.DoorState
+    ) {
+        switch state {
+        case .closed:
+            portalRequiredByDoorState = false
+        case .opening, .open, .closing:
+            portalRequiredByDoorState = true
+        }
+        reconcilePortalDemand(reason: "doorState.\(state.rawValue)")
+    }
+
+    private func reconcilePortalDemand(reason: String) {
+        guard portalDemandActive == false else { return }
+        portalLoadTask?.cancel()
+        portalLoadTask = nil
+        unloadPortalWorld(reason: reason)
+    }
+
+    private func unloadPortalWorld(reason: String) {
+        guard portalDemandActive == false else { return }
+        if let anchors {
+            setEnabledRecursively(anchors.portalPlane, isEnabled: false)
+            for record in anchors.portalOnlyEntities {
+                removePortalIBLReceiversRecursively(from: record.source)
+                record.source.removeFromParent()
+            }
+        }
+        let removedChildCount = portalWorldRoot.children.count
+        portalWorldRoot.children.removeAll()
+        portalWorldRoot.components.set(WorldComponent())
+        portalWorldLoaded = false
+        print("""
+        [TuringDoorPortal] exterior unloaded
+          reason: \(reason)
+          removedPortalWorldChildren: \(removedChildCount)
+          doorState: \(battleDoorState.rawValue)
+          activeBattleOwnerCount: \(battlePortalOwnerIDs.count)
+        """)
+    }
+
+    private func removePortalIBLReceiversRecursively(from entity: Entity) {
+        entity.components.remove(ImageBasedLightReceiverComponent.self)
+        for child in entity.children {
+            removePortalIBLReceiversRecursively(from: child)
         }
     }
 
@@ -1190,7 +1423,10 @@ final class TuringStoryDoorBundleController:
             audioEmitter: anchors.audioEmitter,
             openYawDegrees: config.defaultOpenYawDegrees,
             openDuration: config.openDurationSeconds,
-            closeDuration: config.closeDurationSeconds
+            closeDuration: config.closeDurationSeconds,
+            onStateChanged: { [weak self] state in
+                self?.doorAnimationStateChanged(state)
+            }
         )
     }
 

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "prologue.walkie.rich.scriptPoint04.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-script-point-04.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Mike... I don't even know what to think anymore. Everything happened so fast. I keep telling myself I did what I had to do, but saying it doesn't make it sit any better. The house is quiet again--for the moment--and I'm standing here trying to figure out what comes next. Police services have been down for weeks. Nobody's coming to sort this out for me. I need a minute. Go ahead. What'd you find?",
+  "summary": "Rich is shaken after Mrs. Dempsey is neutralized, admits he is struggling with what happened, and asks Big Mike what he found.",
+  "voicePromptIntent": "The generated Rich continuation is owned by prologue.rich.scriptPoint04.followUp.001. Continue after this authored PR without repeating it.",
+  "defaultEmotion": "shaken, breathless, uncertain, trying to stay practical"
+}

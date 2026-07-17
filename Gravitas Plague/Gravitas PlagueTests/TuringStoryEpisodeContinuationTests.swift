@@ -143,6 +143,49 @@ final class TuringStoryEpisodeContinuationTests: XCTestCase {
         XCTAssertEqual(checkpointFour.mediaState, .battle01)
     }
 
+    func testMicrophoneContinuationRestoresLatestAuthoredPRContext() throws {
+        XCTAssertEqual(
+            TuringStoryStateTeleportCoordinator.conversationContextScriptPointID(
+                for: .script01PromptVoiceCompleted
+            ),
+            "prologue.scriptPoint01"
+        )
+        XCTAssertEqual(
+            TuringStoryStateTeleportCoordinator.conversationContextScriptPointID(
+                for: .script03PromptVoiceCompleted
+            ),
+            "prologue.scriptPoint03"
+        )
+        XCTAssertNil(
+            TuringStoryStateTeleportCoordinator.conversationContextScriptPointID(
+                for: .script01ConversationVoiceCompleted
+            )
+        )
+        XCTAssertNil(
+            TuringStoryStateTeleportCoordinator.conversationContextScriptPointID(
+                for: .script02PromptVoiceCompleted
+            )
+        )
+
+        let flow = try TuringFlowDescriptorStore().require(
+            "prologue.scriptPoint03"
+        )
+        let prerecording = try TuringPrerecordingStore().descriptor(
+            id: flow.transmission.prerecordingID
+        )
+
+        XCTAssertEqual(
+            prerecording.prerecordingID,
+            "prologue.walkie.bigMike.scriptPoint03.001"
+        )
+        XCTAssertEqual(prerecording.transcriptMode, .manual)
+        XCTAssertFalse(
+            prerecording.transcript.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ).isEmpty
+        )
+    }
+
     func testNewPrologueUsesSparseInitialState() throws {
         let destination = try TuringStoryDestinationPlanner.startOfEpisode(.prologue)
         XCTAssertEqual(destination.completedScriptPointIDs, [])

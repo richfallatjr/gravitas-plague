@@ -501,11 +501,6 @@ enum TuringNativeQwenHelloWorldCanary {
               segmentCount: \(plan.segments.count)
               conversationSeedEmpty: \(plan.conversationSeed.isEmptySeed)
             """)
-            await seedStore.updateSeed(
-                plan.conversationSeed,
-                for: seedKey
-            )
-
             guard plan.segments.isEmpty == false else {
                 await playback.qwenComputeAllFinished()
                 await playback.waitUntilPlaybackFinished()
@@ -554,6 +549,7 @@ enum TuringNativeQwenHelloWorldCanary {
                 scheduler: scheduler,
                 gapAudio: playback,
                 runID: runID,
+                modelRoot: stagedRoot,
                 skipQwenSegmentFailures: true
             )
 
@@ -969,6 +965,7 @@ enum TuringNativeQwenHelloWorldCanary {
                     scheduler: scheduler,
                     gapAudio: gapAudio,
                     runID: "\(runID).section\(sectionResult.section.index)",
+                    modelRoot: stagedRoot,
                     skipQwenSegmentFailures: true
                 )
                 renderedSegmentCount += sectionTexts.count
@@ -1126,6 +1123,7 @@ enum TuringNativeQwenHelloWorldCanary {
                 scheduler: scheduler,
                 gapAudio: gapAudio,
                 runID: runID,
+                modelRoot: stagedRoot,
                 onFirstSegmentReady: onFirstSegmentReady
             )
             logMemoryBudgetIfEnabled(
@@ -1229,20 +1227,22 @@ enum TuringNativeQwenHelloWorldCanary {
         scheduler: TuringQwenNativeFreshInstanceScheduler,
         gapAudio: TuringParallelPerfGapAudioBridge,
         runID: String,
+        modelRoot: URL,
         skipQwenSegmentFailures: Bool = true,
         onFirstSegmentReady: (@MainActor @Sendable () async -> Void)? = nil
     ) async throws -> TuringQwenNativeFreshInstanceRunReport {
         let firstSegmentReadyNotifier = TuringFirstSegmentReadyNotifier(
             onFirstSegmentReady: onFirstSegmentReady
         )
-        let report = try await scheduler.renderSegments(
+        let report = try await scheduler.runSegments(
             requests,
             runID: runID,
+            modelRoot: modelRoot,
             skipSegmentFailures: skipQwenSegmentFailures,
             onSegmentStarted: { _, segmentIndex in
                 await gapAudio.qwenComputeStarted(segmentIndex: segmentIndex)
             },
-            onSegmentFinished: { generated in
+            onSegmentDecoded: { generated in
                 await firstSegmentReadyNotifier.notifyIfNeeded(
                     segmentIndex: generated.segmentIndex
                 )

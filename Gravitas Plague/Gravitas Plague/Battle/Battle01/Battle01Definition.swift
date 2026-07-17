@@ -33,6 +33,7 @@ struct Battle01Definition: Codable, Sendable, Hashable {
         let externalMotionDriven: Bool
         let rootMotionEnabledDuringPath: Bool
         let retainCorpseAfterDeath: Bool
+        let corpseRemovalDelaySeconds: Double
     }
 
     struct Door: Codable, Sendable, Hashable {

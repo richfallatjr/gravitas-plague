@@ -1,10 +1,9 @@
 import Foundation
 
-@MainActor
-protocol TuringFlowPlaybackControlling: AnyObject, Sendable {
+nonisolated protocol TuringFlowPlaybackControlling: AnyObject, Sendable {
     func configureFlowIdentity(
         _ identity: TuringFlowIdentity
-    )
+    ) async
 
     func beginRun(
         runID: String,
@@ -42,7 +41,7 @@ protocol TuringFlowPlaybackControlling: AnyObject, Sendable {
     ) async
 
     func waitUntilPlaybackFinished() async
-    func completedGeneratedSegmentCount() -> Int
+    func completedGeneratedSegmentCount() async -> Int
     func runCancelled(reason: String) async
 }
 
@@ -120,7 +119,8 @@ extension TuringFlowRouteRuntime {
                     sendAfterGenerated: false,
                     sendingLeadInAfterGeneratedSeconds: nil
                 ),
-                fixedLeadInSeconds: nil
+                fixedLeadInSeconds: nil,
+                generationPipeline: nil
             ),
             progression: .init(
                 nextScriptPointID: nil,
@@ -302,8 +302,19 @@ final class TuringBigMikeWalkieFlowRoute:
             rootURL:
                 TuringFlowPlaybackPolicyBuilder.rootURL(
                     identity: identity
-                )
+                ),
+            endpoint: try requireWalkieEndpoint()
         )
+    }
+
+    private func requireWalkieEndpoint() throws
+        -> TuringSpatialAudioEndpoint
+    {
+        guard let endpoint = TuringStoryWalkieAudioRoute
+            .makeActiveEndpoint() else {
+            throw TuringWalkieAudioError.missingWalkieEmitter
+        }
+        return endpoint
     }
 
     func runFixedLeadInIfNeeded(
@@ -417,9 +428,20 @@ final class TuringRichWalkieFlowRoute:
                 TuringFlowPlaybackPolicyBuilder.rootURL(
                     identity: identity
                 ),
-            globalPlayer:
-                TuringRichRoutedOneShotClipPlayer()
+            endpoint: try requireHeadsetEndpoint()
         )
+    }
+
+    private func requireHeadsetEndpoint() throws
+        -> TuringSpatialAudioEndpoint
+    {
+        guard let endpoint = TuringRichHeadsetAudioRoute
+            .makeActiveEndpoint() else {
+            throw TuringRuntimeError.invalidConfig(
+                "Rich head-tracked audio endpoint is not installed."
+            )
+        }
+        return endpoint
     }
 
     func runFixedLeadInIfNeeded(
@@ -535,9 +557,20 @@ final class TuringRichRoomFlowRoute:
                 TuringFlowPlaybackPolicyBuilder.rootURL(
                     identity: identity
                 ),
-            globalPlayer:
-                TuringRichRoutedOneShotClipPlayer()
+            endpoint: try requireHeadsetEndpoint()
         )
+    }
+
+    private func requireHeadsetEndpoint() throws
+        -> TuringSpatialAudioEndpoint
+    {
+        guard let endpoint = TuringRichHeadsetAudioRoute
+            .makeActiveEndpoint() else {
+            throw TuringRuntimeError.invalidConfig(
+                "Rich head-tracked audio endpoint is not installed."
+            )
+        }
+        return endpoint
     }
 
     func runFixedLeadInIfNeeded(

@@ -21,7 +21,7 @@ struct TuringFlowDescriptor: Codable, Sendable, Hashable {
 
     struct Transmission: Codable, Sendable, Hashable {
         let prerecordingID: String
-        let voicePromptID: String
+        let voicePromptID: String?
         let characterID: String
         let conversationKey: String
         let outputRoute: TuringVoiceOutputContext
@@ -29,6 +29,7 @@ struct TuringFlowDescriptor: Codable, Sendable, Hashable {
         let fillerMode: FillerMode
         let commSFX: CommSFX
         let fixedLeadInSeconds: Double?
+        let generationPipeline: TuringFlowGenerationPipelineDescriptor?
 
         enum ComputeStart: String, Codable, Sendable, Hashable {
             /// Start Foundation immediately before the prerecording is queued.
@@ -105,10 +106,14 @@ extension TuringFlowTriggerSource {
                 return .userPlay
             case .script01ConversationVoiceCompleted:
                 return .priorConversationPlaybackCompleted
+            case .script04ConversationVoiceCompleted:
+                return .priorConversationPlaybackCompleted
             case .script02PromptVoiceCompleted:
                 return .priorScriptPointCompleted
             case .script01PromptVoiceCompleted,
-                 .script03PromptVoiceCompleted:
+                 .script03PromptVoiceCompleted,
+                 .script04PromptVoiceCompleted,
+                 .script05PromptVoiceCompleted:
                 return .userPlay
             }
         case .manualDebug:
@@ -158,7 +163,6 @@ struct TuringFlowDescriptorStore: TuringFlowDescriptorLoading, Sendable {
         let required = [
             value.scriptPointID,
             value.transmission.prerecordingID,
-            value.transmission.voicePromptID,
             value.transmission.characterID,
             value.transmission.conversationKey,
             value.transmission.outputRoute.rawValue
@@ -170,6 +174,22 @@ struct TuringFlowDescriptorStore: TuringFlowDescriptorLoading, Sendable {
             throw TuringRuntimeError.invalidConfig(
                 "Turing Flow \(scriptPointID) contains an empty required identifier."
             )
+        }
+
+        guard value.transmission.usesLegacyVoicePrompt !=
+                value.transmission.usesCompositePipeline else {
+            throw TuringRuntimeError.invalidConfig(
+                "Turing Flow \(scriptPointID) must define exactly one generation form."
+            )
+        }
+
+        if value.transmission.usesLegacyVoicePrompt {
+            guard let promptID = value.transmission.voicePromptID,
+                  promptID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+                throw TuringRuntimeError.invalidConfig(
+                    "Turing Flow \(scriptPointID) legacy voicePromptID must not be empty."
+                )
+            }
         }
 
         guard value.trigger.delaySeconds >= 0 else {

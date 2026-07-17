@@ -26,6 +26,8 @@ protocol TuringStoryDoorBattleControlling: AnyObject {
         ownerID: UUID,
         reason: String
     )
+    func acquireBattlePortal(ownerID: UUID, reason: String) async throws
+    func releaseBattlePortal(ownerID: UUID, reason: String)
     func openForBattle(ownerID: UUID, reason: String) async throws
     func battlePortalContext() throws -> TuringStoryDoorBattlePortalContext
 }

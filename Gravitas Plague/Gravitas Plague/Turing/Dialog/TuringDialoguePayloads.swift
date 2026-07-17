@@ -25,6 +25,7 @@ struct ConversationPromptNoBibleRequest: Codable, Sendable, Hashable {
     let userInput: String
     let promptContext: String
     let prerecordingTranscript: String
+    let promptVoiceID: String
 }
 
 struct TuringDialoguePlan: Codable, Sendable, Hashable {

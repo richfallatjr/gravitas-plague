@@ -1,7 +1,7 @@
 import AVFoundation
 import Foundation
 
-enum TuringQwenOutputPostProcessor {
+nonisolated enum TuringQwenOutputPostProcessor {
     private static let defaultRate = 0.85
     private static let disabledEnvironmentKey = "TURING_QWEN_OUTPUT_STRETCH_DISABLED"
     private static let rateEnvironmentKey = "TURING_QWEN_OUTPUT_STRETCH_RATE"

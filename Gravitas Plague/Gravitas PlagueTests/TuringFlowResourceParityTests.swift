@@ -250,6 +250,60 @@ final class TuringFlowResourceParityTests:
         XCTAssertFalse(prompt.contains("{{lastVoicePromptSeed}}"))
         XCTAssertFalse(prompt.contains("{{dialogueHistoryJSON}}"))
         XCTAssertFalse(prompt.contains("{{episodeStateForWordsOnly}}"))
+        XCTAssertTrue(prompt.contains("This is what you last said:"))
+        XCTAssertFalse(prompt.contains("Current prerecording transcript:"))
+    }
+
+    func testConversationUsesExactCurrentPromptVoiceSeed()
+        async throws {
+        let descriptorStore = TuringVoicePromptTriggerStore()
+        let point01 = try descriptorStore.descriptor(
+            id: "prologue.bigMike.scriptPoint01.followUp.001"
+        )
+        let point03 = try descriptorStore.descriptor(
+            id: "prologue.bigMike.scriptPoint03.followUp.001"
+        )
+        let point01Seed = TuringPromptVoiceSeedBuilder.standard(point01)
+        let point03Seed = TuringPromptVoiceSeedBuilder.standard(point03)
+
+        XCTAssertTrue(point01Seed.promptContext.contains(point01.intent))
+        XCTAssertTrue(point01Seed.promptContext.contains(point01.emotion))
+        XCTAssertTrue(point03Seed.promptContext.contains(point03.intent))
+        XCTAssertTrue(point03Seed.promptContext.contains(point03.emotion))
+        XCTAssertNotEqual(point01Seed.promptContext, point03Seed.promptContext)
+
+        let store = TuringConversationSeedStore()
+        await store.updatePromptVoiceSeed(
+            point01Seed,
+            for: TuringDialogueThreadIdentity.bigMikeRich
+        )
+        await store.updatePromptVoiceSeed(
+            point03Seed,
+            for: TuringDialogueThreadIdentity.bigMikeRich
+        )
+        let active = await store.promptVoiceSeed(
+            for: TuringDialogueThreadIdentity.bigMikeRich
+        )
+
+        XCTAssertEqual(active, point03Seed)
+    }
+
+    func testConversationRunnerContainsNoHistoryOrFabricatedContext()
+        throws {
+        let testFile = URL(fileURLWithPath: #filePath)
+        let runnerURL = testFile
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Gravitas Plague")
+            .appendingPathComponent(
+                "Turing/Flow/TuringFlowConversationRunner.swift"
+            )
+        let source = try String(contentsOf: runnerURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("promptVoiceSeed.promptContext"))
+        XCTAssertFalse(source.contains("episodeStateForWordsOnly"))
+        XCTAssertFalse(source.contains("appendConversation"))
+        XCTAssertFalse(source.contains("TuringDialogueHistoryStore"))
     }
 
     func testGenericEngineContainsNoProloguePointIDs()

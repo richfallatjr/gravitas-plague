@@ -412,6 +412,23 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             onEnemyRemoved: { [weak self] enemyID in
                 self?.audioController.stopHostAudioSource(id: enemyID)
             },
+            onEnemyMemoryPresenceChanged: { [weak self] present, reason in
+                self?.turingStoryWalkieInteractionController
+                    .setBattle01GrandmaMemoryPresent(
+                        present,
+                        reason: reason
+                    )
+            },
+            onPostBattleHold: { [weak self] instanceID in
+                self?.turingStoryWalkieInteractionController.armPlay(
+                    action: .startScriptPoint(
+                        id: "prologue.scriptPoint04",
+                        trigger: .userPlay
+                    ),
+                    reason:
+                        "battle01.postBattleHold.\(instanceID.uuidString)"
+                )
+            },
             playerTargetProvider: { [weak self] in
                 self?.spatialProvider.currentPose()?.headPosition
             },

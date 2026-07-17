@@ -99,23 +99,32 @@ struct TuringFlowCatalogValidator:
             _ = try prerecordingStore.audioURL(
                 for: prerecording
             )
-            let prompt =
-                try promptStore.descriptor(
-                    id:
-                        descriptor.transmission
-                            .voicePromptID
-                )
             let character =
                 try characterStore.require(
                     descriptor.transmission
                         .characterID
                 )
+            let prompt:
+                TuringVoicePromptTriggerDescriptor?
+            if let voicePromptID =
+                descriptor.transmission.voicePromptID {
+                prompt =
+                    try promptStore.descriptor(
+                        id: voicePromptID
+                    )
+            } else {
+                prompt = nil
+            }
 
             try validateIdentity(
                 descriptor: descriptor,
                 prerecording:
                     prerecording,
                 prompt: prompt,
+                character: character
+            )
+            try validateGenerationPipelineIfNeeded(
+                descriptor: descriptor,
                 character: character
             )
 
@@ -183,7 +192,7 @@ struct TuringFlowCatalogValidator:
         prerecording:
             TuringPrerecordingDescriptor,
         prompt:
-            TuringVoicePromptTriggerDescriptor,
+            TuringVoicePromptTriggerDescriptor?,
         character:
             TuringCharacterRuntimeDefinition
     ) throws {
@@ -194,18 +203,6 @@ struct TuringFlowCatalogValidator:
                 character.characterID,
               prerecording.voiceID ==
                 character.voiceID,
-              prompt.speakerID ==
-                character.characterID,
-              prompt.voiceID ==
-                character.voiceID,
-              prompt.characterProfileID ==
-                character.characterID,
-              prompt.outputContext ==
-                descriptor.transmission
-                    .outputRoute,
-              prompt.conversationKey ==
-                descriptor.transmission
-                    .conversationKey,
               character.supports(
                 descriptor.transmission
                     .outputRoute
@@ -213,6 +210,115 @@ struct TuringFlowCatalogValidator:
             throw TuringRuntimeError.invalidConfig(
                 "Turing Flow identity mismatch at \(descriptor.scriptPointID)."
             )
+        }
+
+        if descriptor.transmission.usesLegacyVoicePrompt {
+            guard let prompt,
+                  prompt.speakerID ==
+                    character.characterID,
+                  prompt.voiceID ==
+                    character.voiceID,
+                  prompt.characterProfileID ==
+                    character.characterID,
+                  prompt.outputContext ==
+                    descriptor.transmission
+                        .outputRoute,
+                  prompt.conversationKey ==
+                    descriptor.transmission
+                        .conversationKey else {
+                throw TuringRuntimeError.invalidConfig(
+                    "Turing Flow prompt identity mismatch at \(descriptor.scriptPointID)."
+                )
+            }
+        }
+    }
+
+    private func validateGenerationPipelineIfNeeded(
+        descriptor: TuringFlowDescriptor,
+        character: TuringCharacterRuntimeDefinition
+    ) throws {
+        guard let pipeline =
+                descriptor.transmission.generationPipeline else {
+            return
+        }
+
+        guard pipeline.schemaVersion == 1 else {
+            throw TuringRuntimeError.invalidConfig(
+                "\(descriptor.scriptPointID) generationPipeline schemaVersion must be 1."
+            )
+        }
+
+        guard pipeline.stages.isEmpty == false else {
+            throw TuringRuntimeError.invalidConfig(
+                "\(descriptor.scriptPointID) generationPipeline must contain at least one stage."
+            )
+        }
+
+        var seenStageIDs = Set<String>()
+        for stage in pipeline.stages {
+            let stageID =
+                stage.stageID.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
+            guard stageID.isEmpty == false,
+                  seenStageIDs.insert(stageID).inserted else {
+                throw TuringRuntimeError.invalidConfig(
+                    "\(descriptor.scriptPointID) generationPipeline contains duplicate or empty stage IDs."
+                )
+            }
+
+            switch stage.kind {
+            case .voiceScriptLongform:
+                guard let sourcePath =
+                        stage.sourceResourcePath,
+                      stage.voicePromptID == nil else {
+                    throw TuringRuntimeError.invalidConfig(
+                        "\(descriptor.scriptPointID) Script Voice stage must provide only sourceResourcePath."
+                    )
+                }
+                let sourceURL =
+                    try TuringResourceLoader.resourceURL(
+                        resourcePath: sourcePath
+                    )
+                let source =
+                    try String(
+                        contentsOf: sourceURL,
+                        encoding: .utf8
+                    )
+                guard source.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ).isEmpty == false else {
+                    throw TuringRuntimeError.invalidConfig(
+                        "\(descriptor.scriptPointID) Script Voice source is empty."
+                    )
+                }
+
+            case .voicePrompt:
+                guard let promptID = stage.voicePromptID,
+                      stage.sourceResourcePath == nil else {
+                    throw TuringRuntimeError.invalidConfig(
+                        "\(descriptor.scriptPointID) promptVoice stage must provide only voicePromptID."
+                    )
+                }
+                let prompt =
+                    try promptStore.descriptor(id: promptID)
+                guard prompt.speakerID ==
+                        character.characterID,
+                      prompt.voiceID ==
+                        character.voiceID,
+                      prompt.characterProfileID ==
+                        character.characterID,
+                      prompt.outputContext ==
+                        descriptor.transmission
+                            .outputRoute,
+                      prompt.conversationKey ==
+                        descriptor.transmission
+                            .conversationKey else {
+                    throw TuringRuntimeError.invalidConfig(
+                        "\(descriptor.scriptPointID) pipeline prompt identity mismatch."
+                    )
+                }
+            }
         }
     }
 

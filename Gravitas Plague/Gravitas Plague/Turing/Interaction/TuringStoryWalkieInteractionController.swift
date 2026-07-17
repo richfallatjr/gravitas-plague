@@ -32,6 +32,7 @@ final class TuringStoryWalkieInteractionController {
     private var walkieReady = false
     private var holdActive = false
     private var pendingPlayAction: TuringStoryWalkiePlayAction?
+    private var battle01GrandmaMemoryPresent = false
 
     private var playStartTask: Task<Void, Never>?
     private var conversationTask: Task<Void, Never>?
@@ -124,6 +125,26 @@ final class TuringStoryWalkieInteractionController {
         renderGateState(reason: reason)
     }
 
+    func setBattle01GrandmaMemoryPresent(
+        _ present: Bool,
+        reason: String
+    ) {
+        guard battle01GrandmaMemoryPresent != present else {
+            return
+        }
+        battle01GrandmaMemoryPresent = present
+        renderGateState(reason: "battle01GrandmaMemory.\(reason)")
+
+        print("""
+        [TuringWalkieState] Battle01 memory suppression changed
+          grandmaMemoryPresent: \(present)
+          gatePreserved: \(gate.state.rawValue)
+          billboardSuppressed: \(present)
+          physicalInteractionSuppressed: \(present)
+          reason: \(reason)
+        """)
+    }
+
     func walkieRemoved(reason: String) {
         walkieReady = false
         holdActive = false
@@ -140,6 +161,7 @@ final class TuringStoryWalkieInteractionController {
 
     func playTapped(source: String) {
         guard walkieReady,
+              battle01GrandmaMemoryPresent == false,
               let action = pendingPlayAction,
               gate.claimPlay(reason: source) else {
             return
@@ -201,7 +223,9 @@ final class TuringStoryWalkieInteractionController {
         dictationStartTask = nil
         await dictation.cancel(reason: reason)
         await TuringWalkieCommsFXController.shared.stopAll(reason: reason)
-        TuringStoryWalkieAudioRoute.makeActiveClipPlayer()?.cancelAll(reason: reason)
+        if let endpoint = TuringStoryWalkieAudioRoute.makeActiveEndpoint() {
+            await endpoint.stopAll(reason: reason)
+        }
         gate.forceClosedForStoryTeleport(reason: reason)
         renderGateState(reason: reason)
         print("[TuringWalkieState] quiesced for Story teleport reason=\(reason)")
@@ -209,6 +233,7 @@ final class TuringStoryWalkieInteractionController {
 
     func microphoneHoldBegan(source: String) {
         guard walkieReady,
+              battle01GrandmaMemoryPresent == false,
               gate.microphoneEnabled,
               holdActive == false else {
             return
@@ -342,6 +367,7 @@ final class TuringStoryWalkieInteractionController {
         activeEpisodeID = nil
         holdActive = false
         pendingPlayAction = nil
+        battle01GrandmaMemoryPresent = false
 
         playStartTask?.cancel()
         conversationTask?.cancel()
@@ -384,7 +410,7 @@ final class TuringStoryWalkieInteractionController {
     }
 
     private func renderGateState(reason: String) {
-        let presentation = walkieReady
+        let presentation = walkieReady && battle01GrandmaMemoryPresent == false
             ? TuringStoryWalkiePresentation(gate: gate.state)
             : .hidden
         iconController.apply(presentation)
@@ -394,6 +420,7 @@ final class TuringStoryWalkieInteractionController {
           gate: \(gate.state.rawValue)
           presentation: \(String(describing: presentation))
           walkieReady: \(walkieReady)
+          battle01GrandmaMemoryPresent: \(battle01GrandmaMemoryPresent)
           iconVisible: \(presentation != .hidden)
           physicalInteractionEnabled: \(presentation != .hidden)
           reason: \(reason)

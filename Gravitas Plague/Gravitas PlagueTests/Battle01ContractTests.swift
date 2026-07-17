@@ -17,7 +17,13 @@ final class Battle01ContractTests: XCTestCase {
         XCTAssertEqual(definition.enemy.turnCount, 2)
         XCTAssertEqual(definition.enemy.turnDegreesPerCompletion, 90, accuracy: 0.0001)
         XCTAssertEqual(definition.enemy.walkClipID, "unstable_walk_01")
-        XCTAssertTrue(definition.enemy.retainCorpseAfterDeath)
+        XCTAssertFalse(definition.enemy.retainCorpseAfterDeath)
+        XCTAssertEqual(
+            definition.enemy.corpseRemovalDelaySeconds,
+            5,
+            accuracy: 0.0001
+        )
+        XCTAssertTrue(definition.completion.removeCorpse)
 
         XCTAssertTrue(definition.portalHandoff.sourceIsAnimationAuthority)
         XCTAssertTrue(definition.portalHandoff.sourceIsCombatAuthority)

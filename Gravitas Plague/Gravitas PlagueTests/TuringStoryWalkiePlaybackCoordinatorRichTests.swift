@@ -33,7 +33,7 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
     let coordinator = TuringStoryWalkiePlaybackCoordinator(
       policy: policy,
       rootURL: rootURL,
-      globalPlayer: fakePlayer
+      endpoint: fakePlayer
     )
 
     await coordinator.beginRun(
@@ -48,7 +48,8 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
       fileURL: prerecordingURL
     )
 
-    XCTAssertEqual(fakePlayer.startedClips.map(\.kind), [.prerecording])
+    var startedKinds = await fakePlayer.startedKinds()
+    XCTAssertEqual(startedKinds, [.prerecording])
 
     await coordinator.setExpectedGeneratedSegmentCount(2)
     await coordinator.qwenComputeStarted(segmentIndex: 0)
@@ -63,25 +64,30 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
     )
     await coordinator.qwenComputeAllFinished()
 
-    XCTAssertEqual(fakePlayer.startedClips.map(\.kind), [.prerecording])
+    startedKinds = await fakePlayer.startedKinds()
+    XCTAssertEqual(startedKinds, [.prerecording])
 
-    fakePlayer.completeActive()
+    await fakePlayer.completeActive()
     await settle()
-    XCTAssertEqual(fakePlayer.startedClips.last?.kind, .filler)
+    var lastKind = await fakePlayer.lastStartedKind()
+    XCTAssertEqual(lastKind, .filler)
 
-    fakePlayer.completeActive()
+    await fakePlayer.completeActive()
     await settle()
-    XCTAssertEqual(fakePlayer.startedClips.last?.label, "segment_0000")
+    var lastLabel = await fakePlayer.lastStartedLabel()
+    XCTAssertEqual(lastLabel, "segment_0000")
 
-    fakePlayer.completeActive()
+    await fakePlayer.completeActive()
     await settle()
-    XCTAssertEqual(fakePlayer.startedClips.last?.label, "segment_0001")
+    lastLabel = await fakePlayer.lastStartedLabel()
+    XCTAssertEqual(lastLabel, "segment_0001")
 
-    fakePlayer.completeActive()
+    await fakePlayer.completeActive()
     await coordinator.waitUntilPlaybackFinished()
 
+    startedKinds = await fakePlayer.startedKinds()
     XCTAssertEqual(
-      fakePlayer.startedClips.map(\.kind),
+      startedKinds,
       [.prerecording, .filler, .generated, .generated]
     )
     let completedCount = await coordinator.completedGeneratedSegmentCount()
@@ -106,7 +112,7 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
     let coordinator = TuringStoryWalkiePlaybackCoordinator(
       policy: policy,
       rootURL: rootURL,
-      globalPlayer: fakePlayer
+      endpoint: fakePlayer
     )
 
     await coordinator.beginRun(
@@ -118,14 +124,16 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
       fileURL: URL(fileURLWithPath: "/tmp/pr-rich-script-point-02.mp3")
     )
 
-    fakePlayer.completeActive()
+    await fakePlayer.completeActive()
     await settle()
-    XCTAssertEqual(fakePlayer.startedClips.map(\.kind), [.prerecording, .filler])
+    var startedKinds = await fakePlayer.startedKinds()
+    XCTAssertEqual(startedKinds, [.prerecording, .filler])
 
-    fakePlayer.completeActive()
+    await fakePlayer.completeActive()
     await settle()
+    startedKinds = await fakePlayer.startedKinds()
     XCTAssertEqual(
-      fakePlayer.startedClips.map(\.kind),
+      startedKinds,
       [.prerecording, .filler, .filler]
     )
 
@@ -137,15 +145,18 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
     )
     await coordinator.qwenComputeAllFinished()
 
-    XCTAssertEqual(fakePlayer.startedClips.last?.kind, .filler)
-    fakePlayer.completeActive()
+    var lastKind = await fakePlayer.lastStartedKind()
+    XCTAssertEqual(lastKind, .filler)
+    await fakePlayer.completeActive()
     await settle()
-    XCTAssertEqual(fakePlayer.startedClips.last?.kind, .generated)
+    lastKind = await fakePlayer.lastStartedKind()
+    XCTAssertEqual(lastKind, .generated)
 
-    fakePlayer.completeActive()
+    await fakePlayer.completeActive()
     await coordinator.waitUntilPlaybackFinished()
+    startedKinds = await fakePlayer.startedKinds()
     XCTAssertEqual(
-      fakePlayer.startedClips.map(\.kind),
+      startedKinds,
       [.prerecording, .filler, .filler, .generated]
     )
   }
@@ -165,7 +176,7 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
     let coordinator = TuringStoryWalkiePlaybackCoordinator(
       policy: policy,
       rootURL: rootURL,
-      globalPlayer: fakePlayer
+      endpoint: fakePlayer
     )
 
     await coordinator.beginRun(
@@ -189,14 +200,18 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
     )
     await coordinator.qwenComputeAllFinished()
 
-    XCTAssertEqual(fakePlayer.startedClips.map(\.kind), [.prerecording])
-    XCTAssertTrue(fakePlayer.cancelReasons.isEmpty)
+    var startedKinds = await fakePlayer.startedKinds()
+    var cancelReasons = await fakePlayer.cancelReasonsSnapshot()
+    XCTAssertEqual(startedKinds, [.prerecording])
+    XCTAssertTrue(cancelReasons.isEmpty)
 
-    fakePlayer.completeActive()
+    await fakePlayer.completeActive()
     await coordinator.waitUntilPlaybackFinished()
 
-    XCTAssertEqual(fakePlayer.startedClips.map(\.kind), [.prerecording])
-    XCTAssertTrue(fakePlayer.cancelReasons.isEmpty)
+    startedKinds = await fakePlayer.startedKinds()
+    cancelReasons = await fakePlayer.cancelReasonsSnapshot()
+    XCTAssertEqual(startedKinds, [.prerecording])
+    XCTAssertTrue(cancelReasons.isEmpty)
     let completedCount = await coordinator.completedGeneratedSegmentCount()
     XCTAssertEqual(completedCount, 0)
   }
@@ -215,7 +230,7 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
     let coordinator = TuringStoryWalkiePlaybackCoordinator(
       policy: policy,
       rootURL: rootURL,
-      globalPlayer: fakePlayer
+      endpoint: fakePlayer
     )
 
     await coordinator.beginRun(
@@ -232,11 +247,13 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
       reason: "test warm-load failure"
     )
 
-    XCTAssertEqual(fakePlayer.startedClips.map(\.kind), [.prerecording])
-    fakePlayer.completeActive()
+    let startedKinds = await fakePlayer.startedKinds()
+    XCTAssertEqual(startedKinds, [.prerecording])
+    await fakePlayer.completeActive()
     await coordinator.waitUntilPlaybackFinished()
 
-    XCTAssertTrue(fakePlayer.cancelReasons.isEmpty)
+    let cancelReasons = await fakePlayer.cancelReasonsSnapshot()
+    XCTAssertTrue(cancelReasons.isEmpty)
     let completedCount = await coordinator.completedGeneratedSegmentCount()
     XCTAssertEqual(completedCount, 0)
   }

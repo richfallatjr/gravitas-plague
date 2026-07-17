@@ -1,6 +1,6 @@
 import Foundation
 
-struct TuringQwenOutputProcessingPolicy: Sendable, Equatable {
+nonisolated struct TuringQwenOutputProcessingPolicy: Sendable, Equatable {
   let voiceID: String
   let playbackRate: Double
 

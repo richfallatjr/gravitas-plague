@@ -1,6 +1,6 @@
 import Foundation
 
-enum TuringRichVoiceIdentity {
+nonisolated enum TuringRichVoiceIdentity {
     static let characterID = "rich"
     static let speakerID = "rich"
     static let voiceID = "rich_base_clone_v1"
@@ -16,14 +16,14 @@ enum TuringRichVoiceIdentity {
     ]
 }
 
-enum TuringBigMikeVoiceIdentity {
+nonisolated enum TuringBigMikeVoiceIdentity {
     static let characterID = "big_mike"
     static let speakerID = "big_mike"
     static let voiceID = "big_mike_base_clone_v1"
     static let displayName = "Big Mike"
 }
 
-enum TuringDialogueThreadIdentity {
+nonisolated enum TuringDialogueThreadIdentity {
     static let bigMikeRich = "dialogue.big_mike.rich"
 }
 
@@ -32,7 +32,7 @@ enum TuringDialogueThreadIdentity {
 /// New prop-specific Rich routes are registered by string ID in
 /// `TuringFlowRouteRegistry`. Adding a route never requires a new ScriptPoint
 /// runner or a change to `TuringFlowEngine`.
-struct TuringVoiceOutputContext:
+nonisolated struct TuringVoiceOutputContext:
     RawRepresentable,
     Codable,
     Sendable,

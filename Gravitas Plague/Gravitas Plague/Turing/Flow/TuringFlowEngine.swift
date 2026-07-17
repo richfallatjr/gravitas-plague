@@ -68,8 +68,6 @@ actor TuringFlowEngine {
         any TuringCharacterRendererMaking
     private let seedStore:
         TuringConversationSeedStore
-    private let historyStore:
-        TuringDialogueHistoryStore
 
     private var activeFlow:
         TuringFlowIdentity?
@@ -100,9 +98,7 @@ actor TuringFlowEngine {
             any TuringCharacterRendererMaking =
                 TuringCharacterQwenRendererFactory(),
         seedStore:
-            TuringConversationSeedStore = .shared,
-        historyStore:
-            TuringDialogueHistoryStore = .shared
+            TuringConversationSeedStore = .shared
     ) {
         self.descriptorStore = descriptorStore
         self.prerecordingStore = prerecordingStore
@@ -114,7 +110,6 @@ actor TuringFlowEngine {
         self.routeResolver = routeResolver
         self.rendererFactory = rendererFactory
         self.seedStore = seedStore
-        self.historyStore = historyStore
     }
 
     func run(
@@ -133,7 +128,7 @@ actor TuringFlowEngine {
         let prerecording:
             TuringPrerecordingDescriptor
         let voicePrompt:
-            TuringVoicePromptTriggerDescriptor
+            TuringVoicePromptTriggerDescriptor?
         let character:
             TuringCharacterRuntimeDefinition
         let prerecordingURL: URL
@@ -164,12 +159,15 @@ actor TuringFlowEngine {
                 try prerecordingStore.audioURL(
                     for: prerecording
                 )
-            voicePrompt =
-                try voicePromptStore.descriptor(
-                    id:
-                        descriptor.transmission
-                            .voicePromptID
-                )
+            if let voicePromptID =
+                descriptor.transmission.voicePromptID {
+                voicePrompt =
+                    try voicePromptStore.descriptor(
+                        id: voicePromptID
+                    )
+            } else {
+                voicePrompt = nil
+            }
             character =
                 try characterRuntimeStore.require(
                     descriptor.transmission
@@ -195,7 +193,10 @@ actor TuringFlowEngine {
             prerecordingID:
                 prerecording.prerecordingID,
             voicePromptID:
-                voicePrompt.voicePromptID
+                Self.identityVoicePromptID(
+                    descriptor: descriptor,
+                    voicePrompt: voicePrompt
+                )
         )
 
         activeFlow = identity
@@ -208,7 +209,7 @@ actor TuringFlowEngine {
         var completionTask:
             Task<Void, Never>?
         var planTask:
-            Task<TuringVoicePromptPlan, Error>?
+            Task<TuringFlowCompositeSpeechPlan, Error>?
         var route:
             (any TuringFlowRouteRuntime)?
         var expectedSegmentCount = 0
@@ -263,11 +264,13 @@ actor TuringFlowEngine {
 
             func makePlanTask()
                 -> Task<
-                    TuringVoicePromptPlan,
+                    TuringFlowCompositeSpeechPlan,
                     Error
                 > {
                 let dialogueService =
                     dialogueServiceFactory()
+                let detachedPromptStore =
+                    voicePromptStore
 
                 TuringFlowLog.event(
                     "Foundation started",
@@ -282,7 +285,9 @@ actor TuringFlowEngine {
                         ),
                         (
                             "promptInputContract",
-                            "characterProfile,promptContext,prerecordingTranscript"
+                            descriptor.transmission.usesCompositePipeline
+                                ? "scriptPrompt,voicePrompt,prerecordingTranscript"
+                                : "characterProfile,promptContext,prerecordingTranscript"
                         ),
                         (
                             "freshDialogueService",
@@ -294,28 +299,58 @@ actor TuringFlowEngine {
                 return Task.detached(
                     priority: .userInitiated
                 ) {
-                    try await dialogueService
-                        .generateVoicePrompt(
-                            VoicePromptRequest(
-                                id:
-                                    voicePrompt
-                                        .voicePromptID,
-                                characterProfileID:
-                                    voicePrompt
-                                        .characterProfileID,
-                                promptContext:
-                                    """
-                                    Story intent:
-                                    \(voicePrompt.intent)
-
-                                    Emotional tone:
-                                    \(voicePrompt.emotion)
-                                    """,
-                                prerecordingTranscript:
-                                    prerecording
-                                        .transcript
+                    if let pipeline =
+                        descriptor.transmission.generationPipeline {
+                        let planner =
+                            TuringFlowCompositeSpeechPlanner(
+                                voicePromptGenerator:
+                                    dialogueService,
+                                promptStore:
+                                    detachedPromptStore
                             )
+                        return try await planner.build(
+                            descriptor: descriptor,
+                            pipeline: pipeline,
+                            character: character,
+                            prerecording: prerecording
                         )
+                    }
+
+                    guard let voicePrompt else {
+                        throw TuringRuntimeError.invalidConfig(
+                            "\(scriptPointID) missing legacy voicePrompt descriptor."
+                        )
+                    }
+
+                    let promptVoiceSeed =
+                        TuringPromptVoiceSeedBuilder.standard(
+                            voicePrompt
+                        )
+                    let promptPlan =
+                        try await dialogueService
+                            .generateVoicePrompt(
+                                VoicePromptRequest(
+                                    id:
+                                        voicePrompt
+                                            .voicePromptID,
+                                    characterProfileID:
+                                        voicePrompt
+                                            .characterProfileID,
+                                    promptContext:
+                                        promptVoiceSeed
+                                            .promptContext,
+                                    prerecordingTranscript:
+                                        prerecording
+                                            .transcript
+                                )
+                            )
+                    return TuringFlowCompositeSpeechPlan(
+                        segments: promptPlan.segments,
+                        conversationSeed:
+                            promptPlan.conversationSeed,
+                        promptVoiceSeed:
+                            promptVoiceSeed
+                    )
                 }
             }
 
@@ -377,7 +412,7 @@ actor TuringFlowEngine {
             completionTask =
                 createdCompletionTask
 
-            let plan: TuringVoicePromptPlan
+            let plan: TuringFlowCompositeSpeechPlan
 
             do {
                 guard let planTask else {
@@ -395,18 +430,6 @@ actor TuringFlowEngine {
                 await createdPlayback
                     .qwenComputeAllFinished()
                 await createdCompletionTask.value
-
-                await historyStore
-                    .appendCompletedScriptPoint(
-                        identity: identity,
-                        prerecording:
-                            prerecording,
-                        generatedSegments: [],
-                        conversationKey:
-                            descriptor.transmission
-                                .conversationKey,
-                        skippedSegmentIndices: []
-                    )
 
                 await resolvedRoute.finish(
                     descriptor: descriptor,
@@ -476,15 +499,15 @@ actor TuringFlowEngine {
                         )
                     ),
                     (
-                        "conversationSeedID",
+                        "unusedGeneratedConversationSeedID",
                         plan.conversationSeed
                             .seedID
                     )
                 ]
             )
 
-            await seedStore.updateSeed(
-                plan.conversationSeed,
+            await seedStore.updatePromptVoiceSeed(
+                plan.promptVoiceSeed,
                 for:
                     descriptor.transmission
                         .conversationKey
@@ -552,21 +575,6 @@ actor TuringFlowEngine {
                     )
                 await createdCompletionTask.value
 
-                await historyStore
-                    .appendCompletedScriptPoint(
-                        identity: identity,
-                        prerecording:
-                            prerecording,
-                        generatedSegments: [],
-                        conversationKey:
-                            descriptor.transmission
-                                .conversationKey,
-                        skippedSegmentIndices:
-                            Set(
-                                0..<expectedSegmentCount
-                            )
-                    )
-
                 await resolvedRoute.finish(
                     descriptor: descriptor,
                     identity: identity,
@@ -632,20 +640,6 @@ actor TuringFlowEngine {
             let skipped =
                 renderReport
                     .skippedSegmentIndices
-
-            await historyStore
-                .appendCompletedScriptPoint(
-                    identity: identity,
-                    prerecording:
-                        prerecording,
-                    generatedSegments:
-                        plan.segments,
-                    conversationKey:
-                        descriptor.transmission
-                            .conversationKey,
-                    skippedSegmentIndices:
-                        skipped
-                )
 
             guard renderReport.isCompleteSuccess,
                   completed ==
@@ -894,7 +888,7 @@ actor TuringFlowEngine {
         prerecording:
             TuringPrerecordingDescriptor,
         voicePrompt:
-            TuringVoicePromptTriggerDescriptor,
+            TuringVoicePromptTriggerDescriptor?,
         character:
             TuringCharacterRuntimeDefinition
     ) throws {
@@ -904,22 +898,30 @@ actor TuringFlowEngine {
               prerecording.speaker ==
                 character.characterID,
               prerecording.voiceID ==
-                character.voiceID,
-              voicePrompt.speakerID ==
-                character.characterID,
-              voicePrompt.voiceID ==
-                character.voiceID,
-              voicePrompt.characterProfileID ==
-                character.characterID,
-              voicePrompt.conversationKey ==
-                descriptor.transmission
-                    .conversationKey,
-              voicePrompt.outputContext ==
-                descriptor.transmission
-                    .outputRoute else {
+                character.voiceID else {
             throw TuringRuntimeError.invalidConfig(
-                "Turing Flow \(descriptor.scriptPointID) character, voice, prompt, PR, route, or conversation identity mismatch."
+                "Turing Flow \(descriptor.scriptPointID) character, voice, or PR identity mismatch."
             )
+        }
+
+        if descriptor.transmission.usesLegacyVoicePrompt {
+            guard let voicePrompt,
+                  voicePrompt.speakerID ==
+                    character.characterID,
+                  voicePrompt.voiceID ==
+                    character.voiceID,
+                  voicePrompt.characterProfileID ==
+                    character.characterID,
+                  voicePrompt.conversationKey ==
+                    descriptor.transmission
+                        .conversationKey,
+                  voicePrompt.outputContext ==
+                    descriptor.transmission
+                        .outputRoute else {
+                throw TuringRuntimeError.invalidConfig(
+                    "Turing Flow \(descriptor.scriptPointID) prompt, route, or conversation identity mismatch."
+                )
+            }
         }
 
         guard character.supports(
@@ -943,5 +945,23 @@ actor TuringFlowEngine {
                 "\(descriptor.scriptPointID) requires a reviewed manual PR transcript."
             )
         }
+    }
+
+    private static func identityVoicePromptID(
+        descriptor: TuringFlowDescriptor,
+        voicePrompt: TuringVoicePromptTriggerDescriptor?
+    ) -> String {
+        if let voicePrompt {
+            return voicePrompt.voicePromptID
+        }
+
+        let pipelinePromptIDs =
+            descriptor.transmission.generationPipeline?.stages
+                .compactMap(\.voicePromptID) ?? []
+        if pipelinePromptIDs.isEmpty == false {
+            return pipelinePromptIDs.joined(separator: "+")
+        }
+
+        return "compositePipeline"
     }
 }

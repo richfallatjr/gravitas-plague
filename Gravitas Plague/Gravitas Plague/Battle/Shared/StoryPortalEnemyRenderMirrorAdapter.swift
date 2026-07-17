@@ -9,7 +9,7 @@ final class StoryPortalEnemyRenderMirrorAdapter {
     private let source: JockRetargetTestController
     private let portalWorldRoot: Entity
     private let portalPlane: HordePortalPlaneDescriptor
-    private let mirror: HordePortalSkinnedRenderMirror
+    private var mirror: HordePortalSkinnedRenderMirror?
     private weak var boundIBLEntity: Entity?
     private var didLogMissingIBL = false
     private(set) var sourceRevealed = false
@@ -26,13 +26,14 @@ final class StoryPortalEnemyRenderMirrorAdapter {
         let removedSourceReceiverCount = Self.removeIBLReceiversRecursively(
             under: source.rootEntity
         )
-        self.mirror = try HordePortalSkinnedRenderMirror(
+        let mirror = try HordePortalSkinnedRenderMirror(
             source: source,
             portalID: UUID(),
             portalWorldRoot: portalWorldRoot,
             portalPlane: portalPlane,
             bodySizeMeters: source.portalMirrorBodySizeMeters()
         )
+        self.mirror = mirror
         self.id = mirror.id
         mirror.syncVisibleDuringIngress()
         print(
@@ -40,8 +41,6 @@ final class StoryPortalEnemyRenderMirrorAdapter {
         )
         refreshPortalLightingIfNeeded()
     }
-
-    var rootEntity: Entity { mirror.rootEntity }
 
     func signedRoomDistance() -> Float {
         portalPlane.signedRoomSideDistance(
@@ -54,7 +53,8 @@ final class StoryPortalEnemyRenderMirrorAdapter {
         exitThreshold: Float
     ) {
         refreshPortalLightingIfNeeded()
-        guard !exited else { return }
+        guard !exited,
+              let mirror else { return }
 
         let worldPosition = source.rootEntity.position(relativeTo: nil)
         let worldOrientation = source.rootEntity.orientation(relativeTo: nil)
@@ -75,20 +75,38 @@ final class StoryPortalEnemyRenderMirrorAdapter {
         }
 
         if depth >= exitThreshold {
-            exited = true
             source.rootEntity.isEnabled = true
-            mirror.cleanup(reason: "Battle01.portalExit")
+            cleanup(reason: "Battle01.portalExit")
             print("[Battle01] portal exit threshold crossed depth=\(depth)")
         }
     }
 
     func cleanup(reason: String) {
+        guard let mirror else {
+            exited = true
+            return
+        }
         exited = true
         mirror.cleanup(reason: reason)
+        self.mirror = nil
+        boundIBLEntity = nil
+        TuringMemoryBudgetProbe.log(
+            label: "afterBattle01PortalMirrorReleased"
+        )
+        print("""
+        [Battle01Memory] portal mirror ownership released
+          mirrorID: \(id.uuidString)
+          reason: \(reason)
+          mirrorRetainedByAdapter: false
+          authoritativeGrandmaRetained: true
+        """)
     }
 
     func refreshPortalLightingIfNeeded() {
-        if !exited, mirror.rootEntity.parent == nil {
+        guard !exited,
+              let mirror else { return }
+
+        if mirror.rootEntity.parent == nil {
             portalWorldRoot.addChild(mirror.rootEntity)
             mirror.syncVisibleDuringIngress()
             print(

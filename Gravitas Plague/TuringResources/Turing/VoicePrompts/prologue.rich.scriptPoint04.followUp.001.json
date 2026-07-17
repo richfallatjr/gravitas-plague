@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "prologue.rich.scriptPoint04.followUp.001",
+  "speakerID": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "characterProfileID": "rich",
+  "outputContext": "walkieOutgoingGlobal",
+  "conversationKey": "dialogue.big_mike.rich",
+  "intent": "Continue after the authored Rich PR with only new spoken words. Rich cannot believe the thing is still in his room and no longer thinks of it as a person. He is frightened and needs to decide what to do because police services have been unavailable for weeks. He needs the thing out of the house. Keep the response non-graphic, first-person, compact, and practical. Do not restate the PR, invent new events, claim scientific knowledge, or speak Big Mike's lines. Seed intent: I can't believe this thing is laying in my room. It's not a person anymore it's a monster. I am still freaking out. We need the police. But police services have been down for weeks. I need to get this thing out of here.",
+  "emotion": "panicked, unsettled, exhausted, trying to reason through the next practical step"
+}

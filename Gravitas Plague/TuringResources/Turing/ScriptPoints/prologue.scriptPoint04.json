@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 2,
+  "scriptPointID": "prologue.scriptPoint04",
+  "trigger": {
+    "kind": "userPlay",
+    "delaySeconds": 0
+  },
+  "transmission": {
+    "prerecordingID": "prologue.walkie.rich.scriptPoint04.001",
+    "voicePromptID": "prologue.rich.scriptPoint04.followUp.001",
+    "characterID": "rich",
+    "conversationKey": "dialogue.big_mike.rich",
+    "outputRoute": "walkieOutgoingGlobal",
+    "computeStart": "withPrerecording",
+    "fillerMode": "continuousFromPrerecordingToGenerated",
+    "commSFX": {
+      "openBeforePrerecording": true,
+      "sendAfterGenerated": true,
+      "sendingLeadInAfterGeneratedSeconds": null
+    },
+    "fixedLeadInSeconds": null,
+    "generationPipeline": null
+  },
+  "progression": {
+    "nextScriptPointID": "prologue.scriptPoint05",
+    "automaticAdvance": false,
+    "interactionGateAfterCompletion": "microphone"
+  }
+}

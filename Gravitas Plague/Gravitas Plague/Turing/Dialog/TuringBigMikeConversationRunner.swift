@@ -17,14 +17,9 @@ enum TuringBigMikeConversationRunner {
                     TuringDialogueThreadIdentity
                         .bigMikeRich,
                 playerDictation:
-                    playerDictation,
-                episodeStateForWordsOnly:
-                    "Rich and Big Mike are in an active early-outbreak radio conversation. Big Mike is nearby, protective, tired, uncertain about the Plague, and trying to keep Rich alive.",
-                emotion:
-                    "protective, grounded, tired, alert"
+                    playerDictation
             ),
             seedStore: seedStore,
-            historyStore: .shared,
             onSegmentZeroReady:
                 onSegmentZeroReady
         )

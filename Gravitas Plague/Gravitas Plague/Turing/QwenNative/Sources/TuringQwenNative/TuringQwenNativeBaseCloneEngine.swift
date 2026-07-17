@@ -51,8 +51,6 @@ public struct TuringQwenNativeBaseClonePreflightReport: Sendable {
 }
 
 public actor TuringQwenNativeBaseCloneEngine {
-    private static let decodeReferenceContextRows = 24
-
     private let modelRoot: URL
     private let trace: TuringQwenNativeTrace
     private let weightBackend: TuringQwenNativeWeightBackend
@@ -98,6 +96,11 @@ public actor TuringQwenNativeBaseCloneEngine {
         self.config = residentResources.config
     }
 
+    @available(
+        *,
+        deprecated,
+        message: "Use renderCodebook plus TuringQwenNativeSpeechDecodeCoordinator."
+    )
     public func generateBaseClone(
         prompt: TuringQwenNativeBaseClonePrompt
     ) async throws -> TuringQwenNativeAudio {
@@ -152,7 +155,11 @@ public actor TuringQwenNativeBaseCloneEngine {
         let initialPromptSeconds = generated.initialPromptSeconds
         let initialTalkerForwardSeconds = generated.initialTalkerForwardSeconds
 
-        let decodeReferenceRows = Array(referenceRows.suffix(Self.decodeReferenceContextRows))
+        let decodeReferenceRows = Array(
+            referenceRows.suffix(
+                TuringQwenDecodeConfiguration.referenceContextRows
+            )
+        )
         let rowsForDecode = decodeReferenceRows + generatedRows
 
         let decodeQueuedAt = Date()
@@ -164,9 +171,8 @@ public actor TuringQwenNativeBaseCloneEngine {
           totalRows: \(rowsForDecode.count)
           decodeFullReference: false
           trimReferenceAfterDecode: true
-          decoderConcurrencyPolicy: serializedAfterConcurrentGeneration
-          talkerDecodeOverlapAllowed: false
-          freshTalkerConcurrency: 2
+          decoderConcurrencyPolicy: serializedHighWatermarkStage
+          qwenGenerationConcurrencyUnchanged: true
         """)
 
         let decodeStart = Date()
@@ -263,6 +269,171 @@ public actor TuringQwenNativeBaseCloneEngine {
         return audio
     }
 
+    func materializeRenderedSegmentAndRelease(
+        request: TuringQwenNativeBaseCloneSegmentRequest,
+        runID: String,
+        instanceID: TuringQwenNativeFreshInstanceID
+    ) throws -> TuringQwenRenderedCodebookMaterialization {
+        do {
+            let payload = try renderCPUCodebooks(
+                request: request,
+                runID: runID,
+                instanceID: instanceID
+            )
+            releaseRequestWorkingSet(
+                runID: runID,
+                segmentIndex: request.segmentIndex,
+                reason: "cpuCodebooksMaterialized"
+            )
+            return payload
+        } catch {
+            releaseRequestWorkingSet(
+                runID: runID,
+                segmentIndex: request.segmentIndex,
+                reason: "renderFailed"
+            )
+            throw error
+        }
+    }
+
+    private func renderCPUCodebooks(
+        request: TuringQwenNativeBaseCloneSegmentRequest,
+        runID: String,
+        instanceID: TuringQwenNativeFreshInstanceID
+    ) throws -> TuringQwenRenderedCodebookMaterialization {
+        try autoreleasepool {
+        let prompt = makePrompt(from: request)
+        TuringQwenNativeMemoryControl.configureForBaseClone(
+            performanceMode: prompt.performanceMode
+        )
+        let phaseStartedAt = Date()
+        trace.stageStarted(.fullGenerate)
+        defer { trace.stageCompleted(.fullGenerate) }
+
+        print("""
+        [TuringSegmentPipeline] render started
+          runID: \(runID)
+          segmentIndex: \(request.segmentIndex)
+          instanceID: \(instanceID.rawValue)
+          voiceID: \(prompt.cloneProfile.voiceID)
+        """)
+
+        do {
+            let generated = try generateCodebookForDecode(prompt)
+            try prompt.generationQualityPolicy.validateBeforeDecode(
+                voiceID: prompt.cloneProfile.voiceID,
+                generatedRowCount: generated.generatedRows.count,
+                maxNewRows: prompt.maxNewRows,
+                reachedEOS: generated.reachedEOS
+            )
+            let codebookCount = generated.generatedRows.first?.count
+                ?? generated.referenceRows.first?.count
+                ?? 0
+            guard codebookCount > 0 else {
+                throw TuringQwenNativeError.invalidConfig(
+                    "Rendered codebooks contain no codebook columns."
+                )
+            }
+            let referenceCodes = try materializeCPUCodebooks(
+                generated.referenceRows,
+                codebookCount: codebookCount
+            )
+            let generatedCodes = try materializeCPUCodebooks(
+                generated.generatedRows,
+                codebookCount: codebookCount
+            )
+            let result = TuringQwenRenderedCodebookMaterialization(
+                runID: runID,
+                instanceID: instanceID,
+                segmentIndex: request.segmentIndex,
+                voiceID: prompt.cloneProfile.voiceID,
+                referenceCodes: referenceCodes,
+                generatedCodes: generatedCodes,
+                referenceRowCount: generated.referenceRows.count,
+                generatedRowCount: generated.generatedRows.count,
+                codebookCount: codebookCount,
+                reachedEOS: generated.reachedEOS,
+                performanceMode: request.performanceMode,
+                renderMetrics: TuringQwenRenderPhaseMetrics(
+                    elapsedSeconds: Date().timeIntervalSince(phaseStartedAt),
+                    initialPromptSeconds: generated.initialPromptSeconds,
+                    initialTalkerForwardSeconds: generated.initialTalkerForwardSeconds,
+                    talkerOneStepTotalSeconds: generated.talkerOneStepTotalSeconds,
+                    codePredictorTotalSeconds: generated.codePredictorTotalSeconds
+                )
+            )
+            let memory = TuringQwenNativeProcessMemoryProbe.snapshot()
+            print("""
+            [TuringSegmentPipeline] render completed
+              runID: \(runID)
+              segmentIndex: \(request.segmentIndex)
+              instanceID: \(instanceID.rawValue)
+              generatedRows: \(result.generatedRowCount)
+              referenceRows: \(result.referenceRowCount)
+              reachedEOS: \(result.reachedEOS)
+              elapsedSeconds: \(String(format: "%.3f", Date().timeIntervalSince(phaseStartedAt)))
+              physFootprintMB: \(String(format: "%.1f", memory.physFootprintMB))
+              residentSizeMB: \(String(format: "%.1f", memory.residentSizeMB))
+            """)
+            return result
+        } catch {
+            print("""
+            [TuringSegmentPipeline] render failed
+              runID: \(runID)
+              segmentIndex: \(request.segmentIndex)
+              instanceID: \(instanceID.rawValue)
+              error: \(error.localizedDescription)
+            """)
+            throw error
+        }
+        }
+    }
+
+    public func releaseRequestWorkingSet(
+        runID: String,
+        segmentIndex: Int,
+        reason: String
+    ) {
+        TuringQwenNativeMemoryControl.clearCache(
+            label: "baseClone.requestReleased.\(runID).\(segmentIndex).\(reason)",
+            shouldLogSnapshot: true
+        )
+        let memory = TuringQwenNativeProcessMemoryProbe.snapshot()
+        print("""
+        [TuringSegmentPipeline] render working set released
+          runID: \(runID)
+          segmentIndex: \(segmentIndex)
+          reason: \(reason)
+          residentModelRetained: \(sharedResidentResources != nil)
+          physFootprintMB: \(String(format: "%.1f", memory.physFootprintMB))
+          residentSizeMB: \(String(format: "%.1f", memory.residentSizeMB))
+        """)
+    }
+
+    private func materializeCPUCodebooks(
+        _ rows: [[Int]],
+        codebookCount: Int
+    ) throws -> ContiguousArray<Int32> {
+        var codes = ContiguousArray<Int32>()
+        codes.reserveCapacity(rows.count * codebookCount)
+        for row in rows {
+            guard row.count == codebookCount else {
+                throw TuringQwenNativeError.invalidConfig(
+                    "Rendered codebook rows have inconsistent widths."
+                )
+            }
+            for value in row {
+                guard let code = Int32(exactly: value) else {
+                    throw TuringQwenNativeError.invalidConfig(
+                        "Rendered codebook value exceeds Int32 storage."
+                    )
+                }
+                codes.append(code)
+            }
+        }
+        return codes
+    }
+
     private func generateCodebookForDecode(
         _ prompt: TuringQwenNativeBaseClonePrompt
     ) throws -> GeneratedCodebookForDecode {
@@ -276,7 +447,7 @@ public actor TuringQwenNativeBaseCloneEngine {
             )
             if prompt.performanceMode.shouldLogMemorySnapshots {
                 print("""
-                [TuringQwenNativeBaseClone] resident talker state released before decode
+                [TuringQwenNativeBaseClone] render temporaries scoped for release
                   reason: codebookRowsReady
                   residentWeights: \(sharedResidentResources == nil ? "false" : "sharedWeightsRetained")
                 """)
@@ -512,6 +683,23 @@ public actor TuringQwenNativeBaseCloneEngine {
             conditioning: conditioning,
             prompt: preparedPrompt,
             report: report
+        )
+    }
+
+    private func makePrompt(
+        from request: TuringQwenNativeBaseCloneSegmentRequest
+    ) -> TuringQwenNativeBaseClonePrompt {
+        TuringQwenNativeBaseClonePrompt(
+            text: request.text,
+            language: request.language,
+            cloneProfile: request.cloneProfile,
+            maxNewRows: request.maxNewRows,
+            performanceMode: request.performanceMode,
+            referenceRowLimit: request.referenceRowLimit,
+            referenceWindowStrategy: request.referenceWindowStrategy,
+            samplingPolicy: request.samplingPolicy,
+            samplingSeed: request.samplingSeed,
+            generationQualityPolicy: request.generationQualityPolicy
         )
     }
 

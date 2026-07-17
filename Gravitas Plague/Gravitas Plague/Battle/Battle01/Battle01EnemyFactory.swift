@@ -52,7 +52,13 @@ final class Battle01EnemyFactory {
             hitsToKill: storyHitsToKill,
             attributes: attributes
         )
+        TuringMemoryBudgetProbe.log(
+            label: "beforeBattle01GrandmaLoad"
+        )
         try await source.loadIfNeeded()
+        TuringMemoryBudgetProbe.log(
+            label: "afterBattle01GrandmaLoad"
+        )
         source.prepareFreshStoryBattleSpawn()
         source.configureIncomingPunchPolicy(
             .storyGrandmaThreeX,
@@ -121,6 +127,9 @@ final class Battle01EnemyFactory {
             source: source,
             portalWorldRoot: doorContext.portalWorldRoot,
             portalPlaneEntity: doorContext.portalPlane
+        )
+        TuringMemoryBudgetProbe.log(
+            label: "afterBattle01PortalMirrorCreated"
         )
         source.rootEntity.isEnabled = false
 

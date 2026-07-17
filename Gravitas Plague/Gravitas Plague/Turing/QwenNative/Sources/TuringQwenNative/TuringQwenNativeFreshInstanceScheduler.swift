@@ -20,18 +20,17 @@ public struct TuringQwenNativeFreshSegmentSkip: Sendable {
 public actor TuringQwenNativeFreshInstanceScheduler {
     private let instancePool: TuringQwenNativeFreshInstancePool
 
-    public init(
-        instancePool: TuringQwenNativeFreshInstancePool
-    ) {
+    public init(instancePool: TuringQwenNativeFreshInstancePool) {
         self.instancePool = instancePool
     }
 
-    public func renderSegments(
+    public func runSegments(
         _ requests: [TuringQwenNativeBaseCloneSegmentRequest],
         runID: String,
+        modelRoot: URL,
         skipSegmentFailures: Bool = false,
         onSegmentStarted: @Sendable @escaping (TuringQwenNativeFreshInstanceID, Int) async -> Void,
-        onSegmentFinished: @Sendable @escaping (TuringQwenNativeFreshSegmentResult) async throws -> Void,
+        onSegmentDecoded: @Sendable @escaping (TuringQwenDecodedSegment) async throws -> Void,
         onSegmentSkipped: @Sendable @escaping (TuringQwenNativeFreshSegmentSkip) async -> Void = { _ in }
     ) async throws -> TuringQwenNativeFreshInstanceRunReport {
         guard requests.isEmpty == false else {
@@ -43,8 +42,27 @@ public actor TuringQwenNativeFreshInstanceScheduler {
         let instances = try await instancePool.warmedInstancesExactlyRequestedCount()
         let requested = await instancePool.requestedInstanceCount
         let actual = instances.count
+        guard requested == 2, actual == 2 else {
+            throw TuringQwenNativeError.invalidConfig(
+                "Fresh2 requires exactly two warmed instances."
+            )
+        }
+
         let runStart = Date()
-        let workQueue = TuringQwenNativeFreshInstanceWorkQueue(totalCount: requests.count)
+        let renderPhaseState = TuringQwenRenderPhaseState()
+        try await renderPhaseState.beginRun(runID: runID)
+        let releaseLedger = TuringQwenRenderReleaseLedger()
+        let decodeCoordinator = TuringQwenNativeSpeechDecodeCoordinator(
+            releaseLedger: releaseLedger,
+            renderPhaseState: renderPhaseState
+        )
+        let decodeToken = try await decodeCoordinator.beginRun(
+            runID: runID,
+            modelRoot: modelRoot
+        )
+        let workQueue = TuringQwenNativeFreshInstanceWorkQueue(
+            totalCount: requests.count
+        )
         let metricsCollector = TuringQwenNativeFreshInstanceMetricsCollector(
             instanceIDs: instances.map(\.id)
         )
@@ -56,107 +74,147 @@ public actor TuringQwenNativeFreshInstanceScheduler {
           actualInstanceCount: \(actual)
           skipSegmentFailures: \(skipSegmentFailures)
           sharedWeights: false
+          dynamicWorkerQueue: true
+          globalRenderBarrier: false
+          freshPathUsesLegacyDecodeGate: false
           fallbackUsed: false
         """)
         await metricsCollector.sampleMemory(label: "runStarted")
 
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            for instance in instances {
-                group.addTask {
-                    while let requestIndex = await workQueue.nextIndex() {
-                        let request = requests[requestIndex]
-                        let instanceID = instance.id
-                        print("""
-                        [TuringQwenFresh2] segment scheduled
-                          segmentIndex: \(request.segmentIndex)
-                          instanceID: \(instanceID.rawValue)
-                        """)
-                        await metricsCollector.sampleMemory(
-                            label: "segmentScheduled.\(request.segmentIndex)"
-                        )
-                        await onSegmentStarted(instanceID, request.segmentIndex)
+        do {
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                for instance in instances {
+                    group.addTask {
+                        while Task.isCancelled == false,
+                              let requestIndex = await workQueue.nextIndex() {
+                            try Task.checkCancellation()
+                            let request = requests[requestIndex]
+                            let instanceID = instance.id
 
-                        let renderStart = Date()
-                        let audio: TuringQwenNativeAudio
-                        do {
-                            audio = try await instance.generate(request)
-                        } catch {
-                            let renderSeconds = Date().timeIntervalSince(renderStart)
-                            await metricsCollector.sampleMemory(
-                                label: "segmentFailed.\(request.segmentIndex)"
+                            await renderPhaseState.renderStarted(
+                                runID: runID,
+                                segmentIndex: request.segmentIndex,
+                                instanceID: instanceID
                             )
-                            if skipSegmentFailures ||
-                                Self.isSkippableEOSBeforeGeneratedAudio(error) {
-                                let reason = Self.isSkippableEOSBeforeGeneratedAudio(error)
-                                    ? "eosBeforeGeneratedAudio"
-                                    : "qwenSegmentFailure"
-                                print("""
-                                [TuringQwenFresh2] segment skipped
-                                  segmentIndex: \(request.segmentIndex)
-                                  instanceID: \(instanceID.rawValue)
-                                  renderSeconds: \(String(format: "%.3f", renderSeconds))
-                                  reason: \(reason)
-                                  error: \(error.localizedDescription)
-                                  spokenUTF16: \(request.text.utf16.count)
-                                  spokenText:
-                                ---BEGIN_TURING_SKIPPED_QWEN_SEGMENT---
-                                \(request.text)
-                                ---END_TURING_SKIPPED_QWEN_SEGMENT---
-                                """)
-                                await onSegmentSkipped(
-                                    TuringQwenNativeFreshSegmentSkip(
-                                        instanceID: instanceID,
-                                        segmentIndex: request.segmentIndex,
-                                        errorDescription: error.localizedDescription
+                            await onSegmentStarted(instanceID, request.segmentIndex)
+                            await metricsCollector.sampleMemory(
+                                label: "render.started.\(request.segmentIndex)"
+                            )
+
+                            let rendered: TuringQwenRenderedCodebookSegment
+                            do {
+                                rendered = try await instance.renderCodebookAndRelease(
+                                    request,
+                                    runID: runID,
+                                    releaseLedger: releaseLedger
+                                )
+                            } catch {
+                                await renderPhaseState.renderReleased(
+                                    runID: runID,
+                                    segmentIndex: request.segmentIndex,
+                                    instanceID: instanceID
+                                )
+                                await metricsCollector.sampleMemory(
+                                    label: "render.failed.\(request.segmentIndex)"
+                                )
+                                if skipSegmentFailures || Self.isSkippableEOSBeforeGeneratedAudio(error) {
+                                    await onSegmentSkipped(
+                                        TuringQwenNativeFreshSegmentSkip(
+                                            instanceID: instanceID,
+                                            segmentIndex: request.segmentIndex,
+                                            errorDescription: error.localizedDescription
+                                        )
+                                    )
+                                    continue
+                                }
+                                throw error
+                            }
+
+                            await renderPhaseState.renderReleased(
+                                runID: runID,
+                                segmentIndex: request.segmentIndex,
+                                instanceID: instanceID
+                            )
+                            await metricsCollector.sampleMemory(
+                                label: "render.released.\(request.segmentIndex)"
+                            )
+
+                            do {
+                                let decoded = try await decodeCoordinator.decode(
+                                    rendered,
+                                    token: decodeToken
+                                )
+                                try request.generationQualityPolicy.validateAfterDecode(
+                                    voiceID: rendered.voiceID,
+                                    generatedRowCount: rendered.generatedRowCount,
+                                    peakAbs: decoded.audio.peakAbs,
+                                    rms: decoded.audio.rms,
+                                    durationSeconds: decoded.audio.durationSeconds
+                                )
+
+                                // Publication returns after the file-backed clip is queued.
+                                // It does not wait for playback completion.
+                                try await onSegmentDecoded(decoded)
+                                await metricsCollector.record(
+                                    TuringQwenNativeFreshInstanceSegmentMetrics(
+                                        instanceID: decoded.instanceID,
+                                        segmentIndex: decoded.segmentIndex,
+                                        renderSeconds: rendered.renderMetrics.elapsedSeconds,
+                                        audioDurationSeconds: decoded.audio.durationSeconds
                                     )
                                 )
-                                continue
+                                await metricsCollector.sampleMemory(
+                                    label: "segmentPublished.\(decoded.segmentIndex)"
+                                )
+                                print("""
+                                [TuringSegmentPipeline] audio published
+                                  runID: \(runID)
+                                  segmentIndex: \(decoded.segmentIndex)
+                                  instanceID: \(decoded.instanceID.rawValue)
+                                  audioDurationSeconds: \(String(format: "%.3f", decoded.audio.durationSeconds))
+                                """)
+                                print("""
+                                [TuringSegmentPipeline] worker advanced
+                                  runID: \(runID)
+                                  segmentIndex: \(decoded.segmentIndex)
+                                  instanceID: \(decoded.instanceID.rawValue)
+                                """)
+                            } catch {
+                                if skipSegmentFailures || Self.isSkippableEOSBeforeGeneratedAudio(error) {
+                                    await onSegmentSkipped(
+                                        TuringQwenNativeFreshSegmentSkip(
+                                            instanceID: instanceID,
+                                            segmentIndex: request.segmentIndex,
+                                            errorDescription: error.localizedDescription
+                                        )
+                                    )
+                                    continue
+                                }
+                                throw error
                             }
-                            print("""
-                            [TuringQwenFresh2] segment failed
-                              segmentIndex: \(request.segmentIndex)
-                              instanceID: \(instanceID.rawValue)
-                              renderSeconds: \(String(format: "%.3f", renderSeconds))
-                              error: \(error.localizedDescription)
-                            """)
-                            throw error
                         }
-                        let renderSeconds = Date().timeIntervalSince(renderStart)
-                        let result = TuringQwenNativeFreshSegmentResult(
-                            instanceID: instanceID,
-                            segmentIndex: request.segmentIndex,
-                            audio: audio,
-                            renderSeconds: renderSeconds
-                        )
-                        await metricsCollector.record(
-                            TuringQwenNativeFreshInstanceSegmentMetrics(
-                                instanceID: instanceID,
-                                segmentIndex: request.segmentIndex,
-                                renderSeconds: renderSeconds,
-                                audioDurationSeconds: audio.durationSeconds
-                            )
-                        )
-                        await metricsCollector.sampleMemory(
-                            label: "segmentFinished.\(request.segmentIndex)"
-                        )
-                        print("""
-                        [TuringQwenFresh2] segment finished
-                          segmentIndex: \(request.segmentIndex)
-                          instanceID: \(instanceID.rawValue)
-                          renderSeconds: \(String(format: "%.3f", renderSeconds))
-                          audioDurationSeconds: \(String(format: "%.3f", audio.durationSeconds))
-                          realTimeFactor: \(String(format: "%.3f", audio.durationSeconds > 0 ? renderSeconds / audio.durationSeconds : 0))
-                        """)
-                        try await onSegmentFinished(result)
                     }
                 }
+
+                try await group.waitForAll()
             }
 
-            try await group.waitForAll()
+            await decodeCoordinator.finishRun(decodeToken)
+            await releaseLedger.clearRun(runID)
+        } catch {
+            await workQueue.cancel()
+            await decodeCoordinator.cancelRun(
+                decodeToken,
+                reason: error.localizedDescription
+            )
+            await decodeCoordinator.finishRun(decodeToken)
+            await releaseLedger.clearRun(runID)
+            throw error
         }
 
         await metricsCollector.sampleMemory(label: "runFinished")
         let metrics = await metricsCollector.snapshot()
+        let overlap = await renderPhaseState.snapshot()
         return TuringQwenNativeFreshInstanceRunReport(
             requestedInstanceCount: requested,
             actualInstanceCount: actual,
@@ -169,6 +227,10 @@ public actor TuringQwenNativeFreshInstanceScheduler {
             sampledPeakResidentSizeMB: metrics.sampledPeakResidentSizeMB,
             peakMLXActiveMemoryMB: metrics.peakMLXActiveMemoryMB,
             peakMLXCacheMemoryMB: metrics.peakMLXCacheMemoryMB,
+            peakRenderConcurrency: overlap.peakActiveRenderCount,
+            peakDecodeConcurrency: metrics.successfulSegmentCount > 0 ? 1 : 0,
+            sameSegmentRenderDecodeOverlapCount: overlap.sameSegmentRenderDecodeOverlapCount,
+            crossSegmentRenderDecodeOverlapCount: overlap.crossSegmentRenderDecodeOverlapCount,
             fallbackUsed: false
         )
     }
@@ -183,21 +245,25 @@ public actor TuringQwenNativeFreshInstanceScheduler {
     }
 }
 
-private actor TuringQwenNativeFreshInstanceWorkQueue {
+actor TuringQwenNativeFreshInstanceWorkQueue {
     private let totalCount: Int
-    private var next = 0
+    private var nextRequestIndex = 0
+    private var isCancelled = false
 
     init(totalCount: Int) {
         self.totalCount = totalCount
     }
 
     func nextIndex() -> Int? {
-        guard next < totalCount else {
+        guard isCancelled == false, nextRequestIndex < totalCount else {
             return nil
         }
-        let index = next
-        next += 1
-        return index
+        defer { nextRequestIndex += 1 }
+        return nextRequestIndex
+    }
+
+    func cancel() {
+        isCancelled = true
     }
 }
 
@@ -209,6 +275,7 @@ private actor TuringQwenNativeFreshInstanceMetricsCollector {
     private var sampledPeakResidentSizeMB: Double = 0
     private var peakMLXActiveMemoryMB: Double = 0
     private var peakMLXCacheMemoryMB: Double = 0
+    private var successfulSegmentCount = 0
 
     init(instanceIDs: [TuringQwenNativeFreshInstanceID]) {
         self.instanceIDs = instanceIDs
@@ -224,28 +291,17 @@ private actor TuringQwenNativeFreshInstanceMetricsCollector {
         }
         perInstanceRenderSeconds[index] += metrics.renderSeconds
         perInstanceGeneratedAudioSeconds[index] += metrics.audioDurationSeconds
+        successfulSegmentCount += 1
     }
 
     func sampleMemory(label: String) {
         let processMemory = TuringQwenNativeProcessMemoryProbe.snapshot()
         let mlxMemory = Self.mlxMemorySnapshotMegabytes()
 
-        sampledPeakPhysFootprintMB = max(
-            sampledPeakPhysFootprintMB,
-            processMemory.physFootprintMB
-        )
-        sampledPeakResidentSizeMB = max(
-            sampledPeakResidentSizeMB,
-            processMemory.residentSizeMB
-        )
-        peakMLXActiveMemoryMB = max(
-            peakMLXActiveMemoryMB,
-            mlxMemory.active
-        )
-        peakMLXCacheMemoryMB = max(
-            peakMLXCacheMemoryMB,
-            mlxMemory.cache
-        )
+        sampledPeakPhysFootprintMB = max(sampledPeakPhysFootprintMB, processMemory.physFootprintMB)
+        sampledPeakResidentSizeMB = max(sampledPeakResidentSizeMB, processMemory.residentSizeMB)
+        peakMLXActiveMemoryMB = max(peakMLXActiveMemoryMB, mlxMemory.active)
+        peakMLXCacheMemoryMB = max(peakMLXCacheMemoryMB, mlxMemory.cache)
 
         print("""
         [TuringQwenFresh2] memory sampled
@@ -265,7 +321,8 @@ private actor TuringQwenNativeFreshInstanceMetricsCollector {
             sampledPeakPhysFootprintMB: sampledPeakPhysFootprintMB,
             sampledPeakResidentSizeMB: sampledPeakResidentSizeMB,
             peakMLXActiveMemoryMB: peakMLXActiveMemoryMB,
-            peakMLXCacheMemoryMB: peakMLXCacheMemoryMB
+            peakMLXCacheMemoryMB: peakMLXCacheMemoryMB,
+            successfulSegmentCount: successfulSegmentCount
         )
     }
 
@@ -285,6 +342,7 @@ private actor TuringQwenNativeFreshInstanceMetricsCollector {
         let sampledPeakResidentSizeMB: Double
         let peakMLXActiveMemoryMB: Double
         let peakMLXCacheMemoryMB: Double
+        let successfulSegmentCount: Int
 
         var totalGeneratedAudioSeconds: Double {
             perInstanceGeneratedAudioSeconds.reduce(0, +)

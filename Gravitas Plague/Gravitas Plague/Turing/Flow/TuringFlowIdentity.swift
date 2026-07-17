@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-struct TuringFlowIdentity: Sendable, Hashable {
+nonisolated struct TuringFlowIdentity: Sendable, Hashable {
     let flowInstanceID: UUID
     let scriptPointID: String
     let characterID: String
@@ -25,7 +25,7 @@ struct TuringFlowIdentity: Sendable, Hashable {
     }
 }
 
-enum TuringFlowHash {
+nonisolated enum TuringFlowHash {
     static func sha256(_ text: String) -> String {
         let digest = SHA256.hash(data: Data(text.utf8))
         return digest.map {
@@ -34,7 +34,7 @@ enum TuringFlowHash {
     }
 }
 
-enum TuringFlowLog {
+nonisolated enum TuringFlowLog {
     static func event(
         _ name: String,
         identity: TuringFlowIdentity,

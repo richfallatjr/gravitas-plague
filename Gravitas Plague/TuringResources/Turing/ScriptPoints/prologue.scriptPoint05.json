@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 2,
+  "scriptPointID": "prologue.scriptPoint05",
+  "trigger": {
+    "kind": "priorConversationPlaybackCompleted",
+    "delaySeconds": 2
+  },
+  "transmission": {
+    "prerecordingID": "prologue.walkie.bigMike.scriptPoint05.001",
+    "voicePromptID": null,
+    "characterID": "big_mike",
+    "conversationKey": "dialogue.big_mike.rich",
+    "outputRoute": "walkieSpatial",
+    "computeStart": "withPrerecording",
+    "fillerMode": "continuousFromPrerecordingToGenerated",
+    "commSFX": {
+      "openBeforePrerecording": false,
+      "sendAfterGenerated": false,
+      "sendingLeadInAfterGeneratedSeconds": null
+    },
+    "fixedLeadInSeconds": null,
+    "generationPipeline": {
+      "schemaVersion": 1,
+      "radioBridgeMode": "bigMikeStaticAndFiller",
+      "stages": [
+        {
+          "stageID": "publicAdvisory",
+          "kind": "voiceScriptLongform",
+          "sourceResourcePath": "Turing/Scripts/Prologue/prologue.scriptPoint05.bigMike.voiceScript.txt",
+          "voicePromptID": null,
+          "defaultEmotion": "measured, official, uneasy, reading carefully",
+          "contextSource": {
+            "kind": "prerecordingTranscript",
+            "stageID": null
+          }
+        },
+        {
+          "stageID": "personalFollowUp",
+          "kind": "voicePrompt",
+          "sourceResourcePath": null,
+          "voicePromptID": "prologue.bigMike.scriptPoint05.followUp.001",
+          "defaultEmotion": "controlled, uneasy, protective, trying to sound casual",
+          "contextSource": {
+            "kind": "prerecordingTranscript",
+            "stageID": null
+          }
+        }
+      ]
+    }
+  },
+  "progression": {
+    "nextScriptPointID": null,
+    "automaticAdvance": false,
+    "interactionGateAfterCompletion": "microphone"
+  }
+}

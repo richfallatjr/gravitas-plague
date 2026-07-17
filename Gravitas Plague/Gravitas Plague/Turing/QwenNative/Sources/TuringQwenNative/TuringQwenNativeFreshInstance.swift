@@ -60,10 +60,13 @@ public actor TuringQwenNativeFreshInstance {
       """)
   }
 
-  public func generate(
+  public func renderCodebookAndRelease(
     _ request:
-      TuringQwenNativeBaseCloneSegmentRequest
-  ) async throws -> TuringQwenNativeAudio {
+      TuringQwenNativeBaseCloneSegmentRequest,
+    runID: String,
+    releaseLedger:
+      TuringQwenRenderReleaseLedger
+  ) async throws -> TuringQwenRenderedCodebookSegment {
     guard
       let engine =
         baseCloneEngine
@@ -75,49 +78,57 @@ public actor TuringQwenNativeFreshInstance {
         )
     }
 
-    let prompt =
-      TuringQwenNativeBaseClonePrompt(
-        text: request.text,
-        language: request.language,
-        cloneProfile:
-          request.cloneProfile,
-        maxNewRows:
-          request.maxNewRows,
-        performanceMode:
-          request.performanceMode,
-        referenceRowLimit:
-          request.referenceRowLimit,
-        referenceWindowStrategy:
-          request
-          .referenceWindowStrategy,
-        samplingPolicy:
-          request.samplingPolicy,
-        samplingSeed:
-          request.samplingSeed,
-        generationQualityPolicy:
-          request
-          .generationQualityPolicy
+    let materialized = try await engine
+      .materializeRenderedSegmentAndRelease(
+        request: request,
+        runID: runID,
+        instanceID: id
       )
 
-    let audio =
-      try await engine
-      .generateBaseClone(
-        prompt: prompt
+    let releaseToken =
+      TuringQwenRenderReleaseToken(
+        runID: runID,
+        segmentIndex:
+          request.segmentIndex,
+        instanceID: id
       )
+    await releaseLedger.record(
+      releaseToken
+    )
 
-    await releaseRequestLocalState()
-    return audio
-  }
+    print(
+      """
+      [TuringSegmentPipeline] render release committed
+        runID: \(runID)
+        segmentIndex: \(request.segmentIndex)
+        instanceID: \(id.rawValue)
+        releaseID: \(releaseToken.releaseID.uuidString)
+        waitsForOtherFreshWorker: false
+      """)
 
-  public func releaseRequestLocalState()
-    async
-  {
-    await baseCloneEngine?
-      .releaseResidentState(
-        reason:
-          "\(id.rawValue).requestFinished",
-        logMemorySnapshot: false
-      )
+    return TuringQwenRenderedCodebookSegment(
+      runID: materialized.runID,
+      instanceID: materialized.instanceID,
+      segmentIndex:
+        materialized.segmentIndex,
+      voiceID: materialized.voiceID,
+      referenceCodes:
+        materialized.referenceCodes,
+      generatedCodes:
+        materialized.generatedCodes,
+      referenceRowCount:
+        materialized.referenceRowCount,
+      generatedRowCount:
+        materialized.generatedRowCount,
+      codebookCount:
+        materialized.codebookCount,
+      reachedEOS: materialized.reachedEOS,
+      performanceMode:
+        materialized.performanceMode,
+      renderMetrics:
+        materialized.renderMetrics,
+      releaseToken: releaseToken
+    )
   }
 
   public func unload() async {

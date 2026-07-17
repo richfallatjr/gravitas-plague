@@ -520,9 +520,7 @@ final class TuringFlowEngineParityTests:
                         rendererFailure
                 ),
             seedStore:
-                TuringConversationSeedStore(),
-            historyStore:
-                TuringDialogueHistoryStore()
+                TuringConversationSeedStore()
         )
 
         return Harness(

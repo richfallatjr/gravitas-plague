@@ -315,9 +315,10 @@ actor TuringCharacterQwenRenderer:
 
       let report =
         try await scheduler
-        .renderSegments(
+        .runSegments(
           requests,
           runID: runID,
+          modelRoot: stagedModel,
           skipSegmentFailures:
             runtime.qwen
             .skipSegmentFailures,
@@ -329,7 +330,7 @@ actor TuringCharacterQwenRenderer:
               segmentIndex
             )
           },
-          onSegmentFinished: {
+          onSegmentDecoded: {
             result in
 
             await state

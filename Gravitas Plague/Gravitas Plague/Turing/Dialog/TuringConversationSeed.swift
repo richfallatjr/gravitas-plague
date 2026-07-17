@@ -25,33 +25,37 @@ struct TuringConversationSeed: Codable, Sendable, Hashable {
 
 }
 
+struct TuringPromptVoiceSeed: Sendable, Equatable {
+    let voicePromptID: String
+    let promptContext: String
+}
+
 actor TuringConversationSeedStore {
     static let shared = TuringConversationSeedStore()
 
-    private var seedsByKey: [String: TuringConversationSeed] = [:]
+    private var promptVoiceSeedsByKey: [String: TuringPromptVoiceSeed] = [:]
     private var prerecordingIDByKey: [String: String] = [:]
     private var prerecordingTranscriptByKey: [String: String] = [:]
-
-    func seed(for key: String) -> TuringConversationSeed {
-        seedsByKey[key] ?? .empty
-    }
 
     func prerecordingTranscript(for key: String) -> String {
         prerecordingTranscriptByKey[key] ?? ""
     }
 
-    func updateSeed(_ seed: TuringConversationSeed?, for key: String) {
-        guard let seed else { return }
-        if seed.isEmptySeed {
-            seedsByKey.removeValue(forKey: key)
-        } else {
-            seedsByKey[key] = seed
-        }
+    func promptVoiceSeed(for key: String) -> TuringPromptVoiceSeed? {
+        promptVoiceSeedsByKey[key]
+    }
+
+    func updatePromptVoiceSeed(
+        _ seed: TuringPromptVoiceSeed,
+        for key: String
+    ) {
+        promptVoiceSeedsByKey[key] = seed
         print("""
-        [TuringConversationSeed] updated
+        [TuringConversationSeed] promptVoice seed updated
           key: \(key)
-          seedID: \(seed.seedID)
-          empty: \(seed.isEmptySeed)
+          voicePromptID: \(seed.voicePromptID)
+          promptContextUTF16: \(seed.promptContext.utf16.count)
+          promptContextSHA256: \(TuringFlowHash.sha256(seed.promptContext))
         """)
     }
 
@@ -71,13 +75,13 @@ actor TuringConversationSeedStore {
     }
 
     func clear(key: String) {
-        seedsByKey.removeValue(forKey: key)
+        promptVoiceSeedsByKey.removeValue(forKey: key)
         prerecordingIDByKey.removeValue(forKey: key)
         prerecordingTranscriptByKey.removeValue(forKey: key)
     }
 
     func clearAll(reason: String) {
-        seedsByKey.removeAll(keepingCapacity: false)
+        promptVoiceSeedsByKey.removeAll(keepingCapacity: false)
         prerecordingIDByKey.removeAll(keepingCapacity: false)
         prerecordingTranscriptByKey.removeAll(keepingCapacity: false)
         print("""

@@ -37,8 +37,6 @@ actor TuringEpisodeFlowController {
         any TuringFlowDescriptorLoading
     private let seedStore:
         TuringConversationSeedStore
-    private let historyStore:
-        TuringDialogueHistoryStore
     private let catalogValidator:
         (any TuringFlowCatalogValidating)?
 
@@ -58,8 +56,6 @@ actor TuringEpisodeFlowController {
                 TuringFlowDescriptorStore(),
         seedStore:
             TuringConversationSeedStore = .shared,
-        historyStore:
-            TuringDialogueHistoryStore = .shared,
         catalogValidator:
             (any TuringFlowCatalogValidating)? =
                 TuringFlowCatalogValidator()
@@ -67,7 +63,6 @@ actor TuringEpisodeFlowController {
         self.engine = engine
         self.descriptorStore = descriptorStore
         self.seedStore = seedStore
-        self.historyStore = historyStore
         self.catalogValidator = catalogValidator
     }
 
@@ -317,7 +312,8 @@ actor TuringEpisodeFlowController {
         switch (checkpoint, scriptPointID) {
         case (.notStarted, "prologue.scriptPoint01"),
              (.script01ConversationVoiceCompleted, "prologue.scriptPoint02"),
-             (.script02PromptVoiceCompleted, "prologue.scriptPoint03"):
+             (.script02PromptVoiceCompleted, "prologue.scriptPoint03"),
+             (.script04ConversationVoiceCompleted, "prologue.scriptPoint05"):
             allowed = true
         default:
             allowed = false
@@ -406,10 +402,6 @@ actor TuringEpisodeFlowController {
             reason:
                 "episodeFlowReset.\(reason)"
         )
-        await historyStore.clearAll(
-            reason:
-                "episodeFlowReset.\(reason)"
-        )
         await TuringFlowInteractionGateController
             .shared
             .reset(reason: reason)
@@ -445,7 +437,6 @@ actor TuringEpisodeFlowController {
             self.pendingConversationAdvance = nil
         }
         await seedStore.clearAll(reason: "storyTeleportRestore")
-        await historyStore.clearAll(reason: "storyTeleportRestore")
         print("""
         [TuringContinuation] episode flow restored
           completedScriptPointIDs: \(completedScriptPointIDs.sorted())

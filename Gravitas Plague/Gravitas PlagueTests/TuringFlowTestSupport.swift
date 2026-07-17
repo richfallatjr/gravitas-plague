@@ -793,7 +793,9 @@ enum TuringFlowTestFixtures {
                         nil
                 ),
                 fixedLeadInSeconds:
-                    fixedLeadIn
+                    fixedLeadIn,
+                generationPipeline:
+                    nil
             ),
             progression: .init(
                 nextScriptPointID: nil,

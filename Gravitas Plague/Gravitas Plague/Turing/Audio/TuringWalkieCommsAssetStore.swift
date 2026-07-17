@@ -1,7 +1,7 @@
 import Foundation
 
-struct TuringWalkieCommsAssetStore: Sendable {
-    enum AssetError: LocalizedError {
+nonisolated struct TuringWalkieCommsAssetStore: Sendable {
+    nonisolated enum AssetError: LocalizedError {
         case missing(String)
 
         var errorDescription: String? {

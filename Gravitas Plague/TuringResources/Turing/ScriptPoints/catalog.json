@@ -3,6 +3,8 @@
   "scriptPointIDs": [
     "prologue.scriptPoint01",
     "prologue.scriptPoint02",
-    "prologue.scriptPoint03"
+    "prologue.scriptPoint03",
+    "prologue.scriptPoint04",
+    "prologue.scriptPoint05"
   ]
 }

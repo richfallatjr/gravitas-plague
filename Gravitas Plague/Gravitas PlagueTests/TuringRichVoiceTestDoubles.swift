@@ -2,15 +2,12 @@ import Foundation
 
 @testable import Gravitas_Plague
 
-@MainActor
-final class FakeRichGlobalClipPlayer:
-  TuringRichGlobalClipPlaying
-{
+actor FakeRichGlobalClipPlayer: TuringAudioPlaybackEndpoint {
 
   struct StartedClip: Equatable {
-    let handle: TuringRichGlobalClipHandle
+    let handle: TuringAudioPlaybackHandle
     let fileURL: URL
-    let kind: TuringRichGlobalClipKind
+    let kind: TuringAudioClipKind
     let label: String
     let gainDB: Float
   }
@@ -18,65 +15,52 @@ final class FakeRichGlobalClipPlayer:
   private(set) var startedClips: [StartedClip] = []
   private(set) var cancelReasons: [String] = []
 
-  private var activeHandle: TuringRichGlobalClipHandle?
-  private var activeCompletion:
-    (
-      @MainActor (
-        TuringRichGlobalClipHandle,
-        Bool
-      ) -> Void
-    )?
+  private var activeHandle: TuringAudioPlaybackHandle?
+  private let eventHub = TuringAudioEventHub()
 
   @discardableResult
   func play(
-    fileURL: URL,
-    kind: TuringRichGlobalClipKind,
-    label: String,
-    gainDB: Float,
-    completion:
-      @escaping @MainActor (
-        TuringRichGlobalClipHandle,
-        Bool
-      ) -> Void
-  ) throws -> TuringRichGlobalClipHandle {
+    _ request: TuringAudioPlaybackRequest
+  ) async throws -> TuringAudioPlaybackHandle {
     precondition(
       activeHandle == nil,
       "Fake player allows one active clip."
     )
 
-    let handle =
-      TuringRichGlobalClipHandle(
-        id: UUID()
-      )
+    let handle = TuringAudioPlaybackHandle(
+      id: UUID(),
+      requestID: request.requestID,
+      runID: request.runID,
+      route: request.route
+    )
     activeHandle = handle
-    activeCompletion = completion
     startedClips.append(
       StartedClip(
         handle: handle,
-        fileURL: fileURL,
-        kind: kind,
-        label: label,
-        gainDB: gainDB
+        fileURL: request.fileURL,
+        kind: request.kind,
+        label: request.label,
+        gainDB: request.gainDB
       )
     )
+    await eventHub.yield(.started(handle))
     return handle
   }
 
-  func cancelActive(reason: String) {
+  func stop(
+    _ handle: TuringAudioPlaybackHandle,
+    reason: String
+  ) async {
+    guard activeHandle == handle else { return }
     cancelReasons.append(reason)
     activeHandle = nil
-    activeCompletion = nil
+    await eventHub.yield(.cancelled(handle, reason: reason))
   }
 
   func completeActive(
     successfully: Bool = true
-  ) {
-    guard
-      let handle =
-        activeHandle,
-      let completion =
-        activeCompletion
-    else {
+  ) async {
+    guard let handle = activeHandle else {
       assertionFailure(
         "No active fake Rich clip."
       )
@@ -84,10 +68,28 @@ final class FakeRichGlobalClipPlayer:
     }
 
     activeHandle = nil
-    activeCompletion = nil
-    completion(
-      handle,
-      successfully
+    await eventHub.yield(
+      .completed(handle, successfully: successfully)
     )
+  }
+
+  func events() async -> AsyncStream<TuringAudioPlaybackEvent> {
+    await eventHub.stream()
+  }
+
+  func startedKinds() -> [TuringAudioClipKind] {
+    startedClips.map(\.kind)
+  }
+
+  func lastStartedKind() -> TuringAudioClipKind? {
+    startedClips.last?.kind
+  }
+
+  func lastStartedLabel() -> String? {
+    startedClips.last?.label
+  }
+
+  func cancelReasonsSnapshot() -> [String] {
+    cancelReasons
   }
 }
