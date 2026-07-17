@@ -86,13 +86,11 @@ final class TuringStoryStateTeleportCoordinator {
             return "prologue.scriptPoint01"
         case .script03PromptVoiceCompleted:
             return "prologue.scriptPoint03"
-        case .script04PromptVoiceCompleted:
-            return "prologue.scriptPoint04"
-        case .script05PromptVoiceCompleted:
-            return "prologue.scriptPoint05"
         case .notStarted,
              .script01ConversationVoiceCompleted,
              .script02PromptVoiceCompleted,
+             .script04PromptVoiceCompleted,
+             .script05PromptVoiceCompleted,
              .script04ConversationVoiceCompleted:
             return nil
         }

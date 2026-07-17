@@ -130,7 +130,11 @@ enum TuringQwenNativeSpeechDecoder {
             config: config.decoderConfig,
             reader: reader
         )
-        materializeIfNeeded(hidden, label: "speechDecoder.quantizerDecode", performanceMode: performanceMode)
+        materializeDecoderStage(
+            hidden,
+            label: "speechDecoder.quantizerDecode",
+            performanceMode: performanceMode
+        )
 
         hidden = try causalConv1d(
             hidden,
@@ -139,7 +143,11 @@ enum TuringQwenNativeSpeechDecoder {
             kernelSize: 3,
             reader: reader
         )
-        materializeIfNeeded(hidden, label: "speechDecoder.preConv", performanceMode: performanceMode)
+        materializeDecoderStage(
+            hidden,
+            label: "speechDecoder.preConv",
+            performanceMode: performanceMode
+        )
 
         hidden = try runPreTransformer(
             hidden,
@@ -147,7 +155,11 @@ enum TuringQwenNativeSpeechDecoder {
             reader: reader,
             performanceMode: performanceMode
         )
-        materializeIfNeeded(hidden, label: "speechDecoder.preTransformer", performanceMode: performanceMode)
+        materializeDecoderStage(
+            hidden,
+            label: "speechDecoder.preTransformer",
+            performanceMode: performanceMode
+        )
 
         for upsampleIndex in 0..<config.decoderConfig.upsamplingRatios.count {
             let ratio = config.decoderConfig.upsamplingRatios[upsampleIndex]
@@ -165,7 +177,11 @@ enum TuringQwenNativeSpeechDecoder {
                 prefix: "decoder.upsample.\(upsampleIndex).1",
                 reader: reader
             )
-            materializeIfNeeded(hidden, label: "speechDecoder.upsample.\(upsampleIndex)", performanceMode: performanceMode)
+            materializeDecoderStage(
+                hidden,
+                label: "speechDecoder.upsample.\(upsampleIndex)",
+                performanceMode: performanceMode
+            )
         }
 
         hidden = try causalConv1d(
@@ -175,7 +191,11 @@ enum TuringQwenNativeSpeechDecoder {
             kernelSize: 7,
             reader: reader
         )
-        materializeIfNeeded(hidden, label: "speechDecoder.decoder.0", performanceMode: performanceMode)
+        materializeDecoderStage(
+            hidden,
+            label: "speechDecoder.decoder.0",
+            performanceMode: performanceMode
+        )
 
         for blockIndex in 0..<config.decoderConfig.upsampleRates.count {
             hidden = try decoderBlock(
@@ -184,7 +204,11 @@ enum TuringQwenNativeSpeechDecoder {
                 upsampleRate: config.decoderConfig.upsampleRates[blockIndex],
                 reader: reader
             )
-            materializeIfNeeded(hidden, label: "speechDecoder.decoder.\(blockIndex + 1)", performanceMode: performanceMode)
+            materializeDecoderStage(
+                hidden,
+                label: "speechDecoder.decoder.\(blockIndex + 1)",
+                performanceMode: performanceMode
+            )
         }
 
         hidden = try snakeBeta(
@@ -202,9 +226,10 @@ enum TuringQwenNativeSpeechDecoder {
         )
         let clipped = clip(hidden, min: -1.0, max: 1.0)
         eval(clipped)
-        if performanceMode.shouldClearMLXCacheEveryRow {
-            TuringQwenNativeMemoryControl.clearCache(label: "speechDecoder.output")
-        }
+        TuringQwenNativeMemoryControl.clearCache(
+            label: "speechDecoder.output",
+            shouldLogSnapshot: performanceMode.shouldLogMemorySnapshots
+        )
 
         let expectedSampleCount = codebookRows.count * config.decodeUpsampleRate
         let samples = Array(
@@ -322,7 +347,7 @@ enum TuringQwenNativeSpeechDecoder {
                 config: config,
                 reader: reader
             )
-            materializeIfNeeded(
+            materializeDecoderStage(
                 hidden,
                 label: "speechDecoder.preTransformer.layer.\(layerIndex)",
                 performanceMode: performanceMode
@@ -348,18 +373,30 @@ enum TuringQwenNativeSpeechDecoder {
         )
     }
 
-    private static func materializeIfNeeded(
+    private static func materializeDecoderStage(
         _ value: MLXArray,
         label: String,
         performanceMode: TuringQwenNativePerformanceMode
     ) {
-        guard performanceMode.shouldForceEveryEval else {
-            return
-        }
+        // Decoder weights are loaded as Float32 for each stage. Leaving these
+        // operations lazy retains the complete decoder graph until output eval,
+        // which can cross the visionOS high-water mark beside a Fresh render.
         eval(value)
-        if performanceMode.shouldClearMLXCacheEveryRow {
-            TuringQwenNativeMemoryControl.clearCache(label: label)
-        }
+        TuringQwenNativeMemoryControl.clearCache(
+            label: label,
+            shouldLogSnapshot: performanceMode.shouldLogMemorySnapshots
+        )
+        let mlx = Memory.snapshot()
+        let process = TuringQwenNativeProcessMemoryProbe.snapshot()
+        let bytesPerMegabyte = 1024.0 * 1024.0
+        print("""
+        [TuringSegmentPipeline] decode stage materialized
+          stage: \(label)
+          performanceMode: \(performanceMode.rawValue)
+          mlxActiveMB: \(String(format: "%.1f", Double(mlx.activeMemory) / bytesPerMegabyte))
+          mlxCacheMB: \(String(format: "%.1f", Double(mlx.cacheMemory) / bytesPerMegabyte))
+          physFootprintMB: \(String(format: "%.1f", process.physFootprintMB))
+        """)
     }
 
     private static func runTransformerLayer(

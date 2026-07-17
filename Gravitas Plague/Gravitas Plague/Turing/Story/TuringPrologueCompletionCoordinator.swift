@@ -40,20 +40,6 @@ final class TuringPrologueCompletionCoordinator: TuringPrologueCompletionEventSi
                 contentRevision: TuringStoryProgressStore.prologueContentRevision
             )
             battleRouter.scriptPointCompleted(event)
-        case "prologue.scriptPoint04":
-            try progress.commit(
-                episodeID: .prologue,
-                checkpoint: .script04PromptVoiceCompleted,
-                sourceEventID: event.eventID,
-                contentRevision: TuringStoryProgressStore.prologueContentRevision
-            )
-        case "prologue.scriptPoint05":
-            try progress.commit(
-                episodeID: .prologue,
-                checkpoint: .script05PromptVoiceCompleted,
-                sourceEventID: event.eventID,
-                contentRevision: TuringStoryProgressStore.prologueContentRevision
-            )
         default:
             break
         }
@@ -66,18 +52,12 @@ final class TuringPrologueCompletionCoordinator: TuringPrologueCompletionEventSi
         guard handledEventIDs.contains(event.eventID) == false else {
             return
         }
-        let checkpoint: TuringPrologueCheckpoint
-        switch event.parentScriptPointID {
-        case "prologue.scriptPoint01":
-            checkpoint = .script01ConversationVoiceCompleted
-        case "prologue.scriptPoint04":
-            checkpoint = .script04ConversationVoiceCompleted
-        default:
+        guard event.parentScriptPointID == "prologue.scriptPoint01" else {
             return
         }
         try progress.commit(
             episodeID: .prologue,
-            checkpoint: checkpoint,
+            checkpoint: .script01ConversationVoiceCompleted,
             sourceEventID: event.eventID,
             contentRevision: TuringStoryProgressStore.prologueContentRevision
         )

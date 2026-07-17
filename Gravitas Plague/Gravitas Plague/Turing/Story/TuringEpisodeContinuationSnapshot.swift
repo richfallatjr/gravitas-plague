@@ -10,6 +10,12 @@ enum TuringPrologueCheckpoint: Int, Codable, Sendable, Comparable, CaseIterable 
     case script04ConversationVoiceCompleted = 60
     case script05PromptVoiceCompleted = 70
 
+    static let latestSupportedContinuation: Self = .script03PromptVoiceCompleted
+
+    var supportedContinuationValue: Self {
+        min(self, Self.latestSupportedContinuation)
+    }
+
     static func < (lhs: Self, rhs: Self) -> Bool {
         lhs.rawValue < rhs.rawValue
     }

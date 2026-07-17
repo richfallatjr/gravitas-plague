@@ -59,7 +59,12 @@ final class TuringStoryProgressStore: ObservableObject {
                 invalidate("Story content revision does not match this build.")
                 return
             }
-            snapshot = value
+            let supportedValue = supportedSnapshot(from: value)
+            if supportedValue != value {
+                try persist(supportedValue)
+                print("[TuringContinuation] later checkpoint migrated to Battle01 start requested=\(value.checkpoint) effective=\(supportedValue.checkpoint)")
+            }
+            snapshot = supportedValue
         } catch {
             invalidate(error.localizedDescription)
         }
@@ -75,12 +80,16 @@ final class TuringStoryProgressStore: ObservableObject {
         guard contentRevision == Self.prologueContentRevision else {
             throw TuringStoryContinuationError.contentRevisionMismatch
         }
+        let supportedCheckpoint = checkpoint.supportedContinuationValue
+        if supportedCheckpoint != checkpoint {
+            print("[TuringContinuation] later checkpoint capped at Battle01 start requested=\(checkpoint) effective=\(supportedCheckpoint)")
+        }
         if let current = snapshot, current.sourceEventID == sourceEventID {
             return current
         }
         if let current = snapshot, current.episodeID == episodeID {
-            guard checkpoint > current.checkpoint else {
-                print("[TuringContinuation] non-advancing checkpoint ignored current=\(current.checkpoint) requested=\(checkpoint)")
+            guard supportedCheckpoint > current.checkpoint else {
+                print("[TuringContinuation] non-advancing checkpoint ignored current=\(current.checkpoint) requested=\(supportedCheckpoint)")
                 return current
             }
         }
@@ -88,20 +97,19 @@ final class TuringStoryProgressStore: ObservableObject {
         let next = TuringEpisodeContinuationSnapshot(
             schemaVersion: TuringEpisodeContinuationSnapshot.currentSchemaVersion,
             episodeID: episodeID,
-            checkpoint: checkpoint,
+            checkpoint: supportedCheckpoint,
             revision: (snapshot?.revision ?? 0) + 1,
             committedAt: Date(),
             sourceEventID: sourceEventID,
             contentRevision: contentRevision
         )
-        let data = try encoder.encode(next)
-        defaults.set(data.base64EncodedString(), forKey: Key.snapshot)
+        try persist(next)
         snapshot = next
         invalidSnapshotReason = nil
         print("""
         [TuringContinuation] checkpoint committed
           episodeID: \(episodeID.rawValue)
-          checkpoint: \(checkpoint)
+          checkpoint: \(supportedCheckpoint)
           revision: \(next.revision)
           sourceEventID: \(sourceEventID.uuidString)
         """)
@@ -125,6 +133,27 @@ final class TuringStoryProgressStore: ObservableObject {
     private func isCompatible(_ value: TuringEpisodeContinuationSnapshot) -> Bool {
         value.episodeID == .prologue &&
             value.contentRevision == Self.prologueContentRevision
+    }
+
+    private func supportedSnapshot(
+        from value: TuringEpisodeContinuationSnapshot
+    ) -> TuringEpisodeContinuationSnapshot {
+        let checkpoint = value.checkpoint.supportedContinuationValue
+        guard checkpoint != value.checkpoint else { return value }
+        return TuringEpisodeContinuationSnapshot(
+            schemaVersion: value.schemaVersion,
+            episodeID: value.episodeID,
+            checkpoint: checkpoint,
+            revision: value.revision + 1,
+            committedAt: Date(),
+            sourceEventID: value.sourceEventID,
+            contentRevision: value.contentRevision
+        )
+    }
+
+    private func persist(_ value: TuringEpisodeContinuationSnapshot) throws {
+        let data = try encoder.encode(value)
+        defaults.set(data.base64EncodedString(), forKey: Key.snapshot)
     }
 
     private func invalidate(_ reason: String) {

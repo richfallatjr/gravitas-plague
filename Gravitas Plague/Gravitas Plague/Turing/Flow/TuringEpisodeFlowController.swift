@@ -312,8 +312,7 @@ actor TuringEpisodeFlowController {
         switch (checkpoint, scriptPointID) {
         case (.notStarted, "prologue.scriptPoint01"),
              (.script01ConversationVoiceCompleted, "prologue.scriptPoint02"),
-             (.script02PromptVoiceCompleted, "prologue.scriptPoint03"),
-             (.script04ConversationVoiceCompleted, "prologue.scriptPoint05"):
+             (.script02PromptVoiceCompleted, "prologue.scriptPoint03"):
             allowed = true
         default:
             allowed = false

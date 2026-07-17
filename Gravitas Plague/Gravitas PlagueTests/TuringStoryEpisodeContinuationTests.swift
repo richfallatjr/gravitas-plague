@@ -29,8 +29,10 @@ final class TuringStoryEpisodeContinuationTests: XCTestCase {
         XCTAssertTrue(layout.plateFrame.contains(layout.contentFrame))
     }
 
-    func testProgressRoundTripsEveryAuthoredCheckpoint() throws {
-        for checkpoint in TuringPrologueCheckpoint.allCases where checkpoint != .notStarted {
+    func testProgressRoundTripsEverySupportedCheckpoint() throws {
+        for checkpoint in TuringPrologueCheckpoint.allCases
+            where checkpoint != .notStarted &&
+                checkpoint <= .latestSupportedContinuation {
             let (store, defaults, suiteName) = makeProgressStore()
             defer { defaults.removePersistentDomain(forName: suiteName) }
 
@@ -46,6 +48,47 @@ final class TuringStoryEpisodeContinuationTests: XCTestCase {
             XCTAssertTrue(reloaded.canContinue)
             XCTAssertNotNil(defaults.string(forKey: TuringStoryProgressStore.Key.snapshot))
         }
+    }
+
+    func testLaterCheckpointIsCappedAtBattle01Start() throws {
+        let (store, defaults, suiteName) = makeProgressStore()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let committed = try store.commit(
+            episodeID: .prologue,
+            checkpoint: .script05PromptVoiceCompleted,
+            sourceEventID: UUID(),
+            contentRevision: TuringStoryProgressStore.prologueContentRevision
+        )
+
+        XCTAssertEqual(committed.checkpoint, .script03PromptVoiceCompleted)
+        let destination = try TuringStoryDestinationPlanner.destination(for: committed)
+        XCTAssertEqual(destination.checkpoint, .script03PromptVoiceCompleted)
+        XCTAssertEqual(destination.walkieAction, .microphone)
+        XCTAssertEqual(destination.battleState, .battle01Start)
+        XCTAssertEqual(destination.mediaState, .battle01)
+    }
+
+    func testPreviouslySavedLaterCheckpointMigratesToBattle01Start() throws {
+        let (_, defaults, suiteName) = makeProgressStore()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let unsupported = makeSnapshot(.script04ConversationVoiceCompleted)
+        let encoded = try JSONEncoder().encode(unsupported).base64EncodedString()
+        defaults.set(encoded, forKey: TuringStoryProgressStore.Key.snapshot)
+
+        let reloaded = TuringStoryProgressStore(defaults: defaults)
+
+        XCTAssertEqual(reloaded.snapshot?.checkpoint, .script03PromptVoiceCompleted)
+        XCTAssertTrue(reloaded.canContinue)
+        let persisted = try XCTUnwrap(
+            defaults.string(forKey: TuringStoryProgressStore.Key.snapshot)
+        )
+        let persistedData = try XCTUnwrap(Data(base64Encoded: persisted))
+        let migrated = try JSONDecoder().decode(
+            TuringEpisodeContinuationSnapshot.self,
+            from: persistedData
+        )
+        XCTAssertEqual(migrated.checkpoint, .script03PromptVoiceCompleted)
     }
 
     func testProgressIgnoresDuplicateAndRegressiveEvents() throws {
