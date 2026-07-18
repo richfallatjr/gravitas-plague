@@ -2,8 +2,8 @@
   "schemaVersion": 2,
   "scriptPointID": "prologue.scriptPoint05",
   "trigger": {
-    "kind": "priorConversationPlaybackCompleted",
-    "delaySeconds": 2
+    "kind": "priorScriptPointCompleted",
+    "delaySeconds": 0
   },
   "transmission": {
     "prerecordingID": "prologue.walkie.bigMike.scriptPoint05.001",
@@ -11,20 +11,20 @@
     "characterID": "big_mike",
     "conversationKey": "dialogue.big_mike.rich",
     "outputRoute": "walkieSpatial",
-    "computeStart": "withPrerecording",
+    "computeStart": "beforePrerecording",
     "fillerMode": "continuousFromPrerecordingToGenerated",
     "commSFX": {
       "openBeforePrerecording": false,
       "sendAfterGenerated": false,
       "sendingLeadInAfterGeneratedSeconds": null
     },
-    "fixedLeadInSeconds": null,
+    "fixedLeadInSeconds": 10,
     "generationPipeline": {
       "schemaVersion": 1,
       "radioBridgeMode": "bigMikeStaticAndFiller",
       "stages": [
         {
-          "stageID": "publicAdvisory",
+          "stageID": "headlineReading",
           "kind": "voiceScriptLongform",
           "sourceResourcePath": "Turing/Scripts/Prologue/prologue.scriptPoint05.bigMike.voiceScript.txt",
           "voicePromptID": null,
@@ -41,8 +41,8 @@
           "voicePromptID": "prologue.bigMike.scriptPoint05.followUp.001",
           "defaultEmotion": "controlled, uneasy, protective, trying to sound casual",
           "contextSource": {
-            "kind": "prerecordingTranscript",
-            "stageID": null
+            "kind": "stageSourceTranscript",
+            "stageID": "headlineReading"
           }
         }
       ]

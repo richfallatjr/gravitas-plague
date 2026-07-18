@@ -1,42 +1,5 @@
 import Foundation
 
-protocol TuringPrerecordingLoading: Sendable {
-    func descriptor(
-        id: String
-    ) throws -> TuringPrerecordingDescriptor
-
-    func audioURL(
-        for descriptor: TuringPrerecordingDescriptor
-    ) throws -> URL
-}
-
-extension TuringPrerecordingStore:
-    TuringPrerecordingLoading
-{
-}
-
-protocol TuringVoicePromptTriggerLoading: Sendable {
-    func descriptor(
-        id: String
-    ) throws -> TuringVoicePromptTriggerDescriptor
-}
-
-extension TuringVoicePromptTriggerStore:
-    TuringVoicePromptTriggerLoading
-{
-}
-
-protocol TuringFlowVoicePromptGenerating: Sendable {
-    func generateVoicePrompt(
-        _ request: VoicePromptRequest
-    ) async throws -> TuringVoicePromptPlan
-}
-
-extension TuringDialogueService:
-    TuringFlowVoicePromptGenerating
-{
-}
-
 struct TuringCharacterRuntimeStore:
     TuringCharacterRuntimeProviding,
     Sendable
@@ -66,6 +29,8 @@ actor TuringFlowEngine {
         any TuringFlowRouteResolving
     private let rendererFactory:
         any TuringCharacterRendererMaking
+    private let stagedRendererFactory:
+        any TuringCharacterRenderSessionMaking
     private let seedStore:
         TuringConversationSeedStore
 
@@ -97,6 +62,9 @@ actor TuringFlowEngine {
         rendererFactory:
             any TuringCharacterRendererMaking =
                 TuringCharacterQwenRendererFactory(),
+        stagedRendererFactory:
+            any TuringCharacterRenderSessionMaking =
+                TuringCharacterQwenRenderSessionFactory(),
         seedStore:
             TuringConversationSeedStore = .shared
     ) {
@@ -109,6 +77,7 @@ actor TuringFlowEngine {
             dialogueServiceFactory
         self.routeResolver = routeResolver
         self.rendererFactory = rendererFactory
+        self.stagedRendererFactory = stagedRendererFactory
         self.seedStore = seedStore
     }
 
@@ -262,6 +231,19 @@ actor TuringFlowEngine {
                         .conversationKey
             )
 
+            if let pipeline =
+                descriptor.transmission.generationPipeline {
+                return await runStagedPipeline(
+                    descriptor: descriptor,
+                    pipeline: pipeline,
+                    prerecording: prerecording,
+                    prerecordingURL: prerecordingURL,
+                    character: character,
+                    identity: identity,
+                    route: resolvedRoute
+                )
+            }
+
             func makePlanTask()
                 -> Task<
                     TuringFlowCompositeSpeechPlan,
@@ -269,9 +251,6 @@ actor TuringFlowEngine {
                 > {
                 let dialogueService =
                     dialogueServiceFactory()
-                let detachedPromptStore =
-                    voicePromptStore
-
                 TuringFlowLog.event(
                     "Foundation started",
                     identity: identity,
@@ -299,23 +278,6 @@ actor TuringFlowEngine {
                 return Task.detached(
                     priority: .userInitiated
                 ) {
-                    if let pipeline =
-                        descriptor.transmission.generationPipeline {
-                        let planner =
-                            TuringFlowCompositeSpeechPlanner(
-                                voicePromptGenerator:
-                                    dialogueService,
-                                promptStore:
-                                    detachedPromptStore
-                            )
-                        return try await planner.build(
-                            descriptor: descriptor,
-                            pipeline: pipeline,
-                            character: character,
-                            prerecording: prerecording
-                        )
-                    }
-
                     guard let voicePrompt else {
                         throw TuringRuntimeError.invalidConfig(
                             "\(scriptPointID) missing legacy voicePrompt descriptor."
@@ -879,6 +841,227 @@ actor TuringFlowEngine {
                     [],
                 message:
                     "\(scriptPointID) failed: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func runStagedPipeline(
+        descriptor: TuringFlowDescriptor,
+        pipeline: TuringFlowGenerationPipelineDescriptor,
+        prerecording: TuringPrerecordingDescriptor,
+        prerecordingURL: URL,
+        character: TuringCharacterRuntimeDefinition,
+        identity: TuringFlowIdentity,
+        route: any TuringFlowRouteRuntime
+    ) async -> TuringFlowResult {
+        var playback: (any TuringFlowPlaybackControlling)?
+        var stagedTask: Task<TuringStagedSpeechRunReport, Error>?
+
+        do {
+            let createdPlayback = try await route.makePlayback(
+                descriptor: descriptor,
+                character: character,
+                identity: identity
+            )
+            playback = createdPlayback
+            await createdPlayback.configureFlowIdentity(identity)
+            await createdPlayback.beginRun(
+                runID: identity.playbackRunID,
+                expectedSegmentCount: nil
+            )
+            await createdPlayback.expectPrerecordingBeforeGenerated()
+
+            let coordinator = TuringStagedSpeechRunCoordinator(
+                promptVoiceExecutor: TuringPromptVoiceStageExecutor(
+                    promptStore: voicePromptStore,
+                    generator: dialogueServiceFactory()
+                ),
+                rendererFactory: stagedRendererFactory,
+                seedStore: seedStore
+            )
+            let task = Task.detached(priority: .userInitiated) {
+                try await coordinator.run(
+                    descriptor: descriptor,
+                    pipeline: pipeline,
+                    character: character,
+                    prerecording: prerecording,
+                    playback: createdPlayback,
+                    identity: identity
+                )
+            }
+            stagedTask = task
+
+            TuringFlowLog.event(
+                "staged speech started",
+                identity: identity,
+                fields: [
+                    ("stageCount", String(pipeline.stages.count)),
+                    ("startsBeforeFixedLeadIn", "true"),
+                    ("playbackInputOpen", "true"),
+                    ("freshDialogueService", "true")
+                ]
+            )
+
+            await route.runFixedLeadInIfNeeded(
+                descriptor: descriptor,
+                identity: identity
+            )
+            try await route.playOpenIfNeeded(
+                descriptor: descriptor,
+                identity: identity
+            )
+            await createdPlayback.enqueuePrerecording(
+                id: prerecording.prerecordingID,
+                fileURL: prerecordingURL
+            )
+
+            let report = try await task.value
+            let expected = report.finalExpectedSegmentCount
+            let completed = report.completedPlaybackCount
+            let skipped = report.skippedSegmentIndices.sorted()
+
+            guard report.completedWithoutStageFailure else {
+                await route.finish(
+                    descriptor: descriptor,
+                    identity: identity,
+                    succeeded: false
+                )
+                await TuringFlowInteractionGateController.shared.failFlow(
+                    identity: identity,
+                    reason: "stagedSpeechPartialFailure"
+                )
+
+                let failures = report.failedStages.map {
+                    "\($0.stageID): \($0.reason)"
+                }.joined(separator: " | ")
+                TuringFlowLog.event(
+                    "point failed",
+                    identity: identity,
+                    fields: [
+                        ("stage", "stagedSpeechPartialFailure"),
+                        ("committedSegmentCount", String(expected)),
+                        ("completedGeneratedSegmentCount", String(completed)),
+                        ("committedWorkErased", "false"),
+                        ("failures", failures)
+                    ]
+                )
+
+                return TuringFlowResult(
+                    outcome: skipped.isEmpty
+                        ? .generatedPlanFailed
+                        : .partialGeneratedFailure,
+                    identity: identity,
+                    expectedGeneratedSegmentCount: expected,
+                    completedGeneratedSegmentCount: completed,
+                    skippedGeneratedSegmentIndices: skipped,
+                    message:
+                        "\(descriptor.scriptPointID) staged speech failed after preserving committed playback: \(failures)"
+                )
+            }
+
+            try await route.playSendIfNeeded(
+                descriptor: descriptor,
+                identity: identity
+            )
+            await route.finish(
+                descriptor: descriptor,
+                identity: identity,
+                succeeded: true
+            )
+            let effectiveGate = descriptor.progression
+                .effectiveInteractionGateAfterCompletion
+            await TuringFlowInteractionGateController.shared
+                .applyCompletionGate(
+                    effectiveGate,
+                    identity: identity
+                )
+
+            TuringFlowLog.event(
+                "point completed",
+                identity: identity,
+                fields: [
+                    ("pipeline", "stagedSpeech"),
+                    ("committedBatchCount", String(report.committedStages.count)),
+                    ("expectedGeneratedSegmentCount", String(expected)),
+                    ("completedGeneratedSegmentCount", String(completed)),
+                    ("interactionGate", effectiveGate.rawValue),
+                    (
+                        "nextScriptPointID",
+                        descriptor.progression.nextScriptPointID ?? "none"
+                    )
+                ]
+            )
+
+            return TuringFlowResult(
+                outcome: .succeeded,
+                identity: identity,
+                expectedGeneratedSegmentCount: expected,
+                completedGeneratedSegmentCount: completed,
+                skippedGeneratedSegmentIndices: [],
+                message: "Finished \(descriptor.scriptPointID)"
+            )
+        } catch is CancellationError {
+            stagedTask?.cancel()
+            if let stagedTask {
+                _ = try? await stagedTask.value
+            }
+            await playback?.runCancelled(reason: "stagedSpeechCancelled")
+            await route.finish(
+                descriptor: descriptor,
+                identity: identity,
+                succeeded: false
+            )
+            await TuringFlowInteractionGateController.shared.failFlow(
+                identity: identity,
+                reason: "cancelled"
+            )
+            return TuringFlowResult(
+                outcome: .cancelled,
+                identity: identity,
+                expectedGeneratedSegmentCount: 0,
+                completedGeneratedSegmentCount: 0,
+                skippedGeneratedSegmentIndices: [],
+                message: "Cancelled \(descriptor.scriptPointID)"
+            )
+        } catch {
+            stagedTask?.cancel()
+            if let stagedTask {
+                _ = try? await stagedTask.value
+            }
+            await playback?.runCancelled(reason: "stagedSpeechFailed")
+            await route.finish(
+                descriptor: descriptor,
+                identity: identity,
+                succeeded: false
+            )
+            await TuringFlowInteractionGateController.shared.failFlow(
+                identity: identity,
+                reason: error.localizedDescription
+            )
+            let completed: Int
+            if let playback {
+                completed = await playback
+                    .completedGeneratedSegmentCount()
+            } else {
+                completed = 0
+            }
+            TuringFlowLog.event(
+                "point failed",
+                identity: identity,
+                fields: [
+                    ("stage", "stagedSpeechFatalFailure"),
+                    ("committedWorkErased", "false"),
+                    ("error", error.localizedDescription)
+                ]
+            )
+            return TuringFlowResult(
+                outcome: .generatedAudioFailed,
+                identity: identity,
+                expectedGeneratedSegmentCount: completed,
+                completedGeneratedSegmentCount: completed,
+                skippedGeneratedSegmentIndices: [],
+                message:
+                    "\(descriptor.scriptPointID) staged speech failed: \(error.localizedDescription)"
             )
         }
     }

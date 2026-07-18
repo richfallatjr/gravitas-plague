@@ -1,50 +1,5 @@
 import Foundation
 
-nonisolated protocol TuringFlowPlaybackControlling: AnyObject, Sendable {
-    func configureFlowIdentity(
-        _ identity: TuringFlowIdentity
-    ) async
-
-    func beginRun(
-        runID: String,
-        expectedSegmentCount: Int?
-    ) async
-
-    func enqueuePrerecording(
-        id: String,
-        fileURL: URL
-    ) async
-
-    func setExpectedGeneratedSegmentCount(
-        _ count: Int
-    ) async
-
-    func qwenComputeStarted(
-        segmentIndex: Int
-    ) async
-
-    func qwenComputeFinished(
-        segmentIndex: Int,
-        audio: TuringComputeGapGeneratedAudio
-    ) async
-
-    func qwenComputeSkipped(
-        segmentIndex: Int,
-        reason: String
-    ) async
-
-    func qwenComputeAllFinished() async
-
-    func qwenComputeFailed(
-        expectedSegmentCount: Int,
-        reason: String
-    ) async
-
-    func waitUntilPlaybackFinished() async
-    func completedGeneratedSegmentCount() async -> Int
-    func runCancelled(reason: String) async
-}
-
 extension TuringStoryWalkiePlaybackCoordinator:
     TuringFlowPlaybackControlling
 {

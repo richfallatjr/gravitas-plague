@@ -87,6 +87,7 @@ actor TuringStoryWalkiePlaybackCoordinator {
     private var activeComputeSegments = Set<Int>()
     private var pendingGenerated: [Int: GeneratedClip] = [:]
     private var pendingPrerecording: PrerecordingClip?
+    private var prerecordingExpected = false
     private var prerecordingHasPlayed = false
     private var skippedSegments = Set<Int>()
     private var allComputeFinished = false
@@ -182,6 +183,7 @@ actor TuringStoryWalkiePlaybackCoordinator {
         self.activeComputeSegments.removeAll(keepingCapacity: true)
         self.pendingGenerated.removeAll(keepingCapacity: true)
         self.pendingPrerecording = nil
+        self.prerecordingExpected = false
         self.prerecordingHasPlayed = false
         self.skippedSegments.removeAll(keepingCapacity: true)
         self.allComputeFinished = false
@@ -222,6 +224,16 @@ actor TuringStoryWalkiePlaybackCoordinator {
         await reconcile(reason: "runStarted")
     }
 
+    func expectPrerecordingBeforeGenerated() async {
+        guard runActive, prerecordingHasPlayed == false else { return }
+        prerecordingExpected = true
+        print("""
+        [TuringStagedSpeech] prerecording playback reserved
+          runID: \(runID ?? "none")
+          generatedPlaybackHeldUntilPrerecordingQueued: true
+        """)
+    }
+
     func enqueuePrerecording(id: String, fileURL: URL) async {
         guard runActive else { return }
         guard acceptedPrerecordingID == nil else {
@@ -238,6 +250,7 @@ actor TuringStoryWalkiePlaybackCoordinator {
             return
         }
         acceptedPrerecordingID = id
+        prerecordingExpected = false
         pendingPrerecording = PrerecordingClip(
             id: id,
             fileURL: fileURL
@@ -374,10 +387,27 @@ actor TuringStoryWalkiePlaybackCoordinator {
     }
 
     func qwenComputeAllFinished() async {
+        let terminalCount = expectedSegmentCount ?? inferredTerminalCount
+        await sealGeneratedInput(
+            finalExpectedSegmentCount: terminalCount
+        )
+    }
+
+    func sealGeneratedInput(
+        finalExpectedSegmentCount count: Int
+    ) async {
         guard runActive else { return }
+        expectedSegmentCount = max(0, count)
         allComputeFinished = true
-        print("[TuringPlaybackRebuild] qwen compute all finished")
-        await reconcile(reason: "computeAllFinished")
+        print("""
+        [TuringStagedSpeech] input sealed
+          runID: \(runID ?? "none")
+          finalExpectedSegmentCount: \(expectedSegmentCount ?? 0)
+          nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+          activeComputeSegments: \(activeComputeSegments.sorted())
+          pendingGenerated: \(pendingGenerated.keys.sorted())
+        """)
+        await reconcile(reason: "generatedInputSealed")
     }
 
     func qwenComputeFailed(
@@ -517,6 +547,10 @@ actor TuringStoryWalkiePlaybackCoordinator {
            let prerecording = pendingPrerecording {
             pendingPrerecording = nil
             await startPrerecording(prerecording, reason: reason)
+            return
+        }
+        if prerecordingHasPlayed == false,
+           prerecordingExpected {
             return
         }
 
@@ -1020,6 +1054,23 @@ actor TuringStoryWalkiePlaybackCoordinator {
             pendingGenerated.isEmpty &&
             skippedSegments.isEmpty &&
             activeItem == .none
+    }
+
+    private var inferredTerminalCount: Int {
+        var count = nextPlaybackSegmentIndex
+        if let maximum = activeComputeSegments.max() {
+            count = max(count, maximum + 1)
+        }
+        if let maximum = pendingGenerated.keys.max() {
+            count = max(count, maximum + 1)
+        }
+        if let maximum = skippedSegments.max() {
+            count = max(count, maximum + 1)
+        }
+        if case .generated(let segmentIndex, _, _, _) = activeItem {
+            count = max(count, segmentIndex + 1)
+        }
+        return count
     }
 
     private var shouldUseDeadAirWhileWaitingForInitialGeneratedSegment: Bool {

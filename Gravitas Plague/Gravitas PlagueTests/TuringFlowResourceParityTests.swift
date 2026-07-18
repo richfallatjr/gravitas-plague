@@ -118,6 +118,83 @@ final class TuringFlowResourceParityTests:
         )
     }
 
+    func testScriptPoint04AutomaticallyBridgesIntoScriptPoint05()
+        throws {
+        let store = TuringFlowDescriptorStore()
+        let point04 = try store.require(
+            "prologue.scriptPoint04"
+        )
+        let point05 = try store.require(
+            "prologue.scriptPoint05"
+        )
+
+        XCTAssertTrue(point04.progression.automaticAdvance)
+        XCTAssertEqual(
+            point04.progression.nextScriptPointID,
+            "prologue.scriptPoint05"
+        )
+        XCTAssertEqual(
+            point04.progression.effectiveInteractionGateAfterCompletion,
+            .closed
+        )
+        XCTAssertEqual(
+            point05.trigger.kind,
+            .priorScriptPointCompleted
+        )
+        XCTAssertEqual(
+            point05.transmission.computeStart,
+            .beforePrerecording
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(point05.transmission.fixedLeadInSeconds),
+            10,
+            accuracy: 0.0001
+        )
+    }
+
+    func testScriptPoint05UsesDebugHeadlineThroughAudiobookThenPromptVoice()
+        throws {
+        let point05 = try TuringFlowDescriptorStore().require(
+            "prologue.scriptPoint05"
+        )
+        let pipeline = try XCTUnwrap(
+            point05.transmission.generationPipeline
+        )
+
+        XCTAssertEqual(pipeline.stages.count, 2)
+        XCTAssertEqual(pipeline.stages[0].kind, .voiceScriptLongform)
+        XCTAssertEqual(pipeline.stages[1].kind, .voicePrompt)
+        XCTAssertEqual(
+            pipeline.stages[1].voicePromptID,
+            "prologue.bigMike.scriptPoint05.followUp.001"
+        )
+        XCTAssertEqual(
+            pipeline.stages[1].contextSource.kind,
+            .stageSourceTranscript
+        )
+        XCTAssertEqual(
+            pipeline.stages[1].contextSource.stageID,
+            pipeline.stages[0].stageID
+        )
+
+        let sourcePath = try XCTUnwrap(
+            pipeline.stages[0].sourceResourcePath
+        )
+        let sourceURL = try TuringResourceLoader.resourceURL(
+            resourcePath: sourcePath
+        )
+        let source = try String(
+            contentsOf: sourceURL,
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(source.contains("Rich, listen to this shit."))
+        XCTAssertTrue(source.contains("THE GRAVITAS PLAGUE SPREADS"))
+        XCTAssertTrue(source.contains("They look awake, but unreachable."))
+        XCTAssertTrue(source.contains("If speech fails, do not negotiate."))
+        XCTAssertFalse(source.contains("Federal Public Health Service advisory"))
+    }
+
     func testCharacterRegistryLoadsBigMikeAndRich()
         throws {
         let registry =

@@ -8,6 +8,6 @@
   "transcriptMode": "manual",
   "transcript": "Rich... you gotta hear this shit. I picked something up, but I'm not putting details over an open channel. It sounded official, then the signal broke apart. Could be useful. Could be somebody trying to scare people into doing something stupid. I'm gonna read you the part that's already public. Listen to the wording, not the panic behind it. When I'm done, we can decide what it means--and what you need to do next.",
   "summary": "Big Mike urgently gets Rich's attention, refuses to expose uncertain details over an open channel, and prepares to read a public advisory.",
-  "voicePromptIntent": "The public advisory is generated through the exact-source Script Voice stage. The personal follow-up is owned by prologue.bigMike.scriptPoint05.followUp.001 and uses this PR transcript as the immediate seed.",
+  "voicePromptIntent": "The headline report is generated through the exact-source Script Voice stage. The personal follow-up is owned by prologue.bigMike.scriptPoint05.followUp.001 and follows that exact headline transcript.",
   "defaultEmotion": "urgent, cautious, skeptical, protective"
 }

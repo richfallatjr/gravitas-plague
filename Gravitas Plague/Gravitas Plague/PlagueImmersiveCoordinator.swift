@@ -794,7 +794,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         case .responseFailed(let message):
             turingHUDDelayedClearTask?.cancel()
             turingHUDDelayedClearTask = nil
-            showInstructionHUD("Turing response failed.")
+            showInstructionHUD("Device operation failed.")
             print("""
             [TuringHUD] response failure shown
               error: \(message)

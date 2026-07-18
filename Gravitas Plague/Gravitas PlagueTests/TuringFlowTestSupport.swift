@@ -475,6 +475,12 @@ final class StubFlowPlayback:
         )
     }
 
+    func expectPrerecordingBeforeGenerated() async {
+        await recorder.record(
+            "playback.prerecordingExpected"
+        )
+    }
+
     func enqueuePrerecording(
         id: String,
         fileURL: URL
@@ -533,6 +539,17 @@ final class StubFlowPlayback:
         allComputeFinished = true
         await recorder.record(
             "playback.compute.allFinished"
+        )
+        await reconcile()
+    }
+
+    func sealGeneratedInput(
+        finalExpectedSegmentCount: Int
+    ) async {
+        expectedCount = finalExpectedSegmentCount
+        allComputeFinished = true
+        await recorder.record(
+            "playback.inputSealed.\(finalExpectedSegmentCount)"
         )
         await reconcile()
     }

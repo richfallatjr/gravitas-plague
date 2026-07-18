@@ -255,6 +255,7 @@ struct TuringFlowCatalogValidator:
         }
 
         var seenStageIDs = Set<String>()
+        var priorScriptVoiceStageIDs = Set<String>()
         for stage in pipeline.stages {
             let stageID =
                 stage.stageID.trimmingCharacters(
@@ -292,6 +293,7 @@ struct TuringFlowCatalogValidator:
                         "\(descriptor.scriptPointID) Script Voice source is empty."
                     )
                 }
+                priorScriptVoiceStageIDs.insert(stageID)
 
             case .voicePrompt:
                 guard let promptID = stage.voicePromptID,
@@ -317,6 +319,23 @@ struct TuringFlowCatalogValidator:
                     throw TuringRuntimeError.invalidConfig(
                         "\(descriptor.scriptPointID) pipeline prompt identity mismatch."
                     )
+                }
+
+                switch stage.contextSource.kind {
+                case .prerecordingTranscript:
+                    guard stage.contextSource.stageID == nil else {
+                        throw TuringRuntimeError.invalidConfig(
+                            "\(descriptor.scriptPointID) prerecording transcript context cannot name a stage."
+                        )
+                    }
+
+                case .stageSourceTranscript:
+                    guard let sourceStageID = stage.contextSource.stageID,
+                          priorScriptVoiceStageIDs.contains(sourceStageID) else {
+                        throw TuringRuntimeError.invalidConfig(
+                            "\(descriptor.scriptPointID) prompt stage \(stageID) must reference an earlier Script Voice source stage."
+                        )
+                    }
                 }
             }
         }

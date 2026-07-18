@@ -69,23 +69,8 @@ enum TuringPromptVoiceSeedBuilder {
 
   static func composite(
     _ descriptor: TuringVoicePromptTriggerDescriptor,
-    scriptVoiceSource: String
+    scriptVoiceSource _: String
   ) -> TuringPromptVoiceSeed {
-    TuringPromptVoiceSeed(
-      voicePromptID: descriptor.voicePromptID,
-      promptContext: """
-      Story intent:
-      \(descriptor.intent)
-
-      Emotional tone:
-      \(descriptor.emotion)
-
-      Script Voice exact source, read verbatim before this follow-up:
-      \(scriptVoiceSource)
-
-      Seed rule:
-      Use the prerecording transcript as the immediate seed/context for this promptVoice continuation.
-      """
-    )
+    standard(descriptor)
   }
 }
