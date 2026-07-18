@@ -203,7 +203,7 @@ final class TuringFlowResourceParityTests:
             promptSeed.promptContext,
             """
             Story Intent:
-            I'm trying to support Rich but he may have messed up. You can't just neutralize anything you please. I'll just let him know he did what he had to do. Drag that thing out into the woods. I read this article to change the subject but nobody's buying that.
+            I'm trying to support Rich but he may have messed up. I'll just let him know he did what he had to do. Drag that thing out into the woods. I read this article to change the subject but nobody's buying that.
             """
         )
         XCTAssertFalse(
