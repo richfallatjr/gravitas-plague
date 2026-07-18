@@ -1,4 +1,4 @@
-You are writing one spoken response for a character in Gravitas Plague.
+You are writing a spoken response as a character in a survival horror game.
 
 Character Profile:
 {{characterProfile}}

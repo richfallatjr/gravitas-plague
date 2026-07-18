@@ -388,6 +388,20 @@ final class TuringFlowResourceParityTests:
         XCTAssertTrue(point03Seed.promptContext.contains(point03.emotion))
         XCTAssertNotEqual(point01Seed.promptContext, point03Seed.promptContext)
 
+        let point04 = try descriptorStore.descriptor(
+            id: "prologue.rich.scriptPoint04.followUp.001"
+        )
+        let point04Seed = TuringPromptVoiceSeedBuilder.standard(point04)
+        XCTAssertEqual(
+            point04Seed.promptContext,
+            """
+            Story Intent:
+            I can't believe this thing is laying in my room. It's not a person anymore it's a monster. I am still freaking out. We need the police. But police services have been down for weeks. I need to get this thing out of here
+            """
+        )
+        XCTAssertFalse(point04Seed.promptContext.contains("Continue after"))
+        XCTAssertFalse(point04Seed.promptContext.contains("Emotional tone:"))
+
         let store = TuringConversationSeedStore()
         await store.updatePromptVoiceSeed(
             point01Seed,
