@@ -191,6 +191,27 @@ final class TuringFlowResourceParityTests:
         XCTAssertTrue(source.contains("They look awake, but unreachable."))
         XCTAssertTrue(source.contains("If speech fails, do not negotiate."))
         XCTAssertFalse(source.contains("Federal Public Health Service advisory"))
+
+        let promptDescriptor = try TuringVoicePromptTriggerStore()
+            .descriptor(
+                id: "prologue.bigMike.scriptPoint05.promptVoice.001"
+            )
+        let promptSeed = TuringPromptVoiceSeedBuilder.standard(
+            promptDescriptor
+        )
+        XCTAssertEqual(
+            promptSeed.promptContext,
+            """
+            Story Intent:
+            I'm trying to support Rich but he may have messed up. You can't just neutralize anything you please. I'll just let him know he did what he had to do. Drag that thing out into the woods. I read this article to change the subject but nobody's buying that.
+            """
+        )
+        XCTAssertFalse(
+            promptSeed.promptContext.contains("Emotional tone:")
+        )
+        XCTAssertFalse(
+            promptSeed.promptContext.contains("promptVoice")
+        )
     }
 
     func testCharacterRegistryLoadsBigMikeAndRich()
@@ -281,6 +302,26 @@ final class TuringFlowResourceParityTests:
         XCTAssertTrue(
             prompt.contains(
                 "{{prerecordingTranscript}}"
+            )
+        )
+        XCTAssertTrue(
+            prompt.contains(
+                "What you just said earlier:"
+            )
+        )
+        XCTAssertTrue(
+            prompt.contains(
+                "Character Profile:"
+            )
+        )
+        XCTAssertFalse(
+            prompt.contains(
+                "Current prerecording transcript:"
+            )
+        )
+        XCTAssertFalse(
+            prompt.contains(
+                "Prompt context:"
             )
         )
         XCTAssertFalse(

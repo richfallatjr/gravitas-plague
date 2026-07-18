@@ -10,6 +10,31 @@ struct TuringVoicePromptTriggerDescriptor: Codable, Sendable, Hashable {
   let conversationKey: String
   let intent: String
   let emotion: String
+  let promptContext: String?
+
+  init(
+    schemaVersion: Int,
+    voicePromptID: String,
+    speakerID: String,
+    voiceID: String,
+    characterProfileID: String,
+    outputContext: TuringVoiceOutputContext,
+    conversationKey: String,
+    intent: String,
+    emotion: String,
+    promptContext: String? = nil
+  ) {
+    self.schemaVersion = schemaVersion
+    self.voicePromptID = voicePromptID
+    self.speakerID = speakerID
+    self.voiceID = voiceID
+    self.characterProfileID = characterProfileID
+    self.outputContext = outputContext
+    self.conversationKey = conversationKey
+    self.intent = intent
+    self.emotion = emotion
+    self.promptContext = promptContext
+  }
 }
 
 struct TuringVoicePromptTriggerStore: Sendable {
@@ -46,6 +71,14 @@ struct TuringVoicePromptTriggerStore: Sendable {
         )
       }
     }
+    if let promptContext = value.promptContext,
+       promptContext.trimmingCharacters(
+        in: .whitespacesAndNewlines
+       ).isEmpty {
+      throw TuringRuntimeError.invalidConfig(
+        "voicePrompt \(id) promptContext must not be empty when provided."
+      )
+    }
 
     return value
   }
@@ -55,7 +88,14 @@ enum TuringPromptVoiceSeedBuilder {
   static func standard(
     _ descriptor: TuringVoicePromptTriggerDescriptor
   ) -> TuringPromptVoiceSeed {
-    TuringPromptVoiceSeed(
+    if let promptContext = descriptor.promptContext {
+      return TuringPromptVoiceSeed(
+        voicePromptID: descriptor.voicePromptID,
+        promptContext: promptContext
+      )
+    }
+
+    return TuringPromptVoiceSeed(
       voicePromptID: descriptor.voicePromptID,
       promptContext: """
       Story intent:

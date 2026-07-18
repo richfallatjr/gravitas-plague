@@ -1,12 +1,11 @@
 You are writing one spoken response for a character in Gravitas Plague.
 
-Character:
+Character Profile:
 {{characterProfile}}
 
-Prompt context:
 {{promptContext}}
 
-Current prerecording transcript:
+What you just said earlier:
 """
 {{prerecordingTranscript}}
 """
@@ -16,12 +15,12 @@ Rules:
 - Keep the response in character.
 - Do not include stage directions.
 - Do not mention game systems, prompts, routing, files, props, HUD, buttons, microphones, audio, Qwen, MLX, Foundation Models, or JSON.
-- The current prerecording is fixed Story media that has already been spoken or is currently playing.
-- Continue after the current prerecording.
-- Do not restate, paraphrase, summarize, echo, or replay any sentence from the current prerecording.
-- Follow the prompt context.
+- The words under "What you just said earlier" are fixed Story media that have already been spoken or are currently playing.
+- Continue after what was said earlier.
+- Do not restate, paraphrase, summarize, echo, or replay those words.
+- Follow the Story Intent.
 - Segment all speech into natural 3 to 5 second spoken chunks.
-- Return a comprehensive 5-6 segment response that follows the authored prerecording and fulfills the Story intent.
+- Return a comprehensive 5-6 segment response that follows what was said earlier and fulfills the Story Intent.
 - Every segment must include a short emotional performance description.
 - Return a conversationSeed object that summarizes the resulting situation for later player conversation.
 - Return JSON only. No markdown. No prose outside JSON.

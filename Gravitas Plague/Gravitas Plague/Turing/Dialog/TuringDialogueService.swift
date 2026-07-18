@@ -21,7 +21,7 @@ actor TuringDialogueService {
         let prompt = try Self.renderPrompt(
             resourcePath: "Turing/Prompts/voicePrompt_characterIntent.txt",
             replacements: [
-                "{{characterProfile}}": profile.voicePromptPromptText,
+                "{{characterProfile}}": profile.promptText,
                 "{{promptContext}}": request.promptContext,
                 "{{prerecordingTranscript}}": request.prerecordingTranscript
             ]
@@ -33,7 +33,7 @@ actor TuringDialogueService {
           id: \(request.id)
           characterID: \(profile.characterID)
           promptTemplate: voicePrompt_characterIntent
-          profileContext: voicePromptSafe
+          profileContext: fullAuthoredCharacterProfile
           inputContract: characterProfile,promptContext,prerecordingTranscript
           prerecordingTranscriptUTF16: \(request.prerecordingTranscript.utf16.count)
           authoredPRTranscriptSHA256: \(TuringFlowHash.sha256(request.prerecordingTranscript))
