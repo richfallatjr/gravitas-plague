@@ -39,7 +39,7 @@ final class TuringPrologueCompletionCoordinator: TuringPrologueCompletionEventSi
                 sourceEventID: event.eventID,
                 contentRevision: TuringStoryProgressStore.prologueContentRevision
             )
-            battleRouter.scriptPointCompleted(event)
+            try await battleRouter.scriptPointCompleted(event)
         default:
             break
         }

@@ -26,7 +26,28 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
         reason: String
     ) {
         PortalHDRIResourceCache.entry = nil
+        PortalHDRIResourceCache.ownerKeys.removeAll(keepingCapacity: false)
         print("[PortalHDRI] shared resource cache cleared reason=\(reason)")
+    }
+
+    @MainActor
+    static func releaseSharedResourceLease(
+        portalWorld: Entity,
+        reason: String
+    ) {
+        PortalHDRIResourceCache.ownerKeys.remove(
+            ObjectIdentifier(portalWorld)
+        )
+        let remainingOwnerCount = PortalHDRIResourceCache.ownerKeys.count
+        if remainingOwnerCount == 0 {
+            PortalHDRIResourceCache.entry = nil
+        }
+        print("""
+        [PortalHDRI] shared resource lease released
+          reason: \(reason)
+          remainingOwnerCount: \(remainingOwnerCount)
+          cacheCleared: \(remainingOwnerCount == 0)
+        """)
     }
 
     @MainActor
@@ -41,6 +62,9 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
         )
 
         let resources = try loadEXRResources(atmosphere: atmosphere)
+        PortalHDRIResourceCache.ownerKeys.insert(
+            ObjectIdentifier(portalWorld)
+        )
 
         let dome = try makeInsideFacingHDRIDome(
             texture: resources.visibleTexture,
@@ -122,6 +146,7 @@ private enum PortalHDRIResourceCache {
     }
 
     static var entry: Entry?
+    static var ownerKeys = Set<ObjectIdentifier>()
 }
 
 private extension HDRIDomePortalContentProvider {

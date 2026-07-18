@@ -53,6 +53,7 @@ protocol Battle01StoryCombatControlling: AnyObject {
 
 @MainActor
 protocol Battle01SoundtrackControlling: AnyObject {
+    var isPlaying: Bool { get }
     func prepare(fileURL: URL) throws
     func prepareAftermathLoop(fileURL: URL) throws
     func playOnce(

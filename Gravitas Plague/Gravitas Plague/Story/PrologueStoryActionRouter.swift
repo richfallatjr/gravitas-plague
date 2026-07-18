@@ -10,24 +10,51 @@ final class PrologueStoryActionRouter {
         self.battle01 = battle01
     }
 
-    func scriptPointCompleted(_ event: TuringScriptPointCompletionEvent) {
+    func scriptPointCompleted(_ event: TuringScriptPointCompletionEvent) async throws {
         guard event.scriptPointID == "prologue.scriptPoint03",
               handledEventIDs.insert(event.eventID).inserted,
               battle01Triggered == false else {
             return
         }
         battle01Triggered = true
-        battle01.start(trigger: .scriptPointCompleted(event))
+        let battleInstanceID = UUID()
+        do {
+            let lease = try await TuringEpisodeFlowController.shared
+                .transferActiveInteractionToBattle(
+                    battleInstanceID: battleInstanceID,
+                    reason: "scriptPoint03ToBattle01"
+                )
+            battle01.start(
+                trigger: .scriptPointCompleted(event),
+                instanceID: battleInstanceID,
+                interactionLease: lease
+            )
+        } catch {
+            battle01Triggered = false
+            throw error
+        }
     }
 
-    func startBattle01FromContinuation(sourceEventID: UUID) {
+    func startBattle01FromContinuation(sourceEventID: UUID) async throws {
         guard battle01Triggered == false else { return }
         battle01Triggered = true
-        battle01.start(
-            trigger: .continuationRestore(
-                snapshotSourceEventID: sourceEventID
+        let battleInstanceID = UUID()
+        do {
+            let lease = try await StoryInteractionArbiter.shared.claimBattle(
+                battleInstanceID: battleInstanceID,
+                source: "continuationRestore"
             )
-        )
+            battle01.start(
+                trigger: .continuationRestore(
+                    snapshotSourceEventID: sourceEventID
+                ),
+                instanceID: battleInstanceID,
+                interactionLease: lease
+            )
+        } catch {
+            battle01Triggered = false
+            throw error
+        }
     }
 
     func reset(reason: String) {

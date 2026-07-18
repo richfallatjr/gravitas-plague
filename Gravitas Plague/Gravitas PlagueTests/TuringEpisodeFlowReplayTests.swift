@@ -80,6 +80,17 @@ final class TuringEpisodeFlowReplayTests:
             )
         let seedStore =
             TuringConversationSeedStore()
+        let interactionArbiter =
+            StoryInteractionArbiter()
+        await interactionArbiter.updateTuringGate(
+            .play,
+            reason: "testSetup"
+        )
+        let interactionPreflight =
+            TuringHighMemoryPreflightCoordinator(
+                interactionArbiter:
+                    interactionArbiter
+            )
         let engine =
             TuringFlowEngine(
                 descriptorStore:
@@ -135,6 +146,10 @@ final class TuringEpisodeFlowReplayTests:
                 descriptorStore:
                     descriptorStore,
                 seedStore: seedStore,
+                interactionPreflight:
+                    interactionPreflight,
+                interactionArbiter:
+                    interactionArbiter,
                 catalogValidator: nil
             )
 

@@ -32,6 +32,7 @@ final class TuringStoryDoorAnimationController {
         ]
         static let closeSqueak = "door-close-squeak-01.wav"
         static let closeContact = "door-close-contact-01.wav"
+        static let exteriorLoop = "door-exterior-outdoor-sounds.mp3"
     }
 
     private let hingePivot: Entity
@@ -49,6 +50,9 @@ final class TuringStoryDoorAnimationController {
     private var closeWaiters: [UUID: CheckedContinuation<Void, Error>] = [:]
     private var sfxControllersByID: [UUID: AudioPlaybackController] = [:]
     private var sfxEntitiesByID: [UUID: Entity] = [:]
+    private var exteriorLoopID: UUID?
+    private var exteriorLoopController: AudioPlaybackController?
+    private var exteriorLoopEntity: Entity?
     private var pendingCloseSFXIDs = Set<UUID>()
     private var closeVisualAnimationCompleted = false
 
@@ -109,6 +113,7 @@ final class TuringStoryDoorAnimationController {
         reason: String
     ) {
         guard state != .closed else {
+            stopExteriorLoop(reason: "alreadyClosed.\(reason)")
             resumeCloseWaiters()
             return
         }
@@ -153,6 +158,9 @@ final class TuringStoryDoorAnimationController {
         case .open, .opening:
             applyYaw(openYawRadians)
             state = .open
+            startExteriorLoop(
+                reason: "storyTeleport.\(teleportID.uuidString)"
+            )
         }
         onStateChanged(state)
 
@@ -211,6 +219,12 @@ final class TuringStoryDoorAnimationController {
         }
         state = startingState
         onStateChanged(state)
+
+        if targetState == .open {
+            startExteriorLoop(reason: "opening.\(reason)")
+        } else {
+            stopExteriorLoop(reason: "closing.\(reason)")
+        }
 
         playSFX(
             fileName: startSFX,
@@ -420,6 +434,7 @@ final class TuringStoryDoorAnimationController {
     private func stopSFX(
         reason: String
     ) {
+        stopExteriorLoop(reason: reason)
         for controller in sfxControllersByID.values {
             controller.stop()
         }
@@ -436,6 +451,105 @@ final class TuringStoryDoorAnimationController {
               reason: \(reason)
             """
         )
+    }
+
+    private func startExteriorLoop(reason: String) {
+        guard exteriorLoopController == nil else {
+            print("""
+            [TuringDoorExteriorAudio] loop retained
+              file: \(SFX.exteriorLoop)
+              emitter: TuringStoryDoorAudioEmitter
+              reason: \(reason)
+            """)
+            return
+        }
+
+        guard let url = resolveSFXURL(fileName: SFX.exteriorLoop) else {
+            print("""
+            [TuringDoorExteriorAudio] loop missing
+              file: \(SFX.exteriorLoop)
+              subdirectory: \(SFX.subdirectory)
+              doorAnimationContinues: true
+            """)
+            return
+        }
+
+        do {
+            let resource = try AudioFileResource.load(
+                contentsOf: url,
+                configuration: AudioFileResource.Configuration(
+                    loadingStrategy: .preload,
+                    shouldLoop: true
+                )
+            )
+            let loopEntity = Entity()
+            loopEntity.name = "TuringStoryDoorExteriorAudioLoop"
+            loopEntity.components.set(SpatialAudioComponent())
+            audioEmitter.addChild(loopEntity)
+
+            let loopID = UUID()
+            let controller = loopEntity.playAudio(resource)
+            controller.gain = -6.0
+            exteriorLoopID = loopID
+            exteriorLoopController = controller
+            exteriorLoopEntity = loopEntity
+            controller.completionHandler = { [weak self] in
+                Task { @MainActor in
+                    guard let self,
+                          self.exteriorLoopID == loopID else {
+                        return
+                    }
+                    self.exteriorLoopID = nil
+                    self.exteriorLoopController = nil
+                    self.exteriorLoopEntity?.removeFromParent()
+                    self.exteriorLoopEntity = nil
+                    print("""
+                    [TuringDoorExteriorAudio] loop ended unexpectedly
+                      file: \(SFX.exteriorLoop)
+                      reason: playbackCompletion
+                    """)
+                }
+            }
+
+            print("""
+            [TuringDoorExteriorAudio] loop started
+              file: \(SFX.exteriorLoop)
+              resolvedURL: \(url.lastPathComponent)
+              emitter: TuringStoryDoorAudioEmitter
+              spatial: true
+              gainDecibels: -6.0
+              shouldLoop: true
+              reason: \(reason)
+            """)
+        } catch {
+            print("""
+            [TuringDoorExteriorAudio] ERROR loop failed
+              file: \(SFX.exteriorLoop)
+              error: \(error.localizedDescription)
+              doorAnimationContinues: true
+            """)
+        }
+    }
+
+    private func stopExteriorLoop(reason: String) {
+        guard exteriorLoopController != nil || exteriorLoopEntity != nil else {
+            return
+        }
+
+        let controller = exteriorLoopController
+        let entity = exteriorLoopEntity
+        exteriorLoopID = nil
+        exteriorLoopController = nil
+        exteriorLoopEntity = nil
+        controller?.stop()
+        entity?.removeFromParent()
+
+        print("""
+        [TuringDoorExteriorAudio] loop stopped
+          file: \(SFX.exteriorLoop)
+          emitter: TuringStoryDoorAudioEmitter
+          reason: \(reason)
+        """)
     }
 
     private func randomOpenSFX() -> String {

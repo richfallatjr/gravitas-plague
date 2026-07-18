@@ -92,6 +92,18 @@ enum TuringFlowTriggerSource: Sendable, Hashable {
 }
 
 extension TuringFlowTriggerSource {
+    var interactionStartMode: TuringInteractionStartMode {
+        switch self {
+        case .priorConversationPlaybackCompleted,
+             .priorScriptPointCompleted:
+            return .automatic
+        case .userPlay,
+             .continuationRestore,
+             .manualDebug:
+            return .manual
+        }
+    }
+
     var kind: TuringFlowDescriptor.Trigger.Kind {
         switch self {
         case .userPlay:

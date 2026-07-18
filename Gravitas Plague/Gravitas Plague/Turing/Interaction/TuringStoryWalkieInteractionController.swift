@@ -32,12 +32,22 @@ final class TuringStoryWalkieInteractionController {
     private var walkieReady = false
     private var holdActive = false
     private var pendingPlayAction: TuringStoryWalkiePlayAction?
-    private var battle01GrandmaMemoryPresent = false
+    private var activeConversationLease: StoryInteractionLease?
+    private var activeRecordingRunID: UUID?
+    private var playClaimPending = false
+    private var latestInteractionSnapshot = StoryInteractionSnapshot(
+        revision: 0,
+        turingGate: .closed,
+        doorState: .closedUnloaded,
+        exclusiveOwner: nil,
+        capabilities: [],
+        walkiePresentation: .hidden,
+        doorPresentation: .hidden
+    )
 
     private var playStartTask: Task<Void, Never>?
     private var conversationTask: Task<Void, Never>?
     private var dictationStartTask: Task<Void, Never>?
-    private var gateObserver: NSObjectProtocol?
 
     init(
         gate: TuringFlowInteractionGateController = .shared,
@@ -60,7 +70,6 @@ final class TuringStoryWalkieInteractionController {
             self?.eventSink?
                 .publishTuringDictationEvent(event)
         }
-        startObservingIfNeeded()
     }
 
     func setEventSink(
@@ -71,18 +80,14 @@ final class TuringStoryWalkieInteractionController {
     }
 
     func episodeStarted(_ episodeID: TuringEpisodeID) {
-        startObservingIfNeeded()
         activeEpisodeID = episodeID
-        renderGateState(
-            reason: "episodeStarted.\(episodeID.rawValue)"
-        )
+        applyInteractionSnapshot(latestInteractionSnapshot)
     }
 
     func walkieInstalled(
         iconAnchor: Entity,
         walkieRoot: Entity
     ) {
-        startObservingIfNeeded()
         iconController.install(
             iconAnchor: iconAnchor,
             walkieRoot: walkieRoot
@@ -96,7 +101,7 @@ final class TuringStoryWalkieInteractionController {
           physicalTarget: TuringStoryWalkieTalkie_PhysicalHitTarget
         """)
 
-        renderGateState(reason: "walkieInstalled")
+        applyInteractionSnapshot(latestInteractionSnapshot)
     }
 
     func armPlay(action: TuringStoryWalkiePlayAction, reason: String) {
@@ -106,7 +111,6 @@ final class TuringStoryWalkieInteractionController {
         }
         pendingPlayAction = action
         gate.forcePlayForStoryTeleport(reason: reason)
-        renderGateState(reason: reason)
     }
 
     func armMicrophone(reason: String) {
@@ -116,31 +120,22 @@ final class TuringStoryWalkieInteractionController {
         }
         pendingPlayAction = nil
         gate.forceMicrophoneForStoryTeleport(reason: reason)
-        renderGateState(reason: reason)
     }
 
     func hideForStoryTeleport(reason: String) {
         pendingPlayAction = nil
         gate.forceClosedForStoryTeleport(reason: reason)
-        renderGateState(reason: reason)
     }
 
     func setBattle01GrandmaMemoryPresent(
         _ present: Bool,
         reason: String
     ) {
-        guard battle01GrandmaMemoryPresent != present else {
-            return
-        }
-        battle01GrandmaMemoryPresent = present
-        renderGateState(reason: "battle01GrandmaMemory.\(reason)")
-
         print("""
-        [TuringWalkieState] Battle01 memory suppression changed
+        [TuringWalkieState] Battle01 memory telemetry changed
           grandmaMemoryPresent: \(present)
           gatePreserved: \(gate.state.rawValue)
-          billboardSuppressed: \(present)
-          physicalInteractionSuppressed: \(present)
+          presentationOwner: StoryInteractionArbiter
           reason: \(reason)
         """)
     }
@@ -161,21 +156,21 @@ final class TuringStoryWalkieInteractionController {
 
     func playTapped(source: String) {
         guard walkieReady,
-              battle01GrandmaMemoryPresent == false,
               let action = pendingPlayAction,
-              gate.claimPlay(reason: source) else {
+              playClaimPending == false,
+              latestInteractionSnapshot.capabilities.contains(.walkiePlay) else {
             return
         }
 
+        playClaimPending = true
         pendingPlayAction = nil
-
-        renderGateState(reason: "playClaimed.\(source)")
 
         playStartTask?.cancel()
         playStartTask = Task { [weak self, action] in
             guard let self else {
                 return
             }
+            defer { self.playClaimPending = false }
 
             let result: TuringVoiceRunResult
             let scriptPointID: String
@@ -227,14 +222,12 @@ final class TuringStoryWalkieInteractionController {
             await endpoint.stopAll(reason: reason)
         }
         gate.forceClosedForStoryTeleport(reason: reason)
-        renderGateState(reason: reason)
         print("[TuringWalkieState] quiesced for Story teleport reason=\(reason)")
     }
 
     func microphoneHoldBegan(source: String) {
         guard walkieReady,
-              battle01GrandmaMemoryPresent == false,
-              gate.microphoneEnabled,
+              latestInteractionSnapshot.capabilities.contains(.walkieMicrophone),
               holdActive == false else {
             return
         }
@@ -246,16 +239,53 @@ final class TuringStoryWalkieInteractionController {
                 return
             }
 
+            let recordingRunID = UUID()
+            let lease: StoryInteractionLease
+            do {
+                lease = try await TuringHighMemoryPreflightCoordinator.shared
+                    .acquireInteractionLease(
+                        runID: "conversation.\(recordingRunID.uuidString)",
+                        source: "microphoneHold.\(source)",
+                        mode: .manual
+                    )
+            } catch {
+                self.holdActive = false
+                self.eventSink?.publishTuringDictationEvent(
+                    .failed("Device operation failed: \(error.localizedDescription)")
+                )
+                return
+            }
+
+            guard self.holdActive,
+                  Task.isCancelled == false else {
+                await StoryInteractionArbiter.shared.release(
+                    lease,
+                    reason: "holdEndedBeforeLeaseUse"
+                )
+                return
+            }
+            self.activeConversationLease = lease
+            self.activeRecordingRunID = recordingRunID
+            self.gate.beginConversation(conversationRunID: recordingRunID)
+
             await TuringWalkieCommsFXController.shared
                 .playOpenCommBeforeRecording(
                     reason: "prologueMic.\(source)"
                 )
 
             guard self.holdActive,
-                  self.gate.microphoneEnabled,
                   Task.isCancelled == false else {
                 await self.dictation.cancel(
                     reason: "holdEndedBeforeRecording"
+                )
+                self.activeConversationLease = nil
+                self.activeRecordingRunID = nil
+                await StoryInteractionArbiter.shared.release(
+                    lease,
+                    reason: "holdEndedBeforeRecording"
+                )
+                self.gate.restoreMicrophoneAfterConversation(
+                    conversationRunID: recordingRunID
                 )
                 return
             }
@@ -278,6 +308,23 @@ final class TuringStoryWalkieInteractionController {
         guard dictation.isRecording else {
             dictationStartTask?.cancel()
             dictationStartTask = nil
+            let lease = activeConversationLease
+            let recordingRunID = activeRecordingRunID
+            activeConversationLease = nil
+            activeRecordingRunID = nil
+            Task {
+                if let lease {
+                    await StoryInteractionArbiter.shared.release(
+                        lease,
+                        reason: "holdEndedBeforeRecording"
+                    )
+                }
+                if let recordingRunID {
+                    gate.restoreMicrophoneAfterConversation(
+                        conversationRunID: recordingRunID
+                    )
+                }
+            }
             print("""
             [TuringWalkieState] microphone hold ended before recording
               source: \(source)
@@ -286,6 +333,12 @@ final class TuringStoryWalkieInteractionController {
         }
 
         dictationStartTask = nil
+        guard let interactionLease = activeConversationLease else {
+            gate.ensureMicrophoneAvailable(reason: "conversationLeaseMissing")
+            return
+        }
+        activeConversationLease = nil
+        activeRecordingRunID = nil
         conversationTask?.cancel()
         conversationTask = Task { [weak self] in
             guard let self else {
@@ -309,6 +362,7 @@ final class TuringStoryWalkieInteractionController {
 
                 let result = await TuringBigMikeConversationRunner.run(
                     playerDictation: transcript,
+                    interactionLease: interactionLease,
                     seedStore: .shared,
                     onSegmentZeroReady: { [weak self] in
                         self?.eventSink?
@@ -340,6 +394,10 @@ final class TuringStoryWalkieInteractionController {
                         )
                 }
             } catch {
+                await StoryInteractionArbiter.shared.release(
+                    interactionLease,
+                    reason: "dictationFailedBeforeConversation"
+                )
                 await TuringWalkieCommsFXController.shared
                     .stopSendingLeadIn(
                         reason: "prologueMicFailed"
@@ -367,7 +425,10 @@ final class TuringStoryWalkieInteractionController {
         activeEpisodeID = nil
         holdActive = false
         pendingPlayAction = nil
-        battle01GrandmaMemoryPresent = false
+        let staleConversationLease = activeConversationLease
+        activeConversationLease = nil
+        activeRecordingRunID = nil
+        playClaimPending = false
 
         playStartTask?.cancel()
         conversationTask?.cancel()
@@ -377,14 +438,15 @@ final class TuringStoryWalkieInteractionController {
         dictationStartTask = nil
 
         await dictation.cancel(reason: reason)
+        if let staleConversationLease {
+            await StoryInteractionArbiter.shared.release(
+                staleConversationLease,
+                reason: "walkieShutdown.\(reason)"
+            )
+        }
         await TuringWalkieCommsFXController.shared
             .stopAll(reason: reason)
 
-        if let gateObserver {
-            NotificationCenter.default
-                .removeObserver(gateObserver)
-            self.gateObserver = nil
-        }
         iconController.remove()
 
         print("""
@@ -393,37 +455,35 @@ final class TuringStoryWalkieInteractionController {
         """)
     }
 
-    private func startObservingIfNeeded() {
-        guard gateObserver == nil else {
+}
+
+extension TuringStoryWalkieInteractionController:
+    StoryInteractionSurfacePresenting
+{
+    func applyInteractionSnapshot(
+        _ snapshot: StoryInteractionSnapshot
+    ) {
+        latestInteractionSnapshot = snapshot
+        guard walkieReady else {
+            iconController.apply(.hidden)
             return
         }
 
-        gateObserver = NotificationCenter.default.addObserver(
-            forName: .turingFlowInteractionGateChanged,
-            object: gate,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.renderGateState(reason: "gateChanged")
-            }
+        switch snapshot.walkiePresentation {
+        case .hidden:
+            iconController.apply(.hidden)
+        case .play:
+            iconController.apply(.play)
+        case .microphone:
+            iconController.apply(.microphone)
         }
-    }
-
-    private func renderGateState(reason: String) {
-        let presentation = walkieReady && battle01GrandmaMemoryPresent == false
-            ? TuringStoryWalkiePresentation(gate: gate.state)
-            : .hidden
-        iconController.apply(presentation)
 
         print("""
-        [TuringWalkieState] transition
-          gate: \(gate.state.rawValue)
-          presentation: \(String(describing: presentation))
-          walkieReady: \(walkieReady)
-          battle01GrandmaMemoryPresent: \(battle01GrandmaMemoryPresent)
-          iconVisible: \(presentation != .hidden)
-          physicalInteractionEnabled: \(presentation != .hidden)
-          reason: \(reason)
+        [TuringWalkieState] arbiter presentation
+          revision: \(snapshot.revision)
+          presentation: \(snapshot.walkiePresentation.rawValue)
+          iconVisible: \(snapshot.walkiePresentation != .hidden)
+          physicalInteractionEnabled: \(snapshot.walkiePresentation != .hidden)
         """)
     }
 }

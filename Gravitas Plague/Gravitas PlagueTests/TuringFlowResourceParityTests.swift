@@ -188,7 +188,7 @@ final class TuringFlowResourceParityTests:
             encoding: .utf8
         )
 
-        XCTAssertTrue(source.contains("Rich, listen to this shit."))
+        XCTAssertTrue(source.contains("Rich, listen to this stuff."))
         XCTAssertTrue(source.contains("THE GRAVITAS PLAGUE SPREADS"))
         XCTAssertTrue(source.contains("They look awake, but unreachable."))
         XCTAssertTrue(source.contains("If speech fails, do not negotiate."))

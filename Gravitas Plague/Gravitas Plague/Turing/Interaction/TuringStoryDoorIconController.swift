@@ -5,18 +5,22 @@ import UIKit
 
 @MainActor
 final class TuringStoryDoorIconController {
-    private var iconEntity: Entity?
+    private var iconEntity: ModelEntity?
+    private var physicalTargetEntity: Entity?
+    private var currentPresentation: TuringStoryDoorInteractionPresentation =
+        .hidden
     private let extraBottomLiftMeters: Float = 6.0 * 0.0254
 
     func install(
         anchor: Entity,
+        doorPanel: Entity,
         doorID: String = "storyDoor.primary"
     ) {
         remove()
         TuringStoryDoorTriggerComponent.registerComponent()
 
         let size = WallStickerStyle.stickerSizeMeters
-        let material = makeIconMaterial()
+        let material = makeIconMaterial(presentation: .open)
         let entity = ModelEntity(
             mesh: .generatePlane(
                 width: size,
@@ -71,6 +75,11 @@ final class TuringStoryDoorIconController {
         )
         entity.setPosition(iconWorldPosition, relativeTo: nil)
         iconEntity = entity
+        physicalTargetEntity = makePhysicalTarget(
+            doorPanel: doorPanel,
+            doorID: doorID
+        )
+        setPresentation(.hidden)
 
         print(
             """
@@ -86,18 +95,78 @@ final class TuringStoryDoorIconController {
               worldOffsetY: \(worldOffsetY)
               anchorWorldPosition: \(anchorWorldPosition)
               iconWorldPosition: \(iconWorldPosition)
+              physicalDoorTarget: \(physicalTargetEntity != nil)
             """
         )
+    }
+
+    func setPresentation(
+        _ presentation: TuringStoryDoorInteractionPresentation
+    ) {
+        currentPresentation = presentation
+        let enabled = presentation != .hidden
+        iconEntity?.isEnabled = enabled
+        physicalTargetEntity?.isEnabled = enabled
+
+        if enabled,
+           var model = iconEntity?.components[ModelComponent.self] {
+            model.materials = [makeIconMaterial(presentation: presentation)]
+            iconEntity?.components.set(model)
+        }
+
+        print("""
+        [TuringDoorTrigger] presentation updated
+          presentation: \(String(describing: presentation))
+          iconEnabled: \(iconEntity?.isEnabled ?? false)
+          physicalTargetEnabled: \(physicalTargetEntity?.isEnabled ?? false)
+        """)
     }
 
     func remove() {
         iconEntity?.removeFromParent()
         iconEntity = nil
+        physicalTargetEntity?.removeFromParent()
+        physicalTargetEntity = nil
+        currentPresentation = .hidden
     }
 
-    private func makeIconMaterial() -> UnlitMaterial {
+    private func makePhysicalTarget(
+        doorPanel: Entity,
+        doorID: String
+    ) -> Entity {
+        let bounds = doorPanel.visualBounds(
+            recursive: true,
+            relativeTo: doorPanel,
+            excludeInactive: false
+        )
+        let size = SIMD3<Float>(
+            max(0.08, bounds.extents.x),
+            max(0.08, bounds.extents.y),
+            max(0.04, bounds.extents.z)
+        )
+        let target = Entity()
+        target.name = "TuringStoryDoorPhysicalActionTarget"
+        target.position = bounds.center
+        target.components.set(
+            CollisionComponent(
+                shapes: [.generateBox(size: size)]
+            )
+        )
+        target.components.set(InputTargetComponent())
+        target.components.set(
+            TuringStoryDoorTriggerComponent(
+                doorID: doorID
+            )
+        )
+        doorPanel.addChild(target)
+        return target
+    }
+
+    private func makeIconMaterial(
+        presentation: TuringStoryDoorInteractionPresentation
+    ) -> UnlitMaterial {
         var material = UnlitMaterial()
-        if let texture = try? makeIconTexture() {
+        if let texture = try? makeIconTexture(presentation: presentation) {
             material.color = .init(
                 tint: WallStickerStyle.twoStopsDownTint,
                 texture: .init(texture)
@@ -114,7 +183,9 @@ final class TuringStoryDoorIconController {
         return material
     }
 
-    private func makeIconTexture() throws -> TextureResource {
+    private func makeIconTexture(
+        presentation: TuringStoryDoorInteractionPresentation
+    ) throws -> TextureResource {
         let size = CGSize(width: 256, height: 256)
         let renderer = UIGraphicsImageRenderer(size: size)
         let image = renderer.image { context in
@@ -146,11 +217,40 @@ final class TuringStoryDoorIconController {
             )
             stroke.setFill()
             knobPath.fill()
+
+            if presentation != .hidden {
+                let arrowPath = UIBezierPath()
+                let points: [CGPoint]
+                switch presentation {
+                case .open:
+                    points = [
+                        CGPoint(x: 54, y: 128),
+                        CGPoint(x: 96, y: 92),
+                        CGPoint(x: 96, y: 164)
+                    ]
+                case .close:
+                    points = [
+                        CGPoint(x: 202, y: 128),
+                        CGPoint(x: 160, y: 92),
+                        CGPoint(x: 160, y: 164)
+                    ]
+                case .hidden:
+                    points = []
+                }
+                if let first = points.first {
+                    arrowPath.move(to: first)
+                    for point in points.dropFirst() {
+                        arrowPath.addLine(to: point)
+                    }
+                    arrowPath.close()
+                    arrowPath.fill()
+                }
+            }
         }
 
         return try TextureResource(
             image: image.cgImage!,
-            withName: "turing_story_door_sticker",
+            withName: "turing_story_door_sticker_\(String(describing: presentation))",
             options: .init(
                 semantic: .color
             )

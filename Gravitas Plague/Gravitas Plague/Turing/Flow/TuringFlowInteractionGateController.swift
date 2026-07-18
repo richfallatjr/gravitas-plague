@@ -250,5 +250,24 @@ final class TuringFlowInteractionGateController:
                 "reason": reason
             ]
         )
+
+        let mapped: StoryTuringGateState
+        switch state {
+        case .closed:
+            mapped = .closed
+        case .play:
+            mapped = .play
+        case .busy:
+            mapped = .busy
+        case .microphone:
+            mapped = .microphone
+        }
+
+        Task {
+            await StoryInteractionArbiter.shared.updateTuringGate(
+                mapped,
+                reason: reason
+            )
+        }
     }
 }

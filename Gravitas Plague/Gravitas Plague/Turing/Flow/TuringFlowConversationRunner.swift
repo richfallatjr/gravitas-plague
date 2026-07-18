@@ -5,6 +5,21 @@ struct TuringFlowConversationRequest: Sendable {
     let outputRoute: TuringVoiceOutputContext
     let conversationKey: String
     let playerDictation: String
+    let interactionLease: StoryInteractionLease?
+
+    init(
+        characterID: String,
+        outputRoute: TuringVoiceOutputContext,
+        conversationKey: String,
+        playerDictation: String,
+        interactionLease: StoryInteractionLease? = nil
+    ) {
+        self.characterID = characterID
+        self.outputRoute = outputRoute
+        self.conversationKey = conversationKey
+        self.playerDictation = playerDictation
+        self.interactionLease = interactionLease
+    }
 }
 
 enum TuringFlowConversationRunner {
@@ -13,6 +28,48 @@ enum TuringFlowConversationRunner {
         seedStore: TuringConversationSeedStore = .shared,
         onSegmentZeroReady:
             (@MainActor @Sendable () -> Void)? = nil
+    ) async -> TuringVoiceRunResult {
+        let interactionLease: StoryInteractionLease
+        do {
+            if let suppliedLease = request.interactionLease {
+                try await StoryInteractionArbiter.shared.requireCurrent(
+                    suppliedLease
+                )
+                interactionLease = suppliedLease
+            } else {
+                interactionLease = try await TuringHighMemoryPreflightCoordinator
+                    .shared
+                    .acquireInteractionLease(
+                        runID: "conversation.\(UUID().uuidString)",
+                        source: "conversationVoice",
+                        mode: .manual
+                    )
+            }
+        } catch {
+            return .failed(
+                "Device operation failed: \(error.localizedDescription)"
+            )
+        }
+
+        let result = await runWithInteractionLease(
+            request: request,
+            interactionLease: interactionLease,
+            seedStore: seedStore,
+            onSegmentZeroReady: onSegmentZeroReady
+        )
+        await StoryInteractionArbiter.shared.release(
+            interactionLease,
+            reason: "conversationFinished"
+        )
+        return result
+    }
+
+    private static func runWithInteractionLease(
+        request: TuringFlowConversationRequest,
+        interactionLease: StoryInteractionLease,
+        seedStore: TuringConversationSeedStore,
+        onSegmentZeroReady:
+            (@MainActor @Sendable () -> Void)?
     ) async -> TuringVoiceRunResult {
         let text = request.playerDictation
             .trimmingCharacters(
@@ -297,7 +354,8 @@ enum TuringFlowConversationRunner {
 
             if let progression = await TuringEpisodeFlowController.shared
                 .conversationPlaybackCompleted(
-                    conversationKey: request.conversationKey
+                    conversationKey: request.conversationKey,
+                    interactionLease: interactionLease
                 ) {
                 if progression.succeeded == false {
                     await TuringFlowInteractionGateController

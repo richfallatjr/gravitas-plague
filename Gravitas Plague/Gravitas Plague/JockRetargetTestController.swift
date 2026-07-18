@@ -2635,6 +2635,10 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
           audioEmitterCount: \(audioCount)
           staticCorpseInstalled: \(corpseInstalled)
         """)
+        print("[BattleRuntimeCleanup] prepared clips released count=\(preparedClipCount)")
+        print("[BattleRuntimeCleanup] collision released count=\(collisionCount)")
+        print("[BattleRuntimeCleanup] character audio released count=\(audioCount)")
+        print("[BattleRuntimeCleanup] enemy controller heavy fields cleared enemyID=\(identity.enemyID.uuidString)")
         return result
     }
 

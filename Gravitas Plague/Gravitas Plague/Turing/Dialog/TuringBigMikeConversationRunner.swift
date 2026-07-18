@@ -3,6 +3,7 @@ import Foundation
 enum TuringBigMikeConversationRunner {
     static func run(
         playerDictation: String,
+        interactionLease: StoryInteractionLease? = nil,
         seedStore: TuringConversationSeedStore = .shared,
         onSegmentZeroReady:
             (@MainActor @Sendable () -> Void)? = nil
@@ -17,7 +18,9 @@ enum TuringBigMikeConversationRunner {
                     TuringDialogueThreadIdentity
                         .bigMikeRich,
                 playerDictation:
-                    playerDictation
+                    playerDictation,
+                interactionLease:
+                    interactionLease
             ),
             seedStore: seedStore,
             onSegmentZeroReady:

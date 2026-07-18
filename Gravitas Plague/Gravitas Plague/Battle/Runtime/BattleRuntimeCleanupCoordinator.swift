@@ -15,6 +15,8 @@ final class BattleRuntimeCleanupCoordinator {
 
     private let registry: BattleEnemyRuntimeRegistry
     private let corpsePresenter: BattleCorpsePresentationController
+    private var releasedResultsByBattleID:
+        [UUID: [UUID: BattleEnemyRuntimeReleaseResult]] = [:]
 
     init(
         registry: BattleEnemyRuntimeRegistry,
@@ -22,6 +24,51 @@ final class BattleRuntimeCleanupCoordinator {
     ) {
         self.registry = registry
         self.corpsePresenter = corpsePresenter
+    }
+
+    func releaseEnemy(
+        battleInstanceID: UUID,
+        enemyID: UUID,
+        reason: BattleEnemyReleaseReason,
+        retentionPolicy: BattleEnemyRetentionPolicy
+    ) async throws -> BattleEnemyRuntimeReleaseResult {
+        if let existing = releasedResultsByBattleID[battleInstanceID]?[enemyID] {
+            return existing
+        }
+        guard let lease = registry.take(
+            battleInstanceID: battleInstanceID,
+            enemyID: enemyID
+        ) else {
+            throw CleanupError.incomplete(
+                emptyFailureReport(battleInstanceID: battleInstanceID)
+            )
+        }
+
+        print("""
+        [BattleRuntimeCleanup] enemy release started
+          battleInstanceID: \(battleInstanceID.uuidString)
+          enemyID: \(enemyID.uuidString)
+          reason: \(reason.rawValue)
+        """)
+        let result = try await lease.release(
+            reason: reason,
+            retentionPolicy: retentionPolicy,
+            corpsePresenter: corpsePresenter
+        )
+        releasedResultsByBattleID[
+            battleInstanceID,
+            default: [:]
+        ][enemyID] = result
+        print("""
+        [BattleRuntimeCleanup] enemy heavy fields cleared
+          battleInstanceID: \(battleInstanceID.uuidString)
+          enemyID: \(enemyID.uuidString)
+          preparedClipsReleased: \(result.releasedPreparedClipCount)
+          collisionReleased: \(result.releasedCollisionCount)
+          characterAudioReleased: \(result.releasedAudioControllerCount)
+          activeEnemyLeaseCount: \(registry.activeEnemyCount(battleInstanceID: battleInstanceID))
+        """)
+        return result
     }
 
     func releaseBattle(
@@ -36,8 +83,11 @@ final class BattleRuntimeCleanupCoordinator {
             label: "beforeBattleRuntimeRelease"
         )
         let leases = registry.drain(battleInstanceID: battleInstanceID)
-        var results: [BattleEnemyRuntimeReleaseResult] = []
-        results.reserveCapacity(leases.count)
+        let previouslyReleased = releasedResultsByBattleID.removeValue(
+            forKey: battleInstanceID
+        ) ?? [:]
+        var results = Array(previouslyReleased.values)
+        results.reserveCapacity(results.count + leases.count)
 
         for lease in leases {
             let result = try await lease.release(
@@ -67,5 +117,25 @@ final class BattleRuntimeCleanupCoordinator {
         }
         print(report.formattedLog)
         return report
+    }
+
+    var hasActiveEnemyRuntime: Bool {
+        registry.totalActiveEnemyCount > 0
+    }
+
+    private func emptyFailureReport(
+        battleInstanceID: UUID
+    ) -> BattleRuntimeReleaseReport {
+        let snapshot = BattleRuntimeMemorySnapshot.capture(
+            label: "battleRuntimeMissingEnemyLease"
+        )
+        return BattleRuntimeReleaseReport(
+            battleInstanceID: battleInstanceID,
+            enemyResults: [],
+            fullPortalReleased: false,
+            musicStillPlaying: false,
+            before: snapshot,
+            after: snapshot
+        )
     }
 }

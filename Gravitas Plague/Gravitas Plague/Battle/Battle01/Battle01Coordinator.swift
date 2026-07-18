@@ -59,6 +59,7 @@ final class Battle01Coordinator {
 
     private(set) var state: Battle01State = .unloaded
     private var battleInstanceID: UUID?
+    private var interactionLease: StoryInteractionLease?
     private var startTask: Task<Void, Never>?
     private var richPRTask: Task<Void, Never>?
     private var aftermathTransitionTask: Task<Void, Never>?
@@ -71,6 +72,25 @@ final class Battle01Coordinator {
     private var portalCrossingStarted = false
     private var latestPlayerTarget: SIMD3<Float>?
     private var enemyMemoryPresenceAnnounced = false
+    private var runtimeReleaseWaiters:
+        [UUID: CheckedContinuation<Void, Never>] = [:]
+
+    var hasActiveBattleRuntime: Bool {
+        let registeredEnemyPresent = battleInstanceID.map {
+            enemyRegistry.activeEnemyCount(battleInstanceID: $0) > 0
+        } ?? false
+        return enemyMemoryPresenceAnnounced ||
+            registeredEnemyPresent ||
+            door.battlePortalFullExteriorResident
+    }
+
+    func waitUntilRuntimeReleased() async {
+        guard hasActiveBattleRuntime else { return }
+        let waiterID = UUID()
+        await withCheckedContinuation { continuation in
+            runtimeReleaseWaiters[waiterID] = continuation
+        }
+    }
 
     init(
         sceneRoot: Entity,
@@ -108,24 +128,47 @@ final class Battle01Coordinator {
         self.onPlayerDamage = onPlayerDamage
     }
 
-    func start(trigger: Battle01Trigger) {
+    func start(
+        trigger: Battle01Trigger,
+        instanceID: UUID,
+        interactionLease: StoryInteractionLease
+    ) {
         guard state == .unloaded,
               battleInstanceID == nil else {
             print("[Battle01] duplicate trigger ignored state=\(state.rawValue)")
             return
         }
 
-        let instanceID = UUID()
+        guard interactionLease.owner == .battle(
+            battleInstanceID: instanceID
+        ) else {
+            print("[Battle01] rejected mismatched Story interaction lease")
+            Task {
+                await StoryInteractionArbiter.shared.release(
+                    interactionLease,
+                    reason: "battleStartLeaseMismatch"
+                )
+            }
+            return
+        }
         runtimeCleanupTask?.cancel()
         runtimeCleanupTask = nil
         battleInstanceID = instanceID
+        self.interactionLease = interactionLease
         state = .preparing
         switch trigger {
         case .scriptPointCompleted(let event):
             guard event.scriptPointID == "prologue.scriptPoint03" else {
                 battleInstanceID = nil
+                self.interactionLease = nil
                 state = .unloaded
                 print("[Battle01] rejected non-ScriptPoint03 trigger scriptPointID=\(event.scriptPointID)")
+                Task {
+                    await StoryInteractionArbiter.shared.release(
+                        interactionLease,
+                        reason: "invalidBattleTrigger"
+                    )
+                }
                 return
             }
             musicStartGate.recordScriptPoint03TTSCompletion()
@@ -346,11 +389,6 @@ final class Battle01Coordinator {
               releaseBoundary: closeAnimationAndSFXCompletion
             """)
 
-            door.setBattleInteractionLocked(
-                false,
-                ownerID: instanceID,
-                reason: "portalExitComplete"
-            )
             state = .combat
             try combat.activate(
                 enemy: enemy.sourceController,
@@ -387,7 +425,7 @@ final class Battle01Coordinator {
                         self.state = .releasingBattleRuntime
                         self.scheduleRuntimeCleanup(
                             instanceID: instanceID,
-                            delaySeconds: definition.enemy.corpseRemovalDelaySeconds
+                            enemyID: enemy.enemyID
                         )
                     }
                 )
@@ -476,30 +514,23 @@ final class Battle01Coordinator {
 
     private func scheduleRuntimeCleanup(
         instanceID: UUID,
-        delaySeconds: Double
+        enemyID: UUID
     ) {
         runtimeCleanupTask?.cancel()
-        let delay = max(0, delaySeconds)
         Battle01EventLog.emit(
             "battle runtime cleanup scheduled",
             instanceID: instanceID,
             state: state,
             fields: [
-                ("delaySeconds", String(format: "%.3f", delay)),
-                ("startsAfterActualDeathAnimationCompletion", "true")
+                ("enemyID", enemyID.uuidString),
+                ("delaySeconds", "0"),
+                ("startsAtActualDeathAnimationCompletion", "true")
             ]
         )
 
         runtimeCleanupTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                try await self.clock.sleep(for: .seconds(delay))
-                try Task.checkCancellation()
-                guard self.battleInstanceID == instanceID else { return }
-
-                if let aftermathTransitionTask = self.aftermathTransitionTask {
-                    await aftermathTransitionTask.value
-                }
                 try Task.checkCancellation()
                 guard self.battleInstanceID == instanceID else { return }
 
@@ -512,11 +543,27 @@ final class Battle01Coordinator {
                 self.richPR.cancel(reason: "Battle01.deathCleanup")
                 self.combat.cancelAndRelease(reason: "Battle01.deathCleanup")
                 self.intro.cancelAndRelease(reason: "Battle01.deathCleanup")
-                let enemyID = self.prepared?.enemyID
                 self.prepared = nil
-                if let enemyID {
-                    self.onEnemyRemoved(enemyID)
-                }
+                self.onEnemyRemoved(enemyID)
+
+                let enemyResult = try await self.runtimeCleanup.releaseEnemy(
+                    battleInstanceID: instanceID,
+                    enemyID: enemyID,
+                    reason: .neutralized,
+                    retentionPolicy: .remove
+                )
+                Battle01EventLog.emit(
+                    "final enemy released",
+                    instanceID: instanceID,
+                    state: self.state,
+                    fields: [
+                        ("enemyID", enemyID.uuidString),
+                        ("heavyRuntimeReleased", String(enemyResult.heavyRuntimeReleased)),
+                        ("preparedClipCount", String(enemyResult.releasedPreparedClipCount)),
+                        ("remainingEnemyLeaseCount", "0"),
+                        ("doorCloseWaitedForEnemyRelease", "true")
+                    ]
+                )
 
                 Battle01EventLog.emit(
                     "door close requested before exterior teardown",
@@ -528,16 +575,26 @@ final class Battle01Coordinator {
                         ("requiresSFXCompletion", "true")
                     ]
                 )
-                do {
-                    try await self.door.closeForBattleAndUnloadPortal(
+                let doorCloseTask = Task { @MainActor [door = self.door] in
+                    try await door.closeForBattleAndUnloadPortal(
                         ownerID: instanceID,
-                        reason: "deathAnimationCompletedPlusFiveSeconds"
+                        reason: "finalEnemyRuntimeReleased"
                     )
+                }
+                if let aftermathTransitionTask = self.aftermathTransitionTask {
+                    await aftermathTransitionTask.value
+                }
+                try Task.checkCancellation()
+                do {
+                    try await doorCloseTask.value
                 } catch {
-                    let musicStillPlaying = await StoryAftermathMusicActor.shared.isPlaying()
+                    let aftermathPlaying =
+                        await StoryAftermathMusicActor.shared.isPlaying()
+                    let musicStillPlaying =
+                        self.soundtrack.isPlaying || aftermathPlaying
                     _ = try? await self.runtimeCleanup.releaseBattle(
                         battleInstanceID: instanceID,
-                        reason: .neutralized,
+                        reason: .battleCompleted,
                         retentionPolicy: .remove,
                         fullPortalReleased: false,
                         musicStillPlaying: musicStillPlaying,
@@ -549,10 +606,13 @@ final class Battle01Coordinator {
                 _ = BattleRuntimeMemorySnapshot.capture(
                     label: "afterBattle01FullPortalReleased"
                 )
-                let musicStillPlaying = await StoryAftermathMusicActor.shared.isPlaying()
+                let aftermathPlaying =
+                    await StoryAftermathMusicActor.shared.isPlaying()
+                let musicStillPlaying =
+                    self.soundtrack.isPlaying || aftermathPlaying
                 let report = try await self.runtimeCleanup.releaseBattle(
                     battleInstanceID: instanceID,
-                    reason: .neutralized,
+                    reason: .battleCompleted,
                     retentionPolicy: .remove,
                     fullPortalReleased: !self.door.battlePortalFullExteriorResident,
                     musicStillPlaying: musicStillPlaying,
@@ -567,7 +627,6 @@ final class Battle01Coordinator {
                 self.startTask = nil
                 self.richPRTask?.cancel()
                 self.richPRTask = nil
-                self.aftermathTransitionTask = nil
                 self.soundtrackStartContext = nil
                 self.portalCrossingStarted = false
                 self.latestPlayerTarget = nil
@@ -594,6 +653,10 @@ final class Battle01Coordinator {
                     ]
                 )
                 self.onPostBattleHold(event)
+                await self.releaseInteractionLease(
+                    reason: "battleRuntimeReleased"
+                )
+                self.resumeRuntimeReleaseWaiters()
                 self.runtimeCleanupTask = nil
             } catch is CancellationError {
                 return
@@ -605,6 +668,9 @@ final class Battle01Coordinator {
                     instanceID: instanceID,
                     state: self.state,
                     fields: [("error", error.localizedDescription)]
+                )
+                self.cancel(
+                    reason: "runtimeCleanupFailure.\(error.localizedDescription)"
                 )
             }
         }
@@ -641,6 +707,10 @@ final class Battle01Coordinator {
             reason: "cancelCleanupFinished.\(reason)"
         )
         setEnemyMemoryPresence(false, reason: "cancelCleanupFinished.\(reason)")
+        await releaseInteractionLease(
+            reason: "battleCancelled.\(reason)"
+        )
+        resumeRuntimeReleaseWaiters()
         runtimeCleanupTask = nil
     }
 
@@ -673,6 +743,29 @@ final class Battle01Coordinator {
         guard enemyMemoryPresenceAnnounced != present else { return }
         enemyMemoryPresenceAnnounced = present
         onEnemyMemoryPresenceChanged(present, reason)
+    }
+
+    private func resumeRuntimeReleaseWaiters() {
+        let waiters = runtimeReleaseWaiters.values
+        runtimeReleaseWaiters.removeAll(keepingCapacity: false)
+        for waiter in waiters {
+            waiter.resume()
+        }
+        print("""
+        [BattleRuntimeCleanup] Turing memory boundary ready
+          remainingWaiterCount: 0
+          fullPortalResident: \(door.battlePortalFullExteriorResident)
+          activeEnemyRuntime: \(hasActiveBattleRuntime)
+        """)
+    }
+
+    private func releaseInteractionLease(reason: String) async {
+        guard let interactionLease else { return }
+        self.interactionLease = nil
+        await StoryInteractionArbiter.shared.release(
+            interactionLease,
+            reason: reason
+        )
     }
 
     private func tryStartSoundtrackIfEligible(reason: String) {

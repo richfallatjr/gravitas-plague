@@ -127,6 +127,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     private var battle01Coordinator: Battle01Coordinator?
     private var prologueStoryActionRouter: PrologueStoryActionRouter?
     private var prologueCompletionCoordinator: TuringPrologueCompletionCoordinator?
+    private var turingHighMemoryPreflightAdapter:
+        StoryTuringHighMemoryPreflightAdapter?
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
     private lazy var turingStoryPlacementAdjustmentCoordinator =
         TuringStoryPlacementAdjustmentCoordinator(
@@ -399,6 +401,13 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             wallManager: roomSkinningCoordinator.wallManager,
             occupancyRegistry: wallPropOccupancyRegistry
         )
+        StoryInteractionPresentationCoordinator.shared.register(
+            turingStoryWalkieInteractionController
+        )
+        StoryInteractionPresentationCoordinator.shared.register(
+            turingDoorBundleController
+        )
+        StoryInteractionPresentationCoordinator.shared.start()
         let battle01 = Battle01Coordinator(
             sceneRoot: root,
             door: turingDoorBundleController,
@@ -442,6 +451,14 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             battleRouter: prologueRouter
         )
         battle01Coordinator = battle01
+        let highMemoryPreflight = StoryTuringHighMemoryPreflightAdapter(
+            door: turingDoorBundleController,
+            battleRuntime: battle01
+        )
+        turingHighMemoryPreflightAdapter = highMemoryPreflight
+        await TuringHighMemoryPreflightCoordinator.shared.install(
+            highMemoryPreflight
+        )
         prologueStoryActionRouter = prologueRouter
         prologueCompletionCoordinator = completionCoordinator
         await TuringEpisodeFlowController.shared
@@ -1458,7 +1475,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             prologueStoryActionRouter?.reset(reason: "storyTeleport.absent")
         case .battle01Start:
             let sourceEventID = TuringStoryProgressStore.shared.snapshot?.sourceEventID ?? UUID()
-            prologueStoryActionRouter?.startBattle01FromContinuation(
+            try await prologueStoryActionRouter?.startBattle01FromContinuation(
                 sourceEventID: sourceEventID
             )
         case .battle01Ready, .battle01Combat, .battle01GrandmaDown:
@@ -2125,15 +2142,21 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     }
 
     func shutdown() {
+        StoryInteractionPresentationCoordinator.shared.stop()
         TuringStoryStateTeleportCoordinator.shared.detach(self)
         TuringStoryStageCoordinator.shared.invalidate(reason: "immersiveShutdown")
         battle01Coordinator?.cancel(reason: "immersiveShutdown")
         battle01Coordinator = nil
         prologueStoryActionRouter = nil
         prologueCompletionCoordinator = nil
+        turingHighMemoryPreflightAdapter = nil
         Task {
+            await TuringHighMemoryPreflightCoordinator.shared.clear()
             await TuringEpisodeFlowController.shared
                 .setCompletionEventSink(nil)
+            await StoryInteractionArbiter.shared.reset(
+                reason: "immersiveShutdown"
+            )
         }
         turingStoryPlacementAdjustmentCoordinator.cancel(
             reason: "immersiveShutdown"

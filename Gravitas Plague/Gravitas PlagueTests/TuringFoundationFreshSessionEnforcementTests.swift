@@ -5,6 +5,21 @@ import XCTest
 final class TuringFoundationFreshSessionEnforcementTests:
     XCTestCase {
 
+    func testFoundationPromptSanitizerReplacesWholeWordBeforeSubmission() {
+        XCTAssertEqual(
+            TuringFoundationPromptSanitizer.sanitize(
+                "This shit, SHIT, and Shit must be replaced."
+            ),
+            "This stuff, stuff, and stuff must be replaced."
+        )
+        XCTAssertEqual(
+            TuringFoundationPromptSanitizer.sanitize(
+                "Shitake and bullshit are different words."
+            ),
+            "Shitake and bullshit are different words."
+        )
+    }
+
     func testOnlyGatewayMayReferenceLanguageModelSession()
         throws {
         let sourceRoot = try appSourceRoot()

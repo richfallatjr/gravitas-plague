@@ -23,6 +23,10 @@ final class Battle01SoundtrackController: NSObject, Battle01SoundtrackControllin
     private var activeBattleInstanceID: UUID?
     private var onCompleted: (@MainActor (UUID, Bool) -> Void)?
 
+    var isPlaying: Bool {
+        activePlayer?.isPlaying == true
+    }
+
     func prepare(fileURL: URL) throws {
         let validator = try AVAudioPlayer(contentsOf: fileURL)
         guard validator.duration > 0 else {

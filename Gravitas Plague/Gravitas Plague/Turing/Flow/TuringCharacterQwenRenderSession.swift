@@ -29,13 +29,24 @@ struct TuringCharacterQwenRenderSessionFactory:
     TuringCharacterRenderSessionMaking,
     Sendable
 {
+    private let highMemoryPreflight:
+        any TuringHighMemoryScenePreparing
+
+    init(
+        highMemoryPreflight: any TuringHighMemoryScenePreparing =
+            TuringHighMemoryPreflightCoordinator.shared
+    ) {
+        self.highMemoryPreflight = highMemoryPreflight
+    }
+
     func make(
         runtime: TuringCharacterRuntimeDefinition,
         runID: String
     ) -> any TuringCharacterRenderSession {
         TuringCharacterQwenRenderSession(
             runtime: runtime,
-            runID: runID
+            runID: runID,
+            highMemoryPreflight: highMemoryPreflight
         )
     }
 }
@@ -45,6 +56,8 @@ actor TuringCharacterQwenRenderSession: TuringCharacterRenderSession {
     private let runID: String
     private let resources: TuringBaseCloneRuntimeResources
     private let arbiter: TuringQwenCharacterPoolArbiter
+    private let highMemoryPreflight:
+        any TuringHighMemoryScenePreparing
 
     private var pool: TuringQwenNativeFreshInstancePool?
     private var scheduler: TuringQwenNativeFreshInstanceScheduler?
@@ -62,16 +75,23 @@ actor TuringCharacterQwenRenderSession: TuringCharacterRenderSession {
         runID: String,
         resources: TuringBaseCloneRuntimeResources =
             TuringBaseCloneRuntimeResources(),
-        arbiter: TuringQwenCharacterPoolArbiter = .shared
+        arbiter: TuringQwenCharacterPoolArbiter = .shared,
+        highMemoryPreflight: any TuringHighMemoryScenePreparing =
+            TuringHighMemoryPreflightCoordinator.shared
     ) {
         self.runtime = runtime
         self.runID = runID
         self.resources = resources
         self.arbiter = arbiter
+        self.highMemoryPreflight = highMemoryPreflight
     }
 
     func begin() async throws {
         guard started == false else { return }
+
+        try await highMemoryPreflight.prepareForTuringHighMemoryRun(
+            runID: runID
+        )
 
         let owner = "\(runtime.characterID).\(runID)"
         await arbiter.acquire(owner: owner)

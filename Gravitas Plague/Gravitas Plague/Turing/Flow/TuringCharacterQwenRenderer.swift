@@ -83,6 +83,8 @@ actor TuringCharacterQwenRenderer:
   private let runtime: TuringCharacterRuntimeDefinition
   private let resources: TuringBaseCloneRuntimeResources
   private let arbiter: TuringQwenCharacterPoolArbiter
+  private let highMemoryPreflight:
+    any TuringHighMemoryScenePreparing
 
   init(
     runtime:
@@ -92,11 +94,15 @@ actor TuringCharacterQwenRenderer:
       TuringBaseCloneRuntimeResources(),
     arbiter:
       TuringQwenCharacterPoolArbiter =
-      .shared
+      .shared,
+    highMemoryPreflight:
+      any TuringHighMemoryScenePreparing =
+      TuringHighMemoryPreflightCoordinator.shared
   ) {
     self.runtime = runtime
     self.resources = resources
     self.arbiter = arbiter
+    self.highMemoryPreflight = highMemoryPreflight
   }
 
   func render(
@@ -123,7 +129,8 @@ actor TuringCharacterQwenRenderer:
       runtime: runtime,
       runID: runID,
       resources: resources,
-      arbiter: arbiter
+      arbiter: arbiter,
+      highMemoryPreflight: highMemoryPreflight
     )
     do {
       try await session.begin()

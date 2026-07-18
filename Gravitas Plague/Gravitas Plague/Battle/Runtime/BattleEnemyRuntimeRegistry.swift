@@ -51,7 +51,9 @@ final class BattleEnemyRuntimeLease {
             corpsePresenter: corpsePresenter
         )
         controller = nil
-        await Task.yield()
+        for _ in 0..<3 where weakController != nil {
+            await Task.yield()
+        }
         let finalResult = result.recordingControllerRelease(
             weakController == nil
         )
@@ -115,6 +117,22 @@ final class BattleEnemyRuntimeRegistry {
         }
     }
 
+    func take(
+        battleInstanceID: UUID,
+        enemyID: UUID
+    ) -> BattleEnemyRuntimeLease? {
+        guard var leases = leasesByBattleID[battleInstanceID],
+              let lease = leases.removeValue(forKey: enemyID) else {
+            return nil
+        }
+        if leases.isEmpty {
+            leasesByBattleID.removeValue(forKey: battleInstanceID)
+        } else {
+            leasesByBattleID[battleInstanceID] = leases
+        }
+        return lease
+    }
+
     func drainAll() -> [BattleEnemyRuntimeLease] {
         let leases = leasesByBattleID.values.flatMap { Array($0.values) }
         leasesByBattleID.removeAll(keepingCapacity: false)
@@ -123,5 +141,9 @@ final class BattleEnemyRuntimeRegistry {
 
     func activeEnemyCount(battleInstanceID: UUID) -> Int {
         leasesByBattleID[battleInstanceID]?.count ?? 0
+    }
+
+    var totalActiveEnemyCount: Int {
+        leasesByBattleID.values.reduce(0) { $0 + $1.count }
     }
 }

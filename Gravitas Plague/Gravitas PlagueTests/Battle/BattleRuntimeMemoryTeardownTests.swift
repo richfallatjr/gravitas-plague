@@ -48,11 +48,19 @@ final class BattleRuntimeMemoryTeardownTests: XCTestCase {
         let animation = try appSource(
             "Turing/Props/TuringStoryDoorAnimationController.swift"
         )
+        let battleCloseStart = try XCTUnwrap(
+            door.range(of: "func closeForBattleAndUnloadPortal(")
+        )
+        let battleCloseSource = door[battleCloseStart.lowerBound...]
         let closeWait = try XCTUnwrap(
-            door.range(of: "try await animationController.closeAndWait(")
+            battleCloseSource.range(
+                of: "try await animationController.closeAndWait("
+            )
         )
         let releaseCheck = try XCTUnwrap(
-            door.range(of: "battlePortalFullExteriorResident == false")
+            battleCloseSource.range(
+                of: "battlePortalFullExteriorResident == false"
+            )
         )
 
         XCTAssertLessThan(closeWait.lowerBound, releaseCheck.lowerBound)

@@ -11,6 +11,16 @@ protocol TuringFoundationQueryRunning: Sendable {
     ) async throws -> String
 }
 
+enum TuringFoundationPromptSanitizer {
+    static func sanitize(_ prompt: String) -> String {
+        prompt.replacingOccurrences(
+            of: #"(?i)\bshit\b"#,
+            with: "stuff",
+            options: .regularExpression
+        )
+    }
+}
+
 /// The sole production gateway to Apple Foundation Models.
 ///
 /// This type intentionally has no stored properties. Every `runPrompt`
@@ -24,9 +34,20 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
         purpose: String
     ) async throws -> String {
         let requestID = UUID()
+        let sanitizedPrompt = TuringFoundationPromptSanitizer
+            .sanitize(prompt)
+
+        if sanitizedPrompt != prompt {
+            print("""
+            [TuringFoundationPrompt] sanitized
+              requestID: \(requestID.uuidString)
+              purpose: \(purpose)
+              replacement: shit -> stuff
+            """)
+        }
 
         Self.logExactPrompt(
-            prompt,
+            sanitizedPrompt,
             purpose: purpose,
             requestID: requestID
         )
@@ -34,7 +55,7 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
 #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, visionOS 26.0, *) {
             return try await Self.respondUsingFreshSession(
-                prompt: prompt,
+                prompt: sanitizedPrompt,
                 purpose: purpose,
                 requestID: requestID
             )

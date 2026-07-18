@@ -39,6 +39,10 @@ actor TuringEpisodeFlowController {
         TuringConversationSeedStore
     private let catalogValidator:
         (any TuringFlowCatalogValidating)?
+    private let interactionPreflight:
+        TuringHighMemoryPreflightCoordinator
+    private let interactionArbiter:
+        StoryInteractionArbiter
 
     private var activeSequenceID: UUID?
     private var catalogValidated = false
@@ -46,6 +50,8 @@ actor TuringEpisodeFlowController {
         Set<String>()
     private var pendingConversationAdvance:
         PendingConversationAdvance?
+    private var activeInteractionLease:
+        StoryInteractionLease?
     private weak var completionEventSink:
         (any TuringPrologueCompletionEventSink)?
 
@@ -56,6 +62,10 @@ actor TuringEpisodeFlowController {
                 TuringFlowDescriptorStore(),
         seedStore:
             TuringConversationSeedStore = .shared,
+        interactionPreflight:
+            TuringHighMemoryPreflightCoordinator = .shared,
+        interactionArbiter:
+            StoryInteractionArbiter = .shared,
         catalogValidator:
             (any TuringFlowCatalogValidating)? =
                 TuringFlowCatalogValidator()
@@ -63,6 +73,8 @@ actor TuringEpisodeFlowController {
         self.engine = engine
         self.descriptorStore = descriptorStore
         self.seedStore = seedStore
+        self.interactionPreflight = interactionPreflight
+        self.interactionArbiter = interactionArbiter
         self.catalogValidator = catalogValidator
     }
 
@@ -83,6 +95,29 @@ actor TuringEpisodeFlowController {
             )
         }
 
+        let sequenceID = UUID()
+        activeSequenceID = sequenceID
+        let result = await runSequence(
+            scriptPointID: scriptPointID,
+            trigger: trigger,
+            allowExplicitReplay: allowExplicitReplay,
+            sequenceID: sequenceID
+        )
+        if activeSequenceID == sequenceID {
+            activeSequenceID = nil
+        }
+        await finishInteractionLease(
+            reason: "sequenceFinished.\(sequenceID.uuidString).\(scriptPointID)"
+        )
+        return result
+    }
+
+    private func runSequence(
+        scriptPointID: String,
+        trigger: TuringFlowTriggerSource,
+        allowExplicitReplay: Bool,
+        sequenceID: UUID
+    ) async -> TuringVoiceRunResult {
         if catalogValidated == false,
            let catalogValidator {
             do {
@@ -105,12 +140,22 @@ actor TuringEpisodeFlowController {
             )
         }
 
-        let sequenceID = UUID()
-        activeSequenceID = sequenceID
-        defer {
-            if activeSequenceID == sequenceID {
-                activeSequenceID = nil
+        do {
+            if let adoptedLease = activeInteractionLease {
+                try await interactionArbiter.requireCurrent(adoptedLease)
+            } else {
+                let claimedLease = try await interactionPreflight
+                    .acquireInteractionLease(
+                        runID: sequenceID.uuidString,
+                        source: trigger.logValue,
+                        mode: trigger.interactionStartMode
+                    )
+                activeInteractionLease = claimedLease
             }
+        } catch {
+            return .failed(
+                "Device operation failed: \(error.localizedDescription)"
+            )
         }
 
         var scheduledPointID =
@@ -351,7 +396,8 @@ actor TuringEpisodeFlowController {
     }
 
     func conversationPlaybackCompleted(
-        conversationKey: String
+        conversationKey: String,
+        interactionLease: StoryInteractionLease? = nil
     ) async -> TuringVoiceRunResult? {
         guard let pending =
                 pendingConversationAdvance else {
@@ -369,6 +415,18 @@ actor TuringEpisodeFlowController {
         }
 
         pendingConversationAdvance = nil
+
+        if let interactionLease {
+            do {
+                try await adoptConversationInteractionLease(
+                    interactionLease
+                )
+            } catch {
+                return .failed(
+                    "Device operation failed: \(error.localizedDescription)"
+                )
+            }
+        }
 
         await TuringFlowInteractionGateController
             .shared
@@ -389,7 +447,54 @@ actor TuringEpisodeFlowController {
         )
     }
 
+    func adoptConversationInteractionLease(
+        _ lease: StoryInteractionLease
+    ) async throws {
+        guard activeSequenceID == nil,
+              activeInteractionLease == nil else {
+            throw StoryInteractionClaimError.exclusiveOwnerActive
+        }
+        try await interactionArbiter.requireCurrent(lease)
+        guard case .turingFlow = lease.owner else {
+            throw StoryInteractionClaimError.invalidTransfer
+        }
+        activeInteractionLease = lease
+    }
+
+    func transferActiveInteractionToBattle(
+        battleInstanceID: UUID,
+        reason: String
+    ) async throws -> StoryInteractionLease {
+        guard let activeInteractionLease else {
+            throw StoryInteractionClaimError.staleLease
+        }
+        let battleLease = try await interactionArbiter
+            .transferTuringToBattle(
+                turingLease: activeInteractionLease,
+                battleInstanceID: battleInstanceID,
+                reason: reason
+            )
+        self.activeInteractionLease = nil
+        return battleLease
+    }
+
+    private func finishInteractionLease(reason: String) async {
+        guard let activeInteractionLease else { return }
+        self.activeInteractionLease = nil
+        await interactionArbiter.release(
+            activeInteractionLease,
+            reason: reason
+        )
+    }
+
     func resetEpisode(reason: String) async {
+        if let activeInteractionLease {
+            self.activeInteractionLease = nil
+            await interactionArbiter.release(
+                activeInteractionLease,
+                reason: "episodeReset.\(reason)"
+            )
+        }
         activeSequenceID = nil
         completedScriptPointIDs.removeAll(
             keepingCapacity: false
@@ -411,7 +516,14 @@ actor TuringEpisodeFlowController {
         """)
     }
 
-    func quiesceForStoryTeleport(reason: String) {
+    func quiesceForStoryTeleport(reason: String) async {
+        if let activeInteractionLease {
+            self.activeInteractionLease = nil
+            await interactionArbiter.release(
+                activeInteractionLease,
+                reason: "storyTeleport.\(reason)"
+            )
+        }
         activeSequenceID = nil
         pendingConversationAdvance = nil
         print("[TuringFlow] quiesced for Story teleport reason=\(reason)")

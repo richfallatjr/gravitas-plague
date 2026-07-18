@@ -20,7 +20,7 @@
     "externalMotionDriven": true,
     "rootMotionEnabledDuringPath": false,
     "retainCorpseAfterDeath": false,
-    "corpseRemovalDelaySeconds": 5.0
+    "corpseRemovalDelaySeconds": 0.0
   },
   "door": {
     "autoOpenIfClosed": true,
@@ -52,7 +52,7 @@
     "delayAfterGrandmaDeathMinSeconds": 3.0,
     "delayAfterGrandmaDeathMaxSeconds": 5.0,
     "crossfadeDurationSeconds": 2.5,
-    "targetDecibels": -15.0,
+    "targetDecibels": -22.0,
     "stop": "prologueTeardown"
   },
   "richPrerecording": {
