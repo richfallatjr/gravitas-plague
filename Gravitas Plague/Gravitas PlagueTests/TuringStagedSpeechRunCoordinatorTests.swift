@@ -30,7 +30,7 @@ final class TuringStagedSpeechRunCoordinatorTests: XCTestCase {
             )
         )
         let promptStage = TuringFlowGenerationPipelineDescriptor.Stage(
-            stageID: "personalFollowUp",
+            stageID: "promptVoice",
             kind: .voicePrompt,
             sourceResourcePath: nil,
             voicePromptID: "test.prompt",
@@ -134,7 +134,7 @@ final class TuringStagedSpeechRunCoordinatorTests: XCTestCase {
         XCTAssertEqual(report.committedStages.count, 1)
         XCTAssertEqual(report.committedStages[0].globalRange, 0..<2)
         XCTAssertEqual(report.failedStages.count, 1)
-        XCTAssertEqual(report.failedStages[0].stageID, "personalFollowUp")
+        XCTAssertEqual(report.failedStages[0].stageID, "promptVoice")
 
         let events = await recorder.snapshot()
         assertOrdered(

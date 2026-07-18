@@ -35,14 +35,14 @@
           }
         },
         {
-          "stageID": "personalFollowUp",
+          "stageID": "promptVoice",
           "kind": "voicePrompt",
           "sourceResourcePath": null,
-          "voicePromptID": "prologue.bigMike.scriptPoint05.followUp.001",
+          "voicePromptID": "prologue.bigMike.scriptPoint05.promptVoice.001",
           "defaultEmotion": "controlled, uneasy, protective, trying to sound casual",
           "contextSource": {
-            "kind": "stageSourceTranscript",
-            "stageID": "headlineReading"
+            "kind": "prerecordingTranscript",
+            "stageID": null
           }
         }
       ]

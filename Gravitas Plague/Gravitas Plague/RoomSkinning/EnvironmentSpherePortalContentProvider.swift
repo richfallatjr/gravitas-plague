@@ -12,13 +12,16 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
 
     let atmosphere: PortalHDRIAtmosphere
     let domeCenterOffsetZ: Float
+    let domeRadius: Float
 
     init(
         atmosphere: PortalHDRIAtmosphere,
-        domeCenterOffsetZ: Float = 0.0
+        domeCenterOffsetZ: Float = 0.0,
+        domeRadius: Float = PortalHDRIDomePlacementTuning.radiusMeters
     ) {
         self.atmosphere = atmosphere
         self.domeCenterOffsetZ = domeCenterOffsetZ
+        self.domeRadius = domeRadius
     }
 
     @MainActor
@@ -70,7 +73,8 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
             texture: resources.visibleTexture,
             resourceName: resources.name,
             atmosphere: atmosphere,
-            centerOffsetZ: domeCenterOffsetZ
+            centerOffsetZ: domeCenterOffsetZ,
+            radius: domeRadius
         )
 
         portalWorld.addChild(dome)
@@ -108,7 +112,9 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
               atmosphere: \(atmosphere.rawValue)
               exr: \(atmosphere.exrResourceName).exr
               dome: true
+              domeRadius: \(domeRadius)
               domeCenterOffsetZ: \(domeCenterOffsetZ)
+              nearestDomeShellDistance: \(domeRadius - abs(domeCenterOffsetZ))
               projectedGroundDisc: \(context.groundDiscEnabled)
               floorY: \(context.floorY)
               groundRadius: \(context.groundDiscRadius)
@@ -129,7 +135,11 @@ private enum PortalHDRIDomeOrientation {
 
 enum PortalHDRIDomePlacementTuning {
     static let radiusMeters: Float = 12.0
-    static let storyOpeningCenterOffsetZ: Float = -9.0
+    static let storyOpeningRadiusMeters: Float = 48.0
+    static let storyOpeningCenterOffsetZ: Float =
+        -storyOpeningRadiusMeters * 0.75
+    static let storyOpeningCameraClearanceMeters: Float =
+        storyOpeningRadiusMeters - abs(storyOpeningCenterOffsetZ)
 }
 
 private struct LoadedPortalEXRResources {
@@ -276,7 +286,8 @@ private extension HDRIDomePortalContentProvider {
         texture: TextureResource,
         resourceName: String,
         atmosphere: PortalHDRIAtmosphere,
-        centerOffsetZ: Float
+        centerOffsetZ: Float,
+        radius: Float
     ) throws -> ModelEntity {
         var material = UnlitMaterial()
         material.color = .init(
@@ -289,8 +300,6 @@ private extension HDRIDomePortalContentProvider {
             texture: .init(texture)
         )
         material.faceCulling = .none
-
-        let radius = PortalHDRIDomePlacementTuning.radiusMeters
 
         let dome = ModelEntity(
             mesh: .generateSphere(radius: radius),

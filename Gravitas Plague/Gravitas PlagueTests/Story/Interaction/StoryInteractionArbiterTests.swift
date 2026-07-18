@@ -28,6 +28,25 @@ final class StoryInteractionArbiterTests: XCTestCase {
         await arbiter.updateTuringGate(.closed, reason: "test")
         snapshot = await arbiter.currentSnapshot()
         XCTAssertEqual(snapshot.walkiePresentation, .hidden)
+        XCTAssertEqual(snapshot.doorPresentation, .open)
+        XCTAssertEqual(snapshot.capabilities, [.doorOpen])
+    }
+
+    func testDoorIsAvailableBeforeAnyTuringFlowStarts() async throws {
+        let arbiter = StoryInteractionArbiter()
+
+        var snapshot = await arbiter.currentSnapshot()
+        XCTAssertEqual(snapshot.turingGate, .closed)
+        XCTAssertEqual(snapshot.doorState, .closedUnloaded)
+        XCTAssertEqual(snapshot.walkiePresentation, .hidden)
+        XCTAssertEqual(snapshot.doorPresentation, .open)
+        XCTAssertEqual(snapshot.capabilities, [.doorOpen])
+
+        let lease = try await arbiter.claimManualDoor(
+            source: "beforeGameStarts"
+        )
+        snapshot = await arbiter.currentSnapshot()
+        XCTAssertEqual(snapshot.exclusiveOwner, lease.owner)
         XCTAssertEqual(snapshot.doorPresentation, .hidden)
         XCTAssertTrue(snapshot.capabilities.isEmpty)
     }

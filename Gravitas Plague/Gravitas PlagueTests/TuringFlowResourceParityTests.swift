@@ -152,7 +152,7 @@ final class TuringFlowResourceParityTests:
         )
     }
 
-    func testScriptPoint05UsesDebugHeadlineThroughAudiobookThenPromptVoice()
+    func testScriptPoint05UsesDebugHeadlineThenStandardPRPromptVoice()
         throws {
         let point05 = try TuringFlowDescriptorStore().require(
             "prologue.scriptPoint05"
@@ -166,16 +166,14 @@ final class TuringFlowResourceParityTests:
         XCTAssertEqual(pipeline.stages[1].kind, .voicePrompt)
         XCTAssertEqual(
             pipeline.stages[1].voicePromptID,
-            "prologue.bigMike.scriptPoint05.followUp.001"
+            "prologue.bigMike.scriptPoint05.promptVoice.001"
         )
+        XCTAssertEqual(pipeline.stages[1].stageID, "promptVoice")
         XCTAssertEqual(
             pipeline.stages[1].contextSource.kind,
-            .stageSourceTranscript
+            .prerecordingTranscript
         )
-        XCTAssertEqual(
-            pipeline.stages[1].contextSource.stageID,
-            pipeline.stages[0].stageID
-        )
+        XCTAssertNil(pipeline.stages[1].contextSource.stageID)
 
         let sourcePath = try XCTUnwrap(
             pipeline.stages[0].sourceResourcePath

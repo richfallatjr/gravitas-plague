@@ -218,6 +218,9 @@ final class TuringStoryDoorBundleController:
             anchor: resolvedAnchors.iconAnchor,
             doorPanel: resolvedAnchors.doorPanelRoot
         )
+        applyInteractionSnapshot(
+            await StoryInteractionArbiter.shared.currentSnapshot()
+        )
         portalLifecycle.recoverClosedUnloaded()
         updateInteractionPresentation()
     }
@@ -283,6 +286,9 @@ final class TuringStoryDoorBundleController:
             iconController.install(
                 anchor: resolvedAnchors.iconAnchor,
                 doorPanel: resolvedAnchors.doorPanelRoot
+            )
+            applyInteractionSnapshot(
+                await StoryInteractionArbiter.shared.currentSnapshot()
             )
             portalLifecycle.recoverClosedUnloaded()
             updateInteractionPresentation()

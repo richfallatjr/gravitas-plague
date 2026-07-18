@@ -33,6 +33,24 @@ final class StoryInteractionPresentationTests: XCTestCase {
         XCTAssertEqual(surface.snapshots.last?.doorPresentation, .open)
     }
 
+    func testInitialClosedTuringGateStillPresentsDoorOpen() async {
+        let coordinator = StoryInteractionPresentationCoordinator(
+            arbiter: StoryInteractionArbiter()
+        )
+        let surface = Surface()
+        let received = expectation(description: "initial idle snapshot")
+        surface.onSnapshot = { received.fulfill() }
+
+        coordinator.register(surface)
+        coordinator.start()
+        await fulfillment(of: [received], timeout: 1.0)
+        coordinator.stop()
+
+        XCTAssertEqual(surface.snapshots.last?.walkiePresentation, .hidden)
+        XCTAssertEqual(surface.snapshots.last?.doorPresentation, .open)
+        XCTAssertEqual(surface.snapshots.last?.capabilities, [.doorOpen])
+    }
+
     func testSurfaceRegistrationDoesNotRetainDeadSurface() {
         let coordinator = StoryInteractionPresentationCoordinator(
             arbiter: StoryInteractionArbiter()

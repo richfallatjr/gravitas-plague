@@ -79,7 +79,7 @@ actor StoryInteractionArbiter {
         guard exclusiveLease == nil else {
             return try reject(.exclusiveOwnerActive, requested: "doorPortal", source: source)
         }
-        guard turingGate == .play || turingGate == .microphone else {
+        guard turingGate != .busy else {
             return try reject(.turingGateNotInteractive, requested: "doorPortal", source: source)
         }
         guard doorState == .closedUnloaded else {
@@ -272,7 +272,11 @@ actor StoryInteractionArbiter {
                 capabilities = [.walkieMicrophone, .doorOpen]
                 walkie = .microphone
                 door = .open
-            case .closed, .busy:
+            case .closed:
+                capabilities = [.doorOpen]
+                walkie = .hidden
+                door = .open
+            case .busy:
                 capabilities = []
                 walkie = .hidden
                 door = .hidden

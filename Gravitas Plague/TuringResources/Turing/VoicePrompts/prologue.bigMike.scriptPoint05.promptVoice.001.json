@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "voicePromptID": "prologue.bigMike.scriptPoint05.followUp.001",
+  "voicePromptID": "prologue.bigMike.scriptPoint05.promptVoice.001",
   "speakerID": "big_mike",
   "voiceID": "big_mike_base_clone_v1",
   "characterProfileID": "big_mike",
