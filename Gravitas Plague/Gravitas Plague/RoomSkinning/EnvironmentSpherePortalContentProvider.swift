@@ -135,9 +135,8 @@ private enum PortalHDRIDomeOrientation {
 
 enum PortalHDRIDomePlacementTuning {
     static let radiusMeters: Float = 12.0
-    static let storyOpeningRadiusMeters: Float = 48.0
-    static let storyOpeningCenterOffsetZ: Float =
-        -storyOpeningRadiusMeters * 0.75
+    static let storyOpeningRadiusMeters: Float = radiusMeters
+    static let storyOpeningCenterOffsetZ: Float = -9.0
     static let storyOpeningCameraClearanceMeters: Float =
         storyOpeningRadiusMeters - abs(storyOpeningCenterOffsetZ)
 }
@@ -299,7 +298,9 @@ private extension HDRIDomePortalContentProvider {
             ),
             texture: .init(texture)
         )
-        material.faceCulling = .none
+        // The negative X scale reverses the sphere winding. Back-face culling
+        // therefore keeps the interior visible and makes the exterior clear.
+        material.faceCulling = .back
 
         let dome = ModelEntity(
             mesh: .generateSphere(radius: radius),
@@ -324,7 +325,9 @@ private extension HDRIDomePortalContentProvider {
               forwardDepthFractionOfDiameter: \((radius - centerOffsetZ) / (radius * 2.0))
               negativeXScale: true
               yRotationDegrees: \(PortalHDRIDomeOrientation.yRotationDegrees)
-              faceCulling: none
+              faceCulling: back
+              singleSidedInterior: true
+              exteriorTransparent: true
               unlitMaterial: true
               textureFromEXR: true
               visibleExposure: \(atmosphere.visibleExposure)

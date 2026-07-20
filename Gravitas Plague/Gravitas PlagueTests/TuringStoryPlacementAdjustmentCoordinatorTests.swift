@@ -248,7 +248,7 @@ final class TuringStoryPlacementAdjustmentCoordinatorTests: XCTestCase {
         )
     }
 
-    func testOtherPropOccupancyFiltersAlternativeBeforePreview() throws {
+    func testOtherPropOccupancyDoesNotRestrictManualPlacement() throws {
         let registry = WallPropOccupancyRegistry()
         let bars = TuringStoryPlacementMockBars()
         let window = TuringStoryPlacementMockAdapter(
@@ -291,11 +291,18 @@ final class TuringStoryPlacementAdjustmentCoordinatorTests: XCTestCase {
         coordinator.begin(propID: .window, worldPoint: .zero)
         coordinator.update(worldPoint: SIMD3<Float>(0.066, 0, 0))
 
-        XCTAssertEqual(window.previewedSlots.last?.slotID, legal.slotID)
-        XCTAssertFalse(
-            window.previewedSlots.contains(where: {
-                $0.slotID == blocked.slotID
-            }))
+        XCTAssertEqual(window.previewedSlots.last?.slotID, blocked.slotID)
+
+        coordinator.end(commit: true)
+
+        XCTAssertEqual(
+            coordinator.activeSlotForTesting(propID: .window)?.slotID,
+            blocked.slotID
+        )
+        XCTAssertEqual(
+            registry.recordsByID[window.adjustmentOccupancyID]?.rect,
+            registry.recordsByID[door.adjustmentOccupancyID]?.rect
+        )
     }
 
     func testLowerPriorityPropCanMoveAfterHigherPriorityCommit() throws {
@@ -392,7 +399,7 @@ final class TuringStoryPlacementAdjustmentCoordinatorTests: XCTestCase {
     }
 
     private func makeCoordinator(
-        registry: WallPropOccupancyRegistry,
+        registry _: WallPropOccupancyRegistry,
         bars: TuringStoryPlacementMockBars,
         adapters: [TuringStoryPropID: TuringStoryPlacementMockAdapter]
     ) -> TuringStoryPlacementAdjustmentCoordinator {
@@ -405,7 +412,6 @@ final class TuringStoryPlacementAdjustmentCoordinatorTests: XCTestCase {
             result[pair.key] = pair.value
         }
         return TuringStoryPlacementAdjustmentCoordinator(
-            occupancyRegistry: registry,
             adapters: erased,
             bars: bars
         )

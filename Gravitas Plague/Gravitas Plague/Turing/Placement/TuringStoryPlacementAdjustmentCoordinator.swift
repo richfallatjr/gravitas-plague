@@ -21,7 +21,6 @@ final class TuringStoryPlacementAdjustmentCoordinator {
         var accumulatedMeters: Float
     }
 
-    private let occupancyRegistry: WallPropOccupancyRegistry
     private let adapters: [TuringStoryPropID: any TuringStoryAdjustablePlacementController]
     private let bars: any TuringStoryPlacementAdjustmentBarPresenting
 
@@ -31,11 +30,9 @@ final class TuringStoryPlacementAdjustmentCoordinator {
     private(set) var activeScanID: String?
 
     init(
-        occupancyRegistry: WallPropOccupancyRegistry,
         adapters: [TuringStoryPropID: any TuringStoryAdjustablePlacementController],
         bars: any TuringStoryPlacementAdjustmentBarPresenting
     ) {
-        self.occupancyRegistry = occupancyRegistry
         self.adapters = adapters
         self.bars = bars
     }
@@ -43,11 +40,9 @@ final class TuringStoryPlacementAdjustmentCoordinator {
     convenience init(
         wallProvider: any TuringStoryAdjustmentWallProviding,
         frontEdgeProvider: (any TuringStoryAdjustmentFrontEdgeProviding)? = nil,
-        occupancyRegistry: WallPropOccupancyRegistry,
         adapters: [TuringStoryPropID: any TuringStoryAdjustablePlacementController]
     ) {
         self.init(
-            occupancyRegistry: occupancyRegistry,
             adapters: adapters,
             bars: TuringStoryPlacementAdjustmentBarPresenter(
                 wallProvider: wallProvider,
@@ -111,7 +106,7 @@ final class TuringStoryPlacementAdjustmentCoordinator {
         activeSlotByProp = selected
         activeScanID = seed.scanID
         bars.show(activeSlots: selected)
-        refilterAllRoutesAfterCommit()
+        refreshBarAvailability()
 
         print(
             "[TuringPlacementAdjust] activated scanID=\(seed.scanID) activeProps=\(selected.count)"
@@ -128,16 +123,13 @@ final class TuringStoryPlacementAdjustmentCoordinator {
             )
             return
         }
-        guard let adapter = adapters[propID],
-            let current = activeSlotByProp[propID]
+        guard adapters[propID] != nil,
+              let current = activeSlotByProp[propID]
         else {
             return
         }
 
-        var route = selectableRoute(
-            propID: propID,
-            adapter: adapter
-        )
+        var route = mappedRoute(propID: propID)
         if !route.contains(where: { $0.slotID == current.slotID }) {
             route.append(current)
             route.sort(by: routeSort)
@@ -176,7 +168,8 @@ final class TuringStoryPlacementAdjustmentCoordinator {
             [TuringPlacementAdjust] drag began
               prop: \(propID.rawValue)
               currentSlot: \(current.slotID)
-              selectableCandidates: \(route.count)
+              mappedCandidates: \(route.count)
+              overlapAllowed: true
             """
         )
     }
@@ -216,7 +209,7 @@ final class TuringStoryPlacementAdjustmentCoordinator {
         defer {
             activeDrag = nil
             bars.setVisualState(.idle, propID: drag.propID)
-            refilterAllRoutesAfterCommit()
+            refreshBarAvailability()
         }
 
         guard commit else {
@@ -320,35 +313,25 @@ final class TuringStoryPlacementAdjustmentCoordinator {
         )
     }
 
-    private func selectableRoute(
-        propID: TuringStoryPropID,
-        adapter: any TuringStoryAdjustablePlacementController
+    /// Manual adjustment deliberately exposes every physically fitting mapped
+    /// slot. Occupancy is still updated on commit for diagnostics and future
+    /// automatic layouts, but it never restricts the player's manual route.
+    private func mappedRoute(
+        propID: TuringStoryPropID
     ) -> [TuringStoryRuntimeSlot] {
         cache.slots(for: propID)
-            .filter { slot in
-                !occupancyRegistry.hasHardOverlap(
-                    wallID: slot.wallID,
-                    candidate: slot.semanticReservation,
-                    candidateKind: propID.occupancyKind,
-                    ignoredIDs: Set([adapter.adjustmentOccupancyID]),
-                    emitDiagnostics: false
-                )
-            }
             .sorted(by: routeSort)
     }
 
-    private func refilterAllRoutesAfterCommit() {
+    private func refreshBarAvailability() {
         for propID in TuringStoryPropID.allCases {
-            guard let adapter = adapters[propID],
-                activeSlotByProp[propID] != nil
+            guard adapters[propID] != nil,
+                  activeSlotByProp[propID] != nil
             else {
                 bars.setEnabled(false, propID: propID)
                 continue
             }
-            let route = selectableRoute(propID: propID, adapter: adapter)
-            // A route with only the currently committed slot has nothing to
-            // adjust. Keep the bar visible as a layout affordance but remove its
-            // InputTarget until another prop move makes an alternative legal.
+            let route = mappedRoute(propID: propID)
             let currentID = activeSlotByProp[propID]?.slotID
             let alternativeCount = route.filter {
                 $0.slotID != currentID

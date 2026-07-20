@@ -5,6 +5,30 @@ import XCTest
 
 @MainActor
 final class TuringDoorPortalLifecycleTests: XCTestCase {
+    func testStoryDomeUsesAuthoredOffsetAndSingleSidedInterior() throws {
+        XCTAssertEqual(
+            PortalHDRIDomePlacementTuning.storyOpeningRadiusMeters,
+            12.0,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            PortalHDRIDomePlacementTuning.storyOpeningCenterOffsetZ,
+            -9.0,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            PortalHDRIDomePlacementTuning.storyOpeningCameraClearanceMeters,
+            3.0,
+            accuracy: 0.0001
+        )
+
+        let source = try appSource(
+            "RoomSkinning/EnvironmentSpherePortalContentProvider.swift"
+        )
+        XCTAssertTrue(source.contains("material.faceCulling = .back"))
+        XCTAssertFalse(source.contains("material.faceCulling = .none"))
+    }
+
     func testManualDoorLifecycleHidesInteractionDuringTransitions() {
         let lifecycle = TuringStoryDoorPortalLifecycleController()
 

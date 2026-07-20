@@ -134,7 +134,6 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         TuringStoryPlacementAdjustmentCoordinator(
             wallProvider: roomSkinningCoordinator.wallManager,
             frontEdgeProvider: turingRollingBenchBundleController,
-            occupancyRegistry: wallPropOccupancyRegistry,
             adapters: [
                 .door: turingDoorBundleController,
                 .rollingBench: turingRollingBenchBundleController,
