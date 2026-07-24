@@ -30,7 +30,7 @@ actor TuringFlowEngine {
     private let rendererFactory:
         any TuringCharacterRendererMaking
     private let stagedRendererFactory:
-        any TuringCharacterRenderSessionMaking
+        any TuringCharacterStreamingRenderSessionMaking
     private let seedStore:
         TuringConversationSeedStore
 
@@ -63,7 +63,7 @@ actor TuringFlowEngine {
             any TuringCharacterRendererMaking =
                 TuringCharacterQwenRendererFactory(),
         stagedRendererFactory:
-            any TuringCharacterRenderSessionMaking =
+            any TuringCharacterStreamingRenderSessionMaking =
                 TuringCharacterQwenRenderSessionFactory(),
         seedStore:
             TuringConversationSeedStore = .shared

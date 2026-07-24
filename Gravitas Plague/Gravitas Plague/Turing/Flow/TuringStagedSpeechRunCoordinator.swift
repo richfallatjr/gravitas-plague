@@ -5,7 +5,8 @@ actor TuringStagedSpeechRunCoordinator {
         TuringFlowGenerationPipelineDescriptor.Stage.Kind:
             any TuringSpeechStageExecuting
     ]
-    private let rendererFactory: any TuringCharacterRenderSessionMaking
+    private let rendererFactory:
+        any TuringCharacterStreamingRenderSessionMaking
     private let seedStore: TuringConversationSeedStore
 
     init(
@@ -13,7 +14,7 @@ actor TuringStagedSpeechRunCoordinator {
             TuringVoiceScriptStageExecutor(),
         promptVoiceExecutor: any TuringSpeechStageExecuting =
             TuringPromptVoiceStageExecutor(),
-        rendererFactory: any TuringCharacterRenderSessionMaking =
+        rendererFactory: any TuringCharacterStreamingRenderSessionMaking =
             TuringCharacterQwenRenderSessionFactory(),
         seedStore: TuringConversationSeedStore = .shared
     ) {
@@ -33,7 +34,7 @@ actor TuringStagedSpeechRunCoordinator {
         playback: any TuringFlowPlaybackControlling,
         identity: TuringFlowIdentity
     ) async throws -> TuringStagedSpeechRunReport {
-        let session = rendererFactory.make(
+        let session = rendererFactory.makeStreamingSession(
             runtime: character,
             runID: identity.playbackRunID
         )
@@ -42,7 +43,24 @@ actor TuringStagedSpeechRunCoordinator {
         var playbackWasTerminallyFailed = false
 
         do {
-            try await session.begin()
+            try await session.begin(
+                onStarted: { index in
+                    await playback.qwenComputeStarted(segmentIndex: index)
+                },
+                onFinished: { index, audio in
+                    await playback.qwenComputeFinished(
+                        segmentIndex: index,
+                        audio: audio
+                    )
+                },
+                onSkipped: { index, reason in
+                    await state.recordSkipped(index)
+                    await playback.qwenComputeSkipped(
+                        segmentIndex: index,
+                        reason: reason
+                    )
+                }
+            )
 
             for stageDescriptor in pipeline.stages {
                 try Task.checkCancellation()
@@ -62,65 +80,65 @@ actor TuringStagedSpeechRunCoordinator {
                 let committedKind = Self.committedKind(
                     for: stageDescriptor.kind
                 )
+                let foundationContext = TuringFoundationRequestContext(
+                    flowRunID: identity.playbackRunID,
+                    scriptPointID: descriptor.scriptPointID,
+                    stageID: stageDescriptor.stageID,
+                    sectionIndex: nil
+                )
 
                 do {
-                    let result = try await executor.execute(
-                        stage: stageDescriptor,
-                        context: context
-                    ) { batch in
-                        let committed = await state.reserve(
-                            batch: batch,
-                            kind: committedKind
-                        )
-                        print("""
-                        [TuringStagedSpeech] stage committed
-                          scriptPointID: \(descriptor.scriptPointID)
-                          stageID: \(committed.stageID)
-                          kind: \(committed.kind.rawValue)
-                          globalRange: \(committed.globalRange)
-                        """)
+                    let result = try await TuringFoundationRequestScope
+                        .$current.withValue(foundationContext) {
+                            try await executor.execute(
+                                stage: stageDescriptor,
+                                context: context
+                            ) { batch in
+                                let committed = await state.reserve(
+                                    batch: batch,
+                                    kind: committedKind
+                                )
+                                print("""
+                                [TuringStagedSpeech] stage committed
+                                  scriptPointID: \(descriptor.scriptPointID)
+                                  stageID: \(committed.stageID)
+                                  kind: \(committed.kind.rawValue)
+                                  globalRange: \(committed.globalRange)
+                                """)
 
-                        let renderReport: TuringCharacterRenderReport
-                        do {
-                            renderReport = try await session.renderStage(
-                                committed,
-                                onStarted: { index in
-                                    await playback.qwenComputeStarted(
-                                        segmentIndex: index
-                                    )
-                                },
-                                onFinished: { index, audio in
-                                    await playback.qwenComputeFinished(
-                                        segmentIndex: index,
-                                        audio: audio
-                                    )
-                                },
-                                onSkipped: { index, reason in
-                                    await state.recordSkipped(index)
-                                    await playback.qwenComputeSkipped(
-                                        segmentIndex: index,
-                                        reason: reason
+                                do {
+                                    try await session.submit(committed)
+                                } catch {
+                                    throw TuringStagedSpeechRenderFailure(
+                                        reason: error.localizedDescription
                                     )
                                 }
+
+                                print("""
+                                [TuringStagedSpeech] stage batch submitted
+                                  scriptPointID: \(descriptor.scriptPointID)
+                                  stageID: \(committed.stageID)
+                                  globalRange: \(committed.globalRange)
+                                  openRenderQueue: true
+                                """)
+                            }
+                    }
+
+                    if committedKind == .scriptVoice {
+                        let upperBound = await state.nextGlobalIndex()
+                        do {
+                            try await session.waitUntilPublished(
+                                throughExclusiveIndex: upperBound
                             )
                         } catch {
                             throw TuringStagedSpeechRenderFailure(
                                 reason: error.localizedDescription
                             )
                         }
-
-                        guard renderReport.isCompleteSuccess else {
-                            throw TuringStagedSpeechRenderFailure(
-                                reason:
-                                    "Stage \(committed.stageID) Qwen render was partial."
-                            )
-                        }
-
                         print("""
-                        [TuringStagedSpeech] stage batch published
+                        [TuringStagedSpeech] Script Voice publication gate passed
                           scriptPointID: \(descriptor.scriptPointID)
-                          stageID: \(committed.stageID)
-                          globalRange: \(committed.globalRange)
+                          throughExclusiveIndex: \(upperBound)
                           waitsForPlaybackCompletion: false
                         """)
                     }
@@ -179,6 +197,19 @@ actor TuringStagedSpeechRunCoordinator {
             }
 
             let finalCount = await state.nextGlobalIndex()
+            await session.sealInput(
+                finalExpectedSegmentCount: finalCount
+            )
+            if playbackWasTerminallyFailed == false {
+                await playback.setExpectedGeneratedSegmentCount(finalCount)
+            }
+            let renderReport = try await session.waitUntilPublished()
+            guard renderReport.successfulSegmentIndices.count +
+                    renderReport.skippedSegmentIndices.count == finalCount else {
+                throw TuringStagedSpeechRenderFailure(
+                    reason: "Streaming render session did not resolve every committed segment."
+                )
+            }
             if playbackWasTerminallyFailed == false {
                 await playback.sealGeneratedInput(
                     finalExpectedSegmentCount: finalCount

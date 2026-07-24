@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import TuringQwenNative
@@ -115,6 +116,107 @@ struct TuringQwenSegmentPipelineTests {
         #expect(await queue.nextIndex() == 1)
         #expect(await queue.nextIndex() == 2)
         #expect(await queue.nextIndex() == nil)
+    }
+
+    @Test
+    func openQueueAcceptsWorkAfterWorkersBeginWaiting() async throws {
+        let queue = TuringQwenOpenSegmentQueue()
+        let waiter = Task {
+            try await queue.next()
+        }
+
+        try await queue.append([makeRequest(segmentIndex: 4)])
+        let request = try await waiter.value
+        #expect(request?.segmentIndex == 4)
+        #expect(await queue.submittedCount() == 1)
+
+        await queue.seal()
+        #expect(try await queue.next() == nil)
+    }
+
+    @Test
+    func openQueueAcceptsAndDrainsElevenOrderedRequests() async throws {
+        let queue = TuringQwenOpenSegmentQueue()
+        let requests = (0..<11).map {
+            makeRequest(segmentIndex: $0)
+        }
+
+        try await queue.append(requests)
+        #expect(await queue.submittedCount() == 11)
+        #expect(await queue.depth() == 11)
+
+        var drainedIndices: [Int] = []
+        for _ in requests.indices {
+            let request = try await queue.next()
+            if let request {
+                drainedIndices.append(request.segmentIndex)
+            }
+        }
+
+        #expect(drainedIndices == Array(0..<11))
+        await queue.seal()
+        #expect(try await queue.next() == nil)
+    }
+
+    @Test
+    func duplicateOpenQueueAppendIsAtomic() async throws {
+        let queue = TuringQwenOpenSegmentQueue()
+        try await queue.append([makeRequest(segmentIndex: 0)])
+
+        await #expect(throws: Error.self) {
+            try await queue.append([
+                makeRequest(segmentIndex: 1),
+                makeRequest(segmentIndex: 1)
+            ])
+        }
+
+        #expect(await queue.submittedCount() == 1)
+        #expect(await queue.depth() == 1)
+        #expect(try await queue.next()?.segmentIndex == 0)
+        await queue.seal()
+    }
+
+    private func makeRequest(
+        segmentIndex: Int
+    ) -> TuringQwenNativeBaseCloneSegmentRequest {
+        let root = URL(fileURLWithPath: "/tmp/turing-open-queue-test")
+        let variant = TuringQwenNativeCloneProfile.Variant(
+            variantID: "test",
+            rootURL: root,
+            manifestURL: root,
+            originalReferenceAudioURL: root,
+            normalizedReferenceAudioURL: root,
+            refTextURL: root,
+            clonePromptManifestURL: root,
+            referenceCodesURL: root,
+            referenceTextTokensURL: root,
+            speakerEmbeddingURL: root,
+            sampleRate: 24_000,
+            channels: 1
+        )
+        let profile = TuringQwenNativeCloneProfile(
+            voiceID: "test-voice",
+            speakerID: "test-speaker",
+            modelID: "test-model",
+            profileKind: "test",
+            rootURL: root,
+            referenceAudioURL: root,
+            originalReferenceAudioURL: root,
+            referenceText: "test",
+            defaultVariantID: variant.variantID,
+            allowFallback: false,
+            variants: [variant.variantID: variant]
+        )
+        return TuringQwenNativeBaseCloneSegmentRequest(
+            segmentIndex: segmentIndex,
+            text: "Test segment \(segmentIndex).",
+            language: "english",
+            cloneProfile: profile,
+            maxNewRows: 16,
+            performanceMode: .performance,
+            referenceRowLimit: nil,
+            referenceWindowStrategy: .full
+        )
     }
 }
 

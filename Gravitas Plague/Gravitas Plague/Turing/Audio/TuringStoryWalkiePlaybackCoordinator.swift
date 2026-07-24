@@ -576,7 +576,7 @@ actor TuringStoryWalkiePlaybackCoordinator {
             return
         }
 
-        if activeComputeSegments.isEmpty == false,
+        if allComputeFinished == false,
            policy.chainFillerWhileComputeWithoutSpeech {
             if shouldUseDeadAirWhileWaitingForInitialGeneratedSegment {
                 if policy.deadAirAfterFillerEnabled {
@@ -1025,7 +1025,7 @@ actor TuringStoryWalkiePlaybackCoordinator {
                 return
             }
             if pendingGenerated[nextPlaybackSegmentIndex] == nil,
-               activeComputeSegments.isEmpty == false,
+               allComputeFinished == false,
                policy.deadAirAfterFillerEnabled {
                 startDeadAir(reason: "afterFiller")
                 return

@@ -64,8 +64,20 @@ actor TuringVoiceScriptStageExecutor: TuringSpeechStageExecuting {
                 return nil
             }
             let section = sourcePlan.sections[index]
+            let requestContext = TuringFoundationRequestScope.current?
+                .withSectionIndex(index)
             return Task.detached(priority: .userInitiated) {
-                try await longformPlanner.prepareSection(
+                if let requestContext {
+                    return try await TuringFoundationRequestScope
+                        .$current.withValue(requestContext) {
+                            try await longformPlanner.prepareSection(
+                                section,
+                                in: sourcePlan,
+                                request: request
+                            )
+                        }
+                }
+                return try await longformPlanner.prepareSection(
                     section,
                     in: sourcePlan,
                     request: request

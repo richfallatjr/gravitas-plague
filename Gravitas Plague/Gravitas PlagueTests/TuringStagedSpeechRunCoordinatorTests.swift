@@ -213,42 +213,59 @@ private struct StubStagedSpeechExecutor: TuringSpeechStageExecuting {
 }
 
 private struct StubStagedRenderSessionFactory:
-    TuringCharacterRenderSessionMaking
+    TuringCharacterStreamingRenderSessionMaking
 {
     let recorder: TuringFlowTestEventRecorder
 
-    func make(
+    func makeStreamingSession(
         runtime: TuringCharacterRuntimeDefinition,
         runID: String
-    ) -> any TuringCharacterRenderSession {
+    ) -> any TuringCharacterStreamingRenderSession {
         StubStagedRenderSession(recorder: recorder)
     }
 }
 
-private actor StubStagedRenderSession: TuringCharacterRenderSession {
+private actor StubStagedRenderSession:
+    TuringCharacterStreamingRenderSession
+{
     let recorder: TuringFlowTestEventRecorder
+    private var onStarted: (@Sendable (Int) async -> Void)?
+    private var onFinished: (@Sendable (
+        Int,
+        TuringComputeGapGeneratedAudio
+    ) async throws -> Void)?
+    private var onSkipped: (@Sendable (Int, String) async -> Void)?
+    private var successfulIndices = Set<Int>()
+    private var expectedSegmentCount = 0
 
     init(recorder: TuringFlowTestEventRecorder) {
         self.recorder = recorder
     }
 
-    func begin() async throws {
-        await recorder.record("renderSession.started")
-    }
-
-    func renderStage(
-        _ stage: TuringCommittedSpeechStage,
+    func begin(
         onStarted: @Sendable @escaping (Int) async -> Void,
         onFinished: @Sendable @escaping (
             Int,
             TuringComputeGapGeneratedAudio
-        ) async -> Void,
+        ) async throws -> Void,
         onSkipped: @Sendable @escaping (Int, String) async -> Void
-    ) async throws -> TuringCharacterRenderReport {
+    ) async throws {
+        self.onStarted = onStarted
+        self.onFinished = onFinished
+        self.onSkipped = onSkipped
+        await recorder.record("renderSession.started")
+    }
+
+    func submit(_ stage: TuringCommittedSpeechStage) async throws {
+        guard let onStarted, let onFinished else {
+            throw TuringRuntimeError.invalidConfig(
+                "Stub streaming render session was not started."
+            )
+        }
         for index in stage.globalRange {
             await recorder.record("render.\(index).started")
             await onStarted(index)
-            await onFinished(
+            try await onFinished(
                 index,
                 TuringComputeGapGeneratedAudio(
                     segmentIndex: index,
@@ -257,10 +274,29 @@ private actor StubStagedRenderSession: TuringCharacterRenderSession {
                     channelCount: 1
                 )
             )
+            successfulIndices.insert(index)
         }
+    }
+
+    func waitUntilPublished(throughExclusiveIndex: Int) async throws {
+        let unresolved = (0..<throughExclusiveIndex).filter {
+            successfulIndices.contains($0) == false
+        }
+        guard unresolved.isEmpty else {
+            throw TuringRuntimeError.invalidConfig(
+                "Stub unresolved indexes: \(unresolved)"
+            )
+        }
+    }
+
+    func sealInput(finalExpectedSegmentCount: Int) async {
+        expectedSegmentCount = finalExpectedSegmentCount
+    }
+
+    func waitUntilPublished() async throws -> TuringCharacterRenderReport {
         return TuringCharacterRenderReport(
-            expectedSegmentCount: stage.globalRange.count,
-            successfulSegmentIndices: Set(stage.globalRange),
+            expectedSegmentCount: expectedSegmentCount,
+            successfulSegmentIndices: successfulIndices,
             skippedSegmentReasons: [:]
         )
     }

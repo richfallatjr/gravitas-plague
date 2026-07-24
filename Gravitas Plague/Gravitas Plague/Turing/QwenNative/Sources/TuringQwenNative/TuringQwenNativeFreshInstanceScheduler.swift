@@ -39,6 +39,37 @@ public actor TuringQwenNativeFreshInstanceScheduler {
             )
         }
 
+        let queue = TuringQwenOpenSegmentQueue()
+        try await queue.append(requests)
+        await queue.seal()
+        return try await runOpenQueue(
+            queue,
+            runID: runID,
+            modelRoot: modelRoot,
+            skipSegmentFailures: skipSegmentFailures,
+            onSegmentStarted: onSegmentStarted,
+            onSegmentDecoded: onSegmentDecoded,
+            onSegmentSkipped: onSegmentSkipped
+        )
+    }
+
+    public func runOpenQueue(
+        _ queue: TuringQwenOpenSegmentQueue,
+        runID: String,
+        modelRoot: URL,
+        skipSegmentFailures: Bool = false,
+        onSegmentStarted: @Sendable @escaping (
+            TuringQwenNativeFreshInstanceID,
+            Int
+        ) async -> Void,
+        onSegmentDecoded: @Sendable @escaping (
+            TuringQwenDecodedSegment
+        ) async throws -> Void,
+        onSegmentSkipped: @Sendable @escaping (
+            TuringQwenNativeFreshSegmentSkip
+        ) async -> Void = { _ in }
+    ) async throws -> TuringQwenNativeFreshInstanceRunReport {
+
         let instances = try await instancePool.warmedInstancesExactlyRequestedCount()
         let requested = await instancePool.requestedInstanceCount
         let actual = instances.count
@@ -60,9 +91,6 @@ public actor TuringQwenNativeFreshInstanceScheduler {
             runID: runID,
             modelRoot: modelRoot
         )
-        let workQueue = TuringQwenNativeFreshInstanceWorkQueue(
-            totalCount: requests.count
-        )
         let metricsCollector = TuringQwenNativeFreshInstanceMetricsCollector(
             instanceIDs: instances.map(\.id)
         )
@@ -75,6 +103,7 @@ public actor TuringQwenNativeFreshInstanceScheduler {
           skipSegmentFailures: \(skipSegmentFailures)
           sharedWeights: false
           dynamicWorkerQueue: true
+          openInputQueue: true
           globalRenderBarrier: false
           freshPathUsesLegacyDecodeGate: false
           fallbackUsed: false
@@ -86,9 +115,8 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                 for instance in instances {
                     group.addTask {
                         while Task.isCancelled == false,
-                              let requestIndex = await workQueue.nextIndex() {
+                              let request = try await queue.next() {
                             try Task.checkCancellation()
-                            let request = requests[requestIndex]
                             let instanceID = instance.id
 
                             await renderPhaseState.renderStarted(
@@ -202,7 +230,7 @@ public actor TuringQwenNativeFreshInstanceScheduler {
             await decodeCoordinator.finishRun(decodeToken)
             await releaseLedger.clearRun(runID)
         } catch {
-            await workQueue.cancel()
+            await queue.cancel(reason: error.localizedDescription)
             await decodeCoordinator.cancelRun(
                 decodeToken,
                 reason: error.localizedDescription
@@ -215,10 +243,11 @@ public actor TuringQwenNativeFreshInstanceScheduler {
         await metricsCollector.sampleMemory(label: "runFinished")
         let metrics = await metricsCollector.snapshot()
         let overlap = await renderPhaseState.snapshot()
+        let submittedCount = await queue.submittedCount()
         return TuringQwenNativeFreshInstanceRunReport(
             requestedInstanceCount: requested,
             actualInstanceCount: actual,
-            totalSegments: requests.count,
+            totalSegments: submittedCount,
             wallClockSeconds: Date().timeIntervalSince(runStart),
             aggregateGeneratedAudioSeconds: metrics.totalGeneratedAudioSeconds,
             perInstanceRenderSeconds: metrics.perInstanceRenderSeconds,

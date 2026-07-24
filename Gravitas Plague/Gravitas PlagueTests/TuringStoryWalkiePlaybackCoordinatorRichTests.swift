@@ -258,6 +258,95 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
     XCTAssertEqual(completedCount, 0)
   }
 
+  func testGeneratedPlaybackStartsImmediatelyAndFillerBridgesMissingIndex()
+    async throws
+  {
+    let fakePlayer = FakeRichGlobalClipPlayer()
+    let rootURL = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let fillerDirectory = try makeFillerDirectory(in: rootURL)
+    var policy = TuringStoryWalkiePlaybackCoordinator.Policy()
+    policy.firstSegmentPrerollFillerCount = 0
+    policy.chainFillerFromPrerecordingToFirstGenerated = false
+    policy.chainFillerWhileComputeWithoutSpeech = true
+    policy.deadAirAfterFillerEnabled = false
+    policy.fillerDirectoryCandidates = [fillerDirectory.path]
+
+    let coordinator = TuringStoryWalkiePlaybackCoordinator(
+      policy: policy,
+      rootURL: rootURL,
+      endpoint: fakePlayer
+    )
+    await coordinator.beginRun(
+      runID: "test.sharedPlayback.immediateOrdered",
+      expectedSegmentCount: nil
+    )
+    await coordinator.enqueuePrerecording(
+      id: "test.sharedPlayback.pr",
+      fileURL: URL(fileURLWithPath: "/tmp/shared-playback-pr.mp3")
+    )
+
+    for index in 0...10 {
+      await coordinator.qwenComputeStarted(segmentIndex: index)
+    }
+    await coordinator.qwenComputeFinished(
+      segmentIndex: 0,
+      audio: generatedAudio(index: 0)
+    )
+    await coordinator.qwenComputeFinished(
+      segmentIndex: 2,
+      audio: generatedAudio(index: 2)
+    )
+
+    var startedKinds = await fakePlayer.startedKinds()
+    XCTAssertEqual(startedKinds, [.prerecording])
+
+    await fakePlayer.completeActive()
+    await settle()
+    var startedLabel = await fakePlayer.lastStartedLabel()
+    XCTAssertEqual(startedLabel, "segment_0000")
+
+    await fakePlayer.completeActive()
+    await settle()
+    startedKinds = await fakePlayer.startedKinds()
+    XCTAssertEqual(startedKinds, [.prerecording, .generated, .filler])
+
+    await coordinator.qwenComputeFinished(
+      segmentIndex: 1,
+      audio: generatedAudio(index: 1)
+    )
+    for index in 3...10 {
+      await coordinator.qwenComputeSkipped(
+        segmentIndex: index,
+        reason: "controlled test tail"
+      )
+    }
+    await settle()
+    let startedKind = await fakePlayer.lastStartedKind()
+    XCTAssertEqual(startedKind, .filler)
+
+    await coordinator.qwenComputeAllFinished()
+    await fakePlayer.completeActive()
+    await settle()
+    startedLabel = await fakePlayer.lastStartedLabel()
+    XCTAssertEqual(startedLabel, "segment_0001")
+
+    await fakePlayer.completeActive()
+    await settle()
+    startedLabel = await fakePlayer.lastStartedLabel()
+    XCTAssertEqual(startedLabel, "segment_0002")
+
+    await fakePlayer.completeActive()
+    await coordinator.waitUntilPlaybackFinished()
+
+    startedKinds = await fakePlayer.startedKinds()
+    XCTAssertEqual(
+      startedKinds,
+      [.prerecording, .generated, .filler, .generated, .generated]
+    )
+    await coordinator.runCancelled(reason: "testComplete")
+  }
+
   private func generatedAudio(index: Int) -> TuringComputeGapGeneratedAudio {
     let samples = (0..<2_400).map { sampleIndex in
       Float(sin(Double(sampleIndex) * 0.02)) * 0.1

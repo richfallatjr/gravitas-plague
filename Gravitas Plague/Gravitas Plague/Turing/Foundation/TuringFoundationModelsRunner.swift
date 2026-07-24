@@ -52,23 +52,65 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
             requestID: requestID
         )
 
-#if canImport(FoundationModels)
-        if #available(iOS 26.0, macOS 26.0, visionOS 26.0, *) {
-            return try await Self.respondUsingFreshSession(
-                prompt: sanitizedPrompt,
-                purpose: purpose,
-                requestID: requestID
-            )
-        }
-#endif
-
+        let context = TuringFoundationRequestScope.current
+        let metadata = TuringFoundationRequestMetadata(
+            requestID: requestID,
+            flowRunID: context?.flowRunID,
+            scriptPointID: context?.scriptPointID,
+            stageID: context?.stageID,
+            sectionIndex: context?.sectionIndex,
+            purpose: purpose
+        )
+        let promptURL = try await TuringFoundationPromptArchive.shared
+            .archivePrompt(sanitizedPrompt, metadata: metadata)
         print("""
-        [TuringFoundation] unavailable
+        [TuringFoundationArchive] prompt archived
           requestID: \(requestID.uuidString)
           purpose: \(purpose)
-          reason: FoundationModels framework unavailable on this OS/SDK
+          promptPath: \(promptURL.path)
+          beforeFoundationCall: true
         """)
-        throw TuringRuntimeError.foundationUnavailable
+
+        do {
+#if canImport(FoundationModels)
+            if #available(iOS 26.0, macOS 26.0, visionOS 26.0, *) {
+                let response = try await Self.respondUsingFreshSession(
+                    prompt: sanitizedPrompt,
+                    purpose: purpose,
+                    requestID: requestID
+                )
+                _ = try? await TuringFoundationPromptArchive.shared
+                    .archiveResponse(response, metadata: metadata)
+                return response
+            }
+#endif
+
+            print("""
+            [TuringFoundation] unavailable
+              requestID: \(requestID.uuidString)
+              purpose: \(purpose)
+              reason: FoundationModels framework unavailable on this OS/SDK
+            """)
+            throw TuringRuntimeError.foundationUnavailable
+        } catch {
+            let errorURL = try? await TuringFoundationPromptArchive.shared
+                .archiveError(
+                    error,
+                    metadata: metadata,
+                    prompt: sanitizedPrompt,
+                    responseReceived: false
+                )
+            print("""
+            [TuringFoundationArchive] request failed
+              requestID: \(requestID.uuidString)
+              purpose: \(purpose)
+              promptPath: \(promptURL.path)
+              errorPath: \(errorURL?.path ?? "unavailable")
+              responseReceived: false
+              error: \(error.localizedDescription)
+            """)
+            throw error
+        }
     }
 
 #if canImport(FoundationModels)
@@ -168,51 +210,5 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
         [TuringFoundationPrompt] END \(purpose)
         """)
 
-        do {
-            let directory = try FileManager.default.url(
-                for: .cachesDirectory,
-                in: .userDomainMask,
-                appropriateFor: nil,
-                create: true
-            ).appendingPathComponent(
-                "TuringFoundationLogs",
-                isDirectory: true
-            )
-            try FileManager.default.createDirectory(
-                at: directory,
-                withIntermediateDirectories: true
-            )
-
-            let safePurpose = purpose.map { character in
-                character.isLetter ||
-                character.isNumber ||
-                character == "_"
-                    ? character
-                    : "_"
-            }
-            let fileName =
-                "last_\(String(safePurpose))_prompt.txt"
-            let url = directory
-                .appendingPathComponent(fileName)
-
-            try prompt.write(
-                to: url,
-                atomically: true,
-                encoding: .utf8
-            )
-
-            print("""
-            [TuringFoundationPrompt] wrote \(fileName)
-              requestID: \(requestID.uuidString)
-              path: \(url.path)
-            """)
-        } catch {
-            print("""
-            [TuringFoundationPrompt] write failed
-              requestID: \(requestID.uuidString)
-              purpose: \(purpose)
-              error: \(error.localizedDescription)
-            """)
-        }
     }
 }
