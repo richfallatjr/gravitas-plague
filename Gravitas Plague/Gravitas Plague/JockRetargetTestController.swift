@@ -181,6 +181,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     var bodyCollisionBox: HordeEnemyBodyCollisionBox?
     var crowdSteering = HordeCrowdSteeringState()
     var enemyBrainCommandDriven = false
+    private var storyCombatUsesNoIdleCadence = false
 
     private var attackAnchorUserPosition: SIMD3<Float>?
     private var latestBrainFollowIntent: EnemyBrainFollowIntent?
@@ -321,6 +322,10 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
 
     private var isActiveHordeGameplayEnemy: Bool {
         isHordeLifecycleManaged && hordeLifecycleState.isLivingGameplayEnemy
+    }
+
+    private var usesNoIdleCombatCadence: Bool {
+        isActiveHordeGameplayEnemy || storyCombatUsesNoIdleCadence
     }
 
     private func canReceivePlayerPunchDamage(
@@ -844,6 +849,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         hordeWave = wave
         hordeSpawnIndex = spawnIndex
         enemyBrainCommandDriven = true
+        storyCombatUsesNoIdleCadence = false
         self.hitsToKill = max(1, hitsToKill)
         lifecycleState = .alive
         hordeLifecycleState = .portalIngress
@@ -912,6 +918,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         hordeWave = 0
         hordeSpawnIndex = 0
         enemyBrainCommandDriven = false
+        storyCombatUsesNoIdleCadence = false
         self.hitsToKill = max(1, hitsToKill)
         lifecycleState = .alive
         hordeLifecycleState = .active
@@ -953,6 +960,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         resetHitSelectionMemory()
         followDemoState = .inactive
         followDelayElapsed = 0
+        storyCombatUsesNoIdleCadence = false
         latestBrainFollowIntent = nil
         latestHeadPosition = nil
         playerAttackEnabled = false
@@ -1092,6 +1100,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         rootMotionEnabled = true
         isPlayingPacingLoop = false
         followDemoState = .inactive
+        storyCombatUsesNoIdleCadence = false
         lifecycleState = .despawned
         hordeLifecycleState = .cleanedUp
         activeDeathClipID = nil
@@ -1340,7 +1349,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
             await hitDetector.startIfNeeded()
         }
 
-        if isActiveHordeGameplayEnemy {
+        if usesNoIdleCombatCadence {
             followDemoState = .following
             playFollowWalk()
 
@@ -1429,6 +1438,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         playerAttackEnabled = enabled
 
         if !enabled {
+            storyCombatUsesNoIdleCadence = false
             resetCombatRuntime()
             hitDetector.stop()
         }
@@ -3103,6 +3113,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         setExternalMotionDriven(false)
         setRootMotionEnabled(true)
         playerAttackEnabled = true
+        storyCombatUsesNoIdleCadence = true
         setEnemyBodyCollisionParticipant(true, reason: "Battle01.portalExit")
         try playFollowDemo(resetBenchmarkState: false)
     }
@@ -3380,7 +3391,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
             )
 
             if distance <= attackConfiguration.attackProximityMeters {
-                if isActiveHordeGameplayEnemy {
+                if usesNoIdleCombatCadence {
                     combatState = .normal
                     startAttackIfPossible()
                 } else {
@@ -3400,10 +3411,10 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
             self?.consumeFollowLocomotionDelta(delta) ?? true
         }
 
-        followDemoState = isActiveHordeGameplayEnemy ? .following : .idleStopped
+        followDemoState = usesNoIdleCombatCadence ? .following : .idleStopped
         followDelayElapsed = 0
 
-        if isActiveHordeGameplayEnemy {
+        if usesNoIdleCombatCadence {
             playFollowWalk()
         } else {
             playFollowIdle()
@@ -4434,7 +4445,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
                 return
             }
 
-            if isActiveHordeGameplayEnemy {
+            if usesNoIdleCombatCadence {
                 startAttackIfPossible()
                 return
             }
@@ -4454,7 +4465,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
 
             if distance <= attackConfiguration.attackProximityMeters {
                 attackAnchorUserPosition = currentHeadPosition
-                if isActiveHordeGameplayEnemy {
+                if usesNoIdleCombatCadence {
                     startAttackIfPossible()
                 } else {
                     enterCloseRangeReady()
@@ -4488,7 +4499,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
 
         crowdSteering = HordeCrowdSteeringState()
 
-        if isActiveHordeGameplayEnemy {
+        if usesNoIdleCombatCadence {
             startAttackIfPossible()
             return
         }
@@ -4538,10 +4549,10 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
             self?.consumeFollowLocomotionDelta(delta) ?? true
         }
 
-        if isActiveHordeGameplayEnemy {
+        if usesNoIdleCombatCadence {
             followDemoState = .following
             playFollowWalk()
-            print("[Gravitas Attack] Player moved out of close range. Horde returning to walk, no idle.")
+            print("[Gravitas Attack] Player moved out of close range. Returning to walk, no idle.")
             return
         }
 
@@ -4666,7 +4677,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         )
 
         if distance <= attackConfiguration.resumeFollowDistanceMeters {
-            if isActiveHordeGameplayEnemy {
+            if usesNoIdleCombatCadence {
                 combatState = .normal
                 startAttackIfPossible()
 
@@ -5007,7 +5018,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
             deltaTime: Float(deltaTime)
         )
 
-        if isActiveHordeGameplayEnemy {
+        if usesNoIdleCombatCadence {
             if horizontalDistance <= attackConfiguration.attackProximityMeters {
                 attackAnchorUserPosition = currentHeadPosition
                 startAttackIfPossible()
@@ -5137,12 +5148,13 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     private func playFollowIdle(
         allowDuringCombat: Bool = false
     ) {
-        if isActiveHordeGameplayEnemy {
+        if usesNoIdleCombatCadence {
             print(
                 """
-                [HordeAnimation] skipped idle request
+                [EnemyAnimation] skipped idle request
                   enemyID: \(hordeID.uuidString)
                   characterID: \(characterAttributes?.characterID ?? characterArchetype.rawValue)
+                  storyCombatNoIdle: \(storyCombatUsesNoIdleCadence)
                   noIdle: true
                   allowDuringCombat: \(allowDuringCombat)
                 """
@@ -5311,7 +5323,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
             return true
         }
 
-        let targetStopDistance = isActiveHordeGameplayEnemy
+        let targetStopDistance = usesNoIdleCombatCadence
             ? attackConfiguration.attackProximityMeters
             : followConfiguration.stopDistanceMeters
 
@@ -5334,7 +5346,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
                 return true
             }
 
-            if isActiveHordeGameplayEnemy {
+            if usesNoIdleCombatCadence {
                 attackAnchorUserPosition = headPosition
                 startAttackIfPossible()
             } else {
@@ -5405,7 +5417,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         }
 
         if clampedStep >= remainingSafeTravel - 0.001 {
-            if isActiveHordeGameplayEnemy {
+            if usesNoIdleCombatCadence {
                 attackAnchorUserPosition = headPosition
                 startAttackIfPossible()
             } else {
