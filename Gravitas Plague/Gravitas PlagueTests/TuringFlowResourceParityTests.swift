@@ -203,7 +203,7 @@ final class TuringFlowResourceParityTests:
             promptSeed.promptContext,
             """
             Story Intent:
-            I'm trying to support Rich but he may have messed up. I'll just let him know he did what he had to do. Drag that thing out into the woods. I read this article to change the subject but nobody's buying that.
+            I'm trying to support Rich but he may have messed up. I'll just let him know he did what he had to do. We both need to keep our eyes sharp and help each other out to stay safe. I am glad Rich is alright. Rich needs to get that ham radio functional so we can communicate better with the outside world which is completely the grid now.
             """
         )
         XCTAssertFalse(
@@ -212,6 +212,57 @@ final class TuringFlowResourceParityTests:
         XCTAssertFalse(
             promptSeed.promptContext.contains("promptVoice")
         )
+        let templatePath = try XCTUnwrap(
+            promptDescriptor.promptTemplateResourcePath
+        )
+        XCTAssertEqual(
+            templatePath,
+            "Turing/Prompts/voicePrompt_scriptPoint05_eliminationTest.txt"
+        )
+        let templateURL = try TuringResourceLoader.resourceURL(
+            resourcePath: templatePath
+        )
+        let template = try String(
+            contentsOf: templateURL,
+            encoding: .utf8
+        )
+        XCTAssertTrue(
+            template.hasPrefix(
+                "You are Big Mike. You are talking to Rich over walkie talkie."
+            )
+        )
+        XCTAssertTrue(template.contains("{{storyIntent}}"))
+        XCTAssertTrue(template.contains("{{characterBackstory}}"))
+        XCTAssertTrue(template.contains("{{prerecordingTranscript}}"))
+        XCTAssertFalse(template.contains("{{characterProfile}}"))
+        XCTAssertFalse(template.contains("{{promptContext}}"))
+        XCTAssertFalse(template.contains("conversationSeed"))
+
+        let profile = try TuringCharacterProfileStore().profile(
+            id: promptDescriptor.characterProfileID
+        )
+        let prerecording = try TuringPrerecordingStore().descriptor(
+            id: "prologue.walkie.bigMike.scriptPoint05.001"
+        )
+        let rendered = template
+            .replacingOccurrences(
+                of: "{{characterBackstory}}",
+                with: profile.writeup
+            )
+            .replacingOccurrences(
+                of: "{{storyIntent}}",
+                with: promptDescriptor.intent
+            )
+            .replacingOccurrences(
+                of: "{{prerecordingTranscript}}",
+                with: prerecording.transcript
+            )
+        XCTAssertTrue(rendered.contains(profile.writeup))
+        XCTAssertTrue(rendered.contains(promptDescriptor.intent))
+        XCTAssertTrue(rendered.contains(prerecording.transcript))
+        XCTAssertFalse(rendered.contains("Big Mike (big_mike)"))
+        XCTAssertFalse(rendered.contains("Voice: big_mike_base_clone_v1"))
+        XCTAssertFalse(rendered.contains("{{"))
     }
 
     func testCharacterRegistryLoadsBigMikeAndRich()
@@ -312,6 +363,21 @@ final class TuringFlowResourceParityTests:
         XCTAssertTrue(
             prompt.contains(
                 "Character Profile:"
+            )
+        )
+        XCTAssertTrue(
+            prompt.hasPrefix(
+                "Character Profile:"
+            )
+        )
+        XCTAssertFalse(
+            prompt.contains(
+                "You are writing"
+            )
+        )
+        XCTAssertFalse(
+            prompt.contains(
+                "conversationSeed"
             )
         )
         XCTAssertFalse(

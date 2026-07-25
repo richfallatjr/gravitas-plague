@@ -11,6 +11,7 @@ struct TuringVoicePromptTriggerDescriptor: Codable, Sendable, Hashable {
   let intent: String
   let emotion: String
   let promptContext: String?
+  let promptTemplateResourcePath: String?
 
   init(
     schemaVersion: Int,
@@ -22,7 +23,8 @@ struct TuringVoicePromptTriggerDescriptor: Codable, Sendable, Hashable {
     conversationKey: String,
     intent: String,
     emotion: String,
-    promptContext: String? = nil
+    promptContext: String? = nil,
+    promptTemplateResourcePath: String? = nil
   ) {
     self.schemaVersion = schemaVersion
     self.voicePromptID = voicePromptID
@@ -34,6 +36,7 @@ struct TuringVoicePromptTriggerDescriptor: Codable, Sendable, Hashable {
     self.intent = intent
     self.emotion = emotion
     self.promptContext = promptContext
+    self.promptTemplateResourcePath = promptTemplateResourcePath
   }
 }
 
@@ -77,6 +80,18 @@ struct TuringVoicePromptTriggerStore: Sendable {
        ).isEmpty {
       throw TuringRuntimeError.invalidConfig(
         "voicePrompt \(id) promptContext must not be empty when provided."
+      )
+    }
+    if let promptTemplateResourcePath = value.promptTemplateResourcePath {
+      guard promptTemplateResourcePath.trimmingCharacters(
+        in: .whitespacesAndNewlines
+      ).isEmpty == false else {
+        throw TuringRuntimeError.invalidConfig(
+          "voicePrompt \(id) promptTemplateResourcePath must not be empty when provided."
+        )
+      }
+      _ = try TuringResourceLoader.resourceURL(
+        resourcePath: promptTemplateResourcePath
       )
     }
 

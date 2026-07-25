@@ -18,11 +18,22 @@ actor TuringDialogueService {
         let profile = try characterStore.profile(
             id: request.characterProfileID
         )
+        let promptResourcePath =
+            request.promptTemplateResourcePath
+            ?? "Turing/Prompts/voicePrompt_characterIntent.txt"
+        let promptTemplateName = URL(
+            fileURLWithPath: promptResourcePath
+        ).deletingPathExtension().lastPathComponent
+        let usesAuthoredTemplate =
+            request.promptTemplateResourcePath != nil
         let prompt = try Self.renderPrompt(
-            resourcePath: "Turing/Prompts/voicePrompt_characterIntent.txt",
+            resourcePath: promptResourcePath,
             replacements: [
                 "{{characterProfile}}": profile.promptText,
+                "{{characterBackstory}}": profile.writeup,
                 "{{promptContext}}": request.promptContext,
+                "{{storyIntent}}": request.storyIntent
+                    ?? request.promptContext,
                 "{{prerecordingTranscript}}": request.prerecordingTranscript
             ]
         )
@@ -32,20 +43,21 @@ actor TuringDialogueService {
           freshSession: true
           id: \(request.id)
           characterID: \(profile.characterID)
-          promptTemplate: voicePrompt_characterIntent
-          profileContext: fullAuthoredCharacterProfile
-          inputContract: characterProfile,promptContext,prerecordingTranscript
+          promptTemplate: \(promptTemplateName)
+          promptTemplateResourcePath: \(promptResourcePath)
+          profileContext: \(usesAuthoredTemplate ? "fullAuthoredCharacterBackstory" : "fullAuthoredCharacterProfile")
+          inputContract: \(usesAuthoredTemplate ? "characterBackstory,storyIntent,prerecordingTranscript" : "characterProfile,promptContext,prerecordingTranscript")
           prerecordingTranscriptUTF16: \(request.prerecordingTranscript.utf16.count)
           authoredPRTranscriptSHA256: \(TuringFlowHash.sha256(request.prerecordingTranscript))
           dialogueHistoryIncluded: false
-          conversationSeedIncluded: false
+          generatedConversationSeedRequested: false
         """)
 
         let raw: String
         do {
             raw = try await runner.runPrompt(
                 prompt,
-                purpose: "voicePrompt_characterIntent"
+                purpose: promptTemplateName
             )
         } catch {
             guard TuringFoundationGuardrailPolicy.isGuardrailError(error) else {
@@ -64,7 +76,7 @@ actor TuringDialogueService {
         }
         Self.logRawResponse(
             raw,
-            name: "voicePrompt_characterIntent",
+            name: promptTemplateName,
             promptCharacters: prompt.utf16.count
         )
         let plan: TuringVoicePromptPlan
@@ -92,8 +104,7 @@ actor TuringDialogueService {
         print("""
         [TuringVoicePrompt] gate passed
           segmentCount: \(plan.segments.count)
-          conversationSeed: present
-          seedID: \(plan.conversationSeed.seedID)
+          generatedConversationSeed: absent
         """)
         Self.logAcceptedSegments(
             purpose: "TuringVoicePrompt",
@@ -320,8 +331,7 @@ actor TuringDialogueService {
 
         let allowedKeys: Set<String> = [
             "schemaVersion",
-            "segments",
-            "conversationSeed"
+            "segments"
         ]
         let extraKeys = Set(dictionary.keys).subtracting(allowedKeys)
         guard extraKeys.isEmpty else {
@@ -376,32 +386,9 @@ actor TuringDialogueService {
             )
         }
 
-        let seed = decoded.conversationSeed
-        let normalizedSeed = TuringConversationSeed(
-            seedID: seed.seedID.trimmingCharacters(in: .whitespacesAndNewlines),
-            summary: seed.summary.trimmingCharacters(in: .whitespacesAndNewlines),
-            currentAttitude: seed.currentAttitude.trimmingCharacters(in: .whitespacesAndNewlines),
-            recentFacts: seed.recentFacts.map {
-                $0.trimmingCharacters(in: .whitespacesAndNewlines)
-            }.filter { $0.isEmpty == false },
-            openThread: seed.openThread.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
-
-        guard normalizedSeed.summary.isEmpty == false else {
-            throw TuringRuntimeError.foundationJSONGateFailed(
-                "conversationSeed.summary must not be empty."
-            )
-        }
-        guard normalizedSeed.openThread.isEmpty == false else {
-            throw TuringRuntimeError.foundationJSONGateFailed(
-                "conversationSeed.openThread must not be empty."
-            )
-        }
-
         return TuringVoicePromptPlan(
             schemaVersion: decoded.schemaVersion,
-            segments: normalizedSegments,
-            conversationSeed: normalizedSeed
+            segments: normalizedSegments
         )
     }
 
@@ -513,14 +500,7 @@ actor TuringDialogueService {
           "text": "string",
           "emotion": "string"
         }
-      ],
-      "conversationSeed": {
-        "seedID": "string",
-        "summary": "string",
-        "currentAttitude": "string",
-        "recentFacts": ["string"],
-        "openThread": "string"
-      }
+      ]
     }
     """
 }

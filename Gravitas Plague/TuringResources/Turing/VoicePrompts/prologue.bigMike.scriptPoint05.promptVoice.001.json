@@ -8,5 +8,6 @@
   "conversationKey": "dialogue.big_mike.rich",
   "intent": "I'm trying to support Rich but he may have messed up. I'll just let him know he did what he had to do. We both need to keep our eyes sharp and help each other out to stay safe. I am glad Rich is alright. Rich needs to get that ham radio functional so we can communicate better with the outside world which is completely the grid now.",
   "emotion": "controlled, uneasy, protective, trying and failing to sound casual",
-  "promptContext": "Story Intent:\nI'm trying to support Rich but he may have messed up. I'll just let him know he did what he had to do. We both need to keep our eyes sharp and help each other out to stay safe. I am glad Rich is alright. Rich needs to get that ham radio functional so we can communicate better with the outside world which is completely the grid now."
+  "promptContext": "Story Intent:\nI'm trying to support Rich but he may have messed up. I'll just let him know he did what he had to do. We both need to keep our eyes sharp and help each other out to stay safe. I am glad Rich is alright. Rich needs to get that ham radio functional so we can communicate better with the outside world which is completely the grid now.",
+  "promptTemplateResourcePath": "Turing/Prompts/voicePrompt_scriptPoint05_eliminationTest.txt"
 }

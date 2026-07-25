@@ -106,6 +106,40 @@ enum TuringStoryPlacementCatalogRouteFilter {
     }
 }
 
+struct TuringStoryManualPlacementProjection: Sendable {
+    let placement: TuringStoryExactPlacement
+    let sliceID: String
+}
+
+struct TuringStoryManualPlacementProjectionBuilder: Sendable {
+    func build(
+        map: TuringStoryWallSliceMap
+    ) -> [TuringStoryManualPlacementProjection] {
+        let resolver = TuringStoryWallSliceLayoutResolver()
+
+        return TuringStoryPropID.allCases.flatMap { propID in
+            map.slices.compactMap { slice in
+                guard let wall = map.perimeter.walls.first(where: {
+                    $0.wallOrdinal == slice.wallOrdinal
+                        && $0.representativeWallUUID
+                            == slice.representativeWallUUID
+                }) else {
+                    return nil
+                }
+                return TuringStoryManualPlacementProjection(
+                    placement: resolver.projectedPlacement(
+                        propID: propID,
+                        slice: slice,
+                        wall: wall,
+                        floorWorldY: map.perimeter.floorWorldY
+                    ),
+                    sliceID: slice.sliceID
+                )
+            }
+        }
+    }
+}
+
 enum TuringStoryPlacementRouteMath {
     private static let epsilon: Float = 0.000_5
 
@@ -205,25 +239,39 @@ struct TuringStoryPlacementCandidateCacheBuilder {
             TuringStoryPlacementCatalogRouteFilter.placements(
                 from: catalog.placements,
                 routedWallIDs: routedWallIDs
-            )
+        )
         let skippedOutsideSpinRoute =
             catalog.placements.count - routedCatalogPlacements.count
+        let manualProjectedPlacements =
+            TuringStoryManualPlacementProjectionBuilder().build(
+                map: sliceMap
+            )
 
         print(
             """
             [TuringPlacementAdjust] catalog filtered to spin route
               totalCatalogPlacements: \(catalog.placements.count)
               routedCatalogPlacements: \(routedCatalogPlacements.count)
+              manualProjectedPlacements: \(manualProjectedPlacements.count)
               skippedOutsideSpinRoute: \(skippedOutsideSpinRoute)
               routedWallCount: \(routedWallIDs.count)
+              manualRouteUsesEveryMappedSlice: true
+              occupancyRestrictsManualRoute: false
             """
         )
 
         var catalogSlotsByProp: [TuringStoryPropID: [TuringStoryRuntimeSlot]] = [:]
-        for exact in routedCatalogPlacements {
+        let adjustmentPlacements: [
+            (placement: TuringStoryExactPlacement, forcedSliceIDs: [String]?)
+        ] =
+            routedCatalogPlacements.map { ($0, nil) }
+            + manualProjectedPlacements.map { ($0.placement, [$0.sliceID]) }
+
+        for candidate in adjustmentPlacements {
+            let exact = candidate.placement
             let slot = try materialize(
                 exact: exact,
-                forcedSliceIDs: nil,
+                forcedSliceIDs: candidate.forcedSliceIDs,
                 sliceMap: sliceMap,
                 wallManager: wallManager,
                 controllers: controllers

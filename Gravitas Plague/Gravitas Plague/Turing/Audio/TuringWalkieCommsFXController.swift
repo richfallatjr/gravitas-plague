@@ -58,10 +58,34 @@ final class TuringWalkieCommsFXController {
         )
     }
 
+    func retainAmbientWalkieStatic(
+        ownerID: String,
+        reason: String
+    ) async {
+        guard let url = try? await worker.ambientStaticURL() else { return }
+        _ = await TuringStoryWalkieAudioRoute
+            .retainAmbientWalkieStaticLoop(
+                fileURL: url,
+                ownerID: ownerID,
+                reason: reason
+            )
+    }
+
     func stopAmbientWalkieStatic(reason: String) async {
         await TuringStoryWalkieAudioRoute.stopAmbientWalkieStaticLoop(
             reason: reason
         )
+    }
+
+    func releaseAmbientWalkieStatic(
+        ownerID: String,
+        reason: String
+    ) async {
+        await TuringStoryWalkieAudioRoute
+            .releaseAmbientWalkieStaticLoop(
+                ownerID: ownerID,
+                reason: reason
+            )
     }
 
     func stopAll(reason: String) async {

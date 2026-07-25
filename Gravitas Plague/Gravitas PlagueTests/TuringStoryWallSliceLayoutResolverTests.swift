@@ -141,6 +141,46 @@ final class TuringStoryWallSliceLayoutResolverTests: XCTestCase {
         )
     }
 
+    func testEveryMappedSliceCanProjectEveryPropForManualAdjustment() {
+        let fixture = makeDistributedFallbackFixture(
+            wallCount: 3,
+            strongestDoorWallOrdinal: 1,
+            includeExactPlacements: false
+        )
+        let projected = TuringStoryManualPlacementProjectionBuilder().build(
+            map: fixture.map
+        )
+
+        for propID in TuringStoryPropID.allCases {
+            let propPlacements = projected.filter {
+                $0.placement.propID == propID
+            }
+
+            XCTAssertEqual(propPlacements.count, fixture.map.slices.count)
+            XCTAssertEqual(
+                Set(propPlacements.map(\.placement.wallUUID)),
+                Set(fixture.map.slices.map(\.representativeWallUUID))
+            )
+            XCTAssertEqual(
+                Set(propPlacements.map(\.sliceID)),
+                Set(fixture.map.slices.map(\.sliceID))
+            )
+            XCTAssertTrue(
+                propPlacements.allSatisfy {
+                    $0.placement.placementID.hasPrefix(
+                        "\(propID.shortID):slice-"
+                    )
+                        && $0.placement.placementID.hasSuffix(":direct")
+                }
+            )
+        }
+
+        XCTAssertEqual(
+            projected.count,
+            fixture.map.slices.count * TuringStoryPropID.allCases.count
+        )
+    }
+
     private func makeDistributedFallbackFixture(
         wallCount: Int,
         strongestDoorWallOrdinal: Int,

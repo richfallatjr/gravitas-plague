@@ -303,13 +303,17 @@ actor TuringFlowEngine {
                                             .promptContext,
                                     prerecordingTranscript:
                                         prerecording
-                                            .transcript
+                                            .transcript,
+                                    storyIntent:
+                                        voicePrompt
+                                            .intent,
+                                    promptTemplateResourcePath:
+                                        voicePrompt
+                                            .promptTemplateResourcePath
                                 )
                             )
                     return TuringFlowCompositeSpeechPlan(
                         segments: promptPlan.segments,
-                        conversationSeed:
-                            promptPlan.conversationSeed,
                         promptVoiceSeed:
                             promptVoiceSeed
                     )
@@ -459,11 +463,6 @@ actor TuringFlowEngine {
                         String(
                             expectedSegmentCount
                         )
-                    ),
-                    (
-                        "unusedGeneratedConversationSeedID",
-                        plan.conversationSeed
-                            .seedID
                     )
                 ]
             )

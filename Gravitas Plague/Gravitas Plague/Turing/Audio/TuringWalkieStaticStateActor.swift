@@ -9,6 +9,7 @@ actor TuringWalkieStaticStateActor {
     private let endpoint: any TuringAudioPlaybackEndpoint
     private var ambientHandle: TuringAudioPlaybackHandle?
     private var sendingHandle: TuringAudioPlaybackHandle?
+    private var ambientRetentionOwners = Set<String>()
 
     init(endpoint: any TuringAudioPlaybackEndpoint) {
         self.endpoint = endpoint
@@ -16,7 +17,7 @@ actor TuringWalkieStaticStateActor {
 
     func startAmbient(fileURL: URL, runID: String) async throws {
         guard ambientHandle == nil else { return }
-        ambientHandle = try await endpoint.play(
+        let handle = try await endpoint.play(
             .init(
                 requestID: UUID(),
                 runID: runID,
@@ -29,12 +30,67 @@ actor TuringWalkieStaticStateActor {
                 cachePolicy: .bundled
             )
         )
+        ambientHandle = handle
+        print("""
+        [TuringWalkieStatic] ambient started
+          runID: \(runID)
+          handleID: \(handle.id.uuidString)
+          file: \(fileURL.lastPathComponent)
+        """)
+    }
+
+    func retainAmbient(
+        fileURL: URL,
+        runID: String,
+        ownerID: String
+    ) async throws {
+        ambientRetentionOwners.insert(ownerID)
+        do {
+            try await startAmbient(fileURL: fileURL, runID: runID)
+        } catch {
+            ambientRetentionOwners.remove(ownerID)
+            throw error
+        }
+
+        print("""
+        [TuringWalkieStatic] ambient retained
+          ownerID: \(ownerID)
+          retentionOwnerCount: \(ambientRetentionOwners.count)
+        """)
     }
 
     func stopAmbient(reason: String) async {
+        guard ambientRetentionOwners.isEmpty else {
+            print("""
+            [TuringWalkieStatic] ambient stop deferred
+              reason: \(reason)
+              retentionOwners: \(ambientRetentionOwners.sorted())
+            """)
+            return
+        }
         guard let handle = ambientHandle else { return }
         ambientHandle = nil
         await endpoint.stop(handle, reason: reason)
+        print("""
+        [TuringWalkieStatic] ambient stopped
+          handleID: \(handle.id.uuidString)
+          reason: \(reason)
+        """)
+    }
+
+    func releaseAmbient(ownerID: String, reason: String) async {
+        guard ambientRetentionOwners.remove(ownerID) != nil else {
+            return
+        }
+
+        print("""
+        [TuringWalkieStatic] ambient retention released
+          ownerID: \(ownerID)
+          retentionOwnerCount: \(ambientRetentionOwners.count)
+          reason: \(reason)
+        """)
+
+        await stopAmbient(reason: reason)
     }
 
     func startSending(fileURL: URL, runID: String) async throws {
@@ -61,6 +117,7 @@ actor TuringWalkieStaticStateActor {
     }
 
     func stopAll(reason: String) async {
+        ambientRetentionOwners.removeAll(keepingCapacity: false)
         await stopSending(reason: reason)
         await stopAmbient(reason: reason)
     }

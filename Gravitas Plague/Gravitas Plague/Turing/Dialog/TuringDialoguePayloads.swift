@@ -5,17 +5,23 @@ struct VoicePromptRequest: Codable, Sendable, Hashable {
     let characterProfileID: String
     let promptContext: String
     let prerecordingTranscript: String
+    let storyIntent: String?
+    let promptTemplateResourcePath: String?
 
     init(
         id: String,
         characterProfileID: String,
         promptContext: String,
-        prerecordingTranscript: String
+        prerecordingTranscript: String,
+        storyIntent: String? = nil,
+        promptTemplateResourcePath: String? = nil
     ) {
         self.id = id
         self.characterProfileID = characterProfileID
         self.promptContext = promptContext
         self.prerecordingTranscript = prerecordingTranscript
+        self.storyIntent = storyIntent
+        self.promptTemplateResourcePath = promptTemplateResourcePath
     }
 }
 
@@ -36,7 +42,6 @@ struct TuringDialoguePlan: Codable, Sendable, Hashable {
 struct TuringVoicePromptPlan: Codable, Sendable, Hashable {
     let schemaVersion: Int
     let segments: [TuringSpeechSegment]
-    let conversationSeed: TuringConversationSeed
 }
 
 struct TuringCharacterProfile: Codable, Sendable, Hashable {

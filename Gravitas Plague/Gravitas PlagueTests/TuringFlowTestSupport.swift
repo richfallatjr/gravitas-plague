@@ -836,19 +836,7 @@ enum TuringFlowTestFixtures {
                     text: "Segment one.",
                     emotion: "controlled"
                 )
-            ],
-            conversationSeed:
-                TuringConversationSeed(
-                    seedID: "test.seed",
-                    summary: "Test.",
-                    currentAttitude:
-                        "Controlled.",
-                    recentFacts: [
-                        "Test fact."
-                    ],
-                    openThread:
-                        "Continue."
-                )
+            ]
         )
     }
 }

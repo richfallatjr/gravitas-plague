@@ -282,6 +282,7 @@ final class TuringBigMikeWalkieFlowRoute:
             return
         }
 
+        await retainAmbientStatic(identity: identity)
         await TuringWalkieCommsFXController.shared
             .runFixedResponseLeadInAfterExternalSend(
                 reason:
@@ -294,11 +295,7 @@ final class TuringBigMikeWalkieFlowRoute:
         descriptor: TuringFlowDescriptor,
         identity: TuringFlowIdentity
     ) async throws {
-        await TuringWalkieCommsFXController.shared
-            .startAmbientWalkieStatic(
-                reason:
-                    "flow.\(identity.flowInstanceID.uuidString).bigMike"
-            )
+        await retainAmbientStatic(identity: identity)
 
         guard descriptor.transmission.commSFX
             .openBeforePrerecording else {
@@ -339,10 +336,28 @@ final class TuringBigMikeWalkieFlowRoute:
                     "flow.\(identity.flowInstanceID.uuidString).finished"
             )
         await TuringWalkieCommsFXController.shared
-            .stopAmbientWalkieStatic(
+            .releaseAmbientWalkieStatic(
+                ownerID: ambientStaticOwnerID(identity: identity),
                 reason:
                     "flow.\(identity.flowInstanceID.uuidString).finished"
             )
+    }
+
+    private func retainAmbientStatic(
+        identity: TuringFlowIdentity
+    ) async {
+        await TuringWalkieCommsFXController.shared
+            .retainAmbientWalkieStatic(
+                ownerID: ambientStaticOwnerID(identity: identity),
+                reason:
+                    "flow.\(identity.flowInstanceID.uuidString).bigMike"
+            )
+    }
+
+    private func ambientStaticOwnerID(
+        identity: TuringFlowIdentity
+    ) -> String {
+        "turingFlow.\(identity.flowInstanceID.uuidString)"
     }
 }
 

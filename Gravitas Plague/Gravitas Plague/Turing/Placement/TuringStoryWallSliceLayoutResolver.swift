@@ -166,7 +166,7 @@ struct TuringStoryWallSliceLayoutResolver: Sendable {
     }
   }
 
-  private func projectedPlacement(
+  func projectedPlacement(
     propID: TuringStoryPropID,
     slice: TuringStoryWallSlice,
     wall: TuringStorySpinOrderedWall,

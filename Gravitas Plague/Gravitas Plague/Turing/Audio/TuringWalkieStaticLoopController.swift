@@ -75,12 +75,46 @@ enum TuringStoryWalkieAudioRoute {
         }
     }
 
+    static func retainAmbientWalkieStaticLoop(
+        fileURL: URL,
+        ownerID: String,
+        reason: String
+    ) async -> Bool {
+        guard let staticState else { return false }
+        do {
+            try await staticState.retainAmbient(
+                fileURL: fileURL,
+                runID: reason,
+                ownerID: ownerID
+            )
+            return true
+        } catch {
+            print("""
+            [TuringWalkieStatic] retained walkie route failed
+              ownerID: \(ownerID)
+              reason: \(reason)
+              error: \(error.localizedDescription)
+            """)
+            return false
+        }
+    }
+
     static func stopActiveRadioStaticLoop(reason: String) async {
         await stopAmbientWalkieStaticLoop(reason: reason)
     }
 
     static func stopAmbientWalkieStaticLoop(reason: String) async {
         await staticState?.stopAmbient(reason: reason)
+    }
+
+    static func releaseAmbientWalkieStaticLoop(
+        ownerID: String,
+        reason: String
+    ) async {
+        await staticState?.releaseAmbient(
+            ownerID: ownerID,
+            reason: reason
+        )
     }
 
     static func startSendingStaticLoop(

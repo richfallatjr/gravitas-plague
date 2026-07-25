@@ -499,7 +499,7 @@ enum TuringNativeQwenHelloWorldCanary {
             [TuringPrerecordingSeed] voicePrompt result received
               runID: \(runID)
               segmentCount: \(plan.segments.count)
-              conversationSeedEmpty: \(plan.conversationSeed.isEmptySeed)
+              generatedConversationSeed: absent
             """)
             guard plan.segments.isEmpty == false else {
                 await playback.qwenComputeAllFinished()
@@ -519,7 +519,6 @@ enum TuringNativeQwenHelloWorldCanary {
             [TuringPrerecordingSeed] voicePrompt follow-up ready
               runID: \(runID)
               segmentCount: \(plan.segments.count)
-              seedID: \(plan.conversationSeed.seedID)
             """)
 
             let modelRoot = try locateBundledBaseCloneModel()

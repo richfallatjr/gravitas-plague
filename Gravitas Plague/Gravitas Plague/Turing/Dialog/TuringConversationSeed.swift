@@ -1,30 +1,5 @@
 import Foundation
 
-struct TuringConversationSeed: Codable, Sendable, Hashable {
-    let seedID: String
-    let summary: String
-    let currentAttitude: String
-    let recentFacts: [String]
-    let openThread: String
-
-    static let empty = TuringConversationSeed(
-        seedID: "",
-        summary: "",
-        currentAttitude: "",
-        recentFacts: [],
-        openThread: ""
-    )
-
-    var isEmptySeed: Bool {
-        seedID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            currentAttitude.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-            recentFacts.isEmpty &&
-            openThread.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-}
-
 struct TuringPromptVoiceSeed: Sendable, Equatable {
     let voicePromptID: String
     let promptContext: String
