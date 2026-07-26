@@ -55,11 +55,11 @@ def main() -> None:
     runner_source = runner.read_text(encoding="utf-8")
     fence_source = fence.read_text(encoding="utf-8")
 
-    exact_creation = (
-        "let session = "
-        "FoundationModels.LanguageModelSession()"
+    local_creation = re.compile(
+        r"\blet\s+session\s*=\s*"
+        r"FoundationModels\.LanguageModelSession\s*\("
     )
-    if runner_source.count(exact_creation) != 1:
+    if len(local_creation.findall(runner_source)) != 1:
         fail(
             "The gateway must contain exactly one local SDK "
             "session-construction site."

@@ -21,6 +21,45 @@ enum TuringFoundationPromptSanitizer {
     }
 }
 
+enum TuringFoundationModelGuardrailMode: String, Sendable {
+    case standard
+    case permissiveContentTransformations
+}
+
+enum TuringFoundationPromptPurposePolicy {
+    static func guardrailMode(
+        for purpose: String
+    ) -> TuringFoundationModelGuardrailMode {
+        switch purpose {
+        case "voicePrompt_characterIntent":
+            return .permissiveContentTransformations
+
+        default:
+            return .standard
+        }
+    }
+}
+
+enum TuringFoundationErrorDiagnostics {
+    static func describe(
+        _ error: Error
+    ) -> String {
+        let nsError = error as NSError
+        let localizedError = error as? any LocalizedError
+
+        return """
+        type: \(String(reflecting: type(of: error)))
+        reflected: \(String(reflecting: error))
+        localizedDescription: \(error.localizedDescription)
+        failureReason: \(localizedError?.failureReason ?? "none")
+        recoverySuggestion: \(localizedError?.recoverySuggestion ?? "none")
+        nsDomain: \(nsError.domain)
+        nsCode: \(nsError.code)
+        nsUserInfo: \(String(reflecting: nsError.userInfo))
+        """
+    }
+}
+
 /// The sole production gateway to Apple Foundation Models.
 ///
 /// This type intentionally has no stored properties. Every `runPrompt`
@@ -120,7 +159,30 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
         purpose: String,
         requestID: UUID
     ) async throws -> String {
-        let model = FoundationModels.SystemLanguageModel.default
+        let guardrailMode = TuringFoundationPromptPurposePolicy
+            .guardrailMode(for: purpose)
+        let model: FoundationModels.SystemLanguageModel
+        let effectiveGuardrailMode:
+            TuringFoundationModelGuardrailMode
+
+        switch guardrailMode {
+        case .standard:
+            model = .default
+            effectiveGuardrailMode = .standard
+
+        case .permissiveContentTransformations:
+            if #available(iOS 27.0, macOS 27.0, visionOS 27.0, *) {
+                model = FoundationModels.SystemLanguageModel(
+                    useCase: .general,
+                    guardrails: .permissiveContentTransformations
+                )
+                effectiveGuardrailMode =
+                    .permissiveContentTransformations
+            } else {
+                model = .default
+                effectiveGuardrailMode = .standard
+            }
+        }
 
         switch model.availability {
         case .available:
@@ -146,7 +208,9 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
         }
 
         // This local session is submitted exactly one prompt.
-        let session = FoundationModels.LanguageModelSession()
+        let session = FoundationModels.LanguageModelSession(
+            model: model
+        )
         let sessionID = UUID()
 
         print("""
@@ -156,6 +220,8 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
           purpose: \(purpose)
           freshSession: true
           promptSubmissionLimit: 1
+          requestedGuardrailMode: \(guardrailMode.rawValue)
+          effectiveGuardrailMode: \(effectiveGuardrailMode.rawValue)
         """)
 
         defer {
@@ -188,7 +254,9 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
               requestID: \(requestID.uuidString)
               sessionID: \(sessionID.uuidString)
               purpose: \(purpose)
-              error: \(error.localizedDescription)
+              guardrailMode: \(guardrailMode.rawValue)
+              diagnostics:
+            \(TuringFoundationErrorDiagnostics.describe(error))
             """)
             throw error
         }

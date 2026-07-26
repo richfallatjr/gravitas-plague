@@ -6,12 +6,12 @@ struct TuringVoicePromptTriggerDescriptor: Codable, Sendable, Hashable {
   let speakerID: String
   let voiceID: String
   let characterProfileID: String
+  let listenerProfileID: String
   let outputContext: TuringVoiceOutputContext
   let conversationKey: String
   let intent: String
   let emotion: String
   let promptContext: String?
-  let promptTemplateResourcePath: String?
 
   init(
     schemaVersion: Int,
@@ -19,24 +19,24 @@ struct TuringVoicePromptTriggerDescriptor: Codable, Sendable, Hashable {
     speakerID: String,
     voiceID: String,
     characterProfileID: String,
+    listenerProfileID: String,
     outputContext: TuringVoiceOutputContext,
     conversationKey: String,
     intent: String,
     emotion: String,
-    promptContext: String? = nil,
-    promptTemplateResourcePath: String? = nil
+    promptContext: String? = nil
   ) {
     self.schemaVersion = schemaVersion
     self.voicePromptID = voicePromptID
     self.speakerID = speakerID
     self.voiceID = voiceID
     self.characterProfileID = characterProfileID
+    self.listenerProfileID = listenerProfileID
     self.outputContext = outputContext
     self.conversationKey = conversationKey
     self.intent = intent
     self.emotion = emotion
     self.promptContext = promptContext
-    self.promptTemplateResourcePath = promptTemplateResourcePath
   }
 }
 
@@ -62,6 +62,7 @@ struct TuringVoicePromptTriggerStore: Sendable {
       ("speakerID", value.speakerID),
       ("voiceID", value.voiceID),
       ("characterProfileID", value.characterProfileID),
+      ("listenerProfileID", value.listenerProfileID),
       ("conversationKey", value.conversationKey),
       ("intent", value.intent),
       ("emotion", value.emotion),
@@ -82,18 +83,9 @@ struct TuringVoicePromptTriggerStore: Sendable {
         "voicePrompt \(id) promptContext must not be empty when provided."
       )
     }
-    if let promptTemplateResourcePath = value.promptTemplateResourcePath {
-      guard promptTemplateResourcePath.trimmingCharacters(
-        in: .whitespacesAndNewlines
-      ).isEmpty == false else {
-        throw TuringRuntimeError.invalidConfig(
-          "voicePrompt \(id) promptTemplateResourcePath must not be empty when provided."
-        )
-      }
-      _ = try TuringResourceLoader.resourceURL(
-        resourcePath: promptTemplateResourcePath
-      )
-    }
+    _ = try TuringCharacterProfileStore().profile(
+      id: value.listenerProfileID
+    )
 
     return value
   }

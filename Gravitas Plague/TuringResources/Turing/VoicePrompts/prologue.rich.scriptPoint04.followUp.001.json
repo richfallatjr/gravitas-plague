@@ -4,6 +4,7 @@
   "speakerID": "rich",
   "voiceID": "rich_base_clone_v1",
   "characterProfileID": "rich",
+  "listenerProfileID": "big_mike",
   "outputContext": "walkieOutgoingGlobal",
   "conversationKey": "dialogue.big_mike.rich",
   "intent": "I can't believe this thing is laying in my room. It's not a person anymore it's a monster. I am still freaking out. We need the police. But police services have been down for weeks. I need to get this thing out of here",

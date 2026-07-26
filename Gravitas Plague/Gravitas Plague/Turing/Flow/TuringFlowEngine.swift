@@ -265,8 +265,8 @@ actor TuringFlowEngine {
                         (
                             "promptInputContract",
                             descriptor.transmission.usesCompositePipeline
-                                ? "scriptPrompt,voicePrompt,prerecordingTranscript"
-                                : "characterProfile,promptContext,prerecordingTranscript"
+                                ? "scriptVoiceSource,characterDisplayName,listenerDisplayName,characterBackstory,storyIntent,prerecordingTranscript"
+                                : "characterDisplayName,listenerDisplayName,characterBackstory,storyIntent,prerecordingTranscript"
                         ),
                         (
                             "freshDialogueService",
@@ -298,6 +298,9 @@ actor TuringFlowEngine {
                                     characterProfileID:
                                         voicePrompt
                                             .characterProfileID,
+                                    listenerProfileID:
+                                        voicePrompt
+                                            .listenerProfileID,
                                     promptContext:
                                         promptVoiceSeed
                                             .promptContext,
@@ -306,10 +309,7 @@ actor TuringFlowEngine {
                                             .transcript,
                                     storyIntent:
                                         voicePrompt
-                                            .intent,
-                                    promptTemplateResourcePath:
-                                        voicePrompt
-                                            .promptTemplateResourcePath
+                                            .intent
                                 )
                             )
                     return TuringFlowCompositeSpeechPlan(

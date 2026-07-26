@@ -4,6 +4,7 @@
   "speakerID": "big_mike",
   "voiceID": "big_mike_base_clone_v1",
   "characterProfileID": "big_mike",
+  "listenerProfileID": "rich",
   "outputContext": "walkieSpatial",
   "conversationKey": "dialogue.big_mike.rich",
   "intent": "You are asking if Rich can hear you. You are worried because you have not heard from Rich at your regular cadence and something may be wrong. Continue after the authored radio contact without repeating it. Give Rich a believable, direct reason to answer.",

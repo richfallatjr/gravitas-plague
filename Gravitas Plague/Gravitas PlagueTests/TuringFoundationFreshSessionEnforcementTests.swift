@@ -20,6 +20,39 @@ final class TuringFoundationFreshSessionEnforcementTests:
         )
     }
 
+    func testPromptVoiceUsesPermissiveContentTransformationGuardrails() {
+        XCTAssertEqual(
+            TuringFoundationPromptPurposePolicy.guardrailMode(
+                for: "voicePrompt_characterIntent"
+            ),
+            .permissiveContentTransformations
+        )
+        XCTAssertEqual(
+            TuringFoundationPromptPurposePolicy.guardrailMode(
+                for: "storyWallSliceLayoutPlanner"
+            ),
+            .standard
+        )
+        XCTAssertEqual(
+            TuringFoundationPromptPurposePolicy.guardrailMode(
+                for: "dialogueJSONRepair"
+            ),
+            .standard
+        )
+    }
+
+    func testGuardrailClassifierUsesReflectedErrorCase() {
+        enum SyntheticLanguageModelError: Error {
+            case guardrailViolation
+        }
+
+        XCTAssertTrue(
+            TuringFoundationGuardrailPolicy.isGuardrailError(
+                SyntheticLanguageModelError.guardrailViolation
+            )
+        )
+    }
+
     func testOnlyGatewayMayReferenceLanguageModelSession()
         throws {
         let sourceRoot = try appSourceRoot()
@@ -50,12 +83,12 @@ final class TuringFoundationFreshSessionEnforcementTests:
                 SDKSessionCreationCount +=
                     source.components(
                         separatedBy:
-                            "FoundationModels.LanguageModelSession()"
+                            "FoundationModels.LanguageModelSession("
                     ).count - 1
 
                 XCTAssertTrue(
                     source.contains(
-                        "let session = FoundationModels.LanguageModelSession()"
+                        "let session = FoundationModels.LanguageModelSession("
                     ),
                     "The gateway must create its session locally."
                 )
@@ -172,7 +205,7 @@ final class TuringFoundationFreshSessionEnforcementTests:
         )
         XCTAssertTrue(
             source.contains(
-                "let session = FoundationModels.LanguageModelSession()"
+                "let session = FoundationModels.LanguageModelSession("
             )
         )
 

@@ -212,15 +212,13 @@ final class TuringFlowResourceParityTests:
         XCTAssertFalse(
             promptSeed.promptContext.contains("promptVoice")
         )
-        let templatePath = try XCTUnwrap(
-            promptDescriptor.promptTemplateResourcePath
-        )
         XCTAssertEqual(
-            templatePath,
-            "Turing/Prompts/voicePrompt_scriptPoint05_eliminationTest.txt"
+            promptDescriptor.listenerProfileID,
+            "rich"
         )
         let templateURL = try TuringResourceLoader.resourceURL(
-            resourcePath: templatePath
+            resourcePath:
+                "Turing/Prompts/voicePrompt_characterIntent.txt"
         )
         let template = try String(
             contentsOf: templateURL,
@@ -228,9 +226,11 @@ final class TuringFlowResourceParityTests:
         )
         XCTAssertTrue(
             template.hasPrefix(
-                "You are Big Mike. You are talking to Rich over walkie talkie."
+                "You are {{characterDisplayName}}. You are talking to {{listenerDisplayName}} over walkie talkie."
             )
         )
+        XCTAssertTrue(template.contains("{{characterDisplayName}}"))
+        XCTAssertTrue(template.contains("{{listenerDisplayName}}"))
         XCTAssertTrue(template.contains("{{storyIntent}}"))
         XCTAssertTrue(template.contains("{{characterBackstory}}"))
         XCTAssertTrue(template.contains("{{prerecordingTranscript}}"))
@@ -241,10 +241,21 @@ final class TuringFlowResourceParityTests:
         let profile = try TuringCharacterProfileStore().profile(
             id: promptDescriptor.characterProfileID
         )
+        let listenerProfile = try TuringCharacterProfileStore().profile(
+            id: promptDescriptor.listenerProfileID
+        )
         let prerecording = try TuringPrerecordingStore().descriptor(
             id: "prologue.walkie.bigMike.scriptPoint05.001"
         )
         let rendered = template
+            .replacingOccurrences(
+                of: "{{characterDisplayName}}",
+                with: profile.displayName
+            )
+            .replacingOccurrences(
+                of: "{{listenerDisplayName}}",
+                with: listenerProfile.displayName
+            )
             .replacingOccurrences(
                 of: "{{characterBackstory}}",
                 with: profile.writeup
@@ -257,6 +268,11 @@ final class TuringFlowResourceParityTests:
                 of: "{{prerecordingTranscript}}",
                 with: prerecording.transcript
             )
+        XCTAssertTrue(
+            rendered.hasPrefix(
+                "You are Big Mike. You are talking to Rich over walkie talkie."
+            )
+        )
         XCTAssertTrue(rendered.contains(profile.writeup))
         XCTAssertTrue(rendered.contains(promptDescriptor.intent))
         XCTAssertTrue(rendered.contains(prerecording.transcript))
@@ -332,22 +348,22 @@ final class TuringFlowResourceParityTests:
 
         XCTAssertTrue(
             prompt.contains(
-                "already been spoken or is currently playing"
+                "You are {{characterDisplayName}}. You are talking to {{listenerDisplayName}} over walkie talkie."
             )
         )
         XCTAssertTrue(
             prompt.contains(
-                "Do not restate, paraphrase, summarize, echo, or replay"
+                "This is your backstory:"
             )
         )
         XCTAssertTrue(
             prompt.contains(
-                "{{characterProfile}}"
+                "{{characterBackstory}}"
             )
         )
         XCTAssertTrue(
             prompt.contains(
-                "{{promptContext}}"
+                "{{storyIntent}}"
             )
         )
         XCTAssertTrue(
@@ -357,17 +373,24 @@ final class TuringFlowResourceParityTests:
         )
         XCTAssertTrue(
             prompt.contains(
-                "What you just said earlier:"
+                "This is what you just said prior to what you are going to say next:"
             )
         )
         XCTAssertTrue(
             prompt.contains(
-                "Character Profile:"
+                "Paraphrase the Story Intent in {{characterDisplayName}}'s voice."
             )
         )
         XCTAssertTrue(
             prompt.hasPrefix(
-                "Character Profile:"
+                "You are {{characterDisplayName}}."
+            )
+        )
+        XCTAssertFalse(prompt.contains("{{characterProfile}}"))
+        XCTAssertFalse(prompt.contains("{{promptContext}}"))
+        XCTAssertFalse(
+            prompt.contains(
+                "Do not restate, paraphrase, summarize, echo, or replay"
             )
         )
         XCTAssertFalse(

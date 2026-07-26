@@ -753,6 +753,10 @@ enum TuringFlowTestFixtures {
             voiceID: voiceID,
             characterProfileID:
                 characterID,
+            listenerProfileID:
+                characterID == "big_mike"
+                    ? "rich"
+                    : "big_mike",
             outputContext:
                 outputRoute,
             conversationKey:

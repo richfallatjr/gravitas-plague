@@ -117,6 +117,8 @@ actor TuringFoundationPromptArchive {
         let url = directory.appendingPathComponent(
             artifactStem(metadata) + "_error.txt"
         )
+        let diagnostics = TuringFoundationErrorDiagnostics
+            .describe(error)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(
@@ -130,7 +132,7 @@ actor TuringFoundationPromptArchive {
                 promptUTF16: prompt.utf16.count,
                 promptSHA256: TuringFlowHash.sha256(prompt),
                 responseReceived: responseReceived,
-                error: error.localizedDescription
+                error: diagnostics
             )
         )
         try data.write(to: url, options: .atomic)
@@ -143,7 +145,7 @@ actor TuringFoundationPromptArchive {
                 utf16Count: prompt.utf16.count,
                 sha256: TuringFlowHash.sha256(prompt),
                 responseReceived: responseReceived,
-                message: error.localizedDescription
+                message: diagnostics
             ),
             directory: directory
         )

@@ -3,25 +3,25 @@ import Foundation
 struct VoicePromptRequest: Codable, Sendable, Hashable {
     let id: String
     let characterProfileID: String
+    let listenerProfileID: String
     let promptContext: String
     let prerecordingTranscript: String
     let storyIntent: String?
-    let promptTemplateResourcePath: String?
 
     init(
         id: String,
         characterProfileID: String,
+        listenerProfileID: String,
         promptContext: String,
         prerecordingTranscript: String,
-        storyIntent: String? = nil,
-        promptTemplateResourcePath: String? = nil
+        storyIntent: String? = nil
     ) {
         self.id = id
         self.characterProfileID = characterProfileID
+        self.listenerProfileID = listenerProfileID
         self.promptContext = promptContext
         self.prerecordingTranscript = prerecordingTranscript
         self.storyIntent = storyIntent
-        self.promptTemplateResourcePath = promptTemplateResourcePath
     }
 }
 

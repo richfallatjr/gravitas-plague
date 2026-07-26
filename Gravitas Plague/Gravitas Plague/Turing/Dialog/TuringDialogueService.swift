@@ -18,20 +18,19 @@ actor TuringDialogueService {
         let profile = try characterStore.profile(
             id: request.characterProfileID
         )
+        let listenerProfile = try characterStore.profile(
+            id: request.listenerProfileID
+        )
         let promptResourcePath =
-            request.promptTemplateResourcePath
-            ?? "Turing/Prompts/voicePrompt_characterIntent.txt"
-        let promptTemplateName = URL(
-            fileURLWithPath: promptResourcePath
-        ).deletingPathExtension().lastPathComponent
-        let usesAuthoredTemplate =
-            request.promptTemplateResourcePath != nil
+            "Turing/Prompts/voicePrompt_characterIntent.txt"
+        let promptTemplateName =
+            "voicePrompt_characterIntent"
         let prompt = try Self.renderPrompt(
             resourcePath: promptResourcePath,
             replacements: [
-                "{{characterProfile}}": profile.promptText,
+                "{{characterDisplayName}}": profile.displayName,
+                "{{listenerDisplayName}}": listenerProfile.displayName,
                 "{{characterBackstory}}": profile.writeup,
-                "{{promptContext}}": request.promptContext,
                 "{{storyIntent}}": request.storyIntent
                     ?? request.promptContext,
                 "{{prerecordingTranscript}}": request.prerecordingTranscript
@@ -43,10 +42,11 @@ actor TuringDialogueService {
           freshSession: true
           id: \(request.id)
           characterID: \(profile.characterID)
+          listenerID: \(listenerProfile.characterID)
           promptTemplate: \(promptTemplateName)
-          promptTemplateResourcePath: \(promptResourcePath)
-          profileContext: \(usesAuthoredTemplate ? "fullAuthoredCharacterBackstory" : "fullAuthoredCharacterProfile")
-          inputContract: \(usesAuthoredTemplate ? "characterBackstory,storyIntent,prerecordingTranscript" : "characterProfile,promptContext,prerecordingTranscript")
+          promptResourcePath: \(promptResourcePath)
+          profileContext: fullAuthoredCharacterBackstory
+          inputContract: characterDisplayName,listenerDisplayName,characterBackstory,storyIntent,prerecordingTranscript
           prerecordingTranscriptUTF16: \(request.prerecordingTranscript.utf16.count)
           authoredPRTranscriptSHA256: \(TuringFlowHash.sha256(request.prerecordingTranscript))
           dialogueHistoryIncluded: false

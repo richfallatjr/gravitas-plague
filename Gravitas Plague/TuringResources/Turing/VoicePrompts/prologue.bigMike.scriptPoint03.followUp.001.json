@@ -4,6 +4,7 @@
   "speakerID": "big_mike",
   "voiceID": "big_mike_base_clone_v1",
   "characterProfileID": "big_mike",
+  "listenerProfileID": "rich",
   "outputContext": "walkieSpatial",
   "conversationKey": "dialogue.big_mike.rich",
   "intent": "You are Mike. You are relieved Rich is okay but need to communicate the danger he may be in with infected wandering the area. Tell Rich to locate and quietly prepare his ham-radio equipment without transmitting. Keep Mike direct, protective, skeptical, and under pressure.",
