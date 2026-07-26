@@ -4,5 +4,5 @@ import Foundation
 /// Descriptor-driven multi-stage points use TuringStagedSpeechRunCoordinator.
 struct TuringFlowCompositeSpeechPlan: Sendable {
     let segments: [TuringSpeechSegment]
-    let promptVoiceSeed: TuringPromptVoiceSeed
+    let promptVoiceContext: TuringAuthoredPromptVoiceContext
 }

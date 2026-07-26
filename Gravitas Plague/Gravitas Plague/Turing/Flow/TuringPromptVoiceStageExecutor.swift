@@ -6,15 +6,18 @@ actor TuringPromptVoiceStageExecutor: TuringSpeechStageExecuting {
 
     private let promptStore: any TuringVoicePromptTriggerLoading
     private let generator: any TuringFlowVoicePromptGenerating
+    private let inputStore: TuringConversationInputStore
 
     init(
         promptStore: any TuringVoicePromptTriggerLoading =
             TuringVoicePromptTriggerStore(),
         generator: any TuringFlowVoicePromptGenerating =
-            TuringDialogueService(runner: TuringFoundationModelsRunner())
+            TuringDialogueService(runner: TuringFoundationModelsRunner()),
+        inputStore: TuringConversationInputStore = .shared
     ) {
         self.promptStore = promptStore
         self.generator = generator
+        self.inputStore = inputStore
     }
 
     func execute(
@@ -57,7 +60,22 @@ actor TuringPromptVoiceStageExecutor: TuringSpeechStageExecuting {
             priorTranscript = transcript
         }
 
-        let promptVoiceSeed = TuringPromptVoiceSeedBuilder.standard(prompt)
+        let promptVoiceContext =
+            TuringPromptVoiceStoryContextBuilder.standard(prompt)
+        await inputStore.updatePromptVoiceStoryContext(
+            promptVoiceContext.storyContext,
+            for: context.descriptor.transmission.conversationKey
+        )
+        print("""
+        [TuringStagedSpeech] authored promptVoice Story Context committed
+          scriptPointID: \(context.descriptor.scriptPointID)
+          stageID: \(stage.stageID)
+          voicePromptID: \(prompt.voicePromptID)
+          conversationKey: \(context.descriptor.transmission.conversationKey)
+          committedBeforeFoundation: true
+          generatedSeedIncluded: false
+          promptContextSHA256: \(TuringFlowHash.sha256(promptVoiceContext.storyContext))
+        """)
         print("""
         [TuringStagedSpeech] Prompt Voice Foundation started
           scriptPointID: \(context.descriptor.scriptPointID)
@@ -72,7 +90,7 @@ actor TuringPromptVoiceStageExecutor: TuringSpeechStageExecuting {
                 id: prompt.voicePromptID,
                 characterProfileID: prompt.characterProfileID,
                 listenerProfileID: prompt.listenerProfileID,
-                promptContext: promptVoiceSeed.promptContext,
+                promptContext: promptVoiceContext.storyContext,
                 prerecordingTranscript: priorTranscript,
                 storyIntent: prompt.intent
             )
@@ -94,7 +112,7 @@ actor TuringPromptVoiceStageExecutor: TuringSpeechStageExecuting {
 
         return TuringSpeechStageExecutionResult(
             normalizedSourceTranscript: nil,
-            promptVoiceSeed: promptVoiceSeed,
+            promptVoiceContext: promptVoiceContext,
             failedBatchDescriptions: []
         )
     }

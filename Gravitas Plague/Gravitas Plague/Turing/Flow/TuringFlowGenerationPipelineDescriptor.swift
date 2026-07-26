@@ -28,6 +28,26 @@ struct TuringFlowGenerationPipelineDescriptor: Codable, Sendable, Hashable {
         let voicePromptID: String?
         let defaultEmotion: String
         let contextSource: ContextSource
+        let authoredPrerecordingAfterStageID: String?
+
+        init(
+            stageID: String,
+            kind: Kind,
+            sourceResourcePath: String?,
+            voicePromptID: String?,
+            defaultEmotion: String,
+            contextSource: ContextSource,
+            authoredPrerecordingAfterStageID: String? = nil
+        ) {
+            self.stageID = stageID
+            self.kind = kind
+            self.sourceResourcePath = sourceResourcePath
+            self.voicePromptID = voicePromptID
+            self.defaultEmotion = defaultEmotion
+            self.contextSource = contextSource
+            self.authoredPrerecordingAfterStageID =
+                authoredPrerecordingAfterStageID
+        }
     }
 
     let schemaVersion: Int

@@ -4,7 +4,7 @@ enum TuringBigMikeConversationRunner {
     static func run(
         playerDictation: String,
         interactionLease: StoryInteractionLease? = nil,
-        seedStore: TuringConversationSeedStore = .shared,
+        inputStore: TuringConversationInputStore = .shared,
         onSegmentZeroReady:
             (@MainActor @Sendable () -> Void)? = nil
     ) async -> TuringVoiceRunResult {
@@ -22,7 +22,7 @@ enum TuringBigMikeConversationRunner {
                 interactionLease:
                     interactionLease
             ),
-            seedStore: seedStore,
+            inputStore: inputStore,
             onSegmentZeroReady:
                 onSegmentZeroReady
         )

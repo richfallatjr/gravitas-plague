@@ -27,7 +27,8 @@ final class TuringStagedSpeechRunCoordinatorTests: XCTestCase {
             contextSource: .init(
                 kind: .prerecordingTranscript,
                 stageID: nil
-            )
+            ),
+            authoredPrerecordingAfterStageID: "test.pr2"
         )
         let promptStage = TuringFlowGenerationPipelineDescriptor.Stage(
             stageID: "promptVoice",
@@ -117,7 +118,7 @@ final class TuringStagedSpeechRunCoordinatorTests: XCTestCase {
             rendererFactory: StubStagedRenderSessionFactory(
                 recorder: recorder
             ),
-            seedStore: TuringConversationSeedStore()
+            inputStore: TuringConversationInputStore()
         )
 
         let report = try await coordinator.run(
@@ -125,6 +126,12 @@ final class TuringStagedSpeechRunCoordinatorTests: XCTestCase {
             pipeline: pipeline,
             character: character,
             prerecording: prerecording,
+            authoredBridges: [
+                "test.pr2": TuringAuthoredSpeechBridge(
+                    prerecordingID: "test.pr2",
+                    fileURL: URL(fileURLWithPath: "/tmp/test-pr2.wav")
+                )
+            ],
             playback: playback,
             identity: identity
         )
@@ -141,12 +148,15 @@ final class TuringStagedSpeechRunCoordinatorTests: XCTestCase {
             events,
             [
                 "stage.voiceScriptLongform.started",
+                "bridge.test.pr2.enqueued.before.2",
                 "render.0.started",
                 "playback.segment.0.published",
                 "generated.0.started",
                 "render.1.started",
                 "playback.segment.1.published",
                 "generated.1.started",
+                "bridge.test.pr2.started",
+                "bridge.test.pr2.completed",
                 "stage.voicePrompt.started",
                 "playback.inputSealed.2",
                 "playback.finished"
@@ -206,7 +216,7 @@ private struct StubStagedSpeechExecutor: TuringSpeechStageExecuting {
         )
         return TuringSpeechStageExecutionResult(
             normalizedSourceTranscript: sourceTranscript,
-            promptVoiceSeed: nil,
+            promptVoiceContext: nil,
             failedBatchDescriptions: []
         )
     }

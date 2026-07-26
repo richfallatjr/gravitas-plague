@@ -78,8 +78,8 @@ final class TuringEpisodeFlowReplayTests:
                         descriptor
                 ]
             )
-        let seedStore =
-            TuringConversationSeedStore()
+        let inputStore =
+            TuringConversationInputStore()
         let interactionArbiter =
             StoryInteractionArbiter()
         await interactionArbiter.updateTuringGate(
@@ -138,14 +138,14 @@ final class TuringEpisodeFlowReplayTests:
                         ],
                         failureMessage: nil
                 ),
-                seedStore: seedStore
+                inputStore: inputStore
             )
         let episode =
             TuringEpisodeFlowController(
                 engine: engine,
                 descriptorStore:
                     descriptorStore,
-                seedStore: seedStore,
+                inputStore: inputStore,
                 interactionPreflight:
                     interactionPreflight,
                 interactionArbiter:

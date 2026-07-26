@@ -165,6 +165,13 @@ final class TuringFlowResourceParityTests:
         XCTAssertEqual(pipeline.stages[0].kind, .voiceScriptLongform)
         XCTAssertEqual(pipeline.stages[1].kind, .voicePrompt)
         XCTAssertEqual(
+            pipeline.stages[0].authoredPrerecordingAfterStageID,
+            "prologue.walkie.bigMike.scriptPoint05.002"
+        )
+        XCTAssertNil(
+            pipeline.stages[1].authoredPrerecordingAfterStageID
+        )
+        XCTAssertEqual(
             pipeline.stages[1].voicePromptID,
             "prologue.bigMike.scriptPoint05.promptVoice.001"
         )
@@ -196,21 +203,22 @@ final class TuringFlowResourceParityTests:
             .descriptor(
                 id: "prologue.bigMike.scriptPoint05.promptVoice.001"
             )
-        let promptSeed = TuringPromptVoiceSeedBuilder.standard(
+        let promptContext =
+            TuringPromptVoiceStoryContextBuilder.standard(
             promptDescriptor
         )
         XCTAssertEqual(
-            promptSeed.promptContext,
+            promptContext.storyContext,
             """
             Story Intent:
             I'm trying to support Rich but he may have messed up. I'll just let him know he did what he had to do. We both need to keep our eyes sharp and help each other out to stay safe. I am glad Rich is alright. Rich needs to get that ham radio functional so we can communicate better with the outside world which is completely the grid now.
             """
         )
         XCTAssertFalse(
-            promptSeed.promptContext.contains("Emotional tone:")
+            promptContext.storyContext.contains("Emotional tone:")
         )
         XCTAssertFalse(
-            promptSeed.promptContext.contains("promptVoice")
+            promptContext.storyContext.contains("promptVoice")
         )
         XCTAssertEqual(
             promptDescriptor.listenerProfileID,
@@ -246,6 +254,18 @@ final class TuringFlowResourceParityTests:
         )
         let prerecording = try TuringPrerecordingStore().descriptor(
             id: "prologue.walkie.bigMike.scriptPoint05.001"
+        )
+        let authoredBridge = try TuringPrerecordingStore().descriptor(
+            id: "prologue.walkie.bigMike.scriptPoint05.002"
+        )
+        XCTAssertEqual(
+            authoredBridge.audioFile,
+            "pr-2-script05-big-mike.mp3"
+        )
+        XCTAssertEqual(authoredBridge.transcriptMode, .none)
+        XCTAssertTrue(authoredBridge.transcript.isEmpty)
+        XCTAssertNoThrow(
+            try TuringPrerecordingStore().audioURL(for: authoredBridge)
         )
         let rendered = template
             .replacingOccurrences(
@@ -459,7 +479,7 @@ final class TuringFlowResourceParityTests:
         XCTAssertFalse(prompt.contains("Current prerecording transcript:"))
     }
 
-    func testConversationUsesExactCurrentPromptVoiceSeed()
+    func testConversationUsesExactCurrentPromptVoiceStoryContext()
         async throws {
         let descriptorStore = TuringVoicePromptTriggerStore()
         let point01 = try descriptorStore.descriptor(
@@ -468,43 +488,49 @@ final class TuringFlowResourceParityTests:
         let point03 = try descriptorStore.descriptor(
             id: "prologue.bigMike.scriptPoint03.followUp.001"
         )
-        let point01Seed = TuringPromptVoiceSeedBuilder.standard(point01)
-        let point03Seed = TuringPromptVoiceSeedBuilder.standard(point03)
+        let point01Context =
+            TuringPromptVoiceStoryContextBuilder.standard(point01)
+        let point03Context =
+            TuringPromptVoiceStoryContextBuilder.standard(point03)
 
-        XCTAssertTrue(point01Seed.promptContext.contains(point01.intent))
-        XCTAssertTrue(point01Seed.promptContext.contains(point01.emotion))
-        XCTAssertTrue(point03Seed.promptContext.contains(point03.intent))
-        XCTAssertTrue(point03Seed.promptContext.contains(point03.emotion))
-        XCTAssertNotEqual(point01Seed.promptContext, point03Seed.promptContext)
+        XCTAssertTrue(point01Context.storyContext.contains(point01.intent))
+        XCTAssertFalse(point01Context.storyContext.contains(point01.emotion))
+        XCTAssertTrue(point03Context.storyContext.contains(point03.intent))
+        XCTAssertFalse(point03Context.storyContext.contains(point03.emotion))
+        XCTAssertNotEqual(
+            point01Context.storyContext,
+            point03Context.storyContext
+        )
 
         let point04 = try descriptorStore.descriptor(
             id: "prologue.rich.scriptPoint04.followUp.001"
         )
-        let point04Seed = TuringPromptVoiceSeedBuilder.standard(point04)
+        let point04Context =
+            TuringPromptVoiceStoryContextBuilder.standard(point04)
         XCTAssertEqual(
-            point04Seed.promptContext,
+            point04Context.storyContext,
             """
             Story Intent:
             I can't believe this thing is laying in my room. It's not a person anymore it's a monster. I am still freaking out. We need the police. But police services have been down for weeks. I need to get this thing out of here
             """
         )
-        XCTAssertFalse(point04Seed.promptContext.contains("Continue after"))
-        XCTAssertFalse(point04Seed.promptContext.contains("Emotional tone:"))
+        XCTAssertFalse(point04Context.storyContext.contains("Continue after"))
+        XCTAssertFalse(point04Context.storyContext.contains("Emotional tone:"))
 
-        let store = TuringConversationSeedStore()
-        await store.updatePromptVoiceSeed(
-            point01Seed,
+        let store = TuringConversationInputStore()
+        await store.updatePromptVoiceStoryContext(
+            point01Context.storyContext,
             for: TuringDialogueThreadIdentity.bigMikeRich
         )
-        await store.updatePromptVoiceSeed(
-            point03Seed,
+        await store.updatePromptVoiceStoryContext(
+            point03Context.storyContext,
             for: TuringDialogueThreadIdentity.bigMikeRich
         )
-        let active = await store.promptVoiceSeed(
+        let active = await store.promptVoiceStoryContext(
             for: TuringDialogueThreadIdentity.bigMikeRich
         )
 
-        XCTAssertEqual(active, point03Seed)
+        XCTAssertEqual(active, point03Context.storyContext)
     }
 
     func testConversationRunnerContainsNoHistoryOrFabricatedContext()
@@ -519,7 +545,8 @@ final class TuringFlowResourceParityTests:
             )
         let source = try String(contentsOf: runnerURL, encoding: .utf8)
 
-        XCTAssertTrue(source.contains("promptVoiceSeed.promptContext"))
+        XCTAssertTrue(source.contains("promptVoiceStoryContext"))
+        XCTAssertFalse(source.contains("promptVoiceSeed"))
         XCTAssertFalse(source.contains("episodeStateForWordsOnly"))
         XCTAssertFalse(source.contains("appendConversation"))
         XCTAssertFalse(source.contains("TuringDialogueHistoryStore"))

@@ -11,6 +11,11 @@ nonisolated protocol TuringFlowPlaybackControlling: AnyObject, Sendable {
     func expectPrerecordingBeforeGenerated() async
 
     func enqueuePrerecording(id: String, fileURL: URL) async
+    func enqueueAuthoredBridge(
+        id: String,
+        fileURL: URL,
+        beforeGeneratedSegmentIndex: Int
+    ) async
     func setExpectedGeneratedSegmentCount(_ count: Int) async
     func qwenComputeStarted(segmentIndex: Int) async
     func qwenComputeFinished(

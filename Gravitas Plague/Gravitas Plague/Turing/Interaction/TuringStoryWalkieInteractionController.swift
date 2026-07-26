@@ -363,7 +363,7 @@ final class TuringStoryWalkieInteractionController {
                 let result = await TuringBigMikeConversationRunner.run(
                     playerDictation: transcript,
                     interactionLease: interactionLease,
-                    seedStore: .shared,
+                    inputStore: .shared,
                     onSegmentZeroReady: { [weak self] in
                         self?.eventSink?
                             .publishTuringDictationEvent(

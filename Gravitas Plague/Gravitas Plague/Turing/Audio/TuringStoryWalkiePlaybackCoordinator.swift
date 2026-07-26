@@ -39,10 +39,23 @@ actor TuringStoryWalkiePlaybackCoordinator {
         let fileURL: URL
     }
 
+    private struct AuthoredBridgeClip {
+        let id: String
+        let fileURL: URL
+        let beforeGeneratedSegmentIndex: Int
+    }
+
     private enum ActiveItem: Equatable {
         case none
         case prerecording(
             id: String,
+            handle: TuringAudioPlaybackHandle,
+            fileURL: URL,
+            startedAt: Date
+        )
+        case authoredBridge(
+            id: String,
+            beforeGeneratedSegmentIndex: Int,
             handle: TuringAudioPlaybackHandle,
             fileURL: URL,
             startedAt: Date
@@ -64,6 +77,7 @@ actor TuringStoryWalkiePlaybackCoordinator {
         var handle: TuringAudioPlaybackHandle? {
             switch self {
             case .prerecording(_, let handle, _, _),
+                 .authoredBridge(_, _, let handle, _, _),
                  .generated(_, let handle, _, _),
                  .filler(let handle, _, _):
                 return handle
@@ -87,6 +101,9 @@ actor TuringStoryWalkiePlaybackCoordinator {
     private var activeComputeSegments = Set<Int>()
     private var pendingGenerated: [Int: GeneratedClip] = [:]
     private var pendingPrerecording: PrerecordingClip?
+    private var pendingAuthoredBridges:
+        [Int: [AuthoredBridgeClip]] = [:]
+    private var acceptedAuthoredBridgeIDs = Set<String>()
     private var prerecordingExpected = false
     private var prerecordingHasPlayed = false
     private var skippedSegments = Set<Int>()
@@ -183,6 +200,8 @@ actor TuringStoryWalkiePlaybackCoordinator {
         self.activeComputeSegments.removeAll(keepingCapacity: true)
         self.pendingGenerated.removeAll(keepingCapacity: true)
         self.pendingPrerecording = nil
+        self.pendingAuthoredBridges.removeAll(keepingCapacity: true)
+        self.acceptedAuthoredBridgeIDs.removeAll(keepingCapacity: true)
         self.prerecordingExpected = false
         self.prerecordingHasPlayed = false
         self.skippedSegments.removeAll(keepingCapacity: true)
@@ -269,6 +288,50 @@ actor TuringStoryWalkiePlaybackCoordinator {
             )
         }
         await reconcile(reason: "prerecordingQueued")
+    }
+
+    func enqueueAuthoredBridge(
+        id: String,
+        fileURL: URL,
+        beforeGeneratedSegmentIndex: Int
+    ) async {
+        guard runActive else { return }
+        guard beforeGeneratedSegmentIndex >= nextPlaybackSegmentIndex else {
+            print("""
+            [TuringStagedSpeech] authored bridge rejected
+              id: \(id)
+              beforeGeneratedSegmentIndex: \(beforeGeneratedSegmentIndex)
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+              reason: playbackBoundaryAlreadyPassed
+            """)
+            return
+        }
+        guard acceptedAuthoredBridgeIDs.insert(id).inserted else {
+            print("""
+            [TuringStagedSpeech] duplicate authored bridge ignored
+              id: \(id)
+              beforeGeneratedSegmentIndex: \(beforeGeneratedSegmentIndex)
+            """)
+            return
+        }
+
+        let clip = AuthoredBridgeClip(
+            id: id,
+            fileURL: fileURL,
+            beforeGeneratedSegmentIndex: beforeGeneratedSegmentIndex
+        )
+        pendingAuthoredBridges[
+            beforeGeneratedSegmentIndex,
+            default: []
+        ].append(clip)
+        print("""
+        [TuringStagedSpeech] authored bridge queued
+          id: \(id)
+          file: \(fileURL.lastPathComponent)
+          beforeGeneratedSegmentIndex: \(beforeGeneratedSegmentIndex)
+          nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+        """)
+        await reconcile(reason: "authoredBridgeQueued")
     }
 
     func setExpectedGeneratedSegmentCount(_ count: Int) async {
@@ -485,6 +548,8 @@ actor TuringStoryWalkiePlaybackCoordinator {
         }
         pendingGenerated.removeAll(keepingCapacity: false)
         pendingPrerecording = nil
+        pendingAuthoredBridges.removeAll(keepingCapacity: false)
+        acceptedAuthoredBridgeIDs.removeAll(keepingCapacity: false)
         prerecordingHasPlayed = false
         skippedSegments.removeAll(keepingCapacity: false)
         activeComputeSegments.removeAll(keepingCapacity: false)
@@ -551,6 +616,21 @@ actor TuringStoryWalkiePlaybackCoordinator {
         }
         if prerecordingHasPlayed == false,
            prerecordingExpected {
+            return
+        }
+
+        if var bridges =
+                pendingAuthoredBridges[nextPlaybackSegmentIndex],
+           bridges.isEmpty == false {
+            let bridge = bridges.removeFirst()
+            if bridges.isEmpty {
+                pendingAuthoredBridges.removeValue(
+                    forKey: nextPlaybackSegmentIndex
+                )
+            } else {
+                pendingAuthoredBridges[nextPlaybackSegmentIndex] = bridges
+            }
+            await startAuthoredBridge(bridge, reason: reason)
             return
         }
 
@@ -731,6 +811,61 @@ actor TuringStoryWalkiePlaybackCoordinator {
               error: \(error.localizedDescription)
             """)
             await runCancelled(reason: "prerecordingStartFailed.\(clip.id)")
+        }
+    }
+
+    private func startAuthoredBridge(
+        _ clip: AuthoredBridgeClip,
+        reason: String
+    ) async {
+        guard activeItem == .none else {
+            pendingAuthoredBridges[
+                clip.beforeGeneratedSegmentIndex,
+                default: []
+            ].insert(clip, at: 0)
+            return
+        }
+        do {
+            print("""
+            [TuringPlaybackTrace] authored bridge playback request
+              id: \(clip.id)
+              reason: \(reason)
+              file: \(clip.fileURL.lastPathComponent)
+              beforeGeneratedSegmentIndex: \(clip.beforeGeneratedSegmentIndex)
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+            """)
+            let handle = try await playOneShot(
+                fileURL: clip.fileURL,
+                kind: .prerecording,
+                label: clip.id
+            )
+            activeItem = .authoredBridge(
+                id: clip.id,
+                beforeGeneratedSegmentIndex:
+                    clip.beforeGeneratedSegmentIndex,
+                handle: handle,
+                fileURL: clip.fileURL,
+                startedAt: Date()
+            )
+            print("""
+            [TuringStagedSpeech] authored bridge playback started
+              id: \(clip.id)
+              handleID: \(handle.id.uuidString)
+              file: \(clip.fileURL.lastPathComponent)
+              beforeGeneratedSegmentIndex: \(clip.beforeGeneratedSegmentIndex)
+              voiceRoute: \(policy.voiceRoute.rawValue)
+              completionSource: \(completionSourceLogName)
+            """)
+        } catch {
+            print("""
+            [TuringStagedSpeech] authored bridge playback failed
+              id: \(clip.id)
+              file: \(clip.fileURL.lastPathComponent)
+              error: \(error.localizedDescription)
+            """)
+            await runCancelled(
+                reason: "authoredBridgeStartFailed.\(clip.id)"
+            )
         }
     }
 
@@ -950,6 +1085,27 @@ actor TuringStoryWalkiePlaybackCoordinator {
             """)
             await reconcile(reason: "prerecordingCompleted")
 
+        case .authoredBridge(
+            let id,
+            let beforeGeneratedSegmentIndex,
+            let activeHandle,
+            let fileURL,
+            let startedAt
+        )
+            where activeHandle == handle:
+            activeItem = .none
+            print("""
+            [TuringStagedSpeech] authored bridge playback completed
+              id: \(id)
+              handleID: \(handle.id.uuidString)
+              file: \(fileURL.lastPathComponent)
+              elapsedSeconds: \(String(format: "%.3f", Date().timeIntervalSince(startedAt)))
+              beforeGeneratedSegmentIndex: \(beforeGeneratedSegmentIndex)
+              nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
+              completionSource: \(completionSourceLogName)
+            """)
+            await reconcile(reason: "authoredBridgeCompleted")
+
         case .generated(
             let segmentIndex,
             let activeHandle,
@@ -1052,6 +1208,7 @@ actor TuringStoryWalkiePlaybackCoordinator {
         return allComputeFinished &&
             activeComputeSegments.isEmpty &&
             pendingGenerated.isEmpty &&
+            pendingAuthoredBridges.isEmpty &&
             skippedSegments.isEmpty &&
             activeItem == .none
     }
@@ -1139,6 +1296,15 @@ actor TuringStoryWalkiePlaybackCoordinator {
         case .prerecording(let id, let handle, let fileURL, let startedAt):
             let elapsed = Date().timeIntervalSince(startedAt)
             return "prerecording.\(id).\(fileURL.lastPathComponent).\(handle.id.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
+        case .authoredBridge(
+            let id,
+            let beforeGeneratedSegmentIndex,
+            let handle,
+            let fileURL,
+            let startedAt
+        ):
+            let elapsed = Date().timeIntervalSince(startedAt)
+            return "authoredBridge.\(id).before=\(beforeGeneratedSegmentIndex).\(fileURL.lastPathComponent).\(handle.id.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
         case .filler(let handle, let fileURL, let startedAt):
             let elapsed = Date().timeIntervalSince(startedAt)
             return "filler.\(fileURL.lastPathComponent).\(handle.id.uuidString).elapsed=\(Self.formatSeconds(elapsed))"

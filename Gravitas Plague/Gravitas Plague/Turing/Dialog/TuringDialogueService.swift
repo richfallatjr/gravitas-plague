@@ -50,7 +50,6 @@ actor TuringDialogueService {
           prerecordingTranscriptUTF16: \(request.prerecordingTranscript.utf16.count)
           authoredPRTranscriptSHA256: \(TuringFlowHash.sha256(request.prerecordingTranscript))
           dialogueHistoryIncluded: false
-          generatedConversationSeedRequested: false
         """)
 
         let raw: String
@@ -104,7 +103,6 @@ actor TuringDialogueService {
         print("""
         [TuringVoicePrompt] gate passed
           segmentCount: \(plan.segments.count)
-          generatedConversationSeed: absent
         """)
         Self.logAcceptedSegments(
             purpose: "TuringVoicePrompt",
@@ -143,13 +141,11 @@ actor TuringDialogueService {
           freshSession: true
           characterID: \(profile.characterID)
           promptTemplate: conversationPrompt_playerTurn_noBible
-          inputContract: userInput,characterProfile,promptVoiceSeed,prerecordingTranscript
+          inputContract: userInput,characterProfile,promptVoiceStoryContext,prerecordingTranscript
           prerecordingTranscriptUTF16: \(request.prerecordingTranscript.utf16.count)
           dialogueHistoryIncluded: false
-          promptVoiceSeedIncluded: true
-          promptVoiceID: \(request.promptVoiceID)
-          generatedConversationSeedIncluded: false
-          promptContextSource: authoredPromptVoiceSeed
+          promptVoiceStoryContextIncluded: true
+          promptContextSource: authoredPromptVoiceStoryContext
           promptContextSHA256: \(TuringFlowHash.sha256(request.promptContext))
         """)
 

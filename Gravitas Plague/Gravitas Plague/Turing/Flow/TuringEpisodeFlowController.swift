@@ -35,8 +35,8 @@ actor TuringEpisodeFlowController {
     private let engine: TuringFlowEngine
     private let descriptorStore:
         any TuringFlowDescriptorLoading
-    private let seedStore:
-        TuringConversationSeedStore
+    private let inputStore:
+        TuringConversationInputStore
     private let catalogValidator:
         (any TuringFlowCatalogValidating)?
     private let interactionPreflight:
@@ -60,8 +60,8 @@ actor TuringEpisodeFlowController {
         descriptorStore:
             any TuringFlowDescriptorLoading =
                 TuringFlowDescriptorStore(),
-        seedStore:
-            TuringConversationSeedStore = .shared,
+        inputStore:
+            TuringConversationInputStore = .shared,
         interactionPreflight:
             TuringHighMemoryPreflightCoordinator = .shared,
         interactionArbiter:
@@ -72,7 +72,7 @@ actor TuringEpisodeFlowController {
     ) {
         self.engine = engine
         self.descriptorStore = descriptorStore
-        self.seedStore = seedStore
+        self.inputStore = inputStore
         self.interactionPreflight = interactionPreflight
         self.interactionArbiter = interactionArbiter
         self.catalogValidator = catalogValidator
@@ -502,7 +502,7 @@ actor TuringEpisodeFlowController {
         pendingConversationAdvance = nil
         catalogValidated = false
 
-        await seedStore.clearAll(
+        await inputStore.clearAll(
             reason:
                 "episodeFlowReset.\(reason)"
         )
@@ -547,7 +547,7 @@ actor TuringEpisodeFlowController {
         } else {
             self.pendingConversationAdvance = nil
         }
-        await seedStore.clearAll(reason: "storyTeleportRestore")
+        await inputStore.clearAll(reason: "storyTeleportRestore")
         print("""
         [TuringContinuation] episode flow restored
           completedScriptPointIDs: \(completedScriptPointIDs.sorted())

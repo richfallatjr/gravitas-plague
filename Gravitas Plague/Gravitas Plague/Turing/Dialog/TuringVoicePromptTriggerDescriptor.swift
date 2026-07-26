@@ -91,25 +91,22 @@ struct TuringVoicePromptTriggerStore: Sendable {
   }
 }
 
-enum TuringPromptVoiceSeedBuilder {
+enum TuringPromptVoiceStoryContextBuilder {
   static func standard(
     _ descriptor: TuringVoicePromptTriggerDescriptor
-  ) -> TuringPromptVoiceSeed {
+  ) -> TuringAuthoredPromptVoiceContext {
     if let promptContext = descriptor.promptContext {
-      return TuringPromptVoiceSeed(
+      return TuringAuthoredPromptVoiceContext(
         voicePromptID: descriptor.voicePromptID,
-        promptContext: promptContext
+        storyContext: promptContext
       )
     }
 
-    return TuringPromptVoiceSeed(
+    return TuringAuthoredPromptVoiceContext(
       voicePromptID: descriptor.voicePromptID,
-      promptContext: """
-      Story intent:
+      storyContext: """
+      Story Intent:
       \(descriptor.intent)
-
-      Emotional tone:
-      \(descriptor.emotion)
       """
     )
   }
@@ -117,7 +114,7 @@ enum TuringPromptVoiceSeedBuilder {
   static func composite(
     _ descriptor: TuringVoicePromptTriggerDescriptor,
     scriptVoiceSource _: String
-  ) -> TuringPromptVoiceSeed {
+  ) -> TuringAuthoredPromptVoiceContext {
     standard(descriptor)
   }
 }

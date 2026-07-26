@@ -1,14 +1,14 @@
 import Foundation
 
-struct TuringPromptVoiceSeed: Sendable, Equatable {
+struct TuringAuthoredPromptVoiceContext: Sendable, Equatable {
     let voicePromptID: String
-    let promptContext: String
+    let storyContext: String
 }
 
-actor TuringConversationSeedStore {
-    static let shared = TuringConversationSeedStore()
+actor TuringConversationInputStore {
+    static let shared = TuringConversationInputStore()
 
-    private var promptVoiceSeedsByKey: [String: TuringPromptVoiceSeed] = [:]
+    private var promptVoiceStoryContextByKey: [String: String] = [:]
     private var prerecordingIDByKey: [String: String] = [:]
     private var prerecordingTranscriptByKey: [String: String] = [:]
 
@@ -16,21 +16,20 @@ actor TuringConversationSeedStore {
         prerecordingTranscriptByKey[key] ?? ""
     }
 
-    func promptVoiceSeed(for key: String) -> TuringPromptVoiceSeed? {
-        promptVoiceSeedsByKey[key]
+    func promptVoiceStoryContext(for key: String) -> String? {
+        promptVoiceStoryContextByKey[key]
     }
 
-    func updatePromptVoiceSeed(
-        _ seed: TuringPromptVoiceSeed,
+    func updatePromptVoiceStoryContext(
+        _ storyContext: String,
         for key: String
     ) {
-        promptVoiceSeedsByKey[key] = seed
+        promptVoiceStoryContextByKey[key] = storyContext
         print("""
-        [TuringConversationSeed] promptVoice seed updated
+        [TuringConversationInput] authored promptVoice Story Context updated
           key: \(key)
-          voicePromptID: \(seed.voicePromptID)
-          promptContextUTF16: \(seed.promptContext.utf16.count)
-          promptContextSHA256: \(TuringFlowHash.sha256(seed.promptContext))
+          storyContextUTF16: \(storyContext.utf16.count)
+          storyContextSHA256: \(TuringFlowHash.sha256(storyContext))
         """)
     }
 
@@ -42,7 +41,7 @@ actor TuringConversationSeedStore {
         prerecordingIDByKey[key] = id
         prerecordingTranscriptByKey[key] = transcript
         print("""
-        [TuringConversationSeed] prerecording context updated
+        [TuringConversationInput] prerecording transcript updated
           key: \(key)
           prerecordingID: \(id)
           transcriptUTF16: \(transcript.utf16.count)
@@ -50,17 +49,17 @@ actor TuringConversationSeedStore {
     }
 
     func clear(key: String) {
-        promptVoiceSeedsByKey.removeValue(forKey: key)
+        promptVoiceStoryContextByKey.removeValue(forKey: key)
         prerecordingIDByKey.removeValue(forKey: key)
         prerecordingTranscriptByKey.removeValue(forKey: key)
     }
 
     func clearAll(reason: String) {
-        promptVoiceSeedsByKey.removeAll(keepingCapacity: false)
+        promptVoiceStoryContextByKey.removeAll(keepingCapacity: false)
         prerecordingIDByKey.removeAll(keepingCapacity: false)
         prerecordingTranscriptByKey.removeAll(keepingCapacity: false)
         print("""
-        [TuringConversationSeed] cleared
+        [TuringConversationInput] cleared
           reason: \(reason)
         """)
     }

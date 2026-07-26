@@ -439,6 +439,8 @@ final class StubFlowPlayback:
         false
     private var pending:
         [Int: TuringComputeGapGeneratedAudio] = [:]
+    private var pendingAuthoredBridges:
+        [Int: [String]] = [:]
     private var skipped = Set<Int>()
     private var nextIndex = 0
     private var completedCount = 0
@@ -495,6 +497,21 @@ final class StubFlowPlayback:
         if autoCompletePrerecording {
             await completePrerecording()
         }
+    }
+
+    func enqueueAuthoredBridge(
+        id: String,
+        fileURL: URL,
+        beforeGeneratedSegmentIndex: Int
+    ) async {
+        pendingAuthoredBridges[
+            beforeGeneratedSegmentIndex,
+            default: []
+        ].append(id)
+        await recorder.record(
+            "bridge.\(id).enqueued.before.\(beforeGeneratedSegmentIndex)"
+        )
+        await reconcile()
     }
 
     func setExpectedGeneratedSegmentCount(
@@ -631,9 +648,27 @@ final class StubFlowPlayback:
             nextIndex += 1
         }
 
-        while pending.removeValue(
-            forKey: nextIndex
-        ) != nil {
+        while true {
+            while skipped.remove(nextIndex) != nil {
+                nextIndex += 1
+            }
+
+            if var bridges = pendingAuthoredBridges[nextIndex],
+               bridges.isEmpty == false {
+                let id = bridges.removeFirst()
+                if bridges.isEmpty {
+                    pendingAuthoredBridges.removeValue(forKey: nextIndex)
+                } else {
+                    pendingAuthoredBridges[nextIndex] = bridges
+                }
+                await recorder.record("bridge.\(id).started")
+                await recorder.record("bridge.\(id).completed")
+                continue
+            }
+
+            guard pending.removeValue(forKey: nextIndex) != nil else {
+                break
+            }
             await recorder.record(
                 "generated.\(nextIndex).started"
             )
@@ -642,15 +677,12 @@ final class StubFlowPlayback:
             )
             completedCount += 1
             nextIndex += 1
-
-            while skipped.remove(nextIndex) != nil {
-                nextIndex += 1
-            }
         }
 
         if allComputeFinished,
            let expectedCount,
-           nextIndex >= expectedCount {
+           nextIndex >= expectedCount,
+           pendingAuthoredBridges.isEmpty {
             await finish()
         }
     }

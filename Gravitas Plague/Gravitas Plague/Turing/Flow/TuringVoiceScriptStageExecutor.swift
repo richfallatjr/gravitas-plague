@@ -166,7 +166,7 @@ actor TuringVoiceScriptStageExecutor: TuringSpeechStageExecuting {
 
         return TuringSpeechStageExecutionResult(
             normalizedSourceTranscript: sourcePlan.normalizedSourceText,
-            promptVoiceSeed: nil,
+            promptVoiceContext: nil,
             failedBatchDescriptions: failedSections
         )
     }

@@ -469,7 +469,7 @@ enum TuringNativeQwenHelloWorldCanary {
         prerecordingID: String,
         prerecordingAudioURL: URL,
         voicePromptTask: Task<TuringVoicePromptPlan, Error>,
-        seedStore: TuringConversationSeedStore,
+        inputStore _: TuringConversationInputStore,
         seedKey: String
     ) async -> TuringNativeQwenRunResult {
         let playback = await MainActor.run {

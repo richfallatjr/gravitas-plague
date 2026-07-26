@@ -32,7 +32,8 @@
           "contextSource": {
             "kind": "prerecordingTranscript",
             "stageID": null
-          }
+          },
+          "authoredPrerecordingAfterStageID": "prologue.walkie.bigMike.scriptPoint05.002"
         },
         {
           "stageID": "promptVoice",

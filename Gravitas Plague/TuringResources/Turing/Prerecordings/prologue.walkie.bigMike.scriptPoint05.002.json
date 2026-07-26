@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "prologue.walkie.bigMike.scriptPoint05.002",
+  "speaker": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "voiceVariantID": "broadcast_reference_fast_01",
+  "audioFile": "pr-2-script05-big-mike.mp3",
+  "transcriptMode": "none",
+  "transcript": "",
+  "summary": "A second authored Big Mike transmission plays after Script Voice while promptVoice continues computing.",
+  "voicePromptIntent": "Playback-only authored bridge. It is not added to the promptVoice or conversationVoice Foundation input.",
+  "defaultEmotion": "measured, concerned, protective"
+}

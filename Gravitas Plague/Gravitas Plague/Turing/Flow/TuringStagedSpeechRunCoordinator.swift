@@ -7,7 +7,7 @@ actor TuringStagedSpeechRunCoordinator {
     ]
     private let rendererFactory:
         any TuringCharacterStreamingRenderSessionMaking
-    private let seedStore: TuringConversationSeedStore
+    private let inputStore: TuringConversationInputStore
 
     init(
         voiceScriptExecutor: any TuringSpeechStageExecuting =
@@ -16,14 +16,14 @@ actor TuringStagedSpeechRunCoordinator {
             TuringPromptVoiceStageExecutor(),
         rendererFactory: any TuringCharacterStreamingRenderSessionMaking =
             TuringCharacterQwenRenderSessionFactory(),
-        seedStore: TuringConversationSeedStore = .shared
+        inputStore: TuringConversationInputStore = .shared
     ) {
         executors = [
             .voiceScriptLongform: voiceScriptExecutor,
             .voicePrompt: promptVoiceExecutor
         ]
         self.rendererFactory = rendererFactory
-        self.seedStore = seedStore
+        self.inputStore = inputStore
     }
 
     func run(
@@ -31,6 +31,7 @@ actor TuringStagedSpeechRunCoordinator {
         pipeline: TuringFlowGenerationPipelineDescriptor,
         character: TuringCharacterRuntimeDefinition,
         prerecording: TuringPrerecordingDescriptor,
+        authoredBridges: [String: TuringAuthoredSpeechBridge] = [:],
         playback: any TuringFlowPlaybackControlling,
         identity: TuringFlowIdentity
     ) async throws -> TuringStagedSpeechRunReport {
@@ -86,6 +87,20 @@ actor TuringStagedSpeechRunCoordinator {
                     stageID: stageDescriptor.stageID,
                     sectionIndex: nil
                 )
+                let stageAuthoredBridge:
+                    TuringAuthoredSpeechBridge?
+                if let bridgeID =
+                        stageDescriptor
+                            .authoredPrerecordingAfterStageID {
+                    guard let bridge = authoredBridges[bridgeID] else {
+                        throw TuringRuntimeError.invalidConfig(
+                            "Missing resolved authored bridge \(bridgeID) for stage \(stageDescriptor.stageID)."
+                        )
+                    }
+                    stageAuthoredBridge = bridge
+                } else {
+                    stageAuthoredBridge = nil
+                }
 
                 do {
                     let result = try await TuringFoundationRequestScope
@@ -106,6 +121,27 @@ actor TuringStagedSpeechRunCoordinator {
                                   globalRange: \(committed.globalRange)
                                 """)
 
+                                if batch.isFinalBatchForStage,
+                                   let bridge = stageAuthoredBridge {
+                                    await playback.enqueueAuthoredBridge(
+                                        id: bridge.prerecordingID,
+                                        fileURL: bridge.fileURL,
+                                        beforeGeneratedSegmentIndex:
+                                            committed.globalRange.upperBound
+                                    )
+                                    await state.recordAuthoredBridgeReserved(
+                                        stageID: stageDescriptor.stageID
+                                    )
+                                    print("""
+                                    [TuringStagedSpeech] authored bridge reserved
+                                      scriptPointID: \(descriptor.scriptPointID)
+                                      stageID: \(stageDescriptor.stageID)
+                                      prerecordingID: \(bridge.prerecordingID)
+                                      beforeGeneratedSegmentIndex: \(committed.globalRange.upperBound)
+                                      waitsForBridgePlaybackBeforeNextStageCompute: false
+                                    """)
+                                }
+
                                 do {
                                     try await session.submit(committed)
                                 } catch {
@@ -122,6 +158,15 @@ actor TuringStagedSpeechRunCoordinator {
                                   openRenderQueue: true
                                 """)
                             }
+                    }
+
+                    if stageAuthoredBridge != nil,
+                       await state.authoredBridgeWasReserved(
+                            stageID: stageDescriptor.stageID
+                       ) == false {
+                            throw TuringRuntimeError.invalidConfig(
+                                "Stage \(stageDescriptor.stageID) completed without a final batch for its authored bridge."
+                            )
                     }
 
                     if committedKind == .scriptVoice {
@@ -149,8 +194,10 @@ actor TuringStagedSpeechRunCoordinator {
                             stageID: stageDescriptor.stageID
                         )
                     }
-                    if let promptVoiceSeed = result.promptVoiceSeed {
-                        await state.recordPromptVoiceSeed(promptVoiceSeed)
+                    if let promptVoiceContext = result.promptVoiceContext {
+                        await state.recordPromptVoiceContext(
+                            promptVoiceContext
+                        )
                     }
                     for failure in result.failedBatchDescriptions {
                         await state.recordFailure(
@@ -222,9 +269,10 @@ actor TuringStagedSpeechRunCoordinator {
                 throw terminalError
             }
 
-            if let promptVoiceSeed = await state.promptVoiceSeed() {
-                await seedStore.updatePromptVoiceSeed(
-                    promptVoiceSeed,
+            if let promptVoiceContext =
+                    await state.promptVoiceContext() {
+                await inputStore.updatePromptVoiceStoryContext(
+                    promptVoiceContext.storyContext,
                     for: descriptor.transmission.conversationKey
                 )
             }
@@ -277,8 +325,10 @@ private actor TuringStagedSpeechRunState {
     private var committedStages: [TuringCommittedSpeechStage] = []
     private var failures: [TuringSpeechStageFailure] = []
     private var transcripts: [String: String] = [:]
-    private var storedPromptVoiceSeed: TuringPromptVoiceSeed?
+    private var storedPromptVoiceContext:
+        TuringAuthoredPromptVoiceContext?
     private var skippedIndices = Set<Int>()
+    private var authoredBridgeStageIDs = Set<String>()
 
     func reserve(
         batch: TuringPreparedSpeechBatch,
@@ -326,16 +376,26 @@ private actor TuringStagedSpeechRunState {
         transcripts
     }
 
-    func recordPromptVoiceSeed(_ seed: TuringPromptVoiceSeed) {
-        storedPromptVoiceSeed = seed
+    func recordPromptVoiceContext(
+        _ context: TuringAuthoredPromptVoiceContext
+    ) {
+        storedPromptVoiceContext = context
     }
 
-    func promptVoiceSeed() -> TuringPromptVoiceSeed? {
-        storedPromptVoiceSeed
+    func promptVoiceContext() -> TuringAuthoredPromptVoiceContext? {
+        storedPromptVoiceContext
     }
 
     func recordSkipped(_ index: Int) {
         skippedIndices.insert(index)
+    }
+
+    func recordAuthoredBridgeReserved(stageID: String) {
+        authoredBridgeStageIDs.insert(stageID)
+    }
+
+    func authoredBridgeWasReserved(stageID: String) -> Bool {
+        authoredBridgeStageIDs.contains(stageID)
     }
 
     func report(

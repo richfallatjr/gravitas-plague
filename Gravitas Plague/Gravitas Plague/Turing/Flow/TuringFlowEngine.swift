@@ -31,8 +31,8 @@ actor TuringFlowEngine {
         any TuringCharacterRendererMaking
     private let stagedRendererFactory:
         any TuringCharacterStreamingRenderSessionMaking
-    private let seedStore:
-        TuringConversationSeedStore
+    private let inputStore:
+        TuringConversationInputStore
 
     private var activeFlow:
         TuringFlowIdentity?
@@ -65,8 +65,8 @@ actor TuringFlowEngine {
         stagedRendererFactory:
             any TuringCharacterStreamingRenderSessionMaking =
                 TuringCharacterQwenRenderSessionFactory(),
-        seedStore:
-            TuringConversationSeedStore = .shared
+        inputStore:
+            TuringConversationInputStore = .shared
     ) {
         self.descriptorStore = descriptorStore
         self.prerecordingStore = prerecordingStore
@@ -78,7 +78,7 @@ actor TuringFlowEngine {
         self.routeResolver = routeResolver
         self.rendererFactory = rendererFactory
         self.stagedRendererFactory = stagedRendererFactory
-        self.seedStore = seedStore
+        self.inputStore = inputStore
     }
 
     func run(
@@ -220,7 +220,7 @@ actor TuringFlowEngine {
                 character: character
             )
 
-            await seedStore.updatePrerecording(
+            await inputStore.updatePrerecording(
                 id:
                     prerecording
                         .prerecordingID,
@@ -284,8 +284,8 @@ actor TuringFlowEngine {
                         )
                     }
 
-                    let promptVoiceSeed =
-                        TuringPromptVoiceSeedBuilder.standard(
+                    let promptVoiceContext =
+                        TuringPromptVoiceStoryContextBuilder.standard(
                             voicePrompt
                         )
                     let promptPlan =
@@ -302,8 +302,8 @@ actor TuringFlowEngine {
                                         voicePrompt
                                             .listenerProfileID,
                                     promptContext:
-                                        promptVoiceSeed
-                                            .promptContext,
+                                        promptVoiceContext
+                                            .storyContext,
                                     prerecordingTranscript:
                                         prerecording
                                             .transcript,
@@ -314,8 +314,8 @@ actor TuringFlowEngine {
                             )
                     return TuringFlowCompositeSpeechPlan(
                         segments: promptPlan.segments,
-                        promptVoiceSeed:
-                            promptVoiceSeed
+                        promptVoiceContext:
+                            promptVoiceContext
                     )
                 }
             }
@@ -467,8 +467,8 @@ actor TuringFlowEngine {
                 ]
             )
 
-            await seedStore.updatePromptVoiceSeed(
-                plan.promptVoiceSeed,
+            await inputStore.updatePromptVoiceStoryContext(
+                plan.promptVoiceContext.storyContext,
                 for:
                     descriptor.transmission
                         .conversationKey
@@ -857,6 +857,10 @@ actor TuringFlowEngine {
         var stagedTask: Task<TuringStagedSpeechRunReport, Error>?
 
         do {
+            let authoredBridges = try resolveAuthoredBridges(
+                pipeline: pipeline,
+                character: character
+            )
             let createdPlayback = try await route.makePlayback(
                 descriptor: descriptor,
                 character: character,
@@ -873,10 +877,11 @@ actor TuringFlowEngine {
             let coordinator = TuringStagedSpeechRunCoordinator(
                 promptVoiceExecutor: TuringPromptVoiceStageExecutor(
                     promptStore: voicePromptStore,
-                    generator: dialogueServiceFactory()
+                    generator: dialogueServiceFactory(),
+                    inputStore: inputStore
                 ),
                 rendererFactory: stagedRendererFactory,
-                seedStore: seedStore
+                inputStore: inputStore
             )
             let task = Task.detached(priority: .userInitiated) {
                 try await coordinator.run(
@@ -884,6 +889,7 @@ actor TuringFlowEngine {
                     pipeline: pipeline,
                     character: character,
                     prerecording: prerecording,
+                    authoredBridges: authoredBridges,
                     playback: createdPlayback,
                     identity: identity
                 )
@@ -1063,6 +1069,39 @@ actor TuringFlowEngine {
                     "\(descriptor.scriptPointID) staged speech failed: \(error.localizedDescription)"
             )
         }
+    }
+
+    private func resolveAuthoredBridges(
+        pipeline: TuringFlowGenerationPipelineDescriptor,
+        character: TuringCharacterRuntimeDefinition
+    ) throws -> [String: TuringAuthoredSpeechBridge] {
+        var resolved: [String: TuringAuthoredSpeechBridge] = [:]
+
+        for stage in pipeline.stages {
+            guard let prerecordingID =
+                    stage.authoredPrerecordingAfterStageID else {
+                continue
+            }
+            if resolved[prerecordingID] != nil {
+                continue
+            }
+
+            let descriptor = try prerecordingStore.descriptor(
+                id: prerecordingID
+            )
+            guard descriptor.speaker == character.characterID,
+                  descriptor.voiceID == character.voiceID else {
+                throw TuringRuntimeError.invalidConfig(
+                    "Authored bridge \(prerecordingID) does not match character \(character.characterID)."
+                )
+            }
+            resolved[prerecordingID] = TuringAuthoredSpeechBridge(
+                prerecordingID: prerecordingID,
+                fileURL: try prerecordingStore.audioURL(for: descriptor)
+            )
+        }
+
+        return resolved
     }
 
     private static func validateIdentity(

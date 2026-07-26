@@ -519,8 +519,8 @@ final class TuringFlowEngineParityTests:
                     failureMessage:
                         rendererFailure
                 ),
-            seedStore:
-                TuringConversationSeedStore()
+            inputStore:
+                TuringConversationInputStore()
         )
 
         return Harness(

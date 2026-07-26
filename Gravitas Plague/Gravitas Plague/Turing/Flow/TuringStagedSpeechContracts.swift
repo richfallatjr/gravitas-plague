@@ -48,8 +48,13 @@ struct TuringSpeechStageContext: Sendable {
 
 struct TuringSpeechStageExecutionResult: Sendable {
     let normalizedSourceTranscript: String?
-    let promptVoiceSeed: TuringPromptVoiceSeed?
+    let promptVoiceContext: TuringAuthoredPromptVoiceContext?
     let failedBatchDescriptions: [String]
+}
+
+struct TuringAuthoredSpeechBridge: Sendable, Equatable {
+    let prerecordingID: String
+    let fileURL: URL
 }
 
 protocol TuringSpeechStageExecuting: Sendable {

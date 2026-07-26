@@ -384,7 +384,7 @@ struct TuringEpisodePickerView: View {
             )
             let result = await TuringPrerecordingSeededPromptRunner
                 .runBigMikeRichContact(
-                    seedStore: TuringConversationSeedStore.shared
+                    inputStore: TuringConversationInputStore.shared
                 )
 
             await MainActor.run {
@@ -603,7 +603,7 @@ struct TuringEpisodePickerView: View {
         Task.detached(priority: .userInitiated) {
             let result = await TuringBigMikeConversationRunner.run(
                 playerDictation: playerDictation,
-                seedStore: TuringConversationSeedStore.shared,
+                inputStore: TuringConversationInputStore.shared,
                 onSegmentZeroReady: {
                     session.publishTuringDictationEvent(
                         .responseSegmentZeroReady(

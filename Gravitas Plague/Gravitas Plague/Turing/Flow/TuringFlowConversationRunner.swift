@@ -25,7 +25,7 @@ struct TuringFlowConversationRequest: Sendable {
 enum TuringFlowConversationRunner {
     static func run(
         request: TuringFlowConversationRequest,
-        seedStore: TuringConversationSeedStore = .shared,
+        inputStore: TuringConversationInputStore = .shared,
         onSegmentZeroReady:
             (@MainActor @Sendable () -> Void)? = nil
     ) async -> TuringVoiceRunResult {
@@ -54,7 +54,7 @@ enum TuringFlowConversationRunner {
         let result = await runWithInteractionLease(
             request: request,
             interactionLease: interactionLease,
-            seedStore: seedStore,
+            inputStore: inputStore,
             onSegmentZeroReady: onSegmentZeroReady
         )
         await StoryInteractionArbiter.shared.release(
@@ -67,7 +67,7 @@ enum TuringFlowConversationRunner {
     private static func runWithInteractionLease(
         request: TuringFlowConversationRequest,
         interactionLease: StoryInteractionLease,
-        seedStore: TuringConversationSeedStore,
+        inputStore: TuringConversationInputStore,
         onSegmentZeroReady:
             (@MainActor @Sendable () -> Void)?
     ) async -> TuringVoiceRunResult {
@@ -138,29 +138,26 @@ enum TuringFlowConversationRunner {
                 )
 
             let prerecordingTranscript =
-                await seedStore.prerecordingTranscript(
+                await inputStore.prerecordingTranscript(
                     for:
                         request.conversationKey
                 )
-            guard let promptVoiceSeed =
-                await seedStore.promptVoiceSeed(
+            guard let promptVoiceStoryContext =
+                await inputStore.promptVoiceStoryContext(
                     for:
                         request.conversationKey
                 ) else {
                 throw TuringRuntimeError.invalidConfig(
-                    "Conversation requires the authored promptVoice seed for \(request.conversationKey)."
+                    "Conversation requires the current promptVoice Story Context for \(request.conversationKey)."
                 )
             }
-            let promptContext =
-                promptVoiceSeed.promptContext
 
             print("""
-            [TuringFlow] conversation prompt context resolved
+            [TuringFlow] conversation promptVoice Story Context resolved
               conversationRunID: \(conversationRunID.uuidString)
               conversationKey: \(request.conversationKey)
-              source: authoredPromptVoiceSeed
-              voicePromptID: \(promptVoiceSeed.voicePromptID)
-              promptContextSHA256: \(TuringFlowHash.sha256(promptContext))
+              source: currentAuthoredPromptVoiceStoryContext
+              promptContextSHA256: \(TuringFlowHash.sha256(promptVoiceStoryContext))
               fabricatedStoryContextIncluded: false
               fabricatedEmotionIncluded: false
               dialogueHistoryIncluded: false
@@ -177,11 +174,9 @@ enum TuringFlowConversationRunner {
                             userInput:
                                 text,
                             promptContext:
-                                promptContext,
+                                promptVoiceStoryContext,
                             prerecordingTranscript:
-                                prerecordingTranscript,
-                            promptVoiceID:
-                                promptVoiceSeed.voicePromptID
+                                prerecordingTranscript
                         )
                     )
 
@@ -374,6 +369,15 @@ enum TuringFlowConversationRunner {
                 "Conversation checkpoint was saved but authored progression was unavailable."
             )
         } catch {
+            print("""
+            [TuringConversationFailure] conversationVoice failed
+              conversationRunID: \(conversationRunID.uuidString)
+              conversationKey: \(request.conversationKey)
+              characterID: \(request.characterID)
+              outputRoute: \(request.outputRoute.rawValue)
+              errorType: \(String(reflecting: type(of: error)))
+              error: \(error.localizedDescription)
+            """)
             await TuringWalkieCommsFXController
                 .shared
                 .stopSendingLeadIn(

@@ -3,7 +3,7 @@ You are the active story character in Gravitas Plague.
 Character:
 {{characterProfile}}
 
-Prompt context:
+This is the current situation you find yourselves in:
 {{promptContext}}
 
 This is what you last said:

@@ -255,6 +255,7 @@ struct TuringFlowCatalogValidator:
         }
 
         var seenStageIDs = Set<String>()
+        var seenAuthoredBridgeIDs = Set<String>()
         var priorScriptVoiceStageIDs = Set<String>()
         for stage in pipeline.stages {
             let stageID =
@@ -266,6 +267,27 @@ struct TuringFlowCatalogValidator:
                 throw TuringRuntimeError.invalidConfig(
                     "\(descriptor.scriptPointID) generationPipeline contains duplicate or empty stage IDs."
                 )
+            }
+
+            if let authoredBridgeID =
+                    stage.authoredPrerecordingAfterStageID {
+                let trimmedID = authoredBridgeID.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                )
+                guard trimmedID.isEmpty == false,
+                      seenAuthoredBridgeIDs.insert(trimmedID).inserted else {
+                    throw TuringRuntimeError.invalidConfig(
+                        "\(descriptor.scriptPointID) generationPipeline contains a duplicate or empty authored bridge ID."
+                    )
+                }
+                let bridge = try prerecordingStore.descriptor(id: trimmedID)
+                _ = try prerecordingStore.audioURL(for: bridge)
+                guard bridge.speaker == character.characterID,
+                      bridge.voiceID == character.voiceID else {
+                    throw TuringRuntimeError.invalidConfig(
+                        "\(descriptor.scriptPointID) authored bridge \(trimmedID) does not match the stage character."
+                    )
+                }
             }
 
             switch stage.kind {

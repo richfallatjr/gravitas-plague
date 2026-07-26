@@ -3,7 +3,7 @@ import Foundation
 
 enum TuringPrerecordingSeededPromptRunner {
     static func runBigMikeRichContact(
-        seedStore: TuringConversationSeedStore
+        inputStore _: TuringConversationInputStore
     ) async -> TuringNativeQwenRunResult {
         let result =
             await TuringEpisodeFlowController

@@ -9,7 +9,7 @@ actor TuringScriptPointProgressionController {
         TuringScriptPointProgressionController()
 
     func triggerAfterFirstSuccessfulWalkieCustomMessage(
-        seedStore: TuringConversationSeedStore = .shared
+        inputStore _: TuringConversationInputStore = .shared
     ) async -> TuringVoiceRunResult? {
         await TuringEpisodeFlowController
             .shared

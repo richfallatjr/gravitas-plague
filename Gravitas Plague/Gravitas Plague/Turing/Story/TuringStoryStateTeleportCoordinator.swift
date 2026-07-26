@@ -113,16 +113,17 @@ final class TuringStoryStateTeleportCoordinator {
                 "\(scriptPointID) continuation requires its reviewed authored PR transcript."
             )
         }
-        await TuringConversationSeedStore.shared.updatePrerecording(
+        await TuringConversationInputStore.shared.updatePrerecording(
             id: prerecording.prerecordingID,
             transcript: prerecording.transcript,
             for: descriptor.transmission.conversationKey
         )
-        let promptVoiceSeed = try Self.promptVoiceSeed(
+        let promptVoiceContext = try Self.promptVoiceContext(
             for: descriptor
         )
-        await TuringConversationSeedStore.shared.updatePromptVoiceSeed(
-            promptVoiceSeed,
+        await TuringConversationInputStore.shared
+            .updatePromptVoiceStoryContext(
+            promptVoiceContext.storyContext,
             for: descriptor.transmission.conversationKey
         )
 
@@ -133,17 +134,17 @@ final class TuringStoryStateTeleportCoordinator {
           prerecordingID: \(prerecording.prerecordingID)
           transcriptMode: \(prerecording.transcriptMode.rawValue)
           transcriptUTF16: \(prerecording.transcript.utf16.count)
-          promptVoiceID: \(promptVoiceSeed.voicePromptID)
-          promptVoiceSeedSHA256: \(TuringFlowHash.sha256(promptVoiceSeed.promptContext))
+          promptVoiceID: \(promptVoiceContext.voicePromptID)
+          promptVoiceStoryContextSHA256: \(TuringFlowHash.sha256(promptVoiceContext.storyContext))
           prerecordingReplayed: false
           promptVoiceReplayed: false
           continuationMetadataInjected: false
         """)
     }
 
-    private nonisolated static func promptVoiceSeed(
+    private nonisolated static func promptVoiceContext(
         for descriptor: TuringFlowDescriptor
-    ) throws -> TuringPromptVoiceSeed {
+    ) throws -> TuringAuthoredPromptVoiceContext {
         let promptStore = TuringVoicePromptTriggerStore()
 
         if let pipeline = descriptor.transmission.generationPipeline {
@@ -151,7 +152,7 @@ final class TuringStoryStateTeleportCoordinator {
                   let sourceResourcePath = pipeline.stages[0].sourceResourcePath,
                   let promptID = pipeline.stages[1].voicePromptID else {
                 throw TuringRuntimeError.invalidConfig(
-                    "\(descriptor.scriptPointID) continuation cannot reconstruct its composite promptVoice seed."
+                    "\(descriptor.scriptPointID) continuation cannot reconstruct its promptVoice Story Context."
                 )
             }
             let sourceURL = try TuringResourceLoader.resourceURL(
@@ -162,7 +163,7 @@ final class TuringStoryStateTeleportCoordinator {
                 encoding: .utf8
             ).trimmingCharacters(in: .whitespacesAndNewlines)
             let prompt = try promptStore.descriptor(id: promptID)
-            return TuringPromptVoiceSeedBuilder.composite(
+            return TuringPromptVoiceStoryContextBuilder.composite(
                 prompt,
                 scriptVoiceSource: sourceText
             )
@@ -170,10 +171,10 @@ final class TuringStoryStateTeleportCoordinator {
 
         guard let promptID = descriptor.transmission.voicePromptID else {
             throw TuringRuntimeError.invalidConfig(
-                "\(descriptor.scriptPointID) continuation has no promptVoice seed."
+                "\(descriptor.scriptPointID) continuation has no promptVoice Story Context."
             )
         }
-        return TuringPromptVoiceSeedBuilder.standard(
+        return TuringPromptVoiceStoryContextBuilder.standard(
             try promptStore.descriptor(id: promptID)
         )
     }
