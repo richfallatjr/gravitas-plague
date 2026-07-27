@@ -15,6 +15,8 @@ struct TuringEpisodePickerView: View {
     @State private var turingDialogueBusy = false
     @State private var dictationPressActive = false
     @State private var dictationStartTask: Task<Void, Never>?
+    @State private var dictationInteractionLease: StoryInteractionLease?
+    @State private var dictationRecordingRunID: UUID?
     @State private var qwenDebugStatus = "Idle"
     @State private var roomScanRequestStarting = false
     @State private var roomScanAttempt = 0
@@ -463,6 +465,61 @@ struct TuringEpisodePickerView: View {
                 return
             }
 
+            let recordingRunID = UUID()
+            let interactionLease: StoryInteractionLease
+            do {
+                interactionLease =
+                    try await TuringHighMemoryPreflightCoordinator
+                        .shared
+                        .acquireInteractionLease(
+                            runID:
+                                "conversation.\(recordingRunID.uuidString)",
+                            source:
+                                "storyDebugUI.microphoneHold",
+                            mode:
+                                .manual
+                        )
+            } catch {
+                dictationPressActive = false
+                let snapshot =
+                    await StoryInteractionArbiter.shared
+                        .currentSnapshot()
+                print("""
+                [TuringConversationFailure] debug microphone lease acquisition failed
+                  currentOwner: \(snapshot.exclusiveOwner?.logValue ?? "none")
+                  turingGate: \(snapshot.turingGate.rawValue)
+                  doorState: \(snapshot.doorState.rawValue)
+                  capabilities: \(snapshot.capabilities.map(\.rawValue).sorted())
+                  errorType: \(String(reflecting: type(of: error)))
+                  error: \(error.localizedDescription)
+                """)
+                session.publishTuringDictationEvent(
+                    .failed(error.localizedDescription)
+                )
+                qwenDebugStatus =
+                    "Failed: \(error.localizedDescription)"
+                return
+            }
+
+            guard dictationPressActive,
+                  Task.isCancelled == false else {
+                await StoryInteractionArbiter.shared.release(
+                    interactionLease,
+                    reason:
+                        "debugHoldEndedBeforeLeaseUse"
+                )
+                return
+            }
+
+            dictationInteractionLease =
+                interactionLease
+            dictationRecordingRunID =
+                recordingRunID
+            turingFlowGate.beginConversation(
+                conversationRunID:
+                    recordingRunID
+            )
+
             session.send(
                 .requestTuringStoryPlacementRoomScan(
                     "holdMicDictation"
@@ -476,6 +533,18 @@ struct TuringEpisodePickerView: View {
                 await dictationCoordinator.cancel(
                     reason: "press ended before open comm finished"
                 )
+                dictationInteractionLease = nil
+                dictationRecordingRunID = nil
+                await StoryInteractionArbiter.shared.release(
+                    interactionLease,
+                    reason:
+                        "debugHoldEndedBeforeRecording"
+                )
+                turingFlowGate
+                    .restoreMicrophoneAfterConversation(
+                        conversationRunID:
+                            recordingRunID
+                    )
                 return
             }
 
@@ -486,6 +555,18 @@ struct TuringEpisodePickerView: View {
                 await dictationCoordinator.cancel(
                     reason: "press ended before recording startup completed"
                 )
+                dictationInteractionLease = nil
+                dictationRecordingRunID = nil
+                await StoryInteractionArbiter.shared.release(
+                    interactionLease,
+                    reason:
+                        "debugHoldEndedDuringRecordingStartup"
+                )
+                turingFlowGate
+                    .restoreMicrophoneAfterConversation(
+                        conversationRunID:
+                            recordingRunID
+                    )
             }
         }
     }
@@ -560,10 +641,51 @@ struct TuringEpisodePickerView: View {
         guard dictationCoordinator.isRecording else {
             dictationStartTask?.cancel()
             dictationStartTask = nil
+            let interactionLease =
+                dictationInteractionLease
+            let recordingRunID =
+                dictationRecordingRunID
+            dictationInteractionLease = nil
+            dictationRecordingRunID = nil
+            Task {
+                if let interactionLease {
+                    await StoryInteractionArbiter.shared.release(
+                        interactionLease,
+                        reason:
+                            "debugHoldEndedBeforeRecording"
+                    )
+                }
+                if let recordingRunID {
+                    turingFlowGate
+                        .restoreMicrophoneAfterConversation(
+                            conversationRunID:
+                                recordingRunID
+                        )
+                }
+            }
             return
         }
 
         dictationStartTask = nil
+        guard let interactionLease =
+                dictationInteractionLease else {
+            Task {
+                await dictationCoordinator.cancel(
+                    reason:
+                        "debugConversationLeaseMissing"
+                )
+            }
+            session.publishTuringDictationEvent(
+                .failed(
+                    "Conversation interaction lease is missing."
+                )
+            )
+            qwenDebugStatus =
+                "Failed: Conversation interaction lease is missing."
+            return
+        }
+        dictationInteractionLease = nil
+        dictationRecordingRunID = nil
 
         Task {
             do {
@@ -572,8 +694,18 @@ struct TuringEpisodePickerView: View {
                     .playSendCommAndStartSendingLeadIn(
                         reason: "dictationReleased"
                     )
-                runBigMikeConversationNoBible(playerDictation: transcript)
+                runBigMikeConversationNoBible(
+                    playerDictation:
+                        transcript,
+                    interactionLease:
+                        interactionLease
+                )
             } catch {
+                await StoryInteractionArbiter.shared.release(
+                    interactionLease,
+                    reason:
+                        "debugDictationFailedBeforeConversation"
+                )
                 await TuringWalkieCommsFXController.shared.stopSendingLeadIn(
                     reason: "dictationFailed"
                 )
@@ -588,7 +720,8 @@ struct TuringEpisodePickerView: View {
     }
 
     private func runBigMikeConversationNoBible(
-        playerDictation: String
+        playerDictation: String,
+        interactionLease: StoryInteractionLease
     ) {
         guard turingDialogueBusy == false else {
             return
@@ -603,6 +736,7 @@ struct TuringEpisodePickerView: View {
         Task.detached(priority: .userInitiated) {
             let result = await TuringBigMikeConversationRunner.run(
                 playerDictation: playerDictation,
+                interactionLease: interactionLease,
                 inputStore: TuringConversationInputStore.shared,
                 onSegmentZeroReady: {
                     session.publishTuringDictationEvent(

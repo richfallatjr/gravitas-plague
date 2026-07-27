@@ -2,8 +2,6 @@ import CoreGraphics
 import Foundation
 import ImageIO
 import RealityKit
-import simd
-import UIKit
 
 struct HDRIDomePortalContentProvider: PortalContentProvider {
     static let providerID = "hdriDome"
@@ -11,17 +9,26 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
     var providerID: String { Self.providerID }
 
     let atmosphere: PortalHDRIAtmosphere
-    let domeCenterOffsetZ: Float
-    let domeRadius: Float
+    let placement: PortalHDRIDomePlacement
+    let surfaceContract: PortalHDRIDomeSurfaceContract
+    let opening: StoryPortalOpening?
+    let providerType: String
+    let ownerID: UUID
 
     init(
         atmosphere: PortalHDRIAtmosphere,
-        domeCenterOffsetZ: Float = 0.0,
-        domeRadius: Float = PortalHDRIDomePlacementTuning.radiusMeters
+        placement: PortalHDRIDomePlacement,
+        surfaceContract: PortalHDRIDomeSurfaceContract,
+        opening: StoryPortalOpening?,
+        providerType: String,
+        ownerID: UUID
     ) {
         self.atmosphere = atmosphere
-        self.domeCenterOffsetZ = domeCenterOffsetZ
-        self.domeRadius = domeRadius
+        self.placement = placement
+        self.surfaceContract = surfaceContract
+        self.opening = opening
+        self.providerType = providerType
+        self.ownerID = ownerID
     }
 
     @MainActor
@@ -58,6 +65,17 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
         portalWorld: Entity,
         context: PortalContentContext
     ) async throws {
+        if let opening {
+            try PortalHDRIDomeRuntimeDiagnostics.validateExistingOwner(
+                in: portalWorld,
+                opening: opening,
+                ownerID: ownerID
+            )
+        }
+        PortalHDRIDomeRuntimeDiagnostics.logRemoval(
+            from: portalWorld,
+            reason: "providerReplacement"
+        )
         portalWorld.children.removeAll()
         portalWorld.components.set(WorldComponent())
         PlagueNativeBloomInstaller.installStrictBloom(
@@ -69,15 +87,31 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
             ObjectIdentifier(portalWorld)
         )
 
-        let dome = try makeInsideFacingHDRIDome(
+        let dome = try PortalHDRIDomeEntityFactory().makeDome(
             texture: resources.visibleTexture,
-            resourceName: resources.name,
-            atmosphere: atmosphere,
-            centerOffsetZ: domeCenterOffsetZ,
-            radius: domeRadius
+            atmosphereID: atmosphere.rawValue,
+            visibleExposure: atmosphere.visibleExposure,
+            providerType: providerType,
+            opening: opening,
+            ownerID: ownerID,
+            placement: placement,
+            surfaceContract: surfaceContract
         )
 
         portalWorld.addChild(dome)
+        try PortalHDRIDomeRuntimeDiagnostics.logInstalled(dome)
+
+        if let opening {
+            let installed = PortalHDRIDomeRuntimeDiagnostics.storyDomes(
+                in: portalWorld,
+                opening: opening
+            )
+            guard installed.count == 1 else {
+                throw PortalHDRIDomeError.invalidStoryRuntime(
+                    "Expected exactly one \(opening.rawValue) Story dome after installation; found \(installed.count)."
+                )
+            }
+        }
 
         if context.groundDiscEnabled {
             let ground = try PortalProjectedGroundDiscFactory.makeGroundDisc(
@@ -112,9 +146,12 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
               atmosphere: \(atmosphere.rawValue)
               exr: \(atmosphere.exrResourceName).exr
               dome: true
-              domeRadius: \(domeRadius)
-              domeCenterOffsetZ: \(domeCenterOffsetZ)
-              nearestDomeShellDistance: \(domeRadius - abs(domeCenterOffsetZ))
+              domeRadius: \(placement.radiusMeters)
+              domeCenterOffsetZ: \(placement.centerOffsetZ)
+              nearestDomeShellDistance: \(placement.nearestShellDistanceMeters)
+              surfaceContract: \(surfaceContract.rawValue)
+              opening: \(opening?.rawValue ?? "none")
+              ownerID: \(ownerID.uuidString)
               projectedGroundDisc: \(context.groundDiscEnabled)
               floorY: \(context.floorY)
               groundRadius: \(context.groundDiscRadius)
@@ -123,22 +160,6 @@ struct HDRIDomePortalContentProvider: PortalContentProvider {
             """
         )
     }
-}
-
-private enum PortalHDRIDomeOrientation {
-    static let yRotationDegrees: Float = 90.0
-
-    static var yRotationRadians: Float {
-        yRotationDegrees * .pi / 180.0
-    }
-}
-
-enum PortalHDRIDomePlacementTuning {
-    static let radiusMeters: Float = 12.0
-    static let storyOpeningRadiusMeters: Float = radiusMeters
-    static let storyOpeningCenterOffsetZ: Float = -9.0
-    static let storyOpeningCameraClearanceMeters: Float =
-        storyOpeningRadiusMeters - abs(storyOpeningCenterOffsetZ)
 }
 
 private struct LoadedPortalEXRResources {
@@ -278,63 +299,6 @@ private extension HDRIDomePortalContentProvider {
             """
         )
         return resources
-    }
-
-    @MainActor
-    func makeInsideFacingHDRIDome(
-        texture: TextureResource,
-        resourceName: String,
-        atmosphere: PortalHDRIAtmosphere,
-        centerOffsetZ: Float,
-        radius: Float
-    ) throws -> ModelEntity {
-        var material = UnlitMaterial()
-        material.color = .init(
-            tint: UIColor(
-                red: CGFloat(atmosphere.visibleExposure),
-                green: CGFloat(atmosphere.visibleExposure),
-                blue: CGFloat(atmosphere.visibleExposure),
-                alpha: 1.0
-            ),
-            texture: .init(texture)
-        )
-        // The negative X scale reverses the sphere winding. Back-face culling
-        // therefore keeps the interior visible and makes the exterior clear.
-        material.faceCulling = .back
-
-        let dome = ModelEntity(
-            mesh: .generateSphere(radius: radius),
-            materials: [material]
-        )
-
-        dome.name = "PortalHDRIDome_\(resourceName)"
-        dome.position.z = centerOffsetZ
-        dome.scale = SIMD3<Float>(-1, 1, 1)
-        dome.orientation = simd_quatf(
-            angle: PortalHDRIDomeOrientation.yRotationRadians,
-            axis: SIMD3<Float>(0, 1, 0)
-        )
-
-        print(
-            """
-            [PortalHDRI] visible EXR dome created
-              atmosphere: \(atmosphere.rawValue)
-              radius: \(radius)
-              centerOffsetZ: \(centerOffsetZ)
-              centerOffsetFractionOfRadius: \(abs(centerOffsetZ) / radius)
-              forwardDepthFractionOfDiameter: \((radius - centerOffsetZ) / (radius * 2.0))
-              negativeXScale: true
-              yRotationDegrees: \(PortalHDRIDomeOrientation.yRotationDegrees)
-              faceCulling: back
-              singleSidedInterior: true
-              exteriorTransparent: true
-              unlitMaterial: true
-              textureFromEXR: true
-              visibleExposure: \(atmosphere.visibleExposure)
-            """
-        )
-
-        return dome
     }
 
     @MainActor

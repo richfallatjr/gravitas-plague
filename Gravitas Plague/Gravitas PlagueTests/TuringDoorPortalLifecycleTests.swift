@@ -7,26 +7,36 @@ import XCTest
 final class TuringDoorPortalLifecycleTests: XCTestCase {
     func testStoryDomeUsesAuthoredOffsetAndSingleSidedInterior() throws {
         XCTAssertEqual(
-            PortalHDRIDomePlacementTuning.storyOpeningRadiusMeters,
+            PortalHDRIDomePlacement.storyOpening.radiusMeters,
             12.0,
             accuracy: 0.0001
         )
         XCTAssertEqual(
-            PortalHDRIDomePlacementTuning.storyOpeningCenterOffsetZ,
+            PortalHDRIDomePlacement.storyOpening.centerOffsetZ,
             -9.0,
             accuracy: 0.0001
         )
         XCTAssertEqual(
-            PortalHDRIDomePlacementTuning.storyOpeningCameraClearanceMeters,
+            PortalHDRIDomePlacement.storyOpening.nearestShellDistanceMeters,
             3.0,
             accuracy: 0.0001
         )
 
         let source = try appSource(
-            "RoomSkinning/EnvironmentSpherePortalContentProvider.swift"
+            "RoomSkinning/PortalHDRIDomeEntityFactory.swift"
         )
-        XCTAssertTrue(source.contains("material.faceCulling = .back"))
-        XCTAssertFalse(source.contains("material.faceCulling = .none"))
+        let storyStart = try XCTUnwrap(
+            source.range(of: "private func makeStoryDome(")
+        )
+        let legacyStart = try XCTUnwrap(
+            source.range(of: "private func makeLegacyDome(")
+        )
+        let storySource = source[storyStart.lowerBound..<legacyStart.lowerBound]
+        XCTAssertTrue(storySource.contains("material.faceCulling = .front"))
+        XCTAssertTrue(
+            storySource.contains("dome.scale = SIMD3<Float>(repeating: 1)")
+        )
+        XCTAssertFalse(storySource.contains("SIMD3<Float>(-1, 1, 1)"))
     }
 
     func testManualDoorLifecycleHidesInteractionDuringTransitions() {

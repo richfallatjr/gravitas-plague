@@ -11,24 +11,20 @@ struct TuringStoryWindowPortalContentProvider: PortalContentProvider {
 
     let atmosphere: PortalHDRIAtmosphere
     let worldYawRadians: Float
+    let ownerID: UUID
 
     @MainActor
     func populatePortalWorld(
         portalWorld: Entity,
         context: PortalContentContext
     ) async throws {
-        portalWorld.children.removeAll()
-        portalWorld.components.set(WorldComponent())
-        PlagueNativeBloomInstaller.installStrictBloom(
-            on: portalWorld
-        )
-
         let hdriProvider = HDRIDomePortalContentProvider(
             atmosphere: atmosphere,
-            domeCenterOffsetZ:
-                PortalHDRIDomePlacementTuning.storyOpeningCenterOffsetZ,
-            domeRadius:
-                PortalHDRIDomePlacementTuning.storyOpeningRadiusMeters
+            placement: .storyOpening,
+            surfaceContract: .storyInteriorOnly,
+            opening: .window,
+            providerType: String(describing: Self.self),
+            ownerID: ownerID
         )
         try await hdriProvider.populatePortalWorld(
             portalWorld: portalWorld,
@@ -62,9 +58,10 @@ struct TuringStoryWindowPortalContentProvider: PortalContentProvider {
         )
         portalWorld.addChild(ground)
 
-        if let backdrop = portalWorld.findEntity(
-            named: "PortalHDRIDome_\(atmosphere.exrResourceName)"
-        ) {
+        if let backdrop = PortalHDRIDomeRuntimeDiagnostics.storyDomes(
+            in: portalWorld,
+            opening: .window
+        ).first {
             backdrop.orientation *= simd_quatf(
                 angle: worldYawRadians,
                 axis: SIMD3<Float>(0, 1, 0)
@@ -79,6 +76,8 @@ struct TuringStoryWindowPortalContentProvider: PortalContentProvider {
               domeRadius: \(PortalHDRIDomePlacementTuning.storyOpeningRadiusMeters)
               domeCenterOffsetZ: \(PortalHDRIDomePlacementTuning.storyOpeningCenterOffsetZ)
               nearestDomeShellDistance: \(PortalHDRIDomePlacementTuning.storyOpeningCameraClearanceMeters)
+              surfaceContract: \(PortalHDRIDomeSurfaceContract.storyInteriorOnly.rawValue)
+              ownerID: \(ownerID.uuidString)
               ground: \(groundTextureName).png
               groundMode: horde_faded_disc
               featherRingCount: 8

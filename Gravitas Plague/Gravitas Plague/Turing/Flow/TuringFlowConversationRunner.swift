@@ -46,6 +46,21 @@ enum TuringFlowConversationRunner {
                     )
             }
         } catch {
+            let snapshot =
+                await StoryInteractionArbiter.shared
+                    .currentSnapshot()
+            print("""
+            [TuringConversationFailure] conversationVoice lease acquisition failed
+              conversationKey: \(request.conversationKey)
+              characterID: \(request.characterID)
+              suppliedLease: \(request.interactionLease != nil)
+              currentOwner: \(snapshot.exclusiveOwner?.logValue ?? "none")
+              turingGate: \(snapshot.turingGate.rawValue)
+              doorState: \(snapshot.doorState.rawValue)
+              capabilities: \(snapshot.capabilities.map(\.rawValue).sorted())
+              errorType: \(String(reflecting: type(of: error)))
+              error: \(error.localizedDescription)
+            """)
             return .failed(
                 "Device operation failed: \(error.localizedDescription)"
             )
@@ -83,6 +98,7 @@ enum TuringFlowConversationRunner {
         }
 
         let conversationRunID = UUID()
+        var failureStage = "validatingPlayerDictation"
 
         await TuringFlowInteractionGateController
             .shared
@@ -92,6 +108,7 @@ enum TuringFlowConversationRunner {
             )
 
         do {
+            failureStage = "loadingCharacterRuntime"
             let runtime =
                 try TuringCharacterRuntimeStore()
                     .require(
@@ -107,12 +124,14 @@ enum TuringFlowConversationRunner {
                     )
             }
 
+            failureStage = "resolvingOutputRoute"
             let route =
                 try await TuringDefaultFlowRouteResolver()
                     .require(
                         request.outputRoute
                     )
 
+            failureStage = "creatingGeneratedPlayback"
             let generatedOnly =
                 try await route
                     .makeGeneratedOnlyPlayback(
@@ -127,6 +146,7 @@ enum TuringFlowConversationRunner {
             let syntheticDescriptor =
                 generatedOnly.descriptor
 
+            failureStage = "validatingOutputRoute"
             try await route.validate(
                 descriptor:
                     syntheticDescriptor,
@@ -137,6 +157,7 @@ enum TuringFlowConversationRunner {
                     identity
                 )
 
+            failureStage = "resolvingConversationInputs"
             let prerecordingTranscript =
                 await inputStore.prerecordingTranscript(
                     for:
@@ -163,22 +184,40 @@ enum TuringFlowConversationRunner {
               dialogueHistoryIncluded: false
             """)
 
+            failureStage = "submittingFoundationConversationPrompt"
+            let foundationContext =
+                TuringFoundationRequestContext(
+                    flowRunID:
+                        conversationRunID.uuidString,
+                    scriptPointID:
+                        nil,
+                    stageID:
+                        "conversationVoice",
+                    sectionIndex:
+                        nil
+                )
             let plan =
-                try await TuringDialogueService()
-                    .generateConversationNoBible(
-                        ConversationPromptNoBibleRequest(
-                            id:
-                                "conversation.\(conversationRunID.uuidString)",
-                            characterProfileID:
-                                runtime.characterID,
-                            userInput:
-                                text,
-                            promptContext:
-                                promptVoiceStoryContext,
-                            prerecordingTranscript:
-                                prerecordingTranscript
+                try await TuringFoundationRequestScope
+                    .$current
+                    .withValue(
+                        foundationContext
+                    ) {
+                        try await TuringDialogueService()
+                            .generateConversationNoBible(
+                                ConversationPromptNoBibleRequest(
+                                    id:
+                                        "conversation.\(conversationRunID.uuidString)",
+                                    characterProfileID:
+                                        runtime.characterID,
+                                    userInput:
+                                        text,
+                                    promptContext:
+                                        promptVoiceStoryContext,
+                                    prerecordingTranscript:
+                                        prerecordingTranscript
+                                )
                         )
-                    )
+                    }
 
             guard plan.segments.isEmpty == false else {
                 throw TuringRuntimeError
@@ -375,6 +414,7 @@ enum TuringFlowConversationRunner {
               conversationKey: \(request.conversationKey)
               characterID: \(request.characterID)
               outputRoute: \(request.outputRoute.rawValue)
+              failureStage: \(failureStage)
               errorType: \(String(reflecting: type(of: error)))
               error: \(error.localizedDescription)
             """)

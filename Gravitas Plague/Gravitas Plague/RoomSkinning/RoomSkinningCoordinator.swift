@@ -9,6 +9,14 @@ enum RoomSkinningPurpose: String {
     case hordeScanOnly
 }
 
+enum RoomSkinningPortalRuntimePolicy:
+    Sendable,
+    Equatable
+{
+    case disabledForTuringStory
+    case legacyDebug
+}
+
 @MainActor
 final class RoomSkinningCoordinator: ObservableObject {
     @Published private(set) var state: RoomSkinningState = .idle
@@ -19,6 +27,7 @@ final class RoomSkinningCoordinator: ObservableObject {
     let wallManager = WallPlaneManager()
     let roomTrackingManager = RoomTrackingManager()
     let portalDoorController = PortalDoorController()
+    let portalRuntimePolicy: RoomSkinningPortalRuntimePolicy
 
     var onStatusChanged: ((String) -> Void)?
 
@@ -40,14 +49,28 @@ final class RoomSkinningCoordinator: ObservableObject {
     }
 
     private var activeDoorHandleDrag: DoorHandleDragState?
+    private let legacyPortalOwnerID = UUID()
 
     var isDoorHandleDragActive: Bool {
         activeDoorHandleDrag != nil
     }
 
-    init() {
+    init(
+        portalRuntimePolicy: RoomSkinningPortalRuntimePolicy = .legacyDebug
+    ) {
+        self.portalRuntimePolicy = portalRuntimePolicy
         root.name = "RoomSkinningRoot"
         root.addChild(portalDoorController.root)
+    }
+
+    var hasInstalledLegacyPortal: Bool {
+        switch portalDoorController.state {
+        case .notCreated:
+            return false
+
+        default:
+            return true
+        }
     }
 
     func installIfNeeded(
@@ -81,6 +104,15 @@ final class RoomSkinningCoordinator: ObservableObject {
     }
 
     func startRoomSkinning() {
+        guard portalRuntimePolicy == .legacyDebug else {
+            assertionFailure(
+                "Legacy portal room skinning is disabled for Turing Story."
+            )
+            print(
+                "[RoomSkinning] legacy portal start rejected policy=disabledForTuringStory"
+            )
+            return
+        }
         purpose = .storyPlacement
 
         guard state == .idle || state == .failed else {
@@ -268,6 +300,12 @@ final class RoomSkinningCoordinator: ObservableObject {
     }
 
     func confirmRoomSkinning() {
+        guard portalRuntimePolicy == .legacyDebug else {
+            assertionFailure(
+                "Legacy portal confirmation is disabled for Turing Story."
+            )
+            return
+        }
         guard state == .doorPreviewVisible ||
               state == .adjustingDoor else {
             print("[RoomSkinning] confirm ignored state=\(state.rawValue)")
@@ -301,8 +339,21 @@ final class RoomSkinningCoordinator: ObservableObject {
     func updatePortalContentAtmosphere(
         _ atmosphere: PortalHDRIAtmosphere
     ) {
+        guard portalRuntimePolicy == .legacyDebug else {
+            assert(hasInstalledLegacyPortal == false)
+            print(
+                "[RoomSkinning] legacy atmosphere update skipped policy=disabledForTuringStory"
+            )
+            return
+        }
+
         let provider = HDRIDomePortalContentProvider(
-            atmosphere: atmosphere
+            atmosphere: atmosphere,
+            placement: .centeredLegacy,
+            surfaceContract: .legacyPreserveCurrentBehavior,
+            opening: nil,
+            providerType: "LegacyRoomSkinningHDRIDome",
+            ownerID: legacyPortalOwnerID
         )
 
         portalDoorController.setPortalContentProvider(

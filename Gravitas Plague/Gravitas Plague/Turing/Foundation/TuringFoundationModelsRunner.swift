@@ -75,8 +75,10 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
         let requestID = UUID()
         let sanitizedPrompt = TuringFoundationPromptSanitizer
             .sanitize(prompt)
+        let requestContext = TuringFoundationRequestScope.current
+        let sanitizationApplied = sanitizedPrompt != prompt
 
-        if sanitizedPrompt != prompt {
+        if sanitizationApplied {
             print("""
             [TuringFoundationPrompt] sanitized
               requestID: \(requestID.uuidString)
@@ -88,16 +90,17 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
         Self.logExactPrompt(
             sanitizedPrompt,
             purpose: purpose,
-            requestID: requestID
+            requestID: requestID,
+            requestContext: requestContext,
+            sanitizationApplied: sanitizationApplied
         )
 
-        let context = TuringFoundationRequestScope.current
         let metadata = TuringFoundationRequestMetadata(
             requestID: requestID,
-            flowRunID: context?.flowRunID,
-            scriptPointID: context?.scriptPointID,
-            stageID: context?.stageID,
-            sectionIndex: context?.sectionIndex,
+            flowRunID: requestContext?.flowRunID,
+            scriptPointID: requestContext?.scriptPointID,
+            stageID: requestContext?.stageID,
+            sectionIndex: requestContext?.sectionIndex,
             purpose: purpose
         )
         let promptURL = try await TuringFoundationPromptArchive.shared
@@ -266,8 +269,28 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
     private static func logExactPrompt(
         _ prompt: String,
         purpose: String,
-        requestID: UUID
+        requestID: UUID,
+        requestContext: TuringFoundationRequestContext?,
+        sanitizationApplied: Bool
     ) {
+        if purpose == "conversationPrompt_playerTurn_noBible" {
+            print("""
+            [TuringConversationVoiceLLMInput] exact Foundation input
+              requestID: \(requestID.uuidString)
+              flowRunID: \(requestContext?.flowRunID ?? "unscoped")
+              scriptPointID: \(requestContext?.scriptPointID ?? "unscoped")
+              stageID: \(requestContext?.stageID ?? "conversationVoice")
+              purpose: \(purpose)
+              sanitizationApplied: \(sanitizationApplied)
+              promptUTF16: \(prompt.utf16.count)
+              promptSHA256: \(TuringFlowHash.sha256(prompt))
+            [TuringConversationVoiceLLMInput] BEGIN
+            \(prompt)
+            [TuringConversationVoiceLLMInput] END
+            """)
+            return
+        }
+
         print("""
         [TuringFoundationPrompt] exact prompt sent
           requestID: \(requestID.uuidString)

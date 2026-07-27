@@ -16,7 +16,14 @@ final class PortalDoorController: ObservableObject {
 
     private var selectedWall: WallCandidate?
     private var contentProvider: PortalContentProvider =
-        HDRIDomePortalContentProvider(atmosphere: .night)
+        HDRIDomePortalContentProvider(
+            atmosphere: .night,
+            placement: .centeredLegacy,
+            surfaceContract: .legacyPreserveCurrentBehavior,
+            opening: nil,
+            providerType: "LegacyPortalDoorController",
+            ownerID: UUID()
+        )
 
     private var doorFrameEntity: Entity?
     private var portalPlaneEntity: ModelEntity?

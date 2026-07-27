@@ -39,6 +39,7 @@ final class TuringStoryWindowBundleController:
 
     let root = Entity()
     private let portalWorldRoot = Entity()
+    private let storyDomeOwnerID = UUID()
     private var loadedBundleRoot: Entity?
     private(set) var anchors: Anchors?
 
@@ -236,6 +237,10 @@ final class TuringStoryWindowBundleController:
         isPlaced = false
         committedAdjustmentTransform = nil
         committedAdjustmentSlot = nil
+        PortalHDRIDomeRuntimeDiagnostics.logRemoval(
+            from: portalWorldRoot,
+            reason: "windowReset"
+        )
         portalWorldRoot.children.removeAll()
         portalWorldRoot.components.set(WorldComponent())
 
@@ -741,7 +746,8 @@ final class TuringStoryWindowBundleController:
     ) async {
         let provider = TuringStoryWindowPortalContentProvider(
             atmosphere: atmosphere,
-            worldYawRadians: placement.worldYawRadians
+            worldYawRadians: placement.worldYawRadians,
+            ownerID: storyDomeOwnerID
         )
 
         do {

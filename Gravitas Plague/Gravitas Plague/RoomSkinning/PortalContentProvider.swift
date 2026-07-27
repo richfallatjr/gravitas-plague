@@ -27,26 +27,28 @@ extension PortalContentProvider {
 }
 
 enum PortalContentProviderRegistry {
-    static func provider(
+    static func requireProvider(
         id: String,
-        atmosphere: PortalHDRIAtmosphere = .night
-    ) -> PortalContentProvider {
+        atmosphere: PortalHDRIAtmosphere,
+        ownerID: UUID
+    ) throws -> PortalContentProvider {
         switch id {
         case HDRIDomePortalContentProvider.providerID,
              "environmentSphere":
             return HDRIDomePortalContentProvider(
-                atmosphere: atmosphere
+                atmosphere: atmosphere,
+                placement: .centeredLegacy,
+                surfaceContract: .legacyPreserveCurrentBehavior,
+                opening: nil,
+                providerType: "LegacyPortalContentProviderRegistry",
+                ownerID: ownerID
             )
 
         default:
-            print(
-                """
-                [PortalContentProviderRegistry] unknown provider \(id), using HDRI dome provider
-                """
-            )
-            return HDRIDomePortalContentProvider(
-                atmosphere: atmosphere
-            )
+#if DEBUG
+            assertionFailure("Unknown portal provider: \(id)")
+#endif
+            throw PortalHDRIDomeError.unknownProvider(id)
         }
     }
 }

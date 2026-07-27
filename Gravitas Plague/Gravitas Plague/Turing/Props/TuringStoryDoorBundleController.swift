@@ -1859,6 +1859,10 @@ final class TuringStoryDoorBundleController:
             }
         }
         let removedChildCount = portalWorldRoot.children.count
+        PortalHDRIDomeRuntimeDiagnostics.logRemoval(
+            from: portalWorldRoot,
+            reason: reason
+        )
         portalWorldRoot.children.removeAll()
         portalWorldRoot.components.set(WorldComponent())
         portalWorldLoaded = false

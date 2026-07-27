@@ -117,7 +117,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     private let spatialProvider = PhaseOneSpatialProvider()
     private let audioController = GravitasDemoAudioController()
     private let forestEnvironmentController = PlagueGaussianForestEnvironmentController()
-    private let roomSkinningCoordinator = RoomSkinningCoordinator()
+    private let roomSkinningCoordinator = RoomSkinningCoordinator(
+        portalRuntimePolicy: .disabledForTuringStory
+    )
     private let hordePortalManager = HordePortalManager()
     private let wallPosterUIController = WallMountedPosterUIController()
     private let turingWalkieBundleController = TuringStoryWalkieBundleController()
@@ -916,7 +918,11 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             wallPosterUIController.updateTuringWindowDayNightIcon(
                 atmosphere: atmosphere
             )
-            roomSkinningCoordinator.updatePortalContentAtmosphere(atmosphere)
+            if roomSkinningCoordinator.portalRuntimePolicy == .legacyDebug {
+                roomSkinningCoordinator.updatePortalContentAtmosphere(atmosphere)
+            } else {
+                assert(roomSkinningCoordinator.hasInstalledLegacyPortal == false)
+            }
             Task { @MainActor [weak self] in
                 await self?.turingWindowBundleController
                     .updateAtmosphereIfNeeded(atmosphere)

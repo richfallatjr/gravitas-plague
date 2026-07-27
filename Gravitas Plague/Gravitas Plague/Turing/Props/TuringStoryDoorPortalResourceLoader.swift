@@ -3,6 +3,8 @@ import RealityKit
 
 @MainActor
 final class TuringStoryDoorPortalResourceLoader {
+    private let storyDomeOwnerID = UUID()
+
     func populateFullExterior(
         portalWorld: Entity,
         atmosphere: PortalHDRIAtmosphere,
@@ -10,7 +12,8 @@ final class TuringStoryDoorPortalResourceLoader {
     ) async throws {
         let provider = TuringStoryDoorPortalContentProvider(
             atmosphere: atmosphere,
-            worldYawRadians: placement.worldYawRadians
+            worldYawRadians: placement.worldYawRadians,
+            ownerID: storyDomeOwnerID
         )
         try await provider.populatePortalWorld(
             portalWorld: portalWorld,
