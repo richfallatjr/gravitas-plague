@@ -172,6 +172,10 @@ enum TuringFlowConversationRunner {
                     "Conversation requires the current promptVoice Story Context for \(request.conversationKey)."
                 )
             }
+            let promptVariant =
+                await inputStore.promptVariant(
+                    for: request.conversationKey
+                )
 
             print("""
             [TuringFlow] conversation promptVoice Story Context resolved
@@ -182,6 +186,7 @@ enum TuringFlowConversationRunner {
               fabricatedStoryContextIncluded: false
               fabricatedEmotionIncluded: false
               dialogueHistoryIncluded: false
+              promptVariant: \(promptVariant.rawValue)
             """)
 
             failureStage = "submittingFoundationConversationPrompt"
@@ -190,7 +195,9 @@ enum TuringFlowConversationRunner {
                     flowRunID:
                         conversationRunID.uuidString,
                     scriptPointID:
-                        nil,
+                        promptVariant == .scriptPoint05
+                            ? "prologue.scriptPoint05"
+                            : nil,
                     stageID:
                         "conversationVoice",
                     sectionIndex:
@@ -214,7 +221,9 @@ enum TuringFlowConversationRunner {
                                     promptContext:
                                         promptVoiceStoryContext,
                                     prerecordingTranscript:
-                                        prerecordingTranscript
+                                        prerecordingTranscript,
+                                    promptVariant:
+                                        promptVariant
                                 )
                         )
                     }

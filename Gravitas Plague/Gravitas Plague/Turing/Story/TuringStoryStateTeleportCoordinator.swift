@@ -126,6 +126,10 @@ final class TuringStoryStateTeleportCoordinator {
             promptVoiceContext.storyContext,
             for: descriptor.transmission.conversationKey
         )
+        await TuringConversationInputStore.shared.updatePromptVariant(
+            .forScriptPointID(descriptor.scriptPointID),
+            for: descriptor.transmission.conversationKey
+        )
 
         print("""
         [TuringContinuation] conversation PR context rehydrated

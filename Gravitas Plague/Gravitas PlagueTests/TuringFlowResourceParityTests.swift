@@ -262,8 +262,11 @@ final class TuringFlowResourceParityTests:
             authoredBridge.audioFile,
             "pr-2-script05-big-mike.mp3"
         )
-        XCTAssertEqual(authoredBridge.transcriptMode, .none)
-        XCTAssertTrue(authoredBridge.transcript.isEmpty)
+        XCTAssertEqual(authoredBridge.transcriptMode, .manual)
+        XCTAssertEqual(
+            authoredBridge.transcript,
+            "Rich, you still with me? I heard enough to know something happened, but keep the details off this channel. Just tell me you’re standing and the house is secure. I’ve been checking the regular bands, and they’re getting worse—dead air, crossed signals, people talking over each other. That old ham setup of yours might be the only thing with enough reach. See if it powers up. Check the antenna. Don’t transmit yet. Just let me know if it’s alive."
+        )
         XCTAssertNoThrow(
             try TuringPrerecordingStore().audioURL(for: authoredBridge)
         )
@@ -477,6 +480,48 @@ final class TuringFlowResourceParityTests:
         XCTAssertFalse(prompt.contains("{{episodeStateForWordsOnly}}"))
         XCTAssertTrue(prompt.contains("This is what you last said:"))
         XCTAssertFalse(prompt.contains("Current prerecording transcript:"))
+    }
+
+    func testScriptPoint05ConversationPromptHasDedicatedContract()
+        throws {
+        let url =
+            try TuringResourceLoader.resourceURL(
+                resourcePath:
+                    "Turing/Prompts/conversationPrompt_scriptPoint05.txt"
+            )
+        let prompt =
+            try String(
+                contentsOf: url,
+                encoding: .utf8
+            )
+
+        XCTAssertTrue(
+            prompt.hasPrefix(
+                "You are Big Mike. You are talking to Rich over walkie talkie. You respond to the statement that comes over the walkie-talkie signal."
+            )
+        )
+        XCTAssertTrue(prompt.contains("{{characterBackstory}}"))
+        XCTAssertTrue(prompt.contains("{{promptContext}}"))
+        XCTAssertTrue(prompt.contains("{{prerecordingTranscript}}"))
+        XCTAssertTrue(prompt.contains("{{userInput}}"))
+        XCTAssertTrue(
+            prompt.contains(
+                "This is the statement you are responding to. This signal came over walkie-talkie."
+            )
+        )
+        XCTAssertFalse(prompt.contains("{{characterProfile}}"))
+        XCTAssertFalse(prompt.contains("Do not mention audio"))
+        XCTAssertFalse(prompt.contains("Do not include extra keys"))
+        XCTAssertEqual(
+            TuringConversationPromptVariant
+                .forScriptPointID("prologue.scriptPoint05"),
+            .scriptPoint05
+        )
+        XCTAssertEqual(
+            TuringConversationPromptVariant
+                .forScriptPointID("prologue.scriptPoint01"),
+            .standard
+        )
     }
 
     func testConversationUsesExactCurrentPromptVoiceStoryContext()

@@ -4,6 +4,7 @@ enum TuringRuntimeError: LocalizedError, Sendable {
     case resourceMissing(String)
     case invalidConfig(String)
     case foundationUnavailable
+    case foundationGuardrailTriggered(String)
     case foundationJSONGateFailed(String)
     case foundationRepairFailed(String)
     case qwenGPUUnavailable
@@ -21,6 +22,8 @@ enum TuringRuntimeError: LocalizedError, Sendable {
             return "Invalid Turing configuration: \(detail)"
         case .foundationUnavailable:
             return "Foundation Models are unavailable."
+        case .foundationGuardrailTriggered(let detail):
+            return "Foundation Models safety guardrails blocked the request: \(detail)"
         case .foundationJSONGateFailed(let detail):
             return "Foundation Models returned invalid JSON: \(detail)"
         case .foundationRepairFailed(let detail):

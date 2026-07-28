@@ -35,6 +35,12 @@ final class TuringFoundationFreshSessionEnforcementTests:
         )
         XCTAssertEqual(
             TuringFoundationPromptPurposePolicy.guardrailMode(
+                for: "conversationPrompt_scriptPoint05"
+            ),
+            .permissiveContentTransformations
+        )
+        XCTAssertEqual(
+            TuringFoundationPromptPurposePolicy.guardrailMode(
                 for: "dialogueJSONRepair"
             ),
             .standard
@@ -50,6 +56,21 @@ final class TuringFoundationFreshSessionEnforcementTests:
             TuringFoundationGuardrailPolicy.isGuardrailError(
                 SyntheticLanguageModelError.guardrailViolation
             )
+        )
+    }
+
+    func testGuardrailClassifierDoesNotTreatGenericPolicyFailureAsSafety() {
+        let error = NSError(
+            domain: "TestPolicy",
+            code: 1,
+            userInfo: [
+                NSLocalizedDescriptionKey:
+                    "A retry policy timed out."
+            ]
+        )
+
+        XCTAssertFalse(
+            TuringFoundationGuardrailPolicy.isGuardrailError(error)
         )
     }
 

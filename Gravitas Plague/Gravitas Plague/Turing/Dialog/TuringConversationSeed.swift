@@ -5,12 +5,41 @@ struct TuringAuthoredPromptVoiceContext: Sendable, Equatable {
     let storyContext: String
 }
 
+enum TuringConversationPromptVariant:
+    String,
+    Codable,
+    Sendable,
+    Hashable
+{
+    case standard
+    case scriptPoint05
+
+    static func forScriptPointID(
+        _ scriptPointID: String
+    ) -> TuringConversationPromptVariant {
+        scriptPointID == "prologue.scriptPoint05"
+            ? .scriptPoint05
+            : .standard
+    }
+
+    var resourcePath: String {
+        switch self {
+        case .standard:
+            return "Turing/Prompts/conversationPrompt_playerTurn_noBible.txt"
+        case .scriptPoint05:
+            return "Turing/Prompts/conversationPrompt_scriptPoint05.txt"
+        }
+    }
+}
+
 actor TuringConversationInputStore {
     static let shared = TuringConversationInputStore()
 
     private var promptVoiceStoryContextByKey: [String: String] = [:]
     private var prerecordingIDByKey: [String: String] = [:]
     private var prerecordingTranscriptByKey: [String: String] = [:]
+    private var promptVariantByKey:
+        [String: TuringConversationPromptVariant] = [:]
 
     func prerecordingTranscript(for key: String) -> String {
         prerecordingTranscriptByKey[key] ?? ""
@@ -18,6 +47,24 @@ actor TuringConversationInputStore {
 
     func promptVoiceStoryContext(for key: String) -> String? {
         promptVoiceStoryContextByKey[key]
+    }
+
+    func promptVariant(
+        for key: String
+    ) -> TuringConversationPromptVariant {
+        promptVariantByKey[key] ?? .standard
+    }
+
+    func updatePromptVariant(
+        _ variant: TuringConversationPromptVariant,
+        for key: String
+    ) {
+        promptVariantByKey[key] = variant
+        print("""
+        [TuringConversationInput] prompt variant updated
+          key: \(key)
+          variant: \(variant.rawValue)
+        """)
     }
 
     func updatePromptVoiceStoryContext(
@@ -52,12 +99,14 @@ actor TuringConversationInputStore {
         promptVoiceStoryContextByKey.removeValue(forKey: key)
         prerecordingIDByKey.removeValue(forKey: key)
         prerecordingTranscriptByKey.removeValue(forKey: key)
+        promptVariantByKey.removeValue(forKey: key)
     }
 
     func clearAll(reason: String) {
         promptVoiceStoryContextByKey.removeAll(keepingCapacity: false)
         prerecordingIDByKey.removeAll(keepingCapacity: false)
         prerecordingTranscriptByKey.removeAll(keepingCapacity: false)
+        promptVariantByKey.removeAll(keepingCapacity: false)
         print("""
         [TuringConversationInput] cleared
           reason: \(reason)

@@ -31,7 +31,8 @@ enum TuringFoundationPromptPurposePolicy {
         for purpose: String
     ) -> TuringFoundationModelGuardrailMode {
         switch purpose {
-        case "voicePrompt_characterIntent":
+        case "voicePrompt_characterIntent",
+             "conversationPrompt_scriptPoint05":
             return .permissiveContentTransformations
 
         default:
@@ -273,9 +274,17 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
         requestContext: TuringFoundationRequestContext?,
         sanitizationApplied: Bool
     ) {
-        if purpose == "conversationPrompt_playerTurn_noBible" {
+        if purpose == "conversationPrompt_playerTurn_noBible" ||
+            purpose == "conversationPrompt_scriptPoint05" {
+            let isScriptPoint05 =
+                requestContext?.scriptPointID ==
+                "prologue.scriptPoint05"
+            let marker =
+                isScriptPoint05
+                    ? "TuringScriptPoint05ConversationVoiceLLMInput"
+                    : "TuringConversationVoiceLLMInput"
             print("""
-            [TuringConversationVoiceLLMInput] exact Foundation input
+            [\(marker)] exact Foundation input
               requestID: \(requestID.uuidString)
               flowRunID: \(requestContext?.flowRunID ?? "unscoped")
               scriptPointID: \(requestContext?.scriptPointID ?? "unscoped")
@@ -284,9 +293,9 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
               sanitizationApplied: \(sanitizationApplied)
               promptUTF16: \(prompt.utf16.count)
               promptSHA256: \(TuringFlowHash.sha256(prompt))
-            [TuringConversationVoiceLLMInput] BEGIN
+            [\(marker)] BEGIN
             \(prompt)
-            [TuringConversationVoiceLLMInput] END
+            [\(marker)] END
             """)
             return
         }

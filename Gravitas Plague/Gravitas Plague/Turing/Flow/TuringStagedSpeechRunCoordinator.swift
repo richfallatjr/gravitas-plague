@@ -130,7 +130,8 @@ actor TuringStagedSpeechRunCoordinator {
                                             committed.globalRange.upperBound
                                     )
                                     await state.recordAuthoredBridgeReserved(
-                                        stageID: stageDescriptor.stageID
+                                        stageID: stageDescriptor.stageID,
+                                        bridge: bridge
                                     )
                                     print("""
                                     [TuringStagedSpeech] authored bridge reserved
@@ -269,10 +270,31 @@ actor TuringStagedSpeechRunCoordinator {
                 throw terminalError
             }
 
+            if let bridge = await state.lastReservedAuthoredBridge(),
+               let transcript = bridge.conversationTranscript {
+                await inputStore.updatePrerecording(
+                    id: bridge.prerecordingID,
+                    transcript: transcript,
+                    for: descriptor.transmission.conversationKey
+                )
+                print("""
+                [TuringStagedSpeech] conversation transcript advanced to authored bridge
+                  scriptPointID: \(descriptor.scriptPointID)
+                  prerecordingID: \(bridge.prerecordingID)
+                  conversationKey: \(descriptor.transmission.conversationKey)
+                  transcriptUTF16: \(transcript.utf16.count)
+                  afterActualPlaybackCompletion: true
+                """)
+            }
+
             if let promptVoiceContext =
                     await state.promptVoiceContext() {
                 await inputStore.updatePromptVoiceStoryContext(
                     promptVoiceContext.storyContext,
+                    for: descriptor.transmission.conversationKey
+                )
+                await inputStore.updatePromptVariant(
+                    .forScriptPointID(descriptor.scriptPointID),
                     for: descriptor.transmission.conversationKey
                 )
             }
@@ -329,6 +351,8 @@ private actor TuringStagedSpeechRunState {
         TuringAuthoredPromptVoiceContext?
     private var skippedIndices = Set<Int>()
     private var authoredBridgeStageIDs = Set<String>()
+    private var reservedAuthoredBridges:
+        [TuringAuthoredSpeechBridge] = []
 
     func reserve(
         batch: TuringPreparedSpeechBatch,
@@ -390,12 +414,20 @@ private actor TuringStagedSpeechRunState {
         skippedIndices.insert(index)
     }
 
-    func recordAuthoredBridgeReserved(stageID: String) {
+    func recordAuthoredBridgeReserved(
+        stageID: String,
+        bridge: TuringAuthoredSpeechBridge
+    ) {
         authoredBridgeStageIDs.insert(stageID)
+        reservedAuthoredBridges.append(bridge)
     }
 
     func authoredBridgeWasReserved(stageID: String) -> Bool {
         authoredBridgeStageIDs.contains(stageID)
+    }
+
+    func lastReservedAuthoredBridge() -> TuringAuthoredSpeechBridge? {
+        reservedAuthoredBridges.last
     }
 
     func report(

@@ -31,6 +31,23 @@ struct ConversationPromptNoBibleRequest: Codable, Sendable, Hashable {
     let userInput: String
     let promptContext: String
     let prerecordingTranscript: String
+    let promptVariant: TuringConversationPromptVariant
+
+    init(
+        id: String,
+        characterProfileID: String,
+        userInput: String,
+        promptContext: String,
+        prerecordingTranscript: String,
+        promptVariant: TuringConversationPromptVariant = .standard
+    ) {
+        self.id = id
+        self.characterProfileID = characterProfileID
+        self.userInput = userInput
+        self.promptContext = promptContext
+        self.prerecordingTranscript = prerecordingTranscript
+        self.promptVariant = promptVariant
+    }
 }
 
 struct TuringDialoguePlan: Codable, Sendable, Hashable {

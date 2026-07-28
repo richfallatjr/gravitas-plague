@@ -5,6 +5,11 @@ enum TuringFoundationGuardrailPolicy {
 
     static func isGuardrailError(_ error: Error) -> Bool {
         let nsError = error as NSError
+        if nsError.domain == "FoundationModels.LanguageModelError",
+           nsError.code == 2 {
+            return true
+        }
+
         let description = [
             error.localizedDescription,
             String(describing: error),
@@ -16,9 +21,7 @@ enum TuringFoundationGuardrailPolicy {
         .lowercased()
 
         return description.contains("guardrail")
-            || description.contains("safety")
-            || description.contains("safe")
-            || description.contains("policy")
-            || description.contains("not allowed")
+            || description.contains("may contain unsafe content")
+            || description.contains("safety guardrails were triggered")
     }
 }

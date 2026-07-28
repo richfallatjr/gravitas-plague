@@ -5,9 +5,9 @@
   "voiceID": "big_mike_base_clone_v1",
   "voiceVariantID": "broadcast_reference_fast_01",
   "audioFile": "pr-2-script05-big-mike.mp3",
-  "transcriptMode": "none",
-  "transcript": "",
+  "transcriptMode": "manual",
+  "transcript": "Rich, you still with me? I heard enough to know something happened, but keep the details off this channel. Just tell me you’re standing and the house is secure. I’ve been checking the regular bands, and they’re getting worse—dead air, crossed signals, people talking over each other. That old ham setup of yours might be the only thing with enough reach. See if it powers up. Check the antenna. Don’t transmit yet. Just let me know if it’s alive.",
   "summary": "A second authored Big Mike transmission plays after Script Voice while promptVoice continues computing.",
-  "voicePromptIntent": "Playback-only authored bridge. It is not added to the promptVoice or conversationVoice Foundation input.",
+  "voicePromptIntent": "Playback-only authored bridge for promptVoice. After actual playback completion, this reviewed transcript becomes the prior statement supplied to conversationVoice.",
   "defaultEmotion": "measured, concerned, protective"
 }

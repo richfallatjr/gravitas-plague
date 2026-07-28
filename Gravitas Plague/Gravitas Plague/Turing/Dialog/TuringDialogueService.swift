@@ -126,10 +126,20 @@ actor TuringDialogueService {
         let profile = try characterStore.profile(
             id: request.characterProfileID
         )
+        let promptResourcePath = request.promptVariant.resourcePath
+        let inputContract =
+            request.promptVariant == .scriptPoint05
+                ? "userInput,characterBackstory,promptVoiceStoryContext,prerecordingTranscript"
+                : "userInput,characterProfile,promptVoiceStoryContext,prerecordingTranscript"
+        let foundationPurpose =
+            request.promptVariant == .scriptPoint05
+                ? "conversationPrompt_scriptPoint05"
+                : "conversationPrompt_playerTurn_noBible"
         let prompt = try Self.renderPrompt(
-            resourcePath: "Turing/Prompts/conversationPrompt_playerTurn_noBible.txt",
+            resourcePath: promptResourcePath,
             replacements: [
                 "{{characterProfile}}": profile.promptText,
+                "{{characterBackstory}}": profile.writeup,
                 "{{promptContext}}": request.promptContext,
                 "{{prerecordingTranscript}}": request.prerecordingTranscript,
                 "{{userInput}}": request.userInput
@@ -140,8 +150,10 @@ actor TuringDialogueService {
         [TuringConversationNoBible] Foundation request started
           freshSession: true
           characterID: \(profile.characterID)
-          promptTemplate: conversationPrompt_playerTurn_noBible
-          inputContract: userInput,characterProfile,promptVoiceStoryContext,prerecordingTranscript
+          promptVariant: \(request.promptVariant.rawValue)
+          promptResourcePath: \(promptResourcePath)
+          foundationPurpose: \(foundationPurpose)
+          inputContract: \(inputContract)
           prerecordingTranscriptUTF16: \(request.prerecordingTranscript.utf16.count)
           dialogueHistoryIncluded: false
           promptVoiceStoryContextIncluded: true
@@ -153,12 +165,12 @@ actor TuringDialogueService {
         do {
             raw = try await runner.runPrompt(
                 prompt,
-                purpose: "conversationPrompt_playerTurn_noBible"
+                purpose: foundationPurpose
             )
         } catch {
             if TuringFoundationGuardrailPolicy.isGuardrailError(error) {
-                throw TuringRuntimeError.foundationJSONGateFailed(
-                    "conversationPrompt guardrails triggered: \(error.localizedDescription)"
+                throw TuringRuntimeError.foundationGuardrailTriggered(
+                    error.localizedDescription
                 )
             }
             throw error
@@ -166,7 +178,7 @@ actor TuringDialogueService {
 
         Self.logRawResponse(
             raw,
-            name: "conversationPrompt_playerTurn_noBible",
+            name: foundationPurpose,
             promptCharacters: prompt.utf16.count
         )
 

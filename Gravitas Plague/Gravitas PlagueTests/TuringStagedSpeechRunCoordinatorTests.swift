@@ -91,6 +91,7 @@ final class TuringStagedSpeechRunCoordinatorTests: XCTestCase {
             fileURL: URL(fileURLWithPath: "/tmp/test-pr.wav")
         )
 
+        let inputStore = TuringConversationInputStore()
         let coordinator = TuringStagedSpeechRunCoordinator(
             voiceScriptExecutor: StubStagedSpeechExecutor(
                 kind: .voiceScriptLongform,
@@ -118,7 +119,7 @@ final class TuringStagedSpeechRunCoordinatorTests: XCTestCase {
             rendererFactory: StubStagedRenderSessionFactory(
                 recorder: recorder
             ),
-            inputStore: TuringConversationInputStore()
+            inputStore: inputStore
         )
 
         let report = try await coordinator.run(
@@ -129,7 +130,8 @@ final class TuringStagedSpeechRunCoordinatorTests: XCTestCase {
             authoredBridges: [
                 "test.pr2": TuringAuthoredSpeechBridge(
                     prerecordingID: "test.pr2",
-                    fileURL: URL(fileURLWithPath: "/tmp/test-pr2.wav")
+                    fileURL: URL(fileURLWithPath: "/tmp/test-pr2.wav"),
+                    conversationTranscript: "Second authored bridge transcript."
                 )
             ],
             playback: playback,
@@ -142,6 +144,13 @@ final class TuringStagedSpeechRunCoordinatorTests: XCTestCase {
         XCTAssertEqual(report.committedStages[0].globalRange, 0..<2)
         XCTAssertEqual(report.failedStages.count, 1)
         XCTAssertEqual(report.failedStages[0].stageID, "promptVoice")
+        let storedTranscript = await inputStore.prerecordingTranscript(
+            for: descriptor.transmission.conversationKey
+        )
+        XCTAssertEqual(
+            storedTranscript,
+            "Second authored bridge transcript."
+        )
 
         let events = await recorder.snapshot()
         assertOrdered(

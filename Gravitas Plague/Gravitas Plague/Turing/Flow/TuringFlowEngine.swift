@@ -473,6 +473,12 @@ actor TuringFlowEngine {
                     descriptor.transmission
                         .conversationKey
             )
+            await inputStore.updatePromptVariant(
+                .forScriptPointID(descriptor.scriptPointID),
+                for:
+                    descriptor.transmission
+                        .conversationKey
+            )
 
             await createdPlayback
                 .setExpectedGeneratedSegmentCount(
@@ -1097,7 +1103,14 @@ actor TuringFlowEngine {
             }
             resolved[prerecordingID] = TuringAuthoredSpeechBridge(
                 prerecordingID: prerecordingID,
-                fileURL: try prerecordingStore.audioURL(for: descriptor)
+                fileURL: try prerecordingStore.audioURL(for: descriptor),
+                conversationTranscript:
+                    descriptor.transcriptMode == .none ||
+                    descriptor.transcript.trimmingCharacters(
+                        in: .whitespacesAndNewlines
+                    ).isEmpty
+                        ? nil
+                        : descriptor.transcript
             )
         }
 

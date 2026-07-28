@@ -55,6 +55,7 @@ struct TuringSpeechStageExecutionResult: Sendable {
 struct TuringAuthoredSpeechBridge: Sendable, Equatable {
     let prerecordingID: String
     let fileURL: URL
+    let conversationTranscript: String?
 }
 
 protocol TuringSpeechStageExecuting: Sendable {
