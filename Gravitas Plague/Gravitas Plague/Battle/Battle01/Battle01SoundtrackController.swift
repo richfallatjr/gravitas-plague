@@ -81,7 +81,7 @@ final class Battle01SoundtrackController: NSObject, Battle01SoundtrackControllin
         outgoing?.setVolume(0, fadeDuration: fadeDuration)
         await StoryAftermathMusicActor.shared.playLoop(
             fileURL: preparedAftermathURL,
-            targetVolume: targetGain,
+            targetDecibels: targetDecibels,
             fadeDuration: fadeDuration
         )
         onStarted(battleInstanceID)

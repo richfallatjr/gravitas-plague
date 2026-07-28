@@ -33,7 +33,7 @@ struct Battle01DefinitionStore: Sendable {
               definition.aftermathMusic.loop,
               definition.aftermathMusic.delayAfterGrandmaDeathMinSeconds == 3,
               definition.aftermathMusic.delayAfterGrandmaDeathMaxSeconds == 5,
-              definition.aftermathMusic.targetDecibels == -22 else {
+              definition.aftermathMusic.targetDecibels == -25 else {
             throw StoreError.invalidContract("authored trigger, anchors, turns, cleanup, or music loop changed")
         }
         return definition

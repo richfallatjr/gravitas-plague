@@ -709,17 +709,110 @@ enum TuringQwenNativeSpeechDecoder {
             try reader.loadTensorFloat32(name: weightName).mlxArray()
         )
         let bias = try reader.loadTensorFloat32(name: biasName).mlxArray()
-        var output = convTransposed1d(
+        return try boundedTransposedConv1d(
             input,
-            weight,
+            weight: weight,
+            bias: bias,
             stride: stride,
-            padding: 0,
-            dilation: 1,
-            outputPadding: 0
-        ) + bias
+            rightCrop: rightCrop
+        )
+    }
+
+    static func boundedTransposedConv1d(
+        _ input: MLXArray,
+        weight: MLXArray,
+        bias: MLXArray,
+        stride: Int,
+        rightCrop: Int
+    ) throws -> MLXArray {
+        guard input.ndim == 3,
+              weight.ndim == 3,
+              bias.ndim == 1,
+              stride > 0,
+              rightCrop >= 0 else {
+            throw TuringQwenNativeError.invalidConfig(
+                "Invalid bounded transposed-convolution shape or parameters."
+            )
+        }
+
+        let batchSize = input.dim(0)
+        let inputLength = input.dim(1)
+        let inputChannels = input.dim(2)
+        let outputChannels = weight.dim(0)
+        let kernelSize = weight.dim(1)
+
+        guard inputLength > 0,
+              kernelSize > 0,
+              weight.dim(2) == inputChannels,
+              bias.dim(0) == outputChannels else {
+            throw TuringQwenNativeError.invalidConfig(
+                "Bounded transposed-convolution channel dimensions do not match."
+            )
+        }
+
+        let dilatedLength = (inputLength - 1) * stride + 1
+        let fullOutputLength = dilatedLength + kernelSize - 1
+        guard rightCrop < fullOutputLength else {
+            throw TuringQwenNativeError.invalidConfig(
+                "Bounded transposed-convolution crop removes the complete output."
+            )
+        }
+
+        var accumulated: MLXArray?
+        for kernelOffset in 0..<kernelSize {
+            let next = autoreleasepool {
+                let kernel = weight[
+                    kernelOffset..<(kernelOffset + 1),
+                    axis: 1
+                ].reshaped([outputChannels, inputChannels])
+                let projected = matmul(input, kernel.T)
+                let interleaved = padded(
+                    projected.expandedDimensions(axis: 2),
+                    widths: [
+                        IntOrPair((0, 0)),
+                        IntOrPair((0, 0)),
+                        IntOrPair((0, stride - 1)),
+                        IntOrPair((0, 0))
+                    ]
+                ).reshaped([
+                    batchSize,
+                    inputLength * stride,
+                    outputChannels
+                ])
+                let dilated = interleaved[..<dilatedLength, axis: 1]
+                let shifted = padded(
+                    dilated,
+                    widths: [
+                        IntOrPair((0, 0)),
+                        IntOrPair((
+                            kernelOffset,
+                            kernelSize - 1 - kernelOffset
+                        )),
+                        IntOrPair((0, 0))
+                    ]
+                )
+                return accumulated.map { $0 + shifted } ?? shifted
+            }
+
+            // The stock transposed-convolution kernel can monopolize the GPU
+            // long enough for visionOS to terminate it for impacting
+            // interactivity. Materializing each bounded contribution keeps
+            // command buffers short without changing decoder ordering.
+            eval(next)
+            accumulated = next
+        }
+
+        guard var output = accumulated else {
+            throw TuringQwenNativeError.invalidConfig(
+                "Bounded transposed convolution produced no output."
+            )
+        }
+        output = output + bias.reshaped([1, 1, outputChannels])
+        eval(output)
 
         if rightCrop > 0 {
-            output = output[..<(output.dim(1) - rightCrop), axis: 1]
+            output = output[..<(fullOutputLength - rightCrop), axis: 1]
+            eval(output)
         }
 
         return output

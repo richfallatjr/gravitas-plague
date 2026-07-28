@@ -57,6 +57,21 @@ final class TuringCharacterRuntimeDecodingPolicyTests:
         .generationQualityPolicy
         .requireEOSBeforeDecode
     )
+    XCTAssertEqual(
+      rich.audio.generatedGainDB,
+      -5,
+      accuracy: 0.0001
+    )
+    XCTAssertEqual(
+      rich.audio.prerecordingGainDB,
+      -5,
+      accuracy: 0.0001
+    )
+    XCTAssertEqual(
+      rich.audio.fillerGainDB,
+      -11,
+      accuracy: 0.0001
+    )
   }
 
   func testThirdVoiceDoesNotRequireRendererSwitch()

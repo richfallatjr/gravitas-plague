@@ -3,6 +3,8 @@ import Foundation
 
 @MainActor
 final class Battle01RichPrerecordingController: NSObject, Battle01RichPrerecordingPlaying, AVAudioPlayerDelegate {
+    private static let richGainDecibels: Float = -5
+
     enum PlaybackError: LocalizedError {
         case playbackDidNotStart
         case interrupted(String)
@@ -52,6 +54,10 @@ final class Battle01RichPrerecordingController: NSObject, Battle01RichPrerecordi
                 let player = try AVAudioPlayer(contentsOf: fileURL)
                 player.delegate = self
                 player.numberOfLoops = 0
+                player.volume = min(
+                    1,
+                    max(0, powf(10, Self.richGainDecibels / 20))
+                )
                 player.prepareToPlay()
                 guard player.play() else {
                     continuation.resume(throwing: PlaybackError.playbackDidNotStart)
@@ -66,6 +72,7 @@ final class Battle01RichPrerecordingController: NSObject, Battle01RichPrerecordi
                   prerecordingID: \(descriptor.prerecordingID)
                   file: \(fileURL.lastPathComponent)
                   route: global
+                  gainDecibels: \(Self.richGainDecibels)
                   generatedTTS: false
                 """)
             } catch {

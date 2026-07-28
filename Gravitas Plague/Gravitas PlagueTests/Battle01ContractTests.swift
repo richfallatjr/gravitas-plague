@@ -128,7 +128,7 @@ final class Battle01ContractTests: XCTestCase {
             5,
             accuracy: 0.0001
         )
-        XCTAssertEqual(definition.aftermathMusic.targetDecibels, -22, accuracy: 0.0001)
+        XCTAssertEqual(definition.aftermathMusic.targetDecibels, -25, accuracy: 0.0001)
         XCTAssertEqual(definition.aftermathMusic.stop, "prologueTeardown")
         XCTAssertEqual(definition.richPrerecording.outputRoute, "roomGlobal")
         XCTAssertFalse(definition.richPrerecording.playWalkieOpenSound)
@@ -146,8 +146,8 @@ final class Battle01ContractTests: XCTestCase {
 
         XCTAssertGreaterThan(player.duration, 0)
         XCTAssertEqual(
-            Battle01SoundtrackController.linearGain(decibels: -22),
-            0.07943282,
+            Battle01SoundtrackController.linearGain(decibels: -25),
+            0.05623413,
             accuracy: 0.0001
         )
     }

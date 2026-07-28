@@ -32,7 +32,10 @@ let package = Package(
         ),
         .testTarget(
             name: "TuringQwenNativeTests",
-            dependencies: ["TuringQwenNative"],
+            dependencies: [
+                "TuringQwenNative",
+                .product(name: "MLX", package: "mlx-swift")
+            ],
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
             ]

@@ -9,14 +9,16 @@ actor StoryAftermathMusicActor {
     private var activeURL: URL?
     private var fadeTask: Task<Void, Never>?
 
-    func playLoop(fileURL: URL, targetVolume: Float, fadeDuration: TimeInterval) {
-        if activeURL == fileURL, let player {
-            player.play()
-            return
-        }
+    func playLoop(
+        fileURL: URL,
+        targetDecibels: Float,
+        fadeDuration: TimeInterval
+    ) {
+        let targetVolume = Self.linearGain(decibels: targetDecibels)
 
         stop(reason: "replaceAftermathTrack")
         let item = AVPlayerItem(url: fileURL)
+        item.audioMix = nil
         let queue = AVQueuePlayer()
         queue.volume = fadeDuration > 0 ? 0 : targetVolume
         let loop = AVPlayerLooper(player: queue, templateItem: item)
@@ -40,7 +42,9 @@ actor StoryAftermathMusicActor {
         print("""
         [StoryAftermathMusic] playing
           file: \(fileURL.lastPathComponent)
+          targetDecibels: \(targetDecibels)
           targetVolume: \(targetVolume)
+          audioMix: none
           battleRuntimeRetained: false
         """)
     }
@@ -62,5 +66,9 @@ actor StoryAftermathMusicActor {
 
     private func setVolume(_ value: Float) {
         player?.volume = value
+    }
+
+    private nonisolated static func linearGain(decibels: Float) -> Float {
+        min(1, max(0, powf(10, decibels / 20)))
     }
 }

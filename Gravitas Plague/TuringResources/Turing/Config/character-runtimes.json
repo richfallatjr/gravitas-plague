@@ -102,9 +102,9 @@
         }
       },
       "audio": {
-        "generatedGainDB": 0,
-        "prerecordingGainDB": 0,
-        "fillerGainDB": -6,
+        "generatedGainDB": -5,
+        "prerecordingGainDB": -5,
+        "fillerGainDB": -11,
         "fillerDirectoryCandidates": [
           "Turing/Audio/rich-filler",
           "Turing/rich-filler",

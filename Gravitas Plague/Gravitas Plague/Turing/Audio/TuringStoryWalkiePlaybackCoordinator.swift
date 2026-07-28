@@ -163,9 +163,9 @@ actor TuringStoryWalkiePlaybackCoordinator {
         policy.voiceRoute = .playerHeadTracked
         policy.outputProcessingPolicy = .rich
         policy.chainFillerFromPrerecordingToFirstGenerated = true
-        policy.generatedGainDB = 0
-        policy.prerecordingGainDB = 0
-        policy.fillerGainDB = -6
+        policy.generatedGainDB = -5
+        policy.prerecordingGainDB = -5
+        policy.fillerGainDB = -11
         policy.fillerDirectoryCandidates = TuringRichVoiceIdentity
             .fillerDirectoryCandidates
 
