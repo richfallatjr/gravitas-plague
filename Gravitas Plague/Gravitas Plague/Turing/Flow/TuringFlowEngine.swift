@@ -372,7 +372,8 @@ actor TuringFlowEngine {
                 let task = makePlanTask()
                 planTask = task
 
-            case .withPrerecording:
+            case .withPrerecording,
+                 .foundationBeforePrerecording:
                 break
             }
 
@@ -390,6 +391,84 @@ actor TuringFlowEngine {
 
             if planTask == nil {
                 planTask = makePlanTask()
+            }
+
+            var foundationPlanBeforePrerecording:
+                TuringFlowCompositeSpeechPlan?
+
+            if descriptor.transmission.computeStart ==
+                .foundationBeforePrerecording {
+                do {
+                    guard let planTask else {
+                        throw TuringRuntimeError
+                            .invalidConfig(
+                                "Turing Flow Foundation task was not created."
+                            )
+                    }
+                    foundationPlanBeforePrerecording =
+                        try await planTask.value
+                } catch {
+                    await resolvedRoute.finish(
+                        descriptor: descriptor,
+                        identity: identity,
+                        succeeded: false
+                    )
+                    await TuringFlowInteractionGateController
+                        .shared
+                        .failFlow(
+                            identity: identity,
+                            reason:
+                                "generatedPlanFailed"
+                        )
+
+                    TuringFlowLog.event(
+                        "point failed",
+                        identity: identity,
+                        fields: [
+                            (
+                                "stage",
+                                "generatedPlanFailedBeforePrerecording"
+                            ),
+                            (
+                                "prerecordingQueued",
+                                "false"
+                            ),
+                            (
+                                "error",
+                                error.localizedDescription
+                            )
+                        ]
+                    )
+
+                    return TuringFlowResult(
+                        outcome:
+                            .generatedPlanFailed,
+                        identity: identity,
+                        expectedGeneratedSegmentCount:
+                            0,
+                        completedGeneratedSegmentCount:
+                            0,
+                        skippedGeneratedSegmentIndices:
+                            [],
+                        message:
+                            "\(scriptPointID) Foundation voicePrompt failed before PR playback: \(error.localizedDescription)"
+                    )
+                }
+
+                TuringFlowLog.event(
+                    "Foundation-before-PR barrier satisfied",
+                    identity: identity,
+                    fields: [
+                        (
+                            "prerecordingQueued",
+                            "false"
+                        ),
+                        (
+                            "ttsComputeStartsAfterPrerecordingQueued",
+                            "true"
+                        )
+                    ]
+                )
             }
 
             let createdPlayback =
@@ -426,68 +505,73 @@ actor TuringFlowEngine {
 
             let plan: TuringFlowCompositeSpeechPlan
 
-            do {
-                guard let planTask else {
-                    throw TuringRuntimeError
-                        .invalidConfig(
-                            "Turing Flow Foundation task was not created."
+            if let foundationPlanBeforePrerecording {
+                plan =
+                    foundationPlanBeforePrerecording
+            } else {
+                do {
+                    guard let planTask else {
+                        throw TuringRuntimeError
+                            .invalidConfig(
+                                "Turing Flow Foundation task was not created."
+                            )
+                    }
+                    plan = try await planTask.value
+                } catch {
+                    await createdPlayback
+                        .setExpectedGeneratedSegmentCount(
+                            0
                         )
-                }
-                plan = try await planTask.value
-            } catch {
-                await createdPlayback
-                    .setExpectedGeneratedSegmentCount(
-                        0
-                    )
-                await createdPlayback
-                    .qwenComputeAllFinished()
-                await createdCompletionTask.value
+                    await createdPlayback
+                        .qwenComputeAllFinished()
+                    await createdCompletionTask.value
 
-                await resolvedRoute.finish(
-                    descriptor: descriptor,
-                    identity: identity,
-                    succeeded: false
-                )
-                await TuringFlowInteractionGateController
-                    .shared
-                    .failFlow(
+                    await resolvedRoute.finish(
+                        descriptor: descriptor,
                         identity: identity,
-                        reason:
-                            "generatedPlanFailed"
+                        succeeded: false
+                    )
+                    await TuringFlowInteractionGateController
+                        .shared
+                        .failFlow(
+                            identity: identity,
+                            reason:
+                                "generatedPlanFailed"
+                        )
+
+                    TuringFlowLog.event(
+                        "point failed",
+                        identity: identity,
+                        fields: [
+                            (
+                                "stage",
+                                "generatedPlanFailed"
+                            ),
+                            (
+                                "activePrerecordingCancelled",
+                                "false"
+                            ),
+                            (
+                                "error",
+                                error.localizedDescription
+                            )
+                        ]
                     )
 
-                TuringFlowLog.event(
-                    "point failed",
-                    identity: identity,
-                    fields: [
-                        (
-                            "stage",
-                            "generatedPlanFailed"
-                        ),
-                        (
-                            "activePrerecordingCancelled",
-                            "false"
-                        ),
-                        (
-                            "error",
-                            error.localizedDescription
-                        )
-                    ]
-                )
-
-                return TuringFlowResult(
-                    outcome:
-                        .generatedPlanFailed,
-                    identity: identity,
-                    expectedGeneratedSegmentCount:
-                        0,
-                    completedGeneratedSegmentCount:
-                        0,
-                    skippedGeneratedSegmentIndices:
-                        [],
-                    message:
-                        "\(scriptPointID) PR completed, but Foundation voicePrompt failed: \(error.localizedDescription)"
-                )
+                    return TuringFlowResult(
+                        outcome:
+                            .generatedPlanFailed,
+                        identity: identity,
+                        expectedGeneratedSegmentCount:
+                            0,
+                        completedGeneratedSegmentCount:
+                            0,
+                        skippedGeneratedSegmentIndices:
+                            [],
+                        message:
+                            "\(scriptPointID) PR completed, but Foundation voicePrompt failed: \(error.localizedDescription)"
+                    )
+                }
             }
 
             expectedSegmentCount =

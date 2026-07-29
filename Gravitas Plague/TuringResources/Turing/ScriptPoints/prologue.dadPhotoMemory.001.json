@@ -12,7 +12,7 @@
     "conversationKey": "object.dad_frame",
     "outputRoute": "roomGlobal",
     "interactionSurface": "dadFrame",
-    "computeStart": "withPrerecording",
+    "computeStart": "foundationBeforePrerecording",
     "fillerMode": "continuousFromPrerecordingToGenerated",
     "commSFX": {
       "openBeforePrerecording": false,

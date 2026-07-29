@@ -28,6 +28,10 @@ final class TuringDadPhotoMemoryResourceTests: XCTestCase {
             descriptor.transmission.fillerMode,
             .continuousFromPrerecordingToGenerated
         )
+        XCTAssertEqual(
+            descriptor.transmission.computeStart,
+            .foundationBeforePrerecording
+        )
         XCTAssertFalse(
             descriptor.transmission.commSFX
                 .openBeforePrerecording

@@ -12,6 +12,7 @@ actor StoryMemoryMusicActor {
     private var player: AVQueuePlayer?
     private var looper: AVPlayerLooper?
     private var activeToken: Token?
+    private var fadeTask: Task<Void, Never>?
 
     func start(
         descriptor: TuringFlowBackgroundMusicDescriptor,
@@ -41,12 +42,15 @@ actor StoryMemoryMusicActor {
         player = queue
         activeToken = token
         queue.play()
-        await fade(
-            token: token,
-            from: queue.volume,
-            to: target,
-            duration: descriptor.fadeInSeconds
-        )
+        let startVolume = queue.volume
+        fadeTask = Task { [weak self] in
+            await self?.runFadeIn(
+                token: token,
+                from: startVolume,
+                to: target,
+                duration: descriptor.fadeInSeconds
+            )
+        }
 
         print("""
         [StoryMemoryMusic] started
@@ -66,6 +70,8 @@ actor StoryMemoryMusicActor {
         guard activeToken == token else {
             return
         }
+        fadeTask?.cancel()
+        fadeTask = nil
         await fade(
             token: token,
             from: player?.volume ?? 0,
@@ -98,6 +104,23 @@ actor StoryMemoryMusicActor {
         )
     }
 
+    private func runFadeIn(
+        token: Token,
+        from start: Float,
+        to target: Float,
+        duration: TimeInterval
+    ) async {
+        await fade(
+            token: token,
+            from: start,
+            to: target,
+            duration: duration
+        )
+        if activeToken == token {
+            fadeTask = nil
+        }
+    }
+
     private func fade(
         token: Token,
         from start: Float,
@@ -122,6 +145,8 @@ actor StoryMemoryMusicActor {
     }
 
     private func releasePlayer() {
+        fadeTask?.cancel()
+        fadeTask = nil
         player?.pause()
         player?.removeAllItems()
         looper = nil

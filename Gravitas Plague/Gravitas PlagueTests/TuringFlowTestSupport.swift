@@ -810,6 +810,10 @@ enum TuringFlowTestFixtures {
         open: Bool = false,
         send: Bool = false,
         fixedLeadIn: Double? = nil,
+        computeStart:
+            TuringFlowDescriptor.Transmission
+                .ComputeStart =
+                    .withPrerecording,
         gate:
             TuringFlowDescriptor.Progression
                 .InteractionGate =
@@ -834,7 +838,7 @@ enum TuringFlowTestFixtures {
                 outputRoute:
                     outputRoute,
                 computeStart:
-                    .withPrerecording,
+                    computeStart,
                 fillerMode:
                     .continuousFromPrerecordingToGenerated,
                 commSFX: .init(

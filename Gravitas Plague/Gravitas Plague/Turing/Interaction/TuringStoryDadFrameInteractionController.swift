@@ -27,6 +27,8 @@ final class TuringStoryDadFrameInteractionController:
     private var activeConversationLease:
         StoryInteractionLease?
     private var activeRecordingRunID: UUID?
+    private var activeConversationMusicIdentity:
+        TuringFlowIdentity?
     private var latestSnapshot = StoryInteractionSnapshot(
         revision: 0,
         turingGate: .closed,
@@ -83,16 +85,30 @@ final class TuringStoryDadFrameInteractionController:
     }
 
     func dadFrameRemoved(reason: String) {
+        let startupTask = dictationStartTask
+        let musicIdentity = activeConversationMusicIdentity
         ready = false
         holdActive = false
         playClaimPending = false
         playTask?.cancel()
-        dictationStartTask?.cancel()
+        startupTask?.cancel()
         conversationTask?.cancel()
         playTask = nil
         dictationStartTask = nil
         conversationTask = nil
+        activeConversationMusicIdentity = nil
         iconController.remove()
+        if let musicIdentity {
+            Task {
+                await startupTask?.value
+                await TuringFlowMediaCueCoordinator.shared
+                    .stopIfNeeded(
+                        identity: musicIdentity,
+                        reason:
+                            "dadFrameRemoved.\(reason)"
+                    )
+            }
+        }
         print("[TuringDadFrame] removed reason=\(reason)")
     }
 
@@ -153,6 +169,53 @@ final class TuringStoryDadFrameInteractionController:
             }
 
             let runID = UUID()
+            let musicIdentity =
+                self.conversationMusicIdentity(
+                    runID: runID
+                )
+            self.activeConversationMusicIdentity =
+                musicIdentity
+            do {
+                let descriptor =
+                    try TuringFlowDescriptorStore()
+                        .require(self.scriptPointID)
+                try await TuringFlowMediaCueCoordinator
+                    .shared
+                    .startIfNeeded(
+                        descriptor: descriptor,
+                        identity: musicIdentity
+                    )
+                print("""
+                [TuringDadPhotoMusic] conversation score started
+                  boundary: recordingPinchBegan
+                  conversationRunID: \(runID.uuidString)
+                """)
+            } catch {
+                self.holdActive = false
+                await self.stopConversationMusic(
+                    identity: musicIdentity,
+                    reason:
+                        "conversationMusicStartFailed"
+                )
+                self.eventSink?
+                    .publishTuringDictationEvent(
+                        .failed(
+                            "Device operation failed: \(error.localizedDescription)"
+                        )
+                    )
+                return
+            }
+
+            guard self.holdActive,
+                  Task.isCancelled == false else {
+                await self.stopConversationMusic(
+                    identity: musicIdentity,
+                    reason:
+                        "dadFrameHoldEndedBeforePreflight"
+                )
+                return
+            }
+
             let lease: StoryInteractionLease
             do {
                 lease = try await
@@ -167,6 +230,11 @@ final class TuringStoryDadFrameInteractionController:
                         )
             } catch {
                 self.holdActive = false
+                await self.stopConversationMusic(
+                    identity: musicIdentity,
+                    reason:
+                        "dadFrameConversationPreflightFailed"
+                )
                 self.eventSink?.publishTuringDictationEvent(
                     .failed(
                         "Device operation failed: \(error.localizedDescription)"
@@ -180,6 +248,11 @@ final class TuringStoryDadFrameInteractionController:
                 await StoryInteractionArbiter.shared.release(
                     lease,
                     reason: "dadFrameHoldEndedBeforeLeaseUse"
+                )
+                await self.stopConversationMusic(
+                    identity: musicIdentity,
+                    reason:
+                        "dadFrameHoldEndedBeforeLeaseUse"
                 )
                 return
             }
@@ -201,13 +274,17 @@ final class TuringStoryDadFrameInteractionController:
         holdActive = false
 
         guard dictation.isRecording else {
-            dictationStartTask?.cancel()
+            let startupTask = dictationStartTask
+            startupTask?.cancel()
             dictationStartTask = nil
             let lease = activeConversationLease
             let runID = activeRecordingRunID
+            let musicIdentity =
+                activeConversationMusicIdentity
             activeConversationLease = nil
             activeRecordingRunID = nil
             Task {
+                await startupTask?.value
                 if let lease {
                     await StoryInteractionArbiter.shared.release(
                         lease,
@@ -221,6 +298,14 @@ final class TuringStoryDadFrameInteractionController:
                         surfaceID: .dadFrame
                     )
                 }
+                if let musicIdentity {
+                    await self.stopConversationMusic(
+                        identity:
+                            musicIdentity,
+                        reason:
+                            "dadFrameHoldEndedBeforeRecording"
+                    )
+                }
             }
             return
         }
@@ -230,10 +315,23 @@ final class TuringStoryDadFrameInteractionController:
                 surfaceID: .dadFrame,
                 reason: "dadFrameConversationLeaseMissing"
             )
+            if let musicIdentity =
+                    activeConversationMusicIdentity {
+                Task {
+                    await self.stopConversationMusic(
+                        identity:
+                            musicIdentity,
+                        reason:
+                            "dadFrameConversationLeaseMissing"
+                    )
+                }
+            }
             return
         }
         let conversationRunID =
             activeRecordingRunID ?? UUID()
+        let musicIdentity =
+            activeConversationMusicIdentity
         activeConversationLease = nil
         activeRecordingRunID = nil
 
@@ -282,6 +380,16 @@ final class TuringStoryDadFrameInteractionController:
                                 )
                         }
                     )
+                if let musicIdentity {
+                    await self.stopConversationMusic(
+                        identity:
+                            musicIdentity,
+                        reason:
+                            result.succeeded
+                                ? "conversationTTSPlaybackCompleted"
+                                : "conversationVoiceFailed"
+                    )
+                }
                 self.eventSink?.publishTuringDictationEvent(
                     result.succeeded
                         ? .responseAudioFinished
@@ -297,6 +405,14 @@ final class TuringStoryDadFrameInteractionController:
                     conversationRunID: conversationRunID,
                     surfaceID: .dadFrame
                 )
+                if let musicIdentity {
+                    await self.stopConversationMusic(
+                        identity:
+                            musicIdentity,
+                        reason:
+                            "dadFrameDictationFailedBeforeConversation"
+                    )
+                }
                 self.eventSink?.publishTuringDictationEvent(
                     .failed(error.localizedDescription)
                 )
@@ -327,5 +443,33 @@ final class TuringStoryDadFrameInteractionController:
                 reason: "dadFrameShutdown.\(reason)"
             )
         }
+    }
+
+    private func conversationMusicIdentity(
+        runID: UUID
+    ) -> TuringFlowIdentity {
+        TuringFlowIdentity(
+            flowInstanceID: runID,
+            scriptPointID:
+                "conversation.\(runID.uuidString)",
+            characterID: "rich",
+            prerecordingID: "none",
+            voicePromptID: "conversationPrompt",
+            interactionSurface: .dadFrame
+        )
+    }
+
+    private func stopConversationMusic(
+        identity: TuringFlowIdentity,
+        reason: String
+    ) async {
+        if activeConversationMusicIdentity == identity {
+            activeConversationMusicIdentity = nil
+        }
+        await TuringFlowMediaCueCoordinator.shared
+            .stopIfNeeded(
+                identity: identity,
+                reason: reason
+            )
     }
 }

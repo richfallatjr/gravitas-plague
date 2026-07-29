@@ -72,6 +72,10 @@ struct TuringFlowDescriptor: Codable, Sendable, Hashable {
             /// Start Foundation before fixed lead-in and prerecording playback.
             case beforePrerecording
 
+            /// Start background media, await the complete Foundation response,
+            /// then start prerecording playback and TTS rendering together.
+            case foundationBeforePrerecording
+
             /// The episode controller starts this point only after the prior
             /// point has completed. Foundation begins immediately on entry.
             case afterPriorPoint

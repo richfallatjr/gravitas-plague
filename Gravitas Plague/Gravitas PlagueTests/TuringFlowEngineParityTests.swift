@@ -234,6 +234,111 @@ final class TuringFlowEngineParityTests:
         )
     }
 
+    func testFoundationBeforePrerecordingStartsMusicThenHoldsPR()
+        async throws {
+        let recorder =
+            TuringFlowTestEventRecorder()
+        let service =
+            ControlledVoicePromptService(
+                recorder: recorder,
+                behavior: .delayed(
+                    TuringFlowTestFixtures.plan
+                )
+            )
+        let harness = try makeHarness(
+            recorder: recorder,
+            dialogueService: service,
+            completionOrder: [0, 1],
+            open: true,
+            send: false,
+            computeStart:
+                .foundationBeforePrerecording,
+            autoCompletePrerecording: true
+        )
+
+        let runTask = Task {
+            await harness.engine.run(
+                scriptPointID:
+                    harness.scriptPointID,
+                trigger: .manualDebug
+            )
+        }
+
+        try await recorder.waitFor(
+            "foundation.started"
+        )
+        let whileFoundationRuns =
+            await recorder.snapshot()
+        XCTAssertTrue(
+            whileFoundationRuns.contains(
+                "route.open"
+            )
+        )
+        XCTAssertFalse(
+            whileFoundationRuns.contains(
+                "pr.enqueued"
+            )
+        )
+        XCTAssertFalse(
+            whileFoundationRuns.contains(
+                "qwen.started"
+            )
+        )
+
+        await service.release()
+        let result = await runTask.value
+        XCTAssertTrue(
+            result.succeeded,
+            result.message
+        )
+
+        let events =
+            await recorder.snapshot()
+        assertOrder(
+            events,
+            [
+                "route.open",
+                "foundation.started",
+                "foundation.completed",
+                "playback.begin",
+                "pr.enqueued",
+                "pr.started",
+                "qwen.started"
+            ]
+        )
+    }
+
+    func testFoundationBeforePrerecordingFailureNeverStartsPR()
+        async throws {
+        let harness = try makeHarness(
+            behavior: .failed(
+                "Foundation fixture failure"
+            ),
+            completionOrder: [],
+            open: true,
+            send: false,
+            computeStart:
+                .foundationBeforePrerecording
+        )
+
+        let result = await harness.engine.run(
+            scriptPointID:
+                harness.scriptPointID,
+            trigger: .manualDebug
+        )
+        XCTAssertEqual(
+            result.outcome,
+            .generatedPlanFailed
+        )
+
+        let events =
+            await harness.recorder.snapshot()
+        XCTAssertTrue(events.contains("route.open"))
+        XCTAssertTrue(events.contains("route.finish.false"))
+        XCTAssertFalse(events.contains("pr.enqueued"))
+        XCTAssertFalse(events.contains("qwen.started"))
+    }
+
     func testQwenFailurePreservesActivePRAndTerminatesWaiter()
         async throws {
         let harness = try makeHarness(
@@ -366,6 +471,10 @@ final class TuringFlowEngineParityTests:
         open: Bool,
         send: Bool,
         fixedLeadIn: Double? = nil,
+        computeStart:
+            TuringFlowDescriptor.Transmission
+                .ComputeStart =
+                    .withPrerecording,
         autoCompletePrerecording: Bool =
             false
     ) throws -> Harness {
@@ -390,6 +499,8 @@ final class TuringFlowEngineParityTests:
             send: send,
             fixedLeadIn:
                 fixedLeadIn,
+            computeStart:
+                computeStart,
             autoCompletePrerecording:
                 autoCompletePrerecording
         )
@@ -407,6 +518,10 @@ final class TuringFlowEngineParityTests:
         open: Bool,
         send: Bool,
         fixedLeadIn: Double? = nil,
+        computeStart:
+            TuringFlowDescriptor.Transmission
+                .ComputeStart =
+                    .withPrerecording,
         autoCompletePrerecording: Bool =
             false
     ) throws -> Harness {
@@ -439,7 +554,9 @@ final class TuringFlowEngineParityTests:
                 open: open,
                 send: send,
                 fixedLeadIn:
-                    fixedLeadIn
+                    fixedLeadIn,
+                computeStart:
+                    computeStart
             )
         let prerecording =
             TuringFlowTestFixtures
