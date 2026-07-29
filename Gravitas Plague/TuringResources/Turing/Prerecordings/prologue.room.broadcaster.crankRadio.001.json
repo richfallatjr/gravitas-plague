@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "prologue.room.broadcaster.crankRadio.001",
+  "speaker": "broadcaster",
+  "voiceID": "broadcaster_base_clone_v1",
+  "voiceVariantID": "broadcaster_reference_fast_01",
+  "audioFile": "pr-broadcaster-emergency-broadcast.mp3",
+  "transcriptMode": "manual",
+  "transcript": "This is an automated emergency broadcast.\n\nPlease stay in your homes. Lock all doors and windows. Do not approach individuals displaying cloudy eyes, loss of speech, abnormal posture, or unprovoked aggression.\n\nThe pathogen currently designated ATNV-15 affects rapid fear-response pathways in the mammalian brain. Infected hosts may appear confused, injured, or familiar.\n\nDo not attempt physical contact. Do not attempt verbal de-escalation at close range. Recognition does not indicate recovery.\n\nIf a host has entered your residence, create distance. Avoid bodily fluid exposure. Remain calm. Scan your surroundings. Wait for containment instructions.\n\nThis message will repeat.\n\nStay indoors. Stay quiet. Stay away from the infected.",
+  "summary": "A public emergency broadcast reports confirmed city cases, neurological symptoms, and immediate safety guidance.",
+  "voicePromptIntent": "Continue the public emergency broadcast using prologue.broadcaster.crankRadio.followUp.001.",
+  "defaultEmotion": "calm, formal public-safety delivery with measured urgency"
+}

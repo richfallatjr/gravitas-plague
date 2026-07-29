@@ -138,7 +138,8 @@ actor TuringDialogueService {
         let promptResourcePath = request.promptVariant.resourcePath
         let usesBackstoryOnly =
             request.promptVariant == .scriptPoint05 ||
-            request.promptVariant == .roomObjectMemory
+            request.promptVariant == .roomObjectMemory ||
+            request.promptVariant == .broadcasterRadio
         let inputContract =
             usesBackstoryOnly
                 ? "userInput,characterBackstory,promptVoiceStoryContext,prerecordingTranscript"

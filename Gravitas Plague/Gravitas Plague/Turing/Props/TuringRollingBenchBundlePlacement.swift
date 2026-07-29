@@ -45,10 +45,8 @@ enum TuringRollingBenchTuning {
     static let bottomAboveFloorMeters: Float = 0
     static let floorSnapToleranceMeters: Float = 0.01
 
-    static let staticGainDB: Double = 20.0 * log10(0.20)
+    static let tuningLoopGainDB: Double = 20.0 * log10(0.20)
     static let cueGainDB: Double = -23.0
-    static let broadcastGainDB: Double = 20.0 * log10(0.78)
-    static let broadcastRepeatDelay: Duration = .seconds(30)
 }
 
 struct TuringRollingBenchBundlePlacement: Codable, Equatable, Sendable {

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "scriptPointID": "prologue.crankRadioBroadcast.001",
+  "trigger": {
+    "kind": "userPlay",
+    "delaySeconds": 0
+  },
+  "transmission": {
+    "prerecordingID": "prologue.room.broadcaster.crankRadio.001",
+    "voicePromptID": "prologue.broadcaster.crankRadio.followUp.001",
+    "characterID": "broadcaster",
+    "conversationKey": "object.crank_radio",
+    "outputRoute": "crankRadioSpatial",
+    "interactionSurface": "crankRadio",
+    "computeStart": "foundationBeforePrerecording",
+    "fillerMode": "none",
+    "commSFX": {
+      "openBeforePrerecording": false,
+      "sendAfterGenerated": false,
+      "sendingLeadInAfterGeneratedSeconds": null
+    },
+    "fixedLeadInSeconds": null,
+    "generationPipeline": null,
+    "backgroundMusic": null
+  },
+  "progression": {
+    "nextScriptPointID": null,
+    "automaticAdvance": false,
+    "interactionGateAfterCompletion": "microphone"
+  }
+}

@@ -411,6 +411,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             turingStoryDadFrameInteractionController
         )
         StoryInteractionPresentationCoordinator.shared.register(
+            turingRollingBenchBundleController
+                .crankRadioInteractionController
+        )
+        StoryInteractionPresentationCoordinator.shared.register(
             turingDoorBundleController
         )
         StoryInteractionPresentationCoordinator.shared.start()
@@ -1394,17 +1398,13 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         source: String
     ) {
         switch (action.deviceID, action.action) {
-        case (.crankRadio, .togglePlayback):
-            turingRollingBenchBundleController.radioController.toggle(
-                source: source
-            )
         case (.hamReceiver, _), (.microphone, _):
             print(
                 "[TuringRollingBench] future device action ignored deviceID=\(action.deviceID.rawValue) action=\(action.action.rawValue) source=\(source)"
             )
         case (.crankRadio, _):
             print(
-                "[TuringRollingBench] unsupported crank-radio action action=\(action.action.rawValue) source=\(source)"
+                "[TuringRollingBench] legacy crank-radio action ignored action=\(action.action.rawValue) source=\(source)"
             )
         }
     }
@@ -1416,6 +1416,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         turingStoryWalkieInteractionController
             .setEventSink(eventSink)
         turingStoryDadFrameInteractionController
+            .setEventSink(eventSink)
+        turingRollingBenchBundleController
+            .crankRadioInteractionController
             .setEventSink(eventSink)
     }
 
@@ -1454,6 +1457,30 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         source: String
     ) {
         turingStoryDadFrameInteractionController
+            .microphoneHoldEnded(source: source)
+    }
+
+    func turingCrankRadioPlayTapped(
+        source: String
+    ) {
+        turingRollingBenchBundleController
+            .crankRadioInteractionController
+            .playTapped(source: source)
+    }
+
+    func turingCrankRadioMicrophoneHoldBegan(
+        source: String
+    ) {
+        turingRollingBenchBundleController
+            .crankRadioInteractionController
+            .microphoneHoldBegan(source: source)
+    }
+
+    func turingCrankRadioMicrophoneHoldEnded(
+        source: String
+    ) {
+        turingRollingBenchBundleController
+            .crankRadioInteractionController
             .microphoneHoldEnded(source: source)
     }
 
@@ -2246,6 +2273,11 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             await turingStoryDadFrameInteractionController.shutdown(
                 reason: "immersiveShutdown"
             )
+            await turingRollingBenchBundleController
+                .crankRadioInteractionController
+                .shutdown(
+                    reason: "immersiveShutdown"
+                )
             await TuringFlowMediaCueCoordinator.shared.stopAll(
                 reason: "immersiveShutdown"
             )

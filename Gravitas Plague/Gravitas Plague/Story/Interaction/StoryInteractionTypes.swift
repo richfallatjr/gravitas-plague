@@ -15,6 +15,7 @@ enum StoryInteractionSurfaceID:
 {
     case walkie
     case dadFrame
+    case crankRadio
 }
 
 enum StoryDoorLifecycleState: String, Sendable, Equatable {
@@ -33,7 +34,8 @@ enum StoryInteractionCapability: String, Sendable, Hashable {
     case walkieMicrophone
     case doorOpen
     case doorClose
-    case rollingBenchRadio
+    case crankRadioPlay
+    case crankRadioMicrophone
     case hamReceiver
     case handMicrophone
     case dadFramePlay
@@ -53,6 +55,12 @@ enum StoryDoorPresentation: String, Sendable, Equatable {
 }
 
 enum StoryDadFramePresentation: String, Sendable, Equatable {
+    case hidden
+    case play
+    case microphone
+}
+
+enum StoryCrankRadioPresentation: String, Sendable, Equatable {
     case hidden
     case play
     case microphone
@@ -92,6 +100,8 @@ struct StoryInteractionSnapshot: Sendable, Equatable {
     let walkiePresentation: StoryWalkiePresentation
     let doorPresentation: StoryDoorPresentation
     let dadFramePresentation: StoryDadFramePresentation
+    let crankRadioPresentation:
+        StoryCrankRadioPresentation
 
     init(
         revision: UInt64,
@@ -101,7 +111,9 @@ struct StoryInteractionSnapshot: Sendable, Equatable {
         capabilities: Set<StoryInteractionCapability>,
         walkiePresentation: StoryWalkiePresentation,
         doorPresentation: StoryDoorPresentation,
-        dadFramePresentation: StoryDadFramePresentation = .hidden
+        dadFramePresentation: StoryDadFramePresentation = .hidden,
+        crankRadioPresentation:
+            StoryCrankRadioPresentation = .hidden
     ) {
         self.revision = revision
         self.turingGate = turingGate
@@ -111,6 +123,8 @@ struct StoryInteractionSnapshot: Sendable, Equatable {
         self.walkiePresentation = walkiePresentation
         self.doorPresentation = doorPresentation
         self.dadFramePresentation = dadFramePresentation
+        self.crankRadioPresentation =
+            crankRadioPresentation
     }
 }
 

@@ -23,6 +23,16 @@ nonisolated enum TuringBigMikeVoiceIdentity {
     static let displayName = "Big Mike"
 }
 
+nonisolated enum TuringBroadcasterVoiceIdentity {
+    static let characterID = "broadcaster"
+    static let speakerID = "broadcaster"
+    static let voiceID = "broadcaster_base_clone_v1"
+    static let displayName = "Broadcaster"
+
+    static let cloneProfileResourcePath =
+        "Turing/Voices/Cloned/Broadcaster/BaseClone/broadcaster_base_clone_v1.qwenclone"
+}
+
 nonisolated enum TuringDialogueThreadIdentity {
     static let bigMikeRich = "dialogue.big_mike.rich"
 }
@@ -63,6 +73,7 @@ nonisolated struct TuringVoiceOutputContext:
     static let walkieOutgoingGlobal = Self(rawValue: "walkieOutgoingGlobal")
     static let walkieOutgoingHeadset = Self(rawValue: "walkieOutgoingHeadset")
     static let walkieSpatial = Self(rawValue: "walkieSpatial")
+    static let crankRadioSpatial = Self(rawValue: "crankRadioSpatial")
 }
 
 typealias TuringRichOutputContext = TuringVoiceOutputContext

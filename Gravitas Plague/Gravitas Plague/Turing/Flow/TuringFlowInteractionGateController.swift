@@ -19,6 +19,8 @@ final class TuringFlowInteractionGateController: ObservableObject {
 
     @Published private(set) var state: State = .closed
     @Published private(set) var dadFrameState: State = .closed
+    @Published private(set) var crankRadioState:
+        State = .closed
 
     private var ownerBySurface:
         [StoryInteractionSurfaceID: UUID] = [:]
@@ -39,6 +41,8 @@ final class TuringFlowInteractionGateController: ObservableObject {
             return state
         case .dadFrame:
             return dadFrameState
+        case .crankRadio:
+            return crankRadioState
         }
     }
 
@@ -287,12 +291,29 @@ final class TuringFlowInteractionGateController: ObservableObject {
         )
     }
 
+    func close(
+        surfaceID: StoryInteractionSurfaceID,
+        reason: String
+    ) {
+        ownerBySurface[surfaceID] = nil
+        setRaw(
+            .closed,
+            surfaceID: surfaceID,
+            reason: reason
+        )
+    }
+
     func reset(reason: String) {
         ownerBySurface.removeAll(keepingCapacity: false)
         state = .closed
         dadFrameState = .closed
+        crankRadioState = .closed
         publish(surfaceID: .walkie, reason: "reset.\(reason)")
         publish(surfaceID: .dadFrame, reason: "reset.\(reason)")
+        publish(
+            surfaceID: .crankRadio,
+            reason: "reset.\(reason)"
+        )
     }
 
     private func set(
@@ -325,6 +346,8 @@ final class TuringFlowInteractionGateController: ObservableObject {
             state = newState
         case .dadFrame:
             dadFrameState = newState
+        case .crankRadio:
+            crankRadioState = newState
         }
         publish(surfaceID: surfaceID, reason: reason)
     }

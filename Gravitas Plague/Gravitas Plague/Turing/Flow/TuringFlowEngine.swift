@@ -471,6 +471,12 @@ actor TuringFlowEngine {
                 )
             }
 
+            try await resolvedRoute
+                .playPrerecordingLeadInIfNeeded(
+                    descriptor: descriptor,
+                    identity: identity
+                )
+
             let createdPlayback =
                 try await resolvedRoute.makePlayback(
                     descriptor: descriptor,

@@ -41,9 +41,13 @@ final class TuringRollingBenchBundleController:
     private(set) var anchors: Anchors?
     private(set) var placement: TuringRollingBenchBundlePlacement?
     private(set) var isPlaced = false
-    let radioController = TuringRollingBenchRadioController()
+    private let crankRadioTuningLoops:
+        TuringCrankRadioTuningLoopActor
+    let radioController:
+        TuringRollingBenchRadioController
+    let crankRadioInteractionController:
+        TuringStoryCrankRadioInteractionController
 
-    private let iconController = TuringRollingBenchRadioIconController()
     private weak var wallManager: WallPlaneManager?
     private weak var occupancyRegistry: WallPropOccupancyRegistry?
     private let occupancyID = UUID()
@@ -61,6 +65,29 @@ final class TuringRollingBenchBundleController:
     private var interactionInstalled = false
 
     init() {
+        let tuningLoops =
+            TuringCrankRadioTuningLoopActor.shared
+        crankRadioTuningLoops = tuningLoops
+        radioController =
+            TuringRollingBenchRadioController(
+                worker:
+                    TuringRollingBenchRadioBedActor.shared,
+                tuningLoops:
+                    tuningLoops
+            )
+        crankRadioInteractionController =
+            TuringStoryCrankRadioInteractionController(
+                gate:
+                    TuringFlowInteractionGateController
+                        .shared,
+                episodeFlow:
+                    TuringEpisodeFlowController
+                        .shared,
+                dictation: nil,
+                iconController: nil,
+                tuningLoops:
+                    tuningLoops
+            )
         root.name = "TuringRollingBench_WorldRoot"
         root.isEnabled = false
     }
@@ -137,14 +164,13 @@ final class TuringRollingBenchBundleController:
         )
 
         if !interactionInstalled {
-            radioController.onStateChanged = { [weak self] state in
-                self?.iconController.apply(state)
-            }
-            radioController.install(emitter: anchors.audioEmitter)
-            iconController.install(
+            try await radioController.install(
+                emitter: anchors.audioEmitter
+            )
+            crankRadioInteractionController
+                .crankRadioInstalled(
                 iconAnchor: anchors.crankRadioIconAnchor,
-                crankRadioRoot: anchors.crankRadioRoot,
-                initialState: radioController.state
+                crankRadioRoot: anchors.crankRadioRoot
             )
             interactionInstalled = true
         }
@@ -165,9 +191,9 @@ final class TuringRollingBenchBundleController:
     func reset(reason: String) {
         preparationTask?.cancel()
         preparationTask = nil
+        crankRadioInteractionController
+            .crankRadioRemoved(reason: reason)
         radioController.reset(reason: reason)
-        iconController.remove()
-        radioController.onStateChanged = nil
         interactionInstalled = false
         occupancyRegistry?.unregister(id: occupancyID)
         root.isEnabled = false

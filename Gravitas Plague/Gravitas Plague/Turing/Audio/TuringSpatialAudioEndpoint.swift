@@ -1,7 +1,7 @@
 import Foundation
 import RealityKit
 
-actor TuringSpatialAudioEndpoint: TuringAudioPlaybackEndpoint {
+actor TuringSpatialAudioEndpoint: TuringTransientAudioPlaybackEndpoint {
     private let loader: TuringRealityAudioResourceLoader
     private let sceneBridge: TuringRealityKitAudioSceneBridge
     private let eventHub: TuringAudioEventHub

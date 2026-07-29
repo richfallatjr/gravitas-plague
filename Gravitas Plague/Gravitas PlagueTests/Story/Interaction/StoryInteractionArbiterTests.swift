@@ -250,7 +250,8 @@ final class StoryInteractionArbiterTests: XCTestCase {
         await arbiter.updateTuringGate(.play, reason: "test")
         let capabilities = await arbiter.currentSnapshot().capabilities
 
-        XCTAssertFalse(capabilities.contains(.rollingBenchRadio))
+        XCTAssertFalse(capabilities.contains(.crankRadioPlay))
+        XCTAssertFalse(capabilities.contains(.crankRadioMicrophone))
         XCTAssertFalse(capabilities.contains(.hamReceiver))
         XCTAssertFalse(capabilities.contains(.handMicrophone))
     }

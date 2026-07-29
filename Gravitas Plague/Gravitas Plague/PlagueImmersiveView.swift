@@ -172,6 +172,46 @@ struct PlagueImmersiveView: View {
             TapGesture()
                 .targetedToEntity(
                     where: .has(
+                        TuringStoryCrankRadioPlayComponent.self
+                    )
+                )
+                .onEnded { _ in
+                    Task { @MainActor in
+                        coordinator
+                            .turingCrankRadioPlayTapped(
+                                source: "realityKit"
+                            )
+                    }
+                }
+        )
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .targetedToEntity(
+                    where: .has(
+                        TuringStoryCrankRadioMicrophoneComponent.self
+                    )
+                )
+                .onChanged { _ in
+                    Task { @MainActor in
+                        coordinator
+                            .turingCrankRadioMicrophoneHoldBegan(
+                                source: "realityKit"
+                            )
+                    }
+                }
+                .onEnded { _ in
+                    Task { @MainActor in
+                        coordinator
+                            .turingCrankRadioMicrophoneHoldEnded(
+                                source: "realityKit"
+                            )
+                    }
+                }
+        )
+        .simultaneousGesture(
+            TapGesture()
+                .targetedToEntity(
+                    where: .has(
                         TuringStoryWalkiePlayComponent.self
                     )
                 )

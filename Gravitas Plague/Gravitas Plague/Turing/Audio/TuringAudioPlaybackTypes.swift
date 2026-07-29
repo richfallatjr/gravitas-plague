@@ -23,6 +23,7 @@ nonisolated enum TuringAudioClipKind: String, Sendable, Hashable {
     case sendingStatic
     case radioCue
     case radioBroadcast
+    case crankRadioTuningFiller
 }
 
 nonisolated enum TuringAudioRouteID: String, Sendable, Hashable {
@@ -75,6 +76,12 @@ nonisolated protocol TuringAudioPlaybackEndpoint: Sendable {
     ) async
 
     func events() async -> AsyncStream<TuringAudioPlaybackEvent>
+}
+
+nonisolated protocol TuringTransientAudioPlaybackEndpoint:
+    TuringAudioPlaybackEndpoint
+{
+    func evictTransient(fileURL: URL) async
 }
 
 actor TuringUnavailableAudioEndpoint: TuringAudioPlaybackEndpoint {

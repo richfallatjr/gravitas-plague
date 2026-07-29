@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import Gravitas_Plague
 
@@ -28,10 +29,15 @@ final class TuringRollingBenchPlacementContractTests: XCTestCase {
         XCTAssertEqual(TuringRollingBenchTuning.runtimeScale, 3.0)
     }
 
-    func testRadioCycleContractUsesThirtySecondRepeatAndSpatialLaneNames() {
+    func testRadioContractUsesTransientTuningAndSpatialEmitter() {
         XCTAssertEqual(
-            TuringRollingBenchTuning.broadcastRepeatDelay,
-            .seconds(30)
+            TuringRollingBenchTuning.tuningLoopGainDB,
+            20.0 * log10(0.20),
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            TuringRollingBenchEntityName.runtimeAudioEmitter,
+            "TuringRollingBenchCrankRadio_AudioEmitter"
         )
         XCTAssertEqual(
             TuringRollingBenchEntityName.runtimeStaticLane,

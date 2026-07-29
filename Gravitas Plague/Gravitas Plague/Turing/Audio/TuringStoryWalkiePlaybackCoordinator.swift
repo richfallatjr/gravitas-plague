@@ -6,6 +6,7 @@ actor TuringStoryWalkiePlaybackCoordinator {
         case walkieSpatial
         case playerGlobal
         case playerHeadTracked
+        case crankRadioSpatial
     }
 
     struct Policy: Sendable {
@@ -23,6 +24,9 @@ actor TuringStoryWalkiePlaybackCoordinator {
         var prerecordingGainDB: Float = -6
         var fillerGainDB: Float = -6
         var stopSendingStaticBeforeGeneratedSegmentZero = false
+        var prerecordingPrecedesGenerated = false
+        var externalGeneratedGapBridge:
+            (any TuringGeneratedGapBridge)?
         var fillerDirectoryCandidates = [
             "Turing/Audio/big-mike-filler",
             "Turing/big-mike-filler",
@@ -202,7 +206,8 @@ actor TuringStoryWalkiePlaybackCoordinator {
         self.pendingPrerecording = nil
         self.pendingAuthoredBridges.removeAll(keepingCapacity: true)
         self.acceptedAuthoredBridgeIDs.removeAll(keepingCapacity: true)
-        self.prerecordingExpected = false
+        self.prerecordingExpected =
+            policy.prerecordingPrecedesGenerated
         self.prerecordingHasPlayed = false
         self.skippedSegments.removeAll(keepingCapacity: true)
         self.allComputeFinished = false
@@ -238,6 +243,8 @@ actor TuringStoryWalkiePlaybackCoordinator {
           weightedFillerEntryCount: \(fillerFiles.count)
           firstSegmentPrerollFillerCount: \(policy.firstSegmentPrerollFillerCount)
           chainFillerFromPrerecordingToFirstGenerated: \(policy.chainFillerFromPrerecordingToFirstGenerated)
+          prerecordingPrecedesGenerated: \(policy.prerecordingPrecedesGenerated)
+          externalGeneratedGapBridge: \(policy.externalGeneratedGapBridge.map { String(reflecting: type(of: $0)) } ?? "none")
         """)
 
         await reconcile(reason: "runStarted")
@@ -543,6 +550,9 @@ actor TuringStoryWalkiePlaybackCoordinator {
         deadAirTask?.cancel()
         deadAirTask = nil
         await cancelActivePlayback(reason: reason)
+        await endExternalGeneratedGap(
+            reason: "runCancelled.\(reason)"
+        )
         if let runID {
             await fileStore.endRun(runID, reason: "cancel.\(reason)")
         }
@@ -656,6 +666,31 @@ actor TuringStoryWalkiePlaybackCoordinator {
             return
         }
 
+        if isFinished {
+            await finishRun(reason: "allDone")
+            return
+        }
+
+        if allComputeFinished == false,
+           let bridge =
+                policy.externalGeneratedGapBridge,
+           let runID {
+            await bridge.beginGap(
+                ownerID: runID,
+                waitingForSegmentIndex:
+                    nextPlaybackSegmentIndex,
+                reason:
+                    "waitingForExactGenerated.\(reason)"
+            )
+            print("""
+            [TuringPlaybackRebuild] external gap bridge
+              runID: \(runID)
+              waitingForSegmentIndex: \(nextPlaybackSegmentIndex)
+              bridgeType: \(String(reflecting: type(of: bridge)))
+            """)
+            return
+        }
+
         if allComputeFinished == false,
            policy.chainFillerWhileComputeWithoutSpeech {
             if shouldUseDeadAirWhileWaitingForInitialGeneratedSegment {
@@ -698,7 +733,8 @@ actor TuringStoryWalkiePlaybackCoordinator {
         case .filler:
             gainDB = policy.fillerGainDB
         case .commSFX, .ambientStatic, .sendingStatic,
-             .radioCue, .radioBroadcast:
+             .radioCue, .radioBroadcast,
+             .crankRadioTuningFiller:
             gainDB = 0
         }
         let route: TuringAudioRouteID
@@ -709,6 +745,8 @@ actor TuringStoryWalkiePlaybackCoordinator {
             route = .richGlobal
         case .playerHeadTracked:
             route = .richHeadTracked
+        case .crankRadioSpatial:
+            route = .rollingBenchRadio
         }
         return try await endpoint.play(
             TuringAudioPlaybackRequest(
@@ -740,6 +778,8 @@ actor TuringStoryWalkiePlaybackCoordinator {
             return "none"
         case .playerHeadTracked:
             return "TuringRichHeadset_AudioEmitter"
+        case .crankRadioSpatial:
+            return "TuringRollingBenchCrankRadio_AudioEmitter"
         }
     }
 
@@ -750,6 +790,8 @@ actor TuringStoryWalkiePlaybackCoordinator {
         case .playerGlobal:
             return "AVAudioPlayerDelegate.audioPlayerDidFinishPlaying"
         case .playerHeadTracked:
+            return "AudioPlaybackController.completionHandler"
+        case .crankRadioSpatial:
             return "AudioPlaybackController.completionHandler"
         }
     }
@@ -763,6 +805,10 @@ actor TuringStoryWalkiePlaybackCoordinator {
             return
         }
         do {
+            await endExternalGeneratedGap(
+                reason:
+                    "prerecordingStarting.\(clip.id).\(reason)"
+            )
             print("""
             [TuringPlaybackTrace] prerecording playback request
               id: \(clip.id)
@@ -875,6 +921,10 @@ actor TuringStoryWalkiePlaybackCoordinator {
             return
         }
         do {
+            await endExternalGeneratedGap(
+                reason:
+                    "generatedReady.\(clip.segmentIndex).\(reason)"
+            )
             if clip.segmentIndex == 0,
                policy.stopSendingStaticBeforeGeneratedSegmentZero {
                 await TuringWalkieCommsFXController.shared
@@ -1251,6 +1301,9 @@ actor TuringStoryWalkiePlaybackCoordinator {
 
     private func finishRun(reason: String) async {
         guard runActive else { return }
+        await endExternalGeneratedGap(
+            reason: "runFinished.\(reason)"
+        )
         runActive = false
         if let runID {
             await fileStore.endRun(runID, reason: "finish.\(reason)")
@@ -1261,6 +1314,20 @@ actor TuringStoryWalkiePlaybackCoordinator {
           reason: \(reason)
         """)
         resumeWaiters()
+    }
+
+    private func endExternalGeneratedGap(
+        reason: String
+    ) async {
+        guard let bridge =
+                policy.externalGeneratedGapBridge,
+              let runID else {
+            return
+        }
+        await bridge.endGap(
+            ownerID: runID,
+            reason: reason
+        )
     }
 
     private func resumeWaiters() {

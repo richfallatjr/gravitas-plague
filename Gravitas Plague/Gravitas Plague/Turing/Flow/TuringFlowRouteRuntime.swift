@@ -30,6 +30,11 @@ protocol TuringFlowRouteRuntime: AnyObject, Sendable {
         identity: TuringFlowIdentity
     ) async throws
 
+    func playPrerecordingLeadInIfNeeded(
+        descriptor: TuringFlowDescriptor,
+        identity: TuringFlowIdentity
+    ) async throws
+
     func playSendIfNeeded(
         descriptor: TuringFlowDescriptor,
         identity: TuringFlowIdentity
@@ -42,6 +47,13 @@ protocol TuringFlowRouteRuntime: AnyObject, Sendable {
     ) async
 }
 
+extension TuringFlowRouteRuntime {
+    func playPrerecordingLeadInIfNeeded(
+        descriptor: TuringFlowDescriptor,
+        identity: TuringFlowIdentity
+    ) async throws {
+    }
+}
 
 extension TuringFlowRouteRuntime {
     func makeGeneratedOnlyPlayback(
@@ -93,7 +105,9 @@ extension TuringFlowRouteRuntime {
             prerecordingID: "none",
             voicePromptID: "conversationPrompt",
             interactionSurface:
-                interactionSurface
+                interactionSurface,
+            playbackRunID:
+                conversationRunID.uuidString
         )
 
         return (
@@ -140,7 +154,8 @@ final class TuringFlowRouteRegistry {
         let resolvedBuiltIns = builtIns ?? [
             TuringBigMikeWalkieFlowRoute(),
             TuringRichWalkieFlowRoute(),
-            TuringRichRoomFlowRoute()
+            TuringRichRoomFlowRoute(),
+            TuringBroadcasterCrankRadioFlowRoute()
         ]
         for route in resolvedBuiltIns {
             routes[route.outputRoute.rawValue] = route
@@ -171,7 +186,7 @@ final class TuringFlowRouteRegistry {
 }
 
 @MainActor
-private enum TuringFlowPlaybackPolicyBuilder {
+enum TuringFlowPlaybackPolicyBuilder {
     static func make(
         descriptor: TuringFlowDescriptor,
         character: TuringCharacterRuntimeDefinition,

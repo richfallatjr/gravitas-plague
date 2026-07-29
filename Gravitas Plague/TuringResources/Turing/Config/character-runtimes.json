@@ -118,6 +118,54 @@
           "caf"
         ]
       }
+    },
+    {
+      "characterID": "broadcaster",
+      "displayName": "Broadcaster",
+      "voiceID": "broadcaster_base_clone_v1",
+      "cloneProfileResourcePath": "Turing/Voices/Cloned/Broadcaster/BaseClone/broadcaster_base_clone_v1.qwenclone",
+      "allowedOutputRoutes": [
+        "crankRadioSpatial"
+      ],
+      "outputProcessing": {
+        "playbackRate": 0.85
+      },
+      "qwen": {
+        "maxNewRows": 160,
+        "useExactReferenceRowCount": true,
+        "referenceWindowStrategy": "full",
+        "skipSegmentFailures": true,
+        "decoding": {
+          "talker": {
+            "mode": "greedy",
+            "backend": "materializedHostTopK",
+            "temperature": 1.0,
+            "topK": 1,
+            "topP": 1.0,
+            "repetitionPenalty": 1.0
+          },
+          "codePredictor": {
+            "mode": "greedy",
+            "backend": "materializedHostTopK",
+            "temperature": 1.0,
+            "topK": 1,
+            "topP": 1.0,
+            "repetitionPenalty": 1.0
+          }
+        },
+        "qualityGate": {
+          "requireEOSBeforeDecode": false,
+          "minimumPeakAbs": 0.0,
+          "minimumRMS": 0.0
+        }
+      },
+      "audio": {
+        "generatedGainDB": -2.158107,
+        "prerecordingGainDB": -2.158107,
+        "fillerGainDB": -14,
+        "fillerDirectoryCandidates": [],
+        "fillerExtensions": []
+      }
     }
   ]
 }

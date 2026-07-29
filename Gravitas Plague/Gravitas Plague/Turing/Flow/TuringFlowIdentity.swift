@@ -16,7 +16,8 @@ nonisolated struct TuringFlowIdentity: Sendable, Hashable {
         characterID: String,
         prerecordingID: String,
         voicePromptID: String,
-        interactionSurface: StoryInteractionSurfaceID = .walkie
+        interactionSurface: StoryInteractionSurfaceID = .walkie,
+        playbackRunID: String? = nil
     ) {
         self.flowInstanceID = flowInstanceID
         self.scriptPointID = scriptPointID
@@ -24,7 +25,9 @@ nonisolated struct TuringFlowIdentity: Sendable, Hashable {
         self.prerecordingID = prerecordingID
         self.voicePromptID = voicePromptID
         self.interactionSurface = interactionSurface
-        playbackRunID = "\(scriptPointID).\(flowInstanceID.uuidString)"
+        self.playbackRunID =
+            playbackRunID ??
+            "\(scriptPointID).\(flowInstanceID.uuidString)"
     }
 }
 

@@ -63,6 +63,7 @@ enum TuringVoicePromptTemplateID:
 {
   case characterIntent
   case roomObjectMemory
+  case broadcasterRadio
 
   var resourcePath: String {
     switch self {
@@ -70,6 +71,8 @@ enum TuringVoicePromptTemplateID:
       return "Turing/Prompts/voicePrompt_characterIntent.txt"
     case .roomObjectMemory:
       return "Turing/Prompts/voicePrompt_roomObjectMemory.txt"
+    case .broadcasterRadio:
+      return "Turing/Prompts/voicePrompt_broadcasterRadio.txt"
     }
   }
 
@@ -79,6 +82,8 @@ enum TuringVoicePromptTemplateID:
       return "voicePrompt_characterIntent"
     case .roomObjectMemory:
       return "voicePrompt_roomObjectMemory"
+    case .broadcasterRadio:
+      return "voicePrompt_broadcasterRadio"
     }
   }
 
@@ -88,6 +93,8 @@ enum TuringVoicePromptTemplateID:
       return .standard
     case .roomObjectMemory:
       return .roomObjectMemory
+    case .broadcasterRadio:
+      return .broadcasterRadio
     }
   }
 }
@@ -148,7 +155,9 @@ enum TuringPromptVoiceStoryContextBuilder {
     _ descriptor: TuringVoicePromptTriggerDescriptor
   ) -> TuringAuthoredPromptVoiceContext {
     if descriptor.effectivePromptTemplateID ==
-        .roomObjectMemory {
+        .roomObjectMemory ||
+       descriptor.effectivePromptTemplateID ==
+        .broadcasterRadio {
       return TuringAuthoredPromptVoiceContext(
         voicePromptID: descriptor.voicePromptID,
         storyContext:

@@ -1,90 +1,184 @@
 import Foundation
 
-actor TuringRollingBenchRadioActor {
+protocol TuringRollingBenchRadioBedControlling: Sendable {
+    func prepareResources() async throws
+    func install(
+        endpoint: any TuringAudioPlaybackEndpoint
+    ) async
+    func beginSession(ownerID: String) async throws
+    func playEmergencyCue(ownerID: String) async throws
+    func endSession(ownerID: String, reason: String) async
+    func reset(reason: String) async
+    func unload(reason: String) async
+}
+
+actor TuringRollingBenchRadioBedActor:
+    TuringRollingBenchRadioBedControlling
+{
+    static let shared = TuringRollingBenchRadioBedActor()
+
     private struct Assets: Sendable {
-        let staticURL: URL
         let cueURL: URL
-        let broadcastURL: URL
     }
 
     private let loader: TuringRealityAudioResourceLoader
     private var endpoint: (any TuringAudioPlaybackEndpoint)?
     private var assets: Assets?
-    private var eventTask: Task<Void, Never>?
-    private var repeatDelayTask: Task<Void, Never>?
-    private var cycleID = UUID()
-    private var isPlaying = false
-    private var staticHandle: TuringAudioPlaybackHandle?
+    private var activeOwnerID: String?
     private var cueHandle: TuringAudioPlaybackHandle?
-    private var broadcastHandle: TuringAudioPlaybackHandle?
+    private var eventTask: Task<Void, Never>?
+    private var cueWaiters:
+        [UUID: CheckedContinuation<Void, Error>] = [:]
+    private var completedCueRequestIDs = Set<UUID>()
+    private var failedCueRequests: [UUID: String] = [:]
 
-    init(loader: TuringRealityAudioResourceLoader = .shared) {
+    init(
+        loader: TuringRealityAudioResourceLoader = .shared
+    ) {
         self.loader = loader
     }
 
     func prepareResources() async throws {
-        let assets = try resolveAssets()
+        let resolved = try resolveAssets()
         _ = try await loader.load(
-            fileURL: assets.staticURL,
-            shouldLoop: true,
-            cachePolicy: .bundled
-        )
-        _ = try await loader.load(
-            fileURL: assets.cueURL,
+            fileURL: resolved.cueURL,
             shouldLoop: false,
             cachePolicy: .bundled
         )
-        _ = try await loader.load(
-            fileURL: assets.broadcastURL,
-            shouldLoop: false,
-            cachePolicy: .bundled
-        )
-        self.assets = assets
-        print("[TuringRollingBenchRadio] resources prepared off MainActor")
+        assets = resolved
+        print("[TuringCrankRadioCue] resources prepared off MainActor")
     }
 
-    func install(endpoint: any TuringAudioPlaybackEndpoint) async {
-        await stop(reason: "install")
-        eventTask?.cancel()
+    func install(
+        endpoint: any TuringAudioPlaybackEndpoint
+    ) async {
+        await reset(reason: "replaceEndpoint")
         self.endpoint = endpoint
         let stream = await endpoint.events()
         eventTask = Task { [weak self] in
             for await event in stream {
-                guard Task.isCancelled == false else { return }
+                guard Task.isCancelled == false else {
+                    return
+                }
                 await self?.received(event)
             }
         }
     }
 
-    func play(source: String) async throws {
-        guard isPlaying == false, let endpoint, let assets else { return }
-        await stopOwnedHandles(reason: "newPlay")
-        cycleID = UUID()
-        isPlaying = true
-        let cycle = cycleID
-        staticHandle = try await endpoint.play(
-            request(
-                fileURL: assets.staticURL,
-                kind: .ambientStatic,
-                label: "rollingBenchStatic",
-                gainDB: Float(TuringRollingBenchTuning.staticGainDB),
-                loops: true,
-                cycleID: cycle
+    func beginSession(ownerID: String) async throws {
+        guard endpoint != nil,
+              assets != nil else {
+            throw TuringRuntimeError.invalidConfig(
+                "Crank-radio cue is not prepared and installed."
             )
-        )
-        try await startCue(cycleID: cycle)
-        print("[TuringRollingBenchRadio] cycle started cycleID=\(cycle.uuidString) source=\(source)")
+        }
+        if activeOwnerID == ownerID {
+            return
+        }
+        guard activeOwnerID == nil else {
+            throw TuringRuntimeError.invalidConfig(
+                "Crank-radio bed belongs to \(activeOwnerID ?? "unknown")."
+            )
+        }
+
+        activeOwnerID = ownerID
+        print("""
+        [TuringCrankRadioCue] session started
+          ownerID: \(ownerID)
+          continuousStaticOwned: false
+        """)
     }
 
-    func pause(source: String) async {
-        await stop(reason: "pause.\(source)")
+    func playEmergencyCue(ownerID: String) async throws {
+        guard activeOwnerID == ownerID,
+              let endpoint,
+              let assets else {
+            throw TuringRuntimeError.invalidConfig(
+                "Crank-radio cue requested without the active session."
+            )
+        }
+
+        if let cueHandle {
+            await endpoint.stop(
+                cueHandle,
+                reason: "replaceEmergencyCue"
+            )
+            self.cueHandle = nil
+        }
+
+        let handle = try await endpoint.play(
+            request(
+                ownerID: ownerID,
+                fileURL: assets.cueURL,
+                kind: .radioCue,
+                label: "crankRadioEmergencyCue",
+                gainDB:
+                    Float(
+                        TuringRollingBenchTuning.cueGainDB
+                    ),
+                loops: false
+            )
+        )
+        cueHandle = handle
+
+        try await withCheckedThrowingContinuation {
+            continuation in
+            if completedCueRequestIDs.remove(
+                handle.requestID
+            ) != nil {
+                continuation.resume()
+            } else if let message =
+                failedCueRequests.removeValue(
+                    forKey: handle.requestID
+                ) {
+                continuation.resume(
+                    throwing:
+                        TuringRuntimeError.invalidConfig(
+                            message
+                        )
+                )
+            } else {
+                cueWaiters[handle.requestID] =
+                    continuation
+            }
+        }
+    }
+
+    func endSession(
+        ownerID: String,
+        reason: String
+    ) async {
+        guard activeOwnerID == ownerID else {
+            return
+        }
+        await stopOwnedHandles(reason: reason)
+        activeOwnerID = nil
+        finishCueWaiters(throwing: CancellationError())
+        print("""
+        [TuringCrankRadioCue] session ended
+          ownerID: \(ownerID)
+          reason: \(reason)
+        """)
     }
 
     func reset(reason: String) async {
-        await stop(reason: "reset.\(reason)")
+        if let ownerID = activeOwnerID {
+            await endSession(
+                ownerID: ownerID,
+                reason: reason
+            )
+        } else {
+            await stopOwnedHandles(reason: reason)
+        }
         eventTask?.cancel()
         eventTask = nil
         endpoint = nil
+        completedCueRequestIDs.removeAll(
+            keepingCapacity: false
+        )
+        failedCueRequests.removeAll(
+            keepingCapacity: false
+        )
     }
 
     func unload(reason: String) async {
@@ -92,116 +186,116 @@ actor TuringRollingBenchRadioActor {
         assets = nil
     }
 
-    private func startCue(cycleID: UUID) async throws {
-        guard isPlaying, self.cycleID == cycleID,
-              let endpoint, let assets else { return }
-        cueHandle = try await endpoint.play(
-            request(
-                fileURL: assets.cueURL,
-                kind: .radioCue,
-                label: "emergencyBeep",
-                gainDB: Float(TuringRollingBenchTuning.cueGainDB),
-                loops: false,
-                cycleID: cycleID
-            )
-        )
-    }
-
-    private func startBroadcast(cycleID: UUID) async throws {
-        guard isPlaying, self.cycleID == cycleID,
-              let endpoint, let assets else { return }
-        broadcastHandle = try await endpoint.play(
-            request(
-                fileURL: assets.broadcastURL,
-                kind: .radioBroadcast,
-                label: "emergencyBroadcast",
-                gainDB: Float(TuringRollingBenchTuning.broadcastGainDB),
-                loops: false,
-                cycleID: cycleID
-            )
-        )
-    }
-
-    private func received(_ event: TuringAudioPlaybackEvent) async {
-        guard case .completed(let handle, let successfully) = event,
-              successfully else { return }
-        let activeCycle = cycleID
-        if cueHandle == handle {
-            cueHandle = nil
-            guard isPlaying else { return }
-            do {
-                try await startBroadcast(cycleID: activeCycle)
-            } catch {
-                await stop(reason: "broadcastStartFailed")
-            }
-            return
-        }
-        if broadcastHandle == handle {
-            broadcastHandle = nil
-            guard isPlaying else { return }
-            scheduleRepeat(cycleID: activeCycle)
-        }
-    }
-
-    private func scheduleRepeat(cycleID: UUID) {
-        repeatDelayTask?.cancel()
-        repeatDelayTask = Task { [weak self] in
-            do {
-                try await Task.sleep(
-                    for: TuringRollingBenchTuning.broadcastRepeatDelay
-                )
-            } catch {
+    private func received(
+        _ event: TuringAudioPlaybackEvent
+    ) async {
+        switch event {
+        case .completed(
+            let handle,
+            let successfully
+        ):
+            guard cueHandle == handle else {
                 return
             }
-            await self?.repeatDelayCompleted(cycleID: cycleID)
-        }
-    }
-
-    private func repeatDelayCompleted(cycleID: UUID) async {
-        guard isPlaying, self.cycleID == cycleID else { return }
-        repeatDelayTask = nil
-        do {
-            try await startCue(cycleID: cycleID)
-        } catch {
-            await stop(reason: "repeatCueStartFailed")
-        }
-    }
-
-    private func stop(reason: String) async {
-        cycleID = UUID()
-        isPlaying = false
-        repeatDelayTask?.cancel()
-        repeatDelayTask = nil
-        await stopOwnedHandles(reason: reason)
-    }
-
-    private func stopOwnedHandles(reason: String) async {
-        guard let endpoint else {
-            staticHandle = nil
             cueHandle = nil
-            broadcastHandle = nil
+            if let waiter =
+                cueWaiters.removeValue(
+                    forKey: handle.requestID
+                ) {
+                if successfully {
+                    waiter.resume()
+                } else {
+                    waiter.resume(
+                        throwing:
+                            TuringRuntimeError.invalidConfig(
+                                "Crank-radio emergency cue playback failed."
+                            )
+                    )
+                }
+            } else if successfully {
+                completedCueRequestIDs.insert(
+                    handle.requestID
+                )
+            } else {
+                failedCueRequests[handle.requestID] =
+                    "Crank-radio emergency cue playback failed."
+            }
+
+        case .cancelled(let handle, _):
+            guard cueHandle == handle else {
+                return
+            }
+            cueHandle = nil
+            cueWaiters.removeValue(
+                forKey: handle.requestID
+            )?.resume(throwing: CancellationError())
+
+        case .failed(
+            let requestID,
+            _,
+            let message
+        ):
+            guard cueHandle?.requestID == requestID else {
+                return
+            }
+            cueHandle = nil
+            if let waiter =
+                cueWaiters.removeValue(
+                    forKey: requestID
+                ) {
+                waiter.resume(
+                    throwing:
+                        TuringRuntimeError.invalidConfig(
+                            message
+                        )
+                )
+            } else {
+                failedCueRequests[requestID] = message
+            }
+
+        case .started:
+            break
+        }
+    }
+
+    private func stopOwnedHandles(
+        reason: String
+    ) async {
+        guard let endpoint else {
+            cueHandle = nil
             return
         }
-        let handles = [staticHandle, cueHandle, broadcastHandle].compactMap { $0 }
-        staticHandle = nil
+        let handles = [cueHandle].compactMap { $0 }
         cueHandle = nil
-        broadcastHandle = nil
         for handle in handles {
-            await endpoint.stop(handle, reason: reason)
+            await endpoint.stop(
+                handle,
+                reason: reason
+            )
+        }
+    }
+
+    private func finishCueWaiters(
+        throwing error: Error
+    ) {
+        let waiters = cueWaiters.values
+        cueWaiters.removeAll(keepingCapacity: false)
+        for waiter in waiters {
+            waiter.resume(throwing: error)
         }
     }
 
     private func request(
+        ownerID: String,
         fileURL: URL,
         kind: TuringAudioClipKind,
         label: String,
         gainDB: Float,
-        loops: Bool,
-        cycleID: UUID
+        loops: Bool
     ) -> TuringAudioPlaybackRequest {
         .init(
             requestID: UUID(),
-            runID: "rollingBench.\(cycleID.uuidString)",
+            runID: ownerID,
             fileURL: fileURL,
             kind: kind,
             route: .rollingBenchRadio,
@@ -214,18 +308,26 @@ actor TuringRollingBenchRadioActor {
 
     private func resolveAssets() throws -> Assets {
         try Assets(
-            staticURL: requireResource(name: "Narrow-band-analog", ext: "wav"),
-            cueURL: requireResource(name: "Create_a_short_emerg_beeping", ext: "wav"),
-            broadcastURL: requireResource(name: "EmergencyBroadcast", ext: "mp3")
+            cueURL:
+                requireResource(
+                    name: "Create_a_short_emerg_beeping",
+                    ext: "wav"
+                )
         )
     }
 
-    private func requireResource(name: String, ext: String) throws -> URL {
+    private func requireResource(
+        name: String,
+        ext: String
+    ) throws -> URL {
         let url = Bundle.main.url(
             forResource: name,
             withExtension: ext,
             subdirectory: "Turing/Audio/rolling-bench"
-        ) ?? Bundle.main.url(forResource: name, withExtension: ext)
+        ) ?? Bundle.main.url(
+            forResource: name,
+            withExtension: ext
+        )
         guard let url else {
             throw TuringRuntimeError.invalidConfig(
                 "Missing rolling-bench radio asset: \(name).\(ext)"

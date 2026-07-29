@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "voiceID": "broadcaster_base_clone_v1",
+  "defaultVariantID": "broadcaster_reference_fast_01",
+  "variants": [
+    {
+      "variantID": "broadcaster_reference_fast_01",
+      "displayName": "Broadcaster Reference Fast 01",
+      "enabled": true
+    }
+  ]
+}

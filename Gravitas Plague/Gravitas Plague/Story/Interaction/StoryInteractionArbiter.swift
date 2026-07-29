@@ -7,7 +7,8 @@ actor StoryInteractionArbiter {
     private var turingGates:
         [StoryInteractionSurfaceID: StoryTuringGateState] = [
             .walkie: .closed,
-            .dadFrame: .closed
+            .dadFrame: .closed,
+            .crankRadio: .closed
         ]
     private var doorState: StoryDoorLifecycleState = .closedUnloaded
     private var exclusiveLease: StoryInteractionLease?
@@ -213,7 +214,8 @@ actor StoryInteractionArbiter {
     func reset(reason: String) async {
         turingGates = [
             .walkie: .closed,
-            .dadFrame: .closed
+            .dadFrame: .closed,
+            .crankRadio: .closed
         ]
         doorState = .closedUnloaded
         exclusiveLease = nil
@@ -277,6 +279,8 @@ actor StoryInteractionArbiter {
         let walkie: StoryWalkiePresentation
         let door: StoryDoorPresentation
         let dadFrame: StoryDadFramePresentation
+        let crankRadio:
+            StoryCrankRadioPresentation
 
         if let exclusiveLease {
             switch exclusiveLease.owner {
@@ -285,9 +289,11 @@ actor StoryInteractionArbiter {
                 walkie = .hidden
                 door = .hidden
                 dadFrame = .hidden
+                crankRadio = .hidden
             case .battle:
                 walkie = .hidden
                 dadFrame = .hidden
+                crankRadio = .hidden
                 switch doorState {
                 case .closedUnloaded, .loading, .closedReady:
                     capabilities = [.doorOpen]
@@ -302,11 +308,13 @@ actor StoryInteractionArbiter {
                     walkie = .hidden
                     door = .close
                     dadFrame = .hidden
+                    crankRadio = .hidden
                 } else {
                     capabilities = []
                     walkie = .hidden
                     door = .hidden
                     dadFrame = .hidden
+                    crankRadio = .hidden
                 }
             }
         } else if doorState != .closedUnloaded {
@@ -314,17 +322,24 @@ actor StoryInteractionArbiter {
             walkie = .hidden
             door = .hidden
             dadFrame = .hidden
+            crankRadio = .hidden
         } else {
             let walkieGate =
                 turingGates[.walkie] ?? .closed
             let dadGate =
                 turingGates[.dadFrame] ?? .closed
+            let crankRadioGate =
+                turingGates[.crankRadio] ?? .closed
 
-            if walkieGate == .busy || dadGate == .busy {
+            let anyTuringSurfaceBusy =
+                turingGates.values.contains(.busy)
+
+            if anyTuringSurfaceBusy {
                 capabilities = []
                 walkie = .hidden
                 door = .hidden
                 dadFrame = .hidden
+                crankRadio = .hidden
             } else {
                 var resolvedCapabilities:
                     Set<StoryInteractionCapability> = [.doorOpen]
@@ -351,6 +366,21 @@ actor StoryInteractionArbiter {
                     dadFrame = .hidden
                 }
 
+                switch crankRadioGate {
+                case .play:
+                    resolvedCapabilities.insert(
+                        .crankRadioPlay
+                    )
+                    crankRadio = .play
+                case .microphone:
+                    resolvedCapabilities.insert(
+                        .crankRadioMicrophone
+                    )
+                    crankRadio = .microphone
+                case .closed, .busy:
+                    crankRadio = .hidden
+                }
+
                 capabilities = resolvedCapabilities
                 door = .open
             }
@@ -364,7 +394,8 @@ actor StoryInteractionArbiter {
             capabilities: capabilities,
             walkiePresentation: walkie,
             doorPresentation: door,
-            dadFramePresentation: dadFrame
+            dadFramePresentation: dadFrame,
+            crankRadioPresentation: crankRadio
         )
     }
 
@@ -376,12 +407,14 @@ actor StoryInteractionArbiter {
           revision: \(snapshot.revision)
           turingGate: \(snapshot.turingGate.rawValue)
           dadFrameGate: \((turingGates[.dadFrame] ?? .closed).rawValue)
+          crankRadioGate: \((turingGates[.crankRadio] ?? .closed).rawValue)
           doorState: \(snapshot.doorState.rawValue)
           exclusiveOwner: \(snapshot.exclusiveOwner?.logValue ?? "none")
           capabilities: \(snapshot.capabilities.map(\.rawValue).sorted())
           walkie: \(snapshot.walkiePresentation.rawValue)
           door: \(snapshot.doorPresentation.rawValue)
           dadFrame: \(snapshot.dadFramePresentation.rawValue)
+          crankRadio: \(snapshot.crankRadioPresentation.rawValue)
           reason: \(reason)
         """)
         await snapshotHub.yield(snapshot)

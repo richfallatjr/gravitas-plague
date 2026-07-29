@@ -1,6 +1,7 @@
 import Foundation
 
 struct TuringFlowConversationRequest: Sendable {
+    let conversationRunID: UUID
     let characterID: String
     let outputRoute: TuringVoiceOutputContext
     let conversationKey: String
@@ -9,6 +10,7 @@ struct TuringFlowConversationRequest: Sendable {
     let interactionSurface: StoryInteractionSurfaceID
 
     init(
+        conversationRunID: UUID = UUID(),
         characterID: String,
         outputRoute: TuringVoiceOutputContext,
         conversationKey: String,
@@ -16,6 +18,7 @@ struct TuringFlowConversationRequest: Sendable {
         interactionLease: StoryInteractionLease? = nil,
         interactionSurface: StoryInteractionSurfaceID = .walkie
     ) {
+        self.conversationRunID = conversationRunID
         self.characterID = characterID
         self.outputRoute = outputRoute
         self.conversationKey = conversationKey
@@ -43,7 +46,8 @@ enum TuringFlowConversationRunner {
                 interactionLease = try await TuringHighMemoryPreflightCoordinator
                     .shared
                     .acquireInteractionLease(
-                        runID: "conversation.\(UUID().uuidString)",
+                        runID:
+                            "conversation.\(request.conversationRunID.uuidString)",
                         source: "conversationVoice",
                         mode: .manual,
                         interactionSurface:
@@ -102,7 +106,8 @@ enum TuringFlowConversationRunner {
             )
         }
 
-        let conversationRunID = UUID()
+        let conversationRunID =
+            request.conversationRunID
         var failureStage = "validatingPlayerDictation"
 
         await TuringFlowInteractionGateController

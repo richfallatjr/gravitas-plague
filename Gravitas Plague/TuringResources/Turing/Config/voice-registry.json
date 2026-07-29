@@ -40,6 +40,25 @@
       "revision": "sha256:bff36aac5647fcc4c32b64b6fee2473d621f28246b340716c50f4d5997aa765a",
       "defaultVariantID": "rich_reference_01",
       "selectionCatalogPath": "selection-catalog.json"
+    },
+    {
+      "allowFallback": false,
+      "displayName": "Broadcaster",
+      "enabled": true,
+      "id": "broadcaster_base_clone_v1",
+      "kind": "baseCloneProfile",
+      "language": "english",
+      "modelID": "qwen3-tts-12hz-1.7b-base-4bit",
+      "profileKind": "qwenBaseCloneReferenceProfile",
+      "profilePath": "Turing/Voices/Cloned/Broadcaster/BaseClone/broadcaster_base_clone_v1.qwenclone",
+      "runtimeMode": "baseClone",
+      "speakerID": "broadcaster",
+      "voiceID": "broadcaster_base_clone_v1",
+      "characterID": "broadcaster",
+      "resourcePath": "Turing/Voices/Cloned/Broadcaster/BaseClone/broadcaster_base_clone_v1.qwenclone",
+      "revision": "sha256:87dfb34255935a2c879a881e7936a36b907687db2e10c38c9826a2807eaa39e9",
+      "defaultVariantID": "broadcaster_reference_fast_01",
+      "selectionCatalogPath": "selection-catalog.json"
     }
   ]
 }

@@ -14,6 +14,7 @@ enum TuringConversationPromptVariant:
     case standard
     case scriptPoint05
     case roomObjectMemory
+    case broadcasterRadio
 
     static func forScriptPointID(
         _ scriptPointID: String
@@ -42,6 +43,8 @@ enum TuringConversationPromptVariant:
             return "Turing/Prompts/conversationPrompt_scriptPoint05.txt"
         case .roomObjectMemory:
             return "Turing/Prompts/conversationPrompt_roomObjectMemory.txt"
+        case .broadcasterRadio:
+            return "Turing/Prompts/conversationPrompt_broadcasterRadio.txt"
         }
     }
 
@@ -53,6 +56,8 @@ enum TuringConversationPromptVariant:
             return "conversationPrompt_scriptPoint05"
         case .roomObjectMemory:
             return "conversationPrompt_roomObjectMemory"
+        case .broadcasterRadio:
+            return "conversationPrompt_broadcasterRadio"
         }
     }
 }

@@ -1,0 +1,57 @@
+{
+  "allowFallback": false,
+  "allowPrerecordedDialoguePlayback": false,
+  "characterID": "broadcaster",
+  "displayName": "Broadcaster Reference Fast 01",
+  "kind": "baseCloneReferenceVariant",
+  "language": "english",
+  "performance": {
+    "allowedContexts": [
+      "broadcast",
+      "public_safety",
+      "emergency_guidance",
+      "verified_update"
+    ],
+    "blockedContexts": [
+      "private_conversation",
+      "comedy",
+      "panic",
+      "horror_narration"
+    ],
+    "energy": "medium_low",
+    "intensity": 4,
+    "pace": "brisk_formal",
+    "selectionHint": "Default fast Broadcaster reference, slowed to production cadence at playback.",
+    "tags": [
+      "broadcast",
+      "formal",
+      "public-safety",
+      "measured",
+      "authoritative"
+    ],
+    "tone": "measured professional emergency-radio delivery",
+    "volume": "medium"
+  },
+  "qwenArtifacts": {
+    "manifestSHA256": "4f8ae5f981b3a63e2e30f37843f9ae9942c9124e2196b506ad8f899473725637",
+    "mode": "icl",
+    "path": "qwen_artifacts/clone_prompt_manifest.json",
+    "referenceCodesPath": "qwen_artifacts/reference_codes.i32le",
+    "referenceTextTokensPath": "qwen_artifacts/ref_text_tokens.i32le",
+    "safetensorsSHA256": "0fac2d192088a23cdb398871c96066f15b5b383387b151ca427dfb8aa3007085",
+    "speakerEmbeddingPath": "qwen_artifacts/speaker_embedding.f32le",
+    "status": "precomputed"
+  },
+  "reference": {
+    "channels": 1,
+    "normalizedAudioPath": "ref_audio/normalized/ref_24000_mono.wav",
+    "normalizedFormat": "wav_float32_le",
+    "originalAudioPath": "ref_audio/original/broadcaster-reference-fast.mp3",
+    "sampleRate": 24000,
+    "textPath": "ref_text.txt"
+  },
+  "schemaVersion": 1,
+  "sourceProvider": "local_recording",
+  "variantID": "broadcaster_reference_fast_01",
+  "voiceID": "broadcaster_base_clone_v1"
+}
