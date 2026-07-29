@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "prologue.room.rich.dadPhotoMemory.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-dad-photo-memory.mp3",
+  "transcriptMode": "manual",
+  "transcript": "That’s Dad and me at a wedding, about twenty years ago. I barely recognize that version of myself. He was still around then, and the world still made sense. Dad went missing early in the outbreak. No call I could trust, no message, nothing that told me where he went. I keep looking at this picture like it’s gonna give me an answer. He always knew how to take a broken system apart and find the one thing everybody else missed. A lot of what’s keeping me alive came from him. I just don’t know if he’s still out there.",
+  "summary": "Rich looks at an old wedding photograph with his missing father and reflects on what his father taught him.",
+  "voicePromptIntent": "Continue after the authored Rich photo memory using prologue.rich.dadPhotoMemory.followUp.001.",
+  "defaultEmotion": "quiet, reflective, emotionally guarded"
+}

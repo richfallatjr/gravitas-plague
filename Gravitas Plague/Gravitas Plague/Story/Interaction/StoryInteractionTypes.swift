@@ -7,6 +7,16 @@ enum StoryTuringGateState: String, Sendable, Equatable {
     case microphone
 }
 
+enum StoryInteractionSurfaceID:
+    String,
+    Codable,
+    Sendable,
+    Hashable
+{
+    case walkie
+    case dadFrame
+}
+
 enum StoryDoorLifecycleState: String, Sendable, Equatable {
     case closedUnloaded
     case loading
@@ -26,6 +36,8 @@ enum StoryInteractionCapability: String, Sendable, Hashable {
     case rollingBenchRadio
     case hamReceiver
     case handMicrophone
+    case dadFramePlay
+    case dadFrameMicrophone
 }
 
 enum StoryWalkiePresentation: String, Sendable, Equatable {
@@ -38,6 +50,12 @@ enum StoryDoorPresentation: String, Sendable, Equatable {
     case hidden
     case open
     case close
+}
+
+enum StoryDadFramePresentation: String, Sendable, Equatable {
+    case hidden
+    case play
+    case microphone
 }
 
 enum StoryInteractionExclusiveOwner: Sendable, Hashable {
@@ -73,6 +91,27 @@ struct StoryInteractionSnapshot: Sendable, Equatable {
     let capabilities: Set<StoryInteractionCapability>
     let walkiePresentation: StoryWalkiePresentation
     let doorPresentation: StoryDoorPresentation
+    let dadFramePresentation: StoryDadFramePresentation
+
+    init(
+        revision: UInt64,
+        turingGate: StoryTuringGateState,
+        doorState: StoryDoorLifecycleState,
+        exclusiveOwner: StoryInteractionExclusiveOwner?,
+        capabilities: Set<StoryInteractionCapability>,
+        walkiePresentation: StoryWalkiePresentation,
+        doorPresentation: StoryDoorPresentation,
+        dadFramePresentation: StoryDadFramePresentation = .hidden
+    ) {
+        self.revision = revision
+        self.turingGate = turingGate
+        self.doorState = doorState
+        self.exclusiveOwner = exclusiveOwner
+        self.capabilities = capabilities
+        self.walkiePresentation = walkiePresentation
+        self.doorPresentation = doorPresentation
+        self.dadFramePresentation = dadFramePresentation
+    }
 }
 
 enum StoryInteractionClaimError: LocalizedError, Sendable, Equatable {

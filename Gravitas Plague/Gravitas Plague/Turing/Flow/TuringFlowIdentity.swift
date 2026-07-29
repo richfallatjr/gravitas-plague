@@ -8,19 +8,22 @@ nonisolated struct TuringFlowIdentity: Sendable, Hashable {
     let prerecordingID: String
     let voicePromptID: String
     let playbackRunID: String
+    let interactionSurface: StoryInteractionSurfaceID
 
     init(
         flowInstanceID: UUID = UUID(),
         scriptPointID: String,
         characterID: String,
         prerecordingID: String,
-        voicePromptID: String
+        voicePromptID: String,
+        interactionSurface: StoryInteractionSurfaceID = .walkie
     ) {
         self.flowInstanceID = flowInstanceID
         self.scriptPointID = scriptPointID
         self.characterID = characterID
         self.prerecordingID = prerecordingID
         self.voicePromptID = voicePromptID
+        self.interactionSurface = interactionSurface
         playbackRunID = "\(scriptPointID).\(flowInstanceID.uuidString)"
     }
 }
@@ -51,6 +54,7 @@ nonisolated enum TuringFlowLog {
           characterID: \(identity.characterID)
           prerecordingID: \(identity.prerecordingID)
           voicePromptID: \(identity.voicePromptID)
+          interactionSurface: \(identity.interactionSurface.rawValue)
           playbackRunID: \(identity.playbackRunID)\(extra.isEmpty ? "" : "\n\(extra)")
         """)
     }

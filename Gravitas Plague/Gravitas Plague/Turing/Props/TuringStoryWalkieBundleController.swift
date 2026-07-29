@@ -58,6 +58,7 @@ final class TuringStoryWalkieBundleController:
     var walkieRoot: Entity? { anchors?.walkieRoot }
     var dadFrameAudioEmitter: Entity? { anchors?.dadFrameAudioEmitter }
     var dadFrameIconAnchor: Entity? { anchors?.dadFrameIconAnchor }
+    var dadFrameRoot: Entity? { anchors?.dadFrameRoot }
 
     init() {
         root.name = "TuringStoryWalkieBundle_WorldRoot"

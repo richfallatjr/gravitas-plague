@@ -165,7 +165,10 @@ actor TuringFlowEngine {
                 Self.identityVoicePromptID(
                     descriptor: descriptor,
                     voicePrompt: voicePrompt
-                )
+                ),
+            interactionSurface:
+                descriptor.transmission
+                    .effectiveInteractionSurface
         )
 
         activeFlow = identity
@@ -231,6 +234,31 @@ actor TuringFlowEngine {
                         .conversationKey
             )
 
+            if let voicePrompt {
+                let promptVoiceContext =
+                    TuringPromptVoiceStoryContextBuilder.standard(
+                        voicePrompt
+                    )
+                await inputStore.updatePromptVoiceStoryContext(
+                    promptVoiceContext.storyContext,
+                    for:
+                        descriptor.transmission
+                            .conversationKey
+                )
+                await inputStore.updatePromptVariant(
+                    .resolved(
+                        scriptPointID:
+                            descriptor.scriptPointID,
+                        promptTemplateID:
+                            voicePrompt
+                                .effectivePromptTemplateID
+                    ),
+                    for:
+                        descriptor.transmission
+                            .conversationKey
+                )
+            }
+
             if let pipeline =
                 descriptor.transmission.generationPipeline {
                 return await runStagedPipeline(
@@ -288,30 +316,48 @@ actor TuringFlowEngine {
                         TuringPromptVoiceStoryContextBuilder.standard(
                             voicePrompt
                         )
+                    let foundationContext =
+                        TuringFoundationRequestContext(
+                            flowRunID:
+                                identity.flowInstanceID
+                                    .uuidString,
+                            scriptPointID:
+                                descriptor.scriptPointID,
+                            stageID: "promptVoice",
+                            sectionIndex: nil
+                        )
                     let promptPlan =
-                        try await dialogueService
-                            .generateVoicePrompt(
-                                VoicePromptRequest(
-                                    id:
-                                        voicePrompt
-                                            .voicePromptID,
-                                    characterProfileID:
-                                        voicePrompt
-                                            .characterProfileID,
-                                    listenerProfileID:
-                                        voicePrompt
-                                            .listenerProfileID,
-                                    promptContext:
-                                        promptVoiceContext
-                                            .storyContext,
-                                    prerecordingTranscript:
-                                        prerecording
-                                            .transcript,
-                                    storyIntent:
-                                        voicePrompt
-                                            .intent
-                                )
-                            )
+                        try await TuringFoundationRequestScope
+                            .$current.withValue(
+                                foundationContext
+                            ) {
+                                try await dialogueService
+                                    .generateVoicePrompt(
+                                        VoicePromptRequest(
+                                            id:
+                                                voicePrompt
+                                                    .voicePromptID,
+                                            characterProfileID:
+                                                voicePrompt
+                                                    .characterProfileID,
+                                            listenerProfileID:
+                                                voicePrompt
+                                                    .listenerProfileID,
+                                            promptContext:
+                                                promptVoiceContext
+                                                    .storyContext,
+                                            prerecordingTranscript:
+                                                prerecording
+                                                    .transcript,
+                                            storyIntent:
+                                                voicePrompt
+                                                    .intent,
+                                            promptTemplateID:
+                                                voicePrompt
+                                                    .effectivePromptTemplateID
+                                        )
+                                    )
+                            }
                     return TuringFlowCompositeSpeechPlan(
                         segments: promptPlan.segments,
                         promptVoiceContext:
@@ -473,12 +519,20 @@ actor TuringFlowEngine {
                     descriptor.transmission
                         .conversationKey
             )
-            await inputStore.updatePromptVariant(
-                .forScriptPointID(descriptor.scriptPointID),
-                for:
-                    descriptor.transmission
-                        .conversationKey
-            )
+            if let voicePrompt {
+                await inputStore.updatePromptVariant(
+                    .resolved(
+                        scriptPointID:
+                            descriptor.scriptPointID,
+                        promptTemplateID:
+                            voicePrompt
+                                .effectivePromptTemplateID
+                    ),
+                    for:
+                        descriptor.transmission
+                            .conversationKey
+                )
+            }
 
             await createdPlayback
                 .setExpectedGeneratedSegmentCount(

@@ -7,11 +7,8 @@ extension Notification.Name {
 }
 
 @MainActor
-final class TuringFlowInteractionGateController:
-    ObservableObject
-{
-    static let shared =
-        TuringFlowInteractionGateController()
+final class TuringFlowInteractionGateController: ObservableObject {
+    static let shared = TuringFlowInteractionGateController()
 
     enum State: String, Sendable {
         case closed
@@ -20,10 +17,11 @@ final class TuringFlowInteractionGateController:
         case busy
     }
 
-    @Published private(set) var state:
-        State = .closed
+    @Published private(set) var state: State = .closed
+    @Published private(set) var dadFrameState: State = .closed
 
-    private var ownerFlowInstanceID: UUID?
+    private var ownerBySurface:
+        [StoryInteractionSurfaceID: UUID] = [:]
 
     var microphoneEnabled: Bool {
         state == .microphone
@@ -35,70 +33,112 @@ final class TuringFlowInteractionGateController:
 
     private init() {}
 
+    func state(for surfaceID: StoryInteractionSurfaceID) -> State {
+        switch surfaceID {
+        case .walkie:
+            return state
+        case .dadFrame:
+            return dadFrameState
+        }
+    }
+
     func armPlay(reason: String) {
-        guard state == .closed else {
+        armPlay(surfaceID: .walkie, reason: reason)
+    }
+
+    func armPlay(
+        surfaceID: StoryInteractionSurfaceID,
+        reason: String
+    ) {
+        guard state(for: surfaceID) == .closed else {
             print("""
             [TuringFlowGate] play arm ignored
-              state: \(state.rawValue)
+              surface: \(surfaceID.rawValue)
+              state: \(state(for: surfaceID).rawValue)
               reason: \(reason)
             """)
             return
         }
-
-        state = .play
-        ownerFlowInstanceID = nil
-        publish(reason: "playArmed.\(reason)")
+        ownerBySurface[surfaceID] = nil
+        setRaw(
+            .play,
+            surfaceID: surfaceID,
+            reason: "playArmed.\(reason)"
+        )
     }
 
     func forcePlayForStoryTeleport(reason: String) {
-        precondition(ownerFlowInstanceID == nil)
-        state = .play
-        publish(reason: "storyTeleportPlay.\(reason)")
+        precondition(ownerBySurface[.walkie] == nil)
+        setRaw(
+            .play,
+            surfaceID: .walkie,
+            reason: "storyTeleportPlay.\(reason)"
+        )
     }
 
     func forceMicrophoneForStoryTeleport(reason: String) {
-        precondition(ownerFlowInstanceID == nil)
-        state = .microphone
-        publish(reason: "storyTeleportMicrophone.\(reason)")
+        precondition(ownerBySurface[.walkie] == nil)
+        setRaw(
+            .microphone,
+            surfaceID: .walkie,
+            reason: "storyTeleportMicrophone.\(reason)"
+        )
     }
 
     func forceClosedForStoryTeleport(reason: String) {
-        ownerFlowInstanceID = nil
-        state = .closed
-        publish(reason: "storyTeleportHidden.\(reason)")
+        ownerBySurface[.walkie] = nil
+        setRaw(
+            .closed,
+            surfaceID: .walkie,
+            reason: "storyTeleportHidden.\(reason)"
+        )
     }
 
     func claimPlay(reason: String) -> Bool {
-        guard state == .play else {
-            print("""
-            [TuringFlowGate] play claim ignored
-              state: \(state.rawValue)
-              reason: \(reason)
-            """)
+        claimPlay(surfaceID: .walkie, reason: reason)
+    }
+
+    func claimPlay(
+        surfaceID: StoryInteractionSurfaceID,
+        reason: String
+    ) -> Bool {
+        guard state(for: surfaceID) == .play else {
             return false
         }
-
-        state = .busy
-        ownerFlowInstanceID = nil
-        publish(reason: "playClaimed.\(reason)")
+        ownerBySurface[surfaceID] = nil
+        setRaw(
+            .busy,
+            surfaceID: surfaceID,
+            reason: "playClaimed.\(reason)"
+        )
         return true
     }
 
     func restorePlayAfterFailedClaim(reason: String) {
-        guard state == .busy,
-              ownerFlowInstanceID == nil else {
-            return
-        }
-
-        state = .play
-        publish(reason: "playClaimFailed.\(reason)")
+        restorePlayAfterFailedClaim(
+            surfaceID: .walkie,
+            reason: reason
+        )
     }
 
-    func beginFlow(
-        identity: TuringFlowIdentity
+    func restorePlayAfterFailedClaim(
+        surfaceID: StoryInteractionSurfaceID,
+        reason: String
     ) {
-        ownerFlowInstanceID =
-            identity.flowInstanceID
+        guard state(for: surfaceID) == .busy,
+              ownerBySurface[surfaceID] == nil else {
+            return
+        }
+        setRaw(
+            .play,
+            surfaceID: surfaceID,
+            reason: "playClaimFailed.\(reason)"
+        )
+    }
+
+    func beginFlow(identity: TuringFlowIdentity) {
+        let surfaceID = identity.interactionSurface
+        ownerBySurface[surfaceID] = identity.flowInstanceID
         set(
             .busy,
             identity: identity,
@@ -107,17 +147,16 @@ final class TuringFlowInteractionGateController:
     }
 
     func applyCompletionGate(
-        _ gate:
-            TuringFlowDescriptor.Progression
-            .InteractionGate,
+        _ gate: TuringFlowDescriptor.Progression.InteractionGate,
         identity: TuringFlowIdentity
     ) {
-        guard ownerFlowInstanceID ==
-                identity.flowInstanceID else {
+        let surfaceID = identity.interactionSurface
+        guard ownerBySurface[surfaceID] == identity.flowInstanceID else {
             print("""
             [TuringFlowGate] stale completion ignored
+              surface: \(surfaceID.rawValue)
               flowInstanceID: \(identity.flowInstanceID.uuidString)
-              ownerFlowInstanceID: \(ownerFlowInstanceID?.uuidString ?? "none")
+              ownerFlowInstanceID: \(ownerBySurface[surfaceID]?.uuidString ?? "none")
             """)
             return
         }
@@ -131,32 +170,46 @@ final class TuringFlowInteractionGateController:
         case .play:
             next = .play
         }
+        set(next, identity: identity, reason: "pointCompleted")
+    }
 
-        set(
-            next,
-            identity: identity,
-            reason: "pointCompleted"
+    func beginConversation(conversationRunID: UUID) {
+        beginConversation(
+            conversationRunID: conversationRunID,
+            surfaceID: .walkie
         )
     }
 
     func beginConversation(
-        conversationRunID: UUID
+        conversationRunID: UUID,
+        surfaceID: StoryInteractionSurfaceID
     ) {
-        state = .busy
-        publish(
-            reason:
-                "conversationStarted.\(conversationRunID.uuidString)"
+        ownerBySurface[surfaceID] = conversationRunID
+        setRaw(
+            .busy,
+            surfaceID: surfaceID,
+            reason: "conversationStarted.\(conversationRunID.uuidString)"
         )
     }
 
     func restoreMicrophoneAfterConversation(
         conversationRunID: UUID
     ) {
-        state = .microphone
-        ownerFlowInstanceID = nil
-        publish(
-            reason:
-                "conversationCompleted.\(conversationRunID.uuidString)"
+        restoreMicrophoneAfterConversation(
+            conversationRunID: conversationRunID,
+            surfaceID: .walkie
+        )
+    }
+
+    func restoreMicrophoneAfterConversation(
+        conversationRunID: UUID,
+        surfaceID: StoryInteractionSurfaceID
+    ) {
+        ownerBySurface[surfaceID] = nil
+        setRaw(
+            .microphone,
+            surfaceID: surfaceID,
+            reason: "conversationCompleted.\(conversationRunID.uuidString)"
         )
     }
 
@@ -164,61 +217,82 @@ final class TuringFlowInteractionGateController:
         conversationRunID: UUID,
         reason: String
     ) {
-        state = .microphone
-        ownerFlowInstanceID = nil
-        publish(
-            reason:
-                "progressionFailed.\(conversationRunID.uuidString).\(reason)"
+        restoreMicrophoneAfterProgressionFailure(
+            conversationRunID: conversationRunID,
+            surfaceID: .walkie,
+            reason: reason
         )
+    }
 
-        print("""
-        [TuringFlowGate] microphone recovered after progression failure
-          conversationRunID: \(conversationRunID.uuidString)
-          state: \(state.rawValue)
-          reason: \(reason)
-        """)
+    func restoreMicrophoneAfterProgressionFailure(
+        conversationRunID: UUID,
+        surfaceID: StoryInteractionSurfaceID,
+        reason: String
+    ) {
+        ownerBySurface[surfaceID] = nil
+        setRaw(
+            .microphone,
+            surfaceID: surfaceID,
+            reason: "progressionFailed.\(conversationRunID.uuidString).\(reason)"
+        )
     }
 
     func ensureMicrophoneAvailable(reason: String) {
-        let previousState = state
-        state = .microphone
-        ownerFlowInstanceID = nil
-        publish(reason: reason)
+        ensureMicrophoneAvailable(
+            surfaceID: .walkie,
+            reason: reason
+        )
+    }
 
+    func ensureMicrophoneAvailable(
+        surfaceID: StoryInteractionSurfaceID,
+        reason: String
+    ) {
+        let previous = state(for: surfaceID)
+        ownerBySurface[surfaceID] = nil
+        setRaw(
+            .microphone,
+            surfaceID: surfaceID,
+            reason: reason
+        )
         print("""
         [TuringFlowGate] terminal microphone verified
-          previousState: \(previousState.rawValue)
-          state: \(state.rawValue)
-          repaired: \(previousState != .microphone)
+          surface: \(surfaceID.rawValue)
+          previousState: \(previous.rawValue)
+          state: \(state(for: surfaceID).rawValue)
+          repaired: \(previous != .microphone)
           reason: \(reason)
         """)
     }
 
-    func closeForScheduledProgression(
-        reason: String
-    ) {
-        state = .closed
-        ownerFlowInstanceID = nil
-        publish(reason: reason)
+    func closeForScheduledProgression(reason: String) {
+        ownerBySurface[.walkie] = nil
+        setRaw(
+            .closed,
+            surfaceID: .walkie,
+            reason: reason
+        )
     }
 
-    func failFlow(
-        identity: TuringFlowIdentity,
-        reason: String
-    ) {
-        guard ownerFlowInstanceID ==
-                identity.flowInstanceID else {
+    func failFlow(identity: TuringFlowIdentity, reason: String) {
+        let surfaceID = identity.interactionSurface
+        guard ownerBySurface[surfaceID] == identity.flowInstanceID else {
             return
         }
-        state = .closed
-        ownerFlowInstanceID = nil
-        publish(reason: "flowFailed.\(reason)")
+        ownerBySurface[surfaceID] = nil
+        setRaw(
+            .closed,
+            surfaceID: surfaceID,
+            reason: "flowFailed.\(reason)"
+        )
     }
 
     func reset(reason: String) {
+        ownerBySurface.removeAll(keepingCapacity: false)
         state = .closed
-        ownerFlowInstanceID = nil
-        publish(reason: "reset.\(reason)")
+        dadFrameState = .closed
+        publish(surfaceID: .walkie, reason: "reset.\(reason)")
+        publish(surfaceID: .dadFrame, reason: "reset.\(reason)")
     }
 
     private func set(
@@ -226,33 +300,52 @@ final class TuringFlowInteractionGateController:
         identity: TuringFlowIdentity,
         reason: String
     ) {
-        state = newState
+        let surfaceID = identity.interactionSurface
         if newState != .busy {
-            ownerFlowInstanceID = nil
+            ownerBySurface[surfaceID] = nil
         }
-
+        setRaw(newState, surfaceID: surfaceID, reason: reason)
         print("""
         [TuringFlowGate] changed
           flowInstanceID: \(identity.flowInstanceID.uuidString)
           scriptPointID: \(identity.scriptPointID)
+          surface: \(surfaceID.rawValue)
           state: \(newState.rawValue)
           reason: \(reason)
         """)
-        publish(reason: reason)
     }
 
-    private func publish(reason: String) {
+    private func setRaw(
+        _ newState: State,
+        surfaceID: StoryInteractionSurfaceID,
+        reason: String
+    ) {
+        switch surfaceID {
+        case .walkie:
+            state = newState
+        case .dadFrame:
+            dadFrameState = newState
+        }
+        publish(surfaceID: surfaceID, reason: reason)
+    }
+
+    private func publish(
+        surfaceID: StoryInteractionSurfaceID,
+        reason: String
+    ) {
+        let surfaceState = state(for: surfaceID)
         NotificationCenter.default.post(
             name: .turingFlowInteractionGateChanged,
             object: self,
             userInfo: [
-                "state": state.rawValue,
+                "surface": surfaceID.rawValue,
+                "state": surfaceState.rawValue,
                 "reason": reason
             ]
         )
 
         let mapped: StoryTuringGateState
-        switch state {
+        switch surfaceState {
         case .closed:
             mapped = .closed
         case .play:
@@ -266,6 +359,7 @@ final class TuringFlowInteractionGateController:
         Task {
             await StoryInteractionArbiter.shared.updateTuringGate(
                 mapped,
+                surfaceID: surfaceID,
                 reason: reason
             )
         }

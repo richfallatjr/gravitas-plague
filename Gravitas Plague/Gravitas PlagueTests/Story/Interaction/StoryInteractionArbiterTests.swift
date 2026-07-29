@@ -255,6 +255,46 @@ final class StoryInteractionArbiterTests: XCTestCase {
         XCTAssertFalse(capabilities.contains(.handMicrophone))
     }
 
+    func testDadFrameHasIndependentStableGateAndSharedLease() async throws {
+        let arbiter = StoryInteractionArbiter()
+        await arbiter.updateTuringGate(
+            .microphone,
+            surfaceID: .walkie,
+            reason: "test"
+        )
+        await arbiter.updateTuringGate(
+            .play,
+            surfaceID: .dadFrame,
+            reason: "test"
+        )
+
+        var snapshot = await arbiter.currentSnapshot()
+        XCTAssertEqual(snapshot.walkiePresentation, .microphone)
+        XCTAssertEqual(snapshot.dadFramePresentation, .play)
+        XCTAssertEqual(
+            snapshot.capabilities,
+            [
+                .walkieMicrophone,
+                .dadFramePlay,
+                .doorOpen
+            ]
+        )
+
+        let lease = try await arbiter.claimManualTuring(
+            runID: "dadMemory",
+            surfaceID: .dadFrame,
+            source: "test"
+        )
+        snapshot = await arbiter.currentSnapshot()
+        XCTAssertEqual(
+            snapshot.exclusiveOwner,
+            lease.owner
+        )
+        XCTAssertEqual(snapshot.walkiePresentation, .hidden)
+        XCTAssertEqual(snapshot.dadFramePresentation, .hidden)
+        XCTAssertEqual(snapshot.doorPresentation, .hidden)
+    }
+
     private func XCTAssertThrowsStoryInteractionError(
         _ expected: StoryInteractionClaimError,
         operation: () async throws -> Void,

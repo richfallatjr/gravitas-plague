@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "prologue.rich.dadPhotoMemory.followUp.001",
+  "speakerID": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "characterProfileID": "rich",
+  "listenerProfileID": "rich",
+  "outputContext": "roomGlobal",
+  "conversationKey": "object.dad_frame",
+  "promptTemplateID": "roomObjectMemory",
+  "intent": "I’m looking at an old wedding photo of Dad and me from about twenty years ago. We had a good relationship. Dad was an engineer, and he taught me how to understand machines, build things, troubleshoot electronics, and work with tools and gadgets. A lot of what is keeping me alive now came from him. He disappeared early in the outbreak, and I still have no reliable idea what happened to him. I’m scared he may be gone, but I have not accepted that. Getting the ham radio working may be my best chance to search for him or hear something useful. I’m trying to talk about the practical things he taught me because admitting how much I miss him is harder.",
+  "emotion": "quiet, reflective, emotionally guarded"
+}

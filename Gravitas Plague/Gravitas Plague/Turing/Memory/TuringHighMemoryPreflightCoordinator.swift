@@ -53,16 +53,19 @@ actor TuringHighMemoryPreflightCoordinator:
     func acquireInteractionLease(
         runID: String,
         source: String,
-        mode: TuringInteractionStartMode
+        mode: TuringInteractionStartMode,
+        interactionSurface: StoryInteractionSurfaceID = .walkie
     ) async throws -> StoryInteractionLease {
         switch mode {
         case .manual:
             return try await interactionArbiter.claimManualTuring(
                 runID: runID,
+                surfaceID: interactionSurface,
                 source: source
             )
         case .automatic:
-            if let storyPreparer {
+            if interactionSurface == .walkie,
+               let storyPreparer {
                 return try await storyPreparer
                     .acquireAutomaticTuringInteractionLease(
                         runID: runID,
@@ -72,6 +75,7 @@ actor TuringHighMemoryPreflightCoordinator:
             return try await interactionArbiter
                 .claimAutomaticTuring(
                     runID: runID,
+                    surfaceID: interactionSurface,
                     source: source
                 )
         }

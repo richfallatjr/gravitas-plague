@@ -22,9 +22,9 @@ actor TuringDialogueService {
             id: request.listenerProfileID
         )
         let promptResourcePath =
-            "Turing/Prompts/voicePrompt_characterIntent.txt"
+            request.promptTemplateID.resourcePath
         let promptTemplateName =
-            "voicePrompt_characterIntent"
+            request.promptTemplateID.foundationPurpose
         let prompt = try Self.renderPrompt(
             resourcePath: promptResourcePath,
             replacements: [
@@ -36,6 +36,13 @@ actor TuringDialogueService {
                 "{{prerecordingTranscript}}": request.prerecordingTranscript
             ]
         )
+        let storyIntent =
+            request.storyIntent ?? request.promptContext
+        let storyIntentOccurrenceCount =
+            Self.occurrenceCount(
+                of: storyIntent,
+                in: prompt
+            )
 
         print("""
         [TuringVoicePrompt] Foundation request started
@@ -49,6 +56,8 @@ actor TuringDialogueService {
           inputContract: characterDisplayName,listenerDisplayName,characterBackstory,storyIntent,prerecordingTranscript
           prerecordingTranscriptUTF16: \(request.prerecordingTranscript.utf16.count)
           authoredPRTranscriptSHA256: \(TuringFlowHash.sha256(request.prerecordingTranscript))
+          promptSHA256: \(TuringFlowHash.sha256(prompt))
+          storyIntentOccurrenceCount: \(storyIntentOccurrenceCount)
           dialogueHistoryIncluded: false
         """)
 
@@ -127,14 +136,15 @@ actor TuringDialogueService {
             id: request.characterProfileID
         )
         let promptResourcePath = request.promptVariant.resourcePath
+        let usesBackstoryOnly =
+            request.promptVariant == .scriptPoint05 ||
+            request.promptVariant == .roomObjectMemory
         let inputContract =
-            request.promptVariant == .scriptPoint05
+            usesBackstoryOnly
                 ? "userInput,characterBackstory,promptVoiceStoryContext,prerecordingTranscript"
                 : "userInput,characterProfile,promptVoiceStoryContext,prerecordingTranscript"
         let foundationPurpose =
-            request.promptVariant == .scriptPoint05
-                ? "conversationPrompt_scriptPoint05"
-                : "conversationPrompt_playerTurn_noBible"
+            request.promptVariant.foundationPurpose
         let prompt = try Self.renderPrompt(
             resourcePath: promptResourcePath,
             replacements: [
@@ -159,6 +169,9 @@ actor TuringDialogueService {
           promptVoiceStoryContextIncluded: true
           promptContextSource: authoredPromptVoiceStoryContext
           promptContextSHA256: \(TuringFlowHash.sha256(request.promptContext))
+          promptSHA256: \(TuringFlowHash.sha256(prompt))
+          promptContextOccurrenceCount: \(Self.occurrenceCount(of: request.promptContext, in: prompt))
+          prerecordingTranscriptOccurrenceCount: \(Self.occurrenceCount(of: request.prerecordingTranscript, in: prompt))
         """)
 
         let raw: String
@@ -417,6 +430,25 @@ actor TuringDialogueService {
         }
 
         return prompt
+    }
+
+    private static func occurrenceCount(
+        of needle: String,
+        in haystack: String
+    ) -> Int {
+        guard needle.isEmpty == false else {
+            return 0
+        }
+        var count = 0
+        var searchRange = haystack.startIndex..<haystack.endIndex
+        while let range = haystack.range(
+            of: needle,
+            range: searchRange
+        ) {
+            count += 1
+            searchRange = range.upperBound..<haystack.endIndex
+        }
+        return count
     }
 
     private static func logAcceptedSegments(

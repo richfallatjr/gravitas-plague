@@ -32,7 +32,9 @@ enum TuringFoundationPromptPurposePolicy {
     ) -> TuringFoundationModelGuardrailMode {
         switch purpose {
         case "voicePrompt_characterIntent",
-             "conversationPrompt_scriptPoint05":
+             "conversationPrompt_scriptPoint05",
+             "voicePrompt_roomObjectMemory",
+             "conversationPrompt_roomObjectMemory":
             return .permissiveContentTransformations
 
         default:
@@ -113,6 +115,14 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
           promptPath: \(promptURL.path)
           beforeFoundationCall: true
         """)
+        if purpose == "voicePrompt_roomObjectMemory" {
+            print("""
+            [TuringDadPhotoPrompt] request archived
+              promptTemplateID: roomObjectMemory
+              promptPath: \(promptURL.path)
+              promptSHA256: \(TuringFlowHash.sha256(sanitizedPrompt))
+            """)
+        }
 
         do {
 #if canImport(FoundationModels)
@@ -275,12 +285,16 @@ struct TuringFoundationModelsRunner: TuringFoundationQueryRunning {
         sanitizationApplied: Bool
     ) {
         if purpose == "conversationPrompt_playerTurn_noBible" ||
-            purpose == "conversationPrompt_scriptPoint05" {
+            purpose == "conversationPrompt_scriptPoint05" ||
+            purpose == "conversationPrompt_roomObjectMemory" {
             let isScriptPoint05 =
                 requestContext?.scriptPointID ==
                 "prologue.scriptPoint05"
             let marker =
-                isScriptPoint05
+                purpose ==
+                    "conversationPrompt_roomObjectMemory"
+                    ? "TuringDadPhotoConversationVoiceLLMInput"
+                    : isScriptPoint05
                     ? "TuringScriptPoint05ConversationVoiceLLMInput"
                     : "TuringConversationVoiceLLMInput"
             print("""

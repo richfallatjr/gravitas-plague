@@ -46,7 +46,8 @@ protocol TuringFlowRouteRuntime: AnyObject, Sendable {
 extension TuringFlowRouteRuntime {
     func makeGeneratedOnlyPlayback(
         character: TuringCharacterRuntimeDefinition,
-        conversationRunID: UUID
+        conversationRunID: UUID,
+        interactionSurface: StoryInteractionSurfaceID = .walkie
     ) throws -> (
         playback: any TuringFlowPlaybackControlling,
         identity: TuringFlowIdentity,
@@ -75,7 +76,9 @@ extension TuringFlowRouteRuntime {
                     sendingLeadInAfterGeneratedSeconds: nil
                 ),
                 fixedLeadInSeconds: nil,
-                generationPipeline: nil
+                generationPipeline: nil,
+                interactionSurface:
+                    interactionSurface
             ),
             progression: .init(
                 nextScriptPointID: nil,
@@ -88,7 +91,9 @@ extension TuringFlowRouteRuntime {
             scriptPointID: scriptPointID,
             characterID: character.characterID,
             prerecordingID: "none",
-            voicePromptID: "conversationPrompt"
+            voicePromptID: "conversationPrompt",
+            interactionSurface:
+                interactionSurface
         )
 
         return (
@@ -553,6 +558,11 @@ final class TuringRichRoomFlowRoute:
         descriptor: TuringFlowDescriptor,
         identity: TuringFlowIdentity
     ) async throws {
+        try await TuringFlowMediaCueCoordinator.shared
+            .startIfNeeded(
+                descriptor: descriptor,
+                identity: identity
+            )
     }
 
     func playSendIfNeeded(
@@ -566,5 +576,18 @@ final class TuringRichRoomFlowRoute:
         identity: TuringFlowIdentity,
         succeeded: Bool
     ) async {
+        await TuringFlowMediaCueCoordinator.shared.stopIfNeeded(
+            identity: identity,
+            reason: succeeded
+                ? "promptVoicePlaybackCompleted"
+                : "flowFailed"
+        )
+        if identity.interactionSurface == .dadFrame {
+            print("""
+            [TuringDadPhoto] promptVoice completed
+              actualPlaybackCompleted: \(succeeded)
+              nextPresentation: \(succeeded ? "microphone" : "hidden")
+            """)
+        }
     }
 }

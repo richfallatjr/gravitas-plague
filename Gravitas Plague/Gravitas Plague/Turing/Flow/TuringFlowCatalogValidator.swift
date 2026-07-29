@@ -112,8 +112,28 @@ struct TuringFlowCatalogValidator:
                     try promptStore.descriptor(
                         id: voicePromptID
                     )
+                if let prompt {
+                    _ = try TuringResourceLoader.resourceURL(
+                        resourcePath:
+                            prompt.effectivePromptTemplateID
+                                .resourcePath
+                    )
+                    _ = try TuringResourceLoader.resourceURL(
+                        resourcePath:
+                            prompt.effectivePromptTemplateID
+                                .conversationVariant
+                                .resourcePath
+                    )
+                }
             } else {
                 prompt = nil
+            }
+
+            if let music =
+                descriptor.transmission.backgroundMusic {
+                _ = try TuringResourceLoader.resourceURL(
+                    resourcePath: music.resourcePath
+                )
             }
 
             try validateIdentity(

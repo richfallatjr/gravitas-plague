@@ -140,6 +140,17 @@ actor TuringEpisodeFlowController {
             )
         }
 
+        let initialDescriptor: TuringFlowDescriptor
+        do {
+            initialDescriptor = try descriptorStore.require(
+                scriptPointID
+            )
+        } catch {
+            return .failed(
+                "Could not schedule \(scriptPointID): \(error.localizedDescription)"
+            )
+        }
+
         do {
             if let adoptedLease = activeInteractionLease {
                 try await interactionArbiter.requireCurrent(adoptedLease)
@@ -148,7 +159,10 @@ actor TuringEpisodeFlowController {
                     .acquireInteractionLease(
                         runID: sequenceID.uuidString,
                         source: trigger.logValue,
-                        mode: trigger.interactionStartMode
+                        mode: trigger.interactionStartMode,
+                        interactionSurface:
+                            initialDescriptor.transmission
+                                .effectiveInteractionSurface
                     )
                 activeInteractionLease = claimedLease
             }
@@ -237,6 +251,9 @@ actor TuringEpisodeFlowController {
                     await TuringFlowInteractionGateController
                         .shared
                         .ensureMicrophoneAvailable(
+                            surfaceID:
+                                descriptor.transmission
+                                    .effectiveInteractionSurface,
                             reason:
                                 "terminalPointCompleted.\(descriptor.scriptPointID)"
                         )

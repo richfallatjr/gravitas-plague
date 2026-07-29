@@ -6,19 +6,22 @@ struct TuringFlowConversationRequest: Sendable {
     let conversationKey: String
     let playerDictation: String
     let interactionLease: StoryInteractionLease?
+    let interactionSurface: StoryInteractionSurfaceID
 
     init(
         characterID: String,
         outputRoute: TuringVoiceOutputContext,
         conversationKey: String,
         playerDictation: String,
-        interactionLease: StoryInteractionLease? = nil
+        interactionLease: StoryInteractionLease? = nil,
+        interactionSurface: StoryInteractionSurfaceID = .walkie
     ) {
         self.characterID = characterID
         self.outputRoute = outputRoute
         self.conversationKey = conversationKey
         self.playerDictation = playerDictation
         self.interactionLease = interactionLease
+        self.interactionSurface = interactionSurface
     }
 }
 
@@ -42,7 +45,9 @@ enum TuringFlowConversationRunner {
                     .acquireInteractionLease(
                         runID: "conversation.\(UUID().uuidString)",
                         source: "conversationVoice",
-                        mode: .manual
+                        mode: .manual,
+                        interactionSurface:
+                            request.interactionSurface
                     )
             }
         } catch {
@@ -104,7 +109,9 @@ enum TuringFlowConversationRunner {
             .shared
             .beginConversation(
                 conversationRunID:
-                    conversationRunID
+                    conversationRunID,
+                surfaceID:
+                    request.interactionSurface
             )
 
         do {
@@ -137,7 +144,9 @@ enum TuringFlowConversationRunner {
                     .makeGeneratedOnlyPlayback(
                         character: runtime,
                         conversationRunID:
-                            conversationRunID
+                            conversationRunID,
+                        interactionSurface:
+                            request.interactionSurface
                     )
             let playback =
                 generatedOnly.playback
@@ -320,7 +329,9 @@ enum TuringFlowConversationRunner {
                     .shared
                     .restoreMicrophoneAfterConversation(
                         conversationRunID:
-                            conversationRunID
+                            conversationRunID,
+                        surfaceID:
+                            request.interactionSurface
                     )
 
                 return .failed(
@@ -348,7 +359,9 @@ enum TuringFlowConversationRunner {
                     .shared
                     .restoreMicrophoneAfterConversation(
                         conversationRunID:
-                            conversationRunID
+                            conversationRunID,
+                        surfaceID:
+                            request.interactionSurface
                     )
 
                 return .failed(
@@ -378,7 +391,8 @@ enum TuringFlowConversationRunner {
                 ) else {
                 await TuringFlowInteractionGateController.shared
                     .restoreMicrophoneAfterConversation(
-                        conversationRunID: conversationRunID
+                        conversationRunID: conversationRunID,
+                        surfaceID: request.interactionSurface
                     )
                 return .succeeded(
                     "Finished \(runtime.displayName) conversation response"
@@ -406,6 +420,8 @@ enum TuringFlowConversationRunner {
                         .restoreMicrophoneAfterProgressionFailure(
                             conversationRunID:
                                 conversationRunID,
+                            surfaceID:
+                                request.interactionSurface,
                             reason:
                                 progression.pickerStatus
                         )
@@ -443,7 +459,9 @@ enum TuringFlowConversationRunner {
                 .shared
                 .restoreMicrophoneAfterConversation(
                     conversationRunID:
-                        conversationRunID
+                        conversationRunID,
+                    surfaceID:
+                        request.interactionSurface
                 )
 
             return .failed(

@@ -208,6 +208,45 @@ struct PlagueImmersiveView: View {
                 }
         )
         .simultaneousGesture(
+            TapGesture()
+                .targetedToEntity(
+                    where: .has(
+                        TuringStoryDadFramePlayComponent.self
+                    )
+                )
+                .onEnded { _ in
+                    Task { @MainActor in
+                        coordinator.turingDadFramePlayTapped(
+                            source: "realityKit"
+                        )
+                    }
+                }
+        )
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .targetedToEntity(
+                    where: .has(
+                        TuringStoryDadFrameMicrophoneComponent.self
+                    )
+                )
+                .onChanged { _ in
+                    Task { @MainActor in
+                        coordinator
+                            .turingDadFrameMicrophoneHoldBegan(
+                                source: "realityKit"
+                            )
+                    }
+                }
+                .onEnded { _ in
+                    Task { @MainActor in
+                        coordinator
+                            .turingDadFrameMicrophoneHoldEnded(
+                                source: "realityKit"
+                            )
+                    }
+                }
+        )
+        .simultaneousGesture(
             DragGesture(minimumDistance: 0)
                 .targetedToEntity(
                     where: .has(

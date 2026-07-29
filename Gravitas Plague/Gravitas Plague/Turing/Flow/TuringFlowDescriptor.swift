@@ -30,6 +30,40 @@ struct TuringFlowDescriptor: Codable, Sendable, Hashable {
         let commSFX: CommSFX
         let fixedLeadInSeconds: Double?
         let generationPipeline: TuringFlowGenerationPipelineDescriptor?
+        let interactionSurface: StoryInteractionSurfaceID?
+        let backgroundMusic: TuringFlowBackgroundMusicDescriptor?
+
+        init(
+            prerecordingID: String,
+            voicePromptID: String?,
+            characterID: String,
+            conversationKey: String,
+            outputRoute: TuringVoiceOutputContext,
+            computeStart: ComputeStart,
+            fillerMode: FillerMode,
+            commSFX: CommSFX,
+            fixedLeadInSeconds: Double?,
+            generationPipeline: TuringFlowGenerationPipelineDescriptor?,
+            interactionSurface: StoryInteractionSurfaceID? = nil,
+            backgroundMusic: TuringFlowBackgroundMusicDescriptor? = nil
+        ) {
+            self.prerecordingID = prerecordingID
+            self.voicePromptID = voicePromptID
+            self.characterID = characterID
+            self.conversationKey = conversationKey
+            self.outputRoute = outputRoute
+            self.computeStart = computeStart
+            self.fillerMode = fillerMode
+            self.commSFX = commSFX
+            self.fixedLeadInSeconds = fixedLeadInSeconds
+            self.generationPipeline = generationPipeline
+            self.interactionSurface = interactionSurface
+            self.backgroundMusic = backgroundMusic
+        }
+
+        var effectiveInteractionSurface: StoryInteractionSurfaceID {
+            interactionSurface ?? .walkie
+        }
 
         enum ComputeStart: String, Codable, Sendable, Hashable {
             /// Start Foundation immediately before the prerecording is queued.
@@ -72,6 +106,23 @@ struct TuringFlowDescriptor: Codable, Sendable, Hashable {
             case play
         }
     }
+}
+
+struct TuringFlowBackgroundMusicDescriptor:
+    Codable,
+    Sendable,
+    Hashable
+{
+    enum StopBoundary: String, Codable, Sendable, Hashable {
+        case promptVoicePlaybackCompleted
+    }
+
+    let resourcePath: String
+    let gainDB: Float
+    let loops: Bool
+    let fadeInSeconds: Double
+    let fadeOutSeconds: Double
+    let stopBoundary: StopBoundary
 }
 
 extension TuringFlowDescriptor.Progression {

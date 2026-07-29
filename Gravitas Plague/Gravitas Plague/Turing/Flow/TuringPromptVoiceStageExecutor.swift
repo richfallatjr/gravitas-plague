@@ -66,6 +66,10 @@ actor TuringPromptVoiceStageExecutor: TuringSpeechStageExecuting {
             promptVoiceContext.storyContext,
             for: context.descriptor.transmission.conversationKey
         )
+        await inputStore.updatePromptVariant(
+            prompt.effectivePromptTemplateID.conversationVariant,
+            for: context.descriptor.transmission.conversationKey
+        )
         print("""
         [TuringStagedSpeech] authored promptVoice Story Context committed
           scriptPointID: \(context.descriptor.scriptPointID)
@@ -92,7 +96,8 @@ actor TuringPromptVoiceStageExecutor: TuringSpeechStageExecuting {
                 listenerProfileID: prompt.listenerProfileID,
                 promptContext: promptVoiceContext.storyContext,
                 prerecordingTranscript: priorTranscript,
-                storyIntent: prompt.intent
+                storyIntent: prompt.intent,
+                promptTemplateID: prompt.effectivePromptTemplateID
             )
         )
         guard plan.segments.isEmpty == false else {

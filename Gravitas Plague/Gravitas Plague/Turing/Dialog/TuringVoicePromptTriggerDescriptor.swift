@@ -12,6 +12,7 @@ struct TuringVoicePromptTriggerDescriptor: Codable, Sendable, Hashable {
   let intent: String
   let emotion: String
   let promptContext: String?
+  let promptTemplateID: TuringVoicePromptTemplateID?
 
   init(
     schemaVersion: Int,
@@ -24,7 +25,8 @@ struct TuringVoicePromptTriggerDescriptor: Codable, Sendable, Hashable {
     conversationKey: String,
     intent: String,
     emotion: String,
-    promptContext: String? = nil
+    promptContext: String? = nil,
+    promptTemplateID: TuringVoicePromptTemplateID? = nil
   ) {
     self.schemaVersion = schemaVersion
     self.voicePromptID = voicePromptID
@@ -37,6 +39,56 @@ struct TuringVoicePromptTriggerDescriptor: Codable, Sendable, Hashable {
     self.intent = intent
     self.emotion = emotion
     self.promptContext = promptContext
+    self.promptTemplateID = promptTemplateID
+  }
+
+  var effectiveAuthoredStoryContext: String {
+    let explicit = promptContext?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    return explicit.isEmpty
+      ? intent.trimmingCharacters(in: .whitespacesAndNewlines)
+      : explicit
+  }
+
+  var effectivePromptTemplateID: TuringVoicePromptTemplateID {
+    promptTemplateID ?? .characterIntent
+  }
+}
+
+enum TuringVoicePromptTemplateID:
+  String,
+  Codable,
+  Sendable,
+  Hashable
+{
+  case characterIntent
+  case roomObjectMemory
+
+  var resourcePath: String {
+    switch self {
+    case .characterIntent:
+      return "Turing/Prompts/voicePrompt_characterIntent.txt"
+    case .roomObjectMemory:
+      return "Turing/Prompts/voicePrompt_roomObjectMemory.txt"
+    }
+  }
+
+  var foundationPurpose: String {
+    switch self {
+    case .characterIntent:
+      return "voicePrompt_characterIntent"
+    case .roomObjectMemory:
+      return "voicePrompt_roomObjectMemory"
+    }
+  }
+
+  var conversationVariant: TuringConversationPromptVariant {
+    switch self {
+    case .characterIntent:
+      return .standard
+    case .roomObjectMemory:
+      return .roomObjectMemory
+    }
   }
 }
 
@@ -95,6 +147,15 @@ enum TuringPromptVoiceStoryContextBuilder {
   static func standard(
     _ descriptor: TuringVoicePromptTriggerDescriptor
   ) -> TuringAuthoredPromptVoiceContext {
+    if descriptor.effectivePromptTemplateID ==
+        .roomObjectMemory {
+      return TuringAuthoredPromptVoiceContext(
+        voicePromptID: descriptor.voicePromptID,
+        storyContext:
+          descriptor.effectiveAuthoredStoryContext
+      )
+    }
+
     if let promptContext = descriptor.promptContext {
       return TuringAuthoredPromptVoiceContext(
         voicePromptID: descriptor.voicePromptID,

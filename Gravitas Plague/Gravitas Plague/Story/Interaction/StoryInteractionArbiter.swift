@@ -4,7 +4,11 @@ actor StoryInteractionArbiter {
     static let shared = StoryInteractionArbiter()
 
     private var revision: UInt64 = 0
-    private var turingGate: StoryTuringGateState = .closed
+    private var turingGates:
+        [StoryInteractionSurfaceID: StoryTuringGateState] = [
+            .walkie: .closed,
+            .dadFrame: .closed
+        ]
     private var doorState: StoryDoorLifecycleState = .closedUnloaded
     private var exclusiveLease: StoryInteractionLease?
     private let snapshotHub = StoryInteractionSnapshotHub()
@@ -18,9 +22,23 @@ actor StoryInteractionArbiter {
     }
 
     func updateTuringGate(_ gate: StoryTuringGateState, reason: String) async {
-        guard turingGate != gate else { return }
-        turingGate = gate
-        await publish(reason: "turingGate.\(reason)")
+        await updateTuringGate(
+            gate,
+            surfaceID: .walkie,
+            reason: reason
+        )
+    }
+
+    func updateTuringGate(
+        _ gate: StoryTuringGateState,
+        surfaceID: StoryInteractionSurfaceID,
+        reason: String
+    ) async {
+        guard turingGates[surfaceID] != gate else { return }
+        turingGates[surfaceID] = gate
+        await publish(
+            reason: "turingGate.\(surfaceID.rawValue).\(reason)"
+        )
     }
 
     func updateDoorState(_ state: StoryDoorLifecycleState, reason: String) async {
@@ -44,10 +62,23 @@ actor StoryInteractionArbiter {
         runID: String,
         source: String
     ) async throws -> StoryInteractionLease {
+        try await claimManualTuring(
+            runID: runID,
+            surfaceID: .walkie,
+            source: source
+        )
+    }
+
+    func claimManualTuring(
+        runID: String,
+        surfaceID: StoryInteractionSurfaceID,
+        source: String
+    ) async throws -> StoryInteractionLease {
         guard exclusiveLease == nil else {
             return try reject(.exclusiveOwnerActive, requested: "turingFlow.\(runID)", source: source)
         }
-        guard turingGate == .play || turingGate == .microphone else {
+        let gate = turingGates[surfaceID] ?? .closed
+        guard gate == .play || gate == .microphone else {
             return try reject(.turingGateNotInteractive, requested: "turingFlow.\(runID)", source: source)
         }
         guard doorState == .closedUnloaded else {
@@ -61,6 +92,18 @@ actor StoryInteractionArbiter {
 
     func claimAutomaticTuring(
         runID: String,
+        source: String
+    ) async throws -> StoryInteractionLease {
+        try await claimAutomaticTuring(
+            runID: runID,
+            surfaceID: .walkie,
+            source: source
+        )
+    }
+
+    func claimAutomaticTuring(
+        runID: String,
+        surfaceID _: StoryInteractionSurfaceID,
         source: String
     ) async throws -> StoryInteractionLease {
         guard exclusiveLease == nil else {
@@ -79,7 +122,7 @@ actor StoryInteractionArbiter {
         guard exclusiveLease == nil else {
             return try reject(.exclusiveOwnerActive, requested: "doorPortal", source: source)
         }
-        guard turingGate != .busy else {
+        guard turingGates.values.contains(.busy) == false else {
             return try reject(.turingGateNotInteractive, requested: "doorPortal", source: source)
         }
         guard doorState == .closedUnloaded else {
@@ -168,7 +211,10 @@ actor StoryInteractionArbiter {
     }
 
     func reset(reason: String) async {
-        turingGate = .closed
+        turingGates = [
+            .walkie: .closed,
+            .dadFrame: .closed
+        ]
         doorState = .closedUnloaded
         exclusiveLease = nil
         await publish(reason: "reset.\(reason)")
@@ -218,7 +264,7 @@ actor StoryInteractionArbiter {
         [StoryInteraction] claim rejected
           requestedOwner: \(requested)
           currentOwner: \(exclusiveLease?.owner.logValue ?? "none")
-          turingGate: \(turingGate.rawValue)
+          turingGate: \((turingGates[.walkie] ?? .closed).rawValue)
           doorState: \(doorState.rawValue)
           source: \(source)
           reason: \(error.localizedDescription)
@@ -230,6 +276,7 @@ actor StoryInteractionArbiter {
         let capabilities: Set<StoryInteractionCapability>
         let walkie: StoryWalkiePresentation
         let door: StoryDoorPresentation
+        let dadFrame: StoryDadFramePresentation
 
         if let exclusiveLease {
             switch exclusiveLease.owner {
@@ -237,8 +284,10 @@ actor StoryInteractionArbiter {
                 capabilities = []
                 walkie = .hidden
                 door = .hidden
+                dadFrame = .hidden
             case .battle:
                 walkie = .hidden
+                dadFrame = .hidden
                 switch doorState {
                 case .closedUnloaded, .loading, .closedReady:
                     capabilities = [.doorOpen]
@@ -252,45 +301,70 @@ actor StoryInteractionArbiter {
                     capabilities = [.doorClose]
                     walkie = .hidden
                     door = .close
+                    dadFrame = .hidden
                 } else {
                     capabilities = []
                     walkie = .hidden
                     door = .hidden
+                    dadFrame = .hidden
                 }
             }
         } else if doorState != .closedUnloaded {
             capabilities = []
             walkie = .hidden
             door = .hidden
+            dadFrame = .hidden
         } else {
-            switch turingGate {
-            case .play:
-                capabilities = [.walkiePlay, .doorOpen]
-                walkie = .play
-                door = .open
-            case .microphone:
-                capabilities = [.walkieMicrophone, .doorOpen]
-                walkie = .microphone
-                door = .open
-            case .closed:
-                capabilities = [.doorOpen]
-                walkie = .hidden
-                door = .open
-            case .busy:
+            let walkieGate =
+                turingGates[.walkie] ?? .closed
+            let dadGate =
+                turingGates[.dadFrame] ?? .closed
+
+            if walkieGate == .busy || dadGate == .busy {
                 capabilities = []
                 walkie = .hidden
                 door = .hidden
+                dadFrame = .hidden
+            } else {
+                var resolvedCapabilities:
+                    Set<StoryInteractionCapability> = [.doorOpen]
+
+                switch walkieGate {
+                case .play:
+                    resolvedCapabilities.insert(.walkiePlay)
+                    walkie = .play
+                case .microphone:
+                    resolvedCapabilities.insert(.walkieMicrophone)
+                    walkie = .microphone
+                case .closed, .busy:
+                    walkie = .hidden
+                }
+
+                switch dadGate {
+                case .play:
+                    resolvedCapabilities.insert(.dadFramePlay)
+                    dadFrame = .play
+                case .microphone:
+                    resolvedCapabilities.insert(.dadFrameMicrophone)
+                    dadFrame = .microphone
+                case .closed, .busy:
+                    dadFrame = .hidden
+                }
+
+                capabilities = resolvedCapabilities
+                door = .open
             }
         }
 
         return StoryInteractionSnapshot(
             revision: revision,
-            turingGate: turingGate,
+            turingGate: turingGates[.walkie] ?? .closed,
             doorState: doorState,
             exclusiveOwner: exclusiveLease?.owner,
             capabilities: capabilities,
             walkiePresentation: walkie,
-            doorPresentation: door
+            doorPresentation: door,
+            dadFramePresentation: dadFrame
         )
     }
 
@@ -301,11 +375,13 @@ actor StoryInteractionArbiter {
         [StoryInteraction] snapshot
           revision: \(snapshot.revision)
           turingGate: \(snapshot.turingGate.rawValue)
+          dadFrameGate: \((turingGates[.dadFrame] ?? .closed).rawValue)
           doorState: \(snapshot.doorState.rawValue)
           exclusiveOwner: \(snapshot.exclusiveOwner?.logValue ?? "none")
           capabilities: \(snapshot.capabilities.map(\.rawValue).sorted())
           walkie: \(snapshot.walkiePresentation.rawValue)
           door: \(snapshot.doorPresentation.rawValue)
+          dadFrame: \(snapshot.dadFramePresentation.rawValue)
           reason: \(reason)
         """)
         await snapshotHub.yield(snapshot)

@@ -13,6 +13,7 @@ enum TuringConversationPromptVariant:
 {
     case standard
     case scriptPoint05
+    case roomObjectMemory
 
     static func forScriptPointID(
         _ scriptPointID: String
@@ -22,12 +23,36 @@ enum TuringConversationPromptVariant:
             : .standard
     }
 
+    static func resolved(
+        scriptPointID: String,
+        promptTemplateID: TuringVoicePromptTemplateID
+    ) -> TuringConversationPromptVariant {
+        let established =
+            Self.forScriptPointID(scriptPointID)
+        return established == .scriptPoint05
+            ? .scriptPoint05
+            : promptTemplateID.conversationVariant
+    }
+
     var resourcePath: String {
         switch self {
         case .standard:
             return "Turing/Prompts/conversationPrompt_playerTurn_noBible.txt"
         case .scriptPoint05:
             return "Turing/Prompts/conversationPrompt_scriptPoint05.txt"
+        case .roomObjectMemory:
+            return "Turing/Prompts/conversationPrompt_roomObjectMemory.txt"
+        }
+    }
+
+    var foundationPurpose: String {
+        switch self {
+        case .standard:
+            return "conversationPrompt_playerTurn_noBible"
+        case .scriptPoint05:
+            return "conversationPrompt_scriptPoint05"
+        case .roomObjectMemory:
+            return "conversationPrompt_roomObjectMemory"
         }
     }
 }

@@ -215,6 +215,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     private let hordePrewarmCoordinator = HordePrewarmCoordinator()
     private let turingStoryWalkieInteractionController =
         TuringStoryWalkieInteractionController()
+    private let turingStoryDadFrameInteractionController =
+        TuringStoryDadFrameInteractionController()
     private var turingWaitingForPlacementRoomScan = false
     private var turingWaitingForPlacementFloorPromptShown = false
     private var turingStoryPlacementScanCompleted = false
@@ -404,6 +406,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         )
         StoryInteractionPresentationCoordinator.shared.register(
             turingStoryWalkieInteractionController
+        )
+        StoryInteractionPresentationCoordinator.shared.register(
+            turingStoryDadFrameInteractionController
         )
         StoryInteractionPresentationCoordinator.shared.register(
             turingDoorBundleController
@@ -1022,6 +1027,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         turingStoryWalkieInteractionController.walkieRemoved(
             reason: "debugRoomRescan.\(attempt)"
         )
+        turingStoryDadFrameInteractionController.dadFrameRemoved(
+            reason: "debugRoomRescan.\(attempt)"
+        )
         turingDoorBundleController.reset(
             reason: "debugRoomRescan.\(attempt)"
         )
@@ -1407,6 +1415,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     ) {
         turingStoryWalkieInteractionController
             .setEventSink(eventSink)
+        turingStoryDadFrameInteractionController
+            .setEventSink(eventSink)
     }
 
     func turingWalkiePlayTapped(source: String) {
@@ -1425,6 +1435,25 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         source: String
     ) {
         turingStoryWalkieInteractionController
+            .microphoneHoldEnded(source: source)
+    }
+
+    func turingDadFramePlayTapped(source: String) {
+        turingStoryDadFrameInteractionController
+            .playTapped(source: source)
+    }
+
+    func turingDadFrameMicrophoneHoldBegan(
+        source: String
+    ) {
+        turingStoryDadFrameInteractionController
+            .microphoneHoldBegan(source: source)
+    }
+
+    func turingDadFrameMicrophoneHoldEnded(
+        source: String
+    ) {
+        turingStoryDadFrameInteractionController
             .microphoneHoldEnded(source: source)
     }
 
@@ -1548,6 +1577,23 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             [TuringWalkieState] ERROR action targets unavailable
               iconAnchor: \(turingWalkieBundleController.walkieIconAnchor?.name ?? "nil")
               walkieRoot: \(turingWalkieBundleController.walkieRoot?.name ?? "nil")
+            """)
+        }
+
+        if let iconAnchor =
+                turingWalkieBundleController.dadFrameIconAnchor,
+           let dadFrameRoot =
+                turingWalkieBundleController.dadFrameRoot {
+            turingStoryDadFrameInteractionController
+                .dadFrameInstalled(
+                    iconAnchor: iconAnchor,
+                    dadFrameRoot: dadFrameRoot
+                )
+        } else {
+            print("""
+            [TuringDadFrame] ERROR action targets unavailable
+              iconAnchor: \(turingWalkieBundleController.dadFrameIconAnchor?.name ?? "nil")
+              dadFrameRoot: \(turingWalkieBundleController.dadFrameRoot?.name ?? "nil")
             """)
         }
 
@@ -2183,6 +2229,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         turingStoryWalkieInteractionController.walkieRemoved(
             reason: "immersiveShutdown"
         )
+        turingStoryDadFrameInteractionController.dadFrameRemoved(
+            reason: "immersiveShutdown"
+        )
         turingWalkieBundleController.reset(reason: "immersiveShutdown")
         turingWindowBundleController.reset(reason: "immersiveShutdown")
         turingDoorBundleController.reset(reason: "immersiveShutdown")
@@ -2192,6 +2241,12 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         )
         Task { @MainActor in
             await turingStoryWalkieInteractionController.shutdown(
+                reason: "immersiveShutdown"
+            )
+            await turingStoryDadFrameInteractionController.shutdown(
+                reason: "immersiveShutdown"
+            )
+            await TuringFlowMediaCueCoordinator.shared.stopAll(
                 reason: "immersiveShutdown"
             )
             TuringStoryWalkieAudioRoute.clear(reason: "immersiveShutdown")
