@@ -19,6 +19,8 @@ final class TuringStoryCrankRadioInteractionController:
         TuringStoryCrankRadioIconController
     private let tuningLoops:
         TuringCrankRadioTuningLoopActor
+    private let radioBed:
+        any TuringRollingBenchRadioBedControlling
 
     private weak var eventSink:
         (any TuringStoryWalkieInteractionEventSink)?
@@ -29,6 +31,7 @@ final class TuringStoryCrankRadioInteractionController:
     private var activeConversationLease:
         StoryInteractionLease?
     private var activeRecordingRunID: UUID?
+    private var activeResponseRunID: UUID?
     private var latestSnapshot =
         StoryInteractionSnapshot(
             revision: 0,
@@ -59,7 +62,9 @@ final class TuringStoryCrankRadioInteractionController:
             dictation: nil,
             iconController: nil,
             tuningLoops:
-                TuringCrankRadioTuningLoopActor.shared
+                TuringCrankRadioTuningLoopActor.shared,
+            radioBed:
+                TuringRollingBenchRadioBedActor.shared
         )
     }
 
@@ -73,7 +78,9 @@ final class TuringStoryCrankRadioInteractionController:
         iconController:
             TuringStoryCrankRadioIconController?,
         tuningLoops:
-            TuringCrankRadioTuningLoopActor
+            TuringCrankRadioTuningLoopActor,
+        radioBed:
+            any TuringRollingBenchRadioBedControlling
     ) {
         self.gate = gate
         self.episodeFlow = episodeFlow
@@ -84,6 +91,7 @@ final class TuringStoryCrankRadioInteractionController:
             iconController ??
             TuringStoryCrankRadioIconController()
         self.tuningLoops = tuningLoops
+        self.radioBed = radioBed
         self.dictation.onEvent = {
             [weak self]
             event in
@@ -128,6 +136,8 @@ final class TuringStoryCrankRadioInteractionController:
             activeConversationLease
         let staleRunID =
             activeRecordingRunID
+        let staleResponseRunID =
+            activeResponseRunID
         ready = false
         holdActive = false
         playClaimPending = false
@@ -139,6 +149,7 @@ final class TuringStoryCrankRadioInteractionController:
         conversationTask = nil
         activeConversationLease = nil
         activeRecordingRunID = nil
+        activeResponseRunID = nil
         iconController.remove()
         gate.close(
             surfaceID: .crankRadio,
@@ -154,6 +165,28 @@ final class TuringStoryCrankRadioInteractionController:
                 await self.tuningLoops.endGap(
                     ownerID:
                         staleRunID.uuidString,
+                    reason:
+                        "crankRadioRemoved.\(reason)"
+                )
+                await self.radioBed.endSession(
+                    ownerID:
+                        staleRunID.uuidString,
+                    reason:
+                        "crankRadioRemoved.\(reason)"
+                )
+            }
+            if let staleResponseRunID {
+                await self.tuningLoops.endGap(
+                    ownerID:
+                        staleResponseRunID
+                            .uuidString,
+                    reason:
+                        "crankRadioRemoved.\(reason)"
+                )
+                await self.radioBed.endSession(
+                    ownerID:
+                        staleResponseRunID
+                            .uuidString,
                     reason:
                         "crankRadioRemoved.\(reason)"
                 )
@@ -279,6 +312,56 @@ final class TuringStoryCrankRadioInteractionController:
                     return
                 }
 
+                do {
+                    try await self.radioBed
+                        .beginSession(
+                            ownerID:
+                                runID.uuidString
+                        )
+                } catch {
+                    self.holdActive = false
+                    await StoryInteractionArbiter
+                        .shared
+                        .release(
+                            lease,
+                            reason:
+                                "crankRadioAmbientStaticFailed"
+                        )
+                    self.gate
+                        .ensureMicrophoneAvailable(
+                            surfaceID:
+                                .crankRadio,
+                            reason:
+                                "crankRadioAmbientStaticFailed"
+                        )
+                    self.eventSink?
+                        .publishTuringDictationEvent(
+                            .failed(
+                                "Device operation failed: \(error.localizedDescription)"
+                            )
+                        )
+                    return
+                }
+
+                guard self.holdActive,
+                      Task.isCancelled ==
+                        false else {
+                    await self.radioBed.endSession(
+                        ownerID:
+                            runID.uuidString,
+                        reason:
+                            "crankRadioHoldEndedBeforeStaticUse"
+                    )
+                    await StoryInteractionArbiter
+                        .shared
+                        .release(
+                            lease,
+                            reason:
+                                "crankRadioHoldEndedBeforeStaticUse"
+                        )
+                    return
+                }
+
                 self.activeConversationLease =
                     lease
                 self.activeRecordingRunID =
@@ -295,8 +378,10 @@ final class TuringStoryCrankRadioInteractionController:
                         "conversationDictationBegan"
                 )
                 print("""
-                [TuringCrankRadioConversation] dictation tuning started
+                [TuringCrankRadioConversation] dictation audio beds started
                   conversationRunID: \(runID.uuidString)
+                  ambientStaticGainDB: \(TuringRollingBenchTuning.ambientStaticGainDB)
+                  ambientStaticContinuesUnderTuningAndSpeech: true
                 """)
                 await self.dictation
                     .beginHoldToRecord()
@@ -327,6 +412,12 @@ final class TuringStoryCrankRadioInteractionController:
                 if let runID {
                     await tuningLoops.endGap(
                         ownerID: runID.uuidString,
+                        reason:
+                            "crankRadioHoldEndedBeforeRecording"
+                    )
+                    await radioBed.endSession(
+                        ownerID:
+                            runID.uuidString,
                         reason:
                             "crankRadioHoldEndedBeforeRecording"
                     )
@@ -366,6 +457,8 @@ final class TuringStoryCrankRadioInteractionController:
             activeRecordingRunID ?? UUID()
         activeConversationLease = nil
         activeRecordingRunID = nil
+        activeResponseRunID =
+            conversationRunID
 
         conversationTask?.cancel()
         conversationTask =
@@ -435,6 +528,13 @@ final class TuringStoryCrankRadioInteractionController:
                         reason:
                             "crankRadioConversationFinished.\(result.succeeded)"
                     )
+                    await self.radioBed.endSession(
+                        ownerID:
+                            conversationRunID.uuidString,
+                        reason:
+                            "crankRadioConversationFinished.\(result.succeeded)"
+                    )
+                    self.activeResponseRunID = nil
                     self.eventSink?
                         .publishTuringDictationEvent(
                             result.succeeded
@@ -450,6 +550,13 @@ final class TuringStoryCrankRadioInteractionController:
                         reason:
                             "crankRadioConversationFailedBeforePlayback"
                     )
+                    await self.radioBed.endSession(
+                        ownerID:
+                            conversationRunID.uuidString,
+                        reason:
+                            "crankRadioConversationFailedBeforePlayback"
+                    )
+                    self.activeResponseRunID = nil
                     await StoryInteractionArbiter
                         .shared
                         .release(

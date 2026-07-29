@@ -121,6 +121,79 @@ final class TuringBroadcasterCrankRadioResourceTests: XCTestCase {
         )
     }
 
+    func testAmbientStaticRemainsIndependentFromTuningLoop()
+        async throws
+    {
+        let endpoint =
+            BroadcasterRadioBedTestEndpoint()
+        let radioBed =
+            TuringRollingBenchRadioBedActor()
+        let tuningLoops =
+            TuringCrankRadioTuningLoopActor(
+                randomIndex: { _ in 0 }
+            )
+
+        try await radioBed.prepareResources()
+        try await tuningLoops.prepareResources()
+        await radioBed.install(endpoint: endpoint)
+        await tuningLoops.install(endpoint: endpoint)
+
+        try await radioBed.beginSession(
+            ownerID: "broadcaster-test"
+        )
+        await tuningLoops.beginGap(
+            ownerID: "broadcaster-test",
+            waitingForSegmentIndex: 0,
+            reason: "testFoundationGap"
+        )
+
+        var snapshot = await endpoint.snapshot()
+        XCTAssertEqual(snapshot.played.count, 2)
+        let ambient = try XCTUnwrap(
+            snapshot.played.first {
+                $0.kind == .ambientStatic
+            }
+        )
+        let tuning = try XCTUnwrap(
+            snapshot.played.first {
+                $0.kind ==
+                    .crankRadioTuningFiller
+            }
+        )
+        XCTAssertEqual(
+            ambient.fileURL.lastPathComponent,
+            "Narrow-band-analog.wav"
+        )
+        XCTAssertEqual(
+            ambient.route,
+            .rollingBenchRadio
+        )
+        XCTAssertEqual(ambient.gainDB, -15)
+        XCTAssertTrue(ambient.shouldLoop)
+        XCTAssertEqual(
+            ambient.cachePolicy,
+            .bundled
+        )
+        XCTAssertNotEqual(
+            ambient.requestID,
+            tuning.requestID
+        )
+
+        await tuningLoops.endGap(
+            ownerID: "broadcaster-test",
+            reason: "exactSegmentReady"
+        )
+        snapshot = await endpoint.snapshot()
+        XCTAssertEqual(snapshot.stopped.count, 1)
+
+        await radioBed.endSession(
+            ownerID: "broadcaster-test",
+            reason: "testFinished"
+        )
+        snapshot = await endpoint.snapshot()
+        XCTAssertEqual(snapshot.stopped.count, 2)
+    }
+
     func testClonePackageIsPrecomputedAndRuntimeEncodingIsDisabled()
         throws
     {
@@ -315,5 +388,65 @@ private final class BroadcasterPromptCapturingRunner:
 
     func lastPrompt() -> String? {
         prompt
+    }
+}
+
+private actor BroadcasterRadioBedTestEndpoint:
+    TuringTransientAudioPlaybackEndpoint
+{
+    struct Snapshot: Sendable {
+        let played: [TuringAudioPlaybackRequest]
+        let stopped: [TuringAudioPlaybackHandle]
+    }
+
+    private let eventHub =
+        TuringAudioEventHub()
+    private var played:
+        [TuringAudioPlaybackRequest] = []
+    private var stopped:
+        [TuringAudioPlaybackHandle] = []
+
+    func play(
+        _ request: TuringAudioPlaybackRequest
+    ) async throws -> TuringAudioPlaybackHandle {
+        played.append(request)
+        let handle =
+            TuringAudioPlaybackHandle(
+                id: UUID(),
+                requestID: request.requestID,
+                runID: request.runID,
+                route: request.route
+            )
+        await eventHub.yield(.started(handle))
+        return handle
+    }
+
+    func stop(
+        _ handle: TuringAudioPlaybackHandle,
+        reason: String
+    ) async {
+        stopped.append(handle)
+        await eventHub.yield(
+            .cancelled(
+                handle,
+                reason: reason
+            )
+        )
+    }
+
+    func events() async
+        -> AsyncStream<TuringAudioPlaybackEvent>
+    {
+        await eventHub.stream()
+    }
+
+    func evictTransient(fileURL _: URL) async {
+    }
+
+    func snapshot() -> Snapshot {
+        Snapshot(
+            played: played,
+            stopped: stopped
+        )
     }
 }

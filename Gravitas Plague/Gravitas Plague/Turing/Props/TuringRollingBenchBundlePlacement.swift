@@ -45,6 +45,7 @@ enum TuringRollingBenchTuning {
     static let bottomAboveFloorMeters: Float = 0
     static let floorSnapToleranceMeters: Float = 0.01
 
+    static let ambientStaticGainDB: Double = -15.0
     static let tuningLoopGainDB: Double = 20.0 * log10(0.20)
     static let cueGainDB: Double = -23.0
 }

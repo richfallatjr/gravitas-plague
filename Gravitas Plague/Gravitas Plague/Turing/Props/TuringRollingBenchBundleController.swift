@@ -86,7 +86,10 @@ final class TuringRollingBenchBundleController:
                 dictation: nil,
                 iconController: nil,
                 tuningLoops:
-                    tuningLoops
+                    tuningLoops,
+                radioBed:
+                    TuringRollingBenchRadioBedActor
+                        .shared
             )
         root.name = "TuringRollingBench_WorldRoot"
         root.isEnabled = false

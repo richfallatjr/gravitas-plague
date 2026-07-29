@@ -18,6 +18,7 @@ actor TuringRollingBenchRadioBedActor:
     static let shared = TuringRollingBenchRadioBedActor()
 
     private struct Assets: Sendable {
+        let ambientStaticURL: URL
         let cueURL: URL
     }
 
@@ -25,6 +26,7 @@ actor TuringRollingBenchRadioBedActor:
     private var endpoint: (any TuringAudioPlaybackEndpoint)?
     private var assets: Assets?
     private var activeOwnerID: String?
+    private var ambientStaticHandle: TuringAudioPlaybackHandle?
     private var cueHandle: TuringAudioPlaybackHandle?
     private var eventTask: Task<Void, Never>?
     private var cueWaiters:
@@ -40,6 +42,11 @@ actor TuringRollingBenchRadioBedActor:
 
     func prepareResources() async throws {
         let resolved = try resolveAssets()
+        _ = try await loader.load(
+            fileURL: resolved.ambientStaticURL,
+            shouldLoop: true,
+            cachePolicy: .bundled
+        )
         _ = try await loader.load(
             fileURL: resolved.cueURL,
             shouldLoop: false,
@@ -69,10 +76,13 @@ actor TuringRollingBenchRadioBedActor:
         guard endpoint != nil,
               assets != nil else {
             throw TuringRuntimeError.invalidConfig(
-                "Crank-radio cue is not prepared and installed."
+                "Crank-radio audio bed is not prepared and installed."
             )
         }
         if activeOwnerID == ownerID {
+            if ambientStaticHandle == nil {
+                try await startAmbientStatic(ownerID: ownerID)
+            }
             return
         }
         guard activeOwnerID == nil else {
@@ -82,10 +92,18 @@ actor TuringRollingBenchRadioBedActor:
         }
 
         activeOwnerID = ownerID
+        do {
+            try await startAmbientStatic(ownerID: ownerID)
+        } catch {
+            activeOwnerID = nil
+            throw error
+        }
         print("""
-        [TuringCrankRadioCue] session started
+        [TuringCrankRadioBed] session started
           ownerID: \(ownerID)
-          continuousStaticOwned: false
+          continuousStaticOwned: true
+          ambientStaticGainDB: \(TuringRollingBenchTuning.ambientStaticGainDB)
+          overlapsTuningCuePRAndGeneratedSpeech: true
         """)
     }
 
@@ -194,6 +212,30 @@ actor TuringRollingBenchRadioBedActor:
             let handle,
             let successfully
         ):
+            if ambientStaticHandle == handle {
+                ambientStaticHandle = nil
+                guard successfully,
+                      let ownerID = activeOwnerID else {
+                    return
+                }
+                do {
+                    try await startAmbientStatic(
+                        ownerID: ownerID
+                    )
+                    print("""
+                    [TuringCrankRadioBed] ambient static restarted
+                      ownerID: \(ownerID)
+                      reason: unexpectedLoopCompletion
+                    """)
+                } catch {
+                    print("""
+                    [TuringCrankRadioBed] ambient static restart failed
+                      ownerID: \(ownerID)
+                      error: \(error.localizedDescription)
+                    """)
+                }
+                return
+            }
             guard cueHandle == handle else {
                 return
             }
@@ -222,6 +264,10 @@ actor TuringRollingBenchRadioBedActor:
             }
 
         case .cancelled(let handle, _):
+            if ambientStaticHandle == handle {
+                ambientStaticHandle = nil
+                return
+            }
             guard cueHandle == handle else {
                 return
             }
@@ -235,6 +281,16 @@ actor TuringRollingBenchRadioBedActor:
             _,
             let message
         ):
+            if ambientStaticHandle?.requestID ==
+                requestID {
+                ambientStaticHandle = nil
+                print("""
+                [TuringCrankRadioBed] ambient static failed
+                  ownerID: \(activeOwnerID ?? "none")
+                  error: \(message)
+                """)
+                return
+            }
             guard cueHandle?.requestID == requestID else {
                 return
             }
@@ -262,10 +318,15 @@ actor TuringRollingBenchRadioBedActor:
         reason: String
     ) async {
         guard let endpoint else {
+            ambientStaticHandle = nil
             cueHandle = nil
             return
         }
-        let handles = [cueHandle].compactMap { $0 }
+        let handles = [
+            ambientStaticHandle,
+            cueHandle
+        ].compactMap { $0 }
+        ambientStaticHandle = nil
         cueHandle = nil
         for handle in handles {
             await endpoint.stop(
@@ -273,6 +334,41 @@ actor TuringRollingBenchRadioBedActor:
                 reason: reason
             )
         }
+    }
+
+    private func startAmbientStatic(
+        ownerID: String
+    ) async throws {
+        guard ambientStaticHandle == nil,
+              let endpoint,
+              let assets else {
+            return
+        }
+        let handle = try await endpoint.play(
+            request(
+                ownerID: ownerID,
+                fileURL:
+                    assets.ambientStaticURL,
+                kind: .ambientStatic,
+                label:
+                    "crankRadioAmbientStatic",
+                gainDB:
+                    Float(
+                        TuringRollingBenchTuning
+                            .ambientStaticGainDB
+                    ),
+                loops: true
+            )
+        )
+        ambientStaticHandle = handle
+        print("""
+        [TuringCrankRadioBed] ambient static started
+          ownerID: \(ownerID)
+          handleID: \(handle.id.uuidString)
+          file: \(assets.ambientStaticURL.lastPathComponent)
+          gainDB: \(TuringRollingBenchTuning.ambientStaticGainDB)
+          shouldLoop: true
+        """)
     }
 
     private func finishCueWaiters(
@@ -308,6 +404,11 @@ actor TuringRollingBenchRadioBedActor:
 
     private func resolveAssets() throws -> Assets {
         try Assets(
+            ambientStaticURL:
+                requireResource(
+                    name: "Narrow-band-analog",
+                    ext: "wav"
+                ),
             cueURL:
                 requireResource(
                     name: "Create_a_short_emerg_beeping",
