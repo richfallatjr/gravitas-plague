@@ -57,6 +57,15 @@ final class TuringStoryStateTeleportCoordinator {
                 for: scriptPointID
             )
         }
+        for scriptPointID in Self.retainedSurfaceContextScriptPointIDs(
+            dadFrameState:
+                TuringFlowInteractionGateController.shared
+                    .state(for: .dadFrame)
+        ) {
+            try await rehydratePrerecordingContext(
+                for: scriptPointID
+            )
+        }
 
         try await world.applyDoorDestination(destination.doorState, teleportID: teleportID)
         try await world.applyBattleDestination(destination.battleState, teleportID: teleportID)
@@ -94,6 +103,15 @@ final class TuringStoryStateTeleportCoordinator {
              .script04ConversationVoiceCompleted:
             return nil
         }
+    }
+
+    nonisolated static func retainedSurfaceContextScriptPointIDs(
+        dadFrameState:
+            TuringFlowInteractionGateController.State
+    ) -> [String] {
+        dadFrameState == .microphone
+            ? ["prologue.dadPhotoMemory.001"]
+            : []
     }
 
     private func rehydratePrerecordingContext(

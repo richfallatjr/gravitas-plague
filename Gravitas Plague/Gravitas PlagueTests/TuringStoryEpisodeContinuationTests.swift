@@ -229,6 +229,29 @@ final class TuringStoryEpisodeContinuationTests: XCTestCase {
         )
     }
 
+    func testContinueRehydratesRetainedDadPhotoMicrophoneContext() {
+        XCTAssertEqual(
+            TuringStoryStateTeleportCoordinator
+                .retainedSurfaceContextScriptPointIDs(
+                    dadFrameState: .microphone
+                ),
+            ["prologue.dadPhotoMemory.001"]
+        )
+        for state in [
+            TuringFlowInteractionGateController.State.closed,
+            .play,
+            .busy
+        ] {
+            XCTAssertEqual(
+                TuringStoryStateTeleportCoordinator
+                    .retainedSurfaceContextScriptPointIDs(
+                        dadFrameState: state
+                    ),
+                []
+            )
+        }
+    }
+
     func testNewPrologueUsesSparseInitialState() throws {
         let destination = try TuringStoryDestinationPlanner.startOfEpisode(.prologue)
         XCTAssertEqual(destination.completedScriptPointIDs, [])
