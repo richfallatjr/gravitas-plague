@@ -24,6 +24,8 @@ nonisolated enum TuringAudioClipKind: String, Sendable, Hashable {
     case radioCue
     case radioBroadcast
     case crankRadioTuningFiller
+    case hamReceiverAmbient
+    case hamReceiverTuningFiller
 }
 
 nonisolated enum TuringAudioRouteID: String, Sendable, Hashable {
@@ -31,6 +33,7 @@ nonisolated enum TuringAudioRouteID: String, Sendable, Hashable {
     case richHeadTracked
     case richGlobal
     case rollingBenchRadio
+    case hamReceiver
 }
 
 nonisolated enum TuringAudioResourceCachePolicy: String, Sendable, Hashable {

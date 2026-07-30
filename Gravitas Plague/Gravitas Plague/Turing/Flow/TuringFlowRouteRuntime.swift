@@ -8,6 +8,9 @@ extension TuringStoryWalkiePlaybackCoordinator:
 @MainActor
 protocol TuringFlowRouteRuntime: AnyObject, Sendable {
     var outputRoute: TuringVoiceOutputContext { get }
+    var startsGeneratedComputeDuringPrerecordingLeadIn: Bool {
+        get
+    }
 
     func validate(
         descriptor: TuringFlowDescriptor,
@@ -30,7 +33,12 @@ protocol TuringFlowRouteRuntime: AnyObject, Sendable {
         identity: TuringFlowIdentity
     ) async throws
 
-    func playPrerecordingLeadInIfNeeded(
+    func beginPrerecordingLeadInIfNeeded(
+        descriptor: TuringFlowDescriptor,
+        identity: TuringFlowIdentity
+    ) async throws
+
+    func waitForPrerecordingLeadInCompletionIfNeeded(
         descriptor: TuringFlowDescriptor,
         identity: TuringFlowIdentity
     ) async throws
@@ -48,7 +56,19 @@ protocol TuringFlowRouteRuntime: AnyObject, Sendable {
 }
 
 extension TuringFlowRouteRuntime {
-    func playPrerecordingLeadInIfNeeded(
+    var startsGeneratedComputeDuringPrerecordingLeadIn:
+        Bool
+    {
+        false
+    }
+
+    func beginPrerecordingLeadInIfNeeded(
+        descriptor: TuringFlowDescriptor,
+        identity: TuringFlowIdentity
+    ) async throws {
+    }
+
+    func waitForPrerecordingLeadInCompletionIfNeeded(
         descriptor: TuringFlowDescriptor,
         identity: TuringFlowIdentity
     ) async throws {
@@ -155,7 +175,8 @@ final class TuringFlowRouteRegistry {
             TuringBigMikeWalkieFlowRoute(),
             TuringRichWalkieFlowRoute(),
             TuringRichRoomFlowRoute(),
-            TuringBroadcasterCrankRadioFlowRoute()
+            TuringBroadcasterCrankRadioFlowRoute(),
+            TuringCatEye81HamReceiverFlowRoute()
         ]
         for route in resolvedBuiltIns {
             routes[route.outputRoute.rawValue] = route

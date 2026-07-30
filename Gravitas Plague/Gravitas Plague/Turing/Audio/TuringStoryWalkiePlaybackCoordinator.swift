@@ -7,6 +7,7 @@ actor TuringStoryWalkiePlaybackCoordinator {
         case playerGlobal
         case playerHeadTracked
         case crankRadioSpatial
+        case hamReceiverSpatial
     }
 
     struct Policy: Sendable {
@@ -734,7 +735,9 @@ actor TuringStoryWalkiePlaybackCoordinator {
             gainDB = policy.fillerGainDB
         case .commSFX, .ambientStatic, .sendingStatic,
              .radioCue, .radioBroadcast,
-             .crankRadioTuningFiller:
+             .crankRadioTuningFiller,
+             .hamReceiverAmbient,
+             .hamReceiverTuningFiller:
             gainDB = 0
         }
         let route: TuringAudioRouteID
@@ -747,6 +750,8 @@ actor TuringStoryWalkiePlaybackCoordinator {
             route = .richHeadTracked
         case .crankRadioSpatial:
             route = .rollingBenchRadio
+        case .hamReceiverSpatial:
+            route = .hamReceiver
         }
         return try await endpoint.play(
             TuringAudioPlaybackRequest(
@@ -780,6 +785,8 @@ actor TuringStoryWalkiePlaybackCoordinator {
             return "TuringRichHeadset_AudioEmitter"
         case .crankRadioSpatial:
             return "TuringRollingBenchCrankRadio_AudioEmitter"
+        case .hamReceiverSpatial:
+            return "TuringRollingBenchHamReceiver_AudioEmitter"
         }
     }
 
@@ -792,6 +799,8 @@ actor TuringStoryWalkiePlaybackCoordinator {
         case .playerHeadTracked:
             return "AudioPlaybackController.completionHandler"
         case .crankRadioSpatial:
+            return "AudioPlaybackController.completionHandler"
+        case .hamReceiverSpatial:
             return "AudioPlaybackController.completionHandler"
         }
     }

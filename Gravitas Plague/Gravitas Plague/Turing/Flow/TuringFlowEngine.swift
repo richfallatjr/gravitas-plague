@@ -235,6 +235,12 @@ actor TuringFlowEngine {
             )
 
             if let voicePrompt {
+                await inputStore.updateCharacterProfileID(
+                    voicePrompt.characterProfileID,
+                    for:
+                        descriptor.transmission
+                            .conversationKey
+                )
                 let promptVoiceContext =
                     TuringPromptVoiceStoryContextBuilder.standard(
                         voicePrompt
@@ -388,6 +394,9 @@ actor TuringFlowEngine {
                     descriptor: descriptor,
                     identity: identity
                 )
+            let startsGeneratedComputeDuringLeadIn =
+                await resolvedRoute
+                    .startsGeneratedComputeDuringPrerecordingLeadIn
 
             if planTask == nil {
                 planTask = makePlanTask()
@@ -464,15 +473,17 @@ actor TuringFlowEngine {
                             "false"
                         ),
                         (
-                            "ttsComputeStartsAfterPrerecordingQueued",
-                            "true"
+                            "ttsComputeStartBoundary",
+                            startsGeneratedComputeDuringLeadIn
+                                ? "prerecordingLeadInStarted"
+                                : "prerecordingQueued"
                         )
                     ]
                 )
             }
 
             try await resolvedRoute
-                .playPrerecordingLeadInIfNeeded(
+                .beginPrerecordingLeadInIfNeeded(
                     descriptor: descriptor,
                     identity: identity
                 )
@@ -492,22 +503,27 @@ actor TuringFlowEngine {
                     identity.playbackRunID,
                 expectedSegmentCount: nil
             )
-            await createdPlayback
-                .enqueuePrerecording(
-                    id:
-                        prerecording
-                            .prerecordingID,
-                    fileURL:
-                        prerecordingURL
-                )
-
-            let createdCompletionTask =
-                Task {
-                    await createdPlayback
-                        .waitUntilPlaybackFinished()
-                }
-            completionTask =
-                createdCompletionTask
+            if startsGeneratedComputeDuringLeadIn ==
+                false {
+                try await resolvedRoute
+                    .waitForPrerecordingLeadInCompletionIfNeeded(
+                        descriptor: descriptor,
+                        identity: identity
+                    )
+                await createdPlayback
+                    .enqueuePrerecording(
+                        id:
+                            prerecording
+                                .prerecordingID,
+                        fileURL:
+                            prerecordingURL
+                    )
+                completionTask =
+                    Task {
+                        await createdPlayback
+                            .waitUntilPlaybackFinished()
+                    }
+            }
 
             let plan: TuringFlowCompositeSpeechPlan
 
@@ -530,7 +546,9 @@ actor TuringFlowEngine {
                         )
                     await createdPlayback
                         .qwenComputeAllFinished()
-                    await createdCompletionTask.value
+                    if let completionTask {
+                        await completionTask.value
+                    }
 
                     await resolvedRoute.finish(
                         descriptor: descriptor,
@@ -610,6 +628,12 @@ actor TuringFlowEngine {
                         .conversationKey
             )
             if let voicePrompt {
+                await inputStore.updateCharacterProfileID(
+                    voicePrompt.characterProfileID,
+                    for:
+                        descriptor.transmission
+                            .conversationKey
+                )
                 await inputStore.updatePromptVariant(
                     .resolved(
                         scriptPointID:
@@ -634,46 +658,94 @@ actor TuringFlowEngine {
                     runtime: character
                 )
 
+            func renderGeneratedAudio() async throws
+                -> TuringCharacterRenderReport
+            {
+                try await renderer.render(
+                    segments: plan.segments,
+                    runID:
+                        identity
+                            .playbackRunID,
+                    onStarted: { index in
+                        await createdPlayback
+                            .qwenComputeStarted(
+                                segmentIndex:
+                                    index
+                            )
+                    },
+                    onFinished: {
+                        index,
+                        audio in
+
+                        await createdPlayback
+                            .qwenComputeFinished(
+                                segmentIndex:
+                                    index,
+                                audio: audio
+                            )
+                    },
+                    onSkipped: {
+                        index,
+                        reason in
+
+                        await createdPlayback
+                            .qwenComputeSkipped(
+                                segmentIndex:
+                                    index,
+                                reason: reason
+                            )
+                    }
+                )
+            }
+
+            let earlyRenderTask:
+                Task<TuringCharacterRenderReport, Error>?
+            if startsGeneratedComputeDuringLeadIn {
+                earlyRenderTask =
+                    Task {
+                        try await renderGeneratedAudio()
+                    }
+                do {
+                    try await resolvedRoute
+                        .waitForPrerecordingLeadInCompletionIfNeeded(
+                            descriptor: descriptor,
+                            identity: identity
+                        )
+                } catch {
+                    earlyRenderTask?.cancel()
+                    if let earlyRenderTask {
+                        _ = try? await earlyRenderTask.value
+                    }
+                    throw error
+                }
+                await createdPlayback
+                    .enqueuePrerecording(
+                        id:
+                            prerecording
+                                .prerecordingID,
+                        fileURL:
+                            prerecordingURL
+                    )
+                completionTask =
+                    Task {
+                        await createdPlayback
+                            .waitUntilPlaybackFinished()
+                    }
+            } else {
+                earlyRenderTask = nil
+            }
+
             let renderReport:
                 TuringCharacterRenderReport
 
             do {
-                renderReport =
-                    try await renderer.render(
-                        segments: plan.segments,
-                        runID:
-                            identity
-                                .playbackRunID,
-                        onStarted: { index in
-                            await createdPlayback
-                                .qwenComputeStarted(
-                                    segmentIndex:
-                                        index
-                                )
-                        },
-                        onFinished: {
-                            index,
-                            audio in
-
-                            await createdPlayback
-                                .qwenComputeFinished(
-                                    segmentIndex:
-                                        index,
-                                    audio: audio
-                                )
-                        },
-                        onSkipped: {
-                            index,
-                            reason in
-
-                            await createdPlayback
-                                .qwenComputeSkipped(
-                                    segmentIndex:
-                                        index,
-                                    reason: reason
-                                )
-                        }
-                    )
+                if let earlyRenderTask {
+                    renderReport =
+                        try await earlyRenderTask.value
+                } else {
+                    renderReport =
+                        try await renderGeneratedAudio()
+                }
                 await createdPlayback
                     .qwenComputeAllFinished()
             } catch {
@@ -684,7 +756,9 @@ actor TuringFlowEngine {
                         reason:
                             error.localizedDescription
                     )
-                await createdCompletionTask.value
+                if let completionTask {
+                    await completionTask.value
+                }
 
                 await resolvedRoute.finish(
                     descriptor: descriptor,
@@ -743,7 +817,12 @@ actor TuringFlowEngine {
                 )
             }
 
-            await createdCompletionTask.value
+            guard let completionTask else {
+                throw TuringRuntimeError.invalidConfig(
+                    "\(scriptPointID) playback completion task was not created."
+                )
+            }
+            await completionTask.value
 
             let completed =
                 await createdPlayback
@@ -1288,8 +1367,13 @@ actor TuringFlowEngine {
                     character.characterID,
                   voicePrompt.voiceID ==
                     character.voiceID,
-                  voicePrompt.characterProfileID ==
-                    character.characterID,
+                  characterProfileMatches(
+                    profileID:
+                        voicePrompt
+                            .characterProfileID,
+                    characterID:
+                        character.characterID
+                  ),
                   voicePrompt.conversationKey ==
                     descriptor.transmission
                         .conversationKey,
@@ -1323,6 +1407,21 @@ actor TuringFlowEngine {
                 "\(descriptor.scriptPointID) requires a reviewed manual PR transcript."
             )
         }
+    }
+
+    private static func characterProfileMatches(
+        profileID: String,
+        characterID: String
+    ) -> Bool {
+        if profileID == characterID {
+            return true
+        }
+        guard let profile =
+                try? TuringCharacterProfileStore()
+                    .profile(id: profileID) else {
+            return false
+        }
+        return profile.characterID == characterID
     }
 
     private static func identityVoicePromptID(

@@ -6,11 +6,15 @@ final class TuringBroadcasterCrankRadioFlowRoute:
 {
     let outputRoute =
         TuringVoiceOutputContext.crankRadioSpatial
+    let startsGeneratedComputeDuringPrerecordingLeadIn =
+        true
 
     private let radioBed:
         any TuringRollingBenchRadioBedControlling
     private let tuningLoops:
         any TuringGeneratedGapBridge
+    private var cueHandlesByPlaybackRunID:
+        [String: TuringAudioPlaybackHandle] = [:]
 
     convenience init() {
         self.init(
@@ -116,7 +120,7 @@ final class TuringBroadcasterCrankRadioFlowRoute:
         )
     }
 
-    func playPrerecordingLeadInIfNeeded(
+    func beginPrerecordingLeadInIfNeeded(
         descriptor: TuringFlowDescriptor,
         identity: TuringFlowIdentity
     ) async throws {
@@ -128,7 +132,43 @@ final class TuringBroadcasterCrankRadioFlowRoute:
             reason:
                 "foundationCompletedBeforeEmergencyCue"
         )
-        try await radioBed.playEmergencyCue(
+        let handle =
+            try await radioBed.startEmergencyCue(
+                ownerID: identity.playbackRunID
+            )
+        cueHandlesByPlaybackRunID[
+            identity.playbackRunID
+        ] = handle
+        print("""
+        [TuringBroadcasterFlow] generated compute released by alarm
+          playbackRunID: \(identity.playbackRunID)
+          cueHandleID: \(handle.id.uuidString)
+          prerecordingQueued: false
+        """)
+    }
+
+    func waitForPrerecordingLeadInCompletionIfNeeded(
+        descriptor: TuringFlowDescriptor,
+        identity: TuringFlowIdentity
+    ) async throws {
+        guard isInitialTransmission(descriptor) else {
+            return
+        }
+        guard let handle =
+                cueHandlesByPlaybackRunID[
+                    identity.playbackRunID
+                ] else {
+            throw TuringRuntimeError.invalidConfig(
+                "Broadcaster alarm did not start before PR playback."
+            )
+        }
+        defer {
+            cueHandlesByPlaybackRunID[
+                identity.playbackRunID
+            ] = nil
+        }
+        try await radioBed.waitForEmergencyCueCompletion(
+            handle,
             ownerID: identity.playbackRunID
         )
     }
@@ -144,6 +184,9 @@ final class TuringBroadcasterCrankRadioFlowRoute:
         identity: TuringFlowIdentity,
         succeeded: Bool
     ) async {
+        cueHandlesByPlaybackRunID[
+            identity.playbackRunID
+        ] = nil
         await tuningLoops.endGap(
             ownerID: identity.playbackRunID,
             reason:

@@ -15,6 +15,7 @@ enum TuringConversationPromptVariant:
     case scriptPoint05
     case roomObjectMemory
     case broadcasterRadio
+    case cateye81HamReceiver
 
     static func forScriptPointID(
         _ scriptPointID: String
@@ -45,6 +46,8 @@ enum TuringConversationPromptVariant:
             return "Turing/Prompts/conversationPrompt_roomObjectMemory.txt"
         case .broadcasterRadio:
             return "Turing/Prompts/conversationPrompt_broadcasterRadio.txt"
+        case .cateye81HamReceiver:
+            return "Turing/Prompts/conversationPrompt_cateye81HamReceiver.txt"
         }
     }
 
@@ -58,6 +61,8 @@ enum TuringConversationPromptVariant:
             return "conversationPrompt_roomObjectMemory"
         case .broadcasterRadio:
             return "conversationPrompt_broadcasterRadio"
+        case .cateye81HamReceiver:
+            return "conversationPrompt_cateye81HamReceiver"
         }
     }
 }
@@ -70,6 +75,8 @@ actor TuringConversationInputStore {
     private var prerecordingTranscriptByKey: [String: String] = [:]
     private var promptVariantByKey:
         [String: TuringConversationPromptVariant] = [:]
+    private var characterProfileIDByKey:
+        [String: String] = [:]
 
     func prerecordingTranscript(for key: String) -> String {
         prerecordingTranscriptByKey[key] ?? ""
@@ -83,6 +90,24 @@ actor TuringConversationInputStore {
         for key: String
     ) -> TuringConversationPromptVariant {
         promptVariantByKey[key] ?? .standard
+    }
+
+    func characterProfileID(
+        for key: String
+    ) -> String? {
+        characterProfileIDByKey[key]
+    }
+
+    func updateCharacterProfileID(
+        _ profileID: String,
+        for key: String
+    ) {
+        characterProfileIDByKey[key] = profileID
+        print("""
+        [TuringConversationInput] character profile updated
+          key: \(key)
+          profileID: \(profileID)
+        """)
     }
 
     func updatePromptVariant(
@@ -130,6 +155,7 @@ actor TuringConversationInputStore {
         prerecordingIDByKey.removeValue(forKey: key)
         prerecordingTranscriptByKey.removeValue(forKey: key)
         promptVariantByKey.removeValue(forKey: key)
+        characterProfileIDByKey.removeValue(forKey: key)
     }
 
     func clearAll(reason: String) {
@@ -137,6 +163,7 @@ actor TuringConversationInputStore {
         prerecordingIDByKey.removeAll(keepingCapacity: false)
         prerecordingTranscriptByKey.removeAll(keepingCapacity: false)
         promptVariantByKey.removeAll(keepingCapacity: false)
+        characterProfileIDByKey.removeAll(keepingCapacity: false)
         print("""
         [TuringConversationInput] cleared
           reason: \(reason)

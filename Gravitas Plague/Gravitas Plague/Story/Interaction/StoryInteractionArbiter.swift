@@ -8,7 +8,8 @@ actor StoryInteractionArbiter {
         [StoryInteractionSurfaceID: StoryTuringGateState] = [
             .walkie: .closed,
             .dadFrame: .closed,
-            .crankRadio: .closed
+            .crankRadio: .closed,
+            .hamReceiver: .closed
         ]
     private var doorState: StoryDoorLifecycleState = .closedUnloaded
     private var exclusiveLease: StoryInteractionLease?
@@ -215,7 +216,8 @@ actor StoryInteractionArbiter {
         turingGates = [
             .walkie: .closed,
             .dadFrame: .closed,
-            .crankRadio: .closed
+            .crankRadio: .closed,
+            .hamReceiver: .closed
         ]
         doorState = .closedUnloaded
         exclusiveLease = nil
@@ -281,6 +283,8 @@ actor StoryInteractionArbiter {
         let dadFrame: StoryDadFramePresentation
         let crankRadio:
             StoryCrankRadioPresentation
+        let hamReceiver:
+            StoryHamReceiverPresentation
 
         if let exclusiveLease {
             switch exclusiveLease.owner {
@@ -290,10 +294,12 @@ actor StoryInteractionArbiter {
                 door = .hidden
                 dadFrame = .hidden
                 crankRadio = .hidden
+                hamReceiver = .hidden
             case .battle:
                 walkie = .hidden
                 dadFrame = .hidden
                 crankRadio = .hidden
+                hamReceiver = .hidden
                 switch doorState {
                 case .closedUnloaded, .loading, .closedReady:
                     capabilities = [.doorOpen]
@@ -309,12 +315,14 @@ actor StoryInteractionArbiter {
                     door = .close
                     dadFrame = .hidden
                     crankRadio = .hidden
+                    hamReceiver = .hidden
                 } else {
                     capabilities = []
                     walkie = .hidden
                     door = .hidden
                     dadFrame = .hidden
                     crankRadio = .hidden
+                    hamReceiver = .hidden
                 }
             }
         } else if doorState != .closedUnloaded {
@@ -323,6 +331,7 @@ actor StoryInteractionArbiter {
             door = .hidden
             dadFrame = .hidden
             crankRadio = .hidden
+            hamReceiver = .hidden
         } else {
             let walkieGate =
                 turingGates[.walkie] ?? .closed
@@ -330,6 +339,8 @@ actor StoryInteractionArbiter {
                 turingGates[.dadFrame] ?? .closed
             let crankRadioGate =
                 turingGates[.crankRadio] ?? .closed
+            let hamReceiverGate =
+                turingGates[.hamReceiver] ?? .closed
 
             let anyTuringSurfaceBusy =
                 turingGates.values.contains(.busy)
@@ -340,6 +351,7 @@ actor StoryInteractionArbiter {
                 door = .hidden
                 dadFrame = .hidden
                 crankRadio = .hidden
+                hamReceiver = .hidden
             } else {
                 var resolvedCapabilities:
                     Set<StoryInteractionCapability> = [.doorOpen]
@@ -381,6 +393,21 @@ actor StoryInteractionArbiter {
                     crankRadio = .hidden
                 }
 
+                switch hamReceiverGate {
+                case .play:
+                    resolvedCapabilities.insert(
+                        .hamReceiverPlay
+                    )
+                    hamReceiver = .play
+                case .microphone:
+                    resolvedCapabilities.insert(
+                        .hamReceiverMicrophone
+                    )
+                    hamReceiver = .microphone
+                case .closed, .busy:
+                    hamReceiver = .hidden
+                }
+
                 capabilities = resolvedCapabilities
                 door = .open
             }
@@ -395,7 +422,8 @@ actor StoryInteractionArbiter {
             walkiePresentation: walkie,
             doorPresentation: door,
             dadFramePresentation: dadFrame,
-            crankRadioPresentation: crankRadio
+            crankRadioPresentation: crankRadio,
+            hamReceiverPresentation: hamReceiver
         )
     }
 
@@ -408,6 +436,7 @@ actor StoryInteractionArbiter {
           turingGate: \(snapshot.turingGate.rawValue)
           dadFrameGate: \((turingGates[.dadFrame] ?? .closed).rawValue)
           crankRadioGate: \((turingGates[.crankRadio] ?? .closed).rawValue)
+          hamReceiverGate: \((turingGates[.hamReceiver] ?? .closed).rawValue)
           doorState: \(snapshot.doorState.rawValue)
           exclusiveOwner: \(snapshot.exclusiveOwner?.logValue ?? "none")
           capabilities: \(snapshot.capabilities.map(\.rawValue).sorted())
@@ -415,6 +444,7 @@ actor StoryInteractionArbiter {
           door: \(snapshot.doorPresentation.rawValue)
           dadFrame: \(snapshot.dadFramePresentation.rawValue)
           crankRadio: \(snapshot.crankRadioPresentation.rawValue)
+          hamReceiver: \(snapshot.hamReceiverPresentation.rawValue)
           reason: \(reason)
         """)
         await snapshotHub.yield(snapshot)

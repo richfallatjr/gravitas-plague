@@ -35,6 +35,9 @@ final class TuringRollingBenchBundleController:
         let crankRadioRoot: Entity
         let crankRadioIconAnchor: Entity
         let audioEmitter: Entity
+        let hamReceiverRoot: Entity
+        let hamReceiverIconAnchor: Entity
+        let hamReceiverAudioEmitter: Entity
     }
 
     let root = Entity()
@@ -47,6 +50,10 @@ final class TuringRollingBenchBundleController:
         TuringRollingBenchRadioController
     let crankRadioInteractionController:
         TuringStoryCrankRadioInteractionController
+    let hamReceiverAudioController:
+        TuringHamReceiverAudioController
+    let hamReceiverInteractionController:
+        TuringStoryHamReceiverInteractionController
 
     private weak var wallManager: WallPlaneManager?
     private weak var occupancyRegistry: WallPropOccupancyRegistry?
@@ -89,6 +96,31 @@ final class TuringRollingBenchBundleController:
                     tuningLoops,
                 radioBed:
                     TuringRollingBenchRadioBedActor
+                        .shared
+            )
+        hamReceiverAudioController =
+            TuringHamReceiverAudioController(
+                bed:
+                    TuringHamReceiverBedActor.shared,
+                tuningLoops:
+                    TuringRandomTuningLoopActor
+                        .hamReceiver
+            )
+        hamReceiverInteractionController =
+            TuringStoryHamReceiverInteractionController(
+                gate:
+                    TuringFlowInteractionGateController
+                        .shared,
+                episodeFlow:
+                    TuringEpisodeFlowController
+                        .shared,
+                dictation: nil,
+                iconController: nil,
+                tuningLoops:
+                    TuringRandomTuningLoopActor
+                        .hamReceiver,
+                radioBed:
+                    TuringHamReceiverBedActor
                         .shared
             )
         root.name = "TuringRollingBench_WorldRoot"
@@ -173,8 +205,28 @@ final class TuringRollingBenchBundleController:
             crankRadioInteractionController
                 .crankRadioInstalled(
                 iconAnchor: anchors.crankRadioIconAnchor,
-                crankRadioRoot: anchors.crankRadioRoot
+                    crankRadioRoot: anchors.crankRadioRoot
             )
+            try await hamReceiverAudioController.install(
+                emitter:
+                    anchors.hamReceiverAudioEmitter
+            )
+            let readiness =
+                hamReceiverResourceReadiness()
+            hamReceiverInteractionController
+                .hamReceiverInstalled(
+                    iconAnchor:
+                        anchors.hamReceiverIconAnchor,
+                    hamReceiverRoot:
+                        anchors.hamReceiverRoot,
+                    resourcesReady:
+                        readiness.missing.isEmpty
+                )
+            print("""
+            [TuringHamReceiver] authoring readiness
+              ready: \(readiness.missing.isEmpty)
+              missing: \(readiness.missing)
+            """)
             interactionInstalled = true
         }
 
@@ -187,6 +239,7 @@ final class TuringRollingBenchBundleController:
               bottomClearanceMeters: \(clearance)
               occupancyID: \(occupancyID)
               audioEmitter: \(anchors.audioEmitter.name)
+              hamReceiverAudioEmitter: \(anchors.hamReceiverAudioEmitter.name)
             """
         )
     }
@@ -196,7 +249,12 @@ final class TuringRollingBenchBundleController:
         preparationTask = nil
         crankRadioInteractionController
             .crankRadioRemoved(reason: reason)
+        hamReceiverInteractionController
+            .hamReceiverRemoved(reason: reason)
         radioController.reset(reason: reason)
+        hamReceiverAudioController.reset(
+            reason: reason
+        )
         interactionInstalled = false
         occupancyRegistry?.unregister(id: occupancyID)
         root.isEnabled = false
@@ -210,6 +268,9 @@ final class TuringRollingBenchBundleController:
     func unload(reason: String) {
         reset(reason: reason)
         radioController.unload(reason: reason)
+        hamReceiverAudioController.unload(
+            reason: reason
+        )
         root.children.removeAll()
         loadedBundleRoot = nil
         anchors = nil
@@ -259,6 +320,8 @@ final class TuringRollingBenchBundleController:
         TuringMemoryBudgetProbe.log(label: "afterRollingBenchAuthoredHierarchyResolved")
         if !audioResourcesPrepared {
             try await radioController.prepareResources()
+            try await hamReceiverAudioController
+                .prepareResources()
             audioResourcesPrepared = true
         }
     }
@@ -294,6 +357,24 @@ final class TuringRollingBenchBundleController:
             canonical: TuringRollingBenchEntityName.canonicalCrankRadioIconAnchor,
             under: bundleRoot
         )
+        let hamReceiverRoot = try requireEntity(
+            current:
+                TuringRollingBenchEntityName
+                    .hamReceiverRoot,
+            canonical:
+                TuringRollingBenchEntityName
+                    .canonicalHamReceiverRoot,
+            under: bundleRoot
+        )
+        let hamReceiverIconAnchor = try requireEntity(
+            current:
+                TuringRollingBenchEntityName
+                    .hamReceiverIconAnchor,
+            canonical:
+                TuringRollingBenchEntityName
+                    .canonicalHamReceiverIconAnchor,
+            under: bundleRoot
+        )
 
         let authoredTopLevelChildren = bundleRoot.children.map { child in
             "\(child.name):enabled=\(child.isEnabled)"
@@ -302,7 +383,19 @@ final class TuringRollingBenchBundleController:
         let passthroughLighting = configurePassthroughLighting(
             in: bundleRoot
         )
-        let emitter = makeAudioEmitter(under: crankRadioRoot)
+        let emitter = makeAudioEmitter(
+            named:
+                TuringRollingBenchEntityName
+                    .runtimeAudioEmitter,
+            under: crankRadioRoot
+        )
+        let hamReceiverEmitter =
+            makeAudioEmitter(
+                named:
+                    TuringRollingBenchEntityName
+                        .runtimeHamReceiverAudioEmitter,
+                under: hamReceiverRoot
+            )
 
         print(
             """
@@ -315,6 +408,10 @@ final class TuringRollingBenchBundleController:
               runtimeGeometryPruning: false
               authoredTopLevelChildren: \(authoredTopLevelChildren)
               proceduralAudioEmitter: \(emitter.name)
+              hamReceiverRoot: \(hamReceiverRoot.name)
+              hamReceiverIconAnchor: \(hamReceiverIconAnchor.name)
+              hamReceiverAudioEmitter: \(hamReceiverEmitter.name)
+              hamReceiverIconAnchorIsRootSibling: \(hamReceiverIconAnchor.parent === hamReceiverRoot.parent)
               automaticPassthroughLighting: true
               importedEnvironmentLightFound: \(passthroughLighting.lightFound)
               importedEnvironmentLightDisabled: \(passthroughLighting.lightDisabled)
@@ -327,7 +424,12 @@ final class TuringRollingBenchBundleController:
             cartRoot: cartRoot,
             crankRadioRoot: crankRadioRoot,
             crankRadioIconAnchor: crankRadioIconAnchor,
-            audioEmitter: emitter
+            audioEmitter: emitter,
+            hamReceiverRoot: hamReceiverRoot,
+            hamReceiverIconAnchor:
+                hamReceiverIconAnchor,
+            hamReceiverAudioEmitter:
+                hamReceiverEmitter
         )
     }
 
@@ -377,17 +479,50 @@ final class TuringRollingBenchBundleController:
         throw BundleError.missingRequiredEntity("\(current) / \(canonical)")
     }
 
-    private func makeAudioEmitter(under crankRadioRoot: Entity) -> Entity {
-        if let existing = crankRadioRoot.turingRollingBenchFindEntity(
-            named: TuringRollingBenchEntityName.runtimeAudioEmitter
+    private func makeAudioEmitter(
+        named: String,
+        under parent: Entity
+    ) -> Entity {
+        if let existing = parent.turingRollingBenchFindEntity(
+            named: named
         ) {
             return existing
         }
         let emitter = Entity()
-        emitter.name = TuringRollingBenchEntityName.runtimeAudioEmitter
+        emitter.name = named
         emitter.position = .zero
-        crankRadioRoot.addChild(emitter)
+        parent.addChild(emitter)
         return emitter
+    }
+
+    private func hamReceiverResourceReadiness()
+        -> (missing: [String], ready: Bool)
+    {
+        var missing: [String] = []
+        if Bundle.main.url(
+            forResource:
+                "pr-cat-eye-81-script01",
+            withExtension: "mp3",
+            subdirectory:
+                "Turing/Audio/prerecordings"
+        ) == nil {
+            missing.append(
+                "pr-cat-eye-81-script01.mp3"
+            )
+        }
+        let cloneMetadataPath =
+            "\(TuringCatEye81VoiceIdentity.cloneProfileResourcePath)/metadata.json"
+        if (try? TuringResourceLoader.resourceURL(
+            resourcePath: cloneMetadataPath
+        )) == nil {
+            missing.append(
+                "cateye81_base_clone_v1.qwenclone"
+            )
+        }
+        return (
+            missing,
+            missing.isEmpty
+        )
     }
 
     private func measureVisualBounds() {

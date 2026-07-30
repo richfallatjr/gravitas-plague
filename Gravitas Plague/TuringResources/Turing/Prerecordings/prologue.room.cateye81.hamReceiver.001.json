@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "prologue.room.cateye81.hamReceiver.001",
+  "speaker": "cateye81",
+  "voiceID": "cateye81_base_clone_v1",
+  "voiceVariantID": "cateye81_reference_01",
+  "audioFile": "pr-cat-eye-81-script01.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Any station monitoring, this is Cat Eye Eight-One, transmitting from Chatham County, Georgia. I haven’t heard a voice I could verify in three days. Savannah’s gone quiet, and most of what’s left on the bands is static or folks repeating rumors. I’ve been sweeping north, west, and down the coast for emergency beacons, road reports, or word of safe passage through the South. I’m sheltered for now, but power and supplies won’t last forever. If anybody copies, answer with a handle and general region only—no exact locations. Reckon I just need to know somebody else is still listening.",
+  "summary": "CatEye81 makes a guarded first-contact transmission after days without a verified voice and asks for general-region replies and information about safe passage through the South.",
+  "voicePromptIntent": "Continue using prologue.cateye81.hamReceiver.followUp.001.",
+  "defaultEmotion": "tired but alert, guarded, naturally Southern"
+}

@@ -61,6 +61,15 @@ actor TuringDialogueService {
           dialogueHistoryIncluded: false
         """)
 
+        if request.promptTemplateID ==
+            .cateye81HamReceiver {
+            Self.logRenderedPrompt(
+                prompt,
+                name:
+                    "TuringCatEye81PromptVoiceRaw"
+            )
+        }
+
         let raw: String
         do {
             raw = try await runner.runPrompt(
@@ -139,7 +148,8 @@ actor TuringDialogueService {
         let usesBackstoryOnly =
             request.promptVariant == .scriptPoint05 ||
             request.promptVariant == .roomObjectMemory ||
-            request.promptVariant == .broadcasterRadio
+            request.promptVariant == .broadcasterRadio ||
+            request.promptVariant == .cateye81HamReceiver
         let inputContract =
             usesBackstoryOnly
                 ? "userInput,characterBackstory,promptVoiceStoryContext,prerecordingTranscript"
@@ -161,6 +171,7 @@ actor TuringDialogueService {
         [TuringConversationNoBible] Foundation request started
           freshSession: true
           characterID: \(profile.characterID)
+          characterProfileID: \(profile.effectiveProfileID)
           promptVariant: \(request.promptVariant.rawValue)
           promptResourcePath: \(promptResourcePath)
           foundationPurpose: \(foundationPurpose)
@@ -173,7 +184,18 @@ actor TuringDialogueService {
           promptSHA256: \(TuringFlowHash.sha256(prompt))
           promptContextOccurrenceCount: \(Self.occurrenceCount(of: request.promptContext, in: prompt))
           prerecordingTranscriptOccurrenceCount: \(Self.occurrenceCount(of: request.prerecordingTranscript, in: prompt))
+          characterProfileOccurrenceCount: \(Self.occurrenceCount(of: profile.writeup, in: prompt))
+          listenerProfileRendered: false
         """)
+
+        if request.promptVariant ==
+            .cateye81HamReceiver {
+            Self.logRenderedPrompt(
+                prompt,
+                name:
+                    "TuringCatEye81ConversationVoiceRaw"
+            )
+        }
 
         let raw: String
         do {
@@ -484,6 +506,22 @@ actor TuringDialogueService {
         writeDebugLog(
             fileName: "last_\(name)_raw_response.txt",
             contents: raw
+        )
+    }
+
+    private static func logRenderedPrompt(
+        _ prompt: String,
+        name: String
+    ) {
+        print("""
+        [\(name)] BEGIN
+        \(prompt)
+        [\(name)] END
+        """)
+        writeDebugLog(
+            fileName:
+                "last_\(name)_prompt.txt",
+            contents: prompt
         )
     }
 

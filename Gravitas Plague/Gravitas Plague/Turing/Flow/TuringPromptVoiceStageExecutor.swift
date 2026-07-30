@@ -62,6 +62,12 @@ actor TuringPromptVoiceStageExecutor: TuringSpeechStageExecuting {
 
         let promptVoiceContext =
             TuringPromptVoiceStoryContextBuilder.standard(prompt)
+        await inputStore.updateCharacterProfileID(
+            prompt.characterProfileID,
+            for:
+                context.descriptor.transmission
+                    .conversationKey
+        )
         await inputStore.updatePromptVoiceStoryContext(
             promptVoiceContext.storyContext,
             for: context.descriptor.transmission.conversationKey
@@ -129,12 +135,32 @@ actor TuringPromptVoiceStageExecutor: TuringSpeechStageExecuting {
     ) throws {
         guard prompt.speakerID == character.characterID,
               prompt.voiceID == character.voiceID,
-              prompt.characterProfileID == character.characterID,
+              characterProfileMatches(
+                profileID:
+                    prompt.characterProfileID,
+                characterID:
+                    character.characterID
+              ),
               prompt.conversationKey == descriptor.transmission.conversationKey,
               prompt.outputContext == descriptor.transmission.outputRoute else {
             throw TuringRuntimeError.invalidConfig(
                 "\(descriptor.scriptPointID) pipeline prompt identity mismatch."
             )
         }
+    }
+
+    private static func characterProfileMatches(
+        profileID: String,
+        characterID: String
+    ) -> Bool {
+        if profileID == characterID {
+            return true
+        }
+        guard let profile =
+                try? TuringCharacterProfileStore()
+                    .profile(id: profileID) else {
+            return false
+        }
+        return profile.characterID == characterID
     }
 }

@@ -9,6 +9,8 @@ enum TuringRollingBenchEntityName {
     static let antennaeRoot = "antennae_root"
     static let microphoneRoot = "microphone_root"
     static let crankRadioIconAnchor = "crank_radio_icon_root"
+    static let hamReceiverIconAnchor =
+        "ham_receiver_icon_root_001"
     static let microphoneIconAnchor = "microphone_icon_root"
     static let importedEnvironmentLight = "env_light"
 
@@ -20,6 +22,8 @@ enum TuringRollingBenchEntityName {
     static let canonicalAntennaeRoot = "TuringRollingBenchAntennae_Root"
     static let canonicalMicrophoneRoot = "TuringRollingBenchMicrophone_Root"
     static let canonicalCrankRadioIconAnchor = "TuringRollingBenchCrankRadio_IconAnchor"
+    static let canonicalHamReceiverIconAnchor =
+        "TuringRollingBenchHamReceiver_IconAnchor"
     static let canonicalMicrophoneIconAnchor = "TuringRollingBenchMicrophone_IconAnchor"
 
     static let runtimeAudioEmitter = "TuringRollingBenchCrankRadio_AudioEmitter"
@@ -28,6 +32,12 @@ enum TuringRollingBenchEntityName {
     static let runtimeBroadcastLane = "TuringRollingBenchCrankRadio_BroadcastLane"
     static let runtimeCrankRadioHitTarget = "TuringRollingBenchCrankRadio_HitTarget"
     static let runtimeCrankRadioActionIcon = "TuringRollingBenchCrankRadio_ActionIcon"
+    static let runtimeHamReceiverAudioEmitter =
+        "TuringRollingBenchHamReceiver_AudioEmitter"
+    static let runtimeHamReceiverHitTarget =
+        "TuringRollingBenchHamReceiver_PhysicalHitTarget"
+    static let runtimeHamReceiverActionIcon =
+        "TuringRollingBenchHamReceiver_ActionIcon"
 }
 
 enum TuringRollingBenchTuning {

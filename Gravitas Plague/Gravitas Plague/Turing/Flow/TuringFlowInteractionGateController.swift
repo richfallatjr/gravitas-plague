@@ -21,6 +21,8 @@ final class TuringFlowInteractionGateController: ObservableObject {
     @Published private(set) var dadFrameState: State = .closed
     @Published private(set) var crankRadioState:
         State = .closed
+    @Published private(set) var hamReceiverState:
+        State = .closed
 
     private var ownerBySurface:
         [StoryInteractionSurfaceID: UUID] = [:]
@@ -43,6 +45,8 @@ final class TuringFlowInteractionGateController: ObservableObject {
             return dadFrameState
         case .crankRadio:
             return crankRadioState
+        case .hamReceiver:
+            return hamReceiverState
         }
     }
 
@@ -308,10 +312,15 @@ final class TuringFlowInteractionGateController: ObservableObject {
         state = .closed
         dadFrameState = .closed
         crankRadioState = .closed
+        hamReceiverState = .closed
         publish(surfaceID: .walkie, reason: "reset.\(reason)")
         publish(surfaceID: .dadFrame, reason: "reset.\(reason)")
         publish(
             surfaceID: .crankRadio,
+            reason: "reset.\(reason)"
+        )
+        publish(
+            surfaceID: .hamReceiver,
             reason: "reset.\(reason)"
         )
     }
@@ -348,6 +357,8 @@ final class TuringFlowInteractionGateController: ObservableObject {
             dadFrameState = newState
         case .crankRadio:
             crankRadioState = newState
+        case .hamReceiver:
+            hamReceiverState = newState
         }
         publish(surfaceID: surfaceID, reason: reason)
     }

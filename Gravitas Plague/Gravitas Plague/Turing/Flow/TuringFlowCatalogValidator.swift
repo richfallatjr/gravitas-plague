@@ -233,12 +233,22 @@ struct TuringFlowCatalogValidator:
         }
 
         if descriptor.transmission.usesLegacyVoicePrompt {
-            guard let prompt,
-                  prompt.speakerID ==
+            guard let prompt else {
+                throw TuringRuntimeError.invalidConfig(
+                    "Turing Flow prompt is missing at \(descriptor.scriptPointID)."
+                )
+            }
+            let promptProfile =
+                try TuringCharacterProfileStore()
+                    .profile(
+                        id: prompt
+                            .characterProfileID
+                    )
+            guard prompt.speakerID ==
                     character.characterID,
                   prompt.voiceID ==
                     character.voiceID,
-                  prompt.characterProfileID ==
+                  promptProfile.characterID ==
                     character.characterID,
                   prompt.outputContext ==
                     descriptor.transmission

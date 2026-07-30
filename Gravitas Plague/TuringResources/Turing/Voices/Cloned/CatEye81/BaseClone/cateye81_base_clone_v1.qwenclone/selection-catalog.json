@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "voiceID": "cateye81_base_clone_v1",
+  "defaultVariantID": "cateye81_reference_01",
+  "variants": [
+    {
+      "variantID": "cateye81_reference_01",
+      "displayName": "CatEye81 Reference 01",
+      "enabled": true
+    }
+  ]
+}

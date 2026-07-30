@@ -212,6 +212,46 @@ struct PlagueImmersiveView: View {
             TapGesture()
                 .targetedToEntity(
                     where: .has(
+                        TuringStoryHamReceiverPlayComponent.self
+                    )
+                )
+                .onEnded { _ in
+                    Task { @MainActor in
+                        coordinator
+                            .turingHamReceiverPlayTapped(
+                                source: "realityKit"
+                            )
+                    }
+                }
+        )
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .targetedToEntity(
+                    where: .has(
+                        TuringStoryHamReceiverMicrophoneComponent.self
+                    )
+                )
+                .onChanged { _ in
+                    Task { @MainActor in
+                        coordinator
+                            .turingHamReceiverMicrophoneHoldBegan(
+                                source: "realityKit"
+                            )
+                    }
+                }
+                .onEnded { _ in
+                    Task { @MainActor in
+                        coordinator
+                            .turingHamReceiverMicrophoneHoldEnded(
+                                source: "realityKit"
+                            )
+                    }
+                }
+        )
+        .simultaneousGesture(
+            TapGesture()
+                .targetedToEntity(
+                    where: .has(
                         TuringStoryWalkiePlayComponent.self
                     )
                 )

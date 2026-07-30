@@ -6,7 +6,13 @@ protocol TuringRollingBenchRadioBedControlling: Sendable {
         endpoint: any TuringAudioPlaybackEndpoint
     ) async
     func beginSession(ownerID: String) async throws
-    func playEmergencyCue(ownerID: String) async throws
+    func startEmergencyCue(
+        ownerID: String
+    ) async throws -> TuringAudioPlaybackHandle
+    func waitForEmergencyCueCompletion(
+        _ handle: TuringAudioPlaybackHandle,
+        ownerID: String
+    ) async throws
     func endSession(ownerID: String, reason: String) async
     func reset(reason: String) async
     func unload(reason: String) async
@@ -107,7 +113,9 @@ actor TuringRollingBenchRadioBedActor:
         """)
     }
 
-    func playEmergencyCue(ownerID: String) async throws {
+    func startEmergencyCue(
+        ownerID: String
+    ) async throws -> TuringAudioPlaybackHandle {
         guard activeOwnerID == ownerID,
               let endpoint,
               let assets else {
@@ -138,7 +146,36 @@ actor TuringRollingBenchRadioBedActor:
             )
         )
         cueHandle = handle
+        print("""
+        [TuringCrankRadioCue] alarm started
+          ownerID: \(ownerID)
+          handleID: \(handle.id.uuidString)
+          file: \(assets.cueURL.lastPathComponent)
+          ttsTriggerBoundary: alarmStarted
+        """)
+        return handle
+    }
 
+    func waitForEmergencyCueCompletion(
+        _ handle: TuringAudioPlaybackHandle,
+        ownerID: String
+    ) async throws {
+        guard activeOwnerID == ownerID else {
+            throw TuringRuntimeError.invalidConfig(
+                "Crank-radio cue completion requested without the active session."
+            )
+        }
+        guard cueHandle == handle ||
+                completedCueRequestIDs.contains(
+                    handle.requestID
+                ) ||
+                failedCueRequests[
+                    handle.requestID
+                ] != nil else {
+            throw TuringRuntimeError.invalidConfig(
+                "Crank-radio cue completion requested for an inactive handle."
+            )
+        }
         try await withCheckedThrowingContinuation {
             continuation in
             if completedCueRequestIDs.remove(

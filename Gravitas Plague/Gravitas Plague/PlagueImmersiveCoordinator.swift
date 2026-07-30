@@ -415,6 +415,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 .crankRadioInteractionController
         )
         StoryInteractionPresentationCoordinator.shared.register(
+            turingRollingBenchBundleController
+                .hamReceiverInteractionController
+        )
+        StoryInteractionPresentationCoordinator.shared.register(
             turingDoorBundleController
         )
         StoryInteractionPresentationCoordinator.shared.start()
@@ -1420,6 +1424,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         turingRollingBenchBundleController
             .crankRadioInteractionController
             .setEventSink(eventSink)
+        turingRollingBenchBundleController
+            .hamReceiverInteractionController
+            .setEventSink(eventSink)
     }
 
     func turingWalkiePlayTapped(source: String) {
@@ -1481,6 +1488,30 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     ) {
         turingRollingBenchBundleController
             .crankRadioInteractionController
+            .microphoneHoldEnded(source: source)
+    }
+
+    func turingHamReceiverPlayTapped(
+        source: String
+    ) {
+        turingRollingBenchBundleController
+            .hamReceiverInteractionController
+            .playTapped(source: source)
+    }
+
+    func turingHamReceiverMicrophoneHoldBegan(
+        source: String
+    ) {
+        turingRollingBenchBundleController
+            .hamReceiverInteractionController
+            .microphoneHoldBegan(source: source)
+    }
+
+    func turingHamReceiverMicrophoneHoldEnded(
+        source: String
+    ) {
+        turingRollingBenchBundleController
+            .hamReceiverInteractionController
             .microphoneHoldEnded(source: source)
     }
 
@@ -2275,6 +2306,11 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             )
             await turingRollingBenchBundleController
                 .crankRadioInteractionController
+                .shutdown(
+                    reason: "immersiveShutdown"
+                )
+            await turingRollingBenchBundleController
+                .hamReceiverInteractionController
                 .shutdown(
                     reason: "immersiveShutdown"
                 )

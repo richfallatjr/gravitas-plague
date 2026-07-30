@@ -1,0 +1,54 @@
+{
+  "allowFallback": false,
+  "allowPrerecordedDialoguePlayback": false,
+  "characterID": "cateye81",
+  "displayName": "CatEye81 Reference 01",
+  "kind": "baseCloneReferenceVariant",
+  "language": "english",
+  "performance": {
+    "allowedContexts": [
+      "ham_radio",
+      "survival_information",
+      "first_contact"
+    ],
+    "blockedContexts": [
+      "comedy",
+      "announcer",
+      "panic"
+    ],
+    "energy": "medium_low",
+    "intensity": 4,
+    "pace": "measured",
+    "selectionHint": "Default CatEye81 Prologue reference.",
+    "tags": [
+      "southern",
+      "guarded",
+      "tired",
+      "practical"
+    ],
+    "tone": "tired but alert, naturally Southern ham-radio delivery",
+    "volume": "medium"
+  },
+  "qwenArtifacts": {
+    "manifestSHA256": "8b34de07ae80667bb7688307d9093a4509a1d345fcbbec95215cc6abc5252a08",
+    "mode": "icl",
+    "path": "qwen_artifacts/clone_prompt_manifest.json",
+    "referenceCodesPath": "qwen_artifacts/reference_codes.i32le",
+    "referenceTextTokensPath": "qwen_artifacts/ref_text_tokens.i32le",
+    "safetensorsSHA256": "27a7b7827d32d0622acd2fb893551df1cb2b46ed9f69be434bd5a956cf3130ba",
+    "speakerEmbeddingPath": "qwen_artifacts/speaker_embedding.f32le",
+    "status": "precomputed"
+  },
+  "reference": {
+    "channels": 1,
+    "normalizedAudioPath": "ref_audio/normalized/ref_24000_mono.wav",
+    "normalizedFormat": "wav_float32_le",
+    "originalAudioPath": "ref_audio/original/cat-eye-81-reference-01.mp3",
+    "sampleRate": 24000,
+    "textPath": "ref_text.txt"
+  },
+  "schemaVersion": 1,
+  "sourceProvider": "local_recording",
+  "variantID": "cateye81_reference_01",
+  "voiceID": "cateye81_base_clone_v1"
+}

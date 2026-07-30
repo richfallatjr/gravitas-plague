@@ -65,10 +65,16 @@ struct TuringVoicePromptPlan: Codable, Sendable, Hashable {
 
 struct TuringCharacterProfile: Codable, Sendable, Hashable {
     let schemaVersion: Int
+    let profileID: String?
     let characterID: String
+    let episodeID: String?
     let displayName: String
     let defaultVoiceID: String
     let writeup: String
+
+    var effectiveProfileID: String {
+        profileID ?? characterID
+    }
 
     var promptText: String {
         """
@@ -84,9 +90,15 @@ struct TuringCharacterProfileStore: Sendable {
     func profile(
         id: String
     ) throws -> TuringCharacterProfile {
-        try TuringResourceLoader.decodeResource(
+        let profile = try TuringResourceLoader.decodeResource(
             TuringCharacterProfile.self,
             resourcePath: "Turing/Characters/\(id).json"
         )
+        guard profile.effectiveProfileID == id else {
+            throw TuringRuntimeError.invalidConfig(
+                "Character profile ID mismatch. Expected \(id), got \(profile.effectiveProfileID)."
+            )
+        }
+        return profile
     }
 }

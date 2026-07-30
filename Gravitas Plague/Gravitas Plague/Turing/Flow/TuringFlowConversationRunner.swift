@@ -190,6 +190,11 @@ enum TuringFlowConversationRunner {
                 await inputStore.promptVariant(
                     for: request.conversationKey
                 )
+            let characterProfileID =
+                await inputStore.characterProfileID(
+                    for: request.conversationKey
+                ) ??
+                runtime.characterID
 
             print("""
             [TuringFlow] conversation promptVoice Story Context resolved
@@ -201,6 +206,7 @@ enum TuringFlowConversationRunner {
               fabricatedEmotionIncluded: false
               dialogueHistoryIncluded: false
               promptVariant: \(promptVariant.rawValue)
+              characterProfileID: \(characterProfileID)
             """)
 
             failureStage = "submittingFoundationConversationPrompt"
@@ -229,7 +235,7 @@ enum TuringFlowConversationRunner {
                                     id:
                                         "conversation.\(conversationRunID.uuidString)",
                                     characterProfileID:
-                                        runtime.characterID,
+                                        characterProfileID,
                                     userInput:
                                         text,
                                     promptContext:
