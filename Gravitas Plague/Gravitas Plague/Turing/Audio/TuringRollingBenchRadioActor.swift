@@ -411,8 +411,8 @@ actor TuringRollingBenchRadioBedActor:
                 ),
             cueURL:
                 requireResource(
-                    name: "Create_a_short_emerg_beeping",
-                    ext: "wav"
+                    name: "emergency-broadcast-alert-data-burst",
+                    ext: "mp3"
                 )
         )
     }
