@@ -1,19 +1,19 @@
 {
   "schemaVersion": 2,
-  "scriptPointID": "prologue.hamReceiver.cateye81.001",
+  "scriptPointID": "prologue.hamReceiver.rich.002",
   "trigger": {
-    "kind": "userPlay",
+    "kind": "priorScriptPointCompleted",
     "delaySeconds": 0
   },
   "transmission": {
-    "prerecordingID": "prologue.room.cateye81.hamReceiver.001",
-    "voicePromptID": "prologue.cateye81.hamReceiver.followUp.001",
-    "characterID": "cateye81",
+    "prerecordingID": "prologue.room.rich.hamReceiver.002",
+    "voicePromptID": "prologue.rich.hamReceiver.followUp.002",
+    "characterID": "rich",
     "conversationKey": "object.ham_receiver",
-    "outputRoute": "hamReceiverSpatial",
+    "outputRoute": "roomGlobal",
     "interactionSurface": "hamReceiver",
     "computeStart": "foundationBeforePrerecording",
-    "fillerMode": "none",
+    "fillerMode": "continuousFromPrerecordingToGenerated",
     "commSFX": {
       "openBeforePrerecording": false,
       "sendAfterGenerated": false,
@@ -24,7 +24,7 @@
     "backgroundMusic": null
   },
   "progression": {
-    "nextScriptPointID": "prologue.hamReceiver.rich.002",
+    "nextScriptPointID": "prologue.hamReceiver.cateye81.003",
     "automaticAdvance": true,
     "interactionGateAfterCompletion": "closed"
   }

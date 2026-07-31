@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "prologue.room.cateye81.hamReceiver.003",
+  "speaker": "cateye81",
+  "voiceID": "cateye81_base_clone_v1",
+  "voiceVariantID": "cateye81_reference_01",
+  "audioFile": "pr-cat-eye-81-ham-radio-script03.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Rich, Cat Eye Eight-One. Copy Pennsylvania. Yeah—the Gravitas relay is real. I’ve heard the identifier myself, and I copied one station confirming an antigen drop. Go to sixty meters, Channel Two. Set your dial to five point three four six five megahertz, upper sideband. That’s 5.3465 USB. Listen for three clipped data bursts, about a minute apart. Don’t key over the first pass. Once the identifier repeats clean, move to Channel One—5.3305 USB—and check in with your handle and six-character grid square, not a street address. They’ll confirm the request there. If they accept it, Gravitas sends the antigen package by drone and homes it on your carrier. You copy?",
+  "summary": "CatEye81 answers the Pennsylvania station and establishes the authored on-air context before her generated Gravitas-beacon details.",
+  "voicePromptIntent": "Continue using prologue.cateye81.hamReceiver.followUp.003.",
+  "defaultEmotion": "relieved, guarded, careful, increasingly hopeful"
+}

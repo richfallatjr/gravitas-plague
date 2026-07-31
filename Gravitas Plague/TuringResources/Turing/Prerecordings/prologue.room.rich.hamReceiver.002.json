@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "prologue.room.rich.hamReceiver.002",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-ham-radio-script02.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Cat Eye Eight-One, this is Rich. I copy you from the Pennsylvania region. My handle’s Rich—exact location stays off the air for now. I heard a report about a Gravitas beacon, something that can call an antigen drone and get doses out to isolated stations. Have you heard anything you trust? If it’s real, give me the band, the exact dial frequency, and what I’m listening for. My set’s old, so say it slow. Over.",
+  "summary": "Rich identifies himself over the ham radio, gives only a general Pennsylvania region, and asks CatEye81 what she knows about the reported Gravitas beacon.",
+  "voicePromptIntent": "Continue using prologue.rich.hamReceiver.followUp.002.",
+  "defaultEmotion": "relieved, cautious, technical, skeptical, trying not to sound desperate"
+}

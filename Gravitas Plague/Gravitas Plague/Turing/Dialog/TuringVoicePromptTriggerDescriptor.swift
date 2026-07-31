@@ -65,6 +65,7 @@ enum TuringVoicePromptTemplateID:
   case roomObjectMemory
   case broadcasterRadio
   case cateye81HamReceiver
+  case richHamReceiver
 
   var resourcePath: String {
     switch self {
@@ -76,6 +77,8 @@ enum TuringVoicePromptTemplateID:
       return "Turing/Prompts/voicePrompt_broadcasterRadio.txt"
     case .cateye81HamReceiver:
       return "Turing/Prompts/voicePrompt_cateye81HamReceiver.txt"
+    case .richHamReceiver:
+      return "Turing/Prompts/voicePrompt_richHamReceiver.txt"
     }
   }
 
@@ -89,6 +92,8 @@ enum TuringVoicePromptTemplateID:
       return "voicePrompt_broadcasterRadio"
     case .cateye81HamReceiver:
       return "voicePrompt_cateye81HamReceiver"
+    case .richHamReceiver:
+      return "voicePrompt_richHamReceiver"
     }
   }
 
@@ -102,6 +107,8 @@ enum TuringVoicePromptTemplateID:
       return .broadcasterRadio
     case .cateye81HamReceiver:
       return .cateye81HamReceiver
+    case .richHamReceiver:
+      return .standard
     }
   }
 }
@@ -166,7 +173,9 @@ enum TuringPromptVoiceStoryContextBuilder {
        descriptor.effectivePromptTemplateID ==
         .broadcasterRadio ||
        descriptor.effectivePromptTemplateID ==
-        .cateye81HamReceiver {
+        .cateye81HamReceiver ||
+       descriptor.effectivePromptTemplateID ==
+        .richHamReceiver {
       return TuringAuthoredPromptVoiceContext(
         voicePromptID: descriptor.voicePromptID,
         storyContext:

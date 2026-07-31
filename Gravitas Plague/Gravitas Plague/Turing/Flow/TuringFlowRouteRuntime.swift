@@ -528,6 +528,25 @@ final class TuringRichRoomFlowRoute:
 {
     let outputRoute = TuringVoiceOutputContext.roomGlobal
 
+    private let hamReceiverTuningLoops:
+        any TuringGeneratedGapBridge
+
+    convenience init() {
+        self.init(
+            hamReceiverTuningLoops:
+                TuringRandomTuningLoopActor
+                    .hamReceiver
+        )
+    }
+
+    init(
+        hamReceiverTuningLoops:
+            any TuringGeneratedGapBridge
+    ) {
+        self.hamReceiverTuningLoops =
+            hamReceiverTuningLoops
+    }
+
     func validate(
         descriptor: TuringFlowDescriptor,
         character: TuringCharacterRuntimeDefinition
@@ -599,6 +618,34 @@ final class TuringRichRoomFlowRoute:
                 descriptor: descriptor,
                 identity: identity
             )
+
+        if descriptor.transmission
+            .effectiveInteractionSurface ==
+            .hamReceiver {
+            await hamReceiverTuningLoops.beginGap(
+                ownerID:
+                    identity.playbackRunID,
+                waitingForSegmentIndex: 0,
+                reason:
+                    "richHamReceiverFoundationPreparation"
+            )
+        }
+    }
+
+    func beginPrerecordingLeadInIfNeeded(
+        descriptor: TuringFlowDescriptor,
+        identity: TuringFlowIdentity
+    ) async throws {
+        guard descriptor.transmission
+                .effectiveInteractionSurface ==
+                .hamReceiver else {
+            return
+        }
+        await hamReceiverTuningLoops.endGap(
+            ownerID: identity.playbackRunID,
+            reason:
+                "richHamReceiverFoundationCompletedBeforePrerecording"
+        )
     }
 
     func playSendIfNeeded(
@@ -612,6 +659,16 @@ final class TuringRichRoomFlowRoute:
         identity: TuringFlowIdentity,
         succeeded: Bool
     ) async {
+        if descriptor.transmission
+            .effectiveInteractionSurface ==
+            .hamReceiver {
+            await hamReceiverTuningLoops.endGap(
+                ownerID:
+                    identity.playbackRunID,
+                reason:
+                    "richHamReceiverFlowFinished.succeeded.\(succeeded)"
+            )
+        }
         await TuringFlowMediaCueCoordinator.shared.stopIfNeeded(
             identity: identity,
             reason: succeeded

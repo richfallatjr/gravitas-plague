@@ -41,6 +41,24 @@ final class TuringFoundationFreshSessionEnforcementTests:
         )
         XCTAssertEqual(
             TuringFoundationPromptPurposePolicy.guardrailMode(
+                for: "voicePrompt_cateye81HamReceiver"
+            ),
+            .permissiveContentTransformations
+        )
+        XCTAssertEqual(
+            TuringFoundationPromptPurposePolicy.guardrailMode(
+                for: "voicePrompt_richHamReceiver"
+            ),
+            .permissiveContentTransformations
+        )
+        XCTAssertEqual(
+            TuringFoundationPromptPurposePolicy.guardrailMode(
+                for: "conversationPrompt_cateye81HamReceiver"
+            ),
+            .permissiveContentTransformations
+        )
+        XCTAssertEqual(
+            TuringFoundationPromptPurposePolicy.guardrailMode(
                 for: "dialogueJSONRepair"
             ),
             .standard

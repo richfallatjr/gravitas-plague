@@ -62,11 +62,16 @@ actor TuringDialogueService {
         """)
 
         if request.promptTemplateID ==
-            .cateye81HamReceiver {
+            .cateye81HamReceiver ||
+           request.promptTemplateID ==
+            .richHamReceiver {
             Self.logRenderedPrompt(
                 prompt,
                 name:
-                    "TuringCatEye81PromptVoiceRaw"
+                    request.promptTemplateID ==
+                        .cateye81HamReceiver
+                        ? "TuringCatEye81PromptVoiceRaw"
+                        : "TuringRichHamReceiverPromptVoiceRaw"
             )
         }
 

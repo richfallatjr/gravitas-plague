@@ -6,7 +6,7 @@
   "characterProfileID": "cateye81.prologue",
   "listenerProfileID": "rich",
   "outputContext": "hamReceiverSpatial",
-  "conversationKey": "object.ham_receiver.cateye81",
+  "conversationKey": "object.ham_receiver",
   "promptTemplateID": "cateye81HamReceiver",
   "intent": "I haven’t spoken to another person in days, and I’m starting to believe I may be one of the last people left in this part of Georgia. I’ve been sweeping the bands for surviving stations, emergency beacons, and any word of safe passage through the South. I need to know whether the roads, waterways, or any organized route out of Chatham County are still open. My family is gone, Savannah has gone quiet, and I’m alone in the old storm shelter with food, water, batteries, and generator fuel running low. Hearing another human signal gives me hope, but I’m still guarded and I won’t give my exact location yet. I want to establish a dependable frequency, trade only information we can verify, and find out what is still alive beyond this shelter.",
   "emotion": "tired but alert, guarded, relieved to hear another station"

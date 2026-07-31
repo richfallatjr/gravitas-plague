@@ -8,7 +8,7 @@ final class TuringStoryHamReceiverInteractionController:
     private let scriptPointID =
         "prologue.hamReceiver.cateye81.001"
     private let conversationKey =
-        "object.ham_receiver.cateye81"
+        "object.ham_receiver"
     private let gate:
         TuringFlowInteractionGateController
     private let episodeFlow:
@@ -170,6 +170,10 @@ final class TuringStoryHamReceiverInteractionController:
                 "hamReceiverRemoved.\(reason)"
         )
         Task {
+            await self.episodeFlow.cancelActiveSequence(
+                reason:
+                    "hamReceiverRemoved.\(reason)"
+            )
             await self.dictation.cancel(
                 reason:
                     "hamReceiverRemoved.\(reason)"
@@ -217,6 +221,12 @@ final class TuringStoryHamReceiverInteractionController:
                 .shared
                 .clear(
                     key: self.conversationKey
+                )
+            await TuringConversationInputStore
+                .shared
+                .clear(
+                    key:
+                        "object.ham_receiver.cateye81"
                 )
         }
         print(

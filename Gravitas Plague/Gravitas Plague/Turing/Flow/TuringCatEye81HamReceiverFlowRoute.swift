@@ -11,15 +11,11 @@ final class TuringCatEye81HamReceiverFlowRoute:
     let startsGeneratedComputeDuringPrerecordingLeadIn =
         false
 
-    private let receiverBed:
-        any TuringHamReceiverBedControlling
     private let tuningLoops:
         any TuringGeneratedGapBridge
 
     convenience init() {
         self.init(
-            receiverBed:
-                TuringHamReceiverBedActor.shared,
             tuningLoops:
                 TuringRandomTuningLoopActor
                     .hamReceiver
@@ -27,12 +23,9 @@ final class TuringCatEye81HamReceiverFlowRoute:
     }
 
     init(
-        receiverBed:
-            any TuringHamReceiverBedControlling,
         tuningLoops:
             any TuringGeneratedGapBridge
     ) {
-        self.receiverBed = receiverBed
         self.tuningLoops = tuningLoops
     }
 
@@ -89,7 +82,8 @@ final class TuringCatEye81HamReceiverFlowRoute:
         policy.externalGeneratedGapBridge =
             tuningLoops
         policy.prerecordingPrecedesGenerated =
-            isInitialTransmission(descriptor)
+            descriptor.transmission
+                .prerecordingID != "none"
         policy.fillerDirectoryCandidates = []
         policy.fillerExtensions = []
         return TuringStoryWalkiePlaybackCoordinator(
@@ -113,14 +107,6 @@ final class TuringCatEye81HamReceiverFlowRoute:
         descriptor: TuringFlowDescriptor,
         identity: TuringFlowIdentity
     ) async throws {
-        guard isInitialTransmission(
-            descriptor
-        ) else {
-            return
-        }
-        try await receiverBed.beginSession(
-            ownerID: identity.playbackRunID
-        )
         await tuningLoops.beginGap(
             ownerID: identity.playbackRunID,
             waitingForSegmentIndex: 0,
@@ -133,11 +119,6 @@ final class TuringCatEye81HamReceiverFlowRoute:
         descriptor: TuringFlowDescriptor,
         identity: TuringFlowIdentity
     ) async throws {
-        guard isInitialTransmission(
-            descriptor
-        ) else {
-            return
-        }
         await tuningLoops.endGap(
             ownerID: identity.playbackRunID,
             reason:
@@ -161,19 +142,5 @@ final class TuringCatEye81HamReceiverFlowRoute:
             reason:
                 "hamReceiverFlowFinished.succeeded.\(succeeded)"
         )
-        await receiverBed.endSession(
-            ownerID: identity.playbackRunID,
-            reason:
-                succeeded
-                    ? "hamReceiverFlowFinished"
-                    : "hamReceiverFlowFailed"
-        )
-    }
-
-    private func isInitialTransmission(
-        _ descriptor: TuringFlowDescriptor
-    ) -> Bool {
-        descriptor.transmission.prerecordingID !=
-            "none"
     }
 }

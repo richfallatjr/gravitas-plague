@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "prologue.cateye81.hamReceiver.followUp.003",
+  "speakerID": "cateye81",
+  "voiceID": "cateye81_base_clone_v1",
+  "characterProfileID": "cateye81.prologue",
+  "listenerProfileID": "rich",
+  "outputContext": "hamReceiverSpatial",
+  "conversationKey": "object.ham_receiver",
+  "promptTemplateID": "cateye81HamReceiver",
+  "intent": "I’m relieved the Pennsylvania station asked about the Gravitas beacon because I’ve been holding onto information I wasn’t sure I would ever get to share. Three nights ago, I copied the same automated identifier twice on the sixty-meter band. Later, I heard another operator report that Gravitas accepted their request and delivered a sealed antigen package by drone. I did not witness the delivery myself, but I heard enough of the exchange to believe the relay is real.\n\nThe automated beacon is on 5.3465 megahertz upper sideband, sixty-meter Channel Two. It transmits three short digital bursts and repeats the same identifier near the top and bottom of the hour. After the identifier is copied cleanly, the operator moves to 5.3305 megahertz upper sideband, Channel One, and checks in with a handle and six-character Maidenhead grid square. The grid gives Gravitas a general delivery area without broadcasting a street address.\n\nA legitimate relay repeats the station’s handle and returns a short confirmation code when the request is accepted. The operator should write that code down, remain near the receiver, and keep monitoring the voice channel because Gravitas may request another check-in before dispatching the drone. I have also heard imitation signals on nearby frequencies, so the repeated identifier and confirmation code matter. The real relay does not ask for a full name or exact address.\n\nI want to give the Pennsylvania station every detail I copied, but I need to distinguish what I heard personally from what another operator reported. I’m hopeful this could keep somebody alive, and I’m relieved to finally have useful information instead of another rumor. I should speak slowly when giving the frequencies, ask for them to be repeated back, and ask the other station to tell me whether the identifier matches the one I heard.",
+  "emotion": "relieved, careful, technically precise, hopeful, explicit about what remains secondhand"
+}

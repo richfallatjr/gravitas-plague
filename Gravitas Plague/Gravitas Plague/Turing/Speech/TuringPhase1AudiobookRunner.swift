@@ -126,10 +126,19 @@ struct TuringPhase1AudiobookRunner: Sendable {
           duplicatedSourceContextDisabled: true
         """)
 
-        let raw = try await runner.runPrompt(
-            prompt,
-            purpose: "voiceScript_audiobookSourceSectionSegmentation"
-        )
+        let raw: String
+        do {
+            raw = try await runner.runPrompt(
+                prompt,
+                purpose: "voiceScript_audiobookSourceSectionSegmentation"
+            )
+        } catch {
+            return try deterministicSegmentationResult(
+                section: section,
+                sectionText: sectionText,
+                reason: "Foundation request failed: \(error.localizedDescription)"
+            )
+        }
         Self.logRawResponse(
             raw,
             name: "voiceScript_audiobook_section_\(section.index)",
@@ -138,54 +147,65 @@ struct TuringPhase1AudiobookRunner: Sendable {
         )
 
         do {
-            return try decodeSegmentationResult(raw, section: section)
+            return try decodeSegmentationResult(
+                raw,
+                section: section,
+                authoredSectionText: sectionText
+            )
         } catch {
-            print("""
-            [TuringFoundation] audiobook section JSON repair started
-              freshSession: true
-              sectionIndex: \(section.index)
-              reason: malformedJSON
-            """)
-
-            do {
-                let repaired = try await runner.runPrompt(
-                    renderRepairPrompt(
-                        section: section,
-                        sectionText: sectionText,
-                        previousError: error
-                    ),
-                    purpose: "voiceScript_audiobookSourceSectionSegmentationRepair"
-                )
-                Self.logRawResponse(
-                    repaired,
-                    name: "voiceScript_audiobook_section_\(section.index)_repair",
-                    sectionIndex: section.index,
-                    promptCharacters: prompt.utf16.count
-                )
-                return try decodeSegmentationResult(repaired, section: section)
-            } catch {
-                print("""
-                [TuringPhase1Audiobook] section failed before Qwen
-                  sectionIndex: \(section.index)
-                  qwenStarted: false
-                  error: \(error.localizedDescription)
-                """)
-                throw error
-            }
+            return try deterministicSegmentationResult(
+                section: section,
+                sectionText: sectionText,
+                reason: "Foundation response unusable: \(error.localizedDescription)"
+            )
         }
+    }
+
+    private func deterministicSegmentationResult(
+        section: TuringAudiobookSourceSection,
+        sectionText: String,
+        reason: String
+    ) throws -> TuringAudiobookSectionSegmentationResult {
+        let fallback = TuringAudiobookDeterministicSegmenter.payload(
+            sourceText: sectionText,
+            sectionIndex: section.index
+        )
+        print("""
+        [TuringPhase1Audiobook] deterministic segmentation fallback
+          sectionIndex: \(section.index)
+          sourceUTF16: \(sectionText.utf16.count)
+          segmentCount: \(fallback.segments.count)
+          foundationRepairRequested: false
+          authoredTextPreserved: true
+          reason: \(reason)
+        """)
+        return try decodeSegmentationPayload(fallback, section: section)
     }
 
     private func decodeSegmentationResult(
         _ raw: String,
+        section: TuringAudiobookSourceSection,
+        authoredSectionText: String
+    ) throws -> TuringAudiobookSectionSegmentationResult {
+        let payload = try TuringAudiobookSegmentationResponseDecoder.decode(
+            raw,
+            expectedSectionIndex: section.index
+        )
+        let segmentedText = payload.segments.map(\.spokenText)
+            .joined(separator: " ")
+        guard normalizedCoverageText(authoredSectionText) ==
+                normalizedCoverageText(segmentedText) else {
+            throw TuringRuntimeError.foundationJSONGateFailed(
+                "Script Voice segmentation changed the authored section text."
+            )
+        }
+        return try decodeSegmentationPayload(payload, section: section)
+    }
+
+    private func decodeSegmentationPayload(
+        _ payload: TuringAudiobookSegmentationPayload,
         section: TuringAudiobookSourceSection
     ) throws -> TuringAudiobookSectionSegmentationResult {
-        let data = try TuringJSONSanitizer.extractSingleTopLevelObject(
-            from: raw
-        )
-        let payload = try JSONDecoder().decode(
-            TuringAudiobookSegmentationPayload.self,
-            from: data
-        )
         let parser = TuringAudiobookSegmentationParser(
             expectedSection: section,
             globalIndexOffset: 0
@@ -207,6 +227,11 @@ struct TuringPhase1AudiobookRunner: Sendable {
             section: section,
             segments: segments
         )
+    }
+
+    private func normalizedCoverageText(_ value: String) -> String {
+        value.split(whereSeparator: \Character.isWhitespace)
+            .joined(separator: " ")
     }
 
     private func renumberSectionResults(
@@ -337,43 +362,6 @@ struct TuringPhase1AudiobookRunner: Sendable {
               error: \(error.localizedDescription)
             """)
         }
-    }
-
-    private func renderRepairPrompt(
-        section: TuringAudiobookSourceSection,
-        sectionText: String,
-        previousError: Error
-    ) -> String {
-        """
-        Repair the audiobook source-section segmentation JSON.
-
-        Return JSON only. No markdown. No commentary.
-        The previous response failed with: \(previousError.localizedDescription)
-
-        Required schema:
-        {
-          "schemaVersion": 1,
-          "sectionIndex": \(section.index),
-          "segments": [
-            {
-              "index": 0,
-              "spokenText": "string sent to Qwen",
-              "emotion": "narration"
-            }
-          ]
-        }
-
-        Rules:
-        - Repair malformed JSON only.
-        - Return ordered spoken segments.
-        - Do not include sourceText.
-        - Only return segments for the section text.
-
-        Section text to segment:
-        ---BEGIN_SECTION_TEXT---
-        \(sectionText)
-        ---END_SECTION_TEXT---
-        """
     }
 
     private func sourceSectionsHaveOverlap(

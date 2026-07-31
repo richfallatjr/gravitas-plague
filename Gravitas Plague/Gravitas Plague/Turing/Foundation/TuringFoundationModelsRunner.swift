@@ -34,7 +34,10 @@ enum TuringFoundationPromptPurposePolicy {
         case "voicePrompt_characterIntent",
              "conversationPrompt_scriptPoint05",
              "voicePrompt_roomObjectMemory",
-             "conversationPrompt_roomObjectMemory":
+             "conversationPrompt_roomObjectMemory",
+             "voicePrompt_cateye81HamReceiver",
+             "voicePrompt_richHamReceiver",
+             "conversationPrompt_cateye81HamReceiver":
             return .permissiveContentTransformations
 
         default:

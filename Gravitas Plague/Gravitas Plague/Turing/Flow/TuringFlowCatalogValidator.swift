@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 private struct TuringFlowCatalogResource:
@@ -199,12 +200,186 @@ struct TuringFlowCatalogValidator:
         try rejectAutomaticCycles(
             descriptors: descriptors
         )
+        try validateHamReceiverThreePointSequence(
+            catalogIDs:
+                catalog.scriptPointIDs,
+            descriptors: descriptors
+        )
 
         print("""
         [TuringFlow] catalog validated
           scriptPointCount: \(catalog.scriptPointIDs.count)
           scriptPointIDs: \(catalog.scriptPointIDs)
         """)
+    }
+
+    private func validateHamReceiverThreePointSequence(
+        catalogIDs: [String],
+        descriptors:
+            [String: TuringFlowDescriptor]
+    ) throws {
+        let pointIDs = [
+            "prologue.hamReceiver.cateye81.001",
+            "prologue.hamReceiver.rich.002",
+            "prologue.hamReceiver.cateye81.003"
+        ]
+        guard let firstIndex =
+                catalogIDs.firstIndex(
+                    of: pointIDs[0]
+                ) else {
+            throw TuringRuntimeError.invalidConfig(
+                "Ham receiver Script01 is missing from the catalog."
+            )
+        }
+        let endIndex =
+            firstIndex + pointIDs.count
+        guard endIndex <= catalogIDs.count,
+              Array(
+                catalogIDs[
+                    firstIndex..<endIndex
+                ]
+              ) == pointIDs else {
+            throw TuringRuntimeError.invalidConfig(
+                "Ham receiver Script01, Script02, and Script03 must be consecutive and in authored order."
+            )
+        }
+
+        let points =
+            try pointIDs.map {
+                guard let descriptor =
+                        descriptors[$0] else {
+                    throw TuringRuntimeError.invalidConfig(
+                        "Missing ham receiver point \($0)."
+                    )
+                }
+                return descriptor
+            }
+        let expectedCharacters = [
+            "cateye81",
+            "rich",
+            "cateye81"
+        ]
+        let expectedRoutes:
+            [TuringVoiceOutputContext] = [
+                .hamReceiverSpatial,
+                .roomGlobal,
+                .hamReceiverSpatial
+            ]
+
+        for index in points.indices {
+            let point = points[index]
+            guard point.transmission
+                    .characterID ==
+                    expectedCharacters[index],
+                  point.transmission
+                    .outputRoute ==
+                    expectedRoutes[index],
+                  point.transmission
+                    .conversationKey ==
+                    "object.ham_receiver",
+                  point.transmission
+                    .effectiveInteractionSurface ==
+                    .hamReceiver,
+                  point.transmission
+                    .computeStart ==
+                    .foundationBeforePrerecording,
+                  point.transmission.commSFX
+                    .openBeforePrerecording ==
+                    false,
+                  point.transmission.commSFX
+                    .sendAfterGenerated ==
+                    false else {
+                throw TuringRuntimeError.invalidConfig(
+                    "Ham receiver point \(point.scriptPointID) violates its production identity or audio contract."
+                )
+            }
+        }
+
+        guard points[0].progression
+                .nextScriptPointID ==
+                pointIDs[1],
+              points[0].progression
+                .automaticAdvance,
+              points[0].progression
+                .interactionGateAfterCompletion ==
+                .closed,
+              points[1].trigger.kind ==
+                .priorScriptPointCompleted,
+              points[1].progression
+                .nextScriptPointID ==
+                pointIDs[2],
+              points[1].progression
+                .automaticAdvance,
+              points[1].progression
+                .interactionGateAfterCompletion ==
+                .closed,
+              points[2].trigger.kind ==
+                .priorScriptPointCompleted,
+              points[2].progression
+                .nextScriptPointID ==
+                nil,
+              points[2].progression
+                .automaticAdvance ==
+                false,
+              points[2].progression
+                .interactionGateAfterCompletion ==
+                .microphone else {
+            throw TuringRuntimeError.invalidConfig(
+                "Ham receiver progression must be automatic Script01 -> Script02 -> Script03 with only Script03 returning the microphone."
+            )
+        }
+
+        let approvedHashes = [
+            "prologue.room.rich.hamReceiver.002":
+                "4eb04a0656565f1ecc724f13fac847d4f3c3a98bf01302f92a52ed87dd06359d",
+            "prologue.room.cateye81.hamReceiver.003":
+                "621b8da451b233e182cde4dd6a04fdbb84e578969146d56cf44a4c607a9390d2"
+        ]
+        for (prerecordingID, approvedHash)
+            in approvedHashes {
+            let prerecording =
+                try prerecordingStore.descriptor(
+                    id: prerecordingID
+                )
+            let transcript =
+                prerecording.transcript
+                    .trimmingCharacters(
+                        in:
+                            .whitespacesAndNewlines
+                    )
+            guard transcript.isEmpty == false,
+                  transcript.contains(
+                    "REVIEWED_VERBATIM_TRANSCRIPT_REQUIRED"
+                  ) == false else {
+                throw TuringRuntimeError.invalidConfig(
+                    "\(prerecordingID) requires a reviewed transcript."
+                )
+            }
+
+            let audioURL =
+                try prerecordingStore.audioURL(
+                    for: prerecording
+                )
+            let audioData =
+                try Data(
+                    contentsOf: audioURL,
+                    options: .mappedIfSafe
+                )
+            let actualHash =
+                SHA256.hash(data: audioData)
+                    .map {
+                        String(
+                            format: "%02x",
+                            $0
+                        )
+                    }
+                    .joined()
+            guard actualHash == approvedHash else {
+                throw TuringRuntimeError.invalidConfig(
+                    "\(prerecordingID) audio hash \(actualHash) does not match the approved asset."
+                )
+            }
+        }
     }
 
     private func validateIdentity(
