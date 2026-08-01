@@ -610,6 +610,13 @@ final class PlagueDemoSession: ObservableObject {
     func handlePlayerDeathUI(
         openWindow: OpenWindowAction
     ) {
+        if experienceMode == .story {
+            requestStoryEpisodePicker(
+                source: "storyPlayerDeathAfterBlackFade"
+            )
+            return
+        }
+
         if swiftUIControlWindowSuppressedForCurrentRun {
             wallPosterUIActive = true
 

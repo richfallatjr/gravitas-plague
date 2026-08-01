@@ -491,11 +491,21 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                     self?.turingRollingBenchBundleController
                         .authoredRewardAnchor(named: name)
                 },
+                onEnemyPrepared: { [weak self] enemyID, controller in
+                    self?.prepareChapter01RobotAudioAndCallbacks(
+                        enemyID: enemyID,
+                        controller: controller
+                    )
+                },
                 onEnemyRemoved: { [weak self] enemyID in
                     self?.audioController.stopHostAudioSource(id: enemyID)
                 },
+                onPlayerDamage: { [weak self] amount in
+                    self?.audioController.playRandomPlayerDamageHit()
+                    self?.onPlayerDamaged?(amount)
+                },
                 onPlayerDeath: { [weak self] in
-                    self?.onPlayerDeathStarted?()
+                    self?.handleChapter01RobotPlayerDeath()
                 }
             )
         let dadWindow = Chapter01DadWindowCoordinator(
@@ -803,6 +813,44 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         }
         controller.onAttackStarted = {
             print("[Battle01] Grandma attack animation started")
+        }
+    }
+
+    private func prepareChapter01RobotAudioAndCallbacks(
+        enemyID: UUID,
+        controller: JockRetargetTestController
+    ) {
+        audioController.attachHostAudioSource(
+            id: enemyID,
+            hostRootEntity: controller.rootEntity,
+            archetype: .robot,
+            headAudioEntity: controller.characterAudioEmitter,
+            breathingStartDelay: 0
+        )
+        controller.onPunchHit = { [weak self] region in
+            self?.audioController.playConfirmedCharacterFaceHitSound(
+                archetype: .robot,
+                enemyID: enemyID,
+                hitRegion: region,
+                sourceID: enemyID
+            )
+        }
+        controller.onCharacterDamageHit = { [weak self] in
+            self?.audioController.playCharacterDamageHit(
+                archetype: .robot,
+                enemyID: enemyID,
+                sourceID: enemyID
+            )
+        }
+        controller.onCharacterDeath = { [weak self] in
+            self?.audioController.playCharacterDeath(
+                archetype: .robot,
+                enemyID: enemyID,
+                sourceID: enemyID
+            )
+        }
+        controller.onAttackStarted = {
+            print("[Chapter01Robot] attack animation started")
         }
     }
 
@@ -5392,6 +5440,84 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             deathPresentationController?.fadeBackUp(duration: 1.25)
 
             print("[PlagueDeath] lights coming back up.")
+        }
+    }
+
+    private func handleChapter01RobotPlayerDeath() {
+        guard !isPlayerDeathSequenceActive else { return }
+
+        isPlayerDeathSequenceActive = true
+
+        let deathAudioDuration =
+            audioController.playRandomPlayerDeathAndReturnDuration()
+        let youDiedOriginFromDevice =
+            spatialProvider.currentTrackedDeviceTransform()
+
+        print(
+            """
+            [Chapter01Robot] handling player death
+              confirmedRobotHits: 5
+              deathAudioDuration: \(String(format: "%.3f", deathAudioDuration))
+              hasTrackedDevicePose: \(youDiedOriginFromDevice != nil)
+            """
+        )
+
+        showInstructionHUD("You died.")
+
+        deathPresentationController?.playDeathBlackoutSequence { [weak self] in
+            guard let self else { return }
+
+            if let youDiedOriginFromDevice,
+               let onYouDiedWorldCardRequested {
+                onYouDiedWorldCardRequested(youDiedOriginFromDevice)
+            } else {
+                print(
+                    """
+                    [YouDied] Chapter01 world card unavailable
+                      hasTrackedDevicePose: \(youDiedOriginFromDevice != nil)
+                      hasPresenter: \(self.onYouDiedWorldCardRequested != nil)
+                    """
+                )
+            }
+
+            print(
+                "[Chapter01Robot] final dark reached; you_died presentation requested"
+            )
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            let delay = deathAudioDuration + 3.0
+            try? await Task.sleep(
+                nanoseconds: UInt64(delay * 1_000_000_000)
+            )
+
+            guard self.isPlayerDeathSequenceActive else { return }
+
+            let finishPresentation: @MainActor () -> Void = { [weak self] in
+                guard let self,
+                      self.isPlayerDeathSequenceActive else { return }
+
+                self.isPlayerDeathSequenceActive = false
+                self.onYouDiedWorldCardCleanupRequested?()
+                self.onPlayerDeathStarted?()
+
+                print(
+                    "[Chapter01Robot] black faded out; Story episode picker requested"
+                )
+            }
+
+            if let deathPresentationController = self.deathPresentationController {
+                deathPresentationController.fadeBackUp(
+                    duration: 1.25,
+                    onCompleted: finishPresentation
+                )
+            } else {
+                finishPresentation()
+            }
+
+            print("[Chapter01Robot] lights coming back up.")
         }
     }
 

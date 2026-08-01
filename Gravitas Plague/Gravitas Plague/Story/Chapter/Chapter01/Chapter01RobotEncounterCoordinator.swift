@@ -32,6 +32,7 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
     private let approachController = Chapter01RobotApproachController()
     private let approachTargetClamp: Chapter01RobotApproachController.TargetClamp
     private let onEnemyRemoved: @MainActor (UUID) -> Void
+    private let onPlayerDamage: @MainActor (Int) -> Void
     private let onPlayerDeath: @MainActor () -> Void
 
     private(set) var state: Chapter01RobotEncounterState = .unloaded
@@ -81,6 +82,7 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
         rewardAnchorResolver: @escaping StoryItemRewardPresenter.AnchorResolver,
         onEnemyPrepared: @escaping @MainActor (UUID, JockRetargetTestController) -> Void = { _, _ in },
         onEnemyRemoved: @escaping @MainActor (UUID) -> Void = { _ in },
+        onPlayerDamage: @escaping @MainActor (Int) -> Void = { _ in },
         onPlayerDeath: @escaping @MainActor () -> Void = {}
     ) {
         let registry = BattleEnemyRuntimeRegistry()
@@ -104,6 +106,7 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
         self.progressStore = progressStore
         self.approachTargetClamp = approachTargetClamp
         self.onEnemyRemoved = onEnemyRemoved
+        self.onPlayerDamage = onPlayerDamage
         self.onPlayerDeath = onPlayerDeath
     }
 
@@ -347,10 +350,11 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
         playerHitBudget = StoryPlayerHitBudget(
             maximumConfirmedHits: definition.combat.confirmedRobotHitsToKillPlayer
         )
-        controller.onBenchmarkPlayerHit = { [weak self] _, _ in
+        controller.onBenchmarkPlayerHit = { [weak self] amount, _ in
             guard let self, let budget = self.playerHitBudget else { return false }
             let terminal = budget.registerConfirmedHit()
             if terminal {
+                self.onPlayerDamage(amount)
                 Task { @MainActor [weak self] in
                     await self?.handlePlayerDeath(request: request)
                 }
@@ -358,7 +362,9 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
             return terminal
         }
         controller.setStoryPlayerHitCallbackOwnsBudget(true)
-        controller.onPlayerDamaged = { _ in }
+        controller.onPlayerDamaged = { [weak self] amount in
+            self?.onPlayerDamage(amount)
+        }
         controller.onBenchmarkEnemyKilled = { [weak self] _, _ in
             self?.transition(to: .robotDeathAnimation)
         }

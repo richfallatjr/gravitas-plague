@@ -49,7 +49,10 @@ final class DeathPresentationController: ObservableObject {
         }
     }
 
-    func fadeBackUp(duration: TimeInterval = 1.25) {
+    func fadeBackUp(
+        duration: TimeInterval = 1.25,
+        onCompleted: @escaping @MainActor () -> Void = {}
+    ) {
         blackoutTask?.cancel()
 
         blackoutTask = Task { @MainActor in
@@ -59,6 +62,7 @@ final class DeathPresentationController: ObservableObject {
 
             blackoutOpacity = 0.0
             isActive = false
+            onCompleted()
         }
     }
 
