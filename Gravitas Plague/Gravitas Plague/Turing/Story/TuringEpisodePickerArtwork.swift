@@ -5,6 +5,7 @@ enum TuringEpisodePickerArtwork {
     static let plate = "episode-plate-alpha"
     static let continueStrip = "episode-continue-button"
     static let prologueStrip = "episode-prologue-button"
+    static let chapter01Strip = "episode-chapter-1-button"
 }
 
 struct TuringEpisodeStripArtwork: Sendable, Equatable {
@@ -18,6 +19,11 @@ struct TuringEpisodeStripArtwork: Sendable, Equatable {
 
     static let prologueStrip = TuringEpisodeStripArtwork(
         assetName: TuringEpisodePickerArtwork.prologueStrip,
+        pixelSize: CGSize(width: 2953, height: 303)
+    )
+
+    static let chapter01Strip = TuringEpisodeStripArtwork(
+        assetName: TuringEpisodePickerArtwork.chapter01Strip,
         pixelSize: CGSize(width: 2953, height: 303)
     )
 }

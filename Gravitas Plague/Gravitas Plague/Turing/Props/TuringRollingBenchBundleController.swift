@@ -729,6 +729,22 @@ final class TuringRollingBenchBundleController:
             timingFunction: .easeInOut
         )
     }
+
+    func authoredRewardAnchor(named name: String) -> Entity? {
+        guard let bundleRoot = anchors?.bundleRoot else { return nil }
+        if let authored = bundleRoot.turingRollingBenchFindEntity(named: name) {
+            return authored
+        }
+        guard name == TuringRollingBenchEntityName.runtimeAntigenRewardAnchor else {
+            return nil
+        }
+        let anchor = Entity()
+        anchor.name = name
+        anchor.position = SIMD3<Float>(0, loadedVisualMaxY, 0)
+        bundleRoot.addChild(anchor)
+        print("[TuringRollingBench] temporary antigen reward anchor installed name=\(name)")
+        return anchor
+    }
 }
 
 private extension Entity {

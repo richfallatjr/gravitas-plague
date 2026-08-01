@@ -15,7 +15,7 @@ struct TuringConversationPlaybackCompletionEvent: Sendable, Equatable {
 }
 
 @MainActor
-protocol TuringPrologueCompletionEventSink: AnyObject {
+protocol TuringStoryCompletionEventSink: AnyObject {
     func scriptPointCompleted(_ event: TuringScriptPointCompletionEvent) async throws
     func conversationPlaybackCompleted(
         _ event: TuringConversationPlaybackCompletionEvent
@@ -61,7 +61,7 @@ actor TuringEpisodeFlowController {
     private var activeInteractionLease:
         StoryInteractionLease?
     private weak var completionEventSink:
-        (any TuringPrologueCompletionEventSink)?
+        (any TuringStoryCompletionEventSink)?
 
     init(
         engine: TuringFlowEngine = .shared,
@@ -92,7 +92,7 @@ actor TuringEpisodeFlowController {
     }
 
     func setCompletionEventSink(
-        _ sink: (any TuringPrologueCompletionEventSink)?
+        _ sink: (any TuringStoryCompletionEventSink)?
     ) {
         completionEventSink = sink
     }
@@ -106,6 +106,18 @@ actor TuringEpisodeFlowController {
             return .failed(
                 "Ignored \(scriptPointID): another Turing Flow sequence is active."
             )
+        }
+
+        switch trigger {
+        case .userPlay,
+             .continuationRestore:
+            await PlagueMainMenuMusicActor.shared.stop(
+                reason: "devicePlay.\(scriptPointID).\(trigger.logValue)"
+            )
+        case .priorConversationPlaybackCompleted,
+             .priorScriptPointCompleted,
+             .manualDebug:
+            break
         }
 
         let sequenceID = UUID()
@@ -568,6 +580,23 @@ actor TuringEpisodeFlowController {
             )
         self.activeInteractionLease = nil
         return battleLease
+    }
+
+    func transferActiveInteractionToStoryTransition(
+        transitionID: UUID,
+        reason: String
+    ) async throws -> StoryInteractionLease {
+        guard let activeInteractionLease else {
+            throw StoryInteractionClaimError.staleLease
+        }
+        let transitionLease = try await interactionArbiter
+            .transferTuringToStoryTransition(
+                turingLease: activeInteractionLease,
+                transitionID: transitionID,
+                reason: reason
+            )
+        self.activeInteractionLease = nil
+        return transitionLease
     }
 
     private func finishActiveSequence(

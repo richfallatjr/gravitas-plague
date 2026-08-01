@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "modelKind": "proceduralCube",
+  "modelResourcePath": null,
+  "proceduralCubeSizeMeters": 0.127,
+  "rollingCartAnchorName": "TuringRollingBenchAntigen_RewardAnchor",
+  "hudDurationSeconds": 5.0,
+  "hudText": "You received an antigen pack",
+  "rewardSoundResourcePath": null
+}

@@ -18,6 +18,7 @@ final class ScriptedAnchorPathFollower {
     }
 
     private weak var controller: JockRetargetTestController?
+    private weak var coordinateSpace: Entity?
     private var segments: [Segment] = []
     private var segmentIndex = 0
     private var sampledFloorPosition = SIMD3<Float>.zero
@@ -28,6 +29,8 @@ final class ScriptedAnchorPathFollower {
     func begin(
         controller: JockRetargetTestController,
         segments: [Segment],
+        coordinateSpace: Entity? = nil,
+        walkClipID: String? = nil,
         onCompleted: @escaping () -> Void
     ) throws {
         guard let first = segments.first else {
@@ -35,6 +38,7 @@ final class ScriptedAnchorPathFollower {
             return
         }
         self.controller = controller
+        self.coordinateSpace = coordinateSpace
         self.segments = segments
         self.segmentIndex = 0
         self.sampledFloorPosition = first.fromWorld
@@ -43,8 +47,16 @@ final class ScriptedAnchorPathFollower {
         self.active = true
 
         setControllerPosition(controller, floorPosition: first.fromWorld)
-        try controller.playScriptedWalkLoop { [weak self] distance in
-            self?.pendingAuthoredTravel += max(0, distance)
+        if let walkClipID {
+            try controller.playScriptedWalkLoop(
+                clipID: walkClipID
+            ) { [weak self] distance in
+                self?.pendingAuthoredTravel += max(0, distance)
+            }
+        } else {
+            try controller.playScriptedWalkLoop { [weak self] distance in
+                self?.pendingAuthoredTravel += max(0, distance)
+            }
         }
         logSegmentStart(first)
     }
@@ -78,7 +90,7 @@ final class ScriptedAnchorPathFollower {
 
             setControllerPosition(controller, floorPosition: sampledFloorPosition)
             controller.steerScriptedRootTowardWorldDirection(
-                direction,
+                worldDirection(for: direction),
                 deltaTime: Float(deltaTime)
             )
 
@@ -99,6 +111,7 @@ final class ScriptedAnchorPathFollower {
         onCompleted = nil
         controller?.stopScriptedLocomotion(reason: reason)
         controller = nil
+        coordinateSpace = nil
     }
 
     private func setControllerPosition(
@@ -107,7 +120,29 @@ final class ScriptedAnchorPathFollower {
     ) {
         var rootPosition = floorPosition
         rootPosition.y = controller.rootYForFloorY(floorPosition.y)
-        controller.rootEntity.setPosition(rootPosition, relativeTo: nil)
+        controller.rootEntity.setPosition(
+            rootPosition,
+            relativeTo: coordinateSpace
+        )
+    }
+
+    private func worldDirection(
+        for coordinateSpaceDirection: SIMD3<Float>
+    ) -> SIMD3<Float> {
+        guard let coordinateSpace else {
+            return coordinateSpaceDirection
+        }
+        let transform = coordinateSpace.transformMatrix(relativeTo: nil)
+        let world = transform * SIMD4<Float>(
+            coordinateSpaceDirection.x,
+            coordinateSpaceDirection.y,
+            coordinateSpaceDirection.z,
+            0
+        )
+        return PhaseOneMath.normalizedOrFallback(
+            SIMD3<Float>(world.x, world.y, world.z),
+            fallback: coordinateSpaceDirection
+        )
     }
 
     private func finishCurrentSegment() {

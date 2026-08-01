@@ -189,14 +189,14 @@ final class StoryInteractionArbiterTests: XCTestCase {
             battleSnapshot.exclusiveOwner,
             .battle(battleInstanceID: battleID)
         )
-        XCTAssertEqual(battleSnapshot.capabilities, [.doorOpen])
+        XCTAssertTrue(battleSnapshot.capabilities.isEmpty)
         XCTAssertEqual(battleSnapshot.walkiePresentation, .hidden)
-        XCTAssertEqual(battleSnapshot.doorPresentation, .open)
+        XCTAssertEqual(battleSnapshot.doorPresentation, .hidden)
 
         await arbiter.updateDoorState(.loading, reason: "battlePortalLoad")
         var activeBattleSnapshot = await arbiter.currentSnapshot()
-        XCTAssertEqual(activeBattleSnapshot.capabilities, [.doorOpen])
-        XCTAssertEqual(activeBattleSnapshot.doorPresentation, .open)
+        XCTAssertTrue(activeBattleSnapshot.capabilities.isEmpty)
+        XCTAssertEqual(activeBattleSnapshot.doorPresentation, .hidden)
 
         await arbiter.updateDoorState(.opening, reason: "battleDoorOpening")
         activeBattleSnapshot = await arbiter.currentSnapshot()
@@ -252,7 +252,8 @@ final class StoryInteractionArbiterTests: XCTestCase {
 
         XCTAssertFalse(capabilities.contains(.crankRadioPlay))
         XCTAssertFalse(capabilities.contains(.crankRadioMicrophone))
-        XCTAssertFalse(capabilities.contains(.hamReceiver))
+        XCTAssertFalse(capabilities.contains(.hamReceiverPlay))
+        XCTAssertFalse(capabilities.contains(.hamReceiverMicrophone))
         XCTAssertFalse(capabilities.contains(.handMicrophone))
     }
 

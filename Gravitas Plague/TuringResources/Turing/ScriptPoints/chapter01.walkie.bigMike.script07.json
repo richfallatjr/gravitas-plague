@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "scriptPointID": "chapter01.walkie.bigMike.script07",
+  "trigger": {
+    "kind": "priorScriptPointCompleted",
+    "delaySeconds": 0
+  },
+  "transmission": {
+    "prerecordingID": "chapter01.walkie.bigMike.script07.001",
+    "voicePromptID": "chapter01.bigMike.script07.promptVoice.001",
+    "characterID": "big_mike",
+    "conversationKey": "dialogue.big_mike.rich",
+    "outputRoute": "walkieSpatial",
+    "computeStart": "foundationBeforePrerecording",
+    "fillerMode": "continuousFromPrerecordingToGenerated",
+    "commSFX": {
+      "openBeforePrerecording": false,
+      "sendAfterGenerated": false,
+      "sendingLeadInAfterGeneratedSeconds": null
+    },
+    "fixedLeadInSeconds": null,
+    "generationPipeline": null,
+    "interactionSurface": "walkie",
+    "backgroundMusic": null
+  },
+  "progression": {
+    "nextScriptPointID": null,
+    "automaticAdvance": false,
+    "interactionGateAfterCompletion": "closed"
+  }
+}

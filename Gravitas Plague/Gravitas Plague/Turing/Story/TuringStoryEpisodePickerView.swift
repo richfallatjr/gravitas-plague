@@ -9,6 +9,12 @@ struct TuringStoryEpisodePickerView: View {
     @State private var errorMessage: String?
     @State private var pendingStartOver: TuringEpisodeDescriptor?
 
+#if DEBUG || GR_TURING_DIAGNOSTICS
+    private let episodes = TuringEpisodeCatalog.developmentEpisodes
+#else
+    private let episodes = TuringEpisodeCatalog.productionEpisodes
+#endif
+
     var body: some View {
         GeometryReader { proxy in
             let layout = TuringEpisodePlateGeometry.layout(in: proxy.size)
@@ -102,7 +108,7 @@ struct TuringStoryEpisodePickerView: View {
                     action: continueStory
                 )
 
-                ForEach(TuringEpisodeCatalog.productionEpisodes) { episode in
+                ForEach(episodes) { episode in
                     TuringEpisodeArtworkStrip(
                         artwork: episode.stripArtwork,
                         enabled: isEnabled(episode),
@@ -153,12 +159,18 @@ struct TuringStoryEpisodePickerView: View {
             do {
                 let snapshot = try progress.requireValidSnapshot()
                 let destination = try TuringStoryDestinationPlanner.destination(for: snapshot)
+                await PlagueMainMenuMusicActor.shared.stop(
+                    reason: "storyContinueSelected"
+                )
                 try await TuringStoryStateTeleportCoordinator.shared.apply(
                     destination,
                     source: "episodePicker.continue"
                 )
                 dismissWindow(id: PlagueWindowID.storyEpisodes)
             } catch {
+                await restoreMenuMusicAfterFailedSelection(
+                    reason: "storyContinueFailed"
+                )
                 errorMessage = error.localizedDescription
             }
         }
@@ -170,6 +182,14 @@ struct TuringStoryEpisodePickerView: View {
         Task { @MainActor in
             defer { activeRequest = false }
             do {
+                await PlagueMainMenuMusicActor.shared.stop(
+                    reason: "storyEpisodeSelected.\(episode.id.rawValue)"
+                )
+                if episode.id == .chapter01 {
+                    session.startStoryEpisode(episode.id)
+                    dismissWindow(id: PlagueWindowID.storyEpisodes)
+                    return
+                }
                 progress.clear(reason: "startOver.\(episode.id.rawValue)")
                 let destination = try TuringStoryDestinationPlanner.startOfEpisode(episode.id)
                 try await TuringStoryStateTeleportCoordinator.shared.apply(
@@ -178,8 +198,25 @@ struct TuringStoryEpisodePickerView: View {
                 )
                 dismissWindow(id: PlagueWindowID.storyEpisodes)
             } catch {
+                await restoreMenuMusicAfterFailedSelection(
+                    reason: "storyEpisodeStartFailed.\(episode.id.rawValue)"
+                )
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    private func restoreMenuMusicAfterFailedSelection(
+        reason: String
+    ) async {
+        do {
+            try await PlagueMainMenuMusicActor.shared.startIfNeeded(
+                reason: reason
+            )
+        } catch {
+            print(
+                "[PlagueMenuMusic] ERROR recovery failed: \(error.localizedDescription)"
+            )
         }
     }
 }

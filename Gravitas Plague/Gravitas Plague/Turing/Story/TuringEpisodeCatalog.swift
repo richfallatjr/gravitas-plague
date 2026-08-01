@@ -2,6 +2,7 @@ import Foundation
 
 enum TuringEpisodeID: String, Codable, CaseIterable, Identifiable, Sendable {
     case prologue
+    case chapter01
 
     nonisolated var id: String { rawValue }
 }
@@ -36,6 +37,15 @@ enum TuringEpisodeCatalog {
             availability: .unlocked,
             stripArtwork: .prologueStrip,
             contentRevision: "prologue.v1"
+        ),
+        TuringEpisodeDescriptor(
+            id: .chapter01,
+            title: "Chapter 1 — Dad?",
+            subtitle: "The beacon. The window. The drone.",
+            scriptResourcePath: nil,
+            availability: .unlocked,
+            stripArtwork: .chapter01Strip,
+            contentRevision: "chapter01.v1"
         )
     ]
 
@@ -44,6 +54,6 @@ enum TuringEpisodeCatalog {
     nonisolated static func descriptor(
         for id: TuringEpisodeID
     ) -> TuringEpisodeDescriptor? {
-        productionEpisodes.first { $0.id == id }
+        return productionEpisodes.first { $0.id == id }
     }
 }

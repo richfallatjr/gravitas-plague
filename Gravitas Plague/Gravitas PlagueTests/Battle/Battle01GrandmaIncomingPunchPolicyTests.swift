@@ -30,6 +30,20 @@ final class Battle01GrandmaIncomingPunchPolicyTests: XCTestCase {
 
         XCTAssertEqual(controller.incomingPunchPolicyForDiagnostics, .legacyHorde)
     }
+
+    func testExplicitStoryRobotConfigurationDoesNotChangeGrandmaPolicy() {
+        let controller = JockRetargetTestController()
+        controller.configureIncomingPunchPolicy(
+            .storyRobotTenPercent,
+            storyBattleInstanceID: UUID(),
+            damageRoller: SequenceStoryRoller(false)
+        )
+
+        XCTAssertEqual(
+            controller.incomingPunchPolicyForDiagnostics,
+            .storyRobotTenPercent
+        )
+    }
 }
 
 @MainActor

@@ -3,6 +3,7 @@ import Foundation
 enum JockIncomingPunchPolicy: Equatable, Sendable {
     case legacyHorde
     case storyGrandmaThreeX
+    case storyRobotTenPercent
 }
 
 enum JockStoryHeadPunchDecision: String, Equatable, Sendable {
@@ -20,6 +21,19 @@ final class JockSystemHeadPunchDamageRoller: JockHeadPunchDamageRolling {
 
     func rollDamageAcceptance() -> Bool {
         Double.random(in: 0..<1) < Self.acceptanceProbability
+    }
+}
+
+final class JockProbabilityHeadPunchDamageRoller: JockHeadPunchDamageRolling {
+    let acceptanceProbability: Double
+
+    init(acceptanceProbability: Double) {
+        precondition((0...1).contains(acceptanceProbability))
+        self.acceptanceProbability = acceptanceProbability
+    }
+
+    func rollDamageAcceptance() -> Bool {
+        Double.random(in: 0..<1) < acceptanceProbability
     }
 }
 

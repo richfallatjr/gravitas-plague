@@ -92,6 +92,23 @@ final class JockHeadPunchDamageRollerTests: XCTestCase {
         XCTAssertEqual(roller.callCount, 4)
     }
 
+    func testProbabilityRollerSupportsRobotPolicyWithoutChangingGrandmaDefault() {
+        XCTAssertFalse(
+            JockProbabilityHeadPunchDamageRoller(
+                acceptanceProbability: 0
+            ).rollDamageAcceptance()
+        )
+        XCTAssertTrue(
+            JockProbabilityHeadPunchDamageRoller(
+                acceptanceProbability: 1
+            ).rollDamageAcceptance()
+        )
+        XCTAssertEqual(
+            JockSystemHeadPunchDamageRoller.acceptanceProbability,
+            1.0 / 3.0
+        )
+    }
+
 }
 
 @MainActor

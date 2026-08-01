@@ -3,6 +3,11 @@ import QuartzCore
 import RealityKit
 import simd
 
+enum CharacterTurnDirection: Sendable, Equatable {
+    case left
+    case right
+}
+
 struct JockGroundingProfile {
     var rootYOffsetFromFloor: Float
 
@@ -73,6 +78,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     var onBenchmarkEnemyKilled: ((UUID, Int) -> Void)?
     var onBenchmarkEnemyDeathAnimationFinished: ((UUID, Int) -> Void)?
     var onAttackStarted: (() -> Void)?
+    private var storyPlayerHitCallbackOwnsBudget = false
 
     private let visualOffsetEntity = Entity()
 
@@ -984,7 +990,15 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     ) {
         incomingPunchPolicy = policy
         storyBattleInstanceIDForHitDiagnostics = storyBattleInstanceID
-        storyHeadPunchDamageRoller = damageRoller ?? JockSystemHeadPunchDamageRoller()
+        if let damageRoller {
+            storyHeadPunchDamageRoller = damageRoller
+        } else if policy == .storyRobotTenPercent {
+            storyHeadPunchDamageRoller = JockProbabilityHeadPunchDamageRoller(
+                acceptanceProbability: 0.10
+            )
+        } else {
+            storyHeadPunchDamageRoller = JockSystemHeadPunchDamageRoller()
+        }
         lastStoryHeadPunchRollAtBySourceID.removeAll(keepingCapacity: false)
 
         print("""
@@ -1449,6 +1463,10 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
               enemyID: \(hordeID)
             """
         )
+    }
+
+    func setStoryPlayerHitCallbackOwnsBudget(_ ownsBudget: Bool) {
+        storyPlayerHitCallbackOwnsBudget = ownsBudget
     }
 
     func setExternalMotionDriven(_ enabled: Bool) {
@@ -2563,6 +2581,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         onBenchmarkEnemyKilled = nil
         onBenchmarkEnemyDeathAnimationFinished = nil
         onAttackStarted = nil
+        storyPlayerHitCallbackOwnsBudget = false
 
         activeAttack = nil
         latestBrainFollowIntent = nil
@@ -2998,8 +3017,12 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     }
 
     func playScriptedIdleLoop() throws {
-        guard let clip = clipsByID["idle_01"] else {
-            throw RetargetError.clipNotFound("idle_01")
+        try playScriptedIdleLoop(clipID: "idle_01")
+    }
+
+    func playScriptedIdleLoop(clipID: String) throws {
+        guard let clip = clipsByID[clipID] else {
+            throw RetargetError.clipNotFound(clipID)
         }
         driver?.locomotionDeltaHandler = nil
         driver?.playClip(
@@ -3009,13 +3032,37 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
             locomotionPolicy: .ignoreClipLocomotion,
             runtimeOverride: followVisualRuntimeOverride()
         )
+
+        print(
+            "[CharacterAnimation] scripted idle loop " +
+                "characterID=\(characterAttributes?.characterID ?? characterArchetype.rawValue) " +
+                "clipID=\(clipID)"
+        )
     }
 
     func playScriptedRightTurn90(
         token: UUID,
         completion: @escaping @MainActor (UUID, Result<Void, Error>) -> Void
     ) throws {
-        let clipID = "turn_right_90"
+        try playScriptedTurn90(
+            direction: .right,
+            token: token,
+            completion: completion
+        )
+    }
+
+    func playScriptedTurn90(
+        direction: CharacterTurnDirection,
+        token: UUID,
+        completion: @escaping @MainActor (UUID, Result<Void, Error>) -> Void
+    ) throws {
+        let clipID: String
+        switch direction {
+        case .left:
+            clipID = "turn_left_90"
+        case .right:
+            clipID = "turn_right_90"
+        }
         guard let clip = clipsByID[clipID] else {
             throw RetargetError.clipNotFound(clipID)
         }
@@ -3073,7 +3120,16 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     func playScriptedWalkLoop(
         onAuthoredTravel: @escaping @MainActor (Float) -> Void
     ) throws {
-        let clipID = "unstable_walk_01"
+        try playScriptedWalkLoop(
+            clipID: "unstable_walk_01",
+            onAuthoredTravel: onAuthoredTravel
+        )
+    }
+
+    func playScriptedWalkLoop(
+        clipID: String,
+        onAuthoredTravel: @escaping @MainActor (Float) -> Void
+    ) throws {
         guard let clip = clipsByID[clipID] else {
             throw RetargetError.clipNotFound(clipID)
         }
@@ -3096,6 +3152,13 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         )
     }
 
+    func requirePreparedAnimationIDs(_ requiredIDs: Set<String>) throws {
+        let missing = requiredIDs.filter { clipsByID[$0] == nil }.sorted()
+        guard missing.isEmpty else {
+            throw RetargetError.clipNotFound(missing.joined(separator: ", "))
+        }
+    }
+
     func stopScriptedLocomotion(reason: String) {
         driver?.locomotionDeltaHandler = nil
         driver?.stop()
@@ -3107,6 +3170,18 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         deltaTime: Float
     ) {
         steerRootTowardWorldDirection(direction, deltaTime: deltaTime)
+    }
+
+    func steerScriptedRootTowardWorldDirection(
+        _ direction: SIMD3<Float>,
+        deltaTime: Float,
+        maximumYawRateDegreesPerSecond: Float
+    ) {
+        steerRootTowardWorldDirection(
+            direction,
+            deltaTime: deltaTime,
+            maximumTurnRadiansPerSecond: maximumYawRateDegreesPerSecond * .pi / 180
+        )
     }
 
     func activateStoryCombat() throws {
@@ -3625,6 +3700,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     private enum JockAcceptedDamageSource: String {
         case legacyHorde
         case storyRandomOneThirdHeadPunch
+        case storyRobotRandomTenPercentHeadPunch
     }
 
     private func handleHitEvent(
@@ -3668,9 +3744,21 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
             handleLegacyHordeDamageHit(event)
 
         case .storyGrandmaThreeX:
-            handleStoryGrandmaThreeXHit(
+            handleStoryRandomizedHeadPunch(
                 event,
-                headSnapClipID: headSnapClipID
+                headSnapClipID: headSnapClipID,
+                acceptanceProbability: 1.0 / 3.0,
+                acceptedDamageSource: .storyRandomOneThirdHeadPunch,
+                logPrefix: "Battle01GrandmaHit"
+            )
+
+        case .storyRobotTenPercent:
+            handleStoryRandomizedHeadPunch(
+                event,
+                headSnapClipID: headSnapClipID,
+                acceptanceProbability: 0.10,
+                acceptedDamageSource: .storyRobotRandomTenPercentHeadPunch,
+                logPrefix: "Chapter01RobotHit"
             )
         }
     }
@@ -3699,9 +3787,12 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         )
     }
 
-    private func handleStoryGrandmaThreeXHit(
+    private func handleStoryRandomizedHeadPunch(
         _ event: JockHandHitDetector.HitEvent,
-        headSnapClipID: String?
+        headSnapClipID: String?,
+        acceptanceProbability: Double,
+        acceptedDamageSource: JockAcceptedDamageSource,
+        logPrefix: String
     ) {
         guard event.region == .head else {
             handleLegacyHordeDamageHit(event)
@@ -3731,6 +3822,8 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
             logStoryHeadPunchDecision(
                 event: event,
                 decision: decision,
+                acceptanceProbability: acceptanceProbability,
+                logPrefix: logPrefix,
                 temporalGateAccepted: false,
                 randomRollPerformed: false,
                 randomRollAccepted: nil,
@@ -3747,6 +3840,8 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
             logStoryHeadPunchDecision(
                 event: event,
                 decision: decision,
+                acceptanceProbability: acceptanceProbability,
+                logPrefix: logPrefix,
                 temporalGateAccepted: true,
                 randomRollPerformed: true,
                 randomRollAccepted: false,
@@ -3762,12 +3857,14 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         performAcceptedDamageHit(
             event,
             acceptedAt: now,
-            source: .storyRandomOneThirdHeadPunch
+            source: acceptedDamageSource
         )
 
         logStoryHeadPunchDecision(
             event: event,
             decision: .damageAndInterrupt,
+            acceptanceProbability: acceptanceProbability,
+            logPrefix: logPrefix,
             temporalGateAccepted: true,
             randomRollPerformed: true,
             randomRollAccepted: true,
@@ -3942,6 +4039,8 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     private func logStoryHeadPunchDecision(
         event: JockHandHitDetector.HitEvent,
         decision: JockStoryHeadPunchDecision,
+        acceptanceProbability: Double,
+        logPrefix: String,
         temporalGateAccepted: Bool,
         randomRollPerformed: Bool,
         randomRollAccepted: Bool?,
@@ -3952,14 +4051,14 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         headSnapClipID: String?
     ) {
         print("""
-        [Battle01GrandmaHit] head punch resolved
+        [\(logPrefix)] head punch resolved
           battleInstanceID: \(storyBattleInstanceIDForHitDiagnostics?.uuidString ?? "none")
           enemyID: \(hordeID.uuidString)
           decision: \(decision.rawValue)
           temporalGateAccepted: \(temporalGateAccepted)
           randomRollPerformed: \(randomRollPerformed)
           randomRollAccepted: \(randomRollAccepted.map(String.init) ?? "nil")
-          configuredDamageProbability: 0.33333333
+          configuredDamageProbability: \(acceptanceProbability)
           headSnapTriggered: \(headSnapClipID != nil)
           headSnapClipID: \(headSnapClipID ?? "none")
           eventSide: \(event.side.rawValue)
@@ -4841,6 +4940,27 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         )
 
         if let onBenchmarkPlayerHit,
+           storyPlayerHitCallbackOwnsBudget {
+            if onBenchmarkPlayerHit(amount, hordeID) {
+                isBenchmarkPlayerDead = true
+                playerAttackEnabled = false
+
+                print(
+                    """
+                    [Gravitas Damage] Player death hit accepted
+                      amount: \(amount)
+                      bodyBoxDistance: \(String(format: "%.3f", distance))
+                      handWorldPosition: \(handWorldPosition)
+                      attackerHordeID: \(hordeID)
+                    """
+                )
+            } else {
+                onPlayerDamaged?(amount)
+            }
+            return
+        }
+
+        if let onBenchmarkPlayerHit,
            onBenchmarkPlayerHit(amount, hordeID) {
             isBenchmarkPlayerDead = true
             playerAttackEnabled = false
@@ -5267,7 +5387,8 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
 
     private func steerRootTowardWorldDirection(
         _ direction: SIMD3<Float>,
-        deltaTime: Float
+        deltaTime: Float,
+        maximumTurnRadiansPerSecond: Float? = nil
     ) {
         let flatDirection = PhaseOneMath.normalizedOrFallback(
             SIMD3<Float>(direction.x, 0, direction.z),
@@ -5299,7 +5420,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
             return
         }
 
-        let maxStep = followConfiguration.maxTurnRadiansPerSecond * deltaTime
+        let maxStep = (maximumTurnRadiansPerSecond ?? followConfiguration.maxTurnRadiansPerSecond) * deltaTime
         let clampedStep = min(max(deltaYaw, -maxStep), maxStep)
 
         rootEntity.orientation = simd_quatf(

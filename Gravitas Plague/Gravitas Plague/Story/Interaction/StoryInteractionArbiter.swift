@@ -186,6 +186,80 @@ actor StoryInteractionArbiter {
         )
     }
 
+    func transferTuringToStoryTransition(
+        turingLease: StoryInteractionLease,
+        transitionID: UUID,
+        reason: String
+    ) async throws -> StoryInteractionLease {
+        guard exclusiveLease == turingLease else {
+            throw StoryInteractionClaimError.staleLease
+        }
+        guard case .turingFlow = turingLease.owner else {
+            throw StoryInteractionClaimError.invalidTransfer
+        }
+        return await transfer(
+            from: turingLease,
+            to: .storyTransition(transitionID: transitionID),
+            reason: reason
+        )
+    }
+
+    func transferStoryTransitionToBattle(
+        storyTransitionLease: StoryInteractionLease,
+        battleInstanceID: UUID,
+        reason: String
+    ) async throws -> StoryInteractionLease {
+        guard exclusiveLease == storyTransitionLease else {
+            throw StoryInteractionClaimError.staleLease
+        }
+        guard case .storyTransition = storyTransitionLease.owner else {
+            throw StoryInteractionClaimError.invalidTransfer
+        }
+        return await transfer(
+            from: storyTransitionLease,
+            to: .battle(battleInstanceID: battleInstanceID),
+            reason: reason
+        )
+    }
+
+    func transferBattleToStoryTransition(
+        battleLease: StoryInteractionLease,
+        transitionID: UUID,
+        reason: String
+    ) async throws -> StoryInteractionLease {
+        guard exclusiveLease == battleLease else {
+            throw StoryInteractionClaimError.staleLease
+        }
+        guard case .battle = battleLease.owner else {
+            throw StoryInteractionClaimError.invalidTransfer
+        }
+        return await transfer(
+            from: battleLease,
+            to: .storyTransition(transitionID: transitionID),
+            reason: reason
+        )
+    }
+
+    func transferBattleToTuring(
+        battleLease: StoryInteractionLease,
+        runID: String,
+        surfaceID _: StoryInteractionSurfaceID,
+        reason: String
+    ) async throws -> StoryInteractionLease {
+        guard exclusiveLease == battleLease else {
+            throw StoryInteractionClaimError.staleLease
+        }
+        guard case .battle = battleLease.owner,
+              doorState == .closedUnloaded else {
+            throw StoryInteractionClaimError.invalidTransfer
+        }
+        return await transfer(
+            from: battleLease,
+            to: .turingFlow(runID: runID),
+            reason: reason
+        )
+    }
+
     func requireCurrent(_ lease: StoryInteractionLease) throws {
         guard exclusiveLease == lease else {
             throw StoryInteractionClaimError.staleLease
@@ -296,18 +370,12 @@ actor StoryInteractionArbiter {
                 crankRadio = .hidden
                 hamReceiver = .hidden
             case .battle:
+                capabilities = []
                 walkie = .hidden
+                door = .hidden
                 dadFrame = .hidden
                 crankRadio = .hidden
                 hamReceiver = .hidden
-                switch doorState {
-                case .closedUnloaded, .loading, .closedReady:
-                    capabilities = [.doorOpen]
-                    door = .open
-                case .opening, .open, .closing, .unloading, .failed:
-                    capabilities = []
-                    door = .hidden
-                }
             case .doorPortal:
                 if doorState == .open {
                     capabilities = [.doorClose]

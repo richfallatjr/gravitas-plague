@@ -38,6 +38,8 @@ enum TuringRollingBenchEntityName {
         "TuringRollingBenchHamReceiver_PhysicalHitTarget"
     static let runtimeHamReceiverActionIcon =
         "TuringRollingBenchHamReceiver_ActionIcon"
+    static let runtimeAntigenRewardAnchor =
+        "TuringRollingBenchAntigen_RewardAnchor"
 }
 
 enum TuringRollingBenchTuning {

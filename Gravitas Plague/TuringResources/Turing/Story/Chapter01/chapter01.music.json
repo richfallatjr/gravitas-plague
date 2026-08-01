@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "cues": [
+    {
+      "cueID": "dadWindow",
+      "resourcePath": "Turing/Audio/chapter01/dad-window-music.mp3",
+      "gainDB": -15.0,
+      "loops": true,
+      "fadeInSeconds": 0.2,
+      "fadeOutSeconds": 0.25
+    },
+    {
+      "cueID": "robotAttack",
+      "resourcePath": "Turing/Audio/chapter01/robot-beserk-music.mp3",
+      "gainDB": -15.0,
+      "loops": true,
+      "fadeInSeconds": 0.15,
+      "fadeOutSeconds": 0.25
+    }
+  ]
+}

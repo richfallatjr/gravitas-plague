@@ -28,6 +28,19 @@ enum PlagueMenuAssetValidator {
                 print("[PlagueMenu] ERROR missing asset \(name)")
             }
         }
+
+        do {
+            let menuMusicURL = try TuringResourceLoader.resourceURL(
+                resourcePath: PlagueMainMenuMusicActor.resourcePath
+            )
+            print(
+                "[PlagueMenu] found audio asset \(menuMusicURL.lastPathComponent)"
+            )
+        } catch {
+            print(
+                "[PlagueMenu] ERROR missing main-menu audio: \(error.localizedDescription)"
+            )
+        }
     }
 }
 
@@ -339,6 +352,17 @@ struct PlagueOperationModePosterMenu: View {
                       walkLoopPlayerFacing: false
                     """
                 )
+            }
+            .task {
+                do {
+                    try await PlagueMainMenuMusicActor.shared.startIfNeeded(
+                        reason: "swiftUIPosterMenuAppeared"
+                    )
+                } catch {
+                    print(
+                        "[PlagueMenuMusic] ERROR start failed: \(error.localizedDescription)"
+                    )
+                }
             }
         }
     }

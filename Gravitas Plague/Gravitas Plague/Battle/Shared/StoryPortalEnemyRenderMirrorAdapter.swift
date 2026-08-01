@@ -2,9 +2,28 @@ import Foundation
 import RealityKit
 import simd
 
+enum StoryPortalTransitionDirection: String, Sendable, Equatable {
+    case portalToRoom
+    case roomToPortal
+}
+
+enum StoryPortalMirrorPhase: String, Sendable, Equatable {
+    case exteriorOnly
+    case overlap
+    case roomOnly
+    case released
+}
+
+struct StoryPortalMirrorThresholds: Sendable, Equatable {
+    let sourceRevealDistance: Float
+    let overlapEndDistance: Float
+    let sourceHideDistance: Float
+    let exteriorReleaseDistance: Float
+}
+
 @MainActor
 final class StoryPortalEnemyRenderMirrorAdapter {
-    let id: UUID
+    private(set) var id: UUID
 
     private let source: JockRetargetTestController
     private let portalWorldRoot: Entity
@@ -14,15 +33,20 @@ final class StoryPortalEnemyRenderMirrorAdapter {
     private var didLogMissingIBL = false
     private(set) var sourceRevealed = false
     private(set) var exited = false
+    private(set) var direction: StoryPortalTransitionDirection
+    private(set) var phase: StoryPortalMirrorPhase
 
     init(
         source: JockRetargetTestController,
         portalWorldRoot: Entity,
-        portalPlaneEntity: Entity
+        portalPlaneEntity: Entity,
+        direction: StoryPortalTransitionDirection = .portalToRoom
     ) throws {
         self.source = source
         self.portalWorldRoot = portalWorldRoot
         self.portalPlane = Self.makePlaneDescriptor(portalPlaneEntity)
+        self.direction = direction
+        self.phase = direction == .portalToRoom ? .exteriorOnly : .roomOnly
         let removedSourceReceiverCount = Self.removeIBLReceiversRecursively(
             under: source.rootEntity
         )
@@ -37,7 +61,7 @@ final class StoryPortalEnemyRenderMirrorAdapter {
         self.id = mirror.id
         mirror.syncVisibleDuringIngress()
         print(
-            "[Battle01Lighting] room-side Grandma portal receivers cleared count=\(removedSourceReceiverCount) lighting=automatic_passthrough"
+            "[StoryPortalLighting] room-side source portal receivers cleared count=\(removedSourceReceiverCount) lighting=automatic_passthrough"
         )
         refreshPortalLightingIfNeeded()
     }
@@ -52,6 +76,10 @@ final class StoryPortalEnemyRenderMirrorAdapter {
         revealThreshold: Float,
         exitThreshold: Float
     ) {
+        guard direction == .portalToRoom else {
+            assertionFailure("Ingress sync used during room-to-portal transition.")
+            return
+        }
         refreshPortalLightingIfNeeded()
         guard !exited,
               let mirror else { return }
@@ -71,22 +99,83 @@ final class StoryPortalEnemyRenderMirrorAdapter {
         if !sourceRevealed, depth >= revealThreshold {
             sourceRevealed = true
             source.rootEntity.isEnabled = true
+            phase = .overlap
             print("[Battle01] portal reveal threshold crossed depth=\(depth)")
         }
 
         if depth >= exitThreshold {
             source.rootEntity.isEnabled = true
+            phase = .roomOnly
             cleanup(reason: "Battle01.portalExit")
             print("[Battle01] portal exit threshold crossed depth=\(depth)")
+        }
+    }
+
+    func prepareForRoomToPortalExit() throws {
+        guard mirror == nil else {
+            direction = .roomToPortal
+            phase = .overlap
+            exited = false
+            source.rootEntity.isEnabled = true
+            return
+        }
+        let next = try HordePortalSkinnedRenderMirror(
+            source: source,
+            portalID: UUID(),
+            portalWorldRoot: portalWorldRoot,
+            portalPlane: portalPlane,
+            bodySizeMeters: source.portalMirrorBodySizeMeters()
+        )
+        mirror = next
+        id = next.id
+        direction = .roomToPortal
+        phase = .overlap
+        exited = false
+        sourceRevealed = true
+        source.rootEntity.isEnabled = true
+        next.syncVisibleDuringIngress()
+        refreshPortalLightingIfNeeded()
+        print("[StoryPortalMirror] reverse transition prepared mirrorID=\(id.uuidString)")
+    }
+
+    func syncRoomToPortal(
+        sourceHideThreshold: Float,
+        exteriorReleaseThreshold: Float
+    ) {
+        guard direction == .roomToPortal,
+              !exited,
+              let mirror else { return }
+        refreshPortalLightingIfNeeded()
+        mirror.syncFromSource(
+            worldPosition: source.rootEntity.position(relativeTo: nil),
+            worldOrientation: source.rootEntity.orientation(relativeTo: nil),
+            portalWorldRoot: portalWorldRoot
+        )
+        mirror.updateAfterSourceAnimationApplied(
+            sourceBodyCenterWorld: source.currentSimplifiedBodyCenterWorld()
+        )
+
+        let depth = signedRoomDistance()
+        if depth <= sourceHideThreshold, source.rootEntity.isEnabled {
+            source.rootEntity.isEnabled = false
+            phase = .exteriorOnly
+            print("[StoryPortalMirror] room source hidden during exit depth=\(depth)")
+        }
+        if depth <= exteriorReleaseThreshold {
+            source.rootEntity.isEnabled = false
+            cleanup(reason: "Chapter01Robot.portalExteriorReached")
+            print("[StoryPortalMirror] exterior release threshold crossed depth=\(depth)")
         }
     }
 
     func cleanup(reason: String) {
         guard let mirror else {
             exited = true
+            phase = .released
             return
         }
         exited = true
+        phase = .released
         mirror.cleanup(reason: reason)
         self.mirror = nil
         boundIBLEntity = nil
@@ -98,7 +187,7 @@ final class StoryPortalEnemyRenderMirrorAdapter {
           mirrorID: \(id.uuidString)
           reason: \(reason)
           mirrorRetainedByAdapter: false
-          authoritativeGrandmaRetained: true
+          authoritativeEnemyRetained: true
         """)
     }
 
@@ -114,7 +203,7 @@ final class StoryPortalEnemyRenderMirrorAdapter {
             portalWorldRoot.addChild(mirror.rootEntity)
             mirror.syncVisibleDuringIngress()
             print(
-                "[Battle01Lighting] Grandma portal mirror restored after portal-world reload"
+                "[StoryPortalLighting] portal mirror restored after portal-world reload"
             )
         }
 
@@ -143,7 +232,7 @@ final class StoryPortalEnemyRenderMirrorAdapter {
 
         print(
             """
-            [Battle01Lighting] Grandma portal mirror bound to portal IBL
+            [StoryPortalLighting] portal mirror bound to portal IBL
               iblEntity: \(iblEntity.name)
               sourceEnemyID: \(source.hordeBenchmarkID.uuidString)
               sourceReceiverCount: 0

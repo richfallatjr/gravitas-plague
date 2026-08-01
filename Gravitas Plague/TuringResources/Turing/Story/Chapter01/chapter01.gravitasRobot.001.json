@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "encounterID": "chapter01.encounter.gravitasRobot.001",
+  "characterResource": "robot_biped.usdz",
+  "characterSidecar": "robot.character.json",
+  "animations": {
+    "idle": "drone_idle_01",
+    "walk": "robot_walk_01",
+    "turnLeft90": "turn_left_90",
+    "turnRight90": "turn_right_90",
+    "attacks": [
+      "charged-slash-left",
+      "charged-slash-right",
+      "left_hook_01",
+      "right_hook_01"
+    ],
+    "deathForward": "dead_fall_forward_01",
+    "deathBackward": "dead_fall_backward_01"
+  },
+  "portalPath": {
+    "exteriorStartSourceAnchor": "zombieA1",
+    "exteriorMidSourceAnchor": "zombieA2",
+    "doorThresholdSourceAnchor": "zombieA3"
+  },
+  "approach": {
+    "stopDistanceMeters": 1.5,
+    "arrivalToleranceMeters": 0.12,
+    "maximumYawRateDegreesPerSecond": 90
+  },
+  "scan": {
+    "sampleRateHz": 30,
+    "stableDurationSeconds": 5,
+    "translationToleranceMeters": 0.05,
+    "rotationToleranceDegrees": 8,
+    "trackingLossGraceSeconds": 0.35,
+    "movementResetsProgress": true,
+    "trackingLossPausesProgress": true
+  },
+  "combat": {
+    "incomingPlayerHitAcceptanceProbability": 0.1,
+    "acceptedPlayerHitsToDestroyMinimum": 30,
+    "acceptedPlayerHitsToDestroyMaximum": 40,
+    "confirmedRobotHitsToKillPlayer": 5
+  },
+  "reward": {
+    "eventID": "chapter01.reward.antigenPack.001",
+    "itemID": "antigen_pack",
+    "quantity": 1,
+    "hudText": "You received an antigen pack"
+  },
+  "speechCatalogID": "chapter01.gravitasRobot.speech.v1"
+}

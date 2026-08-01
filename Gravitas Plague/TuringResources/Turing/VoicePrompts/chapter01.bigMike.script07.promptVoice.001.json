@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter01.bigMike.script07.promptVoice.001",
+  "speakerID": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "characterProfileID": "big_mike",
+  "listenerProfileID": "rich",
+  "outputContext": "walkieSpatial",
+  "conversationKey": "dialogue.big_mike.rich",
+  "intent": "I am going to enter the beacon information into my radio, but first I need to warn Rich because he could be in danger. I did not get a clear look at the man heading toward his house. He looked substantially larger than Mrs. Dempsey, and I could not confirm whether he was infected. I need Rich to keep his defenses ready and treat the warning seriously without pretending I know more than I saw.",
+  "emotion": "protective, urgent, observant, and explicit about uncertainty"
+}

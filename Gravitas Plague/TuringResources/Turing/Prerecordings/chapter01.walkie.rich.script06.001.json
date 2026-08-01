@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter01.walkie.rich.script06.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-walkie-talkie-script-06.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Big Mike, I found it. The Gravitas beacon is real. A woman on the ham bands—Cat Eye Eight-One—walked me through the relay. Sixty meters, Channel Two: five point three four six five megahertz, upper sideband. Then Channel One: five point three three zero five, upper sideband. I sent my delivery grid—Foxtrot November One Zero Golf Mike. They repeated my handle, gave me a confirmation code, and accepted a request for one antigen pack. They said a drone would home in on my carrier when it gets close. Write all that down, Mike. This might actually work.",
+  "summary": "Rich tells Big Mike that the Gravitas beacon is real, gives the two sixty-meter frequencies and delivery grid, and reports that one antigen pack was accepted for drone delivery.",
+  "voicePromptIntent": "Continue using chapter01.rich.script06.promptVoice.001.",
+  "defaultEmotion": "energized, hopeful, technically precise, trying not to celebrate too early"
+}

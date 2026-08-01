@@ -127,8 +127,14 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     private let turingDoorBundleController = TuringStoryDoorBundleController()
     private let turingRollingBenchBundleController = TuringRollingBenchBundleController()
     private var battle01Coordinator: Battle01Coordinator?
+    private var chapter01RobotEncounterCoordinator:
+        Chapter01RobotEncounterCoordinator?
+    private var chapter01DadWindowCoordinator:
+        Chapter01DadWindowCoordinator?
+    private var chapter01Coordinator: Chapter01Coordinator?
     private var prologueStoryActionRouter: PrologueStoryActionRouter?
     private var prologueCompletionCoordinator: TuringPrologueCompletionCoordinator?
+    private var storyCompletionRouter: TuringStoryCompletionRouter?
     private var turingHighMemoryPreflightAdapter:
         StoryTuringHighMemoryPreflightAdapter?
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
@@ -465,6 +471,64 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             battleRouter: prologueRouter
         )
         battle01Coordinator = battle01
+        chapter01RobotEncounterCoordinator =
+            Chapter01RobotEncounterCoordinator(
+                sceneRoot: root,
+                hudRoot: head,
+                door: turingDoorBundleController,
+                spatialProvider: spatialProvider,
+                approachTargetClamp: { [weak self] target in
+                    guard let self else { return target }
+                    return Chapter01RobotApproachController.clampToMappedFloor(
+                        target,
+                        floors: Array(
+                            self.roomSkinningCoordinator.wallManager
+                                .floorCandidates.values
+                        )
+                    )
+                },
+                rewardAnchorResolver: { [weak self] name in
+                    self?.turingRollingBenchBundleController
+                        .authoredRewardAnchor(named: name)
+                },
+                onEnemyRemoved: { [weak self] enemyID in
+                    self?.audioController.stopHostAudioSource(id: enemyID)
+                },
+                onPlayerDeath: { [weak self] in
+                    self?.onPlayerDeathStarted?()
+                }
+            )
+        let dadWindow = Chapter01DadWindowCoordinator(
+            windowBundle: turingWindowBundleController
+        )
+        let chapterCoordinator = Chapter01Coordinator(
+            walkie: turingStoryWalkieInteractionController,
+            dad: dadWindow,
+            startRobot: { [weak self] chapterRunID, transitionLease, sink in
+                guard let self else {
+                    throw Chapter01Error.openingResourceUnavailable(
+                        "The immersive Chapter owner was released."
+                    )
+                }
+                try await self.startChapter01RobotEncounter(
+                    chapterRunID: chapterRunID,
+                    storyTransitionLease: transitionLease,
+                    completionSink: sink
+                )
+            },
+            cancelRobot: { [weak self] reason in
+                await self?.chapter01RobotEncounterCoordinator?.cancel(
+                    reason: reason
+                )
+            }
+        )
+        let completionRouter = TuringStoryCompletionRouter(
+            prologue: completionCoordinator,
+            chapter01: chapterCoordinator
+        )
+        chapter01DadWindowCoordinator = dadWindow
+        chapter01Coordinator = chapterCoordinator
+        storyCompletionRouter = completionRouter
         let highMemoryPreflight = StoryTuringHighMemoryPreflightAdapter(
             door: turingDoorBundleController,
             battleRuntime: battle01
@@ -476,7 +540,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         prologueStoryActionRouter = prologueRouter
         prologueCompletionCoordinator = completionCoordinator
         await TuringEpisodeFlowController.shared
-            .setCompletionEventSink(completionCoordinator)
+            .setCompletionEventSink(completionRouter)
         TuringStoryStateTeleportCoordinator.shared.attach(self)
         turingStoryPlacementAdjustmentCoordinator.install(
             sceneRoot: root
@@ -907,9 +971,6 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
         case .startStoryEpisode(let episodeID):
             startStoryEpisode(episodeID)
-            requestTuringStoryPlacementRoomScan(
-                reason: "startStoryEpisode.\(episodeID.rawValue)"
-            )
 
         case .requestStoryWalkieBundlePlacement:
             requestTuringStoryPlacementRoomScan(
@@ -957,6 +1018,13 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         battle01Coordinator?.cancel(
             reason: "newStoryEpisode.\(episodeID.rawValue)"
         )
+        if episodeID != .chapter01 {
+            Task { @MainActor [weak self] in
+                await self?.chapter01Coordinator?.cancel(
+                    reason: "newStoryEpisode.\(episodeID.rawValue)"
+                )
+            }
+        }
         prologueStoryActionRouter?.reset(
             reason: "newStoryEpisode.\(episodeID.rawValue)"
         )
@@ -974,9 +1042,32 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             return
         }
 
-        roomSkinningCoordinator.cancelRoomSkinning()
         turingStoryWalkieInteractionController
             .episodeStarted(episodeID)
+
+        if episodeID == .chapter01 {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    try await self.chapter01Coordinator?.beginAtRoot()
+                } catch {
+                    self.showTemporaryInstructionHUD(
+                        "Chapter unavailable. Check required window and animation assets.",
+                        clearAfterSeconds: 5,
+                        reason: "chapter01OpeningUnavailable"
+                    )
+                    print(
+                        "[Chapter01] ERROR root start failed: \(error.localizedDescription)"
+                    )
+                }
+            }
+            print(
+                "[TuringStory] Chapter 01 logical start requested noRescan=true"
+            )
+            return
+        }
+
+        roomSkinningCoordinator.cancelRoomSkinning()
 
         print(
             """
@@ -1009,6 +1100,11 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             reason: "debugRoomRescan.\(reason)"
         )
         battle01Coordinator?.cancel(reason: "roomRescan.\(reason)")
+        Task { @MainActor [weak self] in
+            await self?.chapter01Coordinator?.cancel(
+                reason: "roomRescan.\(reason)"
+            )
+        }
         prologueStoryActionRouter?.reset(reason: "roomRescan.\(reason)")
         roomSkinningCoordinator.wallManager
             .clearRetainedPlacementWallSnapshot(
@@ -1537,6 +1633,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         await turingStoryWalkieInteractionController.quiesceForStoryTeleport(reason: reason)
         await TuringEpisodeFlowController.shared.quiesceForStoryTeleport(reason: reason)
         battle01Coordinator?.cancel(reason: reason)
+        await chapter01Coordinator?.cancel(reason: reason)
         prologueCompletionCoordinator?.reset(reason: reason)
         print("""
         [TuringStoryTeleport] transient runtime quiesced
@@ -1564,6 +1661,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         switch destination {
         case .absent:
             battle01Coordinator?.cancel(reason: "storyTeleport.absent.\(teleportID.uuidString)")
+            await chapter01Coordinator?.cancel(
+                reason: "storyTeleport.absent.\(teleportID.uuidString)"
+            )
             prologueStoryActionRouter?.reset(reason: "storyTeleport.absent")
         case .battle01Start:
             let sourceEventID = TuringStoryProgressStore.shared.snapshot?.sourceEventID ?? UUID()
@@ -2072,6 +2172,55 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         }
     }
 
+    func startChapter01RobotEncounter(
+        chapterRunID: UUID,
+        storyTransitionLease: StoryInteractionLease,
+        completionSink: any Chapter01RobotEncounterCompletionSink
+    ) async throws {
+        guard let chapter01RobotEncounterCoordinator else {
+            throw Chapter01RobotError.invalidEncounterState(
+                "immersive Robot coordinator is not installed"
+            )
+        }
+        try await chapter01RobotEncounterCoordinator.validateAvailability()
+        let battleLease = try await StoryInteractionArbiter.shared
+            .transferStoryTransitionToBattle(
+                storyTransitionLease: storyTransitionLease,
+                battleInstanceID: chapterRunID,
+                reason: "dadExitWalkActuallyStarted"
+            )
+        do {
+            try await chapter01RobotEncounterCoordinator.start(
+                request: Chapter01RobotEncounterRequest(
+                    chapterRunID: chapterRunID,
+                    battleLease: battleLease,
+                    completionSink: completionSink
+                )
+            )
+        } catch {
+            if case .storyTransition(let transitionID) = storyTransitionLease.owner {
+                _ = try? await StoryInteractionArbiter.shared
+                    .transferBattleToStoryTransition(
+                        battleLease: battleLease,
+                        transitionID: transitionID,
+                        reason: "chapter01RobotStartFailed"
+                    )
+            } else {
+                await StoryInteractionArbiter.shared.release(
+                    battleLease,
+                    reason: "chapter01RobotStartFailed"
+                )
+            }
+            throw error
+        }
+    }
+
+    func chapter01DadCenteredInWindow(chapterRunID: UUID) async throws {
+        let music = Chapter01MusicController.shared
+        try await music.prepare(catalog: Chapter01MusicCatalog.load())
+        try await music.play(.dadWindow, chapterRunID: chapterRunID)
+    }
+
     func tick(at date: Date) {
         let tickStart = TimingProfiler.now()
         let deltaTime: Float
@@ -2107,6 +2256,12 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         battle01Coordinator?.update(
             deltaTime: TimeInterval(deltaTime),
             playerTargetWorldPosition: currentHeadPosition
+        )
+        chapter01RobotEncounterCoordinator?.update(
+            deltaTime: TimeInterval(deltaTime)
+        )
+        chapter01Coordinator?.update(
+            deltaTime: TimeInterval(deltaTime)
         )
 
         if let currentPose {
@@ -2256,10 +2411,18 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         TuringStoryStageCoordinator.shared.invalidate(reason: "immersiveShutdown")
         battle01Coordinator?.cancel(reason: "immersiveShutdown")
         battle01Coordinator = nil
+        let chapter01Robot = chapter01RobotEncounterCoordinator
+        let chapter01 = chapter01Coordinator
+        chapter01RobotEncounterCoordinator = nil
+        chapter01DadWindowCoordinator = nil
+        chapter01Coordinator = nil
+        storyCompletionRouter = nil
         prologueStoryActionRouter = nil
         prologueCompletionCoordinator = nil
         turingHighMemoryPreflightAdapter = nil
         Task {
+            await chapter01?.cancel(reason: "immersiveShutdown")
+            await chapter01Robot?.cancel(reason: "immersiveShutdown")
             await TuringHighMemoryPreflightCoordinator.shared.clear()
             await TuringEpisodeFlowController.shared
                 .setCompletionEventSink(nil)
@@ -2333,6 +2496,11 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
     private func prepareForUserQuitOrClose() {
         battle01Coordinator?.cancel(reason: "userQuitOrClose")
+        Task { @MainActor [weak self] in
+            await self?.chapter01Coordinator?.cancel(
+                reason: "userQuitOrClose"
+            )
+        }
         turingStoryPlacementAdjustmentCoordinator.cancel(
             reason: "userQuitOrClose"
         )
@@ -2427,6 +2595,11 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
     private func beginHordeRoomScanForBenchmark() {
         battle01Coordinator?.cancel(reason: "modeSwitchToHorde")
+        Task { @MainActor [weak self] in
+            await self?.chapter01Coordinator?.cancel(
+                reason: "modeSwitchToHorde"
+            )
+        }
         guard !hordeWaitingForRoomScan else {
             print("[HordeRoomScan] Horde start ignored; scan already active")
             return

@@ -737,7 +737,8 @@ actor TuringStoryWalkiePlaybackCoordinator {
              .radioCue, .radioBroadcast,
              .crankRadioTuningFiller,
              .hamReceiverAmbient,
-             .hamReceiverTuningFiller:
+             .hamReceiverTuningFiller,
+             .storyRobotSpeech:
             gainDB = 0
         }
         let route: TuringAudioRouteID

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter01.walkie.bigMike.script07.001",
+  "speaker": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "voiceVariantID": "broadcast_reference_fast_01",
+  "audioFile": "pr-big-mike-script-06.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Rich, I copy. Five point three four six five, then five point three three zero five—both upper sideband. Grid Foxtrot November One Zero Golf Mike. I got it. That is damn good news, but now you gotta hear this. I saw a man moving toward your house. Decent size—lot bigger than Mrs. Dempsey. I only caught a quick look, so I cannot tell if he is infected or just desperate. Lock down what you can. Keep something between you and that door, and stay off the windows. I’m tuning those beacon channels now. You stay sharp.",
+  "summary": "Big Mike confirms the beacon data and urgently warns Rich that a substantially larger man is approaching the house, though he cannot confirm infection.",
+  "voicePromptIntent": "Continue using chapter01.bigMike.script07.promptVoice.001.",
+  "defaultEmotion": "briefly relieved, then urgent, protective, and careful not to overstate what he saw"
+}

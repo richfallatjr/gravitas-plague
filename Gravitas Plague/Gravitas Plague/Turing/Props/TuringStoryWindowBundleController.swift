@@ -4,6 +4,14 @@ import RealityKit
 import simd
 import UIKit
 
+struct TuringStoryWindowCinematicContext {
+    let portalWorldRoot: Entity
+    let portalPlane: Entity
+    let entryAnchor: Entity
+    let centerAnchor: Entity
+    let exitAnchor: Entity
+}
+
 @MainActor
 final class TuringStoryWindowBundleController:
     ObservableObject,
@@ -55,6 +63,8 @@ final class TuringStoryWindowBundleController:
     private var loadedVisualMinY: Float = 0
     private var loadedVisualMaxY: Float = TuringStoryWindowBundleTuning
         .defaultHeightMeters
+    private var activeCinematicUseCount = 0
+    private var deferredAtmosphere: PortalHDRIAtmosphere?
 
     init() {
         root.name = "TuringStoryWindowBundle_WorldRoot"
@@ -211,6 +221,13 @@ final class TuringStoryWindowBundleController:
         }
 
         activeAtmosphere = atmosphere
+        if activeCinematicUseCount > 0 {
+            deferredAtmosphere = atmosphere
+            print(
+                "[TuringWindowPortal] atmosphere reload deferred while cinematic runtime is active"
+            )
+            return
+        }
         await reloadPortalWorld(
             atmosphere: atmosphere,
             placement: placement
@@ -221,6 +238,65 @@ final class TuringStoryWindowBundleController:
             [TuringWindowPortal] atmosphere changed
               atmosphere: \(atmosphere.rawValue)
             """
+        )
+    }
+
+    func acquireChapter01DadCinematicContext()
+        throws -> TuringStoryWindowCinematicContext {
+        guard isPlaced,
+              let loadedBundleRoot,
+              let anchors else {
+            throw BundleError.noPlacement
+        }
+        guard let entry = loadedBundleRoot.turingWindowFindEntity(
+            named: "TuringStoryWindowDadEntryAnchor"
+        ) else {
+            throw BundleError.missingRequiredEntity(
+                "TuringStoryWindowDadEntryAnchor"
+            )
+        }
+        guard let center = loadedBundleRoot.turingWindowFindEntity(
+            named: "TuringStoryWindowDadCenterAnchor"
+        ) else {
+            throw BundleError.missingRequiredEntity(
+                "TuringStoryWindowDadCenterAnchor"
+            )
+        }
+        guard let exit = loadedBundleRoot.turingWindowFindEntity(
+            named: "TuringStoryWindowDadExitAnchor"
+        ) else {
+            throw BundleError.missingRequiredEntity(
+                "TuringStoryWindowDadExitAnchor"
+            )
+        }
+
+        activeCinematicUseCount += 1
+        print(
+            "[Chapter01Dad] window cinematic context acquired activeUses=\(activeCinematicUseCount)"
+        )
+        return TuringStoryWindowCinematicContext(
+            portalWorldRoot: portalWorldRoot,
+            portalPlane: anchors.portalPlane,
+            entryAnchor: entry,
+            centerAnchor: center,
+            exitAnchor: exit
+        )
+    }
+
+    func releaseChapter01DadCinematicContext(reason: String) async {
+        activeCinematicUseCount = max(0, activeCinematicUseCount - 1)
+        print(
+            "[Chapter01Dad] window cinematic context released activeUses=\(activeCinematicUseCount) reason=\(reason)"
+        )
+        guard activeCinematicUseCount == 0,
+              let deferredAtmosphere,
+              let placement else {
+            return
+        }
+        self.deferredAtmosphere = nil
+        await reloadPortalWorld(
+            atmosphere: deferredAtmosphere,
+            placement: placement
         )
     }
 
@@ -237,6 +313,8 @@ final class TuringStoryWindowBundleController:
         isPlaced = false
         committedAdjustmentTransform = nil
         committedAdjustmentSlot = nil
+        activeCinematicUseCount = 0
+        deferredAtmosphere = nil
         PortalHDRIDomeRuntimeDiagnostics.logRemoval(
             from: portalWorldRoot,
             reason: "windowReset"

@@ -1,7 +1,7 @@
 {
   "schema": "com.gravitas.animation_library_manifest.v0",
   "library_id": "GravitasPlagueAnimationLibrary",
-  "generated_at": "2026-06-11T19:00:20.211656+00:00",
+  "generated_at": "2026-08-01T01:45:12.149329+00:00",
   "clips": [
     {
       "clip_id": "charged-slash-left",
@@ -202,6 +202,46 @@
       "source_skeleton_hash": "9ddc45fe61050048954d8afb205ab82e74e2b4b21ca4a61fa47824a10f6f1ddd",
       "source_rig_relative_path": "Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
       "updated_at": "2026-06-11T16:02:25.944896+00:00"
+    },
+    {
+      "clip_id": "drone_idle_01",
+      "display_name": "Drone Idle 01",
+      "relative_path": "Clips/Idle/drone_idle_01.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
+      "category": [
+        "idle"
+      ],
+      "emotion": [
+        "controlled",
+        "clinical"
+      ],
+      "threat": [
+        "neutral"
+      ],
+      "story": [
+        "scanning",
+        "compliance"
+      ],
+      "looping": true,
+      "duration_seconds": 1.0,
+      "locomotion_type": "stationary",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "source_rig_id": "robot_biped_ef4ae12ac07d",
+      "source_character_id": "robot_biped",
+      "source_skeleton_hash": "ef4ae12ac07d3d65d88014daffa05accb6ac2b1b369572a9869cbb773f64ff93",
+      "source_rig_relative_path": "Rigs/SourceRigs/robot_biped_ef4ae12ac07d.source_rig.json",
+      "updated_at": "2026-08-01T01:45:12.149319+00:00"
     },
     {
       "clip_id": "head_snap_left",

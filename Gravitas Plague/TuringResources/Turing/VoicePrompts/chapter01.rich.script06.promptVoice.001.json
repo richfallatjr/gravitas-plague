@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter01.rich.script06.promptVoice.001",
+  "speakerID": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "characterProfileID": "rich",
+  "listenerProfileID": "big_mike",
+  "outputContext": "walkieOutgoingGlobal",
+  "conversationKey": "dialogue.big_mike.rich",
+  "intent": "I am excited and hopeful to have found the Gravitas beacon we thought was only a legend until now. I am also happy to have made contact with CatEye81. The antigen may help protect our future for a short time and may help someone in need. I need Big Mike to copy the delivery information correctly, but I am trying not to let my excitement make me careless over an open channel.",
+  "emotion": "excited and hopeful, technically focused, trying to remain cautious over an open channel"
+}

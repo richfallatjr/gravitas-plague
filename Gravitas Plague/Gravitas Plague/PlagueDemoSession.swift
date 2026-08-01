@@ -302,11 +302,21 @@ final class PlagueDemoSession: ObservableObject {
 
         case .horde:
             experienceMode = .horde
-            startHordeBenchmarkFromPoster()
+            Task { @MainActor [weak self] in
+                await PlagueMainMenuMusicActor.shared.stop(
+                    reason: "hordeModeSelected"
+                )
+                self?.startHordeBenchmarkFromPoster()
+            }
 
         case .walkLoop:
             experienceMode = .walkLoop
-            startWalkLoopFromPoster()
+            Task { @MainActor [weak self] in
+                await PlagueMainMenuMusicActor.shared.stop(
+                    reason: "walkLoopSelected"
+                )
+                self?.startWalkLoopFromPoster()
+            }
         }
     }
 
@@ -719,6 +729,18 @@ final class PlagueDemoSession: ObservableObject {
         activeMode = .none
         statusMessage = "Select operation mode."
 
+        Task {
+            do {
+                try await PlagueMainMenuMusicActor.shared.startIfNeeded(
+                    reason: "returnedToOperationMenu"
+                )
+            } catch {
+                print(
+                    "[PlagueMenuMusic] ERROR restart failed: \(error.localizedDescription)"
+                )
+            }
+        }
+
         print("[PlagueMenu] returned to operation menu")
     }
 
@@ -768,7 +790,6 @@ final class PlagueDemoSession: ObservableObject {
         activeMode = .none
         statusMessage = "Starting \(episode.title)."
         resetPlayerDeathState()
-        send(.requestStoryWalkieBundlePlacement)
         send(.startStoryEpisode(episodeID))
 
         print(

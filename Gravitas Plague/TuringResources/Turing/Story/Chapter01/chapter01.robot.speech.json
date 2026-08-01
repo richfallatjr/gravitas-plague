@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "catalogID": "chapter01.gravitasRobot.speech.v1",
+  "speakerID": "gravitas_robot",
+  "outputRoute": "storyRobotSpatial",
+  "cues": [
+    {
+      "cueID": "scanInstruction",
+      "audioFile": "pr-robot-scan-instruction.mp3",
+      "transcript": "Please remain still. This unit is operating on behalf of the Gravitas Corporation. A brief diagnostic scan is required. Face forward, and keep your head as still as possible.",
+      "gainDB": 0
+    },
+    {
+      "cueID": "complianceWarning",
+      "audioFile": "pr-robot-compliance-warning.mp3",
+      "transcript": "Movement detected. This is your final compliance warning. Continued resistance will be interpreted as late-stage infection and loss of behavioral control. Remain still, or defensive measures will be authorized.",
+      "gainDB": 0
+    },
+    {
+      "cueID": "complianceRestored",
+      "audioFile": "pr-robot-compliance-restored.mp3",
+      "transcript": "Compliance restored. Scanning in progress. Keep your head facing forward until confirmation.",
+      "gainDB": 0
+    },
+    {
+      "cueID": "successfulScan",
+      "audioFile": "pr-robot-successful-scan.mp3",
+      "transcript": "Diagnostic scan complete. No late-stage behavioral markers detected. One Gravitas antigen pack has been authorized. Antigen is effective only during early-stage infection. It may temporarily suppress progression. It is not a cure. Payload transfer complete.",
+      "gainDB": 0
+    },
+    {
+      "cueID": "payloadRelease",
+      "audioFile": "pr-robot-payload-release.mp3",
+      "transcript": "Critical unit failure. Delivery protocol interrupted. Emergency payload release authorized. One antigen pack has been released for recovery. Antigen is intended for early-stage infection only.",
+      "gainDB": 0
+    },
+    {
+      "cueID": "exitConfirmation",
+      "audioFile": "pr-robot-exit-confirmation.mp3",
+      "transcript": "Delivery confirmed. Remain indoors and monitor authorized frequencies for further instructions. This unit is returning to relay operations.",
+      "gainDB": 0
+    }
+  ]
+}

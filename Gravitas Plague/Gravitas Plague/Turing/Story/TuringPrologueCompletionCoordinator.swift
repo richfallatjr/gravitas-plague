@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor
-final class TuringPrologueCompletionCoordinator: TuringPrologueCompletionEventSink {
+final class TuringPrologueCompletionCoordinator: TuringStoryCompletionEventSink {
     private let progress: TuringStoryProgressStore
     private let battleRouter: PrologueStoryActionRouter
     private var handledEventIDs = Set<UUID>()
