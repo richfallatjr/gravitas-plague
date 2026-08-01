@@ -396,8 +396,18 @@ final class TuringFlowResourceParityTests:
         )
         XCTAssertTrue(
             prompt.contains(
-                "This is what you just said prior to what you are going to say next:"
+                "This is what you said already:"
             )
+        )
+        let priorTranscriptRange = try XCTUnwrap(
+            prompt.range(of: "{{prerecordingTranscript}}")
+        )
+        let storyIntentRange = try XCTUnwrap(
+            prompt.range(of: "{{storyIntent}}")
+        )
+        XCTAssertLessThan(
+            priorTranscriptRange.lowerBound,
+            storyIntentRange.lowerBound
         )
         XCTAssertTrue(
             prompt.contains(

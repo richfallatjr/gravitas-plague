@@ -394,6 +394,13 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
         )
         controller.setCombatEnabled(false)
         playerHitBudget?.disable()
+        try controller.playScriptedIdleLoop(
+            clipID: definition.animations.idle
+        )
+        print(
+            "[Chapter01RobotScan] diagnostic idle restored " +
+                "clipID=\(definition.animations.idle)"
+        )
 
         movementDuringRecovery = false
         recoveryMonitorTask = makeRecoveryMonitor(
