@@ -129,6 +129,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
 
     private var followDemoState: FollowDemoState = .inactive
     private var followConfiguration = JockFollowDemoConfiguration.defaultDemo
+    private var scriptedVisualHeadingOffsetDegrees: Float = 0
     private var latestHeadPosition: SIMD3<Float>?
     private var followDelayElapsed: TimeInterval = 0
     private var latestFrameDeltaTime: Float = 1.0 / 60.0
@@ -953,6 +954,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     }
 
     func prepareFreshStoryBattleSpawn() {
+        scriptedVisualHeadingOffsetDegrees = 0
         resetIncomingPunchPolicyForDefaultRuntime()
         acceptedHitCount = 0
         clearEnemyDamageCooldown()
@@ -3020,6 +3022,13 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         try playScriptedIdleLoop(clipID: "idle_01")
     }
 
+    func setScriptedVisualHeadingOffsetDegrees(_ degrees: Float) {
+        scriptedVisualHeadingOffsetDegrees = degrees
+        print(
+            "[CharacterAnimation] scripted visual heading offset degrees=\(degrees)"
+        )
+    }
+
     func playScriptedIdleLoop(clipID: String) throws {
         guard let clip = clipsByID[clipID] else {
             throw RetargetError.clipNotFound(clipID)
@@ -3069,7 +3078,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         guard let authoredOverride = runtimeOverrides.clips[clipID] else {
             throw RetargetError.runtimeOverrideNotFound(clipID)
         }
-        let visualCorrection = followConfiguration.visualHeadingCorrectionDegrees
+        let visualCorrection = effectiveScriptedVisualHeadingCorrectionDegrees
         let battleTurnOverride = Self.scriptedTurnRuntimeOverride(
             authoredOverride: authoredOverride,
             visualHeadingCorrectionDegrees: visualCorrection
@@ -5368,10 +5377,17 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
 
     private func followVisualRuntimeOverride() -> JockRuntimeClipOverride {
         return JockRuntimeClipOverride(
-            entryHeadingDegrees: -followConfiguration.visualHeadingCorrectionDegrees,
-            exitHeadingDegrees: -followConfiguration.visualHeadingCorrectionDegrees,
+            entryHeadingDegrees: -effectiveScriptedVisualHeadingCorrectionDegrees,
+            exitHeadingDegrees: -effectiveScriptedVisualHeadingCorrectionDegrees,
             commitRootYawOnCompletion: false
         )
+    }
+
+    private var effectiveScriptedVisualHeadingCorrectionDegrees: Float {
+        (
+            followConfiguration.visualHeadingCorrectionDegrees
+                + scriptedVisualHeadingOffsetDegrees
+        ).truncatingRemainder(dividingBy: 360)
     }
 
     private func cameraFacingRuntimeOverride() -> JockRuntimeClipOverride {

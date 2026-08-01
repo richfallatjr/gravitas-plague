@@ -244,25 +244,27 @@ final class TuringStoryWindowBundleController:
     func acquireChapter01DadCinematicContext()
         throws -> TuringStoryWindowCinematicContext {
         guard isPlaced,
-              let loadedBundleRoot,
               let anchors else {
             throw BundleError.noPlacement
         }
-        guard let entry = loadedBundleRoot.turingWindowFindEntity(
+
+        installChapter01DadRouteAnchors()
+
+        guard let entry = portalWorldRoot.turingWindowFindEntity(
             named: "TuringStoryWindowDadEntryAnchor"
         ) else {
             throw BundleError.missingRequiredEntity(
                 "TuringStoryWindowDadEntryAnchor"
             )
         }
-        guard let center = loadedBundleRoot.turingWindowFindEntity(
+        guard let center = portalWorldRoot.turingWindowFindEntity(
             named: "TuringStoryWindowDadCenterAnchor"
         ) else {
             throw BundleError.missingRequiredEntity(
                 "TuringStoryWindowDadCenterAnchor"
             )
         }
-        guard let exit = loadedBundleRoot.turingWindowFindEntity(
+        guard let exit = portalWorldRoot.turingWindowFindEntity(
             named: "TuringStoryWindowDadExitAnchor"
         ) else {
             throw BundleError.missingRequiredEntity(
@@ -836,6 +838,7 @@ final class TuringStoryWindowBundleController:
                     height: placement.height
                 )
             )
+            installChapter01DadRouteAnchors()
         } catch {
             print(
                 """
@@ -845,6 +848,63 @@ final class TuringStoryWindowBundleController:
                 """
             )
         }
+    }
+
+    private func installChapter01DadRouteAnchors() {
+        let names = [
+            "TuringStoryWindowDadEntryAnchor",
+            "TuringStoryWindowDadCenterAnchor",
+            "TuringStoryWindowDadExitAnchor"
+        ]
+        guard names.contains(where: {
+            portalWorldRoot.turingWindowFindEntity(named: $0) == nil
+        }) else {
+            return
+        }
+
+        for name in names {
+            portalWorldRoot.turingWindowFindEntity(named: name)?
+                .removeFromParent()
+        }
+
+        let sideOffset = TuringStoryWindowBundleTuning
+            .chapter01DadRouteSideOffsetMeters
+        let depth = -TuringStoryWindowBundleTuning
+            .chapter01DadRouteDepthMeters
+        let windowBottomOriginY = loadedVisualMinY
+        let floorY = windowBottomOriginY - TuringStoryWindowBundleTuning
+            .preferredBottomHeightMeters
+
+        let entry = Entity()
+        entry.name = names[0]
+        entry.position = SIMD3<Float>(sideOffset, floorY, depth)
+
+        let center = Entity()
+        center.name = names[1]
+        center.position = SIMD3<Float>(0, floorY, depth)
+
+        let exit = Entity()
+        exit.name = names[2]
+        exit.position = SIMD3<Float>(-sideOffset, floorY, depth)
+
+        portalWorldRoot.addChild(entry)
+        portalWorldRoot.addChild(center)
+        portalWorldRoot.addChild(exit)
+
+        print(
+            """
+            [Chapter01Dad] procedural window route installed
+              coordinateSpace: TuringStoryWindowPortalWorldRoot
+              windowBottomOriginY: \(windowBottomOriginY)
+              floorDropMeters: \(TuringStoryWindowBundleTuning.preferredBottomHeightMeters)
+              floorY: \(floorY)
+              depthZ: \(depth)
+              point1Entry: \(entry.position)
+              point2Center: \(center.position)
+              point3Exit: \(exit.position)
+              source: measured_window_bottom_plus_established_floor_clearance
+            """
+        )
     }
 
     private func choosePlacement(

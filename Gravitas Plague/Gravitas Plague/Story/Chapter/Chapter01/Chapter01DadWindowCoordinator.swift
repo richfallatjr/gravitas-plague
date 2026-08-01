@@ -18,9 +18,12 @@ enum Chapter01DadWindowState: Sendable, Equatable {
 
 @MainActor
 final class Chapter01DadWindowCoordinator {
+    private static let centeredIdleDurationSeconds: TimeInterval = 20
+
     private let windowBundle: TuringStoryWindowBundleController
     private let heavyRuntimeRegistry: StoryHeavyRuntimeRegistry
     private let chapterMusic: Chapter01MusicController
+    private let dadPrerecording: Chapter01DadWindowPrerecordingController
     private let pathFollower = ScriptedAnchorPathFollower()
 
     private(set) var state: Chapter01DadWindowState = .unloaded
@@ -40,11 +43,14 @@ final class Chapter01DadWindowCoordinator {
     init(
         windowBundle: TuringStoryWindowBundleController,
         heavyRuntimeRegistry: StoryHeavyRuntimeRegistry = .shared,
-        chapterMusic: Chapter01MusicController = .shared
+        chapterMusic: Chapter01MusicController = .shared,
+        dadPrerecording: Chapter01DadWindowPrerecordingController =
+            Chapter01DadWindowPrerecordingController()
     ) {
         self.windowBundle = windowBundle
         self.heavyRuntimeRegistry = heavyRuntimeRegistry
         self.chapterMusic = chapterMusic
+        self.dadPrerecording = dadPrerecording
     }
 
     func validateAvailability() async throws {
@@ -55,6 +61,7 @@ final class Chapter01DadWindowCoordinator {
         _ = context
         _ = try CharacterAttributeStore.shared.attributes(for: .dad)
         try await chapterMusic.prepare(catalog: Chapter01MusicCatalog.load())
+        try await dadPrerecording.prepare()
     }
 
     func start(request: Chapter01DadWindowRequest) async throws {
@@ -69,6 +76,7 @@ final class Chapter01DadWindowCoordinator {
         guard case .storyTransition = request.storyTransitionLease.owner else {
             throw StoryInteractionClaimError.invalidTransfer
         }
+        try await dadPrerecording.prepare()
 
         state = .loading
         let context = try windowBundle.acquireChapter01DadCinematicContext()
@@ -158,7 +166,8 @@ final class Chapter01DadWindowCoordinator {
             from: runtime.context.entryAnchor,
             to: runtime.context.centerAnchor,
             coordinateSpace: runtime.context.portalWorldRoot,
-            walkClipID: "unstable_walk_01"
+            walkClipID: "unstable_walk_01",
+            revealAfterLocomotionStarts: true
         )
         try requireCurrent(request, generation: generation)
 
@@ -171,7 +180,28 @@ final class Chapter01DadWindowCoordinator {
 
         state = .centeredIdle20Seconds
         try controller.playScriptedIdleLoop(clipID: "idle_01")
-        try await Task.sleep(for: .seconds(20))
+        guard let exitTurnDurationSeconds =
+                controller.durationForClip(id: "turn_right_90") else {
+            throw Chapter01Error.openingResourceUnavailable(
+                "Dad turn_right_90 duration is unavailable."
+            )
+        }
+        let prerecordingStartDelay =
+            try await dadPrerecording.scheduledStartDelaySeconds(
+                centeredIdleDurationSeconds:
+                    Self.centeredIdleDurationSeconds,
+                exitTurnDurationSeconds:
+                    TimeInterval(exitTurnDurationSeconds)
+            )
+        async let prerecordingPlayback: Void =
+            dadPrerecording.playScheduled(
+                after: prerecordingStartDelay,
+                chapterRunID: request.chapterRunID
+            )
+
+        try await Task.sleep(
+            for: .seconds(Self.centeredIdleDurationSeconds)
+        )
         try requireCurrent(request, generation: generation)
 
         state = .turningRightToExit
@@ -195,6 +225,7 @@ final class Chapter01DadWindowCoordinator {
                 )
             }
         )
+        try await prerecordingPlayback
 
         state = .releasing
         let report = try await runtime.lease.release(
@@ -219,6 +250,7 @@ final class Chapter01DadWindowCoordinator {
         to: Entity,
         coordinateSpace: Entity,
         walkClipID: String,
+        revealAfterLocomotionStarts: Bool = false,
         onLocomotionStarted: (() async throws -> Void)? = nil
     ) async throws {
         let start = from.position(relativeTo: coordinateSpace)
@@ -241,6 +273,12 @@ final class Chapter01DadWindowCoordinator {
                         walkClipID: walkClipID
                     ) { [weak self] in
                         self?.finishPath(.success(()))
+                    }
+                    if revealAfterLocomotionStarts {
+                        controller.show()
+                        print(
+                            "[Chapter01Dad] entry locomotion submitted; Dad revealed"
+                        )
                     }
                     if let onLocomotionStarted {
                         Task { @MainActor [weak self] in
@@ -321,6 +359,7 @@ final class Chapter01DadWindowCoordinator {
     }
 
     private func cleanup(reason: String, notifyFailure: Bool) async {
+        await dadPrerecording.cancel(reason: reason)
         pathFollower.cancel(reason: reason)
         finishPath(.failure(CancellationError()))
         runtime?.controller?.cancelScriptedClipCompletion()

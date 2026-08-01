@@ -16,6 +16,8 @@ enum TuringStoryWindowBundleTuning {
     static let assetImportScale: Float = 3.0
     static let feetToMeters: Float = 0.3048
     static let preferredBottomHeightMeters: Float = 2.8 * feetToMeters
+    static let chapter01DadRouteSideOffsetMeters: Float = 4.0
+    static let chapter01DadRouteDepthMeters: Float = 1.0
     static let minBottomClearanceMeters: Float = 0.30
     static let wallMarginMeters: Float = 0.12
     static let depthOffset: Float = 0.018

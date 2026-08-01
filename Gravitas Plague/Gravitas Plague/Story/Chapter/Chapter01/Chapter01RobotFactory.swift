@@ -73,10 +73,10 @@ final class Chapter01RobotFactory {
             if controller.rootEntity.parent == nil {
                 sceneRoot.addChild(controller.rootEntity)
             }
-            let start = doorContext.robotExteriorStart.position(relativeTo: nil)
+            let start = doorContext.robotDoorThreshold.position(relativeTo: nil)
             let mid = doorContext.robotExteriorMid.position(relativeTo: nil)
             let forward = PhaseOneMath.normalizedOrFallback(
-                SIMD3<Float>(mid.x - start.x, 0, mid.z - start.z),
+                SIMD3<Float>(start.x - mid.x, 0, start.z - mid.z),
                 fallback: SIMD3<Float>(0, 0, -1)
             )
             controller.rootEntity.setPosition(start, relativeTo: nil)
@@ -118,6 +118,8 @@ final class Chapter01RobotFactory {
               acceptedHitsToDestroy: \(acceptedHitsToDestroy)
               incomingHitAcceptanceProbability: \(definition.combat.incomingPlayerHitAcceptanceProbability)
               hordeConfigurationChanged: false
+              initialAnchor: \(doorContext.robotDoorThreshold.name)
+              initialState: idleAtDoorThreshold
               sourceVisible: false
               mirrorID: \(mirror.id.uuidString)
             """)

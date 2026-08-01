@@ -65,7 +65,9 @@ enum Chapter01DadRuntimeFactory {
             at: context.entryAnchor,
             relativeTo: context.portalWorldRoot
         )
-        controller.show()
+        // Spawn preparation enables the root before an animation owns the rig.
+        // Keep it hidden until the entry walk has actually been submitted.
+        controller.rootEntity.isEnabled = false
 
         let corpsePresenter = BattleCorpsePresentationController(
             storyRoot: context.portalWorldRoot
@@ -78,7 +80,7 @@ enum Chapter01DadRuntimeFactory {
         )
         await heavyRuntimeRegistry.register(.dad(chapterRunID))
         print(
-            "[Chapter01Dad] runtime prepared chapterRunID=\(chapterRunID.uuidString) coordinateSpace=\(context.portalWorldRoot.name)"
+            "[Chapter01Dad] runtime prepared hidden=true chapterRunID=\(chapterRunID.uuidString) coordinateSpace=\(context.portalWorldRoot.name)"
         )
         return Chapter01DadRuntime(
             chapterRunID: chapterRunID,

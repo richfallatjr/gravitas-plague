@@ -101,27 +101,7 @@ actor TuringDialogueService {
             name: promptTemplateName,
             promptCharacters: prompt.utf16.count
         )
-        let plan: TuringVoicePromptPlan
-        do {
-            plan = try await decodeVoicePromptPlanWithOneRepair(
-                raw: raw,
-                purpose: "TuringVoicePrompt"
-            )
-        } catch {
-            guard TuringFoundationGuardrailPolicy.isGuardrailError(error) else {
-                throw error
-            }
-            print("""
-            [TuringVoicePrompt] Foundation repair guardrails triggered
-              characterID: \(profile.characterID)
-              result: failed
-              qwenWillGenerateAutoResponse: false
-              error: \(error.localizedDescription)
-            """)
-            throw TuringRuntimeError.foundationRepairFailed(
-                "voicePrompt repair guardrails triggered: \(error.localizedDescription)"
-            )
-        }
+        let plan = try Self.decodeVoicePromptPlan(raw)
 
         print("""
         [TuringVoicePrompt] gate passed
@@ -264,31 +244,6 @@ actor TuringDialogueService {
         }
     }
 
-    private func decodeVoicePromptPlanWithOneRepair(
-        raw: String,
-        purpose: String
-    ) async throws -> TuringVoicePromptPlan {
-        do {
-            return try Self.decodeStrictVoicePromptPlan(raw)
-        } catch {
-            let repairService = TuringDialogueJSONRepairService(
-                runner: runner,
-                expectedSchema: Self.voicePromptPlanRepairSchema
-            )
-            let repaired = try await repairService.repairJSON(
-                invalidPayload: raw,
-                errorDescription: error.localizedDescription
-            )
-            do {
-                return try Self.decodeStrictVoicePromptPlan(repaired)
-            } catch {
-                throw TuringRuntimeError.foundationRepairFailed(
-                    "\(purpose): \(error.localizedDescription)"
-                )
-            }
-        }
-    }
-
     private static func decodeStrictPlan(
         _ raw: String
     ) throws -> TuringDialoguePlan {
@@ -365,7 +320,7 @@ actor TuringDialogueService {
         )
     }
 
-    private static func decodeStrictVoicePromptPlan(
+    private static func decodeVoicePromptPlan(
         _ raw: String
     ) throws -> TuringVoicePromptPlan {
         let data = try TuringJSONSanitizer.extractSingleTopLevelObject(
@@ -410,7 +365,8 @@ actor TuringDialogueService {
             )
         }
 
-        let normalizedSegments = try decoded.segments.enumerated().map { index, segment in
+        var normalizedSegments: [TuringSpeechSegment] = []
+        for (index, segment) in decoded.segments.enumerated() {
             let text = segment.text.trimmingCharacters(
                 in: .whitespacesAndNewlines
             )
@@ -428,17 +384,140 @@ actor TuringDialogueService {
                     "Segment \(index) emotion must not be empty."
                 )
             }
-
-            return TuringSpeechSegment(
-                text: text,
-                emotion: emotion
+            let splitSegments = deterministicSpeechSegments(
+                text,
+                maximumWordCount: 15
             )
+            let originalWordCount = text.split(
+                whereSeparator: { $0.isWhitespace }
+            ).count
+
+            if splitSegments.count > 1 {
+                print("""
+                [TuringVoicePrompt] oversized segment split deterministically
+                  originalSegmentIndex: \(index)
+                  originalWordCount: \(originalWordCount)
+                  resultingSegmentCount: \(splitSegments.count)
+                  boundaryPriority: sentence,clause,conjunction,hardLimit
+                  foundationRepairRequested: false
+                """)
+            }
+
+            for splitText in splitSegments {
+                normalizedSegments.append(
+                    TuringSpeechSegment(
+                        text: splitText,
+                        emotion: emotion
+                    )
+                )
+            }
         }
 
         return TuringVoicePromptPlan(
             schemaVersion: decoded.schemaVersion,
             segments: normalizedSegments
         )
+    }
+
+    private static func deterministicSpeechSegments(
+        _ text: String,
+        maximumWordCount: Int
+    ) -> [String] {
+        let words = text.split(whereSeparator: { $0.isWhitespace })
+        guard words.count > maximumWordCount else {
+            return [words.joined(separator: " ")]
+        }
+
+        var segments: [String] = []
+        var start = 0
+        while start < words.count {
+            let limit = min(start + maximumWordCount, words.count)
+            let end: Int
+            if limit == words.count {
+                end = limit
+            } else if let sentenceBoundary = preferredBoundary(
+                in: words,
+                from: start,
+                through: limit,
+                matching: isSentenceEnding
+            ) {
+                end = sentenceBoundary
+            } else if let clauseBoundary = preferredBoundary(
+                in: words,
+                from: start,
+                through: limit,
+                matching: isClauseEnding
+            ) {
+                end = clauseBoundary
+            } else if let conjunctionBoundary = preferredConjunctionBoundary(
+                in: words,
+                from: start,
+                through: limit
+            ) {
+                end = conjunctionBoundary
+            } else {
+                end = limit
+            }
+
+            segments.append(words[start..<end].joined(separator: " "))
+            start = end
+        }
+        return segments
+    }
+
+    private static func preferredBoundary(
+        in words: [Substring],
+        from start: Int,
+        through limit: Int,
+        matching predicate: (Substring) -> Bool
+    ) -> Int? {
+        guard limit > start else { return nil }
+        for index in stride(from: limit - 1, through: start, by: -1) {
+            if predicate(words[index]) {
+                return index + 1
+            }
+        }
+        return nil
+    }
+
+    private static func preferredConjunctionBoundary(
+        in words: [Substring],
+        from start: Int,
+        through limit: Int
+    ) -> Int? {
+        let conjunctions: Set<String> = [
+            "and", "but", "because", "or", "so", "then", "when", "while"
+        ]
+        guard limit - start >= 5 else { return nil }
+        for index in stride(from: limit - 1, through: start + 4, by: -1) {
+            let normalized = words[index]
+                .trimmingCharacters(in: .punctuationCharacters)
+                .lowercased()
+            if conjunctions.contains(normalized) {
+                return index
+            }
+        }
+        return nil
+    }
+
+    private static func isSentenceEnding(_ word: Substring) -> Bool {
+        let normalized = word.trimmingCharacters(
+            in: CharacterSet(charactersIn: "\"'\u{201D}\u{2019})]}")
+        )
+        return normalized.hasSuffix(".") ||
+            normalized.hasSuffix("?") ||
+            normalized.hasSuffix("!")
+    }
+
+    private static func isClauseEnding(_ word: Substring) -> Bool {
+        let normalized = word.trimmingCharacters(
+            in: CharacterSet(charactersIn: "\"'\u{201D}\u{2019})]}")
+        )
+        return normalized.hasSuffix(",") ||
+            normalized.hasSuffix(";") ||
+            normalized.hasSuffix(":") ||
+            normalized.hasSuffix("--") ||
+            normalized.hasSuffix("\u{2014}")
     }
 
     private static func renderPrompt(
@@ -576,22 +655,13 @@ actor TuringDialogueService {
     }
     """
 
-    fileprivate static let voicePromptPlanRepairSchema = """
-    {
-      "schemaVersion": 1,
-      "segments": [
-        {
-          "text": "string",
-          "emotion": "string"
-        }
-      ]
-    }
-    """
 }
 
 private struct TuringDialogueJSONRepairService: TuringJSONRepairService {
     let runner: any TuringFoundationQueryRunning
     var expectedSchema = TuringDialogueService.dialoguePlanRepairSchema
+    var contentRequirements =
+        "Repair the JSON structure without rewriting the intended character speech."
 
     func repairJSON(
         invalidPayload: String,
@@ -608,7 +678,10 @@ private struct TuringDialogueJSONRepairService: TuringJSONRepairService {
         The previous response failed with:
         \(errorDescription)
 
-        Repair this payload without rewriting the intended character speech:
+        Additional content requirements:
+        \(contentRequirements)
+
+        Repair this payload:
         \"\"\"
         \(invalidPayload)
         \"\"\"

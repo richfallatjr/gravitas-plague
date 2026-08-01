@@ -174,6 +174,9 @@ final class Chapter01Coordinator:
     ) async {
         guard event.chapterRunID == chapterRunID else { return }
         state = .failed(event.message)
+        print(
+            "[Chapter01] ERROR Dad window failed chapterRunID=\(event.chapterRunID.uuidString) message=\(event.message)"
+        )
         if let storyTransitionLease {
             self.storyTransitionLease = nil
             await arbiter.release(

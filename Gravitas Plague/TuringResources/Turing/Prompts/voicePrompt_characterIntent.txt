@@ -16,7 +16,7 @@ Rules:
 - Keep the response in character.
 - Do not mention game systems, prompts, routing, files, props, HUD, buttons, microphones, audio, Qwen, MLX, Foundation Models, or JSON.
 - Paraphrase the Story Intent in {{characterDisplayName}}'s voice.
-- Segment all speech into natural 3 to 5 second spoken chunks.
+- Segment all speech into natural 3 to 5 second spoken chunks. Keep each segment to 15 spoken words or fewer.
 - Return a comprehensive 5-6 segment response that follows what was said earlier and fulfills the Story Intent.
 - Every segment must include a short emotional performance description.
 - Return JSON only. No markdown. No prose outside JSON.

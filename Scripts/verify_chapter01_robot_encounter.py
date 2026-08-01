@@ -17,6 +17,7 @@ SOURCE_ROOT = (
 )
 
 EXPECTED_AUDIO = {
+    "pr-rich-dad-window-01.mp3": "8277ca5dcfad5fb74e05dba57ebd5979ddc30040f804e9d0e23ebfa3c74ebd53",
     "pr-robot-scan-instruction.mp3": "712ad90844604c54c34ceb447d4dc27b1da46d308e72549743712c3b9ef808bd",
     "pr-robot-compliance-warning.mp3": "7ff810f3f2544ebad04d26ed0ad1c95b1feebfa537d14906099d56b621a63a72",
     "pr-robot-compliance-restored.mp3": "357e509a25069d25fbe28492f050cb1dbb0ca987b987d5efb20505e37f8ed50c",
@@ -118,6 +119,33 @@ def main() -> None:
     for forbidden in ("FoundationModels", "LanguageModelSession", "TuringQwen", "promptVoice", "conversationVoice"):
         if forbidden in chapter_source:
             fail(f"Robot Chapter source must not invoke generated speech: {forbidden}")
+
+    dad_runtime_source = (SOURCE_ROOT / "Chapter01DadRuntime.swift").read_text()
+    robot_factory_source = (SOURCE_ROOT / "Chapter01RobotFactory.swift").read_text()
+    for source_name, source in (
+        ("Dad runtime", dad_runtime_source),
+        ("Robot factory", robot_factory_source),
+    ):
+        if "setScriptedVisualHeadingOffsetDegrees" in source:
+            fail(f"{source_name} must use the shared rig heading correction exactly once")
+
+    robot_coordinator_source = (
+        SOURCE_ROOT / "Chapter01RobotEncounterCoordinator.swift"
+    ).read_text()
+    controller_tick = robot_coordinator_source.find("runtime?.controller.update(")
+    path_tick = robot_coordinator_source.find("pathFollower.update(deltaTime: deltaTime)")
+    if controller_tick == -1 or path_tick == -1 or controller_tick > path_tick:
+        fail("Robot animation driver must update before scripted path locomotion")
+
+    dad_pr_source = (
+        SOURCE_ROOT / "Chapter01DadWindowPrerecordingController.swift"
+    ).read_text()
+    if "pr-rich-dad-window-01.mp3" not in dad_pr_source:
+        fail("Dad-window Rich prerecording resource contract is missing")
+    if "desiredCompletionAfterExitWalkStartSeconds: TimeInterval = 2" not in dad_pr_source:
+        fail("Dad-window Rich prerecording must finish two seconds into the exit walk")
+    if "audioDurationSeconds" not in dad_pr_source or "exitTurnDurationSeconds" not in dad_pr_source:
+        fail("Dad-window Rich prerecording start must be derived from timeline durations")
 
     antigen_descriptor = RESOURCE_ROOT / "Story" / "Chapter01" / "chapter01.antigenReward.001.json"
     if not antigen_descriptor.is_file():

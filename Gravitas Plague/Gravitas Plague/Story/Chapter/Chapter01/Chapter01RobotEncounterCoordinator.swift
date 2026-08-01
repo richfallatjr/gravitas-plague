@@ -153,6 +153,15 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
     }
 
     func update(deltaTime: TimeInterval) {
+        let combatTracksPlayer =
+            state == .attackingNoncompliance || state == .stabilityRecovery
+        let pose = spatialProvider.currentPose()
+
+        runtime?.controller.update(
+            deltaTime: Float(deltaTime),
+            currentHeadPosition: combatTracksPlayer ? pose?.headPosition : nil
+        )
+
         pathFollower.update(deltaTime: deltaTime)
         approachController.update(deltaTime: deltaTime)
 
@@ -173,16 +182,10 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
             }
         }
 
-        if state == .attackingNoncompliance || state == .stabilityRecovery,
+        if !combatTracksPlayer,
+           shouldYawTrackPlayer,
            let controller = runtime?.controller,
-           let pose = spatialProvider.currentPose() {
-            controller.update(
-                deltaTime: Float(deltaTime),
-                currentHeadPosition: pose.headPosition
-            )
-        } else if shouldYawTrackPlayer,
-                  let controller = runtime?.controller,
-                  let pose = spatialProvider.currentPose() {
+           let pose {
             controller.setOrientationYawOnlyFacingPlayer(pose.headPosition)
         }
     }
@@ -263,8 +266,6 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
             controller: runtime.controller,
             clipID: definition.animations.walk,
             points: [
-                ("robotExteriorStart", doorContext.robotExteriorStart.position(relativeTo: nil)),
-                ("robotExteriorMid", doorContext.robotExteriorMid.position(relativeTo: nil)),
                 ("robotDoorThreshold", doorContext.robotDoorThreshold.position(relativeTo: nil)),
                 ("robotRoomEntry", roomTarget)
             ]
