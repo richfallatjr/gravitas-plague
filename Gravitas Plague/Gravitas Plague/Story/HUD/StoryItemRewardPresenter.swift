@@ -7,6 +7,15 @@ import UIKit
 final class StoryItemRewardPresenter {
     typealias AnchorResolver = @MainActor (String) -> Entity?
 
+    private enum Layout {
+        static let standardHUDPosition = SIMD3<Float>(0, -0.32, -1.05)
+        static let modelLargestExtentMeters: Float = 0.54
+        static let modelCenterY: Float = 0.38
+        static let textScale: Float = 0.001
+        static let horizontalPadding: Float = 0.16
+        static let verticalPadding: Float = 0.08
+    }
+
     private final class WeakEntityReference {
         weak var value: Entity?
 
@@ -92,7 +101,7 @@ final class StoryItemRewardPresenter {
         let presentationID = UUID()
         let presentationRoot = Entity()
         presentationRoot.name = "StoryRewardHUD_\(itemID)"
-        presentationRoot.position = SIMD3<Float>(0, -0.04, -0.62)
+        presentationRoot.position = Layout.standardHUDPosition
 
         let clone = source.clone(recursive: true)
         clone.name = "StoryRewardHUDModel_\(itemID)"
@@ -104,11 +113,13 @@ final class StoryItemRewardPresenter {
             excludeInactive: false
         )
         let largestExtent = max(bounds.extents.x, bounds.extents.y, bounds.extents.z)
-        let scale = largestExtent > 0.0001 ? min(1, 0.18 / largestExtent) : 1
+        let scale = largestExtent > 0.0001
+            ? Layout.modelLargestExtentMeters / largestExtent
+            : 1
         clone.scale = SIMD3<Float>(repeating: scale)
         clone.position = SIMD3<Float>(
             -bounds.center.x * scale,
-            0.08 - bounds.center.y * scale,
+            Layout.modelCenterY - bounds.center.y * scale,
             -bounds.center.z * scale
         )
 
@@ -154,28 +165,68 @@ final class StoryItemRewardPresenter {
         return try await Entity(contentsOf: url)
     }
 
-    private func makeHUDLabel(_ text: String) -> ModelEntity {
+    private func makeHUDLabel(_ text: String) -> Entity {
+        let root = Entity()
+        root.name = "StoryRewardHUDLabel"
         let mesh = MeshResource.generateText(
             text,
             extrusionDepth: 0.0005,
-            font: .systemFont(ofSize: 30, weight: .semibold),
-            containerFrame: CGRect(x: -360, y: -35, width: 720, height: 70),
+            font: UIFont(name: "Baskerville-SemiBold", size: 34)
+                ?? UIFont(name: "Georgia-Bold", size: 34)
+                ?? UIFont.systemFont(ofSize: 34, weight: .semibold),
+            containerFrame: CGRect(x: -420, y: -70, width: 840, height: 140),
             alignment: .center,
             lineBreakMode: .byWordWrapping
         )
-        var material = UnlitMaterial()
-        material.color = .init(tint: .white)
-        material.blending = .transparent(opacity: 1.0)
-        let label = ModelEntity(mesh: mesh, materials: [material])
+
+        var textMaterial = UnlitMaterial()
+        textMaterial.color = .init(
+            tint: UIColor(
+                red: 0.92,
+                green: 0.86,
+                blue: 0.72,
+                alpha: 1.0
+            )
+        )
+        textMaterial.blending = .transparent(opacity: 1.0)
+        let label = ModelEntity(mesh: mesh, materials: [textMaterial])
         label.name = "StoryRewardHUDText"
-        label.scale = SIMD3<Float>(repeating: 0.00075)
+        label.scale = SIMD3<Float>(repeating: Layout.textScale)
         let bounds = mesh.bounds
         label.position = SIMD3<Float>(
-            -bounds.center.x * 0.00075,
-            -0.08 - bounds.center.y * 0.00075,
+            -bounds.center.x * Layout.textScale,
+            -bounds.center.y * Layout.textScale,
             0
         )
-        return label
+
+        let width = max(
+            0.52,
+            bounds.extents.x * Layout.textScale + Layout.horizontalPadding
+        )
+        let height = max(
+            0.095,
+            bounds.extents.y * Layout.textScale + Layout.verticalPadding
+        )
+        var backgroundMaterial = UnlitMaterial()
+        backgroundMaterial.color = .init(
+            tint: UIColor(
+                red: 0.01,
+                green: 0.008,
+                blue: 0.006,
+                alpha: 0.74
+            )
+        )
+        backgroundMaterial.blending = .transparent(opacity: 1.0)
+        let background = ModelEntity(
+            mesh: .generatePlane(width: width, height: height),
+            materials: [backgroundMaterial]
+        )
+        background.name = "StoryRewardHUDBackground"
+        background.position = SIMD3<Float>(0, 0, -0.012)
+
+        root.addChild(background)
+        root.addChild(label)
+        return root
     }
 
     private func clearHUDPresentation(reason: String) {

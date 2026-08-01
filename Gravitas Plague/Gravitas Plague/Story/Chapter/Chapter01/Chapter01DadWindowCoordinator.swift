@@ -1,5 +1,6 @@
 import Foundation
 import RealityKit
+import simd
 
 enum Chapter01DadWindowState: Sendable, Equatable {
     case unloaded
@@ -33,6 +34,10 @@ final class Chapter01DadWindowCoordinator {
     private var pathContinuation: CheckedContinuation<Void, Error>?
     private var turnContinuation: CheckedContinuation<Void, Error>?
     private var activeTurnToken: UUID?
+    private var activeWalkExpectedForward: SIMD3<Float>?
+    private var previousWalkWorldPosition: SIMD3<Float>?
+    private var activeWalkPhase: String?
+    private var activeWalkDiagnosticWarningLogged = false
     private var contextAcquired = false
     private var generation: UInt64 = 0
 
@@ -123,11 +128,37 @@ final class Chapter01DadWindowCoordinator {
     }
 
     func update(deltaTime: TimeInterval) {
-        runtime?.controller?.update(
+        guard let controller = runtime?.controller else { return }
+        controller.update(
             deltaTime: Float(deltaTime),
             currentHeadPosition: nil
         )
         pathFollower.update(deltaTime: deltaTime)
+
+        switch state {
+        case .turningLeftAtCenter:
+            if let route = runtime?.context.route {
+                Chapter01DadRuntimeFactory.installWorldPose(
+                    controller,
+                    floorPosition: route.centerWorldPosition,
+                    orientation: route.entryWalkWorldOrientation,
+                    log: false
+                )
+            }
+        case .centeredIdle20Seconds, .turningRightToExit:
+            if let route = runtime?.context.route {
+                Chapter01DadRuntimeFactory.installWorldPose(
+                    controller,
+                    floorPosition: route.centerWorldPosition,
+                    orientation: route.centerFacingWindowWorldOrientation,
+                    log: false
+                )
+            }
+        default:
+            break
+        }
+
+        sampleActiveWalkMotionDiagnostics(controller: controller)
     }
 
     func cancel(reason: String) async {
@@ -154,29 +185,60 @@ final class Chapter01DadWindowCoordinator {
                 "Dad controller released before playback."
             )
         }
-        Chapter01DadRuntimeFactory.setController(
+        let route = runtime.context.route
+        logRoute(route, chapterRunID: request.chapterRunID)
+        Chapter01DadRuntimeFactory.installWorldPose(
             controller,
-            at: runtime.context.entryAnchor,
-            relativeTo: runtime.context.portalWorldRoot
+            floorPosition: route.entryWorldPosition,
+            orientation: route.entryWalkWorldOrientation
         )
 
         state = .walkingEntryToCenter
         try await followPath(
             controller: controller,
-            from: runtime.context.entryAnchor,
-            to: runtime.context.centerAnchor,
-            coordinateSpace: runtime.context.portalWorldRoot,
+            fromID: runtime.context.entryAnchorName,
+            fromWorld: route.entryWorldPosition,
+            toID: runtime.context.centerAnchorName,
+            toWorld: route.centerWorldPosition,
+            authoritativeWorldOrientation: route.entryWalkWorldOrientation,
+            expectedWorldForward: route.entryWalkWorldForward,
+            phase: "entryWalk",
             walkClipID: "unstable_walk_01",
             revealAfterLocomotionStarts: true
         )
         try requireCurrent(request, generation: generation)
+        Chapter01DadRuntimeFactory.installWorldPose(
+            controller,
+            floorPosition: route.centerWorldPosition,
+            orientation: route.entryWalkWorldOrientation
+        )
 
         try await chapterMusic.play(
             .dadWindow,
             chapterRunID: request.chapterRunID
         )
         state = .turningLeftAtCenter
-        try await playTurn(controller: controller, direction: .left)
+        try await playTurn(
+            controller: controller,
+            direction: .left,
+            rootYawOwnership: .externalExactWorldPose
+        )
+        Chapter01DadRuntimeFactory.installWorldPose(
+            controller,
+            floorPosition: route.centerWorldPosition,
+            orientation: route.centerFacingWindowWorldOrientation
+        )
+        logTurnEndpoint(
+            controller: controller,
+            orientation: route.centerFacingWindowWorldOrientation,
+            phase: "leftTurn"
+        )
+        try requireRenderedAlignment(
+            controller: controller,
+            expectedForward: route.centerFacingWindowWorldForward,
+            phase: "centerFacingWindow",
+            visible: true
+        )
 
         state = .centeredIdle20Seconds
         try controller.playScriptedIdleLoop(clipID: "idle_01")
@@ -205,15 +267,44 @@ final class Chapter01DadWindowCoordinator {
         try requireCurrent(request, generation: generation)
 
         state = .turningRightToExit
-        try await playTurn(controller: controller, direction: .right)
+        Chapter01DadRuntimeFactory.installWorldPose(
+            controller,
+            floorPosition: route.centerWorldPosition,
+            orientation: route.centerFacingWindowWorldOrientation
+        )
+        try await playTurn(
+            controller: controller,
+            direction: .right,
+            rootYawOwnership: .externalExactWorldPose
+        )
+        Chapter01DadRuntimeFactory.installWorldPose(
+            controller,
+            floorPosition: route.centerWorldPosition,
+            orientation: route.exitWalkWorldOrientation
+        )
+        logTurnEndpoint(
+            controller: controller,
+            orientation: route.exitWalkWorldOrientation,
+            phase: "rightTurn"
+        )
+        try requireRenderedAlignment(
+            controller: controller,
+            expectedForward: route.exitWalkWorldForward,
+            phase: "exitWalkAfterTurn",
+            visible: true
+        )
         try requireCurrent(request, generation: generation)
 
         state = .walkingCenterToExit
         try await followPath(
             controller: controller,
-            from: runtime.context.centerAnchor,
-            to: runtime.context.exitAnchor,
-            coordinateSpace: runtime.context.portalWorldRoot,
+            fromID: runtime.context.centerAnchorName,
+            fromWorld: route.centerWorldPosition,
+            toID: runtime.context.exitAnchorName,
+            toWorld: route.exitWorldPosition,
+            authoritativeWorldOrientation: route.exitWalkWorldOrientation,
+            expectedWorldForward: route.exitWalkWorldForward,
+            phase: "exitWalk",
             walkClipID: "unstable_walk_01",
             onLocomotionStarted: {
                 try await request.completionSink.dadExitWalkStarted(
@@ -225,6 +316,12 @@ final class Chapter01DadWindowCoordinator {
                 )
             }
         )
+        Chapter01DadRuntimeFactory.installWorldPose(
+            controller,
+            floorPosition: route.exitWorldPosition,
+            orientation: route.exitWalkWorldOrientation
+        )
+        controller.rootEntity.isEnabled = false
         try await prerecordingPlayback
 
         state = .releasing
@@ -246,34 +343,49 @@ final class Chapter01DadWindowCoordinator {
 
     private func followPath(
         controller: JockRetargetTestController,
-        from: Entity,
-        to: Entity,
-        coordinateSpace: Entity,
+        fromID: String,
+        fromWorld: SIMD3<Float>,
+        toID: String,
+        toWorld: SIMD3<Float>,
+        authoritativeWorldOrientation: simd_quatf,
+        expectedWorldForward: SIMD3<Float>,
+        phase: String,
         walkClipID: String,
         revealAfterLocomotionStarts: Bool = false,
         onLocomotionStarted: (() async throws -> Void)? = nil
     ) async throws {
-        let start = from.position(relativeTo: coordinateSpace)
-        let destination = to.position(relativeTo: coordinateSpace)
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 pathContinuation = continuation
                 do {
+                    activeWalkExpectedForward = expectedWorldForward
+                    activeWalkPhase = phase
+                    previousWalkWorldPosition = fromWorld
+                    activeWalkDiagnosticWarningLogged = false
                     try pathFollower.begin(
                         controller: controller,
                         segments: [
                             ScriptedAnchorPathFollower.Segment(
-                                fromID: from.name,
-                                toID: to.name,
-                                fromWorld: start,
-                                toWorld: destination
+                                fromID: fromID,
+                                toID: toID,
+                                fromWorld: fromWorld,
+                                toWorld: toWorld
                             )
                         ],
-                        coordinateSpace: coordinateSpace,
-                        walkClipID: walkClipID
+                        coordinateSpace: nil,
+                        walkClipID: walkClipID,
+                        authoritativeWorldOrientation:
+                            authoritativeWorldOrientation,
+                        transitionToWalkClip: false
                     ) { [weak self] in
                         self?.finishPath(.success(()))
                     }
+                    try requireRenderedAlignment(
+                        controller: controller,
+                        expectedForward: expectedWorldForward,
+                        phase: phase,
+                        visible: !revealAfterLocomotionStarts
+                    )
                     if revealAfterLocomotionStarts {
                         controller.show()
                         print(
@@ -293,6 +405,7 @@ final class Chapter01DadWindowCoordinator {
                         }
                     }
                 } catch {
+                    pathFollower.cancel(reason: "dadPathStartFailed")
                     finishPath(.failure(error))
                 }
             }
@@ -306,7 +419,8 @@ final class Chapter01DadWindowCoordinator {
 
     private func playTurn(
         controller: JockRetargetTestController,
-        direction: CharacterTurnDirection
+        direction: CharacterTurnDirection,
+        rootYawOwnership: ScriptedRootYawOwnership
     ) async throws {
         let token = UUID()
         activeTurnToken = token
@@ -316,6 +430,7 @@ final class Chapter01DadWindowCoordinator {
                 do {
                     try controller.playScriptedTurn90(
                         direction: direction,
+                        rootYawOwnership: rootYawOwnership,
                         token: token
                     ) { [weak self] completedToken, result in
                         guard self?.activeTurnToken == completedToken else {
@@ -336,6 +451,10 @@ final class Chapter01DadWindowCoordinator {
     }
 
     private func finishPath(_ result: Result<Void, Error>) {
+        activeWalkExpectedForward = nil
+        previousWalkWorldPosition = nil
+        activeWalkPhase = nil
+        activeWalkDiagnosticWarningLogged = false
         guard let continuation = pathContinuation else { return }
         pathContinuation = nil
         switch result {
@@ -344,6 +463,177 @@ final class Chapter01DadWindowCoordinator {
         case .failure(let error):
             continuation.resume(throwing: error)
         }
+    }
+
+    private func requireRenderedAlignment(
+        controller: JockRetargetTestController,
+        expectedForward: SIMD3<Float>,
+        phase: String,
+        visible: Bool
+    ) throws {
+        let snapshot = try controller.scriptedCharacterHeadingSnapshot()
+        let expected = try PortalLocalHeadingResolver.normalizedHorizontal(
+            expectedForward,
+            label: "\(phase).expected"
+        )
+        let rendered = try PortalLocalHeadingResolver.normalizedHorizontal(
+            snapshot.renderedVisualForwardWorld,
+            label: "\(phase).rendered"
+        )
+        let angle = try PortalLocalHeadingResolver.angularErrorRadians(
+            rendered,
+            expected
+        )
+        let degrees = angle * 180 / Float.pi
+        let withinTolerance = angle <= 5 * Float.pi / 180
+
+        print(
+            """
+            [Chapter01DadHeading] alignment sampled
+              phase: \(phase)
+              logicalRootForwardWorld: \(snapshot.logicalRootForwardWorld)
+              renderedVisualForwardWorld: \(snapshot.renderedVisualForwardWorld)
+              expectedForwardWorld: \(expected)
+              renderedAlignmentDegrees: \(degrees)
+              withinTolerance: \(withinTolerance)
+              visible: \(visible)
+            """
+        )
+
+        guard withinTolerance || visible else {
+            throw Chapter01Error.openingResourceUnavailable(
+                "Dad rendered heading mismatch during \(phase): \(degrees) degrees."
+            )
+        }
+
+        if !withinTolerance {
+            print(
+                "[Chapter01DadHeading] WARNING visible heading mismatch retained for diagnostics phase=\(phase) degrees=\(degrees) progressionCancelled=false"
+            )
+        }
+    }
+
+    private func sampleActiveWalkMotionDiagnostics(
+        controller: JockRetargetTestController
+    ) {
+        // The hidden pre-reveal alignment check is the production gate. This
+        // animated sample is telemetry and must never cancel the cinematic.
+        guard let expectedForward = activeWalkExpectedForward,
+              let previous = previousWalkWorldPosition,
+              let phase = activeWalkPhase else {
+            return
+        }
+
+        let current = controller.rootEntity.position(relativeTo: nil)
+        previousWalkWorldPosition = current
+        let displacement = current - previous
+        let horizontalDistance = simd_length(
+            SIMD3<Float>(displacement.x, 0, displacement.z)
+        )
+        guard horizontalDistance > 0.002 else { return }
+
+        do {
+            let travel = try PortalLocalHeadingResolver.normalizedHorizontal(
+                displacement,
+                label: "\(phase).displacement"
+            )
+            let expected = try PortalLocalHeadingResolver.normalizedHorizontal(
+                expectedForward,
+                label: "\(phase).expectedTravel"
+            )
+            let heading = try controller.scriptedCharacterHeadingSnapshot()
+            let rendered = try PortalLocalHeadingResolver.normalizedHorizontal(
+                heading.renderedVisualForwardWorld,
+                label: "\(phase).renderedTravel"
+            )
+            let travelAgreement = simd_dot(travel, expected)
+            let renderedAgreement = simd_dot(travel, rendered)
+            let minimumAgreement = cos(15 * Float.pi / 180)
+
+            guard travelAgreement >= minimumAgreement,
+                  renderedAgreement >= minimumAgreement else {
+                if !activeWalkDiagnosticWarningLogged {
+                    activeWalkDiagnosticWarningLogged = true
+                    print(
+                        """
+                        [Chapter01DadHeading] WARNING walk-alignment diagnostic
+                          phase: \(phase)
+                          displacementWorld: \(displacement)
+                          travelWorld: \(travel)
+                          expectedWorld: \(expected)
+                          renderedForwardWorld: \(rendered)
+                          travelAgreement: \(travelAgreement)
+                          renderedAgreement: \(renderedAgreement)
+                          progressionCancelled: false
+                          reason: diagnostic_has_no_production_authority
+                        """
+                    )
+                }
+                return
+            }
+
+            if activeWalkDiagnosticWarningLogged {
+                print(
+                    "[Chapter01DadHeading] walk alignment recovered phase=\(phase) progressionCancelled=false"
+                )
+                activeWalkDiagnosticWarningLogged = false
+            }
+        } catch {
+            if !activeWalkDiagnosticWarningLogged {
+                activeWalkDiagnosticWarningLogged = true
+                print(
+                    "[Chapter01DadHeading] WARNING diagnostic sampling failed phase=\(phase) error=\(error.localizedDescription) progressionCancelled=false"
+                )
+            }
+        }
+    }
+
+    private func logRoute(
+        _ route: Chapter01DadWindowRouteSnapshot,
+        chapterRunID: UUID
+    ) {
+        print(
+            """
+            [Chapter01DadHeading] route captured
+              chapterRunID: \(chapterRunID.uuidString)
+              windowWorldTransform: \(route.windowWorldTransform)
+              entryWorldPosition: \(route.entryWorldPosition)
+              centerWorldPosition: \(route.centerWorldPosition)
+              exitWorldPosition: \(route.exitWorldPosition)
+              entryRouteTangentWorld: \(route.entryWalkWorldForward)
+              centerFacingWindowWorld: \(route.centerFacingWindowWorldForward)
+              exitRouteTangentWorld: \(route.exitWalkWorldForward)
+              entryWorldYawDegrees: \(Self.yawDegrees(route.entryWalkWorldOrientation))
+              centerWorldYawDegrees: \(Self.yawDegrees(route.centerFacingWindowWorldOrientation))
+              exitWorldYawDegrees: \(Self.yawDegrees(route.exitWalkWorldOrientation))
+              entryToCenterSignedTurnDegrees: \(route.entryToCenterSignedTurnRadians * 180 / Float.pi)
+              centerToExitSignedTurnDegrees: \(route.centerToExitSignedTurnRadians * 180 / Float.pi)
+            """
+        )
+    }
+
+    private func logTurnEndpoint(
+        controller: JockRetargetTestController,
+        orientation: simd_quatf,
+        phase: String
+    ) {
+        print(
+            """
+            [Chapter01DadHeading] exact endpoint committed
+              phase: \(phase)
+              rootYawOwnership: externalExactWorldPose
+              expectedWorldOrientation: \(orientation.vector)
+              actualWorldOrientation: \(controller.rootEntity.orientation(relativeTo: nil).vector)
+              commitCount: 1
+            """
+        )
+    }
+
+    private nonisolated static func yawDegrees(
+        _ orientation: simd_quatf
+    ) -> Float {
+        let forward = orientation.act(SIMD3<Float>(0, 0, -1))
+        return atan2(forward.x, -forward.z) * 180 / Float.pi
     }
 
     private func finishTurn(_ result: Result<Void, Error>) {

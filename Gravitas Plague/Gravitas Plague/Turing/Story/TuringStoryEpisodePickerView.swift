@@ -157,15 +157,22 @@ struct TuringStoryEpisodePickerView: View {
         Task { @MainActor in
             defer { activeRequest = false }
             do {
-                let snapshot = try progress.requireValidSnapshot()
-                let destination = try TuringStoryDestinationPlanner.destination(for: snapshot)
+                progress.reloadFromDefaults()
+                let target = try progress.requireValidContinuationTarget()
                 await PlagueMainMenuMusicActor.shared.stop(
                     reason: "storyContinueSelected"
                 )
-                try await TuringStoryStateTeleportCoordinator.shared.apply(
-                    destination,
-                    source: "episodePicker.continue"
-                )
+                switch target {
+                case .prologue(let snapshot):
+                    let destination = try TuringStoryDestinationPlanner
+                        .destination(for: snapshot)
+                    try await TuringStoryStateTeleportCoordinator.shared.apply(
+                        destination,
+                        source: "episodePicker.continue.prologue"
+                    )
+                case .chapter01:
+                    session.continueStoryEpisode(.chapter01)
+                }
                 dismissWindow(id: PlagueWindowID.storyEpisodes)
             } catch {
                 await restoreMenuMusicAfterFailedSelection(
@@ -186,10 +193,16 @@ struct TuringStoryEpisodePickerView: View {
                     reason: "storyEpisodeSelected.\(episode.id.rawValue)"
                 )
                 if episode.id == .chapter01 {
+                    progress.clear(
+                        reason: "startOver.\(episode.id.rawValue)"
+                    )
                     session.startStoryEpisode(episode.id)
                     dismissWindow(id: PlagueWindowID.storyEpisodes)
                     return
                 }
+                await Chapter01ProgressStore.shared.clear(
+                    reason: "startOver.\(episode.id.rawValue)"
+                )
                 progress.clear(reason: "startOver.\(episode.id.rawValue)")
                 let destination = try TuringStoryDestinationPlanner.startOfEpisode(episode.id)
                 try await TuringStoryStateTeleportCoordinator.shared.apply(

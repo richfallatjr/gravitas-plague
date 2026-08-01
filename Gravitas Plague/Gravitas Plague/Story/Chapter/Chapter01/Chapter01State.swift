@@ -17,6 +17,7 @@ enum Chapter01Error: LocalizedError {
     case staleDadEvent
     case unexpectedConversationCompletion
     case stageNotEstablished
+    case unsupportedContinuationCheckpoint
     case openingResourceUnavailable(String)
 
     var errorDescription: String? {
@@ -29,6 +30,8 @@ enum Chapter01Error: LocalizedError {
             return "Chapter 01 Script06 and Script07 do not accept conversation playback."
         case .stageNotEstablished:
             return "The Story room must be established before Chapter 01 starts."
+        case .unsupportedContinuationCheckpoint:
+            return "Chapter 01 has no supported continuation checkpoint."
         case .openingResourceUnavailable(let detail):
             return "Chapter 01 opening is unavailable: \(detail)"
         }

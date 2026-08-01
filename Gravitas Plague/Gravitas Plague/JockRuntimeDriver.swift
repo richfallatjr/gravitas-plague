@@ -435,6 +435,7 @@ final class JockRuntimeDriver {
         var resetRootToFrozenOrigin = false
         var locomotionRequest: LocomotionApplicationRequest?
         var runtimeOverrideToCommit: JockRuntimeClipOverride?
+        var rootYawOwnershipToCommit: ScriptedRootYawOwnership = .runtimeDelta
         var completedClip: JockAnimClip?
     }
 
@@ -481,6 +482,7 @@ final class JockRuntimeDriver {
     )
     private var previousRelativeLocomotionSample = LocomotionSample.zero
     private var activeRuntimeOverride = JockRuntimeClipOverride.identity
+    private var activeRootYawOwnership: ScriptedRootYawOwnership = .runtimeDelta
     private var activeLocomotionPolicy: JockClipLocomotionPolicy = .useClipLocomotion
     private var activeSubAnimations: [ActiveSubAnimation] = []
     private var preparedClipsByID: [String: JockPreparedClip] = [:]
@@ -605,12 +607,14 @@ final class JockRuntimeDriver {
         loop: Bool,
         transition: Bool = true,
         locomotionPolicy: JockClipLocomotionPolicy = .useClipLocomotion,
-        runtimeOverride: JockRuntimeClipOverride = .identity
+        runtimeOverride: JockRuntimeClipOverride = .identity,
+        rootYawOwnership: ScriptedRootYawOwnership = .runtimeDelta
     ) {
         guard let modelEntity else { return }
 
         activeClip = clip
         activeRuntimeOverride = runtimeOverride
+        activeRootYawOwnership = rootYawOwnership
         activeLocomotionPolicy = locomotionPolicy
         loopCurrentClip = loop
         playbackTime = 0
@@ -654,6 +658,7 @@ final class JockRuntimeDriver {
               runtimeOverrideEntry: \(runtimeOverride.entryHeadingDegrees)
               runtimeOverrideExit: \(runtimeOverride.exitHeadingDegrees)
               commitYaw: \(runtimeOverride.commitRootYawOnCompletion)
+              rootYawOwnership: \(rootYawOwnership)
             """
         )
     }
@@ -731,6 +736,7 @@ final class JockRuntimeDriver {
         currentPlaybackTime = 0
         currentJointTransforms = modelEntity?.jointTransforms ?? baseJointTransforms
         activeRuntimeOverride = .identity
+        activeRootYawOwnership = .runtimeDelta
         activeLocomotionPolicy = .useClipLocomotion
         activeSubAnimations.removeAll()
         isPlaybackPausedForCorpse = false
@@ -745,6 +751,7 @@ final class JockRuntimeDriver {
         currentPlaybackTime = playbackTime
         currentJointTransforms = modelEntity?.jointTransforms ?? currentJointTransforms
         activeRuntimeOverride = .identity
+        activeRootYawOwnership = .runtimeDelta
         activeLocomotionPolicy = .useClipLocomotion
         activeSubAnimations.removeAll()
         isPlaybackPausedForCorpse = true
@@ -825,6 +832,7 @@ final class JockRuntimeDriver {
         )
 
         activeRuntimeOverride = .identity
+        activeRootYawOwnership = .runtimeDelta
         activeLocomotionPolicy = .useClipLocomotion
         activeSubAnimations.removeAll()
         isPlaybackPausedForCorpse = false
@@ -864,6 +872,7 @@ final class JockRuntimeDriver {
         currentActiveClipID = nil
         currentPlaybackTime = 0
         activeRuntimeOverride = .identity
+        activeRootYawOwnership = .runtimeDelta
         activeLocomotionPolicy = .useClipLocomotion
         activeSubAnimations.removeAll()
         resetFrozenLocomotionState()
@@ -887,6 +896,7 @@ final class JockRuntimeDriver {
         currentActiveClipID = nil
         currentPlaybackTime = 0
         activeRuntimeOverride = .identity
+        activeRootYawOwnership = .runtimeDelta
         activeLocomotionPolicy = .useClipLocomotion
         activeSubAnimations.removeAll()
         resetFrozenLocomotionState()
@@ -1074,6 +1084,7 @@ final class JockRuntimeDriver {
             currentActiveClipID = nil
             currentPlaybackTime = 0
             activeRuntimeOverride = .identity
+            activeRootYawOwnership = .runtimeDelta
             activeLocomotionPolicy = .useClipLocomotion
             resetFrozenLocomotionState()
         }
@@ -1126,6 +1137,7 @@ final class JockRuntimeDriver {
             )
 
             output.runtimeOverrideToCommit = activeRuntimeOverride
+            output.rootYawOwnershipToCommit = activeRootYawOwnership
             output.completedClip = activeClip
 
             state = .stopped
@@ -1133,6 +1145,7 @@ final class JockRuntimeDriver {
             currentActiveClipID = nil
             currentPlaybackTime = 0
             activeRuntimeOverride = .identity
+            activeRootYawOwnership = .runtimeDelta
             activeLocomotionPolicy = .useClipLocomotion
 
             return output
@@ -1203,7 +1216,8 @@ final class JockRuntimeDriver {
 
         if let runtimeOverride = output.runtimeOverrideToCommit {
             commitRuntimeOverrideAtClipCompletion(
-                runtimeOverride
+                runtimeOverride,
+                rootYawOwnership: output.rootYawOwnershipToCommit
             )
         }
 
@@ -3544,7 +3558,8 @@ final class JockRuntimeDriver {
     }
 
     private func commitRuntimeOverrideAtClipCompletion(
-        _ runtimeOverride: JockRuntimeClipOverride
+        _ runtimeOverride: JockRuntimeClipOverride,
+        rootYawOwnership: ScriptedRootYawOwnership
     ) {
         guard runtimeOverride.commitRootYawOnCompletion else {
             return
@@ -3554,10 +3569,14 @@ final class JockRuntimeDriver {
             return
         }
 
-        let delta = runtimeOverride.rootYawDeltaOrientation
-
-        // Same conceptual layer as locomotion yaw: the root owns accumulated heading.
-        root.orientation = delta * root.orientation
+        switch rootYawOwnership {
+        case .runtimeDelta:
+            let delta = runtimeOverride.rootYawDeltaOrientation
+            // Same conceptual layer as locomotion yaw: the root owns accumulated heading.
+            root.orientation = delta * root.orientation
+        case .externalExactWorldPose:
+            break
+        }
 
         visualOffsetEntity?.orientation =
             runtimeOverride.exitVisualOffsetOrientation
@@ -3568,6 +3587,8 @@ final class JockRuntimeDriver {
               entryHeading: \(runtimeOverride.entryHeadingDegrees)
               exitHeading: \(runtimeOverride.exitHeadingDegrees)
               yawDelta: \(runtimeOverride.yawDeltaDegrees)
+              rootYawOwnership: \(rootYawOwnership)
+              rootDeltaCommitted: \(rootYawOwnership == .runtimeDelta)
             """
         )
     }

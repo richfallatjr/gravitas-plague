@@ -180,7 +180,9 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
             case .exit:
                 runtime.mirror.syncRoomToPortal(
                     sourceHideThreshold: -0.05,
-                    exteriorReleaseThreshold: -0.75
+                    // The door, not an arbitrary portal-depth threshold, owns
+                    // the final visible lifetime of a departing Robot.
+                    exteriorReleaseThreshold: -Float.greatestFiniteMagnitude
                 )
             }
         }
@@ -451,6 +453,8 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
         guard let runtime else { return }
         let context = try door.chapter01RobotDoorContext()
         let current = runtime.controller.rootEntity.position(relativeTo: nil)
+        let exteriorMid = context.robotExteriorMid.position(relativeTo: nil)
+        let exteriorStart = context.robotExteriorStart.position(relativeTo: nil)
         transition(to: .walkingToDoor)
         try runtime.mirror.prepareForRoomToPortalExit()
         await heavyRuntimeRegistry.register(
@@ -467,12 +471,58 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
             points: [
                 ("robotRoomExitStart", current),
                 ("robotDoorThreshold", context.robotDoorThreshold.position(relativeTo: nil)),
-                ("robotExteriorMid", context.robotExteriorMid.position(relativeTo: nil)),
-                ("robotExteriorStart", context.robotExteriorStart.position(relativeTo: nil))
+                ("robotExteriorMid", exteriorMid),
+                ("robotExteriorStart", exteriorStart)
             ]
         )
         try requireCurrent(request, generation: generation)
+
+        let departureDirection = PhaseOneMath.normalizedOrFallback(
+            exteriorStart - exteriorMid,
+            fallback: SIMD3<Float>(0, 0, -1)
+        )
+        let departureTarget = exteriorStart + departureDirection * 8
+        let continuedWalk = Task { @MainActor [weak self] in
+            guard let self else { throw CancellationError() }
+            try await self.walk(
+                controller: runtime.controller,
+                clipID: definition.animations.walk,
+                points: [
+                    ("robotExteriorStart", exteriorStart),
+                    ("robotExteriorContinuation", departureTarget)
+                ]
+            )
+        }
+        await Task.yield()
+
+        do {
+            try await door.closeForBattleAndUnloadPortal(
+                ownerID: request.chapterRunID,
+                reason: "successfulRobotDeparture"
+            )
+        } catch {
+            pathFollower.cancel(reason: "robotDepartureDoorCloseFailed")
+            finishPath(.failure(error))
+            _ = try? await continuedWalk.value
+            throw error
+        }
+
+        // Closing the door is the visual cutoff. Stop the now-occluded walk
+        // and release the mirror/runtime only after close and unload complete.
+        pathFollower.cancel(reason: "robotDepartureDoorClosed")
+        finishPath(.success(()))
+        _ = try? await continuedWalk.value
+        try requireCurrent(request, generation: generation)
         portalMotionMode = .none
+        print(
+            """
+            [Chapter01RobotExit] departure completed behind closed door
+              departureDirection: \(departureDirection)
+              departureTarget: \(departureTarget)
+              doorClosedBeforeRuntimeRelease: \(door.battleDoorState == .closed)
+              exteriorUnloadedBeforeRuntimeRelease: \(!door.battlePortalFullExteriorResident)
+            """
+        )
         await cleanup(outcome: .rewardedRobotDeparted, reason: "successfulRobotExit")
     }
 
@@ -542,13 +592,13 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
             inventoryQuantity: result.totalQuantity,
             descriptor: descriptor
         )
-        if result.wasNewlyGranted {
-            try await rewardPresenter.presentHUDReward(
-                itemID: definition.reward.itemID,
-                text: definition.reward.hudText,
-                descriptor: descriptor
-            )
-        }
+        // Inventory remains exactly-once, but every completed encounter must
+        // visibly acknowledge the payload, including replay in development.
+        try await rewardPresenter.presentHUDReward(
+            itemID: definition.reward.itemID,
+            text: definition.reward.hudText,
+            descriptor: descriptor
+        )
         rewardSource = source
     }
 

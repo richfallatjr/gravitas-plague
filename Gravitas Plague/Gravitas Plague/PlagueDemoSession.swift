@@ -123,6 +123,7 @@ final class PlagueDemoSession: ObservableObject {
         case confirmRoomSkinningDoorAdjustment
         case cancelRoomSkinning
         case startStoryEpisode(TuringEpisodeID)
+        case continueStoryEpisode(TuringEpisodeID)
         case requestStoryWalkieBundlePlacement
         case requestTuringStoryPlacementRoomScan(String)
         case restartTuringStoryPlacementRoomScan(String)
@@ -806,6 +807,30 @@ final class PlagueDemoSession: ObservableObject {
               title: \(episode.title)
               hordeEntryPoint: false
             """
+        )
+    }
+
+    func continueStoryEpisode(
+        _ episodeID: TuringEpisodeID
+    ) {
+        guard episodeID == .chapter01,
+              let episode = TuringEpisodeCatalog.descriptor(for: episodeID),
+              episode.isUnlocked else {
+            statusMessage = "Story continuation is unavailable."
+            return
+        }
+
+        selectedOperationMode = .story
+        selectedStoryEpisodeID = episodeID
+        isStoryEpisodePickerPresented = false
+        experienceMode = .story
+        activeMode = .none
+        statusMessage = "Continuing \(episode.title)."
+        resetPlayerDeathState()
+        send(.continueStoryEpisode(episodeID))
+
+        print(
+            "[TuringStory] continuation requested episodeID=\(episodeID.rawValue) noRescan=true"
         )
     }
 

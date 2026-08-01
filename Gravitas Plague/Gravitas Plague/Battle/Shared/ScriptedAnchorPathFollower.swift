@@ -24,6 +24,7 @@ final class ScriptedAnchorPathFollower {
     private var sampledFloorPosition = SIMD3<Float>.zero
     private var pendingAuthoredTravel: Float = 0
     private var onCompleted: (() -> Void)?
+    private var authoritativeWorldOrientation: simd_quatf?
     private var active = false
 
     func begin(
@@ -31,6 +32,8 @@ final class ScriptedAnchorPathFollower {
         segments: [Segment],
         coordinateSpace: Entity? = nil,
         walkClipID: String? = nil,
+        authoritativeWorldOrientation: simd_quatf? = nil,
+        transitionToWalkClip: Bool = true,
         onCompleted: @escaping () -> Void
     ) throws {
         guard let first = segments.first else {
@@ -44,12 +47,15 @@ final class ScriptedAnchorPathFollower {
         self.sampledFloorPosition = first.fromWorld
         self.pendingAuthoredTravel = 0
         self.onCompleted = onCompleted
+        self.authoritativeWorldOrientation = authoritativeWorldOrientation
         self.active = true
 
         setControllerPosition(controller, floorPosition: first.fromWorld)
+        installAuthoritativeOrientation(on: controller)
         if let walkClipID {
             try controller.playScriptedWalkLoop(
-                clipID: walkClipID
+                clipID: walkClipID,
+                transition: transitionToWalkClip
             ) { [weak self] distance in
                 self?.pendingAuthoredTravel += max(0, distance)
             }
@@ -89,14 +95,19 @@ final class ScriptedAnchorPathFollower {
             travel -= stepDistance
 
             setControllerPosition(controller, floorPosition: sampledFloorPosition)
-            controller.steerScriptedRootTowardWorldDirection(
-                worldDirection(for: direction),
-                deltaTime: Float(deltaTime)
-            )
+            if authoritativeWorldOrientation != nil {
+                installAuthoritativeOrientation(on: controller)
+            } else {
+                controller.steerScriptedRootTowardWorldDirection(
+                    worldDirection(for: direction),
+                    deltaTime: Float(deltaTime)
+                )
+            }
 
             if stepDistance >= fullDistance - 0.001 {
                 sampledFloorPosition = segment.toWorld
                 setControllerPosition(controller, floorPosition: sampledFloorPosition)
+                installAuthoritativeOrientation(on: controller)
                 finishCurrentSegment()
             }
         }
@@ -109,9 +120,20 @@ final class ScriptedAnchorPathFollower {
         pendingAuthoredTravel = 0
         segments.removeAll(keepingCapacity: false)
         onCompleted = nil
+        authoritativeWorldOrientation = nil
         controller?.stopScriptedLocomotion(reason: reason)
         controller = nil
         coordinateSpace = nil
+    }
+
+    private func installAuthoritativeOrientation(
+        on controller: JockRetargetTestController
+    ) {
+        guard let authoritativeWorldOrientation else { return }
+        controller.rootEntity.setOrientation(
+            authoritativeWorldOrientation,
+            relativeTo: nil
+        )
     }
 
     private func setControllerPosition(

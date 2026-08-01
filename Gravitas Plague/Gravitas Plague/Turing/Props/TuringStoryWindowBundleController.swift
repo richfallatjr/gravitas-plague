@@ -7,9 +7,10 @@ import UIKit
 struct TuringStoryWindowCinematicContext {
     let portalWorldRoot: Entity
     let portalPlane: Entity
-    let entryAnchor: Entity
-    let centerAnchor: Entity
-    let exitAnchor: Entity
+    let entryAnchorName: String
+    let centerAnchorName: String
+    let exitAnchorName: String
+    let route: Chapter01DadWindowRouteSnapshot
 }
 
 @MainActor
@@ -248,6 +249,15 @@ final class TuringStoryWindowBundleController:
             throw BundleError.noPlacement
         }
 
+        // Manual adjustment commits asynchronously with a short visual move.
+        // Snap to the authoritative transform before deriving this cinematic.
+        if let committedAdjustmentTransform {
+            root.stopAllAnimations()
+            root.setTransformMatrix(
+                committedAdjustmentTransform,
+                relativeTo: nil
+            )
+        }
         installChapter01DadRouteAnchors()
 
         guard let entry = portalWorldRoot.turingWindowFindEntity(
@@ -272,16 +282,57 @@ final class TuringStoryWindowBundleController:
             )
         }
 
+        let windowWorldTransform = root.transformMatrix(relativeTo: nil)
+        let entryWorld = entry.convert(position: .zero, to: nil)
+        let centerWorld = center.convert(position: .zero, to: nil)
+        let exitWorld = exit.convert(position: .zero, to: nil)
+
+        let planeOriginLocal = anchors.portalPlane.convert(
+            position: .zero,
+            to: portalWorldRoot
+        )
+        let planePositiveLocal = anchors.portalPlane.convert(
+            position: SIMD3<Float>(0, 0, 1),
+            to: portalWorldRoot
+        ) - planeOriginLocal
+        let portalNormalCandidateWorld = try PortalLocalHeadingResolver
+            .worldDirection(
+                portalRoot: portalWorldRoot,
+                localDirection: planePositiveLocal,
+                label: "Dad portal normal candidate"
+            )
+        let route = try Chapter01DadWindowRouteBuilder.make(
+            windowWorldTransform: windowWorldTransform,
+            entryWorldPosition: entryWorld,
+            centerWorldPosition: centerWorld,
+            exitWorldPosition: exitWorld,
+            portalNormalCandidateWorld: portalNormalCandidateWorld
+        )
+
         activeCinematicUseCount += 1
         print(
-            "[Chapter01Dad] window cinematic context acquired activeUses=\(activeCinematicUseCount)"
+            """
+            [Chapter01Dad] fresh window world context acquired
+              activeUses: \(activeCinematicUseCount)
+              windowWorldTransform: \(windowWorldTransform)
+              entryWorld: \(entryWorld)
+              centerWorld: \(centerWorld)
+              exitWorld: \(exitWorld)
+              entryRouteTangentWorld: \(route.entryWalkWorldForward)
+              centerFacingWindowWorld: \(route.centerFacingWindowWorldForward)
+              exitRouteTangentWorld: \(route.exitWalkWorldForward)
+              entryToCenterSignedTurnDegrees: \(route.entryToCenterSignedTurnRadians * 180 / Float.pi)
+              centerToExitSignedTurnDegrees: \(route.centerToExitSignedTurnRadians * 180 / Float.pi)
+              source: latest_committed_window_transform
+            """
         )
         return TuringStoryWindowCinematicContext(
             portalWorldRoot: portalWorldRoot,
             portalPlane: anchors.portalPlane,
-            entryAnchor: entry,
-            centerAnchor: center,
-            exitAnchor: exit
+            entryAnchorName: entry.name,
+            centerAnchorName: center.name,
+            exitAnchorName: exit.name,
+            route: route
         )
     }
 
@@ -856,12 +907,6 @@ final class TuringStoryWindowBundleController:
             "TuringStoryWindowDadCenterAnchor",
             "TuringStoryWindowDadExitAnchor"
         ]
-        guard names.contains(where: {
-            portalWorldRoot.turingWindowFindEntity(named: $0) == nil
-        }) else {
-            return
-        }
-
         for name in names {
             portalWorldRoot.turingWindowFindEntity(named: name)?
                 .removeFromParent()

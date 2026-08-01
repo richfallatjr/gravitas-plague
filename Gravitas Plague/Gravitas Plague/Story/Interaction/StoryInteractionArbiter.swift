@@ -149,6 +149,30 @@ actor StoryInteractionArbiter {
         )
     }
 
+    func claimStoryTransition(
+        transitionID: UUID,
+        source: String
+    ) async throws -> StoryInteractionLease {
+        guard exclusiveLease == nil else {
+            return try reject(
+                .exclusiveOwnerActive,
+                requested: "storyTransition.\(transitionID.uuidString)",
+                source: source
+            )
+        }
+        guard doorState == .closedUnloaded else {
+            return try reject(
+                .doorNotClosedAndUnloaded,
+                requested: "storyTransition.\(transitionID.uuidString)",
+                source: source
+            )
+        }
+        return await accept(
+            owner: .storyTransition(transitionID: transitionID),
+            source: source
+        )
+    }
+
     func transferDoorToTuring(
         doorLease: StoryInteractionLease,
         runID: String,

@@ -1,6 +1,39 @@
 import Combine
 import Foundation
 
+enum TuringStoryContinuationTarget: Sendable, Equatable {
+    case prologue(TuringEpisodeContinuationSnapshot)
+    case chapter01(Chapter01ProgressSnapshot)
+
+    var episodeID: TuringEpisodeID {
+        switch self {
+        case .prologue:
+            return .prologue
+        case .chapter01:
+            return .chapter01
+        }
+    }
+
+    var committedAt: Date {
+        switch self {
+        case .prologue(let snapshot):
+            return snapshot.committedAt
+        case .chapter01(let snapshot):
+            return snapshot.committedAt
+        }
+    }
+
+    var checkpointDescription: String {
+        switch self {
+        case .prologue(let snapshot):
+            return String(describing: snapshot.checkpoint)
+        case .chapter01(let snapshot):
+            return snapshot.checkpoint.supportedContinuationCheckpoint?
+                .rawValue ?? snapshot.checkpoint.rawValue
+        }
+    }
+}
+
 @MainActor
 final class TuringStoryProgressStore: ObservableObject {
     static let shared = TuringStoryProgressStore()
@@ -12,7 +45,9 @@ final class TuringStoryProgressStore: ObservableObject {
     static let prologueContentRevision = "prologue.v1"
 
     @Published private(set) var snapshot: TuringEpisodeContinuationSnapshot?
+    @Published private(set) var chapter01Snapshot: Chapter01ProgressSnapshot?
     @Published private(set) var invalidSnapshotReason: String?
+    @Published private(set) var invalidChapter01SnapshotReason: String?
 
     private let defaults: UserDefaults
     private let encoder = JSONEncoder()
@@ -24,19 +59,56 @@ final class TuringStoryProgressStore: ObservableObject {
     }
 
     var canContinue: Bool {
-        guard let snapshot else { return false }
-        return isCompatible(snapshot) && snapshot.checkpoint != .notStarted
+        continuationTarget != nil
+    }
+
+    var continuationTarget: TuringStoryContinuationTarget? {
+        let prologueTarget: TuringStoryContinuationTarget? = {
+            guard let snapshot,
+                  isCompatible(snapshot),
+                  snapshot.checkpoint != .notStarted else {
+                return nil
+            }
+            return .prologue(snapshot)
+        }()
+        let chapterTarget: TuringStoryContinuationTarget? = {
+            guard let chapter01Snapshot,
+                  chapter01Snapshot.contentRevision ==
+                    Chapter01ProgressStore.contentRevision,
+                  chapter01Snapshot.checkpoint
+                    .supportedContinuationCheckpoint != nil else {
+                return nil
+            }
+            return .chapter01(chapter01Snapshot)
+        }()
+
+        switch (prologueTarget, chapterTarget) {
+        case (nil, nil):
+            return nil
+        case (.some(let target), nil), (nil, .some(let target)):
+            return target
+        case (.some(let prologue), .some(let chapter)):
+            return chapter.committedAt >= prologue.committedAt
+                ? chapter
+                : prologue
+        }
     }
 
     var accessibilitySummary: String {
-        guard let snapshot, canContinue else {
+        guard let target = continuationTarget else {
             return "No valid Story progress is available."
         }
-        return "Resume \(snapshot.episodeID.rawValue) from \(snapshot.checkpoint)."
+        return "Resume \(target.episodeID.rawValue) from \(target.checkpointDescription)."
     }
 
     func reloadFromDefaults() {
         invalidSnapshotReason = nil
+        invalidChapter01SnapshotReason = nil
+        reloadPrologueFromDefaults()
+        reloadChapter01FromDefaults()
+    }
+
+    private func reloadPrologueFromDefaults() {
         guard let encoded = defaults.string(forKey: Key.snapshot) else {
             snapshot = nil
             return
@@ -67,6 +139,39 @@ final class TuringStoryProgressStore: ObservableObject {
             snapshot = supportedValue
         } catch {
             invalidate(error.localizedDescription)
+        }
+    }
+
+    private func reloadChapter01FromDefaults() {
+        guard let data = defaults.data(
+            forKey: Chapter01ProgressStore.Key.snapshot
+        ) else {
+            chapter01Snapshot = nil
+            return
+        }
+
+        do {
+            let value = try decoder.decode(
+                Chapter01ProgressSnapshot.self,
+                from: data
+            )
+            guard value.schemaVersion ==
+                    Chapter01ProgressSnapshot.currentSchemaVersion else {
+                invalidateChapter01(
+                    "Unsupported Chapter 01 save schema \(value.schemaVersion)."
+                )
+                return
+            }
+            guard value.contentRevision ==
+                    Chapter01ProgressStore.contentRevision else {
+                invalidateChapter01(
+                    "Chapter 01 content revision does not match this build."
+                )
+                return
+            }
+            chapter01Snapshot = value
+        } catch {
+            invalidateChapter01(error.localizedDescription)
         }
     }
 
@@ -117,10 +222,20 @@ final class TuringStoryProgressStore: ObservableObject {
     }
 
     func requireValidSnapshot() throws -> TuringEpisodeContinuationSnapshot {
-        guard let snapshot, canContinue else {
+        guard let snapshot,
+              isCompatible(snapshot),
+              snapshot.checkpoint != .notStarted else {
             throw TuringStoryContinuationError.noValidSnapshot
         }
         return snapshot
+    }
+
+    func requireValidContinuationTarget() throws
+        -> TuringStoryContinuationTarget {
+        guard let continuationTarget else {
+            throw TuringStoryContinuationError.noValidSnapshot
+        }
+        return continuationTarget
     }
 
     func clear(reason: String) {
@@ -160,5 +275,13 @@ final class TuringStoryProgressStore: ObservableObject {
         snapshot = nil
         invalidSnapshotReason = reason
         print("[TuringContinuation] invalid snapshot reason=\(reason)")
+    }
+
+    private func invalidateChapter01(_ reason: String) {
+        chapter01Snapshot = nil
+        invalidChapter01SnapshotReason = reason
+        print(
+            "[TuringContinuation] invalid Chapter01 snapshot reason=\(reason)"
+        )
     }
 }

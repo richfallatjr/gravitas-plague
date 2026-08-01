@@ -1020,6 +1020,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         case .startStoryEpisode(let episodeID):
             startStoryEpisode(episodeID)
 
+        case .continueStoryEpisode(let episodeID):
+            continueStoryEpisode(episodeID)
+
         case .requestStoryWalkieBundlePlacement:
             requestTuringStoryPlacementRoomScan(
                 reason: "storyModeRequested"
@@ -1127,6 +1130,51 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
               runtimeReady: false
               qwenSmokeAutoRun: false
             """
+        )
+    }
+
+    private func continueStoryEpisode(
+        _ episodeID: TuringEpisodeID
+    ) {
+        guard episodeID == .chapter01 else {
+            print(
+                "[TuringStory] ERROR unsupported immersive continuation episodeID=\(episodeID.rawValue)"
+            )
+            return
+        }
+
+        battle01Coordinator?.cancel(
+            reason: "continueStoryEpisode.chapter01"
+        )
+        prologueStoryActionRouter?.reset(
+            reason: "continueStoryEpisode.chapter01"
+        )
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                guard let chapter01Coordinator =
+                        self.chapter01Coordinator else {
+                    throw Chapter01Error.openingResourceUnavailable(
+                        "The Chapter coordinator is not installed."
+                    )
+                }
+                try await chapter01Coordinator
+                    .resumeFromSavedCheckpoint()
+            } catch {
+                self.showTemporaryInstructionHUD(
+                    "Chapter continuation unavailable.",
+                    clearAfterSeconds: 5,
+                    reason: "chapter01ContinueUnavailable"
+                )
+                print(
+                    "[Chapter01] ERROR continue failed: \(error.localizedDescription)"
+                )
+            }
+        }
+
+        print(
+            "[TuringStory] Chapter 01 logical continuation requested noRescan=true"
         )
     }
 

@@ -22,6 +22,19 @@ enum Chapter01Checkpoint: String, Codable, Sendable, Comparable {
     }
 
     static func < (lhs: Self, rhs: Self) -> Bool { lhs.rank < rhs.rank }
+
+    var supportedContinuationCheckpoint: Chapter01Checkpoint? {
+        switch self {
+        case .root, .script06Completed:
+            return nil
+        case .script07Completed,
+             .dadWindowPending,
+             .robotEncounterPending,
+             .antigenGranted,
+             .hamScript04Pending:
+            return .dadWindowPending
+        }
+    }
 }
 
 struct Chapter01ProgressSnapshot: Codable, Sendable, Equatable {
@@ -38,16 +51,21 @@ struct Chapter01ProgressSnapshot: Codable, Sendable, Equatable {
 actor Chapter01ProgressStore {
     static let shared = Chapter01ProgressStore()
 
+    enum Key {
+        static let snapshot = "story.chapter01.progress.v1"
+    }
+
+    static let contentRevision = "chapter01.v1"
+
     private let defaults: UserDefaults
-    private let key = "story.chapter01.progress.v1"
     private var snapshot: Chapter01ProgressSnapshot?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        if let data = defaults.data(forKey: key),
+        if let data = defaults.data(forKey: Key.snapshot),
            let value = try? JSONDecoder().decode(Chapter01ProgressSnapshot.self, from: data),
            value.schemaVersion == Chapter01ProgressSnapshot.currentSchemaVersion,
-           value.contentRevision == "chapter01.v1" {
+           value.contentRevision == Self.contentRevision {
             snapshot = value
         }
     }
@@ -69,9 +87,12 @@ actor Chapter01ProgressStore {
             revision: (snapshot?.revision ?? 0) + 1,
             sourceEventID: sourceEventID,
             committedAt: Date(),
-            contentRevision: "chapter01.v1"
+            contentRevision: Self.contentRevision
         )
-        defaults.set(try JSONEncoder().encode(next), forKey: key)
+        defaults.set(
+            try JSONEncoder().encode(next),
+            forKey: Key.snapshot
+        )
         snapshot = next
         print("[Chapter01Progress] committed checkpoint=\(checkpoint.rawValue) revision=\(next.revision)")
         return next
@@ -80,7 +101,7 @@ actor Chapter01ProgressStore {
     func currentSnapshot() -> Chapter01ProgressSnapshot? { snapshot }
 
     func clear(reason: String) {
-        defaults.removeObject(forKey: key)
+        defaults.removeObject(forKey: Key.snapshot)
         snapshot = nil
         print("[Chapter01Progress] cleared reason=\(reason)")
     }

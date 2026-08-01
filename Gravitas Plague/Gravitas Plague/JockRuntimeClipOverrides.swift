@@ -7,6 +7,11 @@ struct JockRuntimeClipOverrides: Codable, Equatable {
     let clips: [String: JockRuntimeClipOverride]
 }
 
+enum ScriptedRootYawOwnership: Sendable, Equatable {
+    case runtimeDelta
+    case externalExactWorldPose
+}
+
 struct JockRuntimeClipOverride: Codable, Equatable {
     let entryHeadingDegrees: Float
     let exitHeadingDegrees: Float

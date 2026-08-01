@@ -7,13 +7,66 @@ import XCTest
 final class TuringStoryEpisodeContinuationTests: XCTestCase {
     func testProductionCatalogStartsWithPrologueAndApprovedTitle() {
         let episodes = TuringEpisodeCatalog.productionEpisodes
-        XCTAssertEqual(episodes.map(\.id), [.prologue])
+        XCTAssertEqual(episodes.map(\.id), [.prologue, .chapter01])
         XCTAssertEqual(episodes[0].title, "Prologue")
         XCTAssertEqual(
             episodes[0].subtitle,
             "They are not human—they are monsters"
         )
         XCTAssertEqual(episodes[0].stripArtwork, .prologueStrip)
+        XCTAssertEqual(episodes[1].title, "Chapter 1 — Dad?")
+        XCTAssertTrue(episodes[1].isUnlocked)
+    }
+
+    func testChapterDadWindowCheckpointEnablesUnifiedContinue() async throws {
+        let (_, defaults, suiteName) = makeProgressStore()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let chapter = Chapter01ProgressStore(defaults: defaults)
+
+        _ = try await chapter.commit(
+            .script07Completed,
+            sourceEventID: UUID()
+        )
+        _ = try await chapter.commit(
+            .dadWindowPending,
+            sourceEventID: UUID()
+        )
+
+        let reloaded = TuringStoryProgressStore(defaults: defaults)
+
+        XCTAssertTrue(reloaded.canContinue)
+        guard case .chapter01(let snapshot) =
+                try reloaded.requireValidContinuationTarget() else {
+            return XCTFail("Expected Chapter 01 continuation target.")
+        }
+        XCTAssertEqual(snapshot.checkpoint, .dadWindowPending)
+        XCTAssertEqual(
+            snapshot.checkpoint.supportedContinuationCheckpoint,
+            .dadWindowPending
+        )
+        XCTAssertTrue(
+            reloaded.accessibilitySummary.contains(
+                Chapter01Checkpoint.dadWindowPending.rawValue
+            )
+        )
+    }
+
+    func testChapterContinuationCapsLaterProgressAtDadWindowStart() {
+        XCTAssertNil(Chapter01Checkpoint.root.supportedContinuationCheckpoint)
+        XCTAssertNil(
+            Chapter01Checkpoint.script06Completed
+                .supportedContinuationCheckpoint
+        )
+        XCTAssertEqual(
+            Chapter01Checkpoint.script07Completed
+                .supportedContinuationCheckpoint,
+            .dadWindowPending
+        )
+        XCTAssertEqual(
+            Chapter01Checkpoint.hamScript04Pending
+                .supportedContinuationCheckpoint,
+            .dadWindowPending
+        )
     }
 
     func testPlateGeometryPreservesNormalizedAperture() {

@@ -71,6 +71,58 @@ final class Chapter01Coordinator:
         )
     }
 
+    func resumeFromSavedCheckpoint() async throws {
+        guard TuringStoryStageCoordinator.shared.isEstablished else {
+            throw Chapter01Error.stageNotEstablished
+        }
+        guard let saved = await progress.currentSnapshot(),
+              let checkpoint = saved.checkpoint
+                .supportedContinuationCheckpoint else {
+            throw Chapter01Error.unsupportedContinuationCheckpoint
+        }
+
+        await cancel(reason: "resumeFromSavedCheckpoint")
+        try await dad.validateAvailability()
+
+        let runID = UUID()
+        let transitionID = UUID()
+        chapterRunID = runID
+        handledCompletionEventIDs.removeAll(keepingCapacity: false)
+        await episodeFlow.resetEpisode(
+            reason: "chapter01.continue.\(checkpoint.rawValue)"
+        )
+        walkie.episodeStarted(.chapter01)
+
+        let lease = try await arbiter.claimStoryTransition(
+            transitionID: transitionID,
+            source: "chapter01Continue.\(checkpoint.rawValue)"
+        )
+        storyTransitionLease = lease
+        state = .dadWindow
+
+        do {
+            try await dad.start(
+                request: Chapter01DadWindowRequest(
+                    chapterRunID: runID,
+                    storyTransitionLease: lease,
+                    completionSink: self
+                )
+            )
+        } catch {
+            storyTransitionLease = nil
+            await arbiter.release(
+                lease,
+                reason: "chapter01ContinueDadStartFailed"
+            )
+            state = .failed(error.localizedDescription)
+            throw error
+        }
+
+        print(
+            "[Chapter01] continued checkpoint=\(checkpoint.rawValue) chapterRunID=\(runID.uuidString) scriptsReplayed=false roomRescan=false"
+        )
+    }
+
     func scriptPointCompleted(
         _ event: TuringScriptPointCompletionEvent
     ) async throws {

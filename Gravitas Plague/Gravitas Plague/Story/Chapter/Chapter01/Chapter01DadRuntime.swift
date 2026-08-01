@@ -1,5 +1,6 @@
 import Foundation
 import RealityKit
+import simd
 
 @MainActor
 final class Chapter01DadRuntime {
@@ -51,6 +52,26 @@ enum Chapter01DadRuntimeFactory {
         controller.setPlayerAttackEnabled(false)
         controller.setExternalMotionDriven(true)
         controller.setRootMotionEnabled(false)
+        controller.useAuthoredCharacterHeadingCorrection()
+        let heading = try controller.scriptedCharacterHeadingSnapshot()
+        guard abs(heading.baseVisualCorrectionDegrees - 180) < 0.001,
+              abs(heading.additiveVisualCorrectionDegrees) < 0.001,
+              abs(heading.effectiveVisualCorrectionDegrees - 180) < 0.001 else {
+            throw Chapter01Error.openingResourceUnavailable(
+                "Dad heading correction must be base=180, additive=0, effective=180."
+            )
+        }
+        print(
+            """
+            [Chapter01DadHeading] runtime correction
+              characterID: dad
+              renderedForwardSource: Head->headfront
+              logicalRootForwardAxis: -z
+              baseVisualCorrectionDegrees: \(heading.baseVisualCorrectionDegrees)
+              additiveVisualCorrectionDegrees: \(heading.additiveVisualCorrectionDegrees)
+              effectiveVisualCorrectionDegrees: \(heading.effectiveVisualCorrectionDegrees)
+            """
+        )
         controller.onPunchHit = nil
         controller.onCharacterDamageHit = nil
         controller.onCharacterDeath = nil
@@ -60,10 +81,10 @@ enum Chapter01DadRuntimeFactory {
         stripInteraction(from: controller.rootEntity)
         context.portalWorldRoot.addChild(controller.rootEntity)
         controller.updateGroundingProfileFromLoadedEntityIfNeeded()
-        setController(
+        installWorldPose(
             controller,
-            at: context.entryAnchor,
-            relativeTo: context.portalWorldRoot
+            floorPosition: context.route.entryWorldPosition,
+            orientation: context.route.entryWalkWorldOrientation
         )
         // Spawn preparation enables the root before an animation owns the rig.
         // Keep it hidden until the entry walk has actually been submitted.
@@ -89,20 +110,29 @@ enum Chapter01DadRuntimeFactory {
         )
     }
 
-    static func setController(
+    static func installWorldPose(
         _ controller: JockRetargetTestController,
-        at anchor: Entity,
-        relativeTo coordinateSpace: Entity
+        floorPosition: SIMD3<Float>,
+        orientation: simd_quatf,
+        log: Bool = true
     ) {
-        let anchorTransform = anchor.transformMatrix(relativeTo: coordinateSpace)
-        controller.rootEntity.setTransformMatrix(
-            anchorTransform,
-            relativeTo: coordinateSpace
+        var position = floorPosition
+        position.y = controller.rootYForFloorY(floorPosition.y)
+        controller.rootEntity.setPosition(position, relativeTo: nil)
+        controller.rootEntity.setOrientation(
+            orientation,
+            relativeTo: nil
         )
-        let floorY = anchor.position(relativeTo: coordinateSpace).y
-        var position = controller.rootEntity.position(relativeTo: coordinateSpace)
-        position.y = controller.rootYForFloorY(floorY)
-        controller.rootEntity.setPosition(position, relativeTo: coordinateSpace)
+
+        if log {
+            print(
+                """
+                [Chapter01Dad] runtime reset from fresh window world context
+                  worldPosition: \(position)
+                  worldOrientation: \(orientation.vector)
+                """
+            )
+        }
     }
 
     private static func stripInteraction(from entity: Entity) {

@@ -121,13 +121,18 @@ def main() -> None:
             fail(f"Robot Chapter source must not invoke generated speech: {forbidden}")
 
     dad_runtime_source = (SOURCE_ROOT / "Chapter01DadRuntime.swift").read_text()
+    dad_coordinator_source = (
+        SOURCE_ROOT / "Chapter01DadWindowCoordinator.swift"
+    ).read_text()
     robot_factory_source = (SOURCE_ROOT / "Chapter01RobotFactory.swift").read_text()
-    for source_name, source in (
-        ("Dad runtime", dad_runtime_source),
-        ("Robot factory", robot_factory_source),
-    ):
-        if "setScriptedVisualHeadingOffsetDegrees" in source:
-            fail(f"{source_name} must use the shared rig heading correction exactly once")
+    if "setScriptedVisualHeadingOffsetDegrees(180)" not in dad_runtime_source:
+        fail("Dad must apply its authored 180-degree visual-axis correction locally")
+    if "setScriptedVisualHeadingOffsetDegrees" in robot_factory_source:
+        fail("Robot must continue using the shared rig heading correction")
+    if "entryWorldFacingDirection" not in dad_runtime_source:
+        fail("Dad must reset to the freshly captured window-world heading")
+    if "coordinateSpace: nil" not in dad_coordinator_source:
+        fail("Dad cinematic locomotion must run against captured world points")
 
     robot_coordinator_source = (
         SOURCE_ROOT / "Chapter01RobotEncounterCoordinator.swift"
@@ -136,6 +141,45 @@ def main() -> None:
     path_tick = robot_coordinator_source.find("pathFollower.update(deltaTime: deltaTime)")
     if controller_tick == -1 or path_tick == -1 or controller_tick > path_tick:
         fail("Robot animation driver must update before scripted path locomotion")
+    close_before_cleanup = robot_coordinator_source.find(
+        "reason: \"successfulRobotDeparture\""
+    )
+    successful_exit_cleanup = robot_coordinator_source.find(
+        "reason: \"successfulRobotExit\""
+    )
+    if (
+        close_before_cleanup == -1
+        or successful_exit_cleanup == -1
+        or close_before_cleanup > successful_exit_cleanup
+    ):
+        fail("Robot departure must close the door before releasing the runtime")
+    if "robotExteriorContinuation" not in robot_coordinator_source:
+        fail("Robot must continue walking on its exterior departure vector")
+    if "exteriorReleaseThreshold: -Float.greatestFiniteMagnitude" not in robot_coordinator_source:
+        fail("Robot portal mirror must remain alive until the door closes")
+    if "if result.wasNewlyGranted" in robot_coordinator_source:
+        fail("replayed Robot encounters must not suppress the antigen HUD")
+    if robot_coordinator_source.count("rewardPresenter.presentHUDReward(") != 1:
+        fail("Robot reward must have one unconditional HUD presentation path")
+
+    window_source = (
+        ROOT
+        / "Gravitas Plague"
+        / "Gravitas Plague"
+        / "Turing"
+        / "Props"
+        / "TuringStoryWindowBundleController.swift"
+    ).read_text()
+    for world_context_contract in (
+        "root.stopAllAnimations()",
+        "capturedWindowWorldTransform",
+        "entryWorldPosition",
+        "centerWorldPosition",
+        "exitWorldPosition",
+        "latest_committed_window_transform",
+    ):
+        if world_context_contract not in window_source:
+            fail(f"fresh Dad window-world context is missing: {world_context_contract}")
 
     dad_pr_source = (
         SOURCE_ROOT / "Chapter01DadWindowPrerecordingController.swift"
@@ -190,6 +234,37 @@ def main() -> None:
     ).read_text()
     if ".generateBox" in reward_presenter_source or "proceduralCube" in reward_presenter_source:
         fail("temporary procedural antigen presentation remains active")
+    for required_hud_contract in (
+        'standardHUDPosition = SIMD3<Float>(0, -0.32, -1.05)',
+        "modelLargestExtentMeters: Float = 0.54",
+        "modelCenterY: Float = 0.38",
+        'UIFont(name: "Baskerville-SemiBold", size: 34)',
+        "red: 0.92",
+        "green: 0.86",
+        "blue: 0.72",
+        "alpha: 0.74",
+    ):
+        if required_hud_contract not in reward_presenter_source:
+            fail(f"reward HUD contract changed: {required_hud_contract}")
+
+    jock_controller_source = (
+        ROOT
+        / "Gravitas Plague"
+        / "Gravitas Plague"
+        / "JockRetargetTestController.swift"
+    ).read_text()
+    steering_start = jock_controller_source.find(
+        "private func steerRootTowardWorldDirection("
+    )
+    steering_end = jock_controller_source.find(
+        "private func consumeFollowLocomotionDelta(", steering_start
+    )
+    steering_source = jock_controller_source[steering_start:steering_end]
+    if (
+        "orientation(relativeTo: nil)" not in steering_source
+        or "relativeTo: nil" not in steering_source
+    ):
+        fail("scripted world steering must resolve and set world orientation")
     print("Authored rolling-cart antigen reward verified.")
 
     print("Chapter01 Robot encounter verification passed.")

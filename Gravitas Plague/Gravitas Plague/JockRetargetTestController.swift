@@ -16,6 +16,14 @@ struct JockGroundingProfile {
     )
 }
 
+struct ScriptedCharacterHeadingSnapshot: Sendable {
+    let logicalRootForwardWorld: SIMD3<Float>
+    let renderedVisualForwardWorld: SIMD3<Float>
+    let baseVisualCorrectionDegrees: Float
+    let additiveVisualCorrectionDegrees: Float
+    let effectiveVisualCorrectionDegrees: Float
+}
+
 @MainActor
 final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     private enum FollowDemoState: Equatable {
@@ -39,6 +47,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         case clipNotFound(String)
         case runtimeOverrideNotFound(String)
         case pacingLoopMissingClips([String])
+        case scriptedHeadingUnavailable(String)
 
         var errorDescription: String? {
             switch self {
@@ -54,6 +63,8 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
                 return "JockAsset runtime override not found: \(id)"
             case .pacingLoopMissingClips(let ids):
                 return "Pacing loop is missing clips: \(ids.joined(separator: ", "))"
+            case .scriptedHeadingUnavailable(let message):
+                return "Scripted character heading is unavailable: \(message)"
             }
         }
     }
@@ -3029,6 +3040,59 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         )
     }
 
+    func useAuthoredCharacterHeadingCorrection() {
+        scriptedVisualHeadingOffsetDegrees = 0
+        print(
+            "[CharacterAnimation] using authored character heading correction additiveDegrees=0"
+        )
+    }
+
+    func scriptedCharacterHeadingSnapshot() throws
+        -> ScriptedCharacterHeadingSnapshot {
+        let logicalRootForward = try Self.normalizedScriptedHeading(
+            rootEntity.orientation(relativeTo: nil).act(
+                SIMD3<Float>(0, 0, -1)
+            ),
+            label: "logical root forward"
+        )
+
+        guard let driver,
+              let modelEntity,
+              let skeletonWorldPoseResolver,
+              let headWorld = skeletonWorldPoseResolver.worldPosition(
+                  for: "Head",
+                  jointTransforms: driver.currentJointTransforms,
+                  modelEntity: modelEntity
+              ),
+              let headFrontWorld = skeletonWorldPoseResolver.worldPosition(
+                  for: "headfront",
+                  jointTransforms: driver.currentJointTransforms,
+                  modelEntity: modelEntity
+              ) else {
+            throw RetargetError.scriptedHeadingUnavailable(
+                "Head/headfront rendered pose markers"
+            )
+        }
+
+        // Head -> headfront includes the loaded model, visual correction, and
+        // current authored pose. It measures the body the player sees.
+        let renderedVisualForward = try Self.normalizedScriptedHeading(
+            headFrontWorld - headWorld,
+            label: "rendered visual forward"
+        )
+
+        return ScriptedCharacterHeadingSnapshot(
+            logicalRootForwardWorld: logicalRootForward,
+            renderedVisualForwardWorld: renderedVisualForward,
+            baseVisualCorrectionDegrees:
+                followConfiguration.visualHeadingCorrectionDegrees,
+            additiveVisualCorrectionDegrees:
+                scriptedVisualHeadingOffsetDegrees,
+            effectiveVisualCorrectionDegrees:
+                effectiveScriptedVisualHeadingCorrectionDegrees
+        )
+    }
+
     func playScriptedIdleLoop(clipID: String) throws {
         guard let clip = clipsByID[clipID] else {
             throw RetargetError.clipNotFound(clipID)
@@ -3062,6 +3126,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
 
     func playScriptedTurn90(
         direction: CharacterTurnDirection,
+        rootYawOwnership: ScriptedRootYawOwnership = .runtimeDelta,
         token: UUID,
         completion: @escaping @MainActor (UUID, Result<Void, Error>) -> Void
     ) throws {
@@ -3094,7 +3159,8 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
             loop: false,
             transition: true,
             locomotionPolicy: .useClipLocomotion,
-            runtimeOverride: battleTurnOverride
+            runtimeOverride: battleTurnOverride,
+            rootYawOwnership: rootYawOwnership
         )
         print("""
         [Battle01] authored turn clip started
@@ -3106,7 +3172,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
           runtimeEntryHeadingDegrees: \(battleTurnOverride.entryHeadingDegrees)
           runtimeExitHeadingDegrees: \(battleTurnOverride.exitHeadingDegrees)
           commitRootYawOnCompletion: \(battleTurnOverride.commitRootYawOnCompletion)
-          manualYawCommit: false
+          rootYawOwnership: \(rootYawOwnership)
         """)
     }
 
@@ -3137,6 +3203,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
 
     func playScriptedWalkLoop(
         clipID: String,
+        transition: Bool = true,
         onAuthoredTravel: @escaping @MainActor (Float) -> Void
     ) throws {
         guard let clip = clipsByID[clipID] else {
@@ -3155,10 +3222,22 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         driver?.playClip(
             clip,
             loop: true,
-            transition: true,
+            transition: transition,
             locomotionPolicy: .useClipLocomotion,
             runtimeOverride: followVisualRuntimeOverride()
         )
+    }
+
+    private static func normalizedScriptedHeading(
+        _ direction: SIMD3<Float>,
+        label: String
+    ) throws -> SIMD3<Float> {
+        let horizontal = SIMD3<Float>(direction.x, 0, direction.z)
+        let length = simd_length(horizontal)
+        guard length.isFinite, length > 0.001 else {
+            throw RetargetError.scriptedHeadingUnavailable(label)
+        }
+        return horizontal / length
     }
 
     func requirePreparedAnimationIDs(_ requiredIDs: Set<String>) throws {
@@ -5406,16 +5485,17 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         deltaTime: Float,
         maximumTurnRadiansPerSecond: Float? = nil
     ) {
+        let currentWorldOrientation = rootEntity.orientation(relativeTo: nil)
         let flatDirection = PhaseOneMath.normalizedOrFallback(
             SIMD3<Float>(direction.x, 0, direction.z),
-            fallback: rootEntity.orientation.act(SIMD3<Float>(0, 0, -1))
+            fallback: currentWorldOrientation.act(SIMD3<Float>(0, 0, -1))
         )
 
         let targetYaw = PhaseOneMath.yawRadiansForNegativeZForward(
             worldForward: flatDirection
         )
 
-        let currentForward = rootEntity.orientation.act(
+        let currentForward = currentWorldOrientation.act(
             SIMD3<Float>(0, 0, -1)
         )
 
@@ -5439,9 +5519,12 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         let maxStep = (maximumTurnRadiansPerSecond ?? followConfiguration.maxTurnRadiansPerSecond) * deltaTime
         let clampedStep = min(max(deltaYaw, -maxStep), maxStep)
 
-        rootEntity.orientation = simd_quatf(
-            angle: currentYaw + clampedStep,
-            axis: SIMD3<Float>(0, 1, 0)
+        rootEntity.setOrientation(
+            simd_quatf(
+                angle: currentYaw + clampedStep,
+                axis: SIMD3<Float>(0, 1, 0)
+            ),
+            relativeTo: nil
         )
     }
 
