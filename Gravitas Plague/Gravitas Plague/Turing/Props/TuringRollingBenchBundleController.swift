@@ -38,6 +38,7 @@ final class TuringRollingBenchBundleController:
         let hamReceiverRoot: Entity
         let hamReceiverIconAnchor: Entity
         let hamReceiverAudioEmitter: Entity
+        let antigenRewardAnchor: Entity
     }
 
     let root = Entity()
@@ -375,6 +376,27 @@ final class TuringRollingBenchBundleController:
                     .canonicalHamReceiverIconAnchor,
             under: bundleRoot
         )
+        let antigenRewardAnchor = try requireEntity(
+            current: TuringRollingBenchEntityName.antigenRewardAnchor,
+            canonical: TuringRollingBenchEntityName.antigenRewardAnchor,
+            under: bundleRoot
+        )
+        let antigenHolsterRoot = try requireEntity(
+            current: TuringRollingBenchEntityName.antigenHolsterRoot,
+            canonical: TuringRollingBenchEntityName.antigenHolsterRoot,
+            under: bundleRoot
+        )
+        let antigenVialRoots = try TuringRollingBenchEntityName.antigenVialRoots.map {
+            try requireEntity(
+                current: $0,
+                canonical: $0,
+                under: bundleRoot
+            )
+        }
+        configureAuthoredAntigenPackage(
+            anchor: antigenRewardAnchor,
+            members: [antigenHolsterRoot] + antigenVialRoots
+        )
 
         let authoredTopLevelChildren = bundleRoot.children.map { child in
             "\(child.name):enabled=\(child.isEnabled)"
@@ -412,6 +434,9 @@ final class TuringRollingBenchBundleController:
               hamReceiverIconAnchor: \(hamReceiverIconAnchor.name)
               hamReceiverAudioEmitter: \(hamReceiverEmitter.name)
               hamReceiverIconAnchorIsRootSibling: \(hamReceiverIconAnchor.parent === hamReceiverRoot.parent)
+              antigenRewardAnchor: \(antigenRewardAnchor.name)
+              antigenPackageMembers: \(([antigenHolsterRoot] + antigenVialRoots).map(\.name).joined(separator: ","))
+              antigenInitiallyVisible: \(antigenRewardAnchor.isEnabled)
               automaticPassthroughLighting: true
               importedEnvironmentLightFound: \(passthroughLighting.lightFound)
               importedEnvironmentLightDisabled: \(passthroughLighting.lightDisabled)
@@ -429,7 +454,32 @@ final class TuringRollingBenchBundleController:
             hamReceiverIconAnchor:
                 hamReceiverIconAnchor,
             hamReceiverAudioEmitter:
-                hamReceiverEmitter
+                hamReceiverEmitter,
+            antigenRewardAnchor:
+                antigenRewardAnchor
+        )
+    }
+
+    private func configureAuthoredAntigenPackage(
+        anchor: Entity,
+        members: [Entity]
+    ) {
+        for member in members where member.parent !== anchor {
+            member.setParent(
+                anchor,
+                preservingWorldTransform: true
+            )
+        }
+        anchor.isEnabled = false
+
+        print(
+            """
+            [TuringRollingBench] authored antigen package grouped
+              anchor: \(anchor.name)
+              members: \(members.map(\.name).joined(separator: ","))
+              preservingAuthoredTransforms: true
+              initiallyVisible: false
+            """
         )
     }
 
@@ -731,19 +781,10 @@ final class TuringRollingBenchBundleController:
     }
 
     func authoredRewardAnchor(named name: String) -> Entity? {
-        guard let bundleRoot = anchors?.bundleRoot else { return nil }
-        if let authored = bundleRoot.turingRollingBenchFindEntity(named: name) {
-            return authored
-        }
-        guard name == TuringRollingBenchEntityName.runtimeAntigenRewardAnchor else {
+        guard name == TuringRollingBenchEntityName.antigenRewardAnchor else {
             return nil
         }
-        let anchor = Entity()
-        anchor.name = name
-        anchor.position = SIMD3<Float>(0, loadedVisualMaxY, 0)
-        bundleRoot.addChild(anchor)
-        print("[TuringRollingBench] temporary antigen reward anchor installed name=\(name)")
-        return anchor
+        return anchors?.antigenRewardAnchor
     }
 }
 

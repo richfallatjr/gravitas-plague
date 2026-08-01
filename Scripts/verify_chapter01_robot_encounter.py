@@ -149,15 +149,48 @@ def main() -> None:
 
     antigen_descriptor = RESOURCE_ROOT / "Story" / "Chapter01" / "chapter01.antigenReward.001.json"
     if not antigen_descriptor.is_file():
-        fail("temporary antigen reward descriptor is missing")
+        fail("authored antigen reward descriptor is missing")
     antigen = json.loads(antigen_descriptor.read_text())
-    if antigen.get("modelKind") != "proceduralCube":
-        fail("temporary antigen reward must use the procedural cube")
-    if abs(float(antigen.get("proceduralCubeSizeMeters", 0)) - 0.127) > 0.0001:
-        fail("temporary antigen cube must be exactly five inches")
-    if antigen.get("rollingCartAnchorName") != "TuringRollingBenchAntigen_RewardAnchor":
-        fail("temporary antigen reward anchor changed")
-    print("Temporary five-inch procedural antigen reward verified.")
+    if antigen.get("modelKind") != "authoredBundleGroup":
+        fail("antigen reward must reuse the authored rolling-cart group")
+    if antigen.get("modelResourcePath") is not None:
+        fail("authored antigen reward must not load a second model resource")
+    if antigen.get("rollingCartAnchorName") != "antigen_anchor_root":
+        fail("authored antigen reward anchor changed")
+    expected_antigen_entities = [
+        "antigen_holster_root",
+        "antigen_vile_01_root",
+        "antigen_vile_02_root",
+        "antigen_vile_03_root",
+        "antigen_vile_04_root",
+    ]
+    if antigen.get("authoredEntityNames") != expected_antigen_entities:
+        fail("authored antigen package membership changed")
+
+    rolling_bench_source = (
+        ROOT
+        / "Gravitas Plague"
+        / "Gravitas Plague"
+        / "Turing"
+        / "Props"
+        / "TuringRollingBenchBundleController.swift"
+    ).read_text()
+    if "preservingWorldTransform: true" not in rolling_bench_source:
+        fail("authored antigen members must preserve their USDZ transforms")
+    if "anchor.isEnabled = false" not in rolling_bench_source:
+        fail("authored antigen package must remain hidden before reward")
+
+    reward_presenter_source = (
+        ROOT
+        / "Gravitas Plague"
+        / "Gravitas Plague"
+        / "Story"
+        / "HUD"
+        / "StoryItemRewardPresenter.swift"
+    ).read_text()
+    if ".generateBox" in reward_presenter_source or "proceduralCube" in reward_presenter_source:
+        fail("temporary procedural antigen presentation remains active")
+    print("Authored rolling-cart antigen reward verified.")
 
     print("Chapter01 Robot encounter verification passed.")
 

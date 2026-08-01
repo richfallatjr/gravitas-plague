@@ -3,15 +3,13 @@ import Foundation
 struct Chapter01AntigenRewardDescriptor: Codable, Sendable, Equatable {
     enum ModelKind: String, Codable, Sendable {
         case resource
-        case proceduralCube
+        case authoredBundleGroup
     }
-
-    static let temporaryCubeSizeMeters: Float = 0.127
 
     let schemaVersion: Int
     let modelKind: ModelKind
     let modelResourcePath: String?
-    let proceduralCubeSizeMeters: Float?
+    let authoredEntityNames: [String]?
     let rollingCartAnchorName: String
     let hudDurationSeconds: Double
     let hudText: String
@@ -35,10 +33,14 @@ struct Chapter01AntigenRewardDescriptor: Codable, Sendable, Equatable {
                 throw Chapter01RobotError.invalidDefinition("reward model resource path is missing")
             }
             _ = try TuringResourceLoader.resourceURL(resourcePath: path)
-        case .proceduralCube:
-            guard let size = value.proceduralCubeSizeMeters,
-                  abs(size - temporaryCubeSizeMeters) < 0.0001 else {
-                throw Chapter01RobotError.invalidDefinition("temporary antigen cube must be exactly five inches")
+        case .authoredBundleGroup:
+            guard value.modelResourcePath == nil,
+                  let names = value.authoredEntityNames,
+                  names.isEmpty == false,
+                  Set(names).count == names.count else {
+                throw Chapter01RobotError.invalidDefinition(
+                    "authored antigen package entity names are missing or duplicated"
+                )
             }
         }
 

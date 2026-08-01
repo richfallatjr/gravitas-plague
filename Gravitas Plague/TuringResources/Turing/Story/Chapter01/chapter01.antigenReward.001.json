@@ -1,9 +1,15 @@
 {
   "schemaVersion": 1,
-  "modelKind": "proceduralCube",
+  "modelKind": "authoredBundleGroup",
   "modelResourcePath": null,
-  "proceduralCubeSizeMeters": 0.127,
-  "rollingCartAnchorName": "TuringRollingBenchAntigen_RewardAnchor",
+  "authoredEntityNames": [
+    "antigen_holster_root",
+    "antigen_vile_01_root",
+    "antigen_vile_02_root",
+    "antigen_vile_03_root",
+    "antigen_vile_04_root"
+  ],
+  "rollingCartAnchorName": "antigen_anchor_root",
   "hudDurationSeconds": 5.0,
   "hudText": "You received an antigen pack",
   "rewardSoundResourcePath": null

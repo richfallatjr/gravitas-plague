@@ -62,16 +62,26 @@ final class Chapter01RobotEncounterTests: XCTestCase {
         )
     }
 
-    func testProductionAvailabilityAcceptsTemporaryProceduralAntigen() throws {
+    func testProductionAvailabilityAcceptsAuthoredRollingCartAntigen() throws {
         let availability = Chapter01RobotAvailability.evaluate()
         XCTAssertTrue(availability.isAvailable)
         XCTAssertTrue(availability.missingAuthoredResources.isEmpty)
         let descriptor = try Chapter01AntigenRewardDescriptor.load()
-        XCTAssertEqual(descriptor.modelKind, .proceduralCube)
+        XCTAssertEqual(descriptor.modelKind, .authoredBundleGroup)
+        XCTAssertNil(descriptor.modelResourcePath)
         XCTAssertEqual(
-            try XCTUnwrap(descriptor.proceduralCubeSizeMeters),
-            0.127,
-            accuracy: 0.0001
+            descriptor.rollingCartAnchorName,
+            "antigen_anchor_root"
+        )
+        XCTAssertEqual(
+            descriptor.authoredEntityNames,
+            [
+                "antigen_holster_root",
+                "antigen_vile_01_root",
+                "antigen_vile_02_root",
+                "antigen_vile_03_root",
+                "antigen_vile_04_root"
+            ]
         )
     }
 

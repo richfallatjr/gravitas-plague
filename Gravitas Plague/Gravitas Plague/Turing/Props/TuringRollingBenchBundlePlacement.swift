@@ -12,6 +12,14 @@ enum TuringRollingBenchEntityName {
     static let hamReceiverIconAnchor =
         "ham_receiver_icon_root_001"
     static let microphoneIconAnchor = "microphone_icon_root"
+    static let antigenRewardAnchor = "antigen_anchor_root"
+    static let antigenHolsterRoot = "antigen_holster_root"
+    static let antigenVialRoots = [
+        "antigen_vile_01_root",
+        "antigen_vile_02_root",
+        "antigen_vile_03_root",
+        "antigen_vile_04_root"
+    ]
     static let importedEnvironmentLight = "env_light"
 
     static let canonicalBundleRoot = "TuringRollingBenchBundle_Root"
@@ -38,8 +46,6 @@ enum TuringRollingBenchEntityName {
         "TuringRollingBenchHamReceiver_PhysicalHitTarget"
     static let runtimeHamReceiverActionIcon =
         "TuringRollingBenchHamReceiver_ActionIcon"
-    static let runtimeAntigenRewardAnchor =
-        "TuringRollingBenchAntigen_RewardAnchor"
 }
 
 enum TuringRollingBenchTuning {

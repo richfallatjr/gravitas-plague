@@ -7,9 +7,17 @@ import UIKit
 final class StoryItemRewardPresenter {
     typealias AnchorResolver = @MainActor (String) -> Entity?
 
+    private final class WeakEntityReference {
+        weak var value: Entity?
+
+        init(_ value: Entity) {
+            self.value = value
+        }
+    }
+
     private let hudRoot: Entity
     private let anchorResolver: AnchorResolver
-    private var worldItemsByID: [String: Entity] = [:]
+    private var worldItemsByID: [String: WeakEntityReference] = [:]
     private var hudClone: Entity?
     private var hudPresentationID: UUID?
     private var spinTask: Task<Void, Never>?
@@ -20,8 +28,16 @@ final class StoryItemRewardPresenter {
     }
 
     func validateAuthoredReward(_ descriptor: Chapter01AntigenRewardDescriptor) throws {
-        guard anchorResolver(descriptor.rollingCartAnchorName) != nil else {
+        guard let anchor = anchorResolver(descriptor.rollingCartAnchorName) else {
             throw Chapter01RobotError.missingRewardArt([descriptor.rollingCartAnchorName])
+        }
+        if descriptor.modelKind == .authoredBundleGroup {
+            let missing = descriptor.authoredEntityNames?.filter {
+                anchor.storyRewardFindEntity(named: $0) == nil
+            } ?? []
+            guard missing.isEmpty else {
+                throw Chapter01RobotError.missingRewardArt(missing)
+            }
         }
     }
 
@@ -31,25 +47,36 @@ final class StoryItemRewardPresenter {
         descriptor: Chapter01AntigenRewardDescriptor
     ) async throws {
         guard inventoryQuantity > 0 else { return }
-        if worldItemsByID[itemID] != nil { return }
+        if let existing = worldItemsByID[itemID]?.value {
+            existing.isEnabled = true
+            return
+        }
         guard let anchor = anchorResolver(descriptor.rollingCartAnchorName) else {
             throw Chapter01RobotError.missingRewardArt([descriptor.rollingCartAnchorName])
         }
-        let entity = try await makeRewardEntity(descriptor)
-        entity.name = "StoryInventory_\(itemID)"
-        anchor.addChild(entity)
-        if descriptor.modelKind == .proceduralCube,
-           let size = descriptor.proceduralCubeSizeMeters {
-            let worldScale = anchor.scale(relativeTo: nil)
-            let inverseScale = SIMD3<Float>(
-                1 / max(abs(worldScale.x), 0.0001),
-                1 / max(abs(worldScale.y), 0.0001),
-                1 / max(abs(worldScale.z), 0.0001)
-            )
-            entity.scale = inverseScale
-            entity.position.y = size * 0.5 * inverseScale.y
+
+        let entity: Entity
+        switch descriptor.modelKind {
+        case .authoredBundleGroup:
+            entity = anchor
+            entity.isEnabled = true
+        case .resource:
+            entity = try await makeResourceRewardEntity(descriptor)
+            entity.name = "StoryInventory_\(itemID)"
+            anchor.addChild(entity)
         }
-        worldItemsByID[itemID] = entity
+
+        worldItemsByID[itemID] = WeakEntityReference(entity)
+
+        print(
+            """
+            [StoryRewardWorld] reconciled
+              itemID: \(itemID)
+              modelKind: \(descriptor.modelKind.rawValue)
+              anchor: \(anchor.name)
+              authoredBundleReused: \(descriptor.modelKind == .authoredBundleGroup)
+            """
+        )
     }
 
     func presentHUDReward(
@@ -58,7 +85,7 @@ final class StoryItemRewardPresenter {
         descriptor: Chapter01AntigenRewardDescriptor
     ) async throws {
         guard text == descriptor.hudText,
-              let source = worldItemsByID[itemID] else {
+              let source = worldItemsByID[itemID]?.value else {
             throw Chapter01RobotError.invalidDefinition("reward presentation has no authoritative item")
         }
         clearHUDPresentation(reason: "replaceRewardPresentation")
@@ -114,30 +141,17 @@ final class StoryItemRewardPresenter {
         print("[StoryRewardHUD] cleared reason=\(reason)")
     }
 
-    private func makeRewardEntity(
+    private func makeResourceRewardEntity(
         _ descriptor: Chapter01AntigenRewardDescriptor
     ) async throws -> Entity {
-        switch descriptor.modelKind {
-        case .resource:
-            guard let path = descriptor.modelResourcePath else {
-                throw Chapter01RobotError.invalidDefinition("reward model resource path is missing")
-            }
-            let url = try TuringResourceLoader.resourceURL(resourcePath: path)
-            return try await Entity(contentsOf: url)
-        case .proceduralCube:
-            guard let size = descriptor.proceduralCubeSizeMeters else {
-                throw Chapter01RobotError.invalidDefinition("temporary antigen cube size is missing")
-            }
-            let material = SimpleMaterial(
-                color: UIColor.systemGreen,
-                roughness: 0.28,
-                isMetallic: true
-            )
-            return ModelEntity(
-                mesh: .generateBox(size: SIMD3<Float>(repeating: size)),
-                materials: [material]
+        guard descriptor.modelKind == .resource,
+              let path = descriptor.modelResourcePath else {
+            throw Chapter01RobotError.invalidDefinition(
+                "reward model resource path is missing"
             )
         }
+        let url = try TuringResourceLoader.resourceURL(resourcePath: path)
+        return try await Entity(contentsOf: url)
     }
 
     private func makeHUDLabel(_ text: String) -> ModelEntity {
@@ -179,5 +193,17 @@ final class StoryItemRewardPresenter {
         for child in entity.children {
             makeInert(child)
         }
+    }
+}
+
+private extension Entity {
+    func storyRewardFindEntity(named targetName: String) -> Entity? {
+        if name == targetName { return self }
+        for child in children {
+            if let match = child.storyRewardFindEntity(named: targetName) {
+                return match
+            }
+        }
+        return nil
     }
 }
