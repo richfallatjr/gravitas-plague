@@ -12,6 +12,7 @@ final class Chapter01DadFinalBattleCoordinator {
     private let enemyFactory: Chapter01DadBattleEnemyFactory
     private let door: any TuringStoryDoorBattleControlling
     private let arbiter: StoryInteractionArbiter
+    private let clock: any BattleClock
     private let intro: ScriptedPortalEnemyIntroCoordinator
     private let music = Chapter01DadBattleMusicController()
     private let damageClock = Chapter01DadBattleDamageClock()
@@ -21,8 +22,7 @@ final class Chapter01DadFinalBattleCoordinator {
     private let runtimeCleanup: BattleRuntimeCleanupCoordinator
     private let onEnemyRemoved: EnemyRemovedHook
     private let playerTargetProvider: PlayerTargetProvider
-    private let onPlayerContactFeedback: @MainActor () -> Void
-    private let onPlayerDamage: @MainActor (Int) -> Void
+    private let onPlayerContactFeedback: @MainActor (Int) -> Void
     private let onPlayerDeath: @MainActor () -> Void
     private let onRuntimeReleased: @MainActor (Chapter01DadFinalBattleReleasedEvent) -> Void
 
@@ -47,8 +47,7 @@ final class Chapter01DadFinalBattleCoordinator {
         onEnemyPrepared: @escaping Chapter01DadBattleEnemyFactory.PreparedCallback,
         onEnemyRemoved: @escaping EnemyRemovedHook,
         playerTargetProvider: @escaping PlayerTargetProvider,
-        onPlayerContactFeedback: @escaping @MainActor () -> Void,
-        onPlayerDamage: @escaping @MainActor (Int) -> Void,
+        onPlayerContactFeedback: @escaping @MainActor (Int) -> Void,
         onPlayerDeath: @escaping @MainActor () -> Void,
         onRuntimeReleased: @escaping @MainActor (
             Chapter01DadFinalBattleReleasedEvent
@@ -56,6 +55,7 @@ final class Chapter01DadFinalBattleCoordinator {
     ) {
         self.door = door
         self.arbiter = arbiter
+        self.clock = clock
         self.intro = ScriptedPortalEnemyIntroCoordinator(clock: clock)
         self.corpsePresenter = BattleCorpsePresentationController(
             storyRoot: sceneRoot
@@ -71,7 +71,6 @@ final class Chapter01DadFinalBattleCoordinator {
         self.onEnemyRemoved = onEnemyRemoved
         self.playerTargetProvider = playerTargetProvider
         self.onPlayerContactFeedback = onPlayerContactFeedback
-        self.onPlayerDamage = onPlayerDamage
         self.onPlayerDeath = onPlayerDeath
         self.onRuntimeReleased = onRuntimeReleased
     }
@@ -343,11 +342,8 @@ final class Chapter01DadFinalBattleCoordinator {
                     playerTargetProvider: { [weak self] in
                         self?.latestPlayerTarget ?? self?.playerTargetProvider()
                     },
-                    onPlayerContactFeedback: { [weak self] in
-                        self?.onPlayerContactFeedback()
-                    },
-                    onPlayerDamage: { [weak self] amount in
-                        self?.onPlayerDamage(amount)
+                    onPlayerContactFeedback: { [weak self] amount in
+                        self?.onPlayerContactFeedback(amount)
                     },
                     onPlayerDeath: { [weak self] in
                         self?.handlePlayerDeath(
@@ -393,7 +389,8 @@ final class Chapter01DadFinalBattleCoordinator {
         enemyID: UUID
     ) {
         guard self.battleInstanceID == battleInstanceID,
-              cleanupTask == nil else { return }
+              cleanupTask == nil,
+              let definition else { return }
         state = .dadDeathDialogueHold
         combat?.cancelAndRelease(reason: "Dad death animation completed")
         combat = nil
@@ -418,12 +415,37 @@ final class Chapter01DadFinalBattleCoordinator {
             guard self.battleInstanceID == battleInstanceID else { return }
             self.state = .releasingRuntime
             do {
-                try await doorCloseTask.value
-                self.music.stop(
-                    epoch: self.musicEpoch,
-                    reason: "Dad Rich battle dialogue completed"
-                )
+                if let musicEpoch = self.musicEpoch {
+                    try await self.music.fadeOutAndStop(
+                        epoch: musicEpoch,
+                        durationSeconds:
+                            definition.music.fadeOutDurationSeconds,
+                        reason: "Dad Rich battle dialogue completed"
+                    )
+                } else {
+                    self.music.stop(
+                        epoch: nil,
+                        reason: "Dad battle cleanup without active epoch"
+                    )
+                }
                 self.damageClock.reset()
+                let bodyHoldSeconds =
+                    definition.enemy.removalDelayAfterMusicEndSeconds
+                if bodyHoldSeconds > 0 {
+                    print(
+                        "[Chapter01DadBattle] post-music body hold started " +
+                            "durationSeconds=\(bodyHoldSeconds)"
+                    )
+                    try await self.clock.sleep(
+                        for: .seconds(bodyHoldSeconds)
+                    )
+                    try Task.checkCancellation()
+                    guard self.battleInstanceID == battleInstanceID else {
+                        throw CancellationError()
+                    }
+                    print("[Chapter01DadBattle] post-music body hold completed")
+                }
+                try await doorCloseTask.value
                 self.onEnemyRemoved(enemyID)
                 _ = try await self.runtimeCleanup.releaseEnemy(
                     battleInstanceID: battleInstanceID,

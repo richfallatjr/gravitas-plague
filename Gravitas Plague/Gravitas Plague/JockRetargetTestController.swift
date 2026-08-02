@@ -29,6 +29,11 @@ enum StoryPlayerContactDisposition: Sendable, Equatable {
     case applyDamage
 }
 
+enum StoryEnemyDamageDisposition: Sendable, Equatable {
+    case feedbackOnly
+    case applyDamage
+}
+
 struct StoryPlayerAttackContact: Sendable, Equatable {
     let amount: Int
     let attackerID: UUID?
@@ -109,6 +114,8 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     var onAttackStarted: (() -> Void)?
     var onStoryPlayerAttackContact:
         ((StoryPlayerAttackContact) -> StoryPlayerContactDisposition)?
+    var onStoryEnemyDamageDisposition:
+        (() -> StoryEnemyDamageDisposition)?
     var onStoryAcceptedDamageChanged:
         ((StoryEnemyAcceptedDamageSnapshot) -> Void)?
     private var storyPlayerHitCallbackOwnsBudget = false
@@ -313,6 +320,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         storyHeadPunchDamageRoller = JockSystemHeadPunchDamageRoller()
         lastStoryHeadPunchRollAtBySourceID.removeAll(keepingCapacity: false)
         storyBattleInstanceIDForHitDiagnostics = nil
+        onStoryEnemyDamageDisposition = nil
     }
 
     private func resetCombatRuntime(resetHitCount: Bool = true) {
@@ -2617,6 +2625,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         onBenchmarkEnemyDeathAnimationFinished = nil
         onAttackStarted = nil
         onStoryPlayerAttackContact = nil
+        onStoryEnemyDamageDisposition = nil
         onStoryAcceptedDamageChanged = nil
         storyPlayerHitCallbackOwnsBudget = false
 
@@ -4022,10 +4031,15 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     private func performDamageHit(
         _ event: JockHandHitDetector.HitEvent,
         at now: TimeInterval,
-        damageAccepted: Bool,
+        damageAccepted requestedDamageAccepted: Bool,
         elapsedSinceAcceptedDamage: TimeInterval?,
         source: JockAcceptedDamageSource
     ) {
+        let storyDamageDisposition = requestedDamageAccepted
+            ? onStoryEnemyDamageDisposition?() ?? .applyDamage
+            : .feedbackOnly
+        let damageAccepted = requestedDamageAccepted &&
+            storyDamageDisposition == .applyDamage
         let acceptedDamageHitCount = damageAccepted
             ? acceptedHitCount + 1
             : acceptedHitCount
@@ -4083,6 +4097,16 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
                   sourceID: \(hordeID)
                   acceptedDamageSource: \(source.rawValue)
                   cooldownSeconds: \(String(format: "%.2f", Self.enemyDamageCooldownSeconds))
+                """
+            )
+        } else if requestedDamageAccepted {
+            print(
+                """
+                [EnemyDamage] health mutation suppressed by Story phase
+                  sourceID: \(hordeID)
+                  acceptedDamageSource: \(source.rawValue)
+                  feedbackPreserved: true
+                  fullBodyReactionPreserved: true
                 """
             )
         } else {

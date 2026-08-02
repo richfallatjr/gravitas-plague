@@ -4,22 +4,34 @@ import simd
 struct Chapter01DadBattlePlayerDamagePolicy: Sendable, Equatable {
     let damageEnableMediaTime: TimeInterval
 
+    private func damageIsEnabled(
+        soundtrackMediaTime: TimeInterval?
+    ) -> Bool {
+        guard let soundtrackMediaTime else { return false }
+        return soundtrackMediaTime >= damageEnableMediaTime
+    }
+
     func disposition(
         soundtrackMediaTime: TimeInterval?
     ) -> StoryPlayerContactDisposition {
-        guard let soundtrackMediaTime,
-              soundtrackMediaTime >= damageEnableMediaTime else {
-            return .feedbackOnly
-        }
-        return .applyDamage
+        damageIsEnabled(soundtrackMediaTime: soundtrackMediaTime)
+            ? .applyDamage
+            : .feedbackOnly
+    }
+
+    func enemyDamageDisposition(
+        soundtrackMediaTime: TimeInterval?
+    ) -> StoryEnemyDamageDisposition {
+        damageIsEnabled(soundtrackMediaTime: soundtrackMediaTime)
+            ? .applyDamage
+            : .feedbackOnly
     }
 }
 
 struct Chapter01DadBattleCombatContext {
     let battleInstanceID: UUID
     let playerTargetProvider: @MainActor () -> SIMD3<Float>?
-    let onPlayerContactFeedback: @MainActor () -> Void
-    let onPlayerDamage: @MainActor (Int) -> Void
+    let onPlayerContactFeedback: @MainActor (Int) -> Void
     let onPlayerDeath: @MainActor () -> Void
     let onOneAcceptedDamageRemaining: @MainActor () -> Void
     let onEnemyDeathStarted: @MainActor () -> Void
@@ -67,7 +79,7 @@ final class Chapter01DadBattleCombatAdapter {
 
         enemy.onStoryPlayerAttackContact = { [weak self] contact in
             guard let self, self.active else { return .feedbackOnly }
-            self.context?.onPlayerContactFeedback()
+            self.context?.onPlayerContactFeedback(contact.amount)
             let mediaTime = self.damageClock.currentMediaTime
             let disposition = self.damagePolicy.disposition(
                 soundtrackMediaTime: mediaTime
@@ -76,6 +88,19 @@ final class Chapter01DadBattleCombatAdapter {
                 "[Chapter01DadBattle] player contact " +
                     "mediaTime=\(mediaTime.map { String(format: "%.3f", $0) } ?? "none") " +
                     "clipID=\(contact.attackClipID ?? "none") " +
+                    "disposition=\(String(describing: disposition))"
+            )
+            return disposition
+        }
+        enemy.onStoryEnemyDamageDisposition = { [weak self] in
+            guard let self, self.active else { return .feedbackOnly }
+            let mediaTime = self.damageClock.currentMediaTime
+            let disposition = self.damagePolicy.enemyDamageDisposition(
+                soundtrackMediaTime: mediaTime
+            )
+            print(
+                "[Chapter01DadBattle] Dad incoming damage gate " +
+                    "mediaTime=\(mediaTime.map { String(format: "%.3f", $0) } ?? "none") " +
                     "disposition=\(String(describing: disposition))"
             )
             return disposition
@@ -90,16 +115,12 @@ final class Chapter01DadBattleCombatAdapter {
             )
             if terminal, !self.playerDeathClaimed {
                 self.playerDeathClaimed = true
-                self.context?.onPlayerDamage(amount)
                 self.context?.onPlayerDeath()
             }
             return terminal
         }
         enemy.setStoryPlayerHitCallbackOwnsBudget(true)
-        enemy.onPlayerDamaged = { [weak self] amount in
-            guard let self, self.active else { return }
-            self.context?.onPlayerDamage(amount)
-        }
+        enemy.onPlayerDamaged = nil
         enemy.onStoryAcceptedDamageChanged = { [weak self] snapshot in
             guard let self else { return }
             print(
@@ -153,6 +174,7 @@ final class Chapter01DadBattleCombatAdapter {
     func cancelAndRelease(reason: String) {
         disable(reason: reason)
         enemy?.onStoryPlayerAttackContact = nil
+        enemy?.onStoryEnemyDamageDisposition = nil
         enemy?.onStoryAcceptedDamageChanged = nil
         enemy = nil
         context = nil

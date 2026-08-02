@@ -34,6 +34,7 @@ struct Chapter01DadFinalBattleDefinition: Codable, Sendable, Hashable {
         let incomingPunchPolicy: String
         let storyAcceptedHitCapacityMultiplier: Int
         let retainCorpseAfterDeath: Bool
+        let removalDelayAfterMusicEndSeconds: Double
     }
 
     struct Door: Codable, Sendable, Hashable {
@@ -63,6 +64,7 @@ struct Chapter01DadFinalBattleDefinition: Codable, Sendable, Hashable {
         let start: String
         let damageEnableAtMediaTimeSeconds: Double
         let damageRemainsEnabledAfterNaturalCompletion: Bool
+        let fadeOutDurationSeconds: Double
     }
 
     struct PlayerDamage: Codable, Sendable, Hashable {

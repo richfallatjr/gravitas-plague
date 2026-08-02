@@ -21,7 +21,8 @@
     "rootMotionEnabledDuringPath": false,
     "incomingPunchPolicy": "storyGrandmaThreeX",
     "storyAcceptedHitCapacityMultiplier": 2,
-    "retainCorpseAfterDeath": false
+    "retainCorpseAfterDeath": false,
+    "removalDelayAfterMusicEndSeconds": 1.0
   },
   "door": {
     "playerMayOpenDuringPortalApproach": true,
@@ -47,7 +48,8 @@
     "gainDB": -15.0,
     "start": "actualInitialIdleAnimationStart",
     "damageEnableAtMediaTimeSeconds": 60.0,
-    "damageRemainsEnabledAfterNaturalCompletion": true
+    "damageRemainsEnabledAfterNaturalCompletion": true,
+    "fadeOutDurationSeconds": 2.0
   },
   "playerDamage": {
     "confirmedHitsToKillAfterEnable": 5,

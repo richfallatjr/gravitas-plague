@@ -536,8 +536,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             playerTargetProvider: { [weak self] in
                 self?.spatialProvider.currentPose()?.headPosition
             },
-            onPlayerContactFeedback: {},
-            onPlayerDamage: { [weak self] amount in
+            onPlayerContactFeedback: { [weak self] amount in
                 self?.audioController.playRandomPlayerDamageHit()
                 self?.onPlayerDamaged?(amount)
             },

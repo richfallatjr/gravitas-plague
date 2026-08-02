@@ -20,6 +20,8 @@ final class Chapter01DadFinalBattleTests: XCTestCase {
         XCTAssertEqual(definition.enemy.turnCount, 2)
         XCTAssertTrue(definition.door.playerMayOpenDuringPortalApproach)
         XCTAssertEqual(definition.music.damageEnableAtMediaTimeSeconds, 60)
+        XCTAssertEqual(definition.music.fadeOutDurationSeconds, 2)
+        XCTAssertEqual(definition.enemy.removalDelayAfterMusicEndSeconds, 1)
         XCTAssertEqual(
             try definition.musicTimedRichCue.triggerMediaTimeSeconds,
             30
@@ -66,6 +68,25 @@ final class Chapter01DadFinalBattleTests: XCTestCase {
         )
         XCTAssertEqual(
             policy.disposition(soundtrackMediaTime: 120),
+            .applyDamage
+        )
+    }
+
+    func testDadHealthMutationUsesTheSameExactSoundtrackMinuteGate() {
+        let policy = Chapter01DadBattlePlayerDamagePolicy(
+            damageEnableMediaTime: 60
+        )
+
+        XCTAssertEqual(
+            policy.enemyDamageDisposition(soundtrackMediaTime: nil),
+            .feedbackOnly
+        )
+        XCTAssertEqual(
+            policy.enemyDamageDisposition(soundtrackMediaTime: 59.999),
+            .feedbackOnly
+        )
+        XCTAssertEqual(
+            policy.enemyDamageDisposition(soundtrackMediaTime: 60.000),
             .applyDamage
         )
     }

@@ -139,6 +139,35 @@ final class Chapter01DadBattleMusicController: NSObject, AVAudioPlayerDelegate {
         print("[Chapter01DadBattle] music stopped reason=\(reason)")
     }
 
+    func fadeOutAndStop(
+        epoch: Chapter01DadBattleMusicEpoch,
+        durationSeconds: TimeInterval,
+        reason: String
+    ) async throws {
+        guard epoch == activeEpoch else { throw MusicError.staleEpoch }
+        let fadeDuration = max(0, durationSeconds)
+
+        if let fadingPlayer = player, fadingPlayer.isPlaying {
+            print(
+                "[Chapter01DadBattle] music fade started " +
+                    "playbackID=\(epoch.playbackID.uuidString) " +
+                    "durationSeconds=\(fadeDuration)"
+            )
+            fadingPlayer.setVolume(0, fadeDuration: fadeDuration)
+            if fadeDuration > 0 {
+                try await Task.sleep(for: .seconds(fadeDuration))
+            }
+            try Task.checkCancellation()
+            guard epoch == activeEpoch else { throw MusicError.staleEpoch }
+        }
+
+        stop(epoch: epoch, reason: reason)
+        print(
+            "[Chapter01DadBattle] music fade completed " +
+                "playbackID=\(epoch.playbackID.uuidString)"
+        )
+    }
+
     nonisolated func audioPlayerDidFinishPlaying(
         _ player: AVAudioPlayer,
         successfully flag: Bool
