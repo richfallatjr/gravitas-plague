@@ -2,13 +2,7 @@ import Foundation
 import RealityKit
 import simd
 
-@MainActor
-struct Battle01PreparedEnemy {
-    let enemyID: UUID
-    let sourceController: JockRetargetTestController
-    let sourceRoot: Entity
-    let portalMirror: StoryPortalEnemyRenderMirrorAdapter
-}
+typealias Battle01PreparedEnemy = ScriptedPortalPreparedEnemy
 
 @MainActor
 final class Battle01EnemyFactory {

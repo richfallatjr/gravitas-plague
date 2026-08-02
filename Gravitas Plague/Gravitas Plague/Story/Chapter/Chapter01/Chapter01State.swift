@@ -9,6 +9,7 @@ enum Chapter01State: Sendable, Equatable {
     case robot
     case postRobotHub
     case preDadFinalBattleReady
+    case dadFinalBattle
     case failed(String)
     case cancelled
 }
@@ -21,6 +22,7 @@ enum Chapter01Error: LocalizedError {
     case unsupportedContinuationCheckpoint
     case openingResourceUnavailable(String)
     case postRobotHubNotUnlocked
+    case postRobotBranchNotAvailable(Chapter01PostRobotBranch)
     case terminalPointMismatch
     case robotReleaseBoundaryFailed
 
@@ -40,6 +42,8 @@ enum Chapter01Error: LocalizedError {
             return "Chapter 01 opening is unavailable: \(detail)"
         case .postRobotHubNotUnlocked:
             return "The Chapter 01 post-Robot hub is not unlocked."
+        case .postRobotBranchNotAvailable(let branch):
+            return "The Chapter 01 \(branch.rawValue) interaction is not available yet."
         case .terminalPointMismatch:
             return "A Chapter 01 branch completed from the wrong terminal ScriptPoint."
         case .robotReleaseBoundaryFailed:

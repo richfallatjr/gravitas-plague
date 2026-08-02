@@ -13,6 +13,7 @@ actor StoryInteractionArbiter {
         ]
     private var doorState: StoryDoorLifecycleState = .closedUnloaded
     private var exclusiveLease: StoryInteractionLease?
+    private var battleDoorPermissions: [UUID: StoryBattleDoorPermission] = [:]
     private let snapshotHub = StoryInteractionSnapshotHub()
 
     func snapshots() async -> AsyncStream<StoryInteractionSnapshot> {
@@ -71,6 +72,22 @@ actor StoryInteractionArbiter {
         }
         doorState = state
         await publish(reason: "doorState.\(reason)")
+    }
+
+    func setBattleDoorPermission(
+        _ permission: StoryBattleDoorPermission,
+        battleLease: StoryInteractionLease,
+        reason: String
+    ) async throws {
+        guard exclusiveLease == battleLease,
+              case .battle(let battleInstanceID) = battleLease.owner else {
+            throw StoryInteractionClaimError.staleLease
+        }
+        guard battleDoorPermissions[battleInstanceID] != permission else {
+            return
+        }
+        battleDoorPermissions[battleInstanceID] = permission
+        await publish(reason: "battleDoorPermission.\(reason)")
     }
 
     func claimManualTuring(
@@ -313,6 +330,9 @@ actor StoryInteractionArbiter {
             """)
             return
         }
+        if case .battle(let battleInstanceID) = lease.owner {
+            battleDoorPermissions.removeValue(forKey: battleInstanceID)
+        }
         exclusiveLease = nil
         print("""
         [StoryInteraction] lease released
@@ -332,6 +352,7 @@ actor StoryInteractionArbiter {
         ]
         doorState = .closedUnloaded
         exclusiveLease = nil
+        battleDoorPermissions.removeAll(keepingCapacity: false)
         await publish(reason: "reset.\(reason)")
     }
 
@@ -339,6 +360,9 @@ actor StoryInteractionArbiter {
         owner: StoryInteractionExclusiveOwner,
         source: String
     ) async -> StoryInteractionLease {
+        if case .battle(let battleInstanceID) = owner {
+            battleDoorPermissions[battleInstanceID] = .hiddenAndLocked
+        }
         let lease = StoryInteractionLease(id: UUID(), owner: owner)
         exclusiveLease = lease
         print("""
@@ -356,6 +380,12 @@ actor StoryInteractionArbiter {
         to owner: StoryInteractionExclusiveOwner,
         reason: String
     ) async -> StoryInteractionLease {
+        if case .battle(let oldBattleInstanceID) = oldLease.owner {
+            battleDoorPermissions.removeValue(forKey: oldBattleInstanceID)
+        }
+        if case .battle(let newBattleInstanceID) = owner {
+            battleDoorPermissions[newBattleInstanceID] = .hiddenAndLocked
+        }
         let newLease = StoryInteractionLease(id: UUID(), owner: owner)
         exclusiveLease = newLease
         print("""
@@ -406,10 +436,18 @@ actor StoryInteractionArbiter {
                 dadFrame = .hidden
                 crankRadio = .hidden
                 hamReceiver = .hidden
-            case .battle:
-                capabilities = []
+            case .battle(let battleInstanceID):
+                let permission = battleDoorPermissions[battleInstanceID]
+                    ?? .hiddenAndLocked
+                if permission == .playerMayOpen,
+                   doorState == .closedReady {
+                    capabilities = [.doorOpen]
+                    door = .open
+                } else {
+                    capabilities = []
+                    door = .hidden
+                }
                 walkie = .hidden
-                door = .hidden
                 dadFrame = .hidden
                 crankRadio = .hidden
                 hamReceiver = .hidden

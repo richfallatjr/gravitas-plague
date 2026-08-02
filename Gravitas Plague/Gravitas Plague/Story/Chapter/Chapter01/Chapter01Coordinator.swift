@@ -1,4 +1,5 @@
 import Foundation
+import simd
 
 @MainActor
 final class Chapter01Coordinator:
@@ -21,6 +22,8 @@ final class Chapter01Coordinator:
     private let dad: Chapter01DadWindowCoordinator
     private let postRobotInteractions: Chapter01PostRobotInteractionCoordinator
     private let preDadFinalBattleBoundary: Chapter01PreDadFinalBattleBoundary
+    private let dadFinalBattleActionRouter:
+        Chapter01DadFinalBattleActionRouter
     private let startRobot: RobotStarter
     private let cancelRobot: RobotCanceller
 
@@ -37,6 +40,8 @@ final class Chapter01Coordinator:
         arbiter: StoryInteractionArbiter = .shared,
         postRobotInteractions: Chapter01PostRobotInteractionCoordinator,
         preDadFinalBattleBoundary: Chapter01PreDadFinalBattleBoundary,
+        dadFinalBattleActionRouter:
+            Chapter01DadFinalBattleActionRouter,
         startRobot: @escaping RobotStarter,
         cancelRobot: @escaping RobotCanceller
     ) {
@@ -47,6 +52,7 @@ final class Chapter01Coordinator:
         self.arbiter = arbiter
         self.postRobotInteractions = postRobotInteractions
         self.preDadFinalBattleBoundary = preDadFinalBattleBoundary
+        self.dadFinalBattleActionRouter = dadFinalBattleActionRouter
         self.startRobot = startRobot
         self.cancelRobot = cancelRobot
     }
@@ -107,7 +113,39 @@ final class Chapter01Coordinator:
         )
         walkie.episodeStarted(.chapter01)
 
-        if checkpoint == .postRobotHub || checkpoint == .preDadFinalBattleReady {
+        if checkpoint == .preDadFinalBattleReady {
+            let lease = try await arbiter.claimStoryTransition(
+                transitionID: transitionID,
+                source: "chapter01Continue.\(checkpoint.rawValue)"
+            )
+            storyTransitionLease = lease
+            do {
+                try await dadFinalBattleActionRouter.startFromContinuation(
+                    snapshot: saved,
+                    chapterRunID: runID,
+                    transitionLease: lease
+                )
+                storyTransitionLease = nil
+                state = .dadFinalBattle
+                print(
+                    "[Chapter01] continued directly into Dad final battle " +
+                        "checkpoint=\(checkpoint.rawValue) " +
+                        "chapterRunID=\(runID.uuidString) " +
+                        "deviceStateRestored=false roomRescan=false"
+                )
+                return
+            } catch {
+                storyTransitionLease = nil
+                await arbiter.release(
+                    lease,
+                    reason: "chapter01DadBattleContinueFailed"
+                )
+                state = .failed(error.localizedDescription)
+                throw error
+            }
+        }
+
+        if checkpoint == .postRobotHub {
             let lease = try await arbiter.claimStoryTransition(
                 transitionID: transitionID,
                 source: "chapter01Continue.\(checkpoint.rawValue)"
@@ -119,19 +157,7 @@ final class Chapter01Coordinator:
                     transitionLease: lease
                 )
                 storyTransitionLease = nil
-                state = checkpoint == .preDadFinalBattleReady
-                    ? .preDadFinalBattleReady
-                    : .postRobotHub
-                if checkpoint == .preDadFinalBattleReady {
-                    await preDadFinalBattleBoundary.publishIfNeeded(
-                        Chapter01PreDadFinalBattleReadyEvent(
-                            chapterRunID: runID,
-                            checkpointRevision: saved.revision,
-                            sourceEventID: saved.sourceEventIDs.first ?? UUID(),
-                            completedBranches: saved.postRobot.completedBranches
-                        )
-                    )
-                }
+                state = .postRobotHub
                 print(
                     "[Chapter01] continued checkpoint=\(checkpoint.rawValue) chapterRunID=\(runID.uuidString) cinematicsReplayed=false roomRescan=false"
                 )
@@ -360,7 +386,6 @@ final class Chapter01Coordinator:
             sourceEventID: sourceEventID
         )
         if result.becameAllBranchesComplete {
-            state = .preDadFinalBattleReady
             await preDadFinalBattleBoundary.publishIfNeeded(
                 Chapter01PreDadFinalBattleReadyEvent(
                     chapterRunID: chapterRunID,
@@ -369,13 +394,25 @@ final class Chapter01Coordinator:
                     completedBranches: result.snapshot.postRobot.completedBranches
                 )
             )
+            state = .dadFinalBattle
         } else {
+            try await postRobotInteractions.applyProgress(
+                snapshot: result.snapshot,
+                reason: "chapter01BranchCompleted.\(branch.rawValue)"
+            )
             state = .postRobotHub
         }
     }
 
-    func update(deltaTime: TimeInterval) {
+    func update(
+        deltaTime: TimeInterval,
+        playerTargetWorldPosition: SIMD3<Float>?
+    ) {
         dad.update(deltaTime: deltaTime)
+        dadFinalBattleActionRouter.update(
+            deltaTime: deltaTime,
+            playerTargetWorldPosition: playerTargetWorldPosition
+        )
     }
 
     func cancel(reason: String) async {
@@ -392,6 +429,7 @@ final class Chapter01Coordinator:
                 reason: reason
             )
         }
+        await dadFinalBattleActionRouter.reset(reason: reason)
         chapterRunID = nil
         preDadFinalBattleBoundary.resetTransientPublicationState()
         handledCompletionEventIDs.removeAll(keepingCapacity: false)

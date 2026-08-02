@@ -24,6 +24,24 @@ struct ScriptedCharacterHeadingSnapshot: Sendable {
     let effectiveVisualCorrectionDegrees: Float
 }
 
+enum StoryPlayerContactDisposition: Sendable, Equatable {
+    case feedbackOnly
+    case applyDamage
+}
+
+struct StoryPlayerAttackContact: Sendable, Equatable {
+    let amount: Int
+    let attackerID: UUID?
+    let attackClipID: String?
+}
+
+struct StoryEnemyAcceptedDamageSnapshot: Sendable, Equatable {
+    let acceptedHitCount: Int
+    let acceptedHitCapacity: Int
+    let remainingAcceptedDamagePoints: Int
+    let isLethal: Bool
+}
+
 @MainActor
 final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     private enum FollowDemoState: Equatable {
@@ -89,6 +107,10 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     var onBenchmarkEnemyKilled: ((UUID, Int) -> Void)?
     var onBenchmarkEnemyDeathAnimationFinished: ((UUID, Int) -> Void)?
     var onAttackStarted: (() -> Void)?
+    var onStoryPlayerAttackContact:
+        ((StoryPlayerAttackContact) -> StoryPlayerContactDisposition)?
+    var onStoryAcceptedDamageChanged:
+        ((StoryEnemyAcceptedDamageSnapshot) -> Void)?
     private var storyPlayerHitCallbackOwnsBudget = false
 
     private let visualOffsetEntity = Entity()
@@ -2594,6 +2616,8 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         onBenchmarkEnemyKilled = nil
         onBenchmarkEnemyDeathAnimationFinished = nil
         onAttackStarted = nil
+        onStoryPlayerAttackContact = nil
+        onStoryAcceptedDamageChanged = nil
         storyPlayerHitCallbackOwnsBudget = false
 
         activeAttack = nil
@@ -4041,6 +4065,18 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
             lastDamageAcceptedAtBySourceID[hordeID] = now
             acceptedHitCount = acceptedDamageHitCount
 
+            onStoryAcceptedDamageChanged?(
+                StoryEnemyAcceptedDamageSnapshot(
+                    acceptedHitCount: acceptedHitCount,
+                    acceptedHitCapacity: hitsToKill,
+                    remainingAcceptedDamagePoints: max(
+                        0,
+                        hitsToKill - acceptedHitCount
+                    ),
+                    isLethal: shouldDie
+                )
+            )
+
             print(
                 """
                 [EnemyDamage] accepted
@@ -5021,6 +5057,19 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         distance: Float
     ) {
         guard !isBenchmarkPlayerDead else { return }
+
+        let storyContact = StoryPlayerAttackContact(
+            amount: amount,
+            attackerID: hordeID,
+            attackClipID: activeAttack?.clipID
+        )
+        if onStoryPlayerAttackContact?(storyContact) == .feedbackOnly {
+            print(
+                "[StoryPlayerContact] feedback-only; exposure and hit budget unchanged " +
+                    "attackerID=\(hordeID.uuidString) clipID=\(activeAttack?.clipID ?? "none")"
+            )
+            return
+        }
 
         playerExposure = min(
             attackConfiguration.exposureMax,

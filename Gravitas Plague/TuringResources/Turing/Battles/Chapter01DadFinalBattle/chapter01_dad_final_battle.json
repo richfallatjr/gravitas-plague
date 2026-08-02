@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "battleID": "chapter01.dadFinalBattle.001",
+  "trigger": {
+    "checkpoint": "chapter01.preDadFinalBattle.ready",
+    "requiresAllPostRobotBranches": true,
+    "terminalScriptPointID": "chapter01.hamReceiver.cateye81.script05"
+  },
+  "enemy": {
+    "storyEnemyID": "chapter01_infected_dad",
+    "characterID": "dad",
+    "sourceAsset": "dad_biped.usdz",
+    "anchorIDs": ["zombie_a1", "zombie_a2", "zombie_a3"],
+    "idleClipID": "idle_01",
+    "idleDurationSeconds": 5.0,
+    "turnClipID": "turn_right_90",
+    "turnCount": 2,
+    "turnDegreesPerCompletion": 90.0,
+    "walkClipID": "unstable_walk_01",
+    "externalMotionDriven": true,
+    "rootMotionEnabledDuringPath": false,
+    "incomingPunchPolicy": "storyGrandmaThreeX",
+    "storyAcceptedHitCapacityMultiplier": 2,
+    "retainCorpseAfterDeath": false
+  },
+  "door": {
+    "playerMayOpenDuringPortalApproach": true,
+    "playerMayCloseDuringBattle": false,
+    "autoOpenIfClosedAtLastAnchor": true,
+    "waitInIdleAtLastAnchorWhileOpening": true,
+    "lockAtLastAnchorAndDuringCrossing": true,
+    "requireFullyOpenBeforeCrossing": true
+  },
+  "portalHandoff": {
+    "reuseHordeRenderMirror": true,
+    "sourceIsAnimationAuthority": true,
+    "sourceIsCombatAuthority": true,
+    "mirrorHasCollision": false,
+    "mirrorHasAudio": false,
+    "mirrorHasDamageAuthority": false,
+    "revealThresholdPortalLocalZMeters": -0.3048,
+    "exitThresholdPortalLocalZMeters": 0.45
+  },
+  "music": {
+    "resourcePath": "Turing/Audio/chapter01/dad-battle-01.mp3",
+    "loop": false,
+    "gainDB": -15.0,
+    "start": "actualInitialIdleAnimationStart",
+    "damageEnableAtMediaTimeSeconds": 60.0,
+    "damageRemainsEnabledAfterNaturalCompletion": true
+  },
+  "playerDamage": {
+    "confirmedHitsToKillAfterEnable": 5,
+    "preEnableDisposition": "feedbackOnlyNoDamage",
+    "clock": "soundtrackMediaTime"
+  },
+  "richPrerecordedCues": [
+    {
+      "cueID": "dadBattleSongThirtySeconds",
+      "prerecordingID": "chapter01.room.rich.dadFinalBattle.musicThirtySeconds.001",
+      "trigger": "soundtrackMediaTime",
+      "triggerMediaTimeSeconds": 30.0,
+      "outputRoute": "roomGlobal",
+      "gainDB": -5.0
+    },
+    {
+      "cueID": "dadOneDamageRemaining",
+      "prerecordingID": "chapter01.room.rich.dadFinalBattle.oneDamageRemaining.001",
+      "trigger": "acceptedDamageRemainingEqualsOneNonlethal",
+      "triggerMediaTimeSeconds": null,
+      "outputRoute": "roomGlobal",
+      "gainDB": -5.0
+    }
+  ],
+  "richPrerecordedCuePolicy": {
+    "ordered": true,
+    "maximumActivePlayers": 1,
+    "blocksCombat": false,
+    "usesWalkieEnvelope": false,
+    "usesGeneratedSpeech": false
+  }
+}

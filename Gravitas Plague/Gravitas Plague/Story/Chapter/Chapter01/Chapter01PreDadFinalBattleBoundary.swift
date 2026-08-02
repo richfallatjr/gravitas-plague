@@ -33,7 +33,7 @@ final class Chapter01PreDadFinalBattleBoundary {
           checkpointRevision: \(event.checkpointRevision)
           sourceEventID: \(event.sourceEventID.uuidString)
           completedBranches: \(event.completedBranches)
-          finalBattleImplemented: false
+          finalBattleImplemented: true
         """)
         await sink?.preDadFinalBattleBecameReady(event)
     }

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter01.room.rich.dadFinalBattle.musicThirtySeconds.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": null,
+  "audioFile": "pr-rich-dad-battle-01.mp3",
+  "transcriptMode": "none",
+  "transcript": "",
+  "summary": "Authored Rich reaction exactly thirty seconds into the Dad battle soundtrack.",
+  "voicePromptIntent": "No generated continuation. Authored Chapter 01 Dad battle media only.",
+  "defaultEmotion": "authored in source media"
+}

@@ -131,6 +131,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         Chapter01RobotEncounterCoordinator?
     private var chapter01DadWindowCoordinator:
         Chapter01DadWindowCoordinator?
+    private var chapter01DadFinalBattleCoordinator:
+        Chapter01DadFinalBattleCoordinator?
     private var chapter01Coordinator: Chapter01Coordinator?
     private var prologueStoryActionRouter: PrologueStoryActionRouter?
     private var prologueCompletionCoordinator: TuringPrologueCompletionCoordinator?
@@ -505,7 +507,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                     self?.onPlayerDamaged?(amount)
                 },
                 onPlayerDeath: { [weak self] in
-                    self?.handleChapter01RobotPlayerDeath()
+                    self?.handleChapter01PlayerDeath(source: .robot)
                 }
             )
         let dadWindow = Chapter01DadWindowCoordinator(
@@ -517,11 +519,43 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             hamReceiver: turingRollingBenchBundleController
                 .hamReceiverInteractionController
         )
+        let preDadFinalBattleBoundary = Chapter01PreDadFinalBattleBoundary()
+        let dadFinalBattle = Chapter01DadFinalBattleCoordinator(
+            sceneRoot: root,
+            door: turingDoorBundleController,
+            clock: ProductionBattleClock(),
+            onEnemyPrepared: { [weak self] enemyID, controller in
+                self?.prepareChapter01DadBattleAudioAndCallbacks(
+                    enemyID: enemyID,
+                    controller: controller
+                )
+            },
+            onEnemyRemoved: { [weak self] enemyID in
+                self?.audioController.stopHostAudioSource(id: enemyID)
+            },
+            playerTargetProvider: { [weak self] in
+                self?.spatialProvider.currentPose()?.headPosition
+            },
+            onPlayerContactFeedback: {},
+            onPlayerDamage: { [weak self] amount in
+                self?.audioController.playRandomPlayerDamageHit()
+                self?.onPlayerDamaged?(amount)
+            },
+            onPlayerDeath: { [weak self] in
+                self?.handleChapter01PlayerDeath(source: .dadFinalBattle)
+            }
+        )
+        let dadFinalBattleActionRouter =
+            Chapter01DadFinalBattleActionRouter(
+                battle: dadFinalBattle
+            )
+        preDadFinalBattleBoundary.sink = dadFinalBattleActionRouter
         let chapterCoordinator = Chapter01Coordinator(
             walkie: turingStoryWalkieInteractionController,
             dad: dadWindow,
             postRobotInteractions: postRobotInteractions,
-            preDadFinalBattleBoundary: Chapter01PreDadFinalBattleBoundary(),
+            preDadFinalBattleBoundary: preDadFinalBattleBoundary,
+            dadFinalBattleActionRouter: dadFinalBattleActionRouter,
             startRobot: { [weak self] chapterRunID, transitionLease, sink in
                 guard let self else {
                     throw Chapter01Error.openingResourceUnavailable(
@@ -545,6 +579,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             chapter01: chapterCoordinator
         )
         chapter01DadWindowCoordinator = dadWindow
+        chapter01DadFinalBattleCoordinator = dadFinalBattle
         chapter01Coordinator = chapterCoordinator
         storyCompletionRouter = completionRouter
         let highMemoryPreflight = StoryTuringHighMemoryPreflightAdapter(
@@ -821,6 +856,49 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         }
         controller.onAttackStarted = {
             print("[Battle01] Grandma attack animation started")
+        }
+    }
+
+    private func prepareChapter01DadBattleAudioAndCallbacks(
+        enemyID: UUID,
+        controller: JockRetargetTestController
+    ) {
+        print(
+            "[Chapter01DadBattleLighting] room-side Dad uses automatic " +
+                "passthrough lighting explicitIBLReceiver=false"
+        )
+        audioController.attachHostAudioSource(
+            id: enemyID,
+            hostRootEntity: controller.rootEntity,
+            archetype: .dad,
+            headAudioEntity: controller.characterAudioEmitter,
+            breathingStartDelay: 0
+        )
+        controller.onPunchHit = { [weak self, weak controller] region in
+            guard let controller else { return }
+            self?.audioController.playConfirmedCharacterFaceHitSound(
+                archetype: .dad,
+                enemyID: controller.hordeBenchmarkID,
+                hitRegion: region,
+                sourceID: enemyID
+            )
+        }
+        controller.onCharacterDamageHit = { [weak self] in
+            self?.audioController.playCharacterDamageHit(
+                archetype: .dad,
+                enemyID: enemyID,
+                sourceID: enemyID
+            )
+        }
+        controller.onCharacterDeath = { [weak self] in
+            self?.audioController.playCharacterDeath(
+                archetype: .dad,
+                enemyID: enemyID,
+                sourceID: enemyID
+            )
+        }
+        controller.onAttackStarted = {
+            print("[Chapter01DadBattle] Dad attack animation started")
         }
     }
 
@@ -2374,7 +2452,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             deltaTime: TimeInterval(deltaTime)
         )
         chapter01Coordinator?.update(
-            deltaTime: TimeInterval(deltaTime)
+            deltaTime: TimeInterval(deltaTime),
+            playerTargetWorldPosition: currentHeadPosition
         )
 
         if let currentPose {
@@ -2526,8 +2605,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         battle01Coordinator = nil
         let chapter01Robot = chapter01RobotEncounterCoordinator
         let chapter01 = chapter01Coordinator
+        let chapter01DadBattle = chapter01DadFinalBattleCoordinator
         chapter01RobotEncounterCoordinator = nil
         chapter01DadWindowCoordinator = nil
+        chapter01DadFinalBattleCoordinator = nil
         chapter01Coordinator = nil
         storyCompletionRouter = nil
         prologueStoryActionRouter = nil
@@ -2535,6 +2616,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         turingHighMemoryPreflightAdapter = nil
         Task {
             await chapter01?.cancel(reason: "immersiveShutdown")
+            await chapter01DadBattle?.cancel(reason: "immersiveShutdown")
             await chapter01Robot?.cancel(reason: "immersiveShutdown")
             await TuringHighMemoryPreflightCoordinator.shared.clear()
             await TuringEpisodeFlowController.shared
@@ -5508,7 +5590,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         }
     }
 
-    private func handleChapter01RobotPlayerDeath() {
+    private func handleChapter01PlayerDeath(
+        source: ChapterPlayerDeathSource
+    ) {
         guard !isPlayerDeathSequenceActive else { return }
 
         isPlayerDeathSequenceActive = true
@@ -5520,8 +5604,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
         print(
             """
-            [Chapter01Robot] handling player death
-              confirmedRobotHits: 5
+            [Chapter01PlayerDeath] handling player death
+              source: \(source.rawValue)
+              confirmedHits: 5
               deathAudioDuration: \(String(format: "%.3f", deathAudioDuration))
               hasTrackedDevicePose: \(youDiedOriginFromDevice != nil)
             """
@@ -5539,6 +5624,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 print(
                     """
                     [YouDied] Chapter01 world card unavailable
+                      source: \(source.rawValue)
                       hasTrackedDevicePose: \(youDiedOriginFromDevice != nil)
                       hasPresenter: \(self.onYouDiedWorldCardRequested != nil)
                     """
@@ -5546,17 +5632,25 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             }
 
             print(
-                "[Chapter01Robot] final dark reached; you_died presentation requested"
+                "[Chapter01PlayerDeath] final dark reached; " +
+                    "source=\(source.rawValue) you_died presentation requested"
             )
         }
 
         Task { @MainActor [weak self] in
             guard let self else { return }
 
-            let delay = deathAudioDuration + 3.0
-            try? await Task.sleep(
-                nanoseconds: UInt64(delay * 1_000_000_000)
-            )
+            let presentationDelay = Task { @MainActor in
+                let delay = deathAudioDuration + 3.0
+                try? await Task.sleep(
+                    nanoseconds: UInt64(delay * 1_000_000_000)
+                )
+            }
+            if source == .dadFinalBattle {
+                await self.chapter01DadFinalBattleCoordinator?
+                    .waitUntilRuntimeReleased()
+            }
+            await presentationDelay.value
 
             guard self.isPlayerDeathSequenceActive else { return }
 
@@ -5569,7 +5663,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 self.onPlayerDeathStarted?()
 
                 print(
-                    "[Chapter01Robot] black faded out; Story episode picker requested"
+                    "[Chapter01PlayerDeath] black faded out; " +
+                        "source=\(source.rawValue) Story episode picker requested"
                 )
             }
 
@@ -5582,7 +5677,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 finishPresentation()
             }
 
-            print("[Chapter01Robot] lights coming back up.")
+            print(
+                "[Chapter01PlayerDeath] lights coming back up " +
+                    "source=\(source.rawValue)"
+            )
         }
     }
 

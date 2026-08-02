@@ -340,10 +340,29 @@ final class Battle01Coordinator {
             intro.install(
                 prepared: enemy,
                 doorContext: doorContext,
-                definition: definition
+                configuration: ScriptedPortalEnemyIntroConfiguration(
+                    idleDurationSeconds: definition.enemy.idleDurationSeconds,
+                    turnCount: definition.enemy.turnCount,
+                    turnDegreesPerCompletion: definition.enemy.turnDegreesPerCompletion,
+                    revealThresholdPortalLocalZMeters:
+                        definition.portalHandoff.revealThresholdPortalLocalZMeters,
+                    exitThresholdPortalLocalZMeters:
+                        definition.portalHandoff.exitThresholdPortalLocalZMeters
+                )
             ) { [weak self] nextState in
                 guard self?.battleInstanceID == instanceID else { return }
-                self?.state = nextState
+                switch nextState {
+                case .portalIdleFacingAway:
+                    self?.state = .portalIdleFacingAway
+                case .turnOne:
+                    self?.state = .turnOne
+                case .turnTwo:
+                    self?.state = .turnTwo
+                case .approachingDoor:
+                    self?.state = .approachingDoor
+                case .portalCrossing:
+                    self?.state = .portalCrossing
+                }
             }
 
             try await intro.performApproach()

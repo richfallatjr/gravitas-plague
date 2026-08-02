@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class Chapter01FourChancesTests: XCTestCase {
-    func testSparseBranchesCompleteInAnyOrderAndCommitReadyCheckpoint() async throws {
+    func testBranchesUnlockSequentiallyAndCommitReadyCheckpoint() async throws {
         let suite = "Chapter01FourChancesTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -12,27 +12,62 @@ final class Chapter01FourChancesTests: XCTestCase {
         _ = try await store.commit(.antigenGranted, sourceEventID: UUID())
         _ = try await store.unlockPostRobotHub(sourceEventID: UUID())
 
-        let first = try await store.completePostRobotBranch(
-            .hamReceiver,
-            terminalScriptPointID: Chapter01PostRobotBranch.hamReceiver.terminalScriptPointID,
-            sourceEventID: UUID()
-        )
-        XCTAssertEqual(first.snapshot.checkpoint, .postRobotHub)
-        XCTAssertFalse(first.becameAllBranchesComplete)
+        let current = await store.currentSnapshot()
+        let initial = try XCTUnwrap(current)
+        XCTAssertEqual(initial.postRobot.state(for: .dadFrame), .play)
+        XCTAssertEqual(initial.postRobot.state(for: .walkie), .closed)
+        XCTAssertEqual(initial.postRobot.state(for: .hamReceiver), .closed)
 
-        _ = try await store.completePostRobotBranch(
+        let first = try await store.completePostRobotBranch(
             .dadFrame,
             terminalScriptPointID: Chapter01PostRobotBranch.dadFrame.terminalScriptPointID,
             sourceEventID: UUID()
         )
-        let final = try await store.completePostRobotBranch(
+        XCTAssertEqual(first.snapshot.checkpoint, .postRobotHub)
+        XCTAssertFalse(first.becameAllBranchesComplete)
+        XCTAssertEqual(first.snapshot.postRobot.state(for: .dadFrame), .microphone)
+        XCTAssertEqual(first.snapshot.postRobot.state(for: .walkie), .play)
+        XCTAssertEqual(first.snapshot.postRobot.state(for: .hamReceiver), .closed)
+
+        let second = try await store.completePostRobotBranch(
             .walkie,
             terminalScriptPointID: Chapter01PostRobotBranch.walkie.terminalScriptPointID,
+            sourceEventID: UUID()
+        )
+        XCTAssertEqual(second.snapshot.postRobot.state(for: .dadFrame), .microphone)
+        XCTAssertEqual(second.snapshot.postRobot.state(for: .walkie), .microphone)
+        XCTAssertEqual(second.snapshot.postRobot.state(for: .hamReceiver), .play)
+
+        let final = try await store.completePostRobotBranch(
+            .hamReceiver,
+            terminalScriptPointID: Chapter01PostRobotBranch.hamReceiver.terminalScriptPointID,
             sourceEventID: UUID()
         )
         XCTAssertTrue(final.becameAllBranchesComplete)
         XCTAssertTrue(final.snapshot.postRobot.allBranchesComplete)
         XCTAssertEqual(final.snapshot.checkpoint, .preDadFinalBattleReady)
+        XCTAssertEqual(final.snapshot.postRobot.state(for: .dadFrame), .microphone)
+        XCTAssertEqual(final.snapshot.postRobot.state(for: .walkie), .microphone)
+        XCTAssertEqual(final.snapshot.postRobot.state(for: .hamReceiver), .microphone)
+    }
+
+    func testWalkieCannotCompleteBeforeDad() async throws {
+        let suite = "Chapter01FourChancesTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = Chapter01ProgressStore(defaults: defaults)
+        _ = try await store.unlockPostRobotHub(sourceEventID: UUID())
+
+        do {
+            _ = try await store.completePostRobotBranch(
+                .walkie,
+                terminalScriptPointID: Chapter01PostRobotBranch.walkie.terminalScriptPointID,
+                sourceEventID: UUID()
+            )
+            XCTFail("Walkie completed before Dad.")
+        } catch Chapter01Error.postRobotBranchNotAvailable(let branch) {
+            XCTAssertEqual(branch, .walkie)
+        }
     }
 
     func testDuplicateBranchCompletionIsIdempotent() async throws {

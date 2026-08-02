@@ -30,6 +30,11 @@ enum StoryDoorLifecycleState: String, Sendable, Equatable {
     case failed
 }
 
+enum StoryBattleDoorPermission: String, Sendable, Equatable {
+    case hiddenAndLocked
+    case playerMayOpen
+}
+
 enum StoryInteractionCapability: String, Sendable, Hashable {
     case walkiePlay
     case walkieMicrophone

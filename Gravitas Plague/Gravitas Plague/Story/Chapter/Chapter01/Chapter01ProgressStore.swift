@@ -77,10 +77,38 @@ struct Chapter01PostRobotProgress: Codable, Sendable, Equatable {
         completedBranches == Set(Chapter01PostRobotBranch.allCases)
     }
 
+    func isAvailable(_ branch: Chapter01PostRobotBranch) -> Bool {
+        guard unlocked else { return false }
+        switch branch {
+        case .dadFrame:
+            return true
+        case .walkie:
+            return completedBranches.contains(.dadFrame)
+        case .hamReceiver:
+            return completedBranches.contains(.walkie)
+        }
+    }
+
     func state(
         for branch: Chapter01PostRobotBranch
     ) -> TuringFlowInteractionGateController.State {
-        completedBranches.contains(branch) ? .microphone : .play
+        guard isAvailable(branch) else { return .closed }
+        return completedBranches.contains(branch) ? .microphone : .play
+    }
+
+    func normalizedForSequentialUnlock() -> Self {
+        guard unlocked else { return .locked }
+        var valid = Set<Chapter01PostRobotBranch>()
+        if completedBranches.contains(.dadFrame) {
+            valid.insert(.dadFrame)
+        }
+        if valid.contains(.dadFrame), completedBranches.contains(.walkie) {
+            valid.insert(.walkie)
+        }
+        if valid.contains(.walkie), completedBranches.contains(.hamReceiver) {
+            valid.insert(.hamReceiver)
+        }
+        return Self(unlocked: true, completedBranches: valid)
     }
 
     var gateStates: [StoryInteractionSurfaceID: TuringFlowInteractionGateController.State] {
@@ -173,15 +201,25 @@ actor Chapter01ProgressStore {
                 current.committedAt = Date()
                 current.contentRevision = contentRevision
             }
+            let normalized = current.postRobot.normalizedForSequentialUnlock()
+            if normalized != current.postRobot {
+                current.postRobot = normalized
+                current.checkpoint = normalized.allBranchesComplete
+                    ? .preDadFinalBattleReady
+                    : .postRobotHub
+                current.revision += 1
+                current.committedAt = Date()
+            }
             return current
         }
         if let legacy = try? decoder.decode(LegacyV2Snapshot.self, from: data),
            legacy.schemaVersion == 2 {
-            let allComplete = legacy.postRobot.allBranchesComplete
+            let postRobot = legacy.postRobot.normalizedForSequentialUnlock()
+            let allComplete = postRobot.allBranchesComplete
             return Chapter01ProgressSnapshot(
                 schemaVersion: Chapter01ProgressSnapshot.currentSchemaVersion,
                 checkpoint: allComplete ? .preDadFinalBattleReady : .postRobotHub,
-                postRobot: legacy.postRobot,
+                postRobot: postRobot,
                 revision: legacy.revision,
                 sourceEventIDs: legacy.sourceEventIDs,
                 committedAt: legacy.committedAt,
@@ -278,7 +316,18 @@ actor Chapter01ProgressStore {
         guard branch.terminalScriptPointID == terminalScriptPointID else {
             throw Chapter01Error.terminalPointMismatch
         }
+        guard next.postRobot.isAvailable(branch) else {
+            throw Chapter01Error.postRobotBranchNotAvailable(branch)
+        }
         if next.sourceEventIDs.contains(sourceEventID) {
+            return Chapter01PostRobotBranchCompletionResult(
+                snapshot: next,
+                branch: branch,
+                wasNewlyCompleted: false,
+                becameAllBranchesComplete: false
+            )
+        }
+        if next.postRobot.completedBranches.contains(branch) {
             return Chapter01PostRobotBranchCompletionResult(
                 snapshot: next,
                 branch: branch,

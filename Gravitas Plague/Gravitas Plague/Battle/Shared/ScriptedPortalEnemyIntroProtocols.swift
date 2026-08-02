@@ -2,6 +2,30 @@ import Foundation
 import RealityKit
 import simd
 
+@MainActor
+struct ScriptedPortalPreparedEnemy {
+    let enemyID: UUID
+    let sourceController: JockRetargetTestController
+    let sourceRoot: Entity
+    let portalMirror: StoryPortalEnemyRenderMirrorAdapter
+}
+
+struct ScriptedPortalEnemyIntroConfiguration: Sendable, Equatable {
+    let idleDurationSeconds: Double
+    let turnCount: Int
+    let turnDegreesPerCompletion: Float
+    let revealThresholdPortalLocalZMeters: Float
+    let exitThresholdPortalLocalZMeters: Float
+}
+
+enum ScriptedPortalEnemyIntroState: String, Sendable, Equatable {
+    case portalIdleFacingAway
+    case turnOne
+    case turnTwo
+    case approachingDoor
+    case portalCrossing
+}
+
 protocol BattleClock: Sendable {
     func sleep(for duration: Duration) async throws
 }

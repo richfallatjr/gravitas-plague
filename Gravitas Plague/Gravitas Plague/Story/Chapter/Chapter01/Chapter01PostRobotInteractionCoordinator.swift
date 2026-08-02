@@ -75,9 +75,30 @@ final class Chapter01PostRobotInteractionCoordinator {
         )
     }
 
+    func applyProgress(
+        snapshot: Chapter01ProgressSnapshot,
+        reason: String
+    ) async throws {
+        guard snapshot.postRobot.unlocked else {
+            throw Chapter01Error.postRobotHubNotUnlocked
+        }
+        try await applySnapshot(snapshot, reason: reason)
+    }
+
     private func install(
         snapshot: Chapter01ProgressSnapshot,
         transitionLease: StoryInteractionLease,
+        reason: String
+    ) async throws {
+        try await applySnapshot(snapshot, reason: reason)
+        await arbiter.release(
+            transitionLease,
+            reason: "\(reason).ready"
+        )
+    }
+
+    private func applySnapshot(
+        _ snapshot: Chapter01ProgressSnapshot,
         reason: String
     ) async throws {
         for branch in snapshot.postRobot.completedBranches {
@@ -97,9 +118,12 @@ final class Chapter01PostRobotInteractionCoordinator {
             snapshot.postRobot.gateStates,
             reason: reason
         )
-        await arbiter.release(
-            transitionLease,
-            reason: "\(reason).ready"
+        print(
+            "[Chapter01PostRobot] sequential gates applied " +
+                "dad=\(snapshot.postRobot.state(for: .dadFrame).rawValue) " +
+                "walkie=\(snapshot.postRobot.state(for: .walkie).rawValue) " +
+                "ham=\(snapshot.postRobot.state(for: .hamReceiver).rawValue) " +
+                "reason=\(reason)"
         )
     }
 }

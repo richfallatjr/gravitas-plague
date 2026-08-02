@@ -588,6 +588,10 @@ final class TuringStoryDoorBundleController:
             try await ensurePortalWorldLoaded(reason: "battleAcquire.\(reason)")
             if battleDoorState == .closed {
                 portalLifecycle.markClosedReady(lease: lease)
+                await StoryInteractionArbiter.shared.updateDoorState(
+                    .closedReady,
+                    reason: "battleAcquire.\(reason)"
+                )
             }
             assertDoorPortalInvariant(context: "battleAcquire.\(reason)")
             print("""
@@ -660,6 +664,10 @@ final class TuringStoryDoorBundleController:
         try await ensurePortalWorldLoaded(reason: "Battle01.\(reason).doorOpen")
         portalLifecycle.markClosedReady(lease: lease)
         portalLifecycle.markOpening(lease: lease)
+        await StoryInteractionArbiter.shared.updateDoorState(
+            .opening,
+            reason: "battleOpen.\(reason)"
+        )
         updateInteractionPresentation()
         try await animationController.openAndWait(
             reason: "Battle01.\(reason)"
@@ -668,6 +676,10 @@ final class TuringStoryDoorBundleController:
             throw BundleError.noPlacement
         }
         portalLifecycle.markOpen(lease: lease)
+        await StoryInteractionArbiter.shared.updateDoorState(
+            .open,
+            reason: "battleOpen.\(reason)"
+        )
         updateInteractionPresentation()
         assertDoorPortalInvariant(context: "battleOpen.\(reason)")
     }
@@ -687,6 +699,10 @@ final class TuringStoryDoorBundleController:
         }
         portalRequiredByDoorState = true
         portalLifecycle.markClosing(lease: lease)
+        await StoryInteractionArbiter.shared.updateDoorState(
+            .closing,
+            reason: "battleClose.\(reason)"
+        )
         updateInteractionPresentation()
         try await animationController.closeAndWait(
             reason: "Battle01.\(reason)"
@@ -699,6 +715,10 @@ final class TuringStoryDoorBundleController:
         portalLifecycle.markUnloading(
             requestID: unloadRequestID,
             lease: lease
+        )
+        await StoryInteractionArbiter.shared.updateDoorState(
+            .unloading,
+            reason: "battleClose.\(reason)"
         )
         battlePortalOwnerIDs.remove(ownerID)
         portalRequiredByDoorState = false

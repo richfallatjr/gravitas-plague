@@ -20,50 +20,54 @@ final class ScriptedPortalEnemyIntroCoordinator {
 
     private let clock: any BattleClock
     private let follower = ScriptedAnchorPathFollower()
-    private var prepared: Battle01PreparedEnemy?
+    private var prepared: ScriptedPortalPreparedEnemy?
     private var doorContext: TuringStoryDoorBattlePortalContext?
-    private var definition: Battle01Definition?
+    private var configuration: ScriptedPortalEnemyIntroConfiguration?
     private var pathContinuation: CheckedContinuation<Void, Error>?
     private var turnContinuation: CheckedContinuation<Void, Error>?
     private var activeTurnToken: UUID?
-    private var onStateChange: ((Battle01State) -> Void)?
+    private var onInitialIdleStarted: (() async throws -> Void)?
+    private var onStateChange: ((ScriptedPortalEnemyIntroState) -> Void)?
 
     init(clock: any BattleClock) {
         self.clock = clock
     }
 
     func install(
-        prepared: Battle01PreparedEnemy,
+        prepared: ScriptedPortalPreparedEnemy,
         doorContext: TuringStoryDoorBattlePortalContext,
-        definition: Battle01Definition,
-        onStateChange: @escaping (Battle01State) -> Void
+        configuration: ScriptedPortalEnemyIntroConfiguration,
+        onInitialIdleStarted: (() async throws -> Void)? = nil,
+        onStateChange: @escaping (ScriptedPortalEnemyIntroState) -> Void
     ) {
         self.prepared = prepared
         self.doorContext = doorContext
-        self.definition = definition
+        self.configuration = configuration
+        self.onInitialIdleStarted = onInitialIdleStarted
         self.onStateChange = onStateChange
     }
 
     func performApproach() async throws {
         guard let prepared,
               let doorContext,
-              let definition else {
+              let configuration else {
             throw IntroError.cancelled("notInstalled")
         }
 
         try prepared.sourceController.playScriptedIdleLoop()
         onStateChange?(.portalIdleFacingAway)
-        print("[Battle01] idle started durationSeconds=\(definition.enemy.idleDurationSeconds)")
-        try await clock.sleep(for: .seconds(definition.enemy.idleDurationSeconds))
+        try await onInitialIdleStarted?()
+        print("[ScriptedPortalIntro] idle started durationSeconds=\(configuration.idleDurationSeconds)")
+        try await clock.sleep(for: .seconds(configuration.idleDurationSeconds))
         try Task.checkCancellation()
-        print("[Battle01] idle completed")
+        print("[ScriptedPortalIntro] idle completed")
 
-        for turnIndex in 1...definition.enemy.turnCount {
+        for turnIndex in 1...configuration.turnCount {
             onStateChange?(turnIndex == 1 ? .turnOne : .turnTwo)
             try await playRightTurn(
                 controller: prepared.sourceController,
                 turnIndex: turnIndex,
-                expectedDegrees: definition.enemy.turnDegreesPerCompletion
+                expectedDegrees: configuration.turnDegreesPerCompletion
             )
         }
 
@@ -77,7 +81,7 @@ final class ScriptedPortalEnemyIntroCoordinator {
         let flatTangent = simd_normalize(SIMD3<Float>(tangent.x, 0, tangent.z))
         let flatForward = simd_normalize(SIMD3<Float>(forward.x, 0, forward.z))
         let angle = acos(min(1, max(-1, simd_dot(flatForward, flatTangent)))) * 180 / .pi
-        print("[Battle01] post-turn path alignment degrees=\(angle)")
+        print("[ScriptedPortalIntro] post-turn path alignment degrees=\(angle)")
 
         onStateChange?(.approachingDoor)
         try await follow(
@@ -87,19 +91,19 @@ final class ScriptedPortalEnemyIntroCoordinator {
                 .init(fromID: "zombie_a2", toID: "zombie_a3", fromWorld: a2, toWorld: a3)
             ]
         )
-        print("[Battle01] arrived at door threshold")
+        print("[ScriptedPortalIntro] arrived at door threshold")
     }
 
     func performPortalCrossing() async throws {
         guard let prepared,
               let doorContext,
-              let definition else {
+              let configuration else {
             throw IntroError.cancelled("notInstalled")
         }
         onStateChange?(.portalCrossing)
         let a3 = doorContext.zombieA3.position(relativeTo: nil)
         let target = prepared.portalMirror.roomSideTarget(
-            distance: definition.portalHandoff.exitThresholdPortalLocalZMeters + 0.35,
+            distance: configuration.exitThresholdPortalLocalZMeters + 0.35,
             floorY: a3.y
         )
         try await follow(
@@ -121,15 +125,15 @@ final class ScriptedPortalEnemyIntroCoordinator {
 
     func update(deltaTime: TimeInterval) {
         guard let prepared,
-              let definition else { return }
+              let configuration else { return }
         prepared.sourceController.update(
             deltaTime: Float(deltaTime),
             currentHeadPosition: nil
         )
         follower.update(deltaTime: deltaTime)
         prepared.portalMirror.sync(
-            revealThreshold: definition.portalHandoff.revealThresholdPortalLocalZMeters,
-            exitThreshold: definition.portalHandoff.exitThresholdPortalLocalZMeters
+            revealThreshold: configuration.revealThresholdPortalLocalZMeters,
+            exitThreshold: configuration.exitThresholdPortalLocalZMeters
         )
     }
 
@@ -149,7 +153,8 @@ final class ScriptedPortalEnemyIntroCoordinator {
         }
         prepared = nil
         doorContext = nil
-        definition = nil
+        configuration = nil
+        onInitialIdleStarted = nil
         onStateChange = nil
     }
 
@@ -163,7 +168,7 @@ final class ScriptedPortalEnemyIntroCoordinator {
         expectedDegrees: Float
     ) async throws {
         let token = UUID()
-        print("[Battle01] turn started turnIndex=\(turnIndex) token=\(token.uuidString)")
+        print("[ScriptedPortalIntro] turn started turnIndex=\(turnIndex) token=\(token.uuidString)")
         try await withCheckedThrowingContinuation {
             (continuation: CheckedContinuation<Void, Error>) in
             activeTurnToken = token
@@ -180,7 +185,7 @@ final class ScriptedPortalEnemyIntroCoordinator {
         }
         try Task.checkCancellation()
         print(
-            "[Battle01] turn completed turnIndex=\(turnIndex) expectedDegrees=\(expectedDegrees) authoredRuntimeYawCommit=true manualYawCommit=false"
+            "[ScriptedPortalIntro] turn completed turnIndex=\(turnIndex) expectedDegrees=\(expectedDegrees) authoredRuntimeYawCommit=true manualYawCommit=false"
         )
     }
 
@@ -189,7 +194,7 @@ final class ScriptedPortalEnemyIntroCoordinator {
         result: Result<Void, Error>
     ) {
         guard activeTurnToken == token else {
-            print("[Battle01] stale turn completion ignored token=\(token.uuidString)")
+            print("[ScriptedPortalIntro] stale turn completion ignored token=\(token.uuidString)")
             return
         }
         activeTurnToken = nil
