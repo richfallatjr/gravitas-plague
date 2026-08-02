@@ -137,6 +137,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     private var prologueStoryActionRouter: PrologueStoryActionRouter?
     private var prologueCompletionCoordinator: TuringPrologueCompletionCoordinator?
     private var storyCompletionRouter: TuringStoryCompletionRouter?
+    private let storyTitleCardTransitionCoordinator =
+        StoryTitleCardTransitionCoordinator()
     private var turingHighMemoryPreflightAdapter:
         StoryTuringHighMemoryPreflightAdapter?
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
@@ -253,6 +255,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
     var onPlayerDamaged: ((Int) -> Void)?
     var onPlayerDeathStarted: (() -> Void)?
+    var onStoryEpisodePickerRequested: ((String) -> Void)?
     @MainActor
     var onYouDiedWorldCardRequested: ((simd_float4x4) -> Void)?
 
@@ -345,6 +348,17 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     private let benchmarkNextWaveDelaySeconds: TimeInterval = 1.20
     private let hordePlayerHitLimitPerWave = 3
     private let hordeSpawnRadiusMeters: Float = 2.45
+
+    func configureStoryTitleCardPresentation(
+        presenter: StoryTitleCardWorldPresenter,
+        blackout: ImmersiveBlackoutController
+    ) {
+        storyTitleCardTransitionCoordinator.bind(
+            world: self,
+            presenter: presenter,
+            blackout: blackout
+        )
+    }
 
     func makeSceneRoot(
         initialAtmosphere: PlagueForestAtmosphere,
@@ -578,6 +592,12 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 )
             }
         )
+        chapterCoordinator.onEpisodeBoundary = { [weak self] event in
+            guard let self else {
+                throw StoryTitleCardError.missingRouteOwner
+            }
+            try await self.handleStoryEpisodeBoundary(event)
+        }
         dadFinalBattle.setCompletionSink(chapterCoordinator)
         let completionRouter = TuringStoryCompletionRouter(
             prologue: completionCoordinator,
@@ -1117,6 +1137,13 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
         case .continueStoryEpisode(let episodeID):
             continueStoryEpisode(episodeID)
+
+        case .presentStoryTitleCard(let request):
+            do {
+                try storyTitleCardTransitionCoordinator.accept(request)
+            } catch {
+                titleCardTransitionFailed(error, request: request)
+            }
 
         case .requestStoryWalkieBundlePlacement:
             requestTuringStoryPlacementRoomScan(
@@ -2603,6 +2630,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     }
 
     func shutdown() {
+        storyTitleCardTransitionCoordinator.reset(reason: "immersiveShutdown")
         StoryInteractionPresentationCoordinator.shared.stop()
         TuringStoryStateTeleportCoordinator.shared.detach(self)
         TuringStoryStageCoordinator.shared.invalidate(reason: "immersiveShutdown")
@@ -5496,6 +5524,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     ) {
         guard !isPlayerDeathSequenceActive else { return }
 
+        storyTitleCardTransitionCoordinator.cancelForDeath()
+
         isPlayerDeathSequenceActive = true
         hordeRuntimePhase = .playerDead
         submitHordeScoresIfNeeded(
@@ -5599,6 +5629,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         source: ChapterPlayerDeathSource
     ) {
         guard !isPlayerDeathSequenceActive else { return }
+
+        storyTitleCardTransitionCoordinator.cancelForDeath()
 
         isPlayerDeathSequenceActive = true
 
@@ -6141,6 +6173,200 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             withExtension: "png"
         ) == nil {
             print("[PlagueDeath] WARNING you_died.png not found in main bundle")
+        }
+    }
+}
+
+extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
+    func currentTitleCardDeviceTransform() -> simd_float4x4? {
+        spatialProvider.currentTrackedDeviceTransform()
+    }
+
+    func acquireTitleCardTransitionLease(
+        transitionID: UUID,
+        source: String
+    ) async throws -> StoryInteractionLease {
+        try await turingDoorBundleController
+            .closeUnloadAndTransferToStoryTransition(
+                transitionID: transitionID,
+                reason: "titleCard.\(source)"
+            )
+    }
+
+    func commitTitleCardDestination(
+        _ destination: StoryTitleCardDestination,
+        transitionLease: StoryInteractionLease,
+        requestID: UUID
+    ) async throws -> StoryTitleCardRouteLeaseDisposition {
+        try await StoryInteractionArbiter.shared.requireCurrent(
+            transitionLease
+        )
+
+        let disposition: StoryTitleCardRouteLeaseDisposition
+        switch destination {
+        case .start(.prologue):
+            try await StoryInteractionArbiter.shared.setStableInteractionPolicy(
+                .unrestricted,
+                storyTransitionLease: transitionLease,
+                reason: "titleCard.start.prologue"
+            )
+            await Chapter01ProgressStore.shared.clear(
+                reason: "titleCard.start.prologue"
+            )
+            TuringStoryProgressStore.shared.clear(
+                reason: "titleCard.start.prologue"
+            )
+            let plan = try TuringStoryDestinationPlanner
+                .startOfEpisode(.prologue)
+            try await TuringStoryStateTeleportCoordinator.shared.apply(
+                plan,
+                source: "titleCard.start.prologue"
+            )
+            disposition = .releaseAfterFade
+
+        case .start(.chapter01):
+            TuringStoryProgressStore.shared.clear(
+                reason: "titleCard.start.chapter01"
+            )
+            guard let chapter01Coordinator else {
+                throw StoryTitleCardError.missingRouteOwner
+            }
+            try await chapter01Coordinator.beginAtRoot(
+                transitionLease: transitionLease
+            )
+            disposition = .releaseAfterFade
+
+        case .continueFrom(.prologue(let snapshot)):
+            try await StoryInteractionArbiter.shared.setStableInteractionPolicy(
+                .unrestricted,
+                storyTransitionLease: transitionLease,
+                reason: "titleCard.continue.prologue"
+            )
+            let plan = try TuringStoryDestinationPlanner.destination(
+                for: snapshot
+            )
+            try await TuringStoryStateTeleportCoordinator.shared.apply(
+                plan,
+                source: "titleCard.continue.prologue"
+            )
+            disposition = .releaseAfterFade
+
+        case .continueFrom(.chapter01(let snapshot)):
+            guard let chapter01Coordinator else {
+                throw StoryTitleCardError.missingRouteOwner
+            }
+            disposition = try await chapter01Coordinator
+                .resumeFromSavedCheckpoint(
+                    frozenSnapshot: snapshot,
+                    transitionLease: transitionLease
+                )
+
+        case .advance(let completed, let next):
+            guard TuringEpisodeCatalog.nextUnlockedEpisode(after: completed) == next,
+                  next == .chapter01,
+                  let chapter01Coordinator else {
+                throw StoryTitleCardError.invalidNaturalDestination
+            }
+            try await chapter01Coordinator.beginAtRoot(
+                transitionLease: transitionLease
+            )
+            disposition = .releaseAfterFade
+
+        case .endOfAvailableContent(let completedEpisode):
+            guard TuringEpisodeCatalog.nextUnlockedEpisode(
+                after: completedEpisode
+            ) == nil else {
+                throw StoryTitleCardError
+                    .terminalCardUsedWithUnlockedSuccessor
+            }
+            onStoryEpisodePickerRequested?(
+                "endOfAvailableContent.\(completedEpisode.rawValue)"
+            )
+            disposition = .releaseAfterFade
+        }
+
+        print(
+            """
+            [StoryTitleCard] route committed
+              requestID: \(requestID.uuidString)
+              destination: \(destination)
+              noRescan: true
+              leaseDisposition: \(disposition)
+            """
+        )
+        return disposition
+    }
+
+    func titleCardTransitionFailed(
+        _ error: Error,
+        request: StoryTitleCardTransitionRequest
+    ) {
+        showTemporaryInstructionHUD(
+            "Story transition failed.",
+            clearAfterSeconds: 4,
+            reason: "titleCardFailed.\(request.requestID.uuidString)"
+        )
+        onStoryEpisodePickerRequested?(
+            "titleCardFailed.\(request.source.rawValue)"
+        )
+        print(
+            "[StoryTitleCard] route failure requestID=" +
+                request.requestID.uuidString +
+                " error=\(error.localizedDescription)"
+        )
+    }
+
+    private func handleStoryEpisodeBoundary(
+        _ event: StoryEpisodeBoundaryEvent
+    ) async throws {
+        guard event.actualTerminalPlaybackCompleted else {
+            throw StoryTitleCardError.terminalPlaybackIncomplete
+        }
+
+        let transitionID = UUID()
+        let lease = try await TuringEpisodeFlowController.shared
+            .transferActiveInteractionToStoryTransition(
+                transitionID: transitionID,
+                reason: "episodeBoundary.\(event.completedEpisodeID.rawValue)"
+            )
+
+        let request: StoryTitleCardTransitionRequest
+        if let next = TuringEpisodeCatalog.nextUnlockedEpisode(
+            after: event.completedEpisodeID
+        ) {
+            request = StoryTitleCardTransitionRequest(
+                requestID: transitionID,
+                source: .naturalEpisodeBoundary,
+                descriptor: StoryTitleCardCatalog.descriptor(for: next),
+                destination: .advance(
+                    from: event.completedEpisodeID,
+                    to: next
+                ),
+                menuMusicPolicy: .unchanged
+            )
+        } else {
+            request = StoryTitleCardTransitionRequest(
+                requestID: transitionID,
+                source: .naturalEpisodeBoundary,
+                descriptor: StoryTitleCardCatalog.endOfAvailableContent,
+                destination: .endOfAvailableContent(
+                    completedEpisode: event.completedEpisodeID
+                ),
+                menuMusicPolicy: .unchanged
+            )
+        }
+
+        do {
+            try storyTitleCardTransitionCoordinator.accept(
+                request,
+                ownership: .transferred(lease)
+            )
+        } catch {
+            await StoryInteractionArbiter.shared.release(
+                lease,
+                reason: "episodeBoundaryTitleRejected"
+            )
+            throw error
         }
     }
 }

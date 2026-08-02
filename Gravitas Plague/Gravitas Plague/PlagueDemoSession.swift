@@ -124,6 +124,7 @@ final class PlagueDemoSession: ObservableObject {
         case cancelRoomSkinning
         case startStoryEpisode(TuringEpisodeID)
         case continueStoryEpisode(TuringEpisodeID)
+        case presentStoryTitleCard(StoryTitleCardTransitionRequest)
         case requestStoryWalkieBundlePlacement
         case requestTuringStoryPlacementRoomScan(String)
         case restartTuringStoryPlacementRoomScan(String)
@@ -375,6 +376,10 @@ final class PlagueDemoSession: ObservableObject {
             print("[TuringEpisodePicker] presentation rejected reason=storyStageNotEstablished source=\(source)")
             return
         }
+        selectedOperationMode = .story
+        selectedStoryEpisodeID = nil
+        isStoryEpisodePickerPresented = true
+        statusMessage = "Select a Story chapter."
         storyEpisodePickerRequestRevision &+= 1
         print("""
         [TuringEpisodePicker] presentation requested
@@ -832,6 +837,21 @@ final class PlagueDemoSession: ObservableObject {
         print(
             "[TuringStory] continuation requested episodeID=\(episodeID.rawValue) noRescan=true"
         )
+    }
+
+    func requestStoryTitleCardTransition(
+        _ request: StoryTitleCardTransitionRequest
+    ) {
+        selectedOperationMode = .story
+        selectedStoryEpisodeID = request.destination.episodeID
+        isStoryEpisodePickerPresented = false
+        experienceMode = .story
+        activeMode = .none
+        statusMessage = request.source == .episodePickerContinue
+            ? "Continuing Story."
+            : "Starting Story."
+        resetPlayerDeathState()
+        send(.presentStoryTitleCard(request))
     }
 
     func toggleForestAtmosphere() {

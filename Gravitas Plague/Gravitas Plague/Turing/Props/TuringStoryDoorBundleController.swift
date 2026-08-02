@@ -531,6 +531,38 @@ final class TuringStoryDoorBundleController:
         return turingLease
     }
 
+    func closeUnloadAndTransferToStoryTransition(
+        transitionID: UUID,
+        reason: String
+    ) async throws -> StoryInteractionLease {
+        guard let doorLease = storyInteractionLease,
+              let portalLease = portalLifecycle.activeLease,
+              portalLease.owner == .player else {
+            return try await StoryInteractionArbiter.shared
+                .claimStoryTransition(
+                    transitionID: transitionID,
+                    source: reason
+                )
+        }
+
+        try await closeDoorAndUnload(
+            lease: portalLease,
+            reason: "storyTransition.\(reason)"
+        )
+        await StoryInteractionArbiter.shared.updateDoorState(
+            .closedUnloaded,
+            reason: "storyTransition.\(reason)"
+        )
+        let transitionLease = try await StoryInteractionArbiter.shared
+            .transferDoorToStoryTransition(
+                doorLease: doorLease,
+                transitionID: transitionID,
+                reason: reason
+            )
+        storyInteractionLease = nil
+        return transitionLease
+    }
+
     func setBattleInteractionLocked(
         _ locked: Bool,
         ownerID: UUID,

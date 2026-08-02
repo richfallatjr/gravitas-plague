@@ -245,6 +245,25 @@ actor StoryInteractionArbiter {
         )
     }
 
+    func transferDoorToStoryTransition(
+        doorLease: StoryInteractionLease,
+        transitionID: UUID,
+        reason: String
+    ) async throws -> StoryInteractionLease {
+        guard exclusiveLease == doorLease else {
+            throw StoryInteractionClaimError.staleLease
+        }
+        guard case .doorPortal = doorLease.owner,
+              doorState == .closedUnloaded else {
+            throw StoryInteractionClaimError.invalidTransfer
+        }
+        return await transfer(
+            from: doorLease,
+            to: .storyTransition(transitionID: transitionID),
+            reason: reason
+        )
+    }
+
     func transferTuringToBattle(
         turingLease: StoryInteractionLease,
         battleInstanceID: UUID,
@@ -374,6 +393,18 @@ actor StoryInteractionArbiter {
 
     func release(_ lease: StoryInteractionLease, reason: String) async {
         _ = await releaseAndCurrentSnapshot(lease, reason: reason)
+    }
+
+    func releaseCurrentStoryTransition(
+        transitionID: UUID,
+        reason: String
+    ) async {
+        guard let exclusiveLease,
+              case .storyTransition(let currentID) = exclusiveLease.owner,
+              currentID == transitionID else {
+            return
+        }
+        await release(exclusiveLease, reason: reason)
     }
 
     @discardableResult

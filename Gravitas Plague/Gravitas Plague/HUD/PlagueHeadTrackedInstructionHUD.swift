@@ -15,9 +15,7 @@ final class PlagueHeadTrackedInstructionHUD {
     private let rootPosition = SIMD3<Float>(0, -0.32, -1.05)
 
     private var font: UIFont {
-        UIFont(name: "Baskerville-SemiBold", size: 34)
-            ?? UIFont(name: "Georgia-Bold", size: 34)
-            ?? UIFont.systemFont(ofSize: 34, weight: .semibold)
+        PlagueHUDTypography.instruction()
     }
 
     func ensure(
@@ -84,12 +82,7 @@ final class PlagueHeadTrackedInstructionHUD {
 
         var textMaterial = UnlitMaterial()
         textMaterial.color = .init(
-            tint: UIColor(
-                red: 0.92,
-                green: 0.86,
-                blue: 0.72,
-                alpha: 1.0
-            )
+            tint: PlagueHUDTypography.textColor
         )
         textMaterial.blending = .transparent(opacity: 1.0)
 

@@ -33,6 +33,6 @@
   "progression": {
     "nextScriptPointID": null,
     "automaticAdvance": false,
-    "interactionGateAfterCompletion": "microphone"
+    "interactionGateAfterCompletion": "closed"
   }
 }

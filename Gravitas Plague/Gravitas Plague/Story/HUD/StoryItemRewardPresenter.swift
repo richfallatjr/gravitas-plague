@@ -171,9 +171,7 @@ final class StoryItemRewardPresenter {
         let mesh = MeshResource.generateText(
             text,
             extrusionDepth: 0.0005,
-            font: UIFont(name: "Baskerville-SemiBold", size: 34)
-                ?? UIFont(name: "Georgia-Bold", size: 34)
-                ?? UIFont.systemFont(ofSize: 34, weight: .semibold),
+            font: PlagueHUDTypography.instruction(),
             containerFrame: CGRect(x: -420, y: -70, width: 840, height: 140),
             alignment: .center,
             lineBreakMode: .byWordWrapping
@@ -181,12 +179,7 @@ final class StoryItemRewardPresenter {
 
         var textMaterial = UnlitMaterial()
         textMaterial.color = .init(
-            tint: UIColor(
-                red: 0.92,
-                green: 0.86,
-                blue: 0.72,
-                alpha: 1.0
-            )
+            tint: PlagueHUDTypography.textColor
         )
         textMaterial.blending = .transparent(opacity: 1.0)
         let label = ModelEntity(mesh: mesh, materials: [textMaterial])

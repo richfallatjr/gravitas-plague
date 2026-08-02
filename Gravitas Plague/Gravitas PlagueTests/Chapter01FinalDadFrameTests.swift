@@ -27,7 +27,7 @@ final class Chapter01FinalDadFrameTests: XCTestCase {
         XCTAssertFalse(descriptor.transmission.commSFX.sendAfterGenerated)
         XCTAssertEqual(
             descriptor.progression.interactionGateAfterCompletion,
-            .microphone
+            .closed
         )
         XCTAssertEqual(descriptor.transmission.conversationKey, conversationKey)
         XCTAssertEqual(descriptor.transmission.backgroundMusic?.gainDB, -25)

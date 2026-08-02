@@ -35,6 +35,8 @@ final class Chapter01Coordinator:
     private var storyTransitionLease: StoryInteractionLease?
     private var handledCompletionEventIDs = Set<UUID>()
 
+    var onEpisodeBoundary: ((StoryEpisodeBoundaryEvent) async throws -> Void)?
+
     init(
         walkie: TuringStoryWalkieInteractionController,
         dad: Chapter01DadWindowCoordinator,
@@ -63,14 +65,24 @@ final class Chapter01Coordinator:
         self.cancelRobot = cancelRobot
     }
 
-    func beginAtRoot() async throws {
+    func beginAtRoot(
+        transitionLease: StoryInteractionLease? = nil
+    ) async throws {
         guard TuringStoryStageCoordinator.shared.isEstablished else {
             throw Chapter01Error.stageNotEstablished
         }
         await cancel(reason: "beginAtRoot")
-        await arbiter.resetStableInteractionPolicy(
-            reason: "chapter01.beginAtRoot"
-        )
+        if let transitionLease {
+            try await arbiter.setStableInteractionPolicy(
+                .unrestricted,
+                storyTransitionLease: transitionLease,
+                reason: "chapter01.beginAtRoot"
+            )
+        } else {
+            await arbiter.resetStableInteractionPolicy(
+                reason: "chapter01.beginAtRoot"
+            )
+        }
         try await dad.validateAvailability()
 
         let runID = UUID()
@@ -100,11 +112,21 @@ final class Chapter01Coordinator:
         )
     }
 
-    func resumeFromSavedCheckpoint() async throws {
+    @discardableResult
+    func resumeFromSavedCheckpoint(
+        frozenSnapshot: Chapter01ProgressSnapshot? = nil,
+        transitionLease suppliedTransitionLease: StoryInteractionLease? = nil
+    ) async throws -> StoryTitleCardRouteLeaseDisposition {
         guard TuringStoryStageCoordinator.shared.isEstablished else {
             throw Chapter01Error.stageNotEstablished
         }
-        guard let saved = await progress.currentSnapshot(),
+        let savedCandidate: Chapter01ProgressSnapshot?
+        if let frozenSnapshot {
+            savedCandidate = frozenSnapshot
+        } else {
+            savedCandidate = await progress.currentSnapshot()
+        }
+        guard let saved = savedCandidate,
               let checkpoint = saved.checkpoint
                 .supportedContinuationCheckpoint else {
             throw Chapter01Error.unsupportedContinuationCheckpoint
@@ -123,15 +145,17 @@ final class Chapter01Coordinator:
         walkie.episodeStarted(.chapter01)
 
         if checkpoint == .finalDadFramePending || checkpoint == .complete {
-            let lease = try await arbiter.claimStoryTransition(
+            let lease = try await continuationLease(
+                suppliedTransitionLease,
                 transitionID: transitionID,
-                source: "chapter01Continue.\(checkpoint.rawValue)"
+                checkpoint: checkpoint
             )
             storyTransitionLease = lease
             do {
                 try await finalDadFrameInteractions.restore(
                     snapshot: saved,
-                    transitionLease: lease
+                    transitionLease: lease,
+                    releaseWhenReady: suppliedTransitionLease == nil
                 )
                 storyTransitionLease = nil
                 state = checkpoint == .complete
@@ -142,7 +166,9 @@ final class Chapter01Coordinator:
                         "\(checkpoint.rawValue) battleReplayed=false " +
                         "roomRescan=false"
                 )
-                return
+                return suppliedTransitionLease == nil
+                    ? .transferredByDestination
+                    : .releaseAfterFade
             } catch {
                 storyTransitionLease = nil
                 await arbiter.release(
@@ -155,9 +181,10 @@ final class Chapter01Coordinator:
         }
 
         if checkpoint == .preDadFinalBattleReady {
-            let lease = try await arbiter.claimStoryTransition(
+            let lease = try await continuationLease(
+                suppliedTransitionLease,
                 transitionID: transitionID,
-                source: "chapter01Continue.\(checkpoint.rawValue)"
+                checkpoint: checkpoint
             )
             storyTransitionLease = lease
             do {
@@ -174,7 +201,7 @@ final class Chapter01Coordinator:
                         "chapterRunID=\(runID.uuidString) " +
                         "deviceStateRestored=false roomRescan=false"
                 )
-                return
+                return .transferredByDestination
             } catch {
                 storyTransitionLease = nil
                 await arbiter.release(
@@ -187,22 +214,26 @@ final class Chapter01Coordinator:
         }
 
         if checkpoint == .postRobotHub {
-            let lease = try await arbiter.claimStoryTransition(
+            let lease = try await continuationLease(
+                suppliedTransitionLease,
                 transitionID: transitionID,
-                source: "chapter01Continue.\(checkpoint.rawValue)"
+                checkpoint: checkpoint
             )
             storyTransitionLease = lease
             do {
                 try await postRobotInteractions.restore(
                     snapshot: saved,
-                    transitionLease: lease
+                    transitionLease: lease,
+                    releaseWhenReady: suppliedTransitionLease == nil
                 )
                 storyTransitionLease = nil
                 state = .postRobotHub
                 print(
                     "[Chapter01] continued checkpoint=\(checkpoint.rawValue) chapterRunID=\(runID.uuidString) cinematicsReplayed=false roomRescan=false"
                 )
-                return
+                return suppliedTransitionLease == nil
+                    ? .transferredByDestination
+                    : .releaseAfterFade
             } catch {
                 storyTransitionLease = nil
                 await arbiter.release(lease, reason: "chapter01PostRobotContinueFailed")
@@ -211,9 +242,10 @@ final class Chapter01Coordinator:
             }
         }
 
-        let lease = try await arbiter.claimStoryTransition(
+        let lease = try await continuationLease(
+            suppliedTransitionLease,
             transitionID: transitionID,
-            source: "chapter01Continue.\(checkpoint.rawValue)"
+            checkpoint: checkpoint
         )
         storyTransitionLease = lease
         state = .dadWindow
@@ -238,6 +270,25 @@ final class Chapter01Coordinator:
 
         print(
             "[Chapter01] continued checkpoint=\(checkpoint.rawValue) chapterRunID=\(runID.uuidString) scriptsReplayed=false roomRescan=false"
+        )
+        return .retainedByDestination
+    }
+
+    private func continuationLease(
+        _ supplied: StoryInteractionLease?,
+        transitionID: UUID,
+        checkpoint: Chapter01Checkpoint
+    ) async throws -> StoryInteractionLease {
+        if let supplied {
+            try await arbiter.requireCurrent(supplied)
+            guard case .storyTransition = supplied.owner else {
+                throw StoryInteractionClaimError.invalidTransfer
+            }
+            return supplied
+        }
+        return try await arbiter.claimStoryTransition(
+            transitionID: transitionID,
+            source: "chapter01Continue.\(checkpoint.rawValue)"
         )
     }
 
@@ -324,7 +375,17 @@ final class Chapter01Coordinator:
         case TuringStorySurfaceFlowBinding
             .chapter01DadEulogyScript03
             .terminalScriptPointID:
-            state = .complete
+            guard let onEpisodeBoundary else {
+                throw Chapter01Error.missingEpisodeBoundaryOwner
+            }
+            state = .ending
+            try await onEpisodeBoundary(
+                StoryEpisodeBoundaryEvent(
+                    eventID: event.eventID,
+                    completedEpisodeID: .chapter01,
+                    actualTerminalPlaybackCompleted: true
+                )
+            )
             print(
                 "[Chapter01FinalDadFrame] promptVoice completed " +
                     "actualPlaybackCompleted=true conversationSeedReady=true " +

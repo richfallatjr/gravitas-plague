@@ -62,7 +62,8 @@ final class Chapter01PostRobotInteractionCoordinator {
 
     func restore(
         snapshot: Chapter01ProgressSnapshot,
-        transitionLease: StoryInteractionLease
+        transitionLease: StoryInteractionLease,
+        releaseWhenReady: Bool = true
     ) async throws {
         guard snapshot.postRobot.unlocked else {
             throw Chapter01Error.postRobotHubNotUnlocked
@@ -71,7 +72,8 @@ final class Chapter01PostRobotInteractionCoordinator {
         try await install(
             snapshot: snapshot,
             transitionLease: transitionLease,
-            reason: "chapter01PostRobotHubRestored"
+            reason: "chapter01PostRobotHubRestored",
+            releaseWhenReady: releaseWhenReady
         )
     }
 
@@ -88,13 +90,16 @@ final class Chapter01PostRobotInteractionCoordinator {
     private func install(
         snapshot: Chapter01ProgressSnapshot,
         transitionLease: StoryInteractionLease,
-        reason: String
+        reason: String,
+        releaseWhenReady: Bool = true
     ) async throws {
         try await applySnapshot(snapshot, reason: reason)
-        await arbiter.release(
-            transitionLease,
-            reason: "\(reason).ready"
-        )
+        if releaseWhenReady {
+            await arbiter.release(
+                transitionLease,
+                reason: "\(reason).ready"
+            )
+        }
     }
 
     private func applySnapshot(

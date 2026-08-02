@@ -56,4 +56,18 @@ enum TuringEpisodeCatalog {
     ) -> TuringEpisodeDescriptor? {
         return productionEpisodes.first { $0.id == id }
     }
+
+    nonisolated static func nextUnlockedEpisode(
+        after episodeID: TuringEpisodeID
+    ) -> TuringEpisodeID? {
+        guard let index = productionEpisodes.firstIndex(
+            where: { $0.id == episodeID }
+        ) else {
+            return nil
+        }
+        return productionEpisodes
+            .dropFirst(index + 1)
+            .first(where: { $0.isUnlocked })?
+            .id
+    }
 }

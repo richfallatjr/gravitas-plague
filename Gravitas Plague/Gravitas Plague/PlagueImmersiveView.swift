@@ -16,6 +16,7 @@ struct PlagueImmersiveView: View {
     @StateObject private var deathPresentationController = DeathPresentationController()
     @State private var youDiedWorldAnchor: AnchorEntity?
     @State private var youDiedWorldCardPresenter = YouDiedWorldCardPresenter()
+    @State private var storyTitleCardPresenter = StoryTitleCardWorldPresenter()
     @State private var placementAdjustmentDragActive = false
 
     private let frameTimer = Timer.publish(
@@ -42,6 +43,11 @@ struct PlagueImmersiveView: View {
 
             youDiedWorldCardPresenter.bind(
                 worldAnchor: youDiedWorldAnchor
+            )
+            storyTitleCardPresenter.bind(worldAnchor: youDiedWorldAnchor)
+            coordinator.configureStoryTitleCardPresentation(
+                presenter: storyTitleCardPresenter,
+                blackout: deathPresentationController
             )
 
             let presenter = youDiedWorldCardPresenter
@@ -435,6 +441,9 @@ struct PlagueImmersiveView: View {
                 session
             )
             coordinator.deathPresentationController = deathPresentationController
+            coordinator.onStoryEpisodePickerRequested = { source in
+                session.requestStoryEpisodePicker(source: source)
+            }
             coordinator.onPlayerDamaged = { amount in
                 let intensity = min(max(Double(amount) / 50.0, 0.35), 1.0)
                 session.triggerDamageTint(intensity: intensity)
@@ -502,6 +511,8 @@ struct PlagueImmersiveView: View {
             coordinator.onYouDiedWorldCardCleanupRequested?()
             coordinator.onYouDiedWorldCardRequested = nil
             coordinator.onYouDiedWorldCardCleanupRequested = nil
+            coordinator.onStoryEpisodePickerRequested = nil
+            storyTitleCardPresenter.removeAll(reason: "immersiveViewDisappeared")
 
             damageTintController.reset()
             deathPresentationController.reset()

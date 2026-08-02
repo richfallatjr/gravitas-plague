@@ -1,0 +1,41 @@
+import Foundation
+
+enum StoryTitleCardCatalog {
+    static let prologue = StoryTitleCardDescriptor(
+        id: .prologue,
+        title: "Prologue",
+        subtitle: "They are not human they are monsters",
+        fadeToBlackSeconds: .milliseconds(750),
+        holdSeconds: .milliseconds(2_500),
+        fadeFromBlackSeconds: .milliseconds(750)
+    )
+
+    static let chapter01 = StoryTitleCardDescriptor(
+        id: .chapter01,
+        title: "Chapter 1",
+        subtitle: "Dad?",
+        fadeToBlackSeconds: .milliseconds(750),
+        holdSeconds: .milliseconds(2_500),
+        fadeFromBlackSeconds: .milliseconds(750)
+    )
+
+    static let endOfAvailableContent = StoryTitleCardDescriptor(
+        id: .endOfAvailableContent,
+        title: "Gravitas Plague",
+        subtitle: nil,
+        fadeToBlackSeconds: .milliseconds(750),
+        holdSeconds: .milliseconds(3_000),
+        fadeFromBlackSeconds: .milliseconds(750)
+    )
+
+    static func descriptor(
+        for episodeID: TuringEpisodeID
+    ) -> StoryTitleCardDescriptor {
+        switch episodeID {
+        case .prologue:
+            return prologue
+        case .chapter01:
+            return chapter01
+        }
+    }
+}

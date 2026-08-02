@@ -11,6 +11,7 @@ enum Chapter01State: Sendable, Equatable {
     case preDadFinalBattleReady
     case dadFinalBattle
     case finalDadFramePending
+    case ending
     case complete
     case failed(String)
     case cancelled
@@ -34,6 +35,7 @@ enum Chapter01Error: LocalizedError {
     case dadFinalBattleReleaseBoundaryFailed
     case staleDadFinalBattleCompletion
     case missingDadFinalBattleCompletionSink
+    case missingEpisodeBoundaryOwner
 
     var errorDescription: String? {
         switch self {
@@ -71,6 +73,8 @@ enum Chapter01Error: LocalizedError {
             return "Chapter 01 received a stale Dad final-battle completion."
         case .missingDadFinalBattleCompletionSink:
             return "The Dad final battle has no Chapter completion sink."
+        case .missingEpisodeBoundaryOwner:
+            return "Chapter 01 has no episode-boundary transition owner."
         }
     }
 }

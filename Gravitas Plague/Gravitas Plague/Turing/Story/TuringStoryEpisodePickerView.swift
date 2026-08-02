@@ -159,25 +159,18 @@ struct TuringStoryEpisodePickerView: View {
             do {
                 progress.reloadFromDefaults()
                 let target = try progress.requireValidContinuationTarget()
-                await PlagueMainMenuMusicActor.shared.stop(
-                    reason: "storyContinueSelected"
+                let request = StoryTitleCardTransitionRequest(
+                    requestID: UUID(),
+                    source: .episodePickerContinue,
+                    descriptor: StoryTitleCardCatalog.descriptor(
+                        for: target.episodeID
+                    ),
+                    destination: .continueFrom(target),
+                    menuMusicPolicy: .playThroughCard
                 )
-                switch target {
-                case .prologue(let snapshot):
-                    let destination = try TuringStoryDestinationPlanner
-                        .destination(for: snapshot)
-                    try await TuringStoryStateTeleportCoordinator.shared.apply(
-                        destination,
-                        source: "episodePicker.continue.prologue"
-                    )
-                case .chapter01:
-                    session.continueStoryEpisode(.chapter01)
-                }
+                session.requestStoryTitleCardTransition(request)
                 dismissWindow(id: PlagueWindowID.storyEpisodes)
             } catch {
-                await restoreMenuMusicAfterFailedSelection(
-                    reason: "storyContinueFailed"
-                )
                 errorMessage = error.localizedDescription
             }
         }
@@ -188,48 +181,15 @@ struct TuringStoryEpisodePickerView: View {
         activeRequest = true
         Task { @MainActor in
             defer { activeRequest = false }
-            do {
-                await PlagueMainMenuMusicActor.shared.stop(
-                    reason: "storyEpisodeSelected.\(episode.id.rawValue)"
-                )
-                if episode.id == .chapter01 {
-                    progress.clear(
-                        reason: "startOver.\(episode.id.rawValue)"
-                    )
-                    session.startStoryEpisode(episode.id)
-                    dismissWindow(id: PlagueWindowID.storyEpisodes)
-                    return
-                }
-                await Chapter01ProgressStore.shared.clear(
-                    reason: "startOver.\(episode.id.rawValue)"
-                )
-                progress.clear(reason: "startOver.\(episode.id.rawValue)")
-                let destination = try TuringStoryDestinationPlanner.startOfEpisode(episode.id)
-                try await TuringStoryStateTeleportCoordinator.shared.apply(
-                    destination,
-                    source: "episodePicker.startOver"
-                )
-                dismissWindow(id: PlagueWindowID.storyEpisodes)
-            } catch {
-                await restoreMenuMusicAfterFailedSelection(
-                    reason: "storyEpisodeStartFailed.\(episode.id.rawValue)"
-                )
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    private func restoreMenuMusicAfterFailedSelection(
-        reason: String
-    ) async {
-        do {
-            try await PlagueMainMenuMusicActor.shared.startIfNeeded(
-                reason: reason
+            let request = StoryTitleCardTransitionRequest(
+                requestID: UUID(),
+                source: .episodePickerStart,
+                descriptor: StoryTitleCardCatalog.descriptor(for: episode.id),
+                destination: .start(episode.id),
+                menuMusicPolicy: .stopOnAcceptance
             )
-        } catch {
-            print(
-                "[PlagueMenuMusic] ERROR recovery failed: \(error.localizedDescription)"
-            )
+            session.requestStoryTitleCardTransition(request)
+            dismissWindow(id: PlagueWindowID.storyEpisodes)
         }
     }
 }

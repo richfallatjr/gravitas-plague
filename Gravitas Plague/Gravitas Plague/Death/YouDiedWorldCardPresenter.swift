@@ -82,20 +82,32 @@ final class YouDiedWorldCardPresenter {
         currentCard?.removeFromParent()
         currentCard = nil
 
-        let deviceFromCard = simd_float4x4.translation(
-            SIMD3<Float>(
-                0,
-                0,
-                -max(0.1, distanceMeters)
+        let usesSharedPlacement =
+            distanceMeters == CinematicWorldCardTransform.distanceMeters &&
+            verticalLiftMeters == CinematicWorldCardTransform.worldYLiftMeters &&
+            xTiltDegrees == CinematicWorldCardTransform.xTiltDegrees
+        let liftedOriginFromCard: simd_float4x4
+        if usesSharedPlacement {
+            liftedOriginFromCard = CinematicWorldCardTransform.worldTransform(
+                originFromDevice: originFromDevice
             )
-        )
-        let originFromCard = originFromDevice * deviceFromCard
-        let deviceBillboardTilt = simd_float4x4.rotationX(
-            degrees: xTiltDegrees
-        )
-        let originFromTiltedCard = originFromCard * deviceBillboardTilt
-        var liftedOriginFromCard = originFromTiltedCard
-        liftedOriginFromCard.columns.3.y += verticalLiftMeters
+        } else {
+            let deviceFromCard = simd_float4x4.translation(
+                SIMD3<Float>(
+                    0,
+                    0,
+                    -max(0.1, distanceMeters)
+                )
+            )
+            let originFromCard = originFromDevice * deviceFromCard
+            let deviceBillboardTilt = simd_float4x4.rotationX(
+                degrees: xTiltDegrees
+            )
+            let originFromTiltedCard = originFromCard * deviceBillboardTilt
+            var customTransform = originFromTiltedCard
+            customTransform.columns.3.y += verticalLiftMeters
+            liftedOriginFromCard = customTransform
+        }
 
         worldAnchor.addChild(card)
         card.setTransformMatrix(

@@ -48,7 +48,8 @@ final class Chapter01FinalDadFrameInteractionCoordinator {
 
     func restore(
         snapshot: Chapter01ProgressSnapshot,
-        transitionLease: StoryInteractionLease
+        transitionLease: StoryInteractionLease,
+        releaseWhenReady: Bool = true
     ) async throws {
         guard snapshot.checkpoint == .finalDadFramePending ||
                 snapshot.checkpoint == .complete else {
@@ -58,14 +59,16 @@ final class Chapter01FinalDadFrameInteractionCoordinator {
         try await install(
             checkpoint: snapshot.checkpoint,
             transitionLease: transitionLease,
-            reason: "chapter01FinalDadFrameRestored"
+            reason: "chapter01FinalDadFrameRestored",
+            releaseWhenReady: releaseWhenReady
         )
     }
 
     private func install(
         checkpoint: Chapter01Checkpoint,
         transitionLease: StoryInteractionLease,
-        reason: String
+        reason: String,
+        releaseWhenReady: Bool = true
     ) async throws {
         let finalBinding = TuringStorySurfaceFlowBinding
             .chapter01DadEulogyScript03
@@ -95,18 +98,30 @@ final class Chapter01FinalDadFrameInteractionCoordinator {
             storyTransitionLease: transitionLease,
             reason: reason
         )
-        let releasedSnapshot = await arbiter.releaseAndCurrentSnapshot(
-            transitionLease,
-            reason: "\(reason).ready"
-        )
+        let releasedSnapshot: StoryInteractionSnapshot
+        if releaseWhenReady {
+            releasedSnapshot = await arbiter.releaseAndCurrentSnapshot(
+                transitionLease,
+                reason: "\(reason).ready"
+            )
+        } else {
+            releasedSnapshot = await arbiter.currentSnapshot()
+        }
         let expectedPresentation: StoryDadFramePresentation =
             finalState == .play ? .play : .microphone
         let expectedCapability: StoryInteractionCapability =
             finalState == .play ? .dadFramePlay : .dadFrameMicrophone
-        guard releasedSnapshot.exclusiveOwner == nil,
+        let ownerIsValid = releaseWhenReady
+            ? releasedSnapshot.exclusiveOwner == nil
+            : releasedSnapshot.exclusiveOwner == transitionLease.owner
+        guard ownerIsValid,
               releasedSnapshot.doorState == .closedUnloaded,
-              releasedSnapshot.dadFramePresentation == expectedPresentation,
-              releasedSnapshot.capabilities == [expectedCapability] else {
+              (releaseWhenReady
+                ? releasedSnapshot.dadFramePresentation == expectedPresentation
+                : releasedSnapshot.dadFramePresentation == .hidden),
+              (releaseWhenReady
+                ? releasedSnapshot.capabilities == [expectedCapability]
+                : releasedSnapshot.capabilities.isEmpty) else {
             print(
                 "[Chapter01FinalDadFrame] ERROR stable presentation rejected " +
                     "owner=\(releasedSnapshot.exclusiveOwner?.logValue ?? "none") " +
@@ -120,7 +135,9 @@ final class Chapter01FinalDadFrameInteractionCoordinator {
         // The stream remains the normal presentation path. Applying the exact
         // authorized release snapshot here prevents a suspended observer from
         // dropping the first stable post-battle action.
-        dadFrame.applyInteractionSnapshot(releasedSnapshot)
+        if releaseWhenReady {
+            dadFrame.applyInteractionSnapshot(releasedSnapshot)
+        }
         print(
             "[Chapter01FinalDadFrame] stable policy installed " +
                 "policy=chapter01FinalDadFrameOnly " +
