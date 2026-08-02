@@ -324,15 +324,12 @@ final class Chapter01Coordinator:
         case TuringStorySurfaceFlowBinding
             .chapter01DadEulogyScript03
             .terminalScriptPointID:
-            _ = try await progress.commitChapterComplete(
-                terminalScriptPointID: event.scriptPointID,
-                sourceEventID: event.eventID
-            )
             state = .complete
             print(
                 "[Chapter01FinalDadFrame] promptVoice completed " +
                     "actualPlaybackCompleted=true conversationSeedReady=true " +
-                    "chapterCheckpoint=chapter01.complete"
+                    "episodeEnded=true " +
+                    "durableCheckpoint=chapter01.finalDadFrame.pending"
             )
 
         default:

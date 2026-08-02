@@ -71,16 +71,11 @@ final class Chapter01FinalDadFrameInteractionCoordinator {
             .chapter01DadEulogyScript03
         let finalState: TuringFlowInteractionGateController.State
         switch checkpoint {
-        case .finalDadFramePending:
+        case .finalDadFramePending, .complete:
             await TuringConversationInputStore.shared.clear(
                 key: finalBinding.conversationKey
             )
             finalState = .play
-        case .complete:
-            try await TuringConversationContextRehydrator.rehydrate(
-                terminalScriptPointID: finalBinding.terminalScriptPointID
-            )
-            finalState = .microphone
         default:
             throw Chapter01Error.invalidFinalDadFrameTransition
         }

@@ -50,7 +50,7 @@ enum Chapter01Checkpoint: String, Codable, Sendable, Comparable {
         case .finalDadFramePending:
             return .finalDadFramePending
         case .complete:
-            return .complete
+            return .finalDadFramePending
         }
     }
 }
@@ -206,6 +206,15 @@ actor Chapter01ProgressStore {
         let decoder = JSONDecoder()
         if var current = try? decoder.decode(Chapter01ProgressSnapshot.self, from: data),
            current.schemaVersion == Chapter01ProgressSnapshot.currentSchemaVersion {
+            // Dad Frame 3 ends the episode but is not a durable checkpoint.
+            // Existing saves from the first implementation resume at the last
+            // authored checkpoint: the completed Dad battle.
+            if current.checkpoint == .complete {
+                current.checkpoint = .finalDadFramePending
+                current.revision += 1
+                current.committedAt = Date()
+                current.contentRevision = contentRevision
+            }
             // The first Four Chances build could persist the post-Robot
             // checkpoint before its hub-unlocked bit. That combination is not
             // a valid destination. Repair that single saved record in place so
@@ -429,41 +438,6 @@ actor Chapter01ProgressStore {
                 "checkpoint=\(next.checkpoint.rawValue) " +
                 "sourceEventID=\(sourceEventID.uuidString) " +
                 "revision=\(next.revision)"
-        )
-        return next
-    }
-
-    @discardableResult
-    func commitChapterComplete(
-        terminalScriptPointID: String,
-        sourceEventID: UUID
-    ) throws -> Chapter01ProgressSnapshot {
-        guard terminalScriptPointID ==
-                TuringStorySurfaceFlowBinding
-                    .chapter01DadEulogyScript03
-                    .terminalScriptPointID else {
-            throw Chapter01Error.wrongFinalScriptPoint
-        }
-        guard var next = snapshot else {
-            throw Chapter01Error.finalDadFrameNotPending
-        }
-        if next.sourceEventIDs.contains(sourceEventID) {
-            return next
-        }
-        guard next.checkpoint == .finalDadFramePending ||
-                next.checkpoint == .complete else {
-            throw Chapter01Error.finalDadFrameNotPending
-        }
-
-        next.checkpoint = .complete
-        next.sourceEventIDs.insert(sourceEventID)
-        next.revision += 1
-        next.committedAt = Date()
-        next.contentRevision = Self.contentRevision
-        try persist(next)
-        print(
-            "[Chapter01] completed terminalScriptPointID=\(terminalScriptPointID) " +
-                "sourceEventID=\(sourceEventID.uuidString)"
         )
         return next
     }

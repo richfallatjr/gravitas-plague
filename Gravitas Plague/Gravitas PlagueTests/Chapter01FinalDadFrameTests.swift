@@ -73,7 +73,48 @@ final class Chapter01FinalDadFrameTests: XCTestCase {
         )
         XCTAssertEqual(
             Chapter01Checkpoint.complete.supportedContinuationCheckpoint,
-            .complete
+            .finalDadFramePending
+        )
+    }
+
+    func testLegacyCompleteSaveMigratesBackToPostBattleCheckpoint() throws {
+        let original = Chapter01ProgressSnapshot(
+            schemaVersion: Chapter01ProgressSnapshot.currentSchemaVersion,
+            checkpoint: .complete,
+            postRobot: Chapter01PostRobotProgress(
+                unlocked: true,
+                completedBranches: Set(Chapter01PostRobotBranch.allCases)
+            ),
+            revision: 12,
+            sourceEventIDs: [],
+            committedAt: Date(timeIntervalSince1970: 1),
+            contentRevision: Chapter01ProgressStore.contentRevision
+        )
+
+        let migrated = try Chapter01ProgressStore.decodeAndMigrate(
+            JSONEncoder().encode(original)
+        )
+
+        XCTAssertEqual(migrated.checkpoint, .finalDadFramePending)
+        XCTAssertEqual(migrated.revision, 13)
+    }
+
+    func testFinalDadFrameCompletionDoesNotAdvanceDurableProgress() throws {
+        let source = try appSource(
+            "Story/Chapter/Chapter01/Chapter01Coordinator.swift"
+        )
+        let finalCase = try XCTUnwrap(
+            source.range(
+                of: ".chapter01DadEulogyScript03\n            .terminalScriptPointID:"
+            )
+        )
+        let finalCaseSource = source[finalCase.lowerBound...]
+
+        XCTAssertFalse(finalCaseSource.contains("commitChapterComplete"))
+        XCTAssertTrue(
+            finalCaseSource.contains(
+                "durableCheckpoint=chapter01.finalDadFrame.pending"
+            )
         )
     }
 
@@ -138,5 +179,17 @@ final class Chapter01FinalDadFrameTests: XCTestCase {
         XCTAssertEqual(snapshot.doorState, .closedUnloaded)
         XCTAssertEqual(snapshot.dadFramePresentation, .play)
         XCTAssertEqual(snapshot.capabilities, [.dadFramePlay])
+    }
+
+    private func appSource(_ relativePath: String) throws -> String {
+        let testDirectory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+        let productRoot = testDirectory.deletingLastPathComponent()
+        return try String(
+            contentsOf: productRoot
+                .appendingPathComponent("Gravitas Plague")
+                .appendingPathComponent(relativePath),
+            encoding: .utf8
+        )
     }
 }
