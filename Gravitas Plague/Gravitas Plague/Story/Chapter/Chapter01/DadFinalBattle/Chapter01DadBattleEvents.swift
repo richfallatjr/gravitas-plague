@@ -16,7 +16,9 @@ enum Chapter01DadFinalBattleState: String, Sendable {
     case dadDeathDialogueHold
     case playerDead
     case releasingRuntime
+    case awaitingFinalDadFrameHandoff
     case postBattleHold
+    case completed
     case failed
     case cancelled
 }
@@ -30,5 +32,24 @@ struct Chapter01DadFinalBattleReleasedEvent: Sendable, Equatable {
     let eventID: UUID
     let chapterRunID: UUID
     let battleInstanceID: UUID
+    let battleLease: StoryInteractionLease
     let releaseReport: BattleRuntimeReleaseReport
+    let doorState: TuringStoryDoorBattleState
+    let richBattleQueueDrained: Bool
+
+    var isSafeForFinalDadFrame: Bool {
+        releaseReport.allHeavyEnemyRuntimesReleased &&
+            releaseReport.allEnemyControllersReleased &&
+            releaseReport.fullPortalReleased &&
+            !releaseReport.musicStillPlaying &&
+            doorState == .closed &&
+            richBattleQueueDrained
+    }
+}
+
+@MainActor
+protocol Chapter01DadFinalBattleCompletionSink: AnyObject {
+    func dadFinalBattleCompleted(
+        _ event: Chapter01DadFinalBattleReleasedEvent
+    ) async throws
 }

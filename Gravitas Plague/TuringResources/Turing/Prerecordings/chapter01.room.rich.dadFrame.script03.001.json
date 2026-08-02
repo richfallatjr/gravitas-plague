@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter01.room.rich.dadFrame.script03.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-dad-frame-03.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Dad… I put you down near the creek. It was the only place that felt right. You always liked going down there. Remember when we used to fish before the sun came up? You'd tell me I was talking too loud and scaring everything away.\n\nI wanted so badly to use the antigen on you. I kept thinking there had to be one more chance—that if I could just get close enough, I could bring you back. But it was too late. I know that now. And after what happened in that room… I'm going to need one of those cartridges for myself.\n\nI'm sorry, Dad. I wish I could've saved us both.",
+  "summary": "Rich gives a private eulogy at Dad's photograph after burying him near the creek and admits that he may need an antigen cartridge for himself.",
+  "voicePromptIntent": "Continue using chapter01.rich.dadFrame.script03.promptVoice.001.",
+  "defaultEmotion": "exhausted, grieving, guilty, frightened, and trying to turn the eulogy into a promise"
+}

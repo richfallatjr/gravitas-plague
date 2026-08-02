@@ -16,6 +16,8 @@ enum Chapter01Checkpoint: String, Codable, Sendable, Comparable {
     case hamScript04Pending = "chapter01.hamScript04.pending"
     case postRobotHub = "chapter01.postRobotHub"
     case preDadFinalBattleReady = "chapter01.preDadFinalBattle.ready"
+    case finalDadFramePending = "chapter01.finalDadFrame.pending"
+    case complete = "chapter01.complete"
 
     private var rank: Int {
         switch self {
@@ -28,6 +30,8 @@ enum Chapter01Checkpoint: String, Codable, Sendable, Comparable {
         case .hamScript04Pending: return 6
         case .postRobotHub: return 7
         case .preDadFinalBattleReady: return 8
+        case .finalDadFramePending: return 9
+        case .complete: return 10
         }
     }
 
@@ -43,6 +47,10 @@ enum Chapter01Checkpoint: String, Codable, Sendable, Comparable {
             return .postRobotHub
         case .preDadFinalBattleReady:
             return .preDadFinalBattleReady
+        case .finalDadFramePending:
+            return .finalDadFramePending
+        case .complete:
+            return .complete
         }
     }
 }
@@ -121,7 +129,7 @@ struct Chapter01PostRobotProgress: Codable, Sendable, Equatable {
 }
 
 struct Chapter01ProgressSnapshot: Codable, Sendable, Equatable {
-    static let currentSchemaVersion = 3
+    static let currentSchemaVersion = 4
 
     let schemaVersion: Int
     var checkpoint: Chapter01Checkpoint
@@ -146,7 +154,7 @@ actor Chapter01ProgressStore {
         static let snapshot = "story.chapter01.progress.v1"
     }
 
-    static let contentRevision = "chapter01.v3"
+    static let contentRevision = "chapter01.v4"
 
     private struct LegacyV1Snapshot: Codable {
         let schemaVersion: Int
@@ -158,6 +166,16 @@ actor Chapter01ProgressStore {
     }
 
     private struct LegacyV2Snapshot: Codable {
+        let schemaVersion: Int
+        var checkpoint: Chapter01Checkpoint
+        var postRobot: Chapter01PostRobotProgress
+        var revision: Int
+        var sourceEventIDs: Set<UUID>
+        var committedAt: Date
+        var contentRevision: String
+    }
+
+    private struct LegacyV3Snapshot: Codable {
         let schemaVersion: Int
         var checkpoint: Chapter01Checkpoint
         var postRobot: Chapter01PostRobotProgress
@@ -211,6 +229,34 @@ actor Chapter01ProgressStore {
                 current.committedAt = Date()
             }
             return current
+        }
+        if var legacy = try? decoder.decode(LegacyV3Snapshot.self, from: data),
+           legacy.schemaVersion == 3 {
+            if legacy.checkpoint >= .antigenGranted,
+               !legacy.postRobot.unlocked {
+                legacy.checkpoint = .postRobotHub
+                legacy.postRobot.unlocked = true
+                legacy.revision += 1
+                legacy.committedAt = Date()
+            }
+            let normalized = legacy.postRobot.normalizedForSequentialUnlock()
+            if normalized != legacy.postRobot {
+                legacy.postRobot = normalized
+                legacy.checkpoint = normalized.allBranchesComplete
+                    ? .preDadFinalBattleReady
+                    : .postRobotHub
+                legacy.revision += 1
+                legacy.committedAt = Date()
+            }
+            return Chapter01ProgressSnapshot(
+                schemaVersion: Chapter01ProgressSnapshot.currentSchemaVersion,
+                checkpoint: legacy.checkpoint,
+                postRobot: legacy.postRobot,
+                revision: legacy.revision,
+                sourceEventIDs: legacy.sourceEventIDs,
+                committedAt: legacy.committedAt,
+                contentRevision: contentRevision
+            )
         }
         if let legacy = try? decoder.decode(LegacyV2Snapshot.self, from: data),
            legacy.schemaVersion == 2 {
@@ -351,6 +397,75 @@ actor Chapter01ProgressStore {
             wasNewlyCompleted: inserted,
             becameAllBranchesComplete: !wasComplete && next.postRobot.allBranchesComplete
         )
+    }
+
+    @discardableResult
+    func commitFinalDadFramePending(
+        sourceEventID: UUID
+    ) throws -> Chapter01ProgressSnapshot {
+        guard var next = snapshot else {
+            throw Chapter01Error.invalidFinalDadFrameTransition
+        }
+        if next.sourceEventIDs.contains(sourceEventID) {
+            return next
+        }
+        if next.checkpoint == .finalDadFramePending ||
+            next.checkpoint == .complete {
+            return next
+        }
+        guard next.checkpoint == .preDadFinalBattleReady,
+              next.postRobot.allBranchesComplete else {
+            throw Chapter01Error.invalidFinalDadFrameTransition
+        }
+
+        next.checkpoint = .finalDadFramePending
+        next.sourceEventIDs.insert(sourceEventID)
+        next.revision += 1
+        next.committedAt = Date()
+        next.contentRevision = Self.contentRevision
+        try persist(next)
+        print(
+            "[Chapter01FinalDadFrame] checkpoint committed " +
+                "checkpoint=\(next.checkpoint.rawValue) " +
+                "sourceEventID=\(sourceEventID.uuidString) " +
+                "revision=\(next.revision)"
+        )
+        return next
+    }
+
+    @discardableResult
+    func commitChapterComplete(
+        terminalScriptPointID: String,
+        sourceEventID: UUID
+    ) throws -> Chapter01ProgressSnapshot {
+        guard terminalScriptPointID ==
+                TuringStorySurfaceFlowBinding
+                    .chapter01DadEulogyScript03
+                    .terminalScriptPointID else {
+            throw Chapter01Error.wrongFinalScriptPoint
+        }
+        guard var next = snapshot else {
+            throw Chapter01Error.finalDadFrameNotPending
+        }
+        if next.sourceEventIDs.contains(sourceEventID) {
+            return next
+        }
+        guard next.checkpoint == .finalDadFramePending ||
+                next.checkpoint == .complete else {
+            throw Chapter01Error.finalDadFrameNotPending
+        }
+
+        next.checkpoint = .complete
+        next.sourceEventIDs.insert(sourceEventID)
+        next.revision += 1
+        next.committedAt = Date()
+        next.contentRevision = Self.contentRevision
+        try persist(next)
+        print(
+            "[Chapter01] completed terminalScriptPointID=\(terminalScriptPointID) " +
+                "sourceEventID=\(sourceEventID.uuidString)"
+        )
+        return next
     }
 
     func currentSnapshot() -> Chapter01ProgressSnapshot? { snapshot }

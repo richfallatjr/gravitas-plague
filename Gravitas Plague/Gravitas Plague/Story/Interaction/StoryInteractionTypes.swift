@@ -11,12 +11,41 @@ enum StoryInteractionSurfaceID:
     String,
     Codable,
     Sendable,
-    Hashable
+    Hashable,
+    CaseIterable
 {
     case walkie
     case dadFrame
     case crankRadio
     case hamReceiver
+}
+
+enum StoryStableInteractionPolicyID:
+    String,
+    Codable,
+    Sendable,
+    Equatable
+{
+    case unrestricted
+    case chapter01FinalDadFrameOnly
+}
+
+struct StoryStableInteractionPolicy: Sendable, Equatable {
+    let id: StoryStableInteractionPolicyID
+    let allowedTuringSurfaces: Set<StoryInteractionSurfaceID>
+    let permitsDoorInteraction: Bool
+
+    static let unrestricted = Self(
+        id: .unrestricted,
+        allowedTuringSurfaces: Set(StoryInteractionSurfaceID.allCases),
+        permitsDoorInteraction: true
+    )
+
+    static let chapter01FinalDadFrameOnly = Self(
+        id: .chapter01FinalDadFrameOnly,
+        allowedTuringSurfaces: [.dadFrame],
+        permitsDoorInteraction: false
+    )
 }
 
 enum StoryDoorLifecycleState: String, Sendable, Equatable {
@@ -153,6 +182,7 @@ enum StoryInteractionClaimError: LocalizedError, Sendable, Equatable {
     case doorNotClosedAndUnloaded
     case staleLease
     case invalidTransfer
+    case interactionNotPermitted
 
     var errorDescription: String? {
         switch self {
@@ -166,6 +196,8 @@ enum StoryInteractionClaimError: LocalizedError, Sendable, Equatable {
             return "The Story interaction lease is stale."
         case .invalidTransfer:
             return "The requested Story interaction ownership transfer is invalid."
+        case .interactionNotPermitted:
+            return "The requested Story interaction is not permitted in the current Chapter state."
         }
     }
 }

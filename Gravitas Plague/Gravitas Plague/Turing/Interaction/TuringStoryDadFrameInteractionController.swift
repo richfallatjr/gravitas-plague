@@ -454,11 +454,19 @@ final class TuringStoryDadFrameInteractionController:
         _ snapshot: StoryInteractionSnapshot
     ) {
         latestSnapshot = snapshot
-        iconController.apply(
-            ready
-                ? snapshot.dadFramePresentation
-                : .hidden
-        )
+        let appliedPresentation = ready
+            ? snapshot.dadFramePresentation
+            : .hidden
+        iconController.apply(appliedPresentation)
+        if snapshot.dadFramePresentation != .hidden ||
+            appliedPresentation != .hidden {
+            print(
+                "[TuringDadFrame] presentation applied " +
+                    "requested=\(snapshot.dadFramePresentation.rawValue) " +
+                    "applied=\(appliedPresentation.rawValue) " +
+                    "ready=\(ready) revision=\(snapshot.revision)"
+            )
+        }
     }
 
     func shutdown(reason: String) async {

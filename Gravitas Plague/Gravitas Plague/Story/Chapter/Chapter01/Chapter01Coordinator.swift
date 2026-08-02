@@ -5,7 +5,8 @@ import simd
 final class Chapter01Coordinator:
     TuringStoryCompletionEventSink,
     Chapter01DadWindowCompletionSink,
-    Chapter01RobotEncounterCompletionSink {
+    Chapter01RobotEncounterCompletionSink,
+    Chapter01DadFinalBattleCompletionSink {
 
     typealias RobotStarter = @MainActor (
         UUID,
@@ -24,6 +25,8 @@ final class Chapter01Coordinator:
     private let preDadFinalBattleBoundary: Chapter01PreDadFinalBattleBoundary
     private let dadFinalBattleActionRouter:
         Chapter01DadFinalBattleActionRouter
+    private let finalDadFrameInteractions:
+        Chapter01FinalDadFrameInteractionCoordinator
     private let startRobot: RobotStarter
     private let cancelRobot: RobotCanceller
 
@@ -42,6 +45,8 @@ final class Chapter01Coordinator:
         preDadFinalBattleBoundary: Chapter01PreDadFinalBattleBoundary,
         dadFinalBattleActionRouter:
             Chapter01DadFinalBattleActionRouter,
+        finalDadFrameInteractions:
+            Chapter01FinalDadFrameInteractionCoordinator,
         startRobot: @escaping RobotStarter,
         cancelRobot: @escaping RobotCanceller
     ) {
@@ -53,6 +58,7 @@ final class Chapter01Coordinator:
         self.postRobotInteractions = postRobotInteractions
         self.preDadFinalBattleBoundary = preDadFinalBattleBoundary
         self.dadFinalBattleActionRouter = dadFinalBattleActionRouter
+        self.finalDadFrameInteractions = finalDadFrameInteractions
         self.startRobot = startRobot
         self.cancelRobot = cancelRobot
     }
@@ -62,6 +68,9 @@ final class Chapter01Coordinator:
             throw Chapter01Error.stageNotEstablished
         }
         await cancel(reason: "beginAtRoot")
+        await arbiter.resetStableInteractionPolicy(
+            reason: "chapter01.beginAtRoot"
+        )
         try await dad.validateAvailability()
 
         let runID = UUID()
@@ -112,6 +121,38 @@ final class Chapter01Coordinator:
             reason: "chapter01.continue.\(checkpoint.rawValue)"
         )
         walkie.episodeStarted(.chapter01)
+
+        if checkpoint == .finalDadFramePending || checkpoint == .complete {
+            let lease = try await arbiter.claimStoryTransition(
+                transitionID: transitionID,
+                source: "chapter01Continue.\(checkpoint.rawValue)"
+            )
+            storyTransitionLease = lease
+            do {
+                try await finalDadFrameInteractions.restore(
+                    snapshot: saved,
+                    transitionLease: lease
+                )
+                storyTransitionLease = nil
+                state = checkpoint == .complete
+                    ? .complete
+                    : .finalDadFramePending
+                print(
+                    "[Chapter01] continued final Dad-frame checkpoint=" +
+                        "\(checkpoint.rawValue) battleReplayed=false " +
+                        "roomRescan=false"
+                )
+                return
+            } catch {
+                storyTransitionLease = nil
+                await arbiter.release(
+                    lease,
+                    reason: "chapter01FinalDadFrameContinueFailed"
+                )
+                state = .failed(error.localizedDescription)
+                throw error
+            }
+        }
 
         if checkpoint == .preDadFinalBattleReady {
             let lease = try await arbiter.claimStoryTransition(
@@ -280,6 +321,20 @@ final class Chapter01Coordinator:
                 sourceEventID: event.eventID
             )
 
+        case TuringStorySurfaceFlowBinding
+            .chapter01DadEulogyScript03
+            .terminalScriptPointID:
+            _ = try await progress.commitChapterComplete(
+                terminalScriptPointID: event.scriptPointID,
+                sourceEventID: event.eventID
+            )
+            state = .complete
+            print(
+                "[Chapter01FinalDadFrame] promptVoice completed " +
+                    "actualPlaybackCompleted=true conversationSeedReady=true " +
+                    "chapterCheckpoint=chapter01.complete"
+            )
+
         default:
             throw TuringRuntimeError.invalidConfig(
                 "Unexpected Chapter 01 ScriptPoint completion: \(event.scriptPointID)"
@@ -293,7 +348,8 @@ final class Chapter01Coordinator:
         let openEndedKeys: Set<String> = [
             TuringStorySurfaceFlowBinding.chapter01FourChancesDad.conversationKey,
             TuringStorySurfaceFlowBinding.chapter01FourChancesWalkie.conversationKey,
-            TuringStorySurfaceFlowBinding.chapter01FourChancesHam.conversationKey
+            TuringStorySurfaceFlowBinding.chapter01FourChancesHam.conversationKey,
+            TuringStorySurfaceFlowBinding.chapter01DadEulogyScript03.conversationKey
         ]
         guard openEndedKeys.contains(event.conversationKey) else {
             throw Chapter01Error.unexpectedConversationCompletion
@@ -370,6 +426,17 @@ final class Chapter01Coordinator:
     ) async {
         guard event.chapterRunID == chapterRunID else { return }
         state = .failed(event.message)
+    }
+
+    func dadFinalBattleCompleted(
+        _ event: Chapter01DadFinalBattleReleasedEvent
+    ) async throws {
+        guard let chapterRunID,
+              event.chapterRunID == chapterRunID else {
+            throw Chapter01Error.staleDadFinalBattleCompletion
+        }
+        try await finalDadFrameInteractions.unlockAfterBattle(event: event)
+        state = .finalDadFramePending
     }
 
     private func completePostRobotBranch(

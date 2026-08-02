@@ -127,4 +127,40 @@ final class Chapter01DadFinalBattleTests: XCTestCase {
             .preDadFinalBattleReady
         )
     }
+
+    func testCoordinatorDropsPreparedEnemyBeforeDeallocationProof() throws {
+        let source = try appSource(
+            "Story/Chapter/Chapter01/DadFinalBattle/Chapter01DadFinalBattleCoordinator.swift"
+        )
+        let removal = try XCTUnwrap(
+            source.range(of: "self.onEnemyRemoved(enemyID)")
+        )
+        let preparedRelease = try XCTUnwrap(
+            source.range(
+                of: "self.prepared = nil",
+                range: removal.upperBound..<source.endIndex
+            )
+        )
+        let registryRelease = try XCTUnwrap(
+            source.range(
+                of: "self.runtimeCleanup.releaseEnemy(",
+                range: preparedRelease.upperBound..<source.endIndex
+            )
+        )
+
+        XCTAssertLessThan(removal.lowerBound, preparedRelease.lowerBound)
+        XCTAssertLessThan(preparedRelease.lowerBound, registryRelease.lowerBound)
+    }
+
+    private func appSource(_ relativePath: String) throws -> String {
+        let testDirectory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+        let productRoot = testDirectory.deletingLastPathComponent()
+        return try String(
+            contentsOf: productRoot
+                .appendingPathComponent("Gravitas Plague")
+                .appendingPathComponent(relativePath),
+            encoding: .utf8
+        )
+    }
 }

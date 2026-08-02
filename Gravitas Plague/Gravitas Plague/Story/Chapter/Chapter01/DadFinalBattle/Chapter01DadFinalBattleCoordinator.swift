@@ -25,6 +25,8 @@ final class Chapter01DadFinalBattleCoordinator {
     private let onPlayerContactFeedback: @MainActor (Int) -> Void
     private let onPlayerDeath: @MainActor () -> Void
     private let onRuntimeReleased: @MainActor (Chapter01DadFinalBattleReleasedEvent) -> Void
+    private weak var completionSink:
+        (any Chapter01DadFinalBattleCompletionSink)?
 
     private(set) var state: Chapter01DadFinalBattleState = .unloaded
     private var chapterRunID: UUID?
@@ -82,6 +84,12 @@ final class Chapter01DadFinalBattleCoordinator {
         return enemyRegistry.activeEnemyCount(
             battleInstanceID: battleInstanceID
         ) > 0 || door.battlePortalFullExteriorResident
+    }
+
+    func setCompletionSink(
+        _ sink: (any Chapter01DadFinalBattleCompletionSink)?
+    ) {
+        completionSink = sink
     }
 
     func start(
@@ -447,6 +455,14 @@ final class Chapter01DadFinalBattleCoordinator {
                 }
                 try await doorCloseTask.value
                 self.onEnemyRemoved(enemyID)
+                // The registry's release proof is based on the controller's weak
+                // lifetime. Drop the coordinator-owned prepared graph before the
+                // lease clears and verifies the controller.
+                self.prepared = nil
+                print(
+                    "[Chapter01DadBattle] coordinator prepared enemy released " +
+                        "enemyID=\(enemyID.uuidString) beforeRegistryProof=true"
+                )
                 _ = try await self.runtimeCleanup.releaseEnemy(
                     battleInstanceID: battleInstanceID,
                     enemyID: enemyID,
@@ -461,11 +477,11 @@ final class Chapter01DadFinalBattleCoordinator {
                         !self.door.battlePortalFullExteriorResident,
                     musicStillPlaying: false
                 )
-                await self.finishRuntimeRelease(
+                try await self.finishRuntimeRelease(
                     chapterRunID: self.chapterRunID,
                     battleInstanceID: battleInstanceID,
                     report: report,
-                    finalState: .postBattleHold
+                    finalState: .completed
                 )
             } catch {
                 print(
@@ -555,18 +571,45 @@ final class Chapter01DadFinalBattleCoordinator {
         battleInstanceID: UUID,
         report: BattleRuntimeReleaseReport,
         finalState: Chapter01DadFinalBattleState
-    ) async {
-        await releaseInteractionLease(reason: "chapter01DadBattle.completed")
-        if let chapterRunID {
-            onRuntimeReleased(
-                Chapter01DadFinalBattleReleasedEvent(
-                    eventID: UUID(),
-                    chapterRunID: chapterRunID,
-                    battleInstanceID: battleInstanceID,
-                    releaseReport: report
-                )
-            )
+    ) async throws {
+        guard let chapterRunID,
+              let interactionLease,
+              let completionSink else {
+            throw Chapter01Error.missingDadFinalBattleCompletionSink
         }
+        let event = Chapter01DadFinalBattleReleasedEvent(
+            eventID: UUID(),
+            chapterRunID: chapterRunID,
+            battleInstanceID: battleInstanceID,
+            battleLease: interactionLease,
+            releaseReport: report,
+            doorState: door.battleDoorState,
+            richBattleQueueDrained: richQueue.isDrained(
+                battleInstanceID: battleInstanceID
+            )
+        )
+        guard event.isSafeForFinalDadFrame else {
+            throw Chapter01Error.dadFinalBattleReleaseBoundaryFailed
+        }
+
+        state = .awaitingFinalDadFrameHandoff
+        print(
+            "[Chapter01DadBattle] successful release boundary " +
+                "chapterRunID=\(chapterRunID.uuidString) " +
+                "battleInstanceID=\(battleInstanceID.uuidString) " +
+                "completionEventID=\(event.eventID.uuidString) " +
+                "doorState=\(event.doorState.rawValue) " +
+                "fullExteriorResident=\(!report.fullPortalReleased) " +
+                "musicActive=\(report.musicStillPlaying) " +
+                "richQueueDrained=\(event.richBattleQueueDrained) " +
+                "safeForFinalDadFrame=\(event.isSafeForFinalDadFrame)"
+        )
+        try await completionSink.dadFinalBattleCompleted(event)
+
+        // The sink atomically transfers this lease to storyTransition.
+        // Clearing the stale local reference prevents a second release.
+        self.interactionLease = nil
+        onRuntimeReleased(event)
         prepared = nil
         definition = nil
         self.chapterRunID = nil

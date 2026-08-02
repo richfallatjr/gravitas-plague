@@ -10,6 +10,8 @@ enum Chapter01State: Sendable, Equatable {
     case postRobotHub
     case preDadFinalBattleReady
     case dadFinalBattle
+    case finalDadFramePending
+    case complete
     case failed(String)
     case cancelled
 }
@@ -25,6 +27,13 @@ enum Chapter01Error: LocalizedError {
     case postRobotBranchNotAvailable(Chapter01PostRobotBranch)
     case terminalPointMismatch
     case robotReleaseBoundaryFailed
+    case invalidFinalDadFrameTransition
+    case finalDadFrameNotPending
+    case finalDadFramePresentationFailed
+    case wrongFinalScriptPoint
+    case dadFinalBattleReleaseBoundaryFailed
+    case staleDadFinalBattleCompletion
+    case missingDadFinalBattleCompletionSink
 
     var errorDescription: String? {
         switch self {
@@ -48,6 +57,20 @@ enum Chapter01Error: LocalizedError {
             return "A Chapter 01 branch completed from the wrong terminal ScriptPoint."
         case .robotReleaseBoundaryFailed:
             return "The Robot, its audio, or the exterior portal is still resident."
+        case .invalidFinalDadFrameTransition:
+            return "Chapter 01 cannot unlock the final Dad-frame memory from its current checkpoint."
+        case .finalDadFrameNotPending:
+            return "The final Dad-frame memory is not pending."
+        case .finalDadFramePresentationFailed:
+            return "The final Dad-frame interaction could not become the active Chapter action."
+        case .wrongFinalScriptPoint:
+            return "Chapter 01 completed from the wrong final ScriptPoint."
+        case .dadFinalBattleReleaseBoundaryFailed:
+            return "The Dad battle, its audio, or the exterior portal is still resident."
+        case .staleDadFinalBattleCompletion:
+            return "Chapter 01 received a stale Dad final-battle completion."
+        case .missingDadFinalBattleCompletionSink:
+            return "The Dad final battle has no Chapter completion sink."
         }
     }
 }

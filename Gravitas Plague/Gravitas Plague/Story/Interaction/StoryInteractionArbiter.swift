@@ -14,6 +14,8 @@ actor StoryInteractionArbiter {
     private var doorState: StoryDoorLifecycleState = .closedUnloaded
     private var exclusiveLease: StoryInteractionLease?
     private var battleDoorPermissions: [UUID: StoryBattleDoorPermission] = [:]
+    private var stableInteractionPolicy: StoryStableInteractionPolicy =
+        .unrestricted
     private let snapshotHub = StoryInteractionSnapshotHub()
 
     func snapshots() async -> AsyncStream<StoryInteractionSnapshot> {
@@ -109,6 +111,13 @@ actor StoryInteractionArbiter {
         guard exclusiveLease == nil else {
             return try reject(.exclusiveOwnerActive, requested: "turingFlow.\(runID)", source: source)
         }
+        guard stableInteractionPolicy.allowedTuringSurfaces.contains(surfaceID) else {
+            return try reject(
+                .interactionNotPermitted,
+                requested: "turingFlow.\(runID)",
+                source: source
+            )
+        }
         let gate = turingGates[surfaceID] ?? .closed
         guard gate == .play || gate == .microphone else {
             return try reject(.turingGateNotInteractive, requested: "turingFlow.\(runID)", source: source)
@@ -135,11 +144,18 @@ actor StoryInteractionArbiter {
 
     func claimAutomaticTuring(
         runID: String,
-        surfaceID _: StoryInteractionSurfaceID,
+        surfaceID: StoryInteractionSurfaceID,
         source: String
     ) async throws -> StoryInteractionLease {
         guard exclusiveLease == nil else {
             return try reject(.exclusiveOwnerActive, requested: "turingFlow.\(runID)", source: source)
+        }
+        guard stableInteractionPolicy.allowedTuringSurfaces.contains(surfaceID) else {
+            return try reject(
+                .interactionNotPermitted,
+                requested: "turingFlow.\(runID)",
+                source: source
+            )
         }
         guard doorState == .closedUnloaded else {
             return try reject(.doorNotClosedAndUnloaded, requested: "turingFlow.\(runID)", source: source)
@@ -153,6 +169,13 @@ actor StoryInteractionArbiter {
     func claimManualDoor(source: String) async throws -> StoryInteractionLease {
         guard exclusiveLease == nil else {
             return try reject(.exclusiveOwnerActive, requested: "doorPortal", source: source)
+        }
+        guard stableInteractionPolicy.permitsDoorInteraction else {
+            return try reject(
+                .interactionNotPermitted,
+                requested: "doorPortal",
+                source: source
+            )
         }
         guard turingGates.values.contains(.busy) == false else {
             return try reject(.turingGateNotInteractive, requested: "doorPortal", source: source)
@@ -320,7 +343,44 @@ actor StoryInteractionArbiter {
         }
     }
 
+    func setStableInteractionPolicy(
+        _ policy: StoryStableInteractionPolicy,
+        storyTransitionLease: StoryInteractionLease,
+        reason: String
+    ) async throws {
+        guard exclusiveLease == storyTransitionLease else {
+            throw StoryInteractionClaimError.staleLease
+        }
+        guard case .storyTransition = storyTransitionLease.owner else {
+            throw StoryInteractionClaimError.invalidTransfer
+        }
+        guard stableInteractionPolicy != policy else { return }
+        stableInteractionPolicy = policy
+        await publish(reason: "stablePolicy.\(reason)")
+    }
+
+    func resetStableInteractionPolicy(reason: String) async {
+        guard exclusiveLease == nil else {
+            print(
+                "[StoryInteraction] stable policy reset deferred " +
+                    "owner=\(exclusiveLease?.owner.logValue ?? "none") reason=\(reason)"
+            )
+            return
+        }
+        guard stableInteractionPolicy != .unrestricted else { return }
+        stableInteractionPolicy = .unrestricted
+        await publish(reason: "stablePolicyReset.\(reason)")
+    }
+
     func release(_ lease: StoryInteractionLease, reason: String) async {
+        _ = await releaseAndCurrentSnapshot(lease, reason: reason)
+    }
+
+    @discardableResult
+    func releaseAndCurrentSnapshot(
+        _ lease: StoryInteractionLease,
+        reason: String
+    ) async -> StoryInteractionSnapshot {
         guard exclusiveLease == lease else {
             print("""
             [StoryInteraction] stale release ignored
@@ -328,7 +388,7 @@ actor StoryInteractionArbiter {
               owner: \(lease.owner.logValue)
               reason: \(reason)
             """)
-            return
+            return makeSnapshot()
         }
         if case .battle(let battleInstanceID) = lease.owner {
             battleDoorPermissions.removeValue(forKey: battleInstanceID)
@@ -341,6 +401,7 @@ actor StoryInteractionArbiter {
           reason: \(reason)
         """)
         await publish(reason: "release.\(reason)")
+        return makeSnapshot()
     }
 
     func reset(reason: String) async {
@@ -353,6 +414,7 @@ actor StoryInteractionArbiter {
         doorState = .closedUnloaded
         exclusiveLease = nil
         battleDoorPermissions.removeAll(keepingCapacity: false)
+        stableInteractionPolicy = .unrestricted
         await publish(reason: "reset.\(reason)")
     }
 
@@ -476,14 +538,22 @@ actor StoryInteractionArbiter {
             crankRadio = .hidden
             hamReceiver = .hidden
         } else {
-            let walkieGate =
-                turingGates[.walkie] ?? .closed
-            let dadGate =
-                turingGates[.dadFrame] ?? .closed
-            let crankRadioGate =
-                turingGates[.crankRadio] ?? .closed
-            let hamReceiverGate =
-                turingGates[.hamReceiver] ?? .closed
+            let walkieGate = stableInteractionPolicy.allowedTuringSurfaces
+                .contains(.walkie)
+                ? (turingGates[.walkie] ?? .closed)
+                : .closed
+            let dadGate = stableInteractionPolicy.allowedTuringSurfaces
+                .contains(.dadFrame)
+                ? (turingGates[.dadFrame] ?? .closed)
+                : .closed
+            let crankRadioGate = stableInteractionPolicy.allowedTuringSurfaces
+                .contains(.crankRadio)
+                ? (turingGates[.crankRadio] ?? .closed)
+                : .closed
+            let hamReceiverGate = stableInteractionPolicy.allowedTuringSurfaces
+                .contains(.hamReceiver)
+                ? (turingGates[.hamReceiver] ?? .closed)
+                : .closed
 
             let anyTuringSurfaceBusy =
                 turingGates.values.contains(.busy)
@@ -497,7 +567,10 @@ actor StoryInteractionArbiter {
                 hamReceiver = .hidden
             } else {
                 var resolvedCapabilities:
-                    Set<StoryInteractionCapability> = [.doorOpen]
+                    Set<StoryInteractionCapability> =
+                        stableInteractionPolicy.permitsDoorInteraction
+                        ? [.doorOpen]
+                        : []
 
                 switch walkieGate {
                 case .play:
@@ -552,7 +625,9 @@ actor StoryInteractionArbiter {
                 }
 
                 capabilities = resolvedCapabilities
-                door = .open
+                door = stableInteractionPolicy.permitsDoorInteraction
+                    ? .open
+                    : .hidden
             }
         }
 
@@ -582,6 +657,7 @@ actor StoryInteractionArbiter {
           hamReceiverGate: \((turingGates[.hamReceiver] ?? .closed).rawValue)
           doorState: \(snapshot.doorState.rawValue)
           exclusiveOwner: \(snapshot.exclusiveOwner?.logValue ?? "none")
+          stablePolicy: \(stableInteractionPolicy.id.rawValue)
           capabilities: \(snapshot.capabilities.map(\.rawValue).sorted())
           walkie: \(snapshot.walkiePresentation.rawValue)
           door: \(snapshot.doorPresentation.rawValue)

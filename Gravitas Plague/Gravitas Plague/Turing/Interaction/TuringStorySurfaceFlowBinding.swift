@@ -55,6 +55,15 @@ extension TuringStorySurfaceFlowBinding {
         interactionSurface: .dadFrame
     )
 
+    static let chapter01DadEulogyScript03 = Self(
+        rootScriptPointID: "chapter01.dadFrame.rich.script03",
+        terminalScriptPointID: "chapter01.dadFrame.rich.script03",
+        conversationKey: "chapter01.object.dad_frame.eulogy",
+        conversationCharacterID: "rich",
+        conversationOutputRoute: .roomGlobal,
+        interactionSurface: .dadFrame
+    )
+
     static let chapter01FourChancesWalkie = Self(
         rootScriptPointID: "chapter01.walkie.rich.script08",
         terminalScriptPointID: "chapter01.walkie.bigMike.script09",

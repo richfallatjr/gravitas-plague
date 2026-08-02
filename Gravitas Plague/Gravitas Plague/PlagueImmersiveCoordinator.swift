@@ -548,6 +548,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             Chapter01DadFinalBattleActionRouter(
                 battle: dadFinalBattle
             )
+        let finalDadFrameInteractions =
+            Chapter01FinalDadFrameInteractionCoordinator(
+                dadFrame: turingStoryDadFrameInteractionController
+            )
         preDadFinalBattleBoundary.sink = dadFinalBattleActionRouter
         let chapterCoordinator = Chapter01Coordinator(
             walkie: turingStoryWalkieInteractionController,
@@ -555,6 +559,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             postRobotInteractions: postRobotInteractions,
             preDadFinalBattleBoundary: preDadFinalBattleBoundary,
             dadFinalBattleActionRouter: dadFinalBattleActionRouter,
+            finalDadFrameInteractions: finalDadFrameInteractions,
             startRobot: { [weak self] chapterRunID, transitionLease, sink in
                 guard let self else {
                     throw Chapter01Error.openingResourceUnavailable(
@@ -573,6 +578,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 )
             }
         )
+        dadFinalBattle.setCompletionSink(chapterCoordinator)
         let completionRouter = TuringStoryCompletionRouter(
             prologue: completionCoordinator,
             chapter01: chapterCoordinator
