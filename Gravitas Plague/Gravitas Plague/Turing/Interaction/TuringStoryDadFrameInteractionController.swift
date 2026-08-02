@@ -5,10 +5,7 @@ import RealityKit
 final class TuringStoryDadFrameInteractionController:
     StoryInteractionSurfacePresenting
 {
-    private let scriptPointID =
-        "prologue.dadPhotoMemory.001"
-    private let conversationKey =
-        "object.dad_frame"
+    private var binding: TuringStorySurfaceFlowBinding?
     private let gate:
         TuringFlowInteractionGateController
     private let episodeFlow:
@@ -75,19 +72,38 @@ final class TuringStoryDadFrameInteractionController:
             dadFrameRoot: dadFrameRoot
         )
         ready = true
-        if gate.state(for: .dadFrame) == .closed {
-            gate.armPlay(
-                surfaceID: .dadFrame,
-                reason: "dadFrameInstalled"
-            )
-        }
         applyInteractionSnapshot(latestSnapshot)
+    }
+
+    func bind(
+        _ binding: TuringStorySurfaceFlowBinding,
+        initialState: TuringFlowInteractionGateController.State,
+        reason: String
+    ) {
+        precondition(binding.interactionSurface == .dadFrame)
+        self.binding = binding
+        gate.applyStableState(
+            initialState,
+            surfaceID: .dadFrame,
+            reason: reason
+        )
+    }
+
+    func stageBinding(
+        _ binding: TuringStorySurfaceFlowBinding,
+        reason: String
+    ) {
+        precondition(binding.interactionSurface == .dadFrame)
+        self.binding = binding
+        print("[TuringDadFrame] binding staged root=\(binding.rootScriptPointID) reason=\(reason)")
     }
 
     func dadFrameRemoved(reason: String) {
         let startupTask = dictationStartTask
         let musicIdentity = activeConversationMusicIdentity
         ready = false
+        let staleConversationKey = binding?.conversationKey
+        binding = nil
         holdActive = false
         playClaimPending = false
         playTask?.cancel()
@@ -109,11 +125,19 @@ final class TuringStoryDadFrameInteractionController:
                     )
             }
         }
+        if let staleConversationKey {
+            Task {
+                await TuringConversationInputStore.shared.clear(
+                    key: staleConversationKey
+                )
+            }
+        }
         print("[TuringDadFrame] removed reason=\(reason)")
     }
 
     func playTapped(source: String) {
         guard ready,
+              let binding,
               playClaimPending == false,
               latestSnapshot.capabilities
                 .contains(.dadFramePlay) else {
@@ -123,9 +147,9 @@ final class TuringStoryDadFrameInteractionController:
         playClaimPending = true
         print("""
         [TuringDadPhoto] play claimed
-          scriptPointID: \(scriptPointID)
+          scriptPointID: \(binding.rootScriptPointID)
           interactionSurface: \(StoryInteractionSurfaceID.dadFrame.rawValue)
-          conversationKey: \(conversationKey)
+          conversationKey: \(binding.conversationKey)
           source: \(source)
         """)
         playTask?.cancel()
@@ -137,7 +161,7 @@ final class TuringStoryDadFrameInteractionController:
                 self.playClaimPending = false
             }
             let result = await self.episodeFlow.start(
-                scriptPointID: self.scriptPointID,
+                scriptPointID: binding.rootScriptPointID,
                 trigger: .userPlay
             )
             if result.succeeded == false,
@@ -176,9 +200,12 @@ final class TuringStoryDadFrameInteractionController:
             self.activeConversationMusicIdentity =
                 musicIdentity
             do {
+                guard let binding = self.binding else {
+                    throw TuringRuntimeError.invalidConfig("Dad-frame flow binding is unavailable.")
+                }
                 let descriptor =
                     try TuringFlowDescriptorStore()
-                        .require(self.scriptPointID)
+                        .require(binding.rootScriptPointID)
                 try await TuringFlowMediaCueCoordinator
                     .shared
                     .startIfNeeded(
@@ -341,6 +368,9 @@ final class TuringStoryDadFrameInteractionController:
                 return
             }
             do {
+                guard let binding = self.binding else {
+                    throw TuringRuntimeError.invalidConfig("Dad-frame conversation binding is unavailable.")
+                }
                 let transcript =
                     try await self.dictation.endHoldToSend()
                 self.eventSink?.publishTuringDictationEvent(
@@ -350,9 +380,9 @@ final class TuringStoryDadFrameInteractionController:
                 )
                 print("""
                 [TuringDadPhoto] conversation submitted
-                  characterID: rich
-                  outputRoute: \(TuringVoiceOutputContext.roomGlobal.rawValue)
-                  conversationKey: \(self.conversationKey)
+                  characterID: \(binding.conversationCharacterID)
+                  outputRoute: \(binding.conversationOutputRoute.rawValue)
+                  conversationKey: \(binding.conversationKey)
                   userInputUTF16: \(transcript.utf16.count)
                   dialogueHistoryIncluded: false
                 """)
@@ -361,14 +391,14 @@ final class TuringStoryDadFrameInteractionController:
                     await TuringFlowConversationRunner.run(
                         request:
                             TuringFlowConversationRequest(
-                                characterID: "rich",
-                                outputRoute: .roomGlobal,
+                                characterID: binding.conversationCharacterID,
+                                outputRoute: binding.conversationOutputRoute,
                                 conversationKey:
-                                    self.conversationKey,
+                                    binding.conversationKey,
                                 playerDictation: transcript,
                                 interactionLease: lease,
                                 interactionSurface:
-                                    .dadFrame
+                                    binding.interactionSurface
                             ),
                         inputStore: .shared,
                         onSegmentZeroReady: { [weak self] in
@@ -448,14 +478,15 @@ final class TuringStoryDadFrameInteractionController:
     private func conversationMusicIdentity(
         runID: UUID
     ) -> TuringFlowIdentity {
-        TuringFlowIdentity(
+        let activeBinding = binding ?? .prologueDadPhoto
+        return TuringFlowIdentity(
             flowInstanceID: runID,
             scriptPointID:
                 "conversation.\(runID.uuidString)",
-            characterID: "rich",
+            characterID: activeBinding.conversationCharacterID,
             prerecordingID: "none",
             voicePromptID: "conversationPrompt",
-            interactionSurface: .dadFrame
+            interactionSurface: activeBinding.interactionSurface
         )
     }
 

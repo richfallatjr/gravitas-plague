@@ -8,4 +8,5 @@ struct Chapter01RobotRuntime {
     let roomRoot: Entity
     let mirror: StoryPortalEnemyRenderMirrorAdapter
     let speechEmitter: Entity
+    let externalAudioAttachment: (any Chapter01RobotAudioAttachment)?
 }

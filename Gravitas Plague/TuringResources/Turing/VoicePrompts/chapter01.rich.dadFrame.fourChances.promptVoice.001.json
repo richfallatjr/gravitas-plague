@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter01.rich.dadFrame.fourChances.promptVoice.001",
+  "speakerID": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "characterProfileID": "rich.chapter01.fourChances",
+  "listenerProfileID": "rich.chapter01.fourChances",
+  "outputContext": "roomGlobal",
+  "conversationKey": "chapter01.object.dad_frame.four_chances",
+  "promptTemplateID": "roomObjectMemory",
+  "intent": "I am forcing myself to separate what I actually witnessed from what I desperately want to believe. Dad followed the same route he used after late engineering shifts, coming past the side window before walking around to the front door. When I called to him, he stopped and turned toward my voice. His hand moved toward the lower window frame near the loose seal he used to complain about fixing. That may have been recognition, an old habit, or merely the infection reacting to sound, but it is the first evidence I have that some part of him may still be present.\n\nThe Gravitas pack contains four individually sealed antigen cartridges. I have already started thinking of one as Dad’s, even though I do not know the treatment window, the proper way to administer it, or whether he is still early-stage. One cartridge should probably be held back for myself. The remaining two suddenly feel like moral decisions instead of supplies. Every person I encounter may become a choice about who deserves another chance.\n\nThe Robot described the antigen as temporary suppression, not a cure. I need to learn whether recognition of home, familiar voices, repeated habits, or purposeful movement means the treatment could still work. I also need a way to bring Dad close without opening the house to him or anything that may be following him.\n\nDad taught me never to declare a machine dead until I had traced every connection. People are not machines, but I am holding onto that lesson. I want to use the photograph, his old tools, the workshop light, and familiar sounds to test whether memory can still reach him before I risk a cartridge—or my life.",
+  "emotion": "reflective, analytical, frightened, and cautiously hopeful"
+}

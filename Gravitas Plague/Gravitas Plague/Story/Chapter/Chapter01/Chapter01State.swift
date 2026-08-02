@@ -7,7 +7,8 @@ enum Chapter01State: Sendable, Equatable {
     case script07
     case dadWindow
     case robot
-    case postRobotHolding
+    case postRobotHub
+    case preDadFinalBattleReady
     case failed(String)
     case cancelled
 }
@@ -19,6 +20,9 @@ enum Chapter01Error: LocalizedError {
     case stageNotEstablished
     case unsupportedContinuationCheckpoint
     case openingResourceUnavailable(String)
+    case postRobotHubNotUnlocked
+    case terminalPointMismatch
+    case robotReleaseBoundaryFailed
 
     var errorDescription: String? {
         switch self {
@@ -34,6 +38,12 @@ enum Chapter01Error: LocalizedError {
             return "Chapter 01 has no supported continuation checkpoint."
         case .openingResourceUnavailable(let detail):
             return "Chapter 01 opening is unavailable: \(detail)"
+        case .postRobotHubNotUnlocked:
+            return "The Chapter 01 post-Robot hub is not unlocked."
+        case .terminalPointMismatch:
+            return "A Chapter 01 branch completed from the wrong terminal ScriptPoint."
+        case .robotReleaseBoundaryFailed:
+            return "The Robot, its audio, or the exterior portal is still resident."
         }
     }
 }

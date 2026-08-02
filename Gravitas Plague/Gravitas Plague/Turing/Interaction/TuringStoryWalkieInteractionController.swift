@@ -29,6 +29,7 @@ final class TuringStoryWalkieInteractionController {
         (any TuringStoryWalkieInteractionEventSink)?
 
     private var activeEpisodeID: TuringEpisodeID?
+    private var binding: TuringStorySurfaceFlowBinding?
     private var walkieReady = false
     private var holdActive = false
     private var pendingPlayAction: TuringStoryWalkiePlayAction?
@@ -81,7 +82,36 @@ final class TuringStoryWalkieInteractionController {
 
     func episodeStarted(_ episodeID: TuringEpisodeID) {
         activeEpisodeID = episodeID
+        if episodeID == .prologue {
+            binding = .prologueWalkie
+        }
         applyInteractionSnapshot(latestInteractionSnapshot)
+    }
+
+    func bind(
+        _ binding: TuringStorySurfaceFlowBinding,
+        initialState: TuringFlowInteractionGateController.State,
+        reason: String
+    ) {
+        precondition(binding.interactionSurface == .walkie)
+        self.binding = binding
+        pendingPlayAction = initialState == .play
+            ? .startScriptPoint(id: binding.rootScriptPointID, trigger: .userPlay)
+            : nil
+        gate.applyStableState(initialState, surfaceID: .walkie, reason: reason)
+    }
+
+    func stageBinding(
+        _ binding: TuringStorySurfaceFlowBinding,
+        initialState: TuringFlowInteractionGateController.State,
+        reason: String
+    ) {
+        precondition(binding.interactionSurface == .walkie)
+        self.binding = binding
+        pendingPlayAction = initialState == .play
+            ? .startScriptPoint(id: binding.rootScriptPointID, trigger: .userPlay)
+            : nil
+        print("[TuringWalkieState] binding staged root=\(binding.rootScriptPointID) reason=\(reason)")
     }
 
     func walkieInstalled(
@@ -142,6 +172,7 @@ final class TuringStoryWalkieInteractionController {
 
     func walkieRemoved(reason: String) {
         walkieReady = false
+        binding = nil
         holdActive = false
         pendingPlayAction = nil
         dictationStartTask?.cancel()
@@ -239,6 +270,13 @@ final class TuringStoryWalkieInteractionController {
                 return
             }
 
+            guard let binding = self.binding else {
+                self.holdActive = false
+                self.eventSink?.publishTuringDictationEvent(
+                    .failed("Device operation failed: walkie conversation binding is unavailable.")
+                )
+                return
+            }
             let recordingRunID = UUID()
             let lease: StoryInteractionLease
             do {
@@ -246,7 +284,8 @@ final class TuringStoryWalkieInteractionController {
                     .acquireInteractionLease(
                         runID: "conversation.\(recordingRunID.uuidString)",
                         source: "microphoneHold.\(source)",
-                        mode: .manual
+                        mode: .manual,
+                        interactionSurface: binding.interactionSurface
                     )
             } catch {
                 self.holdActive = false
@@ -360,9 +399,20 @@ final class TuringStoryWalkieInteractionController {
                         reason: "prologueMic.\(source)"
                     )
 
-                let result = await TuringBigMikeConversationRunner.run(
-                    playerDictation: transcript,
-                    interactionLease: interactionLease,
+                guard let binding = self.binding else {
+                    throw TuringRuntimeError.invalidConfig(
+                        "Walkie conversation binding is unavailable."
+                    )
+                }
+                let result = await TuringFlowConversationRunner.run(
+                    request: TuringFlowConversationRequest(
+                        characterID: binding.conversationCharacterID,
+                        outputRoute: binding.conversationOutputRoute,
+                        conversationKey: binding.conversationKey,
+                        playerDictation: transcript,
+                        interactionLease: interactionLease,
+                        interactionSurface: binding.interactionSurface
+                    ),
                     inputStore: .shared,
                     onSegmentZeroReady: { [weak self] in
                         self?.eventSink?
@@ -423,6 +473,7 @@ final class TuringStoryWalkieInteractionController {
     func shutdown(reason: String) async {
         walkieReady = false
         activeEpisodeID = nil
+        binding = nil
         holdActive = false
         pendingPlayAction = nil
         let staleConversationLease = activeConversationLease

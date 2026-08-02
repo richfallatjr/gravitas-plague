@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter01.bigMike.script09.promptVoice.001",
+  "speakerID": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "characterProfileID": "big_mike.chapter01.fourChances",
+  "listenerProfileID": "rich.chapter01.fourChances",
+  "outputContext": "walkieSpatial",
+  "conversationKey": "chapter01.dialogue.big_mike.rich.four_chances",
+  "promptTemplateID": "characterIntent",
+  "intent": "I want Rich’s father alive too. Years ago, during an ice storm, that man kept my generator running when my family needed heat. He worked on it half the night and refused to take a dollar. I am not dismissing Rich’s hope or treating his father like another infected stranger. I am trying to stop Rich from turning hope into a suicide mission.\n\nWhen I saw the large figure moving toward Rich’s house, I also caught two smaller movements deeper in the tree line. I could not identify them. They may have been infected, animals, or frightened people following at a distance. I did not tell Rich immediately because I only saw them for a second, but now he needs to understand that his father may not be alone.\n\nI have also heard scattered radio chatter about survivors watching the sky for Gravitas drones and following them toward delivery sites. Medicine can attract desperate people. Rich should not say how many cartridges he has or leave the case visible from a window.\n\nThe safest plan is to make Dad return to a controlled location. Rich can use his lights, speakers, and gadgets from inside while I monitor the roads and radio traffic. I will help him search, but I need him behind a wall, thinking clearly, and alive.",
+  "emotion": "protective, firm, personally invested, and careful about uncertainty"
+}

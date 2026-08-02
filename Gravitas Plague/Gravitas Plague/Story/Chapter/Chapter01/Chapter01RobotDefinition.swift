@@ -11,6 +11,7 @@ enum Chapter01RobotError: LocalizedError {
     case encounterAlreadyActive
     case invalidEncounterState(String)
     case incompleteCleanup(String)
+    case portalReleaseBoundaryFailed
 
     var errorDescription: String? {
         switch self {
@@ -34,6 +35,8 @@ enum Chapter01RobotError: LocalizedError {
             return "Invalid Chapter 01 Robot encounter state: \(reason)"
         case .incompleteCleanup(let reason):
             return "Chapter 01 Robot cleanup was incomplete: \(reason)"
+        case .portalReleaseBoundaryFailed:
+            return "The Robot departure door did not reach closed with the full exterior unloaded."
         }
     }
 }

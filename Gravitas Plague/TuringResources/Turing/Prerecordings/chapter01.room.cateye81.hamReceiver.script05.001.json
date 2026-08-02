@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter01.room.cateye81.hamReceiver.script05.001",
+  "speaker": "cateye81",
+  "voiceID": "cateye81_base_clone_v1",
+  "voiceVariantID": "cateye81_reference_01",
+  "audioFile": "pr-cat-eye-81-ham-receiver-script-05.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Rich, Lord, I am glad that relay found you. But listen close: treat that antigen like the last medicine on earth, because it may be. Every report I copied said early stage—confusion, fever, still recognizing people and places. Once the eyes cloud and speech goes, nobody I trust could promise anything. Look after yourself first, and keep the package off the air. Before I went underground, I saw infected pull a young couple down outside Savannah and start feeding. They moved together like a pack. I know what the doctors call this, but some nights it feels like Hell opened its gates and gave the abominations free reign.",
+  "summary": "CatEye81 confirms only uncertain early-stage reports, warns Rich to conceal the antigen, and describes what she witnessed near Savannah.",
+  "voicePromptIntent": "Continue using chapter01.cateye81.hamReceiver.script05.promptVoice.001.",
+  "defaultEmotion": "relieved, grave, candid, frightened, and careful about uncertainty"
+}

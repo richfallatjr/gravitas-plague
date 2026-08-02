@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter01.cateye81.hamReceiver.script05.promptVoice.001",
+  "speakerID": "cateye81",
+  "voiceID": "cateye81_base_clone_v1",
+  "characterProfileID": "cateye81.chapter01.fourChances",
+  "listenerProfileID": "rich.chapter01.fourChances",
+  "outputContext": "hamReceiverSpatial",
+  "conversationKey": "chapter01.object.ham_receiver.four_chances",
+  "promptTemplateID": "cateye81HamReceiver",
+  "intent": "I am relieved the Gravitas delivery was real, but that success frightens me because it turns the beacon into something desperate people may hunt. I heard one operator claim that antigen slowed symptoms when it was administered within hours of confusion and fever. Another station attempted treatment after the patient had stopped speaking and reported no visible improvement. Both accounts came over the radio. I did not witness either treatment, and I cannot guarantee that either report was honest or complete.\n\nI have not told Rich that I may need to request a cartridge for myself. While clearing the storm shelter’s ventilation intake, I scraped my forearm on a damaged panel after something had been clawing around above the hatch. I do not know whether blood or contaminated fluid touched the cut. I cleaned it immediately, but I have started checking my temperature and writing down any changes. I do not want pity, and I do not want Rich offering me one of the few doses he has.\n\nWhat I witnessed outside Savannah still feels larger than disease. The infected moved around the young couple with a strange shared purpose, almost without speaking. One woman stood apart and repeated the same broken line from an old hymn in a flat voice while the others fed. I do not know whether that was damaged memory, imitation, coordinated behavior, or something spiritual. My faith tells me that evil can use broken things, but I should not present belief as medical fact.\n\nI am beginning to believe the Plague may destroy more than the brain. It seems to strip away restraint while leaving fragments of habit, speech, and recognition behind. That is what makes the infected feel like abominations wearing pieces of the people they were.\n\nRich needs to understand that trying to save everyone may get him killed. The medicine is rare, the drones may be traceable, and any survivor who learns he has several doses may become more dangerous than the infected. I may try the beacon myself tonight, but I am not ready to tell him why.",
+  "emotion": "relieved, grave, candid, frightened, and explicit about uncertainty"
+}

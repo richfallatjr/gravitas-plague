@@ -52,10 +52,19 @@ final class TuringStoryProgressStore: ObservableObject {
     private let defaults: UserDefaults
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private var cancellables = Set<AnyCancellable>()
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         reloadFromDefaults()
+        NotificationCenter.default.publisher(
+            for: .chapter01ProgressDidChange
+        )
+        .receive(on: RunLoop.main)
+        .sink { [weak self] _ in
+            self?.reloadChapter01FromDefaults()
+        }
+        .store(in: &cancellables)
     }
 
     var canContinue: Bool {
@@ -151,23 +160,19 @@ final class TuringStoryProgressStore: ObservableObject {
         }
 
         do {
-            let value = try decoder.decode(
-                Chapter01ProgressSnapshot.self,
-                from: data
-            )
-            guard value.schemaVersion ==
-                    Chapter01ProgressSnapshot.currentSchemaVersion else {
-                invalidateChapter01(
-                    "Unsupported Chapter 01 save schema \(value.schemaVersion)."
-                )
-                return
-            }
+            let value = try Chapter01ProgressStore.decodeAndMigrate(data)
             guard value.contentRevision ==
                     Chapter01ProgressStore.contentRevision else {
                 invalidateChapter01(
                     "Chapter 01 content revision does not match this build."
                 )
                 return
+            }
+            if let migrated = try? encoder.encode(value), migrated != data {
+                defaults.set(
+                    migrated,
+                    forKey: Chapter01ProgressStore.Key.snapshot
+                )
             }
             chapter01Snapshot = value
         } catch {

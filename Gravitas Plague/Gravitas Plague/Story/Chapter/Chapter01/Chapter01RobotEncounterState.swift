@@ -33,7 +33,7 @@ struct Chapter01RobotEncounterCompletionEvent: Sendable {
     let chapterRunID: UUID
     let rewardSource: StoryRewardSource
     let releaseReport: Chapter01RobotReleaseReport
-    let hamTuringLease: StoryInteractionLease
+    let postRobotTransitionLease: StoryInteractionLease
 }
 
 struct Chapter01RobotEncounterFailureEvent: Sendable {

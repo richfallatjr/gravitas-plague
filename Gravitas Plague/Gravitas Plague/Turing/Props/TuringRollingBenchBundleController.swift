@@ -223,6 +223,13 @@ final class TuringRollingBenchBundleController:
                     resourcesReady:
                         readiness.missing.isEmpty
                 )
+            if readiness.missing.isEmpty {
+                hamReceiverInteractionController.bind(
+                    .prologueHamReceiver,
+                    initialState: .play,
+                    reason: "prologueHamReceiverConfigured"
+                )
+            }
             print("""
             [TuringHamReceiver] authoring readiness
               ready: \(readiness.missing.isEmpty)

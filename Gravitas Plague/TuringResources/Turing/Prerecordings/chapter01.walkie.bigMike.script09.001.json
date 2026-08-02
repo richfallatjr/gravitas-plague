@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter01.walkie.bigMike.script09.001",
+  "speaker": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "voiceVariantID": "broadcast_reference_fast_01",
+  "audioFile": "pr-big-mike-walkie-script-09.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Rich, slow down and listen. I believe you saw your father. I also believe those woods could be crawling with infected. One familiar face does not make that route safe. Mark the direction he went, lock the house down, and keep those cartridges out of sight. Give me time to watch the roads and work the radio. We can find a way to draw him back to the house without you wandering out there blind. You do not go chasing him alone. Not tonight. I know what he means to you, but I need you alive long enough to help him.",
+  "summary": "Big Mike validates Rich's hope while insisting they create a controlled plan and keep the antigen hidden.",
+  "voicePromptIntent": "Continue using chapter01.bigMike.script09.promptVoice.001.",
+  "defaultEmotion": "protective, firm, worried, and personally invested"
+}

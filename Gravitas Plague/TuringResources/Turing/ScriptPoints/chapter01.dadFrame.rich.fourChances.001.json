@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "scriptPointID": "chapter01.dadFrame.rich.fourChances.001",
+  "trigger": { "kind": "userPlay", "delaySeconds": 0 },
+  "transmission": {
+    "prerecordingID": "chapter01.room.rich.dadFrame.fourChances.001",
+    "voicePromptID": "chapter01.rich.dadFrame.fourChances.promptVoice.001",
+    "characterID": "rich",
+    "conversationKey": "chapter01.object.dad_frame.four_chances",
+    "outputRoute": "roomGlobal",
+    "interactionSurface": "dadFrame",
+    "computeStart": "foundationBeforePrerecording",
+    "fillerMode": "continuousFromPrerecordingToGenerated",
+    "commSFX": { "openBeforePrerecording": false, "sendAfterGenerated": false, "sendingLeadInAfterGeneratedSeconds": null },
+    "fixedLeadInSeconds": null,
+    "generationPipeline": null,
+    "backgroundMusic": {
+      "resourcePath": "Turing/Audio/Music/dad-photo-memory-score.mp3",
+      "gainDB": -25,
+      "loops": true,
+      "fadeInSeconds": 0.75,
+      "fadeOutSeconds": 1.25,
+      "stopBoundary": "promptVoicePlaybackCompleted"
+    }
+  },
+  "progression": { "nextScriptPointID": null, "automaticAdvance": false, "interactionGateAfterCompletion": "microphone" }
+}

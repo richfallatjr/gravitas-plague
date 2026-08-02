@@ -51,6 +51,7 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
     private var cleanupStarted = false
     private var generation: UInt64 = 0
     private var rewardSource: StoryRewardSource?
+    private var robotAudioAttachment: (any Chapter01RobotAudioAttachment)?
 
     var hasActiveHeavyRuntime: Bool {
         runtime != nil || door.battlePortalFullExteriorResident
@@ -80,7 +81,10 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
         progressStore: Chapter01ProgressStore = .shared,
         approachTargetClamp: @escaping Chapter01RobotApproachController.TargetClamp = { $0 },
         rewardAnchorResolver: @escaping StoryItemRewardPresenter.AnchorResolver,
-        onEnemyPrepared: @escaping @MainActor (UUID, JockRetargetTestController) -> Void = { _, _ in },
+        onEnemyPrepared: @escaping @MainActor (
+            UUID,
+            JockRetargetTestController
+        ) -> (any Chapter01RobotAudioAttachment)? = { _, _ in nil },
         onEnemyRemoved: @escaping @MainActor (UUID) -> Void = { _ in },
         onPlayerDamage: @escaping @MainActor (Int) -> Void = { _ in },
         onPlayerDeath: @escaping @MainActor () -> Void = {}
@@ -145,6 +149,14 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
                     request: request,
                     definition: definition,
                     generation: runGeneration
+                )
+                // The encounter call stack owns temporary strong references to
+                // the Robot during ingress, scan, combat, and departure. Only
+                // test the final weak-release boundary after that stack has
+                // returned and those locals are out of scope.
+                await self.cleanup(
+                    outcome: .rewardedRobotDeparted,
+                    reason: "successfulRobotExit"
                 )
             } catch is CancellationError {
                 guard !self.robotDeathHandled else { return }
@@ -239,6 +251,7 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
             doorContext: doorContext
         )
         self.runtime = runtime
+        robotAudioAttachment = runtime.externalAudioAttachment
         await heavyRuntimeRegistry.register(.robot(runtime.identity))
         await heavyRuntimeRegistry.register(
             .portalMirror(
@@ -457,6 +470,18 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
         definition: Chapter01RobotDefinition,
         generation: UInt64
     ) async throws {
+        try await performSuccessfulExit(
+            request: request,
+            definition: definition,
+            generation: generation
+        )
+    }
+
+    private func performSuccessfulExit(
+        request: Chapter01RobotEncounterRequest,
+        definition: Chapter01RobotDefinition,
+        generation: UInt64
+    ) async throws {
         guard let runtime else { return }
         let context = try door.chapter01RobotDoorContext()
         let current = runtime.controller.rootEntity.position(relativeTo: nil)
@@ -514,11 +539,19 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
             throw error
         }
 
+        guard door.battleDoorState == .closed,
+              !door.battlePortalFullExteriorResident else {
+            throw Chapter01RobotError.portalReleaseBoundaryFailed
+        }
+
         // Closing the door is the visual cutoff. Stop the now-occluded walk
         // and release the mirror/runtime only after close and unload complete.
         pathFollower.cancel(reason: "robotDepartureDoorClosed")
         finishPath(.success(()))
         _ = try? await continuedWalk.value
+        await robotAudioAttachment?.deactivate(
+            reason: "doorClosedAndExteriorUnloaded"
+        )
         try requireCurrent(request, generation: generation)
         portalMotionMode = .none
         print(
@@ -530,7 +563,6 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
               exteriorUnloadedBeforeRuntimeRelease: \(!door.battlePortalFullExteriorResident)
             """
         )
-        await cleanup(outcome: .rewardedRobotDeparted, reason: "successfulRobotExit")
     }
 
     private func handleRobotDeath(
@@ -544,6 +576,7 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
         recoveryMonitorTask?.cancel()
         runtime?.controller.setCombatEnabled(false)
         playerHitBudget?.disable()
+
         await music.stop(
             .robotAttack,
             chapterRunID: request.chapterRunID,
@@ -786,6 +819,9 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
         }
         runtime?.controller.setCombatEnabled(false)
         playerHitBudget?.disable()
+        await robotAudioAttachment?.deactivate(
+            reason: "cleanupFallback.\(reason)"
+        )
 
         let runtimeIdentity = runtime?.identity
         let enemyID = runtimeIdentity?.enemyID
@@ -863,19 +899,38 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
             robotCombatHandleCount: 0,
             activeEncounterTaskCount: 0,
             weakRobotControllerReleased: weakReleased,
+            robotPresenceAudioActive: robotAudioAttachment?.isActive ?? false,
+            robotExternalAudioSourceCount: robotAudioAttachment?.isActive == true ? 1 : 0,
             physicalFootprintMB: memory.physicalFootprintMB,
             residentSizeMB: memory.residentSizeMB
+        )
+        print(
+            """
+            [Chapter01RobotCleanup] release boundary
+              outcome: \(outcome)
+              doorState: \(report.doorState)
+              fullExteriorResident: \(report.fullExteriorResident)
+              robotPresenceAudioActive: \(report.robotPresenceAudioActive)
+              robotExternalAudioSourceCount: \(report.robotExternalAudioSourceCount)
+              robotRuntimeCount: \(report.robotRuntimeCount)
+              portalMirrorCount: \(report.portalMirrorCount)
+              preparedClipCount: \(report.preparedClipCount)
+              safeForPostRobotHub: \(report.isSafeForPostRobotHub)
+              physicalFootprintMB: \(report.physicalFootprintMB)
+              residentSizeMB: \(report.residentSizeMB)
+            """
         )
 
         let completionSink = request.completionSink
         let finalRewardSource = rewardSource
         self.request = nil
         self.definition = nil
+        self.robotAudioAttachment = nil
         state = .released
 
         switch outcome {
         case .rewardedRobotDeparted, .rewardedRobotDestroyed:
-            guard report.isSafeForTuring, let finalRewardSource else {
+            guard report.isSafeForPostRobotHub, let finalRewardSource else {
                 await completionSink.robotEncounterFailed(
                     Chapter01RobotEncounterFailureEvent(
                         chapterRunID: request.chapterRunID,
@@ -885,32 +940,27 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
                 )
                 return
             }
-            var transferredTuringLease: StoryInteractionLease?
+            var transitionLease: StoryInteractionLease?
             do {
-                _ = try await progressStore.commit(
-                    .hamScript04Pending,
-                    sourceEventID: UUID()
-                )
-                let turingLease = try await StoryInteractionArbiter.shared.transferBattleToTuring(
+                let transferred = try await StoryInteractionArbiter.shared.transferBattleToStoryTransition(
                     battleLease: request.battleLease,
-                    runID: "chapter01.hamScript04.\(request.chapterRunID.uuidString)",
-                    surfaceID: .hamReceiver,
+                    transitionID: UUID(),
                     reason: "chapter01RobotRuntimeReleased"
                 )
-                transferredTuringLease = turingLease
+                transitionLease = transferred
                 try await completionSink.robotEncounterCompleted(
                     Chapter01RobotEncounterCompletionEvent(
                         chapterRunID: request.chapterRunID,
                         rewardSource: finalRewardSource,
                         releaseReport: report,
-                        hamTuringLease: turingLease
+                        postRobotTransitionLease: transferred
                     )
                 )
             } catch {
-                if let transferredTuringLease {
+                if let transitionLease {
                     await StoryInteractionArbiter.shared.release(
-                        transferredTuringLease,
-                        reason: "chapter01HamHandoffFailed"
+                        transitionLease,
+                        reason: "chapter01PostRobotHandoffFailed"
                     )
                 } else {
                     await StoryInteractionArbiter.shared.release(
@@ -922,7 +972,7 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
                     Chapter01RobotEncounterFailureEvent(
                         chapterRunID: request.chapterRunID,
                         message: error.localizedDescription,
-                        retryCheckpointID: "chapter01.hamScript04.pending"
+                        retryCheckpointID: "chapter01.postRobotHub"
                     )
                 )
             }

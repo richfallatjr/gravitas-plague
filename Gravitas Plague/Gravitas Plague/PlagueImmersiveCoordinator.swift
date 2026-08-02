@@ -511,9 +511,17 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         let dadWindow = Chapter01DadWindowCoordinator(
             windowBundle: turingWindowBundleController
         )
+        let postRobotInteractions = Chapter01PostRobotInteractionCoordinator(
+            dadFrame: turingStoryDadFrameInteractionController,
+            walkie: turingStoryWalkieInteractionController,
+            hamReceiver: turingRollingBenchBundleController
+                .hamReceiverInteractionController
+        )
         let chapterCoordinator = Chapter01Coordinator(
             walkie: turingStoryWalkieInteractionController,
             dad: dadWindow,
+            postRobotInteractions: postRobotInteractions,
+            preDadFinalBattleBoundary: Chapter01PreDadFinalBattleBoundary(),
             startRobot: { [weak self] chapterRunID, transitionLease, sink in
                 guard let self else {
                     throw Chapter01Error.openingResourceUnavailable(
@@ -819,7 +827,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     private func prepareChapter01RobotAudioAndCallbacks(
         enemyID: UUID,
         controller: JockRetargetTestController
-    ) {
+    ) -> (any Chapter01RobotAudioAttachment)? {
         audioController.attachHostAudioSource(
             id: enemyID,
             hostRootEntity: controller.rootEntity,
@@ -852,6 +860,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         controller.onAttackStarted = {
             print("[Chapter01Robot] attack animation started")
         }
+        return Chapter01RobotAudioAttachmentLease(
+            enemyID: enemyID,
+            audioController: audioController
+        )
     }
 
     func handle(_ envelope: PlagueDemoSession.CommandEnvelope) {
@@ -1843,6 +1855,11 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                     iconAnchor: iconAnchor,
                     dadFrameRoot: dadFrameRoot
                 )
+            turingStoryDadFrameInteractionController.bind(
+                .prologueDadPhoto,
+                initialState: .play,
+                reason: "prologueDadFrameConfigured"
+            )
         } else {
             print("""
             [TuringDadFrame] ERROR action targets unavailable

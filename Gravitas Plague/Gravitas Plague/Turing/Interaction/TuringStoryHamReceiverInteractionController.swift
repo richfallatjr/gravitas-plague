@@ -5,10 +5,7 @@ import RealityKit
 final class TuringStoryHamReceiverInteractionController:
     StoryInteractionSurfacePresenting
 {
-    private let scriptPointID =
-        "prologue.hamReceiver.cateye81.001"
-    private let conversationKey =
-        "object.ham_receiver"
+    private var binding: TuringStorySurfaceFlowBinding?
     private let gate:
         TuringFlowInteractionGateController
     private let episodeFlow:
@@ -132,16 +129,32 @@ final class TuringStoryHamReceiverInteractionController:
             )
             return
         }
-        if gate.state(for: .hamReceiver) ==
-            .closed {
-            gate.armPlay(
-                surfaceID: .hamReceiver,
-                reason: "hamReceiverInstalled"
-            )
-        }
         applyInteractionSnapshot(
             latestSnapshot
         )
+    }
+
+    func bind(
+        _ binding: TuringStorySurfaceFlowBinding,
+        initialState: TuringFlowInteractionGateController.State,
+        reason: String
+    ) {
+        precondition(binding.interactionSurface == .hamReceiver)
+        self.binding = binding
+        gate.applyStableState(
+            initialState,
+            surfaceID: .hamReceiver,
+            reason: reason
+        )
+    }
+
+    func stageBinding(
+        _ binding: TuringStorySurfaceFlowBinding,
+        reason: String
+    ) {
+        precondition(binding.interactionSurface == .hamReceiver)
+        self.binding = binding
+        print("[TuringHamReceiver] binding staged root=\(binding.rootScriptPointID) reason=\(reason)")
     }
 
     func hamReceiverRemoved(reason: String) {
@@ -151,7 +164,9 @@ final class TuringStoryHamReceiverInteractionController:
             activeRecordingRunID
         let staleResponseRunID =
             activeResponseRunID
+        let staleConversationKey = binding?.conversationKey
         ready = false
+        binding = nil
         holdActive = false
         playClaimPending = false
         playTask?.cancel()
@@ -217,17 +232,11 @@ final class TuringStoryHamReceiverInteractionController:
                             "hamReceiverRemoved.\(reason)"
                     )
             }
-            await TuringConversationInputStore
-                .shared
-                .clear(
-                    key: self.conversationKey
+            if let staleConversationKey {
+                await TuringConversationInputStore.shared.clear(
+                    key: staleConversationKey
                 )
-            await TuringConversationInputStore
-                .shared
-                .clear(
-                    key:
-                        "object.ham_receiver.cateye81"
-                )
+            }
         }
         print(
             "[TuringHamReceiver] removed reason=\(reason)"
@@ -236,6 +245,7 @@ final class TuringStoryHamReceiverInteractionController:
 
     func playTapped(source: String) {
         guard ready,
+              let binding,
               playClaimPending == false,
               latestSnapshot.capabilities
                 .contains(.hamReceiverPlay) else {
@@ -254,7 +264,7 @@ final class TuringStoryHamReceiverInteractionController:
             let result =
                 await self.episodeFlow.start(
                     scriptPointID:
-                        self.scriptPointID,
+                        binding.rootScriptPointID,
                     trigger: .userPlay
                 )
             if result.succeeded == false,
@@ -490,6 +500,9 @@ final class TuringStoryHamReceiverInteractionController:
                     return
                 }
                 do {
+                    guard let binding = self.binding else {
+                        throw TuringRuntimeError.invalidConfig("Ham-receiver conversation binding is unavailable.")
+                    }
                     let transcript =
                         try await self.dictation
                             .endHoldToSend()
@@ -502,9 +515,9 @@ final class TuringStoryHamReceiverInteractionController:
                         )
                     print("""
                     [TuringHamReceiver] conversation submitted
-                      characterID: \(TuringCatEye81VoiceIdentity.characterID)
-                      outputRoute: \(TuringVoiceOutputContext.hamReceiverSpatial.rawValue)
-                      conversationKey: \(self.conversationKey)
+                      characterID: \(binding.conversationCharacterID)
+                      outputRoute: \(binding.conversationOutputRoute.rawValue)
+                      conversationKey: \(binding.conversationKey)
                       userInputUTF16: \(transcript.utf16.count)
                       dialogueHistoryIncluded: false
                     """)
@@ -517,18 +530,17 @@ final class TuringStoryHamReceiverInteractionController:
                                         conversationRunID:
                                             conversationRunID,
                                         characterID:
-                                            TuringCatEye81VoiceIdentity
-                                                .characterID,
+                                            binding.conversationCharacterID,
                                         outputRoute:
-                                            .hamReceiverSpatial,
+                                            binding.conversationOutputRoute,
                                         conversationKey:
-                                            self.conversationKey,
+                                            binding.conversationKey,
                                         playerDictation:
                                             transcript,
                                         interactionLease:
                                             lease,
                                         interactionSurface:
-                                            .hamReceiver
+                                            binding.interactionSurface
                                     ),
                                 inputStore:
                                     .shared,

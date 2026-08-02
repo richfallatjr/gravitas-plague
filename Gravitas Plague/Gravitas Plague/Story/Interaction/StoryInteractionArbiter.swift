@@ -43,6 +43,19 @@ actor StoryInteractionArbiter {
         )
     }
 
+    func updateTuringGates(
+        _ gates: [StoryInteractionSurfaceID: StoryTuringGateState],
+        reason: String
+    ) async {
+        var changed = false
+        for (surfaceID, gate) in gates where turingGates[surfaceID] != gate {
+            turingGates[surfaceID] = gate
+            changed = true
+        }
+        guard changed else { return }
+        await publish(reason: "turingGateBatch.\(reason)")
+    }
+
     func updateDoorState(_ state: StoryDoorLifecycleState, reason: String) async {
         guard doorState != state else { return }
         if state != .closedUnloaded,

@@ -7,13 +7,19 @@ final class Chapter01RobotFactory {
     private let sceneRoot: Entity
     private let enemyRegistry: BattleEnemyRuntimeRegistry
     private let corpsePresenter: BattleCorpsePresentationController
-    private let onPrepared: @MainActor (UUID, JockRetargetTestController) -> Void
+    private let onPrepared: @MainActor (
+        UUID,
+        JockRetargetTestController
+    ) -> (any Chapter01RobotAudioAttachment)?
 
     init(
         sceneRoot: Entity,
         enemyRegistry: BattleEnemyRuntimeRegistry,
         corpsePresenter: BattleCorpsePresentationController,
-        onPrepared: @escaping @MainActor (UUID, JockRetargetTestController) -> Void = { _, _ in }
+        onPrepared: @escaping @MainActor (
+            UUID,
+            JockRetargetTestController
+        ) -> (any Chapter01RobotAudioAttachment)? = { _, _ in nil }
     ) {
         self.sceneRoot = sceneRoot
         self.enemyRegistry = enemyRegistry
@@ -108,7 +114,7 @@ final class Chapter01RobotFactory {
             try enemyRegistry.register(lease)
             registered = true
             Chapter01RobotAudioRoute.install(on: emitter)
-            onPrepared(enemyID, controller)
+            let audioAttachment = onPrepared(enemyID, controller)
 
             print("""
             [Chapter01Robot] runtime prepared
@@ -129,7 +135,8 @@ final class Chapter01RobotFactory {
                 controller: controller,
                 roomRoot: controller.rootEntity,
                 mirror: mirror,
-                speechEmitter: emitter
+                speechEmitter: emitter,
+                externalAudioAttachment: audioAttachment
             )
         } catch {
             if registered,

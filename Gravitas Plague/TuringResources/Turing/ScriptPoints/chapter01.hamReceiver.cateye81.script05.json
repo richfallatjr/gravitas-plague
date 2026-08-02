@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "scriptPointID": "chapter01.hamReceiver.cateye81.script05",
+  "trigger": { "kind": "priorScriptPointCompleted", "delaySeconds": 0 },
+  "transmission": {
+    "prerecordingID": "chapter01.room.cateye81.hamReceiver.script05.001",
+    "voicePromptID": "chapter01.cateye81.hamReceiver.script05.promptVoice.001",
+    "characterID": "cateye81",
+    "conversationKey": "chapter01.object.ham_receiver.four_chances",
+    "outputRoute": "hamReceiverSpatial",
+    "interactionSurface": "hamReceiver",
+    "computeStart": "foundationBeforePrerecording",
+    "fillerMode": "none",
+    "commSFX": { "openBeforePrerecording": false, "sendAfterGenerated": false, "sendingLeadInAfterGeneratedSeconds": null },
+    "fixedLeadInSeconds": null,
+    "generationPipeline": null,
+    "backgroundMusic": null
+  },
+  "progression": { "nextScriptPointID": null, "automaticAdvance": false, "interactionGateAfterCompletion": "microphone" }
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter01.rich.hamReceiver.script04.promptVoice.001",
+  "speakerID": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "characterProfileID": "rich.chapter01.fourChances",
+  "listenerProfileID": "cateye81.chapter01.fourChances",
+  "outputContext": "roomGlobal",
+  "conversationKey": "chapter01.object.ham_receiver.four_chances",
+  "promptTemplateID": "richHamReceiver",
+  "intent": "I am deeply grateful to CatEye81, and the successful delivery makes me feel that the outside world may still contain organized people and working systems. At the same time, I do not want to announce how valuable the delivery is. The case contains four individually sealed cartridges, but I should avoid stating the exact quantity over an open frequency.\n\nThe Gravitas Robot described the antigen as temporary suppression rather than a cure. There was no promise that the treatment reverses damage, and no guarantee that another delivery can ever be requested. The drone used my signal to locate the house, which also means someone watching its flight may now know approximately where the package went.\n\nThe person I am asking about is Dad. I am not yet ready to identify him over the air. He found the house, followed an old familiar route, stopped at the window, and appeared to react to my voice. I need CatEye81 to separate anything she witnessed herself from reports she only heard: whether recognition of home or family suggests early infection, whether cloudy eyes and failed speech mean it is already too late, and whether one cartridge treats one person.\n\nI have already divided the pack in my head: one cartridge for Dad, one held back in case I am exposed, and two for other people who might still be reachable. I feel ashamed reducing human lives to inventory, but four cartridges force four decisions. If Dad has even a narrow chance, I intend to build a safe way to administer one.",
+  "emotion": "grateful, guarded, technical, and urgently hopeful"
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter01.room.rich.hamReceiver.script04.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-ham-receiver-script-04.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Cat Eye Eight-One, this is Rich. Your relay information worked. A Gravitas unit reached my location and delivered an antigen pack. The drop was real. The instructions say early-stage infection only, but they don’t tell me what early stage actually looks like. I have someone nearby who can still walk, still find familiar places, maybe even recognize a voice. I need to know what signs mean there’s still time, and what happens if the dose is given too late. I want to use this to help people, not just lock it away. What have you heard that you trust? Over.",
+  "summary": "Rich confirms the Gravitas delivery and asks CatEye81 for trustworthy information about the antigen treatment window.",
+  "voicePromptIntent": "Continue using chapter01.rich.hamReceiver.script04.promptVoice.001.",
+  "defaultEmotion": "grateful, technical, guarded, and urgently hopeful"
+}

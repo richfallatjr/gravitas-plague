@@ -65,7 +65,7 @@ final class TuringStoryEpisodeContinuationTests: XCTestCase {
         XCTAssertEqual(
             Chapter01Checkpoint.hamScript04Pending
                 .supportedContinuationCheckpoint,
-            .dadWindowPending
+            .postRobotHub
         )
     }
 

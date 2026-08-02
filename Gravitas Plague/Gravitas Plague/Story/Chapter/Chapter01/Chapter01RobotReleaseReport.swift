@@ -25,7 +25,7 @@ enum Chapter01RobotCleanupOutcome: Sendable, Equatable {
     }
 }
 
-struct Chapter01RobotReleaseReport: Sendable {
+struct Chapter01RobotReleaseReport: Sendable, Equatable {
     let chapterRunID: UUID
     let outcome: Chapter01RobotCleanupOutcome
     let dadRuntimeCount: Int
@@ -38,6 +38,8 @@ struct Chapter01RobotReleaseReport: Sendable {
     let robotCombatHandleCount: Int
     let activeEncounterTaskCount: Int
     let weakRobotControllerReleased: Bool
+    let robotPresenceAudioActive: Bool
+    let robotExternalAudioSourceCount: Int
     let physicalFootprintMB: UInt64
     let residentSizeMB: UInt64
 
@@ -52,5 +54,13 @@ struct Chapter01RobotReleaseReport: Sendable {
             robotCombatHandleCount == 0 &&
             activeEncounterTaskCount == 0 &&
             weakRobotControllerReleased
+    }
+
+    var isSafeForPostRobotHub: Bool {
+        isSafeForTuring &&
+            !robotPresenceAudioActive &&
+            robotExternalAudioSourceCount == 0 &&
+            !fullExteriorResident &&
+            doorState == .closedUnloaded
     }
 }

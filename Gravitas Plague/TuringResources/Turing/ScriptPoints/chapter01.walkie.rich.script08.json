@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "scriptPointID": "chapter01.walkie.rich.script08",
+  "trigger": { "kind": "userPlay", "delaySeconds": 0 },
+  "transmission": {
+    "prerecordingID": "chapter01.walkie.rich.script08.001",
+    "voicePromptID": "chapter01.rich.script08.promptVoice.001",
+    "characterID": "rich",
+    "conversationKey": "chapter01.dialogue.big_mike.rich.four_chances",
+    "outputRoute": "walkieOutgoingGlobal",
+    "interactionSurface": "walkie",
+    "computeStart": "foundationBeforePrerecording",
+    "fillerMode": "continuousFromPrerecordingToGenerated",
+    "commSFX": { "openBeforePrerecording": true, "sendAfterGenerated": true, "sendingLeadInAfterGeneratedSeconds": null },
+    "fixedLeadInSeconds": null,
+    "generationPipeline": null,
+    "backgroundMusic": null
+  },
+  "progression": { "nextScriptPointID": "chapter01.walkie.bigMike.script09", "automaticAdvance": true, "interactionGateAfterCompletion": "closed" }
+}

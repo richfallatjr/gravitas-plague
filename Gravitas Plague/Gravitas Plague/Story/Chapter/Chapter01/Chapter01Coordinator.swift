@@ -19,6 +19,8 @@ final class Chapter01Coordinator:
     private let arbiter: StoryInteractionArbiter
     private let walkie: TuringStoryWalkieInteractionController
     private let dad: Chapter01DadWindowCoordinator
+    private let postRobotInteractions: Chapter01PostRobotInteractionCoordinator
+    private let preDadFinalBattleBoundary: Chapter01PreDadFinalBattleBoundary
     private let startRobot: RobotStarter
     private let cancelRobot: RobotCanceller
 
@@ -33,6 +35,8 @@ final class Chapter01Coordinator:
         progress: Chapter01ProgressStore = .shared,
         episodeFlow: TuringEpisodeFlowController = .shared,
         arbiter: StoryInteractionArbiter = .shared,
+        postRobotInteractions: Chapter01PostRobotInteractionCoordinator,
+        preDadFinalBattleBoundary: Chapter01PreDadFinalBattleBoundary,
         startRobot: @escaping RobotStarter,
         cancelRobot: @escaping RobotCanceller
     ) {
@@ -41,6 +45,8 @@ final class Chapter01Coordinator:
         self.progress = progress
         self.episodeFlow = episodeFlow
         self.arbiter = arbiter
+        self.postRobotInteractions = postRobotInteractions
+        self.preDadFinalBattleBoundary = preDadFinalBattleBoundary
         self.startRobot = startRobot
         self.cancelRobot = cancelRobot
     }
@@ -57,7 +63,15 @@ final class Chapter01Coordinator:
         handledCompletionEventIDs.removeAll(keepingCapacity: false)
         _ = try await progress.resetForReplay(sourceEventID: runID)
         await episodeFlow.resetEpisode(reason: "chapter01.root")
+        await postRobotInteractions.prepareForChapterOpening(
+            reason: "chapter01.root"
+        )
         walkie.episodeStarted(.chapter01)
+        walkie.bind(
+            .chapter01OpeningWalkie,
+            initialState: .play,
+            reason: "chapter01.root"
+        )
         walkie.armPlay(
             action: .startScriptPoint(
                 id: "chapter01.walkie.rich.script06",
@@ -92,6 +106,43 @@ final class Chapter01Coordinator:
             reason: "chapter01.continue.\(checkpoint.rawValue)"
         )
         walkie.episodeStarted(.chapter01)
+
+        if checkpoint == .postRobotHub || checkpoint == .preDadFinalBattleReady {
+            let lease = try await arbiter.claimStoryTransition(
+                transitionID: transitionID,
+                source: "chapter01Continue.\(checkpoint.rawValue)"
+            )
+            storyTransitionLease = lease
+            do {
+                try await postRobotInteractions.restore(
+                    snapshot: saved,
+                    transitionLease: lease
+                )
+                storyTransitionLease = nil
+                state = checkpoint == .preDadFinalBattleReady
+                    ? .preDadFinalBattleReady
+                    : .postRobotHub
+                if checkpoint == .preDadFinalBattleReady {
+                    await preDadFinalBattleBoundary.publishIfNeeded(
+                        Chapter01PreDadFinalBattleReadyEvent(
+                            chapterRunID: runID,
+                            checkpointRevision: saved.revision,
+                            sourceEventID: saved.sourceEventIDs.first ?? UUID(),
+                            completedBranches: saved.postRobot.completedBranches
+                        )
+                    )
+                }
+                print(
+                    "[Chapter01] continued checkpoint=\(checkpoint.rawValue) chapterRunID=\(runID.uuidString) cinematicsReplayed=false roomRescan=false"
+                )
+                return
+            } catch {
+                storyTransitionLease = nil
+                await arbiter.release(lease, reason: "chapter01PostRobotContinueFailed")
+                state = .failed(error.localizedDescription)
+                throw error
+            }
+        }
 
         let lease = try await arbiter.claimStoryTransition(
             transitionID: transitionID,
@@ -176,6 +227,33 @@ final class Chapter01Coordinator:
                 throw error
             }
 
+        case Chapter01PostRobotBranch.dadFrame.terminalScriptPointID:
+            try await completePostRobotBranch(
+                .dadFrame,
+                terminalScriptPointID: event.scriptPointID,
+                sourceEventID: event.eventID
+            )
+
+        case "chapter01.walkie.rich.script08":
+            break
+
+        case Chapter01PostRobotBranch.walkie.terminalScriptPointID:
+            try await completePostRobotBranch(
+                .walkie,
+                terminalScriptPointID: event.scriptPointID,
+                sourceEventID: event.eventID
+            )
+
+        case "chapter01.hamReceiver.rich.script04":
+            break
+
+        case Chapter01PostRobotBranch.hamReceiver.terminalScriptPointID:
+            try await completePostRobotBranch(
+                .hamReceiver,
+                terminalScriptPointID: event.scriptPointID,
+                sourceEventID: event.eventID
+            )
+
         default:
             throw TuringRuntimeError.invalidConfig(
                 "Unexpected Chapter 01 ScriptPoint completion: \(event.scriptPointID)"
@@ -186,7 +264,17 @@ final class Chapter01Coordinator:
     func conversationPlaybackCompleted(
         _ event: TuringConversationPlaybackCompletionEvent
     ) async throws {
-        throw Chapter01Error.unexpectedConversationCompletion
+        let openEndedKeys: Set<String> = [
+            TuringStorySurfaceFlowBinding.chapter01FourChancesDad.conversationKey,
+            TuringStorySurfaceFlowBinding.chapter01FourChancesWalkie.conversationKey,
+            TuringStorySurfaceFlowBinding.chapter01FourChancesHam.conversationKey
+        ]
+        guard openEndedKeys.contains(event.conversationKey) else {
+            throw Chapter01Error.unexpectedConversationCompletion
+        }
+        print(
+            "[Chapter01] open-ended conversation completed key=\(event.conversationKey) progression=none"
+        )
     }
 
     func dadExitWalkStarted(
@@ -244,13 +332,10 @@ final class Chapter01Coordinator:
         guard event.chapterRunID == chapterRunID else {
             throw Chapter01Error.missingRun
         }
-        state = .postRobotHolding
-        await arbiter.release(
-            event.hamTuringLease,
-            reason: "chapter01OpeningCompleteHamPointsNotInstalled"
-        )
+        try await postRobotInteractions.unlock(event: event)
+        state = .postRobotHub
         print(
-            "[Chapter01] Robot encounter completed; opening is in post-Robot holding state"
+            "[Chapter01] Robot encounter completed; three-device hub unlocked"
         )
     }
 
@@ -259,6 +344,34 @@ final class Chapter01Coordinator:
     ) async {
         guard event.chapterRunID == chapterRunID else { return }
         state = .failed(event.message)
+    }
+
+    private func completePostRobotBranch(
+        _ branch: Chapter01PostRobotBranch,
+        terminalScriptPointID: String,
+        sourceEventID: UUID
+    ) async throws {
+        guard let chapterRunID else {
+            throw Chapter01Error.missingRun
+        }
+        let result = try await progress.completePostRobotBranch(
+            branch,
+            terminalScriptPointID: terminalScriptPointID,
+            sourceEventID: sourceEventID
+        )
+        if result.becameAllBranchesComplete {
+            state = .preDadFinalBattleReady
+            await preDadFinalBattleBoundary.publishIfNeeded(
+                Chapter01PreDadFinalBattleReadyEvent(
+                    chapterRunID: chapterRunID,
+                    checkpointRevision: result.snapshot.revision,
+                    sourceEventID: sourceEventID,
+                    completedBranches: result.snapshot.postRobot.completedBranches
+                )
+            )
+        } else {
+            state = .postRobotHub
+        }
     }
 
     func update(deltaTime: TimeInterval) {
@@ -280,6 +393,7 @@ final class Chapter01Coordinator:
             )
         }
         chapterRunID = nil
+        preDadFinalBattleBoundary.resetTransientPublicationState()
         handledCompletionEventIDs.removeAll(keepingCapacity: false)
         state = .cancelled
     }

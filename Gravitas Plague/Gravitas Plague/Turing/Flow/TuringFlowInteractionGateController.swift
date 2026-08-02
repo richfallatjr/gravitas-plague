@@ -307,6 +307,43 @@ final class TuringFlowInteractionGateController: ObservableObject {
         )
     }
 
+    func applyStableState(
+        _ newState: State,
+        surfaceID: StoryInteractionSurfaceID,
+        reason: String
+    ) {
+        precondition(newState != .busy)
+        precondition(ownerBySurface[surfaceID] == nil)
+        setRaw(newState, surfaceID: surfaceID, reason: reason)
+    }
+
+    func applyStableStatesAtomically(
+        _ states: [StoryInteractionSurfaceID: State],
+        reason: String
+    ) async {
+        precondition(states.values.allSatisfy { $0 != .busy })
+        precondition(states.keys.allSatisfy { ownerBySurface[$0] == nil })
+
+        for (surfaceID, newState) in states {
+            setStateWithoutPublishing(newState, surfaceID: surfaceID)
+        }
+        for (surfaceID, newState) in states {
+            NotificationCenter.default.post(
+                name: .turingFlowInteractionGateChanged,
+                object: self,
+                userInfo: [
+                    "surface": surfaceID.rawValue,
+                    "state": newState.rawValue,
+                    "reason": reason
+                ]
+            )
+        }
+        await StoryInteractionArbiter.shared.updateTuringGates(
+            states.mapValues(Self.storyGateState),
+            reason: reason
+        )
+    }
+
     func reset(reason: String) {
         ownerBySurface.removeAll(keepingCapacity: false)
         state = .closed
@@ -350,6 +387,14 @@ final class TuringFlowInteractionGateController: ObservableObject {
         surfaceID: StoryInteractionSurfaceID,
         reason: String
     ) {
+        setStateWithoutPublishing(newState, surfaceID: surfaceID)
+        publish(surfaceID: surfaceID, reason: reason)
+    }
+
+    private func setStateWithoutPublishing(
+        _ newState: State,
+        surfaceID: StoryInteractionSurfaceID
+    ) {
         switch surfaceID {
         case .walkie:
             state = newState
@@ -360,7 +405,15 @@ final class TuringFlowInteractionGateController: ObservableObject {
         case .hamReceiver:
             hamReceiverState = newState
         }
-        publish(surfaceID: surfaceID, reason: reason)
+    }
+
+    private static func storyGateState(_ state: State) -> StoryTuringGateState {
+        switch state {
+        case .closed: return .closed
+        case .play: return .play
+        case .busy: return .busy
+        case .microphone: return .microphone
+        }
     }
 
     private func publish(

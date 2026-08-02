@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "scriptPointID": "chapter01.hamReceiver.rich.script04",
+  "trigger": { "kind": "userPlay", "delaySeconds": 0 },
+  "transmission": {
+    "prerecordingID": "chapter01.room.rich.hamReceiver.script04.001",
+    "voicePromptID": "chapter01.rich.hamReceiver.script04.promptVoice.001",
+    "characterID": "rich",
+    "conversationKey": "chapter01.object.ham_receiver.four_chances",
+    "outputRoute": "roomGlobal",
+    "interactionSurface": "hamReceiver",
+    "computeStart": "foundationBeforePrerecording",
+    "fillerMode": "continuousFromPrerecordingToGenerated",
+    "commSFX": { "openBeforePrerecording": false, "sendAfterGenerated": false, "sendingLeadInAfterGeneratedSeconds": null },
+    "fixedLeadInSeconds": null,
+    "generationPipeline": null,
+    "backgroundMusic": null
+  },
+  "progression": { "nextScriptPointID": "chapter01.hamReceiver.cateye81.script05", "automaticAdvance": true, "interactionGateAfterCompletion": "closed" }
+}
