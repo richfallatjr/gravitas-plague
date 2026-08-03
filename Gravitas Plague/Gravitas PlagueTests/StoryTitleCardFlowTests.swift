@@ -70,16 +70,16 @@ final class StoryTitleCardFlowTests: XCTestCase {
         XCTAssertEqual(request.menuMusicPolicy, .playThroughCard)
     }
 
-    func testEpisodeStartStopsMenuMusicOnAcceptance() {
+    func testEpisodeStartKeepsMenuMusicThroughCard() {
         let request = StoryTitleCardTransitionRequest(
             requestID: UUID(),
             source: .episodePickerStart,
             descriptor: StoryTitleCardCatalog.prologue,
             destination: .start(.prologue),
-            menuMusicPolicy: .stopOnAcceptance
+            menuMusicPolicy: .playThroughCard
         )
 
-        XCTAssertEqual(request.menuMusicPolicy, .stopOnAcceptance)
+        XCTAssertEqual(request.menuMusicPolicy, .playThroughCard)
     }
 
     func testChapterOneIsTheOnlyUnlockedSuccessorToPrologue() {

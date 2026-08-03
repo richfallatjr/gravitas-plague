@@ -5,6 +5,10 @@ import XCTest
 @testable import Gravitas_Plague
 
 final class Chapter01RobotEncounterTests: XCTestCase {
+    func testAntigenRemainsHiddenOnRollingCart() {
+        XCTAssertFalse(StoryItemRewardPresenter.displaysAntigenOnRollingCart)
+    }
+
     func testDefinitionLocksRobotContract() throws {
         let definition = try Chapter01RobotDefinitionStore().load()
         XCTAssertEqual(definition.encounterID, "chapter01.encounter.gravitasRobot.001")

@@ -186,7 +186,7 @@ struct TuringStoryEpisodePickerView: View {
                 source: .episodePickerStart,
                 descriptor: StoryTitleCardCatalog.descriptor(for: episode.id),
                 destination: .start(episode.id),
-                menuMusicPolicy: .stopOnAcceptance
+                menuMusicPolicy: .playThroughCard
             )
             session.requestStoryTitleCardTransition(request)
             dismissWindow(id: PlagueWindowID.storyEpisodes)

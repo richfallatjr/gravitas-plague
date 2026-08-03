@@ -7,6 +7,8 @@ import UIKit
 final class StoryItemRewardPresenter {
     typealias AnchorResolver = @MainActor (String) -> Entity?
 
+    static let displaysAntigenOnRollingCart = false
+
     private enum Layout {
         static let standardHUDPosition = SIMD3<Float>(0, -0.32, -1.05)
         static let modelLargestExtentMeters: Float = 0.54
@@ -57,7 +59,7 @@ final class StoryItemRewardPresenter {
     ) async throws {
         guard inventoryQuantity > 0 else { return }
         if let existing = worldItemsByID[itemID]?.value {
-            existing.isEnabled = true
+            existing.isEnabled = Self.displaysAntigenOnRollingCart
             return
         }
         guard let anchor = anchorResolver(descriptor.rollingCartAnchorName) else {
@@ -68,7 +70,7 @@ final class StoryItemRewardPresenter {
         switch descriptor.modelKind {
         case .authoredBundleGroup:
             entity = anchor
-            entity.isEnabled = true
+            entity.isEnabled = Self.displaysAntigenOnRollingCart
         case .resource:
             entity = try await makeResourceRewardEntity(descriptor)
             entity.name = "StoryInventory_\(itemID)"
@@ -84,6 +86,7 @@ final class StoryItemRewardPresenter {
               modelKind: \(descriptor.modelKind.rawValue)
               anchor: \(anchor.name)
               authoredBundleReused: \(descriptor.modelKind == .authoredBundleGroup)
+              rollingCartVisible: \(entity.isEnabled)
             """
         )
     }
@@ -105,6 +108,7 @@ final class StoryItemRewardPresenter {
 
         let clone = source.clone(recursive: true)
         clone.name = "StoryRewardHUDModel_\(itemID)"
+        clone.isEnabled = true
         clone.transform = Transform()
         makeInert(clone)
         let bounds = clone.visualBounds(

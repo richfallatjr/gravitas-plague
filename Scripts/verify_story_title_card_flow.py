@@ -41,8 +41,8 @@ if "TextureResource" in factory or "InputTargetComponent()" in factory:
     raise SystemExit("title cards cannot be textured or interactive")
 if "requireValidContinuationTarget" not in picker:
     raise SystemExit("Continue must freeze the validated continuation target")
-if "menuMusicPolicy: .playThroughCard" not in picker:
-    raise SystemExit("Continue must keep main-menu music through the title card")
+if picker.count("menuMusicPolicy: .playThroughCard") < 2:
+    raise SystemExit("Start and Continue must keep main-menu music through the title card")
 fade_complete = transition.index("try await blackout.fadeBackUp(")
 music_stop = transition.index('reason: "titleCardBlackoutFullyFaded.')
 if music_stop < fade_complete:
