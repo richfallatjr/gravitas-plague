@@ -5643,7 +5643,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             """
             [Chapter01PlayerDeath] handling player death
               source: \(source.rawValue)
-              confirmedHits: 5
+              confirmedHits: \(source.confirmedHitsToKill)
               deathAudioDuration: \(String(format: "%.3f", deathAudioDuration))
               hasTrackedDevicePose: \(youDiedOriginFromDevice != nil)
             """

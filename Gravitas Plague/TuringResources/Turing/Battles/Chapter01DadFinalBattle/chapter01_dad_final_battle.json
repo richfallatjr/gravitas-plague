@@ -52,7 +52,7 @@
     "fadeOutDurationSeconds": 2.0
   },
   "playerDamage": {
-    "confirmedHitsToKillAfterEnable": 5,
+    "confirmedHitsToKillAfterEnable": 10,
     "preEnableDisposition": "feedbackOnlyNoDamage",
     "clock": "soundtrackMediaTime"
   },

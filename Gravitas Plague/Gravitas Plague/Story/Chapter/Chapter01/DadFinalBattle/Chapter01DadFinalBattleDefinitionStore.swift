@@ -48,7 +48,7 @@ struct Chapter01DadFinalBattleDefinitionStore: Sendable {
               definition.music.start == "actualInitialIdleAnimationStart",
               definition.music.damageEnableAtMediaTimeSeconds == 60,
               definition.music.fadeOutDurationSeconds == 2,
-              definition.playerDamage.confirmedHitsToKillAfterEnable == 5,
+              definition.playerDamage.confirmedHitsToKillAfterEnable == 10,
               timedCue.triggerMediaTimeSeconds == 30,
               timedCue.gainDB == -5,
               remainingCue.gainDB == -5,

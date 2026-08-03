@@ -26,6 +26,15 @@ enum Chapter01DadFinalBattleState: String, Sendable {
 enum ChapterPlayerDeathSource: String, Sendable {
     case robot
     case dadFinalBattle
+
+    var confirmedHitsToKill: Int {
+        switch self {
+        case .robot:
+            return 5
+        case .dadFinalBattle:
+            return 10
+        }
+    }
 }
 
 struct Chapter01DadFinalBattleReleasedEvent: Sendable, Equatable {

@@ -28,7 +28,7 @@ final class Chapter01DadFinalBattleTests: XCTestCase {
         )
         XCTAssertEqual(
             definition.playerDamage.confirmedHitsToKillAfterEnable,
-            5
+            10
         )
     }
 
@@ -91,15 +91,15 @@ final class Chapter01DadFinalBattleTests: XCTestCase {
         )
     }
 
-    func testFifthConfirmedPostGateContactIsTerminal() {
-        let budget = StoryPlayerHitBudget(maximumConfirmedHits: 5)
+    func testTenthConfirmedPostGateContactIsTerminal() {
+        let budget = StoryPlayerHitBudget(maximumConfirmedHits: 10)
 
-        for expectedCount in 1...4 {
+        for expectedCount in 1...9 {
             XCTAssertFalse(budget.registerConfirmedHit())
             XCTAssertEqual(budget.snapshot().confirmedHits, expectedCount)
         }
         XCTAssertTrue(budget.registerConfirmedHit())
-        XCTAssertEqual(budget.snapshot().confirmedHits, 5)
+        XCTAssertEqual(budget.snapshot().confirmedHits, 10)
         XCTAssertTrue(budget.snapshot().terminal)
     }
 
