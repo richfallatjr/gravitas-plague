@@ -6,7 +6,7 @@ enum StoryTitleCardCatalog {
         title: "Prologue",
         subtitle: "They are not human they are monsters",
         fadeToBlackSeconds: .milliseconds(750),
-        holdSeconds: .milliseconds(2_500),
+        holdSeconds: .milliseconds(7_500),
         fadeFromBlackSeconds: .milliseconds(750)
     )
 
@@ -15,7 +15,7 @@ enum StoryTitleCardCatalog {
         title: "Chapter 1",
         subtitle: "Dad?",
         fadeToBlackSeconds: .milliseconds(750),
-        holdSeconds: .milliseconds(2_500),
+        holdSeconds: .milliseconds(7_500),
         fadeFromBlackSeconds: .milliseconds(750)
     )
 
@@ -24,7 +24,7 @@ enum StoryTitleCardCatalog {
         title: "Gravitas Plague",
         subtitle: nil,
         fadeToBlackSeconds: .milliseconds(750),
-        holdSeconds: .milliseconds(3_000),
+        holdSeconds: .milliseconds(9_000),
         fadeFromBlackSeconds: .milliseconds(750)
     )
 

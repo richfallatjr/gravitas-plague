@@ -28,7 +28,10 @@ final class StoryTitleCardWorldPresenter {
         worldAnchor.addChild(card)
         card.setTransformMatrix(
             CinematicWorldCardTransform.worldTransform(
-                originFromDevice: originFromDevice
+                originFromDevice: originFromDevice,
+                verticalLiftMeters:
+                    CinematicWorldCardTransform.titleWorldYLiftMeters,
+                xRotationDegrees: 0
             ),
             relativeTo: nil
         )
@@ -46,8 +49,8 @@ final class StoryTitleCardWorldPresenter {
               titleFont: \(PlagueHUDTypography.title().fontName)
               subtitleFont: \(PlagueHUDTypography.subtitle().fontName)
               distanceFromHeadset: \(CinematicWorldCardTransform.distanceMeters)
-              verticalLiftMeters: \(CinematicWorldCardTransform.worldYLiftMeters)
-              xTiltDegrees: \(CinematicWorldCardTransform.xTiltDegrees)
+              verticalLiftMeters: \(CinematicWorldCardTransform.titleWorldYLiftMeters)
+              xTiltDegrees: 0
               followsHeadset: false
             """
         )

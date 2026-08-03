@@ -43,10 +43,10 @@ if "requireValidContinuationTarget" not in picker:
     raise SystemExit("Continue must freeze the validated continuation target")
 if "menuMusicPolicy: .playThroughCard" not in picker:
     raise SystemExit("Continue must keep main-menu music through the title card")
-if transition.index("presenter.remove(requestID:") > transition.index(
-    'reason: "titleCardRemoved.'
-):
-    raise SystemExit("Continue music must stop only after title removal")
+fade_complete = transition.index("try await blackout.fadeBackUp(")
+music_stop = transition.index('reason: "titleCardBlackoutFullyFaded.')
+if music_stop < fade_complete:
+    raise SystemExit("Continue music must stop only after blackout fully fades")
 if '"interactionGateAfterCompletion": "closed"' not in resource:
     raise SystemExit("final Dad frame must not flash a microphone")
 if "StoryEpisodeBoundaryEvent(" not in chapter or "state = .complete" in chapter:

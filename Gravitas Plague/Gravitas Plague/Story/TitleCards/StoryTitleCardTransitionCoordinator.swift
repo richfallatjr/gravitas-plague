@@ -187,16 +187,6 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
 
         presenter.remove(requestID: request.requestID)
 
-        if request.menuMusicPolicy == .playThroughCard {
-            await PlagueMainMenuMusicActor.shared.stop(
-                reason: "titleCardRemoved.\(request.source.rawValue)"
-            )
-            print(
-                "[StoryTitleCard] Continue menu music stopped after card removal " +
-                    "requestID=\(request.requestID.uuidString)"
-            )
-        }
-
         state = .committingRoute(request.requestID)
         let disposition = try await world.commitTitleCardDestination(
             request.destination,
@@ -210,6 +200,16 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
             duration: request.descriptor.fadeFromBlackSeconds,
             requestID: request.requestID
         )
+
+        if request.menuMusicPolicy == .playThroughCard {
+            await PlagueMainMenuMusicActor.shared.stop(
+                reason: "titleCardBlackoutFullyFaded.\(request.source.rawValue)"
+            )
+            print(
+                "[StoryTitleCard] Continue menu music stopped after blackout fully faded " +
+                    "requestID=\(request.requestID.uuidString) opacity=0.0"
+            )
+        }
 
         if disposition == .releaseAfterFade {
             await StoryInteractionArbiter.shared.release(
