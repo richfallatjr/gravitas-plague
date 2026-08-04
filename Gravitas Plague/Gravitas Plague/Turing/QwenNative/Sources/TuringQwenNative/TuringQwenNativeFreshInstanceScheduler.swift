@@ -111,121 +111,37 @@ public actor TuringQwenNativeFreshInstanceScheduler {
         await metricsCollector.sampleMemory(label: "runStarted")
 
         do {
-            try await withThrowingTaskGroup(of: Void.self) { group in
-                for instance in instances {
-                    group.addTask {
-                        while Task.isCancelled == false,
-                              let request = try await queue.next() {
-                            try Task.checkCancellation()
-                            let instanceID = instance.id
-
-                            await renderPhaseState.renderStarted(
-                                runID: runID,
-                                segmentIndex: request.segmentIndex,
-                                instanceID: instanceID
-                            )
-                            await onSegmentStarted(instanceID, request.segmentIndex)
-                            await metricsCollector.sampleMemory(
-                                label: "render.started.\(request.segmentIndex)"
-                            )
-
-                            let rendered: TuringQwenRenderedCodebookSegment
-                            do {
-                                rendered = try await instance.renderCodebookAndRelease(
-                                    request,
-                                    runID: runID,
-                                    releaseLedger: releaseLedger
-                                )
-                            } catch {
-                                await renderPhaseState.renderReleased(
-                                    runID: runID,
-                                    segmentIndex: request.segmentIndex,
-                                    instanceID: instanceID
-                                )
-                                await metricsCollector.sampleMemory(
-                                    label: "render.failed.\(request.segmentIndex)"
-                                )
-                                if skipSegmentFailures || Self.isSkippableEOSBeforeGeneratedAudio(error) {
-                                    await onSegmentSkipped(
-                                        TuringQwenNativeFreshSegmentSkip(
-                                            instanceID: instanceID,
-                                            segmentIndex: request.segmentIndex,
-                                            errorDescription: error.localizedDescription
-                                        )
-                                    )
-                                    continue
-                                }
-                                throw error
-                            }
-
-                            await renderPhaseState.renderReleased(
-                                runID: runID,
-                                segmentIndex: request.segmentIndex,
-                                instanceID: instanceID
-                            )
-                            await metricsCollector.sampleMemory(
-                                label: "render.released.\(request.segmentIndex)"
-                            )
-
-                            do {
-                                let decoded = try await decodeCoordinator.decode(
-                                    rendered,
-                                    token: decodeToken
-                                )
-                                try request.generationQualityPolicy.validateAfterDecode(
-                                    voiceID: rendered.voiceID,
-                                    generatedRowCount: rendered.generatedRowCount,
-                                    peakAbs: decoded.audio.peakAbs,
-                                    rms: decoded.audio.rms,
-                                    durationSeconds: decoded.audio.durationSeconds
-                                )
-
-                                // Publication returns after the file-backed clip is queued.
-                                // It does not wait for playback completion.
-                                try await onSegmentDecoded(decoded)
-                                await metricsCollector.record(
-                                    TuringQwenNativeFreshInstanceSegmentMetrics(
-                                        instanceID: decoded.instanceID,
-                                        segmentIndex: decoded.segmentIndex,
-                                        renderSeconds: rendered.renderMetrics.elapsedSeconds,
-                                        audioDurationSeconds: decoded.audio.durationSeconds
-                                    )
-                                )
-                                await metricsCollector.sampleMemory(
-                                    label: "segmentPublished.\(decoded.segmentIndex)"
-                                )
-                                print("""
-                                [TuringSegmentPipeline] audio published
-                                  runID: \(runID)
-                                  segmentIndex: \(decoded.segmentIndex)
-                                  instanceID: \(decoded.instanceID.rawValue)
-                                  audioDurationSeconds: \(String(format: "%.3f", decoded.audio.durationSeconds))
-                                """)
-                                print("""
-                                [TuringSegmentPipeline] worker advanced
-                                  runID: \(runID)
-                                  segmentIndex: \(decoded.segmentIndex)
-                                  instanceID: \(decoded.instanceID.rawValue)
-                                """)
-                            } catch {
-                                if skipSegmentFailures || Self.isSkippableEOSBeforeGeneratedAudio(error) {
-                                    await onSegmentSkipped(
-                                        TuringQwenNativeFreshSegmentSkip(
-                                            instanceID: instanceID,
-                                            segmentIndex: request.segmentIndex,
-                                            errorDescription: error.localizedDescription
-                                        )
-                                    )
-                                    continue
-                                }
-                                throw error
-                            }
-                        }
-                    }
-                }
-
-                try await group.waitForAll()
-            }
+            async let lane0: Void = Self.runLane(
+                laneIndex: 0,
+                instance: instances[0],
+                queue: queue,
+                runID: runID,
+                skipSegmentFailures: skipSegmentFailures,
+                renderPhaseState: renderPhaseState,
+                releaseLedger: releaseLedger,
+                decodeCoordinator: decodeCoordinator,
+                decodeToken: decodeToken,
+                metricsCollector: metricsCollector,
+                onSegmentStarted: onSegmentStarted,
+                onSegmentDecoded: onSegmentDecoded,
+                onSegmentSkipped: onSegmentSkipped
+            )
+            async let lane1: Void = Self.runLane(
+                laneIndex: 1,
+                instance: instances[1],
+                queue: queue,
+                runID: runID,
+                skipSegmentFailures: skipSegmentFailures,
+                renderPhaseState: renderPhaseState,
+                releaseLedger: releaseLedger,
+                decodeCoordinator: decodeCoordinator,
+                decodeToken: decodeToken,
+                metricsCollector: metricsCollector,
+                onSegmentStarted: onSegmentStarted,
+                onSegmentDecoded: onSegmentDecoded,
+                onSegmentSkipped: onSegmentSkipped
+            )
+            _ = try await (lane0, lane1)
 
             await decodeCoordinator.finishRun(decodeToken)
             await releaseLedger.clearRun(runID)
@@ -262,6 +178,153 @@ public actor TuringQwenNativeFreshInstanceScheduler {
             crossSegmentRenderDecodeOverlapCount: overlap.crossSegmentRenderDecodeOverlapCount,
             fallbackUsed: false
         )
+    }
+
+    private static func runLane(
+        laneIndex: Int,
+        instance: TuringQwenNativeFreshInstance,
+        queue: TuringQwenOpenSegmentQueue,
+        runID: String,
+        skipSegmentFailures: Bool,
+        renderPhaseState: TuringQwenRenderPhaseState,
+        releaseLedger: TuringQwenRenderReleaseLedger,
+        decodeCoordinator: TuringQwenNativeSpeechDecodeCoordinator,
+        decodeToken: TuringQwenNativeSpeechDecodeCoordinator.RunToken,
+        metricsCollector: TuringQwenNativeFreshInstanceMetricsCollector,
+        onSegmentStarted: @Sendable @escaping (
+            TuringQwenNativeFreshInstanceID,
+            Int
+        ) async -> Void,
+        onSegmentDecoded: @Sendable @escaping (
+            TuringQwenDecodedSegment
+        ) async throws -> Void,
+        onSegmentSkipped: @Sendable @escaping (
+            TuringQwenNativeFreshSegmentSkip
+        ) async -> Void
+    ) async throws {
+        while Task.isCancelled == false,
+              let request = try await queue.next() {
+            try Task.checkCancellation()
+            let instanceID = instance.id
+            print("""
+            [TuringFresh2] lane render started
+              runID: \(runID)
+              laneIndex: \(laneIndex)
+              instanceID: \(instanceID.rawValue)
+              segmentIndex: \(request.segmentIndex)
+            """)
+
+            await renderPhaseState.renderStarted(
+                runID: runID,
+                segmentIndex: request.segmentIndex,
+                instanceID: instanceID
+            )
+            await onSegmentStarted(instanceID, request.segmentIndex)
+            await metricsCollector.sampleMemory(
+                label: "render.started.\(request.segmentIndex)"
+            )
+
+            let rendered: TuringQwenRenderedCodebookSegment
+            do {
+                rendered = try await instance.renderCodebookAndRelease(
+                    request,
+                    runID: runID,
+                    releaseLedger: releaseLedger
+                )
+            } catch {
+                await renderPhaseState.renderReleased(
+                    runID: runID,
+                    segmentIndex: request.segmentIndex,
+                    instanceID: instanceID
+                )
+                await metricsCollector.sampleMemory(
+                    label: "render.failed.\(request.segmentIndex)"
+                )
+                if skipSegmentFailures || isSkippableEOSBeforeGeneratedAudio(error) {
+                    await onSegmentSkipped(
+                        TuringQwenNativeFreshSegmentSkip(
+                            instanceID: instanceID,
+                            segmentIndex: request.segmentIndex,
+                            errorDescription: error.localizedDescription
+                        )
+                    )
+                    continue
+                }
+                throw error
+            }
+
+            await renderPhaseState.renderReleased(
+                runID: runID,
+                segmentIndex: request.segmentIndex,
+                instanceID: instanceID
+            )
+            await metricsCollector.sampleMemory(
+                label: "render.released.\(request.segmentIndex)"
+            )
+
+            do {
+                print("""
+                [TuringFresh2] lane entered decoder
+                  runID: \(runID)
+                  laneIndex: \(laneIndex)
+                  instanceID: \(instanceID.rawValue)
+                  segmentIndex: \(request.segmentIndex)
+                """)
+                let decoded = try await decodeCoordinator.decode(
+                    rendered,
+                    token: decodeToken
+                )
+                try request.generationQualityPolicy.validateAfterDecode(
+                    voiceID: rendered.voiceID,
+                    generatedRowCount: rendered.generatedRowCount,
+                    peakAbs: decoded.audio.peakAbs,
+                    rms: decoded.audio.rms,
+                    durationSeconds: decoded.audio.durationSeconds
+                )
+
+                // Publication returns after the file-backed clip is queued.
+                // It does not wait for playback completion.
+                try await onSegmentDecoded(decoded)
+                await metricsCollector.record(
+                    TuringQwenNativeFreshInstanceSegmentMetrics(
+                        instanceID: decoded.instanceID,
+                        segmentIndex: decoded.segmentIndex,
+                        renderSeconds: rendered.renderMetrics.elapsedSeconds,
+                        audioDurationSeconds: decoded.audio.durationSeconds
+                    )
+                )
+                await metricsCollector.sampleMemory(
+                    label: "segmentPublished.\(decoded.segmentIndex)"
+                )
+                print("""
+                [TuringSegmentPipeline] audio published
+                  runID: \(runID)
+                  segmentIndex: \(decoded.segmentIndex)
+                  instanceID: \(decoded.instanceID.rawValue)
+                  audioDurationSeconds: \(String(format: "%.3f", decoded.audio.durationSeconds))
+                """)
+                print("""
+                [TuringFresh2] lane publication completed
+                  runID: \(runID)
+                  laneIndex: \(laneIndex)
+                  instanceID: \(decoded.instanceID.rawValue)
+                  segmentIndex: \(decoded.segmentIndex)
+                  nextRequestEligible: true
+                """)
+            } catch {
+                if skipSegmentFailures || isSkippableEOSBeforeGeneratedAudio(error) {
+                    await onSegmentSkipped(
+                        TuringQwenNativeFreshSegmentSkip(
+                            instanceID: instanceID,
+                            segmentIndex: request.segmentIndex,
+                            errorDescription: error.localizedDescription
+                        )
+                    )
+                    continue
+                }
+                throw error
+            }
+        }
     }
 
     private static func isSkippableEOSBeforeGeneratedAudio(_ error: Error) -> Bool {

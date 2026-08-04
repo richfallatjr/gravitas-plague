@@ -162,7 +162,19 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
                 guard !self.robotDeathHandled else { return }
                 await self.cleanup(outcome: .cancelled, reason: "encounterTaskCancelled")
             } catch {
-                await self.fail(error, request: request)
+                if self.rewardSource != nil {
+                    print(
+                        "[Chapter01Robot] post-reward departure failed; " +
+                            "forcing full release before hub handoff " +
+                            "error=\(error.localizedDescription)"
+                    )
+                    await self.cleanup(
+                        outcome: .rewardedRobotDeparted,
+                        reason: "postRewardDepartureRecovery"
+                    )
+                } else {
+                    await self.fail(error, request: request)
+                }
             }
         }
     }
