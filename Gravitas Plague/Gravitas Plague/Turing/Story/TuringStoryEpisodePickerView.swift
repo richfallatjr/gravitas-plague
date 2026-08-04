@@ -157,6 +157,25 @@ struct TuringStoryEpisodePickerView: View {
         Task { @MainActor in
             defer { activeRequest = false }
             do {
+                if let postBattle = try await
+                    TuringProloguePostBattleProgressStore.shared.load(),
+                   postBattle.boundaryState == .chapterTransitionPending {
+                    let request = StoryTitleCardTransitionRequest(
+                        requestID: UUID(),
+                        source: .episodePickerContinue,
+                        descriptor: StoryTitleCardCatalog.descriptor(
+                            for: .chapter01
+                        ),
+                        destination: .advance(
+                            from: .prologue,
+                            to: .chapter01
+                        ),
+                        menuMusicPolicy: .playThroughCard
+                    )
+                    session.requestStoryTitleCardTransition(request)
+                    dismissWindow(id: PlagueWindowID.storyEpisodes)
+                    return
+                }
                 progress.reloadFromDefaults()
                 let target = try progress.requireValidContinuationTarget()
                 let request = StoryTitleCardTransitionRequest(

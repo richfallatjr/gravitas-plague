@@ -119,13 +119,10 @@ final class TuringStoryCrankRadioInteractionController:
             crankRadioRoot: crankRadioRoot
         )
         ready = true
-        if gate.state(for: .crankRadio) ==
-            .closed {
-            gate.armPlay(
-                surfaceID: .crankRadio,
-                reason: "crankRadioInstalled"
-            )
-        }
+        gate.close(
+            surfaceID: .crankRadio,
+            reason: "crankRadioInstalledClosed"
+        )
         applyInteractionSnapshot(
             latestSnapshot
         )

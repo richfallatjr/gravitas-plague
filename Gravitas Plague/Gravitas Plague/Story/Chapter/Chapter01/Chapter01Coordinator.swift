@@ -294,9 +294,9 @@ final class Chapter01Coordinator:
 
     func scriptPointCompleted(
         _ event: TuringScriptPointCompletionEvent
-    ) async throws {
+    ) async throws -> TuringStoryCompletionDisposition {
         guard handledCompletionEventIDs.insert(event.eventID).inserted else {
-            return
+            return .useDescriptorProgression
         }
         guard let chapterRunID else {
             throw Chapter01Error.missingRun
@@ -398,6 +398,7 @@ final class Chapter01Coordinator:
                 "Unexpected Chapter 01 ScriptPoint completion: \(event.scriptPointID)"
             )
         }
+        return .useDescriptorProgression
     }
 
     func conversationPlaybackCompleted(

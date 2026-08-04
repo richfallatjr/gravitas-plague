@@ -205,9 +205,9 @@ final class TuringRollingBenchBundleController:
             )
             crankRadioInteractionController
                 .crankRadioInstalled(
-                iconAnchor: anchors.crankRadioIconAnchor,
+                    iconAnchor: anchors.crankRadioIconAnchor,
                     crankRadioRoot: anchors.crankRadioRoot
-            )
+                )
             try await hamReceiverAudioController.install(
                 emitter:
                     anchors.hamReceiverAudioEmitter
@@ -226,8 +226,8 @@ final class TuringRollingBenchBundleController:
             if readiness.missing.isEmpty {
                 hamReceiverInteractionController.bind(
                     .prologueHamReceiver,
-                    initialState: .play,
-                    reason: "prologueHamReceiverConfigured"
+                    initialState: .closed,
+                    reason: "hamReceiverInstalledClosed"
                 )
             }
             print("""

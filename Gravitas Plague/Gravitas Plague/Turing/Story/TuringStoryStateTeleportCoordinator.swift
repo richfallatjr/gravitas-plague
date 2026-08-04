@@ -16,7 +16,11 @@ final class TuringStoryStateTeleportCoordinator {
         self.world = nil
     }
 
-    func apply(_ destination: TuringStoryDestination, source: String) async throws {
+    func apply(
+        _ destination: TuringStoryDestination,
+        source: String,
+        storyTransitionLease: StoryInteractionLease? = nil
+    ) async throws {
         guard TuringStoryStageCoordinator.shared.isEstablished else {
             throw TuringStoryContinuationError.storyStageNotEstablished
         }
@@ -45,6 +49,10 @@ final class TuringStoryStateTeleportCoordinator {
         """)
 
         try await world.quiesceStoryRuntime(teleportID: teleportID)
+        world.prepareEpisodeInteractionBindings(
+            destination.episodeID,
+            teleportID: teleportID
+        )
         await TuringEpisodeFlowController.shared.restore(
             completedScriptPointIDs: destination.completedScriptPointIDs,
             pendingConversationAdvance: destination.pendingConversationAdvance
@@ -68,7 +76,11 @@ final class TuringStoryStateTeleportCoordinator {
         }
 
         try await world.applyDoorDestination(destination.doorState, teleportID: teleportID)
-        try await world.applyBattleDestination(destination.battleState, teleportID: teleportID)
+        try await world.applyBattleDestination(
+            destination.battleState,
+            teleportID: teleportID,
+            storyTransitionLease: storyTransitionLease
+        )
         try await world.applyMediaDestination(destination.mediaState, teleportID: teleportID)
         try await world.applyWalkieDestination(destination.walkieAction, teleportID: teleportID)
 

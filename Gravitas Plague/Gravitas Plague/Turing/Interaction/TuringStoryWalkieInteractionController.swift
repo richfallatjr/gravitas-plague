@@ -114,6 +114,17 @@ final class TuringStoryWalkieInteractionController {
         print("[TuringWalkieState] binding staged root=\(binding.rootScriptPointID) reason=\(reason)")
     }
 
+    func stagePendingPlayAction(
+        _ action: TuringStoryWalkiePlayAction?,
+        reason: String
+    ) {
+        pendingPlayAction = action
+        print(
+            "[TuringWalkieState] pending action staged " +
+                "available=\(action != nil) reason=\(reason)"
+        )
+    }
+
     func walkieInstalled(
         iconAnchor: Entity,
         walkieRoot: Entity

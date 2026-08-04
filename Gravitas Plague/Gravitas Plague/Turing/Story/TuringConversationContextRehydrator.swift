@@ -7,14 +7,15 @@ enum TuringConversationContextRehydrator {
         let descriptor = try TuringFlowDescriptorStore().require(
             terminalScriptPointID
         )
+        let promptID = try promptVoiceID(for: descriptor)
+        let prerecordingID = conversationPrerecordingID(for: descriptor)
         let prerecording = try TuringPrerecordingStore().descriptor(
-            id: descriptor.transmission.prerecordingID
+            id: prerecordingID
         )
         guard prerecording.transcriptMode == .manual,
               !prerecording.transcript.trimmingCharacters(
                 in: .whitespacesAndNewlines
-              ).isEmpty,
-              let promptID = descriptor.transmission.voicePromptID else {
+              ).isEmpty else {
             throw TuringRuntimeError.invalidConfig(
                 "\(terminalScriptPointID) requires an authored PR transcript and promptVoice descriptor."
             )
@@ -41,12 +42,39 @@ enum TuringConversationContextRehydrator {
             for: key
         )
         print("""
-        [TuringContinuation] Chapter conversation context rehydrated
+        [TuringContinuation] Story conversation context rehydrated
           scriptPointID: \(terminalScriptPointID)
           conversationKey: \(key)
+          prerecordingID: \(prerecording.prerecordingID)
           characterProfileID: \(prompt.characterProfileID)
           authoredPR: true
           generatedHistoryIncluded: false
         """)
+    }
+
+    private static func promptVoiceID(
+        for descriptor: TuringFlowDescriptor
+    ) throws -> String {
+        if let promptID = descriptor.transmission.voicePromptID {
+            return promptID
+        }
+        if let promptID = descriptor.transmission.generationPipeline?
+            .stages
+            .last(where: { $0.kind == .voicePrompt })?
+            .voicePromptID {
+            return promptID
+        }
+        throw TuringRuntimeError.invalidConfig(
+            "\(descriptor.scriptPointID) has no promptVoice descriptor."
+        )
+    }
+
+    private static func conversationPrerecordingID(
+        for descriptor: TuringFlowDescriptor
+    ) -> String {
+        descriptor.transmission.generationPipeline?
+            .stages
+            .compactMap(\.authoredPrerecordingAfterStageID)
+            .last ?? descriptor.transmission.prerecordingID
     }
 }

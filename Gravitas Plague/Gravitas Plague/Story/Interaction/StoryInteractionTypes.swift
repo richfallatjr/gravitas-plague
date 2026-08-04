@@ -7,7 +7,7 @@ enum StoryTuringGateState: String, Sendable, Equatable {
     case microphone
 }
 
-enum StoryInteractionSurfaceID:
+nonisolated enum StoryInteractionSurfaceID:
     String,
     Codable,
     Sendable,
@@ -64,7 +64,7 @@ enum StoryBattleDoorPermission: String, Sendable, Equatable {
     case playerMayOpen
 }
 
-enum StoryInteractionCapability: String, Sendable, Hashable {
+nonisolated enum StoryInteractionCapability: String, Sendable, Hashable {
     case walkiePlay
     case walkieMicrophone
     case doorOpen

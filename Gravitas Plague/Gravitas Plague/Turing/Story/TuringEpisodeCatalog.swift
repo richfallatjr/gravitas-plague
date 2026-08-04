@@ -1,6 +1,6 @@
 import Foundation
 
-enum TuringEpisodeID: String, Codable, CaseIterable, Identifiable, Sendable {
+nonisolated enum TuringEpisodeID: String, Codable, CaseIterable, Identifiable, Sendable {
     case prologue
     case chapter01
 

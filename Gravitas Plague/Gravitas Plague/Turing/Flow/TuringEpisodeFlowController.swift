@@ -1,22 +1,33 @@
 import Foundation
 
-struct TuringScriptPointCompletionEvent: Sendable, Equatable {
+nonisolated struct TuringScriptPointCompletionEvent: Sendable, Equatable {
     let eventID: UUID
     let scriptPointID: String
+    let flowSequenceID: UUID
     let flowInstanceID: UUID
     let triggerSource: TuringFlowTriggerSource
+    let externalActivation: TuringExternalActivationContext?
+    let actualPlaybackCompleted: Bool
 }
 
-struct TuringConversationPlaybackCompletionEvent: Sendable, Equatable {
+nonisolated struct TuringConversationPlaybackCompletionEvent: Sendable, Equatable {
     let eventID: UUID
     let conversationRunID: UUID
     let conversationKey: String
     let parentScriptPointID: String
 }
 
+nonisolated enum TuringStoryCompletionDisposition: Sendable, Equatable {
+    case useDescriptorProgression
+    case suppressDescriptorGateAndReleaseInteraction
+    case interactionLeaseTransferred
+}
+
 @MainActor
 protocol TuringStoryCompletionEventSink: AnyObject {
-    func scriptPointCompleted(_ event: TuringScriptPointCompletionEvent) async throws
+    func scriptPointCompleted(
+        _ event: TuringScriptPointCompletionEvent
+    ) async throws -> TuringStoryCompletionDisposition
     func conversationPlaybackCompleted(
         _ event: TuringConversationPlaybackCompletionEvent
     ) async throws
@@ -45,6 +56,8 @@ actor TuringEpisodeFlowController {
         StoryInteractionArbiter
     private let sequenceLifecycleResolver:
         any TuringFlowSequenceLifecycleResolving
+    private let postBattleActivations:
+        TuringProloguePostBattleActivationRegistry
 
     private var activeSequenceID: UUID?
     private var activeSequenceLifecycle:
@@ -60,6 +73,8 @@ actor TuringEpisodeFlowController {
         PendingConversationAdvance?
     private var activeInteractionLease:
         StoryInteractionLease?
+    private var activeExternalActivation:
+        TuringExternalActivationContext?
     private weak var completionEventSink:
         (any TuringStoryCompletionEventSink)?
 
@@ -79,7 +94,9 @@ actor TuringEpisodeFlowController {
                 TuringFlowCatalogValidator(),
         sequenceLifecycleResolver:
             any TuringFlowSequenceLifecycleResolving =
-                TuringDefaultFlowSequenceLifecycleResolver()
+                TuringDefaultFlowSequenceLifecycleResolver(),
+        postBattleActivations:
+            TuringProloguePostBattleActivationRegistry = .shared
     ) {
         self.engine = engine
         self.descriptorStore = descriptorStore
@@ -89,6 +106,7 @@ actor TuringEpisodeFlowController {
         self.catalogValidator = catalogValidator
         self.sequenceLifecycleResolver =
             sequenceLifecycleResolver
+        self.postBattleActivations = postBattleActivations
     }
 
     func setCompletionEventSink(
@@ -181,6 +199,19 @@ actor TuringEpisodeFlowController {
             )
         }
 
+        let externalActivation: TuringExternalActivationContext?
+        do {
+            externalActivation = try await postBattleActivations
+                .prepareIfNeeded(
+                    rootScriptPointID: scriptPointID,
+                    trigger: trigger
+                )
+        } catch {
+            return .failed(
+                "Device operation failed: \(error.localizedDescription)"
+            )
+        }
+
         do {
             if let adoptedLease = activeInteractionLease {
                 try await interactionArbiter.requireCurrent(adoptedLease)
@@ -195,6 +226,13 @@ actor TuringEpisodeFlowController {
                                 .effectiveInteractionSurface
                     )
                 activeInteractionLease = claimedLease
+            }
+            if let externalActivation {
+                try await postBattleActivations.registerAcceptedPlay(
+                    externalActivation,
+                    flowSequenceID: sequenceID
+                )
+                activeExternalActivation = externalActivation
             }
         } catch {
             return .failed(
@@ -313,143 +351,109 @@ actor TuringEpisodeFlowController {
             }
 
             do {
-                try await publishCompletion(
+                let completionDisposition = try await publishCompletion(
                     result: result,
                     scriptPointID: scheduledPointID,
-                    triggerSource: scheduledTrigger
+                    triggerSource: scheduledTrigger,
+                    sequenceID: sequenceID
                 )
+
+                if completionDisposition == .interactionLeaseTransferred,
+                   activeInteractionLease != nil {
+                    throw TuringRuntimeError.invalidConfig(
+                        "Story completion reported a transferred interaction lease without clearing the Turing lease."
+                    )
+                }
+
+                completedScriptPointIDs.insert(scheduledPointID)
+
+                let progression = descriptor.progression
+
+                guard let nextScriptPointID = progression.nextScriptPointID else {
+                    pendingConversationAdvance = nil
+                    if completionDisposition == .useDescriptorProgression,
+                       activeInteractionLease != nil,
+                       progression.interactionGateAfterCompletion == .microphone {
+                        await TuringFlowInteractionGateController.shared
+                            .ensureMicrophoneAvailable(
+                                surfaceID: descriptor.transmission
+                                    .effectiveInteractionSurface,
+                                reason:
+                                    "terminalPointCompleted.\(descriptor.scriptPointID)"
+                            )
+                    }
+                    return result.voiceRunResult
+                }
+
+                guard completionDisposition == .useDescriptorProgression else {
+                    throw TuringRuntimeError.invalidConfig(
+                        "A nonterminal ScriptPoint suppressed descriptor progression."
+                    )
+                }
+
+                let nextDescriptor: TuringFlowDescriptor
+                do {
+                    nextDescriptor = try descriptorStore.require(nextScriptPointID)
+                } catch {
+                    print("""
+                    [TuringFlow] progression failed
+                      completedScriptPointID: \(scheduledPointID)
+                      nextScriptPointID: \(nextScriptPointID)
+                      error: \(error.localizedDescription)
+                    """)
+                    return .failed(
+                        "\(scheduledPointID) completed, but \(nextScriptPointID) could not be loaded: \(error.localizedDescription)"
+                    )
+                }
+
+                if progression.automaticAdvance {
+                    guard nextDescriptor.trigger.kind == .priorScriptPointCompleted else {
+                        return .failed(
+                            "\(scheduledPointID) requests automatic advance, but \(nextScriptPointID) is not triggered by priorScriptPointCompleted."
+                        )
+                    }
+
+                    if let completedIdentity = result.identity {
+                        TuringFlowLog.event(
+                            "next point scheduled",
+                            identity: completedIdentity,
+                            fields: [
+                                ("nextScriptPointID", nextScriptPointID),
+                                ("nextTrigger", nextDescriptor.trigger.kind.rawValue),
+                                (
+                                    "delaySeconds",
+                                    String(
+                                        format: "%.3f",
+                                        nextDescriptor.trigger.delaySeconds
+                                    )
+                                )
+                            ]
+                        )
+                    }
+
+                    scheduledPointID = nextScriptPointID
+                    scheduledTrigger = .priorScriptPointCompleted(
+                        parentScriptPointID: descriptor.scriptPointID
+                    )
+                    continue
+                }
+
+                if nextDescriptor.trigger.kind == .priorConversationPlaybackCompleted {
+                    pendingConversationAdvance = PendingConversationAdvance(
+                        parentScriptPointID: descriptor.scriptPointID,
+                        nextScriptPointID: nextScriptPointID,
+                        conversationKey: descriptor.transmission.conversationKey
+                    )
+                } else {
+                    pendingConversationAdvance = nil
+                }
+
+                return result.voiceRunResult
             } catch {
                 return .failed(
                     "\(scheduledPointID) completed playback, but its checkpoint could not be saved: \(error.localizedDescription)"
                 )
             }
-
-            completedScriptPointIDs.insert(scheduledPointID)
-
-            let progression =
-                descriptor.progression
-
-            guard let nextScriptPointID =
-                    progression.nextScriptPointID else {
-                pendingConversationAdvance = nil
-                if progression
-                    .interactionGateAfterCompletion ==
-                    .microphone {
-                    await TuringFlowInteractionGateController
-                        .shared
-                        .ensureMicrophoneAvailable(
-                            surfaceID:
-                                descriptor.transmission
-                                    .effectiveInteractionSurface,
-                            reason:
-                                "terminalPointCompleted.\(descriptor.scriptPointID)"
-                        )
-                }
-                return result.voiceRunResult
-            }
-
-            let nextDescriptor:
-                TuringFlowDescriptor
-
-            do {
-                nextDescriptor =
-                    try descriptorStore.require(
-                        nextScriptPointID
-                    )
-            } catch {
-                print("""
-                [TuringFlow] progression failed
-                  completedScriptPointID: \(scheduledPointID)
-                  nextScriptPointID: \(nextScriptPointID)
-                  error: \(error.localizedDescription)
-                """)
-                return .failed(
-                    "\(scheduledPointID) completed, but \(nextScriptPointID) could not be loaded: \(error.localizedDescription)"
-                )
-            }
-
-            if progression.automaticAdvance {
-                guard nextDescriptor.trigger.kind ==
-                        .priorScriptPointCompleted else {
-                    return .failed(
-                        "\(scheduledPointID) requests automatic advance, but \(nextScriptPointID) is not triggered by priorScriptPointCompleted."
-                    )
-                }
-
-                if let completedIdentity =
-                    result.identity {
-                    TuringFlowLog.event(
-                        "next point scheduled",
-                        identity:
-                            completedIdentity,
-                        fields: [
-                            (
-                                "nextScriptPointID",
-                                nextScriptPointID
-                            ),
-                            (
-                                "nextTrigger",
-                                nextDescriptor.trigger
-                                    .kind.rawValue
-                            ),
-                            (
-                                "delaySeconds",
-                                String(
-                                    format: "%.3f",
-                                    nextDescriptor.trigger
-                                        .delaySeconds
-                                )
-                            )
-                        ]
-                    )
-                } else {
-                    print("""
-                    [TuringFlow] next point scheduled
-                      parentScriptPointID: \(descriptor.scriptPointID)
-                      nextScriptPointID: \(nextScriptPointID)
-                      nextTrigger: \(nextDescriptor.trigger.kind.rawValue)
-                      delaySeconds: \(String(format: "%.3f", nextDescriptor.trigger.delaySeconds))
-                    """)
-                }
-
-                scheduledPointID =
-                    nextScriptPointID
-                scheduledTrigger =
-                    .priorScriptPointCompleted(
-                        parentScriptPointID:
-                            descriptor
-                                .scriptPointID
-                    )
-                continue
-            }
-
-            if nextDescriptor.trigger.kind ==
-                .priorConversationPlaybackCompleted {
-                pendingConversationAdvance =
-                    PendingConversationAdvance(
-                        parentScriptPointID:
-                            descriptor
-                                .scriptPointID,
-                        nextScriptPointID:
-                            nextScriptPointID,
-                        conversationKey:
-                            descriptor
-                                .transmission
-                                .conversationKey
-                    )
-
-                print("""
-                [TuringFlow] next point waiting for conversation
-                  parentScriptPointID: \(descriptor.scriptPointID)
-                  nextScriptPointID: \(nextScriptPointID)
-                  conversationKey: \(descriptor.transmission.conversationKey)
-                  microphoneGate: \(descriptor.progression.interactionGateAfterCompletion.rawValue)
-                """)
-            } else {
-                pendingConversationAdvance = nil
-            }
-
-            return result.voiceRunResult
         }
     }
 
@@ -599,6 +603,17 @@ actor TuringEpisodeFlowController {
         return transitionLease
     }
 
+    func releaseAnyCurrentInteractionAfterTransferFailure(
+        reason: String
+    ) async {
+        guard let activeInteractionLease else { return }
+        self.activeInteractionLease = nil
+        await interactionArbiter.release(
+            activeInteractionLease,
+            reason: reason
+        )
+    }
+
     private func finishActiveSequence(
         sequenceID: UUID,
         finalDescriptor:
@@ -627,6 +642,14 @@ actor TuringEpisodeFlowController {
             self.activeInteractionLease = nil
             await interactionArbiter.release(
                 activeInteractionLease,
+                reason: reason
+            )
+        }
+
+        if let activeExternalActivation {
+            self.activeExternalActivation = nil
+            await postBattleActivations.cancel(
+                activeExternalActivation,
                 reason: reason
             )
         }
@@ -674,6 +697,8 @@ actor TuringEpisodeFlowController {
         )
         pendingConversationAdvance = nil
         catalogValidated = false
+
+        await postBattleActivations.reset(reason: reason)
 
         await inputStore.clearAll(
             reason:
@@ -745,11 +770,19 @@ actor TuringEpisodeFlowController {
         )
     }
 
+    func removeCompletedForRetry(scriptPointID: String) {
+        completedScriptPointIDs.remove(scriptPointID)
+        print(
+            "[TuringFlow] completion removed for retry scriptPointID=\(scriptPointID)"
+        )
+    }
+
     private func publishCompletion(
         result: TuringFlowResult,
         scriptPointID: String,
-        triggerSource: TuringFlowTriggerSource
-    ) async throws {
+        triggerSource: TuringFlowTriggerSource,
+        sequenceID: UUID
+    ) async throws -> TuringStoryCompletionDisposition {
         guard let identity = result.identity else {
             print("[TuringFlow] completion event omitted: successful result had no identity scriptPointID=\(scriptPointID)")
             throw TuringStoryContinuationError.noValidSnapshot
@@ -757,16 +790,21 @@ actor TuringEpisodeFlowController {
         let event = TuringScriptPointCompletionEvent(
             eventID: UUID(),
             scriptPointID: scriptPointID,
+            flowSequenceID: sequenceID,
             flowInstanceID: identity.flowInstanceID,
-            triggerSource: triggerSource
+            triggerSource: triggerSource,
+            externalActivation: activeExternalActivation,
+            actualPlaybackCompleted: true
         )
-        try await completionEventSink?.scriptPointCompleted(event)
+        let disposition = try await completionEventSink?
+            .scriptPointCompleted(event) ?? .useDescriptorProgression
         print("""
         [TuringFlow] actual script point completion published
           scriptPointID: \(scriptPointID)
           flowInstanceID: \(identity.flowInstanceID.uuidString)
           trigger: \(triggerSource.logValue)
         """)
+        return disposition
     }
 }
 

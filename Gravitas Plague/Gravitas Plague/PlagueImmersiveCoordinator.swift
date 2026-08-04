@@ -465,14 +465,20 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                     )
             },
             onPostBattleHold: { [weak self] event in
-                self?.turingStoryWalkieInteractionController.armPlay(
-                    action: .startScriptPoint(
-                        id: "prologue.scriptPoint04",
-                        trigger: .userPlay
-                    ),
-                    reason:
-                        "battle01.runtimeReleased.\(event.battleInstanceID.uuidString)"
-                )
+                guard let completion = self?.prologueCompletionCoordinator else {
+                    print(
+                        "[TuringProloguePostBattle] ERROR completion owner unavailable"
+                    )
+                    return
+                }
+                do {
+                    try await completion.battleRuntimeReleased(event)
+                } catch {
+                    print(
+                        "[TuringProloguePostBattle] ERROR hub unlock failed " +
+                            "error=\(error.localizedDescription)"
+                    )
+                }
             },
             playerTargetProvider: { [weak self] in
                 self?.spatialProvider.currentPose()?.headPosition
@@ -484,7 +490,11 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         )
         let prologueRouter = PrologueStoryActionRouter(battle01: battle01)
         let completionCoordinator = TuringPrologueCompletionCoordinator(
-            battleRouter: prologueRouter
+            battleRouter: prologueRouter,
+            walkie: turingStoryWalkieInteractionController,
+            dadFrame: turingStoryDadFrameInteractionController,
+            hamReceiver: turingRollingBenchBundleController
+                .hamReceiverInteractionController
         )
         battle01Coordinator = battle01
         chapter01RobotEncounterCoordinator =
@@ -593,6 +603,12 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             }
         )
         chapterCoordinator.onEpisodeBoundary = { [weak self] event in
+            guard let self else {
+                throw StoryTitleCardError.missingRouteOwner
+            }
+            try await self.handleStoryEpisodeBoundary(event)
+        }
+        completionCoordinator.onEpisodeBoundary = { [weak self] event in
             guard let self else {
                 throw StoryTitleCardError.missingRouteOwner
             }
@@ -1861,6 +1877,50 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         """)
     }
 
+    func prepareEpisodeInteractionBindings(
+        _ episodeID: TuringEpisodeID,
+        teleportID: UUID
+    ) {
+        guard episodeID == .prologue else {
+            return
+        }
+
+        let reason = "storyTeleport.\(teleportID.uuidString).prologueBindings"
+        turingStoryWalkieInteractionController.episodeStarted(.prologue)
+        turingStoryDadFrameInteractionController.stageBinding(
+            .prologueDadPhoto,
+            reason: reason
+        )
+        turingRollingBenchBundleController.hamReceiverInteractionController
+            .stageBinding(
+                .prologueHamReceiver,
+                reason: reason
+            )
+        TuringFlowInteractionGateController.shared.applyStableState(
+            .closed,
+            surfaceID: .dadFrame,
+            reason: reason
+        )
+        TuringFlowInteractionGateController.shared.applyStableState(
+            .closed,
+            surfaceID: .crankRadio,
+            reason: reason
+        )
+        TuringFlowInteractionGateController.shared.applyStableState(
+            .closed,
+            surfaceID: .hamReceiver,
+            reason: reason
+        )
+        print("""
+        [TuringStoryTeleport] episode interaction bindings prepared
+          teleportID: \(teleportID.uuidString)
+          episodeID: \(episodeID.rawValue)
+          walkieConversationKey: \(TuringStorySurfaceFlowBinding.prologueWalkie.conversationKey)
+          dadFrameConversationKey: \(TuringStorySurfaceFlowBinding.prologueDadPhoto.conversationKey)
+          hamReceiverConversationKey: \(TuringStorySurfaceFlowBinding.prologueHamReceiver.conversationKey)
+        """)
+    }
+
     func applyDoorDestination(
         _ destination: TuringStoryDoorDestination?,
         teleportID: UUID
@@ -1874,7 +1934,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
     func applyBattleDestination(
         _ destination: TuringStoryBattleDestination,
-        teleportID: UUID
+        teleportID: UUID,
+        storyTransitionLease: StoryInteractionLease?
     ) async throws {
         switch destination {
         case .absent:
@@ -1884,9 +1945,13 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             )
             prologueStoryActionRouter?.reset(reason: "storyTeleport.absent")
         case .battle01Start:
+            guard let storyTransitionLease else {
+                throw StoryInteractionClaimError.invalidTransfer
+            }
             let sourceEventID = TuringStoryProgressStore.shared.snapshot?.sourceEventID ?? UUID()
             try await prologueStoryActionRouter?.startBattle01FromContinuation(
-                sourceEventID: sourceEventID
+                sourceEventID: sourceEventID,
+                storyTransitionLease: storyTransitionLease
             )
         case .battle01Ready, .battle01Combat, .battle01GrandmaDown:
             throw TuringStoryContinuationError.unsupportedEpisode
@@ -1967,8 +2032,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 )
             turingStoryDadFrameInteractionController.bind(
                 .prologueDadPhoto,
-                initialState: .play,
-                reason: "prologueDadFrameConfigured"
+                initialState: .closed,
+                reason: "dadFrameInstalledClosed"
             )
         } else {
             print("""
@@ -6216,11 +6281,15 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
             TuringStoryProgressStore.shared.clear(
                 reason: "titleCard.start.prologue"
             )
+            await TuringProloguePostBattleProgressStore.shared.clear(
+                reason: "titleCard.start.prologue"
+            )
             let plan = try TuringStoryDestinationPlanner
                 .startOfEpisode(.prologue)
             try await TuringStoryStateTeleportCoordinator.shared.apply(
                 plan,
-                source: "titleCard.start.prologue"
+                source: "titleCard.start.prologue",
+                storyTransitionLease: transitionLease
             )
             disposition = .releaseAfterFade
 
@@ -6247,9 +6316,12 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
             )
             try await TuringStoryStateTeleportCoordinator.shared.apply(
                 plan,
-                source: "titleCard.continue.prologue"
+                source: "titleCard.continue.prologue",
+                storyTransitionLease: transitionLease
             )
-            disposition = .releaseAfterFade
+            disposition = plan.battleState == .battle01Start
+                ? .retainedByDestination
+                : .releaseAfterFade
 
         case .continueFrom(.chapter01(let snapshot)):
             guard let chapter01Coordinator else {
@@ -6270,6 +6342,10 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
             try await chapter01Coordinator.beginAtRoot(
                 transitionLease: transitionLease
             )
+            if completed == .prologue {
+                try await prologueCompletionCoordinator?
+                    .commitPendingEpisodeBoundary()
+            }
             disposition = .releaseAfterFade
 
         case .endOfAvailableContent(let completedEpisode):
@@ -6302,7 +6378,7 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
         request: StoryTitleCardTransitionRequest
     ) {
         showTemporaryInstructionHUD(
-            "Story transition failed.",
+            "Story transition failed: \(error.localizedDescription)",
             clearAfterSeconds: 4,
             reason: "titleCardFailed.\(request.requestID.uuidString)"
         )
@@ -6314,6 +6390,12 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
                 request.requestID.uuidString +
                 " error=\(error.localizedDescription)"
         )
+        if case .advance(from: .prologue, to: .chapter01) = request.destination {
+            Task { @MainActor [weak self] in
+                await self?.prologueCompletionCoordinator?
+                    .episodeBoundaryFailed(reason: error.localizedDescription)
+            }
+        }
     }
 
     private func handleStoryEpisodeBoundary(
@@ -6329,7 +6411,18 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
                 transitionID: transitionID,
                 reason: "episodeBoundary.\(event.completedEpisodeID.rawValue)"
             )
+        try await acceptStoryEpisodeBoundary(
+            event,
+            transitionID: transitionID,
+            lease: lease
+        )
+    }
 
+    private func acceptStoryEpisodeBoundary(
+        _ event: StoryEpisodeBoundaryEvent,
+        transitionID: UUID,
+        lease: StoryInteractionLease
+    ) async throws {
         let request: StoryTitleCardTransitionRequest
         if let next = TuringEpisodeCatalog.nextUnlockedEpisode(
             after: event.completedEpisodeID
@@ -6369,4 +6462,5 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
             throw error
         }
     }
+
 }

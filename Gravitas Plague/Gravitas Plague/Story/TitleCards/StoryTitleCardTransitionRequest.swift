@@ -51,7 +51,7 @@ enum StoryTitleCardRouteLeaseDisposition: Sendable, Equatable {
     case transferredByDestination
 }
 
-struct StoryEpisodeBoundaryEvent: Sendable, Hashable {
+nonisolated struct StoryEpisodeBoundaryEvent: Sendable, Hashable {
     let eventID: UUID
     let completedEpisodeID: TuringEpisodeID
     let actualTerminalPlaybackCompleted: Bool

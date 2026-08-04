@@ -22,6 +22,7 @@ final class PhaseOneSpatialProvider {
     private var isRunning = false
     private var isPlaneDetectionRunning = false
     private var planeUpdateTask: Task<Void, Never>?
+    private var lastDeviceTransform: simd_float4x4?
 
     private var knownHorizontalPlaneYsByID: [UUID: Float] = [:]
 
@@ -73,6 +74,7 @@ final class PhaseOneSpatialProvider {
         planeUpdateTask = nil
 
         knownHorizontalPlaneYsByID.removeAll()
+        lastDeviceTransform = nil
 
         guard isRunning else { return }
         session.stop()
@@ -95,6 +97,9 @@ final class PhaseOneSpatialProvider {
         }
 
         let matrix = deviceAnchor.originFromAnchorTransform
+        if deviceAnchor.isTracked {
+            lastDeviceTransform = matrix
+        }
 
         let headPosition = SIMD3<Float>(
             matrix.columns.3.x,
@@ -125,14 +130,29 @@ final class PhaseOneSpatialProvider {
         guard let deviceAnchor = worldTrackingProvider.queryDeviceAnchor(
             atTimestamp: CACurrentMediaTime()
         ) else {
-            return nil
+            if let lastDeviceTransform {
+                print("[SpatialProvider] using last device transform because the current anchor is unavailable")
+            }
+            return lastDeviceTransform
         }
 
-        guard deviceAnchor.isTracked else {
-            return nil
+        let transform = deviceAnchor.originFromAnchorTransform
+        if deviceAnchor.isTracked {
+            lastDeviceTransform = transform
+            return transform
         }
 
-        return deviceAnchor.originFromAnchorTransform
+        if let lastDeviceTransform {
+            print("[SpatialProvider] using last tracked device transform during a transient tracking loss")
+            return lastDeviceTransform
+        }
+
+        // ARKit can briefly mark the queried anchor untracked while still
+        // returning its most recent valid world transform. A title transition
+        // is preferable to dropping the completed Story boundary.
+        lastDeviceTransform = transform
+        print("[SpatialProvider] using the current untracked device transform for title placement")
+        return transform
     }
 
     func resolvedFloorY(

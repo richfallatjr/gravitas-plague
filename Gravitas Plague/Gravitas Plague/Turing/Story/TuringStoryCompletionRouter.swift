@@ -15,15 +15,14 @@ final class TuringStoryCompletionRouter: TuringStoryCompletionEventSink {
 
     func scriptPointCompleted(
         _ event: TuringScriptPointCompletionEvent
-    ) async throws {
+    ) async throws -> TuringStoryCompletionDisposition {
         if event.scriptPointID.hasPrefix("prologue.") {
             guard let prologue else {
                 throw TuringRuntimeError.invalidConfig(
                     "No Prologue completion owner is installed."
                 )
             }
-            try await prologue.scriptPointCompleted(event)
-            return
+            return try await prologue.scriptPointCompleted(event)
         }
 
         if event.scriptPointID.hasPrefix("chapter01.") {
@@ -32,8 +31,7 @@ final class TuringStoryCompletionRouter: TuringStoryCompletionEventSink {
                     "No Chapter 01 completion owner is installed."
                 )
             }
-            try await chapter01.scriptPointCompleted(event)
-            return
+            return try await chapter01.scriptPointCompleted(event)
         }
 
         throw TuringRuntimeError.invalidConfig(

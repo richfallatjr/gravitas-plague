@@ -1,6 +1,6 @@
 import Foundation
 
-enum TuringPrologueCheckpoint: Int, Codable, Sendable, Comparable, CaseIterable {
+nonisolated enum TuringPrologueCheckpoint: Int, Codable, Sendable, Comparable, CaseIterable {
     case notStarted = 0
     case script01PromptVoiceCompleted = 10
     case script01ConversationVoiceCompleted = 20

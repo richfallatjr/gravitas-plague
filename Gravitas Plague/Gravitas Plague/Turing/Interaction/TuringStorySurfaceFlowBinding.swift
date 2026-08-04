@@ -1,6 +1,6 @@
 import Foundation
 
-struct TuringStorySurfaceFlowBinding: Sendable, Equatable {
+nonisolated struct TuringStorySurfaceFlowBinding: Sendable, Equatable {
     let rootScriptPointID: String
     let terminalScriptPointID: String
     let conversationKey: String
@@ -26,6 +26,24 @@ extension TuringStorySurfaceFlowBinding {
         conversationCharacterID: TuringBigMikeVoiceIdentity.characterID,
         conversationOutputRoute: .walkieSpatial,
         interactionSurface: .walkie
+    )
+
+    static let prologuePostBattleWalkie = Self(
+        rootScriptPointID: "prologue.scriptPoint04",
+        terminalScriptPointID: "prologue.scriptPoint05",
+        conversationKey: TuringDialogueThreadIdentity.bigMikeRich,
+        conversationCharacterID: TuringBigMikeVoiceIdentity.characterID,
+        conversationOutputRoute: .walkieSpatial,
+        interactionSurface: .walkie
+    )
+
+    static let prologueCrankRadio = Self(
+        rootScriptPointID: "prologue.crankRadioBroadcast.001",
+        terminalScriptPointID: "prologue.crankRadioBroadcast.001",
+        conversationKey: "object.crank_radio",
+        conversationCharacterID: "broadcaster",
+        conversationOutputRoute: .crankRadioSpatial,
+        interactionSurface: .crankRadio
     )
 
     static let chapter01OpeningWalkie = Self(

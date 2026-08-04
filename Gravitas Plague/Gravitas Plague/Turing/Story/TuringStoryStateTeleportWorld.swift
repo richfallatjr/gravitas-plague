@@ -4,13 +4,18 @@ import Foundation
 protocol TuringStoryStateTeleportWorld: AnyObject {
     func establishedLayoutFingerprint() throws -> TuringStoryEstablishedLayoutFingerprint
     func quiesceStoryRuntime(teleportID: UUID) async throws
+    func prepareEpisodeInteractionBindings(
+        _ episodeID: TuringEpisodeID,
+        teleportID: UUID
+    )
     func applyDoorDestination(
         _ destination: TuringStoryDoorDestination?,
         teleportID: UUID
     ) async throws
     func applyBattleDestination(
         _ destination: TuringStoryBattleDestination,
-        teleportID: UUID
+        teleportID: UUID,
+        storyTransitionLease: StoryInteractionLease?
     ) async throws
     func applyMediaDestination(
         _ destination: TuringStoryMediaDestination,

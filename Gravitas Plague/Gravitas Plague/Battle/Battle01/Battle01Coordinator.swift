@@ -30,7 +30,7 @@ final class Battle01Coordinator {
     typealias EnemyPreparedHook = @MainActor (UUID, JockRetargetTestController) -> Void
     typealias EnemyRemovedHook = @MainActor (UUID) -> Void
     typealias EnemyMemoryPresenceHook = @MainActor (Bool, String) -> Void
-    typealias PostBattleHoldHook = @MainActor (BattleRuntimeReleasedEvent) -> Void
+    typealias PostBattleHoldHook = @MainActor (BattleRuntimeReleasedEvent) async -> Void
 
     private let definitionStore = Battle01DefinitionStore()
     private let enemyFactory: Battle01EnemyFactory
@@ -671,7 +671,7 @@ final class Battle01Coordinator {
                         ("musicStillPlaying", String(musicStillPlaying))
                     ]
                 )
-                self.onPostBattleHold(event)
+                await self.onPostBattleHold(event)
                 await self.releaseInteractionLease(
                     reason: "battleRuntimeReleased"
                 )

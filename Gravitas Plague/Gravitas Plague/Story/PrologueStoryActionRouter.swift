@@ -35,15 +35,20 @@ final class PrologueStoryActionRouter {
         }
     }
 
-    func startBattle01FromContinuation(sourceEventID: UUID) async throws {
+    func startBattle01FromContinuation(
+        sourceEventID: UUID,
+        storyTransitionLease: StoryInteractionLease
+    ) async throws {
         guard battle01Triggered == false else { return }
         battle01Triggered = true
         let battleInstanceID = UUID()
         do {
-            let lease = try await StoryInteractionArbiter.shared.claimBattle(
-                battleInstanceID: battleInstanceID,
-                source: "continuationRestore"
-            )
+            let lease = try await StoryInteractionArbiter.shared
+                .transferStoryTransitionToBattle(
+                    storyTransitionLease: storyTransitionLease,
+                    battleInstanceID: battleInstanceID,
+                    reason: "continuationRestore"
+                )
             battle01.start(
                 trigger: .continuationRestore(
                     snapshotSourceEventID: sourceEventID

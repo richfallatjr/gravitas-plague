@@ -138,7 +138,7 @@ extension TuringFlowDescriptor.Progression {
     }
 }
 
-enum TuringFlowTriggerSource: Sendable, Hashable {
+nonisolated enum TuringFlowTriggerSource: Sendable, Hashable {
     case userPlay
     case priorConversationPlaybackCompleted(parentScriptPointID: String)
     case priorScriptPointCompleted(parentScriptPointID: String)
