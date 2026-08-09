@@ -18,6 +18,20 @@ enum StoryTitleCardDestination: Sendable, Equatable {
             return completedEpisode
         }
     }
+
+    var stopsPrologueAftermathAfterFade: Bool {
+        switch self {
+        case .start(.chapter01),
+             .continueFrom(.chapter01),
+             .advance(from: .prologue, to: .chapter01):
+            return true
+        case .start,
+             .continueFrom,
+             .advance,
+             .endOfAvailableContent:
+            return false
+        }
+    }
 }
 
 enum StoryTitleCardMenuMusicPolicy: String, Sendable, Equatable {

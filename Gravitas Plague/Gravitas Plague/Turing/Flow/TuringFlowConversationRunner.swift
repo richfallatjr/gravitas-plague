@@ -330,7 +330,7 @@ enum TuringFlowConversationRunner {
                     )
                 await playback
                     .waitUntilPlaybackFinished()
-                await route.finish(
+                try? await route.finish(
                     descriptor:
                         syntheticDescriptor,
                     identity: identity,
@@ -360,7 +360,7 @@ enum TuringFlowConversationRunner {
             guard report.isCompleteSuccess,
                   completed ==
                     plan.segments.count else {
-                await route.finish(
+                try? await route.finish(
                     descriptor:
                         syntheticDescriptor,
                     identity: identity,
@@ -380,7 +380,7 @@ enum TuringFlowConversationRunner {
                 )
             }
 
-            await route.finish(
+            try await route.finish(
                 descriptor:
                     syntheticDescriptor,
                 identity: identity,

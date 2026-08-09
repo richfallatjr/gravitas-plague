@@ -9,6 +9,12 @@ protocol TuringRollingBenchRadioBedControlling: Sendable {
     func startEmergencyCue(
         ownerID: String
     ) async throws -> TuringAudioPlaybackHandle
+    func startAuthoredCue(
+        ownerID: String,
+        resourceName: String,
+        fileExtension: String,
+        label: String
+    ) async throws -> TuringAudioPlaybackHandle
     func waitForEmergencyCueCompletion(
         _ handle: TuringAudioPlaybackHandle,
         ownerID: String
@@ -116,9 +122,43 @@ actor TuringRollingBenchRadioBedActor:
     func startEmergencyCue(
         ownerID: String
     ) async throws -> TuringAudioPlaybackHandle {
+        guard let assets else {
+            throw TuringRuntimeError.invalidConfig(
+                "Crank-radio resources are not prepared."
+            )
+        }
+        return try await startCue(
+            ownerID: ownerID,
+            fileURL: assets.cueURL,
+            label: "crankRadioEmergencyCue"
+        )
+    }
+
+    func startAuthoredCue(
+        ownerID: String,
+        resourceName: String,
+        fileExtension: String,
+        label: String
+    ) async throws -> TuringAudioPlaybackHandle {
+        let fileURL = try requireResource(
+            name: resourceName,
+            ext: fileExtension,
+            subdirectory: "Turing/Audio/CrankRadio"
+        )
+        return try await startCue(
+            ownerID: ownerID,
+            fileURL: fileURL,
+            label: label
+        )
+    }
+
+    private func startCue(
+        ownerID: String,
+        fileURL: URL,
+        label: String
+    ) async throws -> TuringAudioPlaybackHandle {
         guard activeOwnerID == ownerID,
-              let endpoint,
-              let assets else {
+              let endpoint else {
             throw TuringRuntimeError.invalidConfig(
                 "Crank-radio cue requested without the active session."
             )
@@ -135,9 +175,9 @@ actor TuringRollingBenchRadioBedActor:
         let handle = try await endpoint.play(
             request(
                 ownerID: ownerID,
-                fileURL: assets.cueURL,
+                fileURL: fileURL,
                 kind: .radioCue,
-                label: "crankRadioEmergencyCue",
+                label: label,
                 gainDB:
                     Float(
                         TuringRollingBenchTuning.cueGainDB
@@ -150,7 +190,8 @@ actor TuringRollingBenchRadioBedActor:
         [TuringCrankRadioCue] alarm started
           ownerID: \(ownerID)
           handleID: \(handle.id.uuidString)
-          file: \(assets.cueURL.lastPathComponent)
+          file: \(fileURL.lastPathComponent)
+          label: \(label)
           ttsTriggerBoundary: alarmStarted
         """)
         return handle
@@ -456,12 +497,13 @@ actor TuringRollingBenchRadioBedActor:
 
     private func requireResource(
         name: String,
-        ext: String
+        ext: String,
+        subdirectory: String = "Turing/Audio/rolling-bench"
     ) throws -> URL {
         let url = Bundle.main.url(
             forResource: name,
             withExtension: ext,
-            subdirectory: "Turing/Audio/rolling-bench"
+            subdirectory: subdirectory
         ) ?? Bundle.main.url(
             forResource: name,
             withExtension: ext

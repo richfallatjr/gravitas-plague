@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter02.rich.walkie.script02.promptVoice.001",
+  "speakerID": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "characterProfileID": "rich.chapter02.outbreakNight",
+  "listenerProfileID": "big_mike.chapter02.outbreakNight",
+  "outputContext": "walkieOutgoingGlobal",
+  "conversationKey": "chapter02.dialogue.big_mike.rich.outbreak_night",
+  "intent": "Leaving may kill me, but staying feels like choosing Dad’s death from a safe room. His final words have already begun turning into guilt. I need Mike to give me a reason to remain that is stronger than fear.",
+  "emotion": "frightened, guilty, and resistant to staying behind",
+  "communicationMedium": "walkie talkie",
+  "promptTemplateID": "chapter02CharacterIntent"
+}

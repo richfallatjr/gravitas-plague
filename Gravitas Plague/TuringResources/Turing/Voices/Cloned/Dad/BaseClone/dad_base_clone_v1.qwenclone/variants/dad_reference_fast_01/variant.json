@@ -1,0 +1,30 @@
+{
+  "allowFallback": false,
+  "allowPrerecordedDialoguePlayback": false,
+  "characterID": "dad",
+  "displayName": "Dad Reference Fast 01",
+  "kind": "baseCloneReferenceVariant",
+  "language": "english",
+  "qwenArtifacts": {
+    "manifestSHA256": "715b8623838774e18b4a47e1e8973c5c664a2dfeb5aab93eab152678827ced78",
+    "mode": "icl",
+    "path": "qwen_artifacts/clone_prompt_manifest.json",
+    "referenceCodesPath": "qwen_artifacts/reference_codes.i32le",
+    "referenceTextTokensPath": "qwen_artifacts/ref_text_tokens.i32le",
+    "safetensorsSHA256": "c5253ddd7a755354d49ba6ce8286a93060292e30e3f5d047ea32f16aa95c31df",
+    "speakerEmbeddingPath": "qwen_artifacts/speaker_embedding.f32le",
+    "status": "precomputed"
+  },
+  "reference": {
+    "channels": 1,
+    "normalizedAudioPath": "ref_audio/normalized/ref_24000_mono.wav",
+    "normalizedFormat": "wav_float32_le",
+    "originalAudioPath": "ref_audio/original/dad-reference-fast.mp3",
+    "sampleRate": 24000,
+    "textPath": "ref_text.txt"
+  },
+  "schemaVersion": 1,
+  "sourceProvider": "local_recording",
+  "variantID": "dad_reference_fast_01",
+  "voiceID": "dad_base_clone_v1"
+}

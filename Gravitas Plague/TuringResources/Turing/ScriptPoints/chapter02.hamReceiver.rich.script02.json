@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "scriptPointID": "chapter02.hamReceiver.rich.script02",
+  "trigger": { "kind": "priorScriptPointCompleted", "delaySeconds": 0 },
+  "transmission": {
+    "prerecordingID": "chapter02.hamReceiver.rich.script02.001",
+    "voicePromptID": "chapter02.rich.hamReceiver.script02.promptVoice.001",
+    "characterID": "rich",
+    "conversationKey": "chapter02.object.ham_receiver.dad_outbreak_night",
+    "outputRoute": "roomGlobal",
+    "computeStart": "foundationBeforePrerecording",
+    "fillerMode": "continuousFromPrerecordingToGenerated",
+    "commSFX": { "openBeforePrerecording": false, "sendAfterGenerated": false, "sendingLeadInAfterGeneratedSeconds": null },
+    "fixedLeadInSeconds": null,
+    "generationPipeline": null,
+    "interactionSurface": "hamReceiver",
+    "backgroundMusic": null
+  },
+  "progression": { "nextScriptPointID": "chapter02.hamReceiver.dad.script03", "automaticAdvance": true, "interactionGateAfterCompletion": "closed" }
+}

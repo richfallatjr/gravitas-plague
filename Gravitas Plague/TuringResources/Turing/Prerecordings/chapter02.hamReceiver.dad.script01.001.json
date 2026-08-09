@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter02.hamReceiver.dad.script01.001",
+  "speaker": "dad",
+  "voiceID": "dad_base_clone_v1",
+  "voiceVariantID": "dad_reference_fast_01",
+  "audioFile": "pr-dad-electricity-went-out.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Rich, you copy? It’s Dad.\n\nThe whole county just went dark.\n\nI’m at the Black Creek relay on generator power. Ambulances are calling blind, and this tower is the only thing still carrying them.\n\nI know what you’re going to say.\n\nGive me ten minutes. Then I’m coming home.\n\nKeep the doors locked. Keep the workshop dark. Stay by the radio.",
+  "summary": "Dad reports the blackout from the Black Creek relay and asks Rich to wait ten minutes.",
+  "voicePromptIntent": "Continue using chapter02.dad.hamReceiver.script01.promptVoice.001.",
+  "defaultEmotion": "calm and directive while concealing fear"
+}

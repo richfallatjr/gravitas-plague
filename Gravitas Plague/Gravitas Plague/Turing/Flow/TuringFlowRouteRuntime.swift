@@ -52,7 +52,7 @@ protocol TuringFlowRouteRuntime: AnyObject, Sendable {
         descriptor: TuringFlowDescriptor,
         identity: TuringFlowIdentity,
         succeeded: Bool
-    ) async
+    ) async throws
 }
 
 extension TuringFlowRouteRuntime {

@@ -337,6 +337,24 @@ final class Battle01Coordinator {
             }
             prepared = enemy
 
+            guard let interactionLease else {
+                throw StoryInteractionClaimError.staleLease
+            }
+            try await StoryInteractionArbiter.shared.setBattleDoorPermission(
+                .playerMayOpen,
+                battleLease: interactionLease,
+                reason: "battle01.grandmaLoaded"
+            )
+            Battle01EventLog.emit(
+                "player door interaction enabled",
+                instanceID: instanceID,
+                state: state,
+                fields: [
+                    ("activationBoundary", "grandmaRuntimeRegistered"),
+                    ("doorState", door.battleDoorState.rawValue)
+                ]
+            )
+
             intro.install(
                 prepared: enemy,
                 doorContext: doorContext,
@@ -369,6 +387,11 @@ final class Battle01Coordinator {
             try Task.checkCancellation()
             guard battleInstanceID == instanceID else { return }
 
+            try await StoryInteractionArbiter.shared.setBattleDoorPermission(
+                .hiddenAndLocked,
+                battleLease: interactionLease,
+                reason: "battle01.grandmaAtA3"
+            )
             door.setBattleInteractionLocked(
                 true,
                 ownerID: instanceID,

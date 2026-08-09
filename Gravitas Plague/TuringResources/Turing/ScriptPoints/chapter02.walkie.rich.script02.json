@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "scriptPointID": "chapter02.walkie.rich.script02",
+  "trigger": { "kind": "priorScriptPointCompleted", "delaySeconds": 0 },
+  "transmission": {
+    "prerecordingID": "chapter02.walkie.rich.script02.001",
+    "voicePromptID": "chapter02.rich.walkie.script02.promptVoice.001",
+    "characterID": "rich",
+    "conversationKey": "chapter02.dialogue.big_mike.rich.outbreak_night",
+    "outputRoute": "walkieOutgoingGlobal",
+    "computeStart": "foundationBeforePrerecording",
+    "fillerMode": "continuousFromPrerecordingToGenerated",
+    "commSFX": { "openBeforePrerecording": false, "sendAfterGenerated": false, "sendingLeadInAfterGeneratedSeconds": null },
+    "fixedLeadInSeconds": null,
+    "generationPipeline": null,
+    "interactionSurface": "walkie",
+    "backgroundMusic": null
+  },
+  "progression": { "nextScriptPointID": "chapter02.walkie.bigMike.script03", "automaticAdvance": true, "interactionGateAfterCompletion": "closed" }
+}

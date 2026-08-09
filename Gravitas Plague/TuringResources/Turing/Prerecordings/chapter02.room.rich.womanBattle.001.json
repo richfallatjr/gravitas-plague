@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter02.room.rich.womanBattle.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-women-battle.mp3",
+  "transcriptMode": "manual",
+  "transcript": "I remember what he sounded like.\n\nHe kept describing your clothes because it was all he had left.\n\nYellow shirt. Yellow pants. Bare feet.\n\nHe said you would never leave without telling him where you were going.\n\nHe was still looking for you when the station died.\n\nI’m sorry.\n\nI’m sorry this is the only way anybody ever found you.",
+  "summary": "Rich remembers the missing woman's husband while fighting what remains of her.",
+  "voicePromptIntent": "None. This is a coordinator-owned PR-only battle cue.",
+  "defaultEmotion": "sorrowful recognition under combat pressure"
+}

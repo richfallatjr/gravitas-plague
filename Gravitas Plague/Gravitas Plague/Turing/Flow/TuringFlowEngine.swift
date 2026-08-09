@@ -360,7 +360,10 @@ actor TuringFlowEngine {
                                                     .intent,
                                             promptTemplateID:
                                                 voicePrompt
-                                                    .effectivePromptTemplateID
+                                                    .effectivePromptTemplateID,
+                                            communicationMedium:
+                                                voicePrompt
+                                                    .effectiveCommunicationMedium
                                         )
                                     )
                             }
@@ -380,6 +383,8 @@ actor TuringFlowEngine {
 
             case .withPrerecording,
                  .foundationBeforePrerecording:
+                break
+            case .none:
                 break
             }
 
@@ -417,7 +422,7 @@ actor TuringFlowEngine {
                     foundationPlanBeforePrerecording =
                         try await planTask.value
                 } catch {
-                    await resolvedRoute.finish(
+                    try? await resolvedRoute.finish(
                         descriptor: descriptor,
                         identity: identity,
                         succeeded: false
@@ -550,7 +555,7 @@ actor TuringFlowEngine {
                         await completionTask.value
                     }
 
-                    await resolvedRoute.finish(
+                    try? await resolvedRoute.finish(
                         descriptor: descriptor,
                         identity: identity,
                         succeeded: false
@@ -760,7 +765,7 @@ actor TuringFlowEngine {
                     await completionTask.value
                 }
 
-                await resolvedRoute.finish(
+                try? await resolvedRoute.finish(
                     descriptor: descriptor,
                     identity: identity,
                     succeeded: false
@@ -834,7 +839,7 @@ actor TuringFlowEngine {
             guard renderReport.isCompleteSuccess,
                   completed ==
                     expectedSegmentCount else {
-                await resolvedRoute.finish(
+                try? await resolvedRoute.finish(
                     descriptor: descriptor,
                     identity: identity,
                     succeeded: false
@@ -893,7 +898,7 @@ actor TuringFlowEngine {
                     identity: identity
                 )
 
-            await resolvedRoute.finish(
+            try await resolvedRoute.finish(
                 descriptor: descriptor,
                 identity: identity,
                 succeeded: true
@@ -980,7 +985,7 @@ actor TuringFlowEngine {
             }
 
             if let route {
-                await route.finish(
+                try? await route.finish(
                     descriptor: descriptor,
                     identity: identity,
                     succeeded: false
@@ -1028,7 +1033,7 @@ actor TuringFlowEngine {
             }
 
             if let route {
-                await route.finish(
+                try? await route.finish(
                     descriptor: descriptor,
                     identity: identity,
                     succeeded: false
@@ -1155,7 +1160,7 @@ actor TuringFlowEngine {
             let skipped = report.skippedSegmentIndices.sorted()
 
             guard report.completedWithoutStageFailure else {
-                await route.finish(
+                try? await route.finish(
                     descriptor: descriptor,
                     identity: identity,
                     succeeded: false
@@ -1197,7 +1202,7 @@ actor TuringFlowEngine {
                 descriptor: descriptor,
                 identity: identity
             )
-            await route.finish(
+            try await route.finish(
                 descriptor: descriptor,
                 identity: identity,
                 succeeded: true
@@ -1240,7 +1245,7 @@ actor TuringFlowEngine {
                 _ = try? await stagedTask.value
             }
             await playback?.runCancelled(reason: "stagedSpeechCancelled")
-            await route.finish(
+            try? await route.finish(
                 descriptor: descriptor,
                 identity: identity,
                 succeeded: false
@@ -1263,7 +1268,7 @@ actor TuringFlowEngine {
                 _ = try? await stagedTask.value
             }
             await playback?.runCancelled(reason: "stagedSpeechFailed")
-            await route.finish(
+            try? await route.finish(
                 descriptor: descriptor,
                 identity: identity,
                 succeeded: false

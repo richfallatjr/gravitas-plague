@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter02.hamReceiver.rich.script02.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-ham-receiver-dad.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Let the tower die.\n\nThe whole horizon went black at once. Mike says the phones are gone, and nobody knows what comes next.\n\nI don’t care how many voices are still on that relay.\n\nI care whether yours comes back through my door.\n\nCome home, Dad.\n\nRight now.",
+  "summary": "Rich demands that Dad leave the relay and come home.",
+  "voicePromptIntent": "Continue using chapter02.rich.hamReceiver.script02.promptVoice.001.",
+  "defaultEmotion": "frightened, angry, and direct"
+}

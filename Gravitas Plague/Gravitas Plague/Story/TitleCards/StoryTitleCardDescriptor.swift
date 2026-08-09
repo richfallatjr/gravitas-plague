@@ -4,6 +4,7 @@ struct StoryTitleCardDescriptor: Sendable, Hashable {
     enum CardID: String, Sendable, Hashable {
         case prologue
         case chapter01
+        case chapter02
         case endOfAvailableContent
     }
 

@@ -1,13 +1,16 @@
 import Foundation
 
-enum StoryHeavyRuntimeKind: Hashable, Sendable {
+nonisolated enum StoryHeavyRuntimeKind: Hashable, Sendable {
     case dad(UUID)
+    case chapter02Woman(UUID)
     case robot(BattleEnemyRuntimeIdentity)
     case portalMirror(chapterRunID: UUID, mirrorID: UUID)
 
     var chapterRunID: UUID {
         switch self {
         case .dad(let id):
+            return id
+        case .chapter02Woman(let id):
             return id
         case .robot(let identity):
             return identity.battleInstanceID
@@ -40,6 +43,7 @@ actor StoryHeavyRuntimeRegistry {
         active = active.filter { runtime in
             guard runtime.chapterRunID == chapterRunID else { return true }
             if case .dad = runtime { return true }
+            if case .chapter02Woman = runtime { return true }
             return false
         }
     }

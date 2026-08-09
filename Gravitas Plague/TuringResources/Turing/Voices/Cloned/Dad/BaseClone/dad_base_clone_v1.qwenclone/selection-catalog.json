@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "voiceID": "dad_base_clone_v1",
+  "defaultVariantID": "dad_reference_fast_01",
+  "variants": [
+    {
+      "variantID": "dad_reference_fast_01",
+      "displayName": "Dad Reference Fast 01",
+      "enabled": true
+    }
+  ]
+}

@@ -60,66 +60,6 @@
       }
     },
     {
-      "characterID": "rich",
-      "displayName": "Rich",
-      "voiceID": "rich_base_clone_v1",
-      "cloneProfileResourcePath": "Turing/Voices/Cloned/Rich/BaseClone/rich_base_clone_v1.qwenclone",
-      "allowedOutputRoutes": [
-        "roomGlobal",
-        "walkieOutgoingGlobal",
-        "walkieOutgoingHeadset"
-      ],
-      "outputProcessing": {
-        "playbackRate": 0.85
-      },
-      "qwen": {
-        "maxNewRows": 160,
-        "useExactReferenceRowCount": true,
-        "referenceWindowStrategy": "full",
-        "skipSegmentFailures": true,
-        "decoding": {
-          "talker": {
-            "mode": "temperatureTopP",
-            "backend": "materializedHostTopK",
-            "temperature": 0.9,
-            "topK": 50,
-            "topP": 1.0,
-            "repetitionPenalty": 1.05
-          },
-          "codePredictor": {
-            "mode": "greedy",
-            "backend": "materializedHostTopK",
-            "temperature": 1.0,
-            "topK": 1,
-            "topP": 1.0,
-            "repetitionPenalty": 1.0
-          }
-        },
-        "qualityGate": {
-          "requireEOSBeforeDecode": true,
-          "minimumPeakAbs": 0.001,
-          "minimumRMS": 0.0001
-        }
-      },
-      "audio": {
-        "generatedGainDB": -5,
-        "prerecordingGainDB": -5,
-        "fillerGainDB": -11,
-        "fillerDirectoryCandidates": [
-          "Turing/Audio/rich-filler",
-          "Turing/rich-filler",
-          "rich-filler"
-        ],
-        "fillerExtensions": [
-          "wav",
-          "mp3",
-          "m4a",
-          "aiff",
-          "caf"
-        ]
-      }
-    },
-    {
       "characterID": "broadcaster",
       "displayName": "Broadcaster",
       "voiceID": "broadcaster_base_clone_v1",
@@ -213,6 +153,114 @@
         "fillerGainDB": -14,
         "fillerDirectoryCandidates": [],
         "fillerExtensions": []
+      }
+    },
+    {
+      "characterID": "dad",
+      "displayName": "Dad",
+      "voiceID": "dad_base_clone_v1",
+      "cloneProfileResourcePath": "Turing/Voices/Cloned/Dad/BaseClone/dad_base_clone_v1.qwenclone",
+      "allowedOutputRoutes": [
+        "hamReceiverSpatial"
+      ],
+      "outputProcessing": {
+        "playbackRate": 0.85
+      },
+      "qwen": {
+        "maxNewRows": 160,
+        "useExactReferenceRowCount": true,
+        "referenceWindowStrategy": "full",
+        "skipSegmentFailures": true,
+        "decoding": {
+          "talker": {
+            "mode": "temperatureTopP",
+            "backend": "materializedHostTopK",
+            "temperature": 0.9,
+            "topK": 50,
+            "topP": 1.0,
+            "repetitionPenalty": 1.05
+          },
+          "codePredictor": {
+            "mode": "greedy",
+            "backend": "materializedHostTopK",
+            "temperature": 1.0,
+            "topK": 1,
+            "topP": 1.0,
+            "repetitionPenalty": 1.0
+          }
+        },
+        "qualityGate": {
+          "requireEOSBeforeDecode": true,
+          "minimumPeakAbs": 0.001,
+          "minimumRMS": 0.0001
+        }
+      },
+      "audio": {
+        "generatedGainDB": 0,
+        "prerecordingGainDB": 0,
+        "fillerGainDB": -14,
+        "fillerDirectoryCandidates": [],
+        "fillerExtensions": []
+      }
+    },
+    {
+      "characterID": "rich",
+      "displayName": "Rich",
+      "voiceID": "rich_base_clone_v1",
+      "cloneProfileResourcePath": "Turing/Voices/Cloned/Rich/BaseClone/rich_base_clone_v1.qwenclone",
+      "allowedOutputRoutes": [
+        "roomGlobal",
+        "walkieOutgoingGlobal",
+        "walkieOutgoingHeadset"
+      ],
+      "outputProcessing": {
+        "playbackRate": 0.85
+      },
+      "qwen": {
+        "maxNewRows": 160,
+        "useExactReferenceRowCount": true,
+        "referenceWindowStrategy": "full",
+        "skipSegmentFailures": true,
+        "decoding": {
+          "talker": {
+            "mode": "temperatureTopP",
+            "backend": "materializedHostTopK",
+            "temperature": 0.9,
+            "topK": 50,
+            "topP": 1.0,
+            "repetitionPenalty": 1.05
+          },
+          "codePredictor": {
+            "mode": "greedy",
+            "backend": "materializedHostTopK",
+            "temperature": 1.0,
+            "topK": 1,
+            "topP": 1.0,
+            "repetitionPenalty": 1.0
+          }
+        },
+        "qualityGate": {
+          "requireEOSBeforeDecode": true,
+          "minimumPeakAbs": 0.001,
+          "minimumRMS": 0.0001
+        }
+      },
+      "audio": {
+        "generatedGainDB": -5,
+        "prerecordingGainDB": -5,
+        "fillerGainDB": -11,
+        "fillerDirectoryCandidates": [
+          "Turing/Audio/rich-filler",
+          "Turing/rich-filler",
+          "rich-filler"
+        ],
+        "fillerExtensions": [
+          "wav",
+          "mp3",
+          "m4a",
+          "aiff",
+          "caf"
+        ]
       }
     }
   ]

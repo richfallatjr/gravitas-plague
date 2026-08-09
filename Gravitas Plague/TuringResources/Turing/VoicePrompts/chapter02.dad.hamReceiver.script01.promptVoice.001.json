@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter02.dad.hamReceiver.script01.promptVoice.001",
+  "speakerID": "dad",
+  "voiceID": "dad_base_clone_v1",
+  "characterProfileID": "dad.chapter02.outbreakNight",
+  "listenerProfileID": "rich.chapter02.outbreakNight",
+  "outputContext": "hamReceiverSpatial",
+  "conversationKey": "chapter02.object.ham_receiver.dad_outbreak_night",
+  "intent": "I am Dad on the night the electricity failed. Emergency voices are disappearing one by one from the relay, and I am trying to sound steadier than I feel. I believe I can give the county ten more minutes and still make it home to my son.",
+  "emotion": "steady, practical, and concealing fear",
+  "communicationMedium": "ham radio",
+  "promptTemplateID": "chapter02CharacterIntent"
+}

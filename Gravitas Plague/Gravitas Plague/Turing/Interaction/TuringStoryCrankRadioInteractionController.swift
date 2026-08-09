@@ -5,10 +5,8 @@ import RealityKit
 final class TuringStoryCrankRadioInteractionController:
     StoryInteractionSurfacePresenting
 {
-    private let scriptPointID =
-        "prologue.crankRadioBroadcast.001"
-    private let conversationKey =
-        "object.crank_radio"
+    private var binding: TuringStorySurfaceFlowBinding? =
+        .prologueCrankRadio
     private let gate:
         TuringFlowInteractionGateController
     private let episodeFlow:
@@ -128,9 +126,35 @@ final class TuringStoryCrankRadioInteractionController:
         )
     }
 
+    func bind(
+        _ binding: TuringStorySurfaceFlowBinding,
+        initialState: TuringFlowInteractionGateController.State,
+        reason: String
+    ) {
+        precondition(binding.interactionSurface == .crankRadio)
+        self.binding = binding
+        gate.applyStableState(
+            initialState,
+            surfaceID: .crankRadio,
+            reason: reason
+        )
+    }
+
+    func stageBinding(
+        _ binding: TuringStorySurfaceFlowBinding,
+        reason: String
+    ) {
+        precondition(binding.interactionSurface == .crankRadio)
+        self.binding = binding
+        print(
+            "[TuringCrankRadio] binding staged root=\(binding.rootScriptPointID) reason=\(reason)"
+        )
+    }
+
     func crankRadioRemoved(reason: String) {
         let staleLease =
             activeConversationLease
+        let staleConversationKey = binding?.conversationKey
         let staleRunID =
             activeRecordingRunID
         let staleResponseRunID =
@@ -197,11 +221,11 @@ final class TuringStoryCrankRadioInteractionController:
                             "crankRadioRemoved.\(reason)"
                     )
             }
-            await TuringConversationInputStore
-                .shared
-                .clear(
-                    key: self.conversationKey
-                )
+            if let staleConversationKey {
+                await TuringConversationInputStore
+                    .shared
+                    .clear(key: staleConversationKey)
+            }
         }
         print(
             "[TuringCrankRadio] removed reason=\(reason)"
@@ -225,10 +249,17 @@ final class TuringStoryCrankRadioInteractionController:
             defer {
                 self.playClaimPending = false
             }
+            guard let binding = self.binding else {
+                self.gate.close(
+                    surfaceID: .crankRadio,
+                    reason: "crankRadioBindingMissing"
+                )
+                return
+            }
             let result =
                 await self.episodeFlow.start(
                     scriptPointID:
-                        self.scriptPointID,
+                        binding.rootScriptPointID,
                     trigger: .userPlay
                 )
             if result.succeeded == false,
@@ -450,6 +481,23 @@ final class TuringStoryCrankRadioInteractionController:
             return
         }
 
+        guard let binding else {
+            holdActive = false
+            activeConversationLease = nil
+            activeRecordingRunID = nil
+            Task {
+                await StoryInteractionArbiter.shared.release(
+                    lease,
+                    reason: "crankRadioConversationBindingMissing"
+                )
+            }
+            gate.close(
+                surfaceID: .crankRadio,
+                reason: "crankRadioConversationBindingMissing"
+            )
+            return
+        }
+
         let conversationRunID =
             activeRecordingRunID ?? UUID()
         activeConversationLease = nil
@@ -476,9 +524,9 @@ final class TuringStoryCrankRadioInteractionController:
                         )
                     print("""
                     [TuringCrankRadio] conversation submitted
-                      characterID: broadcaster
-                      outputRoute: \(TuringVoiceOutputContext.crankRadioSpatial.rawValue)
-                      conversationKey: \(self.conversationKey)
+                      characterID: \(binding.conversationCharacterID)
+                      outputRoute: \(binding.conversationOutputRoute.rawValue)
+                      conversationKey: \(binding.conversationKey)
                       userInputUTF16: \(transcript.utf16.count)
                       dialogueHistoryIncluded: false
                     """)
@@ -491,12 +539,14 @@ final class TuringStoryCrankRadioInteractionController:
                                         conversationRunID:
                                             conversationRunID,
                                         characterID:
-                                            TuringBroadcasterVoiceIdentity
-                                                .characterID,
+                                            binding
+                                                .conversationCharacterID,
                                         outputRoute:
-                                            .crankRadioSpatial,
+                                            binding
+                                                .conversationOutputRoute,
                                         conversationKey:
-                                            self.conversationKey,
+                                            binding
+                                                .conversationKey,
                                         playerDictation:
                                             transcript,
                                         interactionLease:

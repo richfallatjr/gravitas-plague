@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter02.bigMike.walkie.script03.promptVoice.001",
+  "speakerID": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "characterProfileID": "big_mike.chapter02.outbreakNight",
+  "listenerProfileID": "rich.chapter02.outbreakNight",
+  "outputContext": "walkieSpatial",
+  "conversationKey": "chapter02.dialogue.big_mike.rich.outbreak_night",
+  "intent": "I love Dad too, and the debt between us was never money. I give Rich a reason to remain by taking responsibility for the search myself. The possibility that neither Dad nor I will return sits beneath every word, but I speak as though one of us must.",
+  "emotion": "loyal, resolute, and protective",
+  "communicationMedium": "walkie talkie",
+  "promptTemplateID": "chapter02CharacterIntent"
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter02.walkie.bigMike.script01.001",
+  "speaker": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "voiceVariantID": "broadcast_reference_fast_01",
+  "audioFile": "pr-big-mike-nukes.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Rich. Answer me.\n\nThe phones are dead.\n\nThe emergency bands say China and Russia launched nukes. They say we launched back.\n\nNobody knows what cities are left. Nobody knows who is lying.\n\nThe sky beyond the ridge is red, and every light in the county is gone.\n\nTell me you’re inside.\n\nTell me where your dad is.",
+  "summary": "Big Mike reports broken nuclear-war claims and urgently checks Rich and Dad's locations.",
+  "voicePromptIntent": "Continue using chapter02.bigMike.walkie.script01.promptVoice.001.",
+  "defaultEmotion": "blunt, protective, and afraid"
+}

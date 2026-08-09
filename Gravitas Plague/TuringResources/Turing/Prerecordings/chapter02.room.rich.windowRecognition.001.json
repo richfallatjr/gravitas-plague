@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter02.room.rich.windowRecognition.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-women-window.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Wait.\n\nI remember you.\n\nYou were that missing wife in the yellow pajamas.\n\nLong sleeves. Matching pants. Barefoot.\n\nYour husband was on the county band every night asking if anybody had seen you.\n\nThen the lights went out, and his voice disappeared with everybody else’s.\n\nAll this time he was waiting for you to come home.\n\nAnd now you’re coming to my door.",
+  "summary": "Rich recognizes the woman from the early missing-person broadcasts as she leaves the window.",
+  "voicePromptIntent": "None. This is a coordinator-owned PR-only cinematic cue.",
+  "defaultEmotion": "shocked recognition turning into dread"
+}

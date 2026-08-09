@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "scriptPointID": "chapter02.crankRadio.broadcaster.gravitasPSA.003",
+  "trigger": { "kind": "userPlay", "delaySeconds": 0 },
+  "transmission": {
+    "prerecordingID": "chapter02.crankRadio.broadcaster.gravitasPSA.003",
+    "voicePromptID": "chapter02.broadcaster.gravitasPSA.promptVoice.003",
+    "characterID": "broadcaster",
+    "conversationKey": "chapter02.object.crank_radio.gravitas_psa",
+    "outputRoute": "crankRadioSpatial",
+    "computeStart": "foundationBeforePrerecording",
+    "fillerMode": "none",
+    "commSFX": { "openBeforePrerecording": false, "sendAfterGenerated": false, "sendingLeadInAfterGeneratedSeconds": null },
+    "fixedLeadInSeconds": null,
+    "generationPipeline": null,
+    "interactionSurface": "crankRadio",
+    "backgroundMusic": null
+  },
+  "progression": { "nextScriptPointID": null, "automaticAdvance": false, "interactionGateAfterCompletion": "microphone" }
+}

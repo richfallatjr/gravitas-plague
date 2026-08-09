@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter02.walkie.rich.script02.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-walkie-obey.mp3",
+  "transcriptMode": "manual",
+  "transcript": "He’s still at the relay.\n\nHe told me to keep the house and not come looking if he doesn’t make it back.\n\nI don’t know if that was an order or a goodbye.\n\nI can’t sit here while he disappears, Mike.\n\nI can’t let the last thing I ever do for him be obeying.",
+  "summary": "Rich tells Mike that Dad remains at the relay and refuses to accept passive obedience.",
+  "voicePromptIntent": "Continue using chapter02.rich.walkie.script02.promptVoice.001.",
+  "defaultEmotion": "afraid, guilty, and determined to act"
+}

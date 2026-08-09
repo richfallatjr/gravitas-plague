@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter02.crankRadio.broadcaster.gravitasPSA.003",
+  "speaker": "broadcaster",
+  "voiceID": "broadcaster_base_clone_v1",
+  "voiceVariantID": "broadcaster_reference_fast_01",
+  "audioFile": "pr-broadcast-psa-propoganda.mp3",
+  "transcriptMode": "manual",
+  "transcript": "This public service announcement is brought to you by the Gravitas Corporation.\n\nReports of widespread infection, mass disappearance, and nuclear attack remain unconfirmed.\n\nGravitas continuity systems are operational.\n\nRemain indoors.\n\nKeep registered devices powered.\n\nLeave emergency location services enabled.\n\nAutomated Gravitas units are authorized to enter affected regions without human escort.\n\nCooperate with all drones, medical robots, and relay systems.\n\nStay calm.\n\nStay connected.\n\nThe future has not been canceled.\n\nGravitas.\n\nTomorrow, delivered.",
+  "summary": "A branded Gravitas public-service announcement converts collapse into corporate reassurance and compliance.",
+  "voicePromptIntent": "Continue using chapter02.broadcaster.gravitasPSA.promptVoice.003.",
+  "defaultEmotion": "polished, reassuring, corporate, and quietly coercive"
+}

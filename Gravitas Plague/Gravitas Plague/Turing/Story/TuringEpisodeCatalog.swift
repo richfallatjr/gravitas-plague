@@ -3,6 +3,7 @@ import Foundation
 nonisolated enum TuringEpisodeID: String, Codable, CaseIterable, Identifiable, Sendable {
     case prologue
     case chapter01
+    case chapter02
 
     nonisolated var id: String { rawValue }
 }
@@ -46,6 +47,15 @@ enum TuringEpisodeCatalog {
             availability: .unlocked,
             stripArtwork: .chapter01Strip,
             contentRevision: "chapter01.v1"
+        ),
+        TuringEpisodeDescriptor(
+            id: .chapter02,
+            title: "Chapter 2",
+            subtitle: "The Night the Lights Went Out",
+            scriptResourcePath: nil,
+            availability: .unlocked,
+            stripArtwork: .chapter02Strip,
+            contentRevision: "chapter02.v1"
         )
     ]
 

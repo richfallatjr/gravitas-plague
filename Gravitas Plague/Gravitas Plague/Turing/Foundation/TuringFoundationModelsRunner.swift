@@ -37,6 +37,8 @@ enum TuringFoundationPromptPurposePolicy {
              "conversationPrompt_roomObjectMemory",
              "voicePrompt_cateye81HamReceiver",
              "voicePrompt_richHamReceiver",
+             "voicePrompt_chapter02CharacterIntent",
+             "voicePrompt_chapter02CatEye81",
              "conversationPrompt_cateye81HamReceiver":
             return .permissiveContentTransformations
 

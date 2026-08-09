@@ -17,6 +17,16 @@ protocol StoryTitleCardTransitionWorld: AnyObject {
         requestID: UUID
     ) async throws -> StoryTitleCardRouteLeaseDisposition
 
+    func titleCardTransitionDidFullyFade(
+        _ destination: StoryTitleCardDestination,
+        requestID: UUID
+    ) async throws
+
+    func titleCardTransitionCompleted(
+        _ destination: StoryTitleCardDestination,
+        requestID: UUID
+    ) async
+
     func titleCardTransitionFailed(
         _ error: Error,
         request: StoryTitleCardTransitionRequest
@@ -200,6 +210,11 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
             duration: request.descriptor.fadeFromBlackSeconds,
             requestID: request.requestID
         )
+        try requireCurrent(request.requestID)
+        try await world.titleCardTransitionDidFullyFade(
+            request.destination,
+            requestID: request.requestID
+        )
 
         if request.menuMusicPolicy == .playThroughCard {
             await PlagueMainMenuMusicActor.shared.stop(
@@ -207,7 +222,19 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
             )
             print(
                 "[StoryTitleCard] Continue menu music stopped after blackout fully faded " +
-                    "requestID=\(request.requestID.uuidString) opacity=0.0"
+                "requestID=\(request.requestID.uuidString) opacity=0.0"
+            )
+        }
+
+        if request.destination.stopsPrologueAftermathAfterFade {
+            await StoryAftermathMusicActor.shared.stop(
+                reason:
+                    "chapter01TitleCardBlackoutFullyFaded.\(request.source.rawValue)"
+            )
+            print(
+                "[StoryTitleCard] Battle01 aftermath music stopped after " +
+                    "Chapter 1 blackout fully faded requestID=" +
+                    request.requestID.uuidString + " opacity=0.0"
             )
         }
 
@@ -223,6 +250,10 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
         activeTask = nil
         activeRequestID = nil
         state = .idle
+        await world.titleCardTransitionCompleted(
+            request.destination,
+            requestID: request.requestID
+        )
         print(
             "[StoryTitleCard] completed requestID=" +
                 request.requestID.uuidString +

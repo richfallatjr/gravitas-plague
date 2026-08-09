@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter02.rich.dadFrame.dadDisappeared.promptVoice.001",
+  "speakerID": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "characterProfileID": "rich.chapter02.present",
+  "listenerProfileID": "dad.chapter02.outbreakNight",
+  "outputContext": "roomGlobal",
+  "conversationKey": "chapter02.object.dad_frame.dad_disappeared",
+  "intent": "I am looking at the photograph after burying Dad. Mike found the truck but never found the man who drove it. I have spent every day since turning Dad’s last order into evidence for and against myself. Obedience kept me alive long enough to see what the Plague made of him.",
+  "emotion": "grieving, reflective, and uncertain what obedience cost",
+  "communicationMedium": "the room while looking at Dad's photograph",
+  "promptTemplateID": "chapter02CharacterIntent"
+}

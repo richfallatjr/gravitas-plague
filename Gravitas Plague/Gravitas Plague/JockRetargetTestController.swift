@@ -3209,6 +3209,34 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         """)
     }
 
+    func playScriptedPresentationClip(
+        clipID: String,
+        token: UUID,
+        completion: @escaping @MainActor (UUID, Result<Void, Error>) -> Void
+    ) throws {
+        guard let clip = clipsByID[clipID] else {
+            throw RetargetError.clipNotFound(clipID)
+        }
+        scriptedClipCompletionObserver = ScriptedClipCompletionObserver(
+            token: token,
+            clipID: clipID,
+            completion: completion
+        )
+        driver?.locomotionDeltaHandler = nil
+        driver?.playClip(
+            clip,
+            loop: false,
+            transition: true,
+            locomotionPolicy: .ignoreClipLocomotion,
+            runtimeOverride: followVisualRuntimeOverride()
+        )
+        print(
+            "[CharacterAnimation] scripted presentation clip " +
+                "characterID=\(characterAttributes?.characterID ?? characterArchetype.rawValue) " +
+                "clipID=\(clipID) token=\(token.uuidString) combatAuthority=false"
+        )
+    }
+
     nonisolated static func scriptedTurnRuntimeOverride(
         authoredOverride: JockRuntimeClipOverride,
         visualHeadingCorrectionDegrees: Float

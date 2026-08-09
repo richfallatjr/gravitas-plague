@@ -1,0 +1,756 @@
+Gravitas Plague - Linear Story Source
+
+Prologue and Chapter 1
+
+This document reconstructs the current production story in the most linear
+useful order for writing. It follows the requested device order:
+
+Prologue
+  Walkie -> Battle01 -> Crank Radio -> Walkie -> Ham Receiver -> Dad Photo
+
+Chapter 1
+  Walkie -> Dad at Window / Robot -> Dad Photo -> Walkie -> Ham Receiver
+  -> Dad Final Battle -> Dad Photo
+
+Source key
+
+- PR is fixed authored dialogue played from an MP3. Text is copied from the
+  production prerecording descriptor unless otherwise noted.
+- Script Voice is exact authored prose that Foundation mechanically prepares
+  for generated Big Mike speech. Its wording is fixed even though it is rendered
+  through TTS.
+- PromptVoice Story Intent is the exact authored narrative input. Foundation
+  decides the final spoken wording at runtime, so there is no single canonical
+  PromptVoice transcript in the repository.
+- ConversationVoice is player-dependent and has no fixed canonical dialogue.
+  It uses the current point's authored context, character profile, PR context,
+  and the player's current statement. It does not add durable conversation
+  history to the story.
+- The Dad-window and Dad-battle PR descriptors intentionally contain no text.
+  Their dialogue below is a local transcription of the production MP3 and is
+  labeled accordingly.
+
+
+Prologue
+
+They are not human they are monsters
+
+The player has established the room, placed the Story props, and sees the first
+Play icon over the walkie-talkie.
+
+1. Walkie - Big Mike Reaches Rich
+
+ScriptPoint01 - Big Mike
+
+Action
+
+The player presses Play above the walkie. The icon disappears. Walkie static
+and the authored transmission establish the first contact.
+
+PR - Big Mike
+
+Hey Rich you there? Haven't heard from you in a minute. Do you copy? Over......Rich this is Big Mike! Do you Copy?! Over.
+
+PromptVoice Story Intent
+
+You are asking if Rich can hear you. You are worried because you have not heard from Rich at your regular cadence and something may be wrong. Continue after the authored radio contact without repeating it. Give Rich a believable, direct reason to answer.
+
+The generated continuation should sound like Big Mike trying to keep his worry
+under control while forcing Rich to answer. When the actual generated playback
+finishes, the microphone becomes available over the walkie.
+
+ConversationVoice - The player answers Big Mike
+
+This is the first player-dependent exchange. The player's spoken statement is
+answered by Big Mike using the ScriptPoint01 context. When the actual
+ConversationVoice playback completes, it advances the story into Rich's
+outgoing response.
+
+ScriptPoint02 - Rich answers
+
+PR - Rich
+
+Yeah, Mike, I’m here. Power died about ten minutes ago. Front deadbolt’s set, back latch too. The crank radio is pulling pieces of county traffic and one clean Gravitas message, which somehow makes me trust it less. Backup battery’s at forty-two percent. I heard a hard scrape outside, then something hit a car, but I stayed off the glass. I’m at the bench now, checking the ham set. Give me a second—the receive meter just moved.
+
+PromptVoice Story Intent
+
+Continue Rich's same outgoing transmission after the authored PR. Say that the receive side appears alive but the transmitter is still uncertain. Ask Big Mike what he personally saw and what stimulus the woman reacted to: sound, light, movement, or voice. Use no more than one brief dry observation. Do not repeat the whole PR, narrate Rich's actions, or write Big Mike's lines.
+
+Rich confirms that the receiver may still work, but the transmitter remains an
+unknown. He wants observation rather than rumor: what did Mike actually see,
+and did the woman react to sound, light, movement, or a familiar voice?
+
+ScriptPoint03 - Big Mike warns Rich
+
+ScriptPoint03 follows automatically. No player conversation is inserted between
+Rich's outgoing response and Mike's warning.
+
+PR - Big Mike
+
+Copy. Keep the transmitter cold. I saw Mrs. Dempsey in the street, barefoot, staring at your house. A car alarm chirped two doors down and she turned toward it before the second beep. Then she walked face-first into a parked sedan hard enough to open her cheek and kept moving. That part I saw myself. Now something just hit my service door, so I’m stepping away from the glass. Stay dark, stay locked, and don’t key up again yet.
+
+PromptVoice Story Intent
+
+You are Mike. You are relieved Rich is okay but need to communicate the danger he may be in with infected wandering the area. Tell Rich to locate and quietly prepare his ham-radio equipment without transmitting. Keep Mike direct, protective, skeptical, and under pressure.
+
+Mike is relieved Rich is alive, but the relief is swallowed by immediate danger.
+He wants the ham equipment located and quietly prepared, but he does not want
+Rich transmitting yet. The warning gives the player three important facts:
+Mrs. Dempsey is outside, she reacts to sound, and injury no longer produces a
+normal human response.
+
+Actual completion of ScriptPoint03 starts Battle01. The story does not wait for
+a new player transmission.
+
+Battle01 - Mrs. Dempsey
+
+Portal entrance
+
+As soon as Grandma's runtime loads in the exterior portal, the door Open icon is
+available. The player may open the door during the pre-attack timeline.
+
+Inside the portal world, Mrs. Dempsey appears at zombie_a1, facing away from
+the room. She holds an idle pose for five seconds. She performs one authored
+right ninety-degree turn, commits the new facing direction, then performs the
+same right turn a second time. After the full one-hundred-eighty-degree turn,
+she walks the authored three-dimensional route from zombie_a1 through
+zombie_a2 to zombie_a3, climbing the exterior slope with her feet grounded.
+
+If the player has already opened the door, she continues toward the threshold.
+If the door is still closed when she reaches zombie_a3, she waits in idle while
+the real door animation and sound open it. Player door control locks at that
+last anchor. She crosses the portal using the exterior mirror and the hidden
+real-world source so that one animation clock carries her smoothly into the
+room.
+
+The Battle01 soundtrack starts only when both conditions are true:
+
+ScriptPoint03 actual TTS playback completed
+and
+the door is open
+
+Five seconds after the soundtrack actually starts, Rich's battle PR plays
+globally without a walkie envelope.
+
+Battle PR - Rich
+
+Mrs. Dempsey. You need to back up. Don’t make me do this to you. You are not well. Mrs. Dempsey—look at me. It’s Rich. You know me. Jesus—Mike, she’s not stopping. She came through the doorway and she’s coming straight at me. Ma’am, get back! Get—off me! Damn it! Mike, she’s bleeding, and she doesn’t even feel it. I’m moving toward the kitchen. Mrs. Dempsey, last warning. I do not want to hurt you. Back up. Back up now!
+
+Fight and aftermath
+
+Mrs. Dempsey uses the established Grandma follow, attack, hit, and death
+behavior. Every valid head strike layers the head-snap reaction over her current
+animation. A random thirty-three percent of eligible head punches becomes an
+accepted damage point and a full-body interrupt. Her Story accepted-hit capacity
+is twice the current Horde value. Her attacks produce the authored combat
+feedback, but Battle01 does not spend a player-death hit budget.
+
+When her death animation finishes, the heavy Grandma runtime and portal mirror
+are released and the full exterior can unload. Three to five seconds later, the
+attack score crossfades into the looping cabin aftermath music at minus
+twenty-five decibels. That aftermath score continues while Rich uses the four
+post-battle devices.
+
+The four devices are all gameplay-available after Battle01. For a linear story
+read, the remainder of the Prologue is ordered below as Crank Radio, Walkie,
+Ham Receiver, and Dad Photo.
+
+
+2. Crank Radio - The Official Broadcast
+
+The player presses Play over the crank radio. Random tuning static begins first.
+Foundation prepares the PromptVoice response before the alarm and PR begin. The
+data-burst alert then sounds, the emergency broadcast plays, and Broadcaster TTS
+computes while the PR is audible. Low radio static remains under the alarm, PR,
+generated Broadcaster speech, and any later radio conversation.
+
+Broadcaster PR
+
+This is an automated emergency broadcast.
+
+Please stay in your homes. Lock all doors and windows. Do not approach individuals displaying cloudy eyes, loss of speech, abnormal posture, or unprovoked aggression.
+
+The pathogen currently designated ATNV-15 affects rapid fear-response pathways in the mammalian brain. Infected hosts may appear confused, injured, or familiar.
+
+Do not attempt physical contact. Do not attempt verbal de-escalation at close range. Recognition does not indicate recovery.
+
+If a host has entered your residence, create distance. Avoid bodily fluid exposure. Remain calm. Scan your surroundings. Wait for containment instructions.
+
+This message will repeat.
+
+Stay indoors. Stay quiet. Stay away from the infected.
+
+PromptVoice Story Intent
+
+Continue the public emergency broadcast with additional verified guidance. Reinforce staying indoors, securing entrances, avoiding contact with aggressive animals or bodily fluids, monitoring this frequency, and waiting for clear verified instructions. Clearly state that no verified cause, cure, or broader operational details are available at this time. Do not address any individual listener or introduce private events, Gravitas Corporation, antigen drones, or unverified government operations.
+
+The generated continuation remains an impersonal public broadcast. It does not
+know Rich and never addresses him. It reinforces verified survival guidance and
+explicitly refuses to claim a cause, cure, or hidden government operation.
+
+ConversationVoice - Tuning for related information
+
+The microphone over the crank radio lets the player ask about the broadcast.
+The Broadcaster does not recognize a private question. The answer sounds like
+the radio has tuned into a relevant continuation, clarification, or repeated
+piece of public guidance. The conversation introduces no private knowledge of
+Rich, Big Mike, Dad, Mrs. Dempsey, the cabin, Gravitas drones, or events inside
+the house.
+
+
+3. Walkie - After Mrs. Dempsey
+
+ScriptPoint04 - Rich tries to process what happened
+
+PR - Rich
+
+Mike... I don't even know what to think anymore. Everything happened so fast. I keep telling myself I did what I had to do, but saying it doesn't make it sit any better. The house is quiet again--for the moment--and I'm standing here trying to figure out what comes next. Police services have been down for weeks. Nobody's coming to sort this out for me. I need a minute. Go ahead. What'd you find?
+
+PromptVoice Story Intent
+
+I can't believe this thing is laying in my room. It's not a person anymore it's a monster. I am still freaking out. We need the police. But police services have been down for weeks. I need to get this thing out of here
+
+Rich is horrified by the body and by the decision he was forced to make. He no
+longer experiences Mrs. Dempsey as a person he can reason with. Police and public
+services are gone, so there is no authority coming to remove the body, secure the
+house, or decide what happens next. Rich has to do it himself.
+
+ScriptPoint05 - Big Mike reads the headline
+
+ScriptPoint05 follows automatically. Big Mike first introduces what he found.
+
+PR 1 - Big Mike
+
+Rich... you gotta hear this stuff. I picked something up on the radio, but I'm not saying much over an open channel. Whoever was talking sounded scared enough that I'm inclined to believe 'em. Could be nothing... could be everything. Just listen first, then we'll sort out what matters and what doesn't.
+
+Script Voice - exact authored source
+
+Rich, listen to this stuff. THE GRAVITAS PLAGUE SPREADS. Officials are warning residents to stay indoors after new cases of the Gravitas Plague were confirmed across the city. Doctors say the illness attacks the brain’s fear response. Early victims may seem confused, sleepless, or strangely calm. Later symptoms include cloudy eyes, broken speech, fixation on movement, and sudden agitation. One hospital worker said, “They look awake, but unreachable.” The infected are not dead. They are living hosts with severe brain damage. Residents are advised to lock doors, avoid contact with rabid animals, and report any bite or fluid exposure immediately. If someone you know appears infected, do not open the door. If the eyes cloud, isolate. If speech fails, do not negotiate.
+
+This headline reading is mechanically sectioned and rendered as ordered Big Mike
+speech. It is not a generated summary. The exact authored source above is the
+story text.
+
+After the Script Voice portion, a second authored PR bridges into the final
+PromptVoice response.
+
+PR 2 - Big Mike
+
+Rich, you still with me? I heard enough to know something happened, but keep the details off this channel. Just tell me you’re standing and the house is secure. I’ve been checking the regular bands, and they’re getting worse—dead air, crossed signals, people talking over each other. That old ham setup of yours might be the only thing with enough reach. See if it powers up. Check the antenna. Don’t transmit yet. Just let me know if it’s alive.
+
+PromptVoice Story Intent
+
+I'm trying to support Rich but he may have messed up. I'll just let him know he did what he had to do. We both need to keep our eyes sharp and help each other out to stay safe. I am glad Rich is alright. Rich needs to get that ham radio functional so we can communicate better with the outside world which is completely the grid now.
+
+Big Mike does not absolve Rich with scientific certainty. He tells his friend
+that survival forced the decision, warns that both of them need to stay alert,
+and turns Rich toward the next practical objective: get the ham equipment
+functional so they can reach beyond the collapsing local channels.
+
+ConversationVoice - Big Mike remains available
+
+The walkie microphone remains available for player questions. This is an
+open-ended Big Mike conversation grounded in the current Story Intent and the
+second PR, not a fixed additional scene.
+
+
+4. Ham Receiver - CatEye81 and the Gravitas Beacon
+
+The player presses Play over the ham receiver. Three ScriptPoints run
+consecutively: CatEye81 calls for any station, Rich answers, and CatEye81 gives
+the beacon procedure. Tuning static bridges CatEye81's generated gaps. Rich's
+outgoing transmission uses Rich filler and the receiver's ambient radio bed.
+
+Ham Script01 - CatEye81 calls into the silence
+
+PR - CatEye81
+
+Any station monitoring, this is Cat Eye Eight-One, transmitting from Chatham County, Georgia. I haven’t heard a voice I could verify in three days. Savannah’s gone quiet, and most of what’s left on the bands is static or folks repeating rumors. I’ve been sweeping north, west, and down the coast for emergency beacons, road reports, or word of safe passage through the South. I’m sheltered for now, but power and supplies won’t last forever. If anybody copies, answer with a handle and general region only—no exact locations. Reckon I just need to know somebody else is still listening.
+
+PromptVoice Story Intent
+
+I haven’t spoken to another person in days, and I’m starting to believe I may be one of the last people left in this part of Georgia. I’ve been sweeping the bands for surviving stations, emergency beacons, and any word of safe passage through the South. I need to know whether the roads, waterways, or any organized route out of Chatham County are still open. My family is gone, Savannah has gone quiet, and I’m alone in the old storm shelter with food, water, batteries, and generator fuel running low. Hearing another human signal gives me hope, but I’m still guarded and I won’t give my exact location yet. I want to establish a dependable frequency, trade only information we can verify, and find out what is still alive beyond this shelter.
+
+CatEye81 is not merely asking for information. She is trying to establish that
+another human being still exists. Her supplies and power are finite, her family
+is gone, and she does not know whether any organized route out of Chatham County
+survives. Hope makes her transmit; caution keeps her location private.
+
+Ham Script02 - Rich answers from Pennsylvania
+
+PR - Rich
+
+Cat Eye Eight-One, this is Rich. I copy you from the Pennsylvania region. My handle’s Rich—exact location stays off the air for now. I heard a report about a Gravitas beacon, something that can call an antigen drone and get doses out to isolated stations. Have you heard anything you trust? If it’s real, give me the band, the exact dial frequency, and what I’m listening for. My set’s old, so say it slow. Over.
+
+PromptVoice Story Intent
+
+I’m relieved to hear another living person answer, but I’m trying not to sound too eager or give away more than I should over an open frequency. I’m somewhere in Pennsylvania, and for now I’m only giving my handle and general region. I’ve heard fragments about a Gravitas beacon that can request an antigen delivery by drone, but I have never heard the beacon myself and I do not know whether the reports are real.
+
+I need CatEye81 to tell me what she personally heard, what came from another operator, and whether anyone actually confirmed receiving an antigen package. I need the band, exact dial frequency, sideband mode, transmission schedule, and the identifying sound or code that separates the real Gravitas relay from interference or somebody imitating it. My ham equipment is old and only partly functional, so I need the numbers spoken slowly and repeated clearly. I may also need to know what information the relay expects, whether a handle and grid square are enough, and how long I have to remain on frequency after making contact.
+
+I’m trying to sound technical and skeptical because that is easier than admitting how badly I need this to be real. A working Gravitas relay would be the first concrete evidence that somebody outside the immediate area is still organized and capable of helping. I also do not want this contact with CatEye81 to disappear after one exchange. I want to establish a dependable frequency and time to call again, compare what each of us is hearing, and trade only information we can verify.
+
+Rich hides his hope behind technical questions. He wants the frequency, mode,
+schedule, identifier, authentication procedure, and evidence of a completed
+delivery. He also wants something more durable than one lucky contact: a person
+he can reach again.
+
+Ham Script03 - CatEye81 gives the beacon procedure
+
+PR - CatEye81
+
+Rich, Cat Eye Eight-One. Copy Pennsylvania. Yeah—the Gravitas relay is real. I’ve heard the identifier myself, and I copied one station confirming an antigen drop. Go to sixty meters, Channel Two. Set your dial to five point three four six five megahertz, upper sideband. That’s 5.3465 USB. Listen for three clipped data bursts, about a minute apart. Don’t key over the first pass. Once the identifier repeats clean, move to Channel One—5.3305 USB—and check in with your handle and six-character grid square, not a street address. They’ll confirm the request there. If they accept it, Gravitas sends the antigen package by drone and homes it on your carrier. You copy?
+
+PromptVoice Story Intent
+
+I’m relieved the Pennsylvania station asked about the Gravitas beacon because I’ve been holding onto information I wasn’t sure I would ever get to share. Three nights ago, I copied the same automated identifier twice on the sixty-meter band. Later, I heard another operator report that Gravitas accepted their request and delivered a sealed antigen package by drone. I did not witness the delivery myself, but I heard enough of the exchange to believe the relay is real.
+
+The automated beacon is on 5.3465 megahertz upper sideband, sixty-meter Channel Two. It transmits three short digital bursts and repeats the same identifier near the top and bottom of the hour. After the identifier is copied cleanly, the operator moves to 5.3305 megahertz upper sideband, Channel One, and checks in with a handle and six-character Maidenhead grid square. The grid gives Gravitas a general delivery area without broadcasting a street address.
+
+A legitimate relay repeats the station’s handle and returns a short confirmation code when the request is accepted. The operator should write that code down, remain near the receiver, and keep monitoring the voice channel because Gravitas may request another check-in before dispatching the drone. I have also heard imitation signals on nearby frequencies, so the repeated identifier and confirmation code matter. The real relay does not ask for a full name or exact address.
+
+I want to give the Pennsylvania station every detail I copied, but I need to distinguish what I heard personally from what another operator reported. I’m hopeful this could keep somebody alive, and I’m relieved to finally have useful information instead of another rumor. I should speak slowly when giving the frequencies, ask for them to be repeated back, and ask the other station to tell me whether the identifier matches the one I heard.
+
+CatEye81 distinguishes direct evidence from secondhand radio reports. The
+procedure is now concrete: identify the legitimate three-burst signal on
+5.3465 USB, move to 5.3305 USB, identify only by handle and six-character grid,
+record the returned confirmation code, and remain near the receiver. Spoof
+signals exist, so repetition and the confirmation code matter.
+
+ConversationVoice - CatEye81 remains on frequency
+
+The final ham microphone allows follow-up questions. CatEye81 answers from the
+final Ham Script03 context. She does not gain knowledge from prior player turns;
+each answer remains grounded in her Prologue profile, the current authored
+context, the PR transmission, and the player's present statement.
+
+
+5. Dad Photo - What Rich Inherited
+
+The player presses Play above the wedding photograph. The Dad memory score fades
+in, Rich's authored memory plays, and PromptVoice expands the emotional context.
+
+Dad Photo PR - Rich
+
+That’s Dad and me at a wedding, about twenty years ago. I barely recognize that version of myself. He was still around then, and the world still made sense. Dad went missing early in the outbreak. No call I could trust, no message, nothing that told me where he went. I keep looking at this picture like it’s gonna give me an answer. He always knew how to take a broken system apart and find the one thing everybody else missed. A lot of what’s keeping me alive came from him. I just don’t know if he’s still out there.
+
+PromptVoice Story Intent
+
+I’m looking at an old wedding photo of Dad and me from about twenty years ago. We had a good relationship. Dad was an engineer, and he taught me how to understand machines, build things, troubleshoot electronics, and work with tools and gadgets. A lot of what is keeping me alive now came from him. He disappeared early in the outbreak, and I still have no reliable idea what happened to him. I’m scared he may be gone, but I have not accepted that. Getting the ham radio working may be my best chance to search for him or hear something useful. I’m trying to talk about the practical things he taught me because admitting how much I miss him is harder.
+
+The photograph connects the survival machinery in the room to Dad. Rich's
+technical competence is an inheritance and a form of grief. He can say that Dad
+taught him to troubleshoot, build, and repair; he cannot yet say how much he
+misses him. The ham receiver becomes both a survival tool and a possible path
+back to Dad.
+
+ConversationVoice - Rich at the photograph
+
+The Dad-frame microphone permits an open-ended conversation with Rich about the
+photograph and his father. The memory music returns when the player begins the
+recording and remains through Rich's generated response, then fades out. This
+conversation adds no fixed canonical event.
+
+When the Crank Radio, post-battle Walkie, Ham Receiver, and Dad Photo flows have
+all actually completed, the Prologue ends. The room fades to black and the next
+title card appears.
+
+
+Chapter 1
+
+Dad?
+
+The established room is preserved. The Chapter begins at the walkie-talkie.
+
+1. Walkie - The Beacon Worked, and Someone Is Coming
+
+Script06 - Rich reports the Gravitas request
+
+PR - Rich
+
+Big Mike, I found it. The Gravitas beacon is real. A woman on the ham bands—Cat Eye Eight-One—walked me through the relay. Sixty meters, Channel Two: five point three four six five megahertz, upper sideband. Then Channel One: five point three three zero five, upper sideband. I sent my delivery grid—Foxtrot November One Zero Golf Mike. They repeated my handle, gave me a confirmation code, and accepted a request for one antigen pack. They said a drone would home in on my carrier when it gets close. Write all that down, Mike. This might actually work.
+
+PromptVoice Story Intent
+
+I am excited and hopeful to have found the Gravitas beacon we thought was only a legend until now. I am also happy to have made contact with CatEye81. The antigen may help protect our future for a short time and may help someone in need. I need Big Mike to copy the delivery information correctly, but I am trying not to let my excitement make me careless over an open channel.
+
+Rich has achieved the first concrete victory of the story. The beacon is real,
+CatEye81 is real, and a package has been accepted for delivery. His excitement
+is practical and moral at once: antigen may preserve their own future or save
+someone else. He still limits what he says over the open channel.
+
+Script07 - Big Mike warns him about the man
+
+Script07 follows automatically. ConversationVoice is bypassed.
+
+PR - Big Mike
+
+Rich, I copy. Five point three four six five, then five point three three zero five—both upper sideband. Grid Foxtrot November One Zero Golf Mike. I got it. That is damn good news, but now you gotta hear this. I saw a man moving toward your house. Decent size—lot bigger than Mrs. Dempsey. I only caught a quick look, so I cannot tell if he is infected or just desperate. Lock down what you can. Keep something between you and that door, and stay off the windows. I’m tuning those beacon channels now. You stay sharp.
+
+PromptVoice Story Intent
+
+I am going to enter the beacon information into my radio, but first I need to warn Rich because he could be in danger. I did not get a clear look at the man heading toward his house. He looked substantially larger than Mrs. Dempsey, and I could not confirm whether he was infected. I need Rich to keep his defenses ready and treat the warning seriously without pretending I know more than I saw.
+
+Mike does not let the successful beacon call erase the immediate danger. A
+large man is heading toward Rich's house. Mike reports only what he saw and does
+not pretend to know whether the figure is infected.
+
+Actual completion of Script07 transfers the story away from Turing dialogue and
+into the Dad-window cinematic.
+
+Action Sequence - Dad at the Window
+
+Dad appears outside the window and walks from one side of the authored window
+route to its center. Once centered, the Dad-window score begins. He turns toward
+the glass and holds an idle pose for twenty seconds.
+
+Rich's PR is scheduled backward from the exit so that it ends about two seconds
+after Dad begins walking away.
+
+Dad-window PR - Rich (local transcription of authored MP3)
+
+Dad? Dad? Dad, is that you? Look at me. Come around to the front door. Come on. How did you get here? Where have you been? Dad? Are you okay? Can you hear me? Say something. Dad, don't walk away.
+
+Dad gives no answer. After the twenty-second hold, he turns away and begins
+walking out of view. The instant his exit locomotion actually starts, the Robot
+encounter is allowed to begin. Dad continues out of the window route and his
+heavy runtime unloads after the authored PR completes.
+
+Action Sequence - The Gravitas Robot
+
+The full exterior portal loads behind the front door. A Gravitas Robot waits in
+its idle scan pose outside. The door opens, the Robot walks through the portal,
+crosses into the physical room, approaches the player, stops about 1.5 meters
+away, and returns to its diagnostic idle pose.
+
+Initial scan instruction
+
+Robot PR
+
+Please remain still. This unit is operating on behalf of the Gravitas Corporation. A brief diagnostic scan is required. Face forward, and keep your head as still as possible.
+
+The player must keep the headset within five centimeters of translation and
+eight degrees of rotation for five continuous seconds.
+
+Compliant path
+
+If the player remains still, the Robot completes the scan.
+
+Robot PR - Successful scan
+
+Diagnostic scan complete. No late-stage behavioral markers detected. One Gravitas antigen pack has been authorized. Antigen is effective only during early-stage infection. It may temporarily suppress progression. It is not a cure. Payload transfer complete.
+
+The inventory receives one antigen pack. Its Story contents are four individually
+sealed cartridges. The HUD announces:
+
+You received an antigen pack
+
+The Robot then confirms departure.
+
+Robot PR - Exit confirmation
+
+Delivery confirmed. Remain indoors and monitor authorized frequencies for further instructions. This unit is returning to relay operations.
+
+The Robot walks back to the door, crosses through the portal, and continues
+walking away outside while the door closes. Its walk and character audio stop
+only after the closed door becomes the visual cutoff. The exterior portal,
+mirror, Robot geometry, animation runtime, combat state, and audio unload.
+
+Noncompliance path
+
+If the player moves before the first five-second scan completes, the Robot gives
+one final warning.
+
+Robot PR - Compliance warning
+
+Movement detected. This is your final compliance warning. Continued resistance will be interpreted as late-stage infection and loss of behavioral control. Remain still, or defensive measures will be authorized.
+
+The Robot enters attack mode and the Robot battle music starts. Its attacks use
+the established movement, contact, damage, and combat audio. Five confirmed
+Robot hits kill the player. Player attacks have an independent ten-percent
+acceptance chance, and the Robot takes a randomized thirty to forty accepted
+hits to destroy.
+
+The scan remains the path out of combat. Once the player's head is held still
+for five continuous seconds, the Robot stops attacking, returns to the real
+drone_idle_01 diagnostic pose, and resumes the scan.
+
+Robot PR - Compliance restored
+
+Compliance restored. Scanning in progress. Keep your head facing forward until confirmation.
+
+If the player moves again during this recovery announcement, attack mode resumes.
+If the player stays still, the encounter returns to the successful scan,
+antigen reward, exit confirmation, and departure path above.
+
+Robot-destruction path
+
+If the player destroys the Robot, the death animation completes before its
+emergency payload protocol runs.
+
+Robot PR - Emergency payload release
+
+Critical unit failure. Delivery protocol interrupted. Emergency payload release authorized. One antigen pack has been released for recovery. Antigen is intended for early-stage infection only.
+
+The player still receives the antigen pack. There is no normal exit-confirmation
+speech on this branch. The dead Robot and portal runtime release before the next
+Story devices unlock.
+
+
+2. Dad Photo - Four Chances
+
+After the Robot encounter and its full runtime cleanup, the Dad Photo is the
+first post-Robot device to unlock.
+
+PR - Rich
+
+That picture was twenty years ago. Dad looks like he knew exactly where he belonged. I keep looking at his face in it, then thinking about the face I saw at that window. He didn’t wander past the house. He came right to the glass and stopped. For a second, I swear he knew me. Now I’ve got four antigen cartridges sitting on that cart. Four chances. I don’t know how long he’s been sick, or whether early stage is already behind him, but I can’t decide he’s gone. Not after he found his way home.
+
+PromptVoice Story Intent
+
+I am forcing myself to separate what I actually witnessed from what I desperately want to believe. Dad followed the same route he used after late engineering shifts, coming past the side window before walking around to the front door. When I called to him, he stopped and turned toward my voice. His hand moved toward the lower window frame near the loose seal he used to complain about fixing. That may have been recognition, an old habit, or merely the infection reacting to sound, but it is the first evidence I have that some part of him may still be present.
+
+The Gravitas pack contains four individually sealed antigen cartridges. I have already started thinking of one as Dad’s, even though I do not know the treatment window, the proper way to administer it, or whether he is still early-stage. One cartridge should probably be held back for myself. The remaining two suddenly feel like moral decisions instead of supplies. Every person I encounter may become a choice about who deserves another chance.
+
+The Robot described the antigen as temporary suppression, not a cure. I need to learn whether recognition of home, familiar voices, repeated habits, or purposeful movement means the treatment could still work. I also need a way to bring Dad close without opening the house to him or anything that may be following him.
+
+Dad taught me never to declare a machine dead until I had traced every connection. People are not machines, but I am holding onto that lesson. I want to use the photograph, his old tools, the workshop light, and familiar sounds to test whether memory can still reach him before I risk a cartridge—or my life.
+
+Rich turns four cartridges into four moral choices. He recognizes the danger of
+mistaking habit for consciousness, but Dad's familiar route and movement toward
+the broken window seal feel too specific to dismiss. He decides not to call Dad
+gone until he has tested every remaining connection.
+
+ConversationVoice - Rich at the photograph
+
+The Dad-frame microphone remains available after this scene. The next linear
+story device, however, is the walkie.
+
+
+3. Walkie - Dad Was at the Window
+
+Completing the Four Chances photo memory unlocks the walkie Play icon.
+
+Script08 - Rich tells Big Mike
+
+PR - Rich
+
+Mike, the man at the window was Dad. I saw his face. He came straight to the house and stood there looking in like he remembered it. I called to him, told him to come to the front door, but he just watched me, then turned back toward the trees. He looked sick—I know that—but he remembered this place. He has to still be in there somewhere. I’ve got four antigen cartridges, and one of them is for him. Watch the roads while I figure out how to bring him back without getting either of us killed.
+
+PromptVoice Story Intent
+
+I am telling Mike the facts, but I am leaving out how close I came to running outside after Dad. I had my hand on the door before I remembered Mrs. Dempsey and what one mistake inside this house can cost. I am frightened by how quickly seeing Dad overpowered every survival instinct I had developed.
+
+Dad’s route to the window matters. He used to stop there after working late because the workshop light was visible from that side of the property. He would check whether I was still awake before walking around to the front. Seeing him repeat that pattern makes me believe memory is operating underneath the infection.
+
+I need Mike to help me turn the house into a controlled retrieval point. I can use the workshop light, speakers, radios, and sounds from Dad’s old tools to draw him back without immediately opening the door. Mike can watch the road, monitor the woods, and tell me whether Dad is traveling alone.
+
+The early-stage restriction makes every hour feel expensive. I need to know where Dad went and how quickly he is changing. I want Mike’s help, but I am also trying to prevent him from realizing that I may go searching alone if Dad does not return soon.
+
+Rich presents a plan because the truth is more dangerous: seeing Dad nearly made
+him abandon every survival rule. He wants to use the house and Dad's old habits
+as a controlled lure, but he may go into the woods alone if that plan fails.
+
+Script09 - Big Mike refuses the suicide mission
+
+Script09 follows automatically.
+
+PR - Big Mike
+
+Rich, slow down and listen. I believe you saw your father. I also believe those woods could be crawling with infected. One familiar face does not make that route safe. Mark the direction he went, lock the house down, and keep those cartridges out of sight. Give me time to watch the roads and work the radio. We can find a way to draw him back to the house without you wandering out there blind. You do not go chasing him alone. Not tonight. I know what he means to you, but I need you alive long enough to help him.
+
+PromptVoice Story Intent
+
+I want Rich’s father alive too. Years ago, during an ice storm, that man kept my generator running when my family needed heat. He worked on it half the night and refused to take a dollar. I am not dismissing Rich’s hope or treating his father like another infected stranger. I am trying to stop Rich from turning hope into a suicide mission.
+
+When I saw the large figure moving toward Rich’s house, I also caught two smaller movements deeper in the tree line. I could not identify them. They may have been infected, animals, or frightened people following at a distance. I did not tell Rich immediately because I only saw them for a second, but now he needs to understand that his father may not be alone.
+
+I have also heard scattered radio chatter about survivors watching the sky for Gravitas drones and following them toward delivery sites. Medicine can attract desperate people. Rich should not say how many cartridges he has or leave the case visible from a window.
+
+The safest plan is to make Dad return to a controlled location. Rich can use his lights, speakers, and gadgets from inside while I monitor the roads and radio traffic. I will help him search, but I need him behind a wall, thinking clearly, and alive.
+
+Mike's objection is not indifference. Dad once kept Mike's family warm through
+an ice storm and refused payment. Mike wants him alive too. But he saw two other
+movements in the trees, and he has heard that desperate survivors may follow
+Gravitas drones to their delivery sites. The cartridges endanger Rich as much as
+they protect him. Mike insists on a controlled retrieval from inside the house.
+
+ConversationVoice - Big Mike remains available
+
+The walkie microphone remains available from the final Script09 context. Once
+this authored pair completes, the Ham Receiver unlocks.
+
+
+4. Ham Receiver - What Antigen Can and Cannot Do
+
+Ham Script04 - Rich reports the delivery
+
+PR - Rich
+
+Cat Eye Eight-One, this is Rich. Your relay information worked. A Gravitas unit reached my location and delivered an antigen pack. The drop was real. The instructions say early-stage infection only, but they don’t tell me what early stage actually looks like. I have someone nearby who can still walk, still find familiar places, maybe even recognize a voice. I need to know what signs mean there’s still time, and what happens if the dose is given too late. I want to use this to help people, not just lock it away. What have you heard that you trust? Over.
+
+PromptVoice Story Intent
+
+I am deeply grateful to CatEye81, and the successful delivery makes me feel that the outside world may still contain organized people and working systems. At the same time, I do not want to announce how valuable the delivery is. The case contains four individually sealed cartridges, but I should avoid stating the exact quantity over an open frequency.
+
+The Gravitas Robot described the antigen as temporary suppression rather than a cure. There was no promise that the treatment reverses damage, and no guarantee that another delivery can ever be requested. The drone used my signal to locate the house, which also means someone watching its flight may now know approximately where the package went.
+
+The person I am asking about is Dad. I am not yet ready to identify him over the air. He found the house, followed an old familiar route, stopped at the window, and appeared to react to my voice. I need CatEye81 to separate anything she witnessed herself from reports she only heard: whether recognition of home or family suggests early infection, whether cloudy eyes and failed speech mean it is already too late, and whether one cartridge treats one person.
+
+I have already divided the pack in my head: one cartridge for Dad, one held back in case I am exposed, and two for other people who might still be reachable. I feel ashamed reducing human lives to inventory, but four cartridges force four decisions. If Dad has even a narrow chance, I intend to build a safe way to administer one.
+
+Rich does not name Dad over the open frequency and does not announce the
+quantity. Privately, however, the inventory has already become a plan: one for
+Dad, one for himself if exposed, and two for people not yet known. He wants
+CatEye81 to separate witnessed evidence from rumor before he gambles one of four
+lives.
+
+Ham Script05 - CatEye81 warns him
+
+Script05 follows automatically.
+
+PR - CatEye81
+
+Rich, Lord, I am glad that relay found you. But listen close: treat that antigen like the last medicine on earth, because it may be. Every report I copied said early stage—confusion, fever, still recognizing people and places. Once the eyes cloud and speech goes, nobody I trust could promise anything. Look after yourself first, and keep the package off the air. Before I went underground, I saw infected pull a young couple down outside Savannah and start feeding. They moved together like a pack. I know what the doctors call this, but some nights it feels like Hell opened its gates and gave the abominations free reign.
+
+PromptVoice Story Intent
+
+I am relieved the Gravitas delivery was real, but that success frightens me because it turns the beacon into something desperate people may hunt. I heard one operator claim that antigen slowed symptoms when it was administered within hours of confusion and fever. Another station attempted treatment after the patient had stopped speaking and reported no visible improvement. Both accounts came over the radio. I did not witness either treatment, and I cannot guarantee that either report was honest or complete.
+
+I have not told Rich that I may need to request a cartridge for myself. While clearing the storm shelter’s ventilation intake, I scraped my forearm on a damaged panel after something had been clawing around above the hatch. I do not know whether blood or contaminated fluid touched the cut. I cleaned it immediately, but I have started checking my temperature and writing down any changes. I do not want pity, and I do not want Rich offering me one of the few doses he has.
+
+What I witnessed outside Savannah still feels larger than disease. The infected moved around the young couple with a strange shared purpose, almost without speaking. One woman stood apart and repeated the same broken line from an old hymn in a flat voice while the others fed. I do not know whether that was damaged memory, imitation, coordinated behavior, or something spiritual. My faith tells me that evil can use broken things, but I should not present belief as medical fact.
+
+I am beginning to believe the Plague may destroy more than the brain. It seems to strip away restraint while leaving fragments of habit, speech, and recognition behind. That is what makes the infected feel like abominations wearing pieces of the people they were.
+
+Rich needs to understand that trying to save everyone may get him killed. The medicine is rare, the drones may be traceable, and any survivor who learns he has several doses may become more dangerous than the infected. I may try the beacon myself tonight, but I am not ready to tell him why.
+
+CatEye81 gives Rich the nearest thing to an answer: reports suggest a narrow
+window around confusion, fever, and retained recognition. Once eyes cloud and
+speech fails, there is no trusted evidence of improvement. But she refuses to
+turn radio reports into certainty.
+
+She also withholds her own possible exposure. Something clawed around the storm
+shelter intake before a damaged panel cut her arm. She cleaned it, monitors her
+temperature, and may call the beacon that night, but she will not ask Rich for
+one of his doses.
+
+The horror deepens beyond ordinary infection. CatEye81 witnessed coordinated
+feeding and a woman repeating a broken hymn. She names the infected
+abominations, but she still distinguishes faith and fear from medical fact.
+
+ConversationVoice - CatEye81 remains available
+
+The Ham Receiver microphone remains available after the final response. In the
+linear Chapter flow, actual completion of this terminal Ham Script means all
+three post-Robot devices have completed. That boundary starts the Dad final
+battle.
+
+
+Action Sequence - Dad Final Battle
+
+The Dad-battle score begins with Dad's actual initial idle animation, whether or
+not the door is open. Dad appears at zombie_a1 inside the exterior portal,
+facing away from the room. He idles for five seconds, performs two authored
+right ninety-degree turns, and walks the same zombie_a1 to zombie_a2 to
+zombie_a3 route used by Battle01. The player may open the door during this
+approach. If it remains closed at the final anchor, Dad waits in idle while the
+door opens. He then crosses the portal and attacks.
+
+First minute - feedback without player damage
+
+The soundtrack is the combat clock. From media time zero through sixty seconds,
+Dad's attacks connect with full contact effects, sound, and hit feedback, but no
+player damage is recorded. The grace period does not make Dad passive; it makes
+the first minute a desperate fight synchronized to the slow opening of the song.
+
+At exactly thirty seconds of actual soundtrack media time, the first Rich battle
+PR plays globally.
+
+Dad Battle PR 1 - Rich (local transcription of authored MP3)
+
+No, Dad. Wait, wait. I have the antigen right here. Look at me. It's me. Easy, Dad. Easy. You're hurting me. Stop. I don't want to fight you. Just hold still and let me help you. Dad, please. I could still save you. Don't make me do this. Dad.
+
+Rich still believes the antigen can end the fight without killing Dad. He tries
+recognition, physical restraint, pleading, and the promise of treatment while
+Dad keeps attacking.
+
+After one minute - lethal combat
+
+At soundtrack media time sixty seconds, Dad's confirmed hits begin counting.
+Ten confirmed hits kill the player. Dad otherwise has the same Story incoming
+punch behavior as Grandma: every head strike layers a head snap, while a random
+thirty-three percent of eligible punches becomes accepted damage and a full-body
+reaction. His accepted-hit capacity is twice the underlying Dad/Horde value.
+
+When Dad has exactly one accepted damage point remaining after a nonlethal hit,
+the second Rich PR is queued exactly once.
+
+Dad Battle PR 2 - Rich (local transcription of authored MP3)
+
+Dad. Dad, you made me do this to you. Why wouldn't you just stop? Why did you let this happen? I had the antigen. I had it right here. I thought I could save you, Dad. Are you okay? Can you hear me? Please, say something. Dad? Dad, I'm sorry. I'm so sorry.
+
+This is the emotional break in the fight. Rich's hope becomes accusation and
+then collapses into apology. He is still trying to hear a human answer while the
+game's remaining damage state says the fight is almost over.
+
+Dad's death and release
+
+Dad enters and completes the authored death animation. His body does not vanish
+at animation completion. The completed pose remains while any queued Rich battle
+dialogue finishes. The door begins its close-and-unload work behind that hold.
+
+After the Rich queue drains, the Dad-battle music fades out over two seconds.
+The body remains for one additional beat after the music ends, then the Dad
+runtime, body, portal mirror, full exterior, combat callbacks, animation data,
+and character audio release. Only after this deterministic cleanup does the
+final Dad Photo become available.
+
+If Dad kills the player first, the screen follows the established You Died flow
+and returns to the Chapter picker after the black fade.
+
+
+5. Dad Photo - Eulogy
+
+The final Play icon appears over the same photograph after the Dad battle has
+fully released.
+
+Final Dad Photo PR - Rich
+
+Dad… I put you down near the creek. It was the only place that felt right. You always liked going down there. Remember when we used to fish before the sun came up? You'd tell me I was talking too loud and scaring everything away.
+
+I wanted so badly to use the antigen on you. I kept thinking there had to be one more chance—that if I could just get close enough, I could bring you back. But it was too late. I know that now. And after what happened in that room… I'm going to need one of those cartridges for myself.
+
+I'm sorry, Dad. I wish I could've saved us both.
+
+PromptVoice Story Intent
+
+I am not really talking to the photograph. I am asking Dad to forgive me for surviving him. I keep replaying the moment when I stopped trying to reach him and started fighting to stay alive. The part I cannot admit aloud is that I felt relief when the room finally became quiet. I hate that relief almost as much as I hate what happened.
+
+I moved him before daylight because I could not leave him where he fell, and because the noise from the fight may have drawn more infected toward the house. In his coat, I found the old brass fishing lure he used to keep in his tackle box. I held onto it. I do not know whether he carried it because he remembered the creek or whether it had simply been there since before the outbreak, but right now I need it to mean that some part of him was still trying to find his way home.
+
+During the fight, Dad broke the skin on my forearm. I cleaned it immediately, but I cannot rule out exposure. I have started checking my temperature, repeating words aloud, and watching for moments when my thoughts do not feel like my own. I have not told Big Mike or CatEye81 yet. I am afraid they will hear infection in every pause, and I am not ready to become another danger they have to judge from a distance.
+
+I am setting aside one antigen cartridge for myself, which leaves three. The Robot said antigen may suppress early progression; it is not a cure. Taking it could save me, buy me time, or merely delay what happened to Dad. I know that waiting for certainty may be the same mistake I made with him, but using the cartridge means admitting that I may already be infected.
+
+I want Dad to tell me that I did what I had to do. I also want him to be angry with me, because anger would be easier than this silence. I am trying to turn this eulogy into a promise: I will not waste whatever time I still have, and I will not let guilt make the next decision for me.
+
+Rich buries Dad near the creek and keeps the brass fishing lure from his coat.
+The object may prove nothing, but Rich needs it to mean Dad remembered where he
+was going. The fight has also changed Rich's own status: Dad broke the skin on
+his forearm. Rich may now be infected.
+
+He reserves one cartridge for himself, leaving three. He does not tell Big Mike
+or CatEye81. He fears they will hear infection in every hesitation and decide
+what he has already been forced to decide about Mrs. Dempsey and Dad.
+
+The Chapter closes on a contradiction. Rich wants forgiveness for surviving,
+but he also wants Dad's anger because anger would mean presence. Silence gives
+him neither. His final promise is not that he will be saved. It is that guilt
+will not make the next decision for him.
+
+Actual completion of the final PromptVoice ends Chapter 1. With no later Chapter
+currently authored, the room transitions through the final available title:
+
+Gravitas Plague
+

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter02.dadFrame.rich.dadDisappeared.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-dad-photo-dad-disappeared.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Mike found Dad’s truck before dawn.\n\nIt was parked beneath the relay with the driver’s door open and the keys still in it.\n\nNo Dad.\n\nFor weeks I kept telling myself a man could disappear and still be alive.\n\nThen he came to this window with cloudy eyes and no voice, and I learned there are worse ways to come home.\n\nThe last thing he told me was to keep the house.\n\nI kept it.\n\nI just don’t know what it cost him.",
+  "summary": "Rich reflects on Dad's abandoned truck, return, and last order while looking at the photograph.",
+  "voicePromptIntent": "Continue using chapter02.rich.dadFrame.dadDisappeared.promptVoice.001.",
+  "defaultEmotion": "grieving, reflective, and uncertain"
+}

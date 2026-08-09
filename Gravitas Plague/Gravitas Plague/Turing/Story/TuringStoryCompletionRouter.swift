@@ -4,13 +4,16 @@ import Foundation
 final class TuringStoryCompletionRouter: TuringStoryCompletionEventSink {
     weak var prologue: (any TuringStoryCompletionEventSink)?
     weak var chapter01: (any TuringStoryCompletionEventSink)?
+    weak var chapter02: (any TuringStoryCompletionEventSink)?
 
     init(
         prologue: (any TuringStoryCompletionEventSink)? = nil,
-        chapter01: (any TuringStoryCompletionEventSink)? = nil
+        chapter01: (any TuringStoryCompletionEventSink)? = nil,
+        chapter02: (any TuringStoryCompletionEventSink)? = nil
     ) {
         self.prologue = prologue
         self.chapter01 = chapter01
+        self.chapter02 = chapter02
     }
 
     func scriptPointCompleted(
@@ -32,6 +35,15 @@ final class TuringStoryCompletionRouter: TuringStoryCompletionEventSink {
                 )
             }
             return try await chapter01.scriptPointCompleted(event)
+        }
+
+        if event.scriptPointID.hasPrefix("chapter02.") {
+            guard let chapter02 else {
+                throw TuringRuntimeError.invalidConfig(
+                    "No Chapter 02 completion owner is installed."
+                )
+            }
+            return try await chapter02.scriptPointCompleted(event)
         }
 
         throw TuringRuntimeError.invalidConfig(
@@ -59,6 +71,16 @@ final class TuringStoryCompletionRouter: TuringStoryCompletionEventSink {
                 )
             }
             try await chapter01.conversationPlaybackCompleted(event)
+            return
+        }
+
+        if event.parentScriptPointID.hasPrefix("chapter02.") {
+            guard let chapter02 else {
+                throw TuringRuntimeError.invalidConfig(
+                    "No Chapter 02 conversation completion owner is installed."
+                )
+            }
+            try await chapter02.conversationPlaybackCompleted(event)
             return
         }
 

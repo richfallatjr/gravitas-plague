@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter02.bigMike.walkie.script01.promptVoice.001",
+  "speakerID": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "characterProfileID": "big_mike.chapter02.outbreakNight",
+  "listenerProfileID": "rich.chapter02.outbreakNight",
+  "outputContext": "walkieSpatial",
+  "conversationKey": "chapter02.dialogue.big_mike.rich.outbreak_night",
+  "intent": "I am hearing the end of the world in broken pieces and reducing it to the two facts I can still act upon: Rich is alive, and Dad is away from home. Fear makes me blunt. I need Rich’s situation before grief sends him out onto the road.",
+  "emotion": "blunt, urgent, and protective",
+  "communicationMedium": "walkie talkie",
+  "promptTemplateID": "chapter02CharacterIntent"
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter02.crankRadio.broadcaster.gridFailure.002",
+  "speaker": "broadcaster",
+  "voiceID": "broadcaster_base_clone_v1",
+  "voiceVariantID": "broadcaster_reference_fast_01",
+  "audioFile": "pr-broadcast-night-lights-went-out.mp3",
+  "transcriptMode": "manual",
+  "transcript": "This is the Emergency Alert System.\n\nChina and Russia have launched nuclear weapons.\n\nThe United States has launched in response.\n\nThe national power grid is failing.\n\nGo below ground if you can. Otherwise move to the center of the structure and remain away from windows.\n\nFill every available container with water.\n\nTurn off every light.\n\nLock every door.\n\nEmergency services will not come.\n\nThis message will continue for as long as power remains.",
+  "summary": "The Emergency Alert System reports nuclear launches and grid failure, then gives final shelter instructions.",
+  "voicePromptIntent": "Continue using chapter02.broadcaster.gridFailure.promptVoice.002.",
+  "defaultEmotion": "formal and procedural with no promise of rescue"
+}

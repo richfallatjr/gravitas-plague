@@ -79,6 +79,9 @@ struct TuringFlowDescriptor: Codable, Sendable, Hashable {
             /// The episode controller starts this point only after the prior
             /// point has completed. Foundation begins immediately on entry.
             case afterPriorPoint
+
+            /// Coordinator-owned authored PR with no Foundation or TTS stage.
+            case none
         }
 
         enum FillerMode: String, Codable, Sendable, Hashable {
@@ -243,11 +246,26 @@ struct TuringFlowDescriptorStore: TuringFlowDescriptorLoading, Sendable {
             )
         }
 
-        guard value.transmission.usesLegacyVoicePrompt !=
-                value.transmission.usesCompositePipeline else {
+        let generationFormCount = [
+            value.transmission.usesLegacyVoicePrompt,
+            value.transmission.usesCompositePipeline,
+            value.transmission.isPrerecordingOnly
+        ].filter { $0 }.count
+        guard generationFormCount == 1 else {
             throw TuringRuntimeError.invalidConfig(
                 "Turing Flow \(scriptPointID) must define exactly one generation form."
             )
+        }
+
+        if value.transmission.isPrerecordingOnly {
+            guard value.transmission.computeStart == .none,
+                  value.transmission.fillerMode == .none,
+                  value.progression.automaticAdvance == false,
+                  value.progression.nextScriptPointID == nil else {
+                throw TuringRuntimeError.invalidConfig(
+                    "Turing Flow \(scriptPointID) prerecording-only contract is invalid."
+                )
+            }
         }
 
         if value.transmission.usesLegacyVoicePrompt {

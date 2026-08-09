@@ -34,12 +34,9 @@ final class TuringCatEye81HamReceiverFlowRoute:
         character:
             TuringCharacterRuntimeDefinition
     ) throws {
-        guard character.characterID ==
-                TuringCatEye81VoiceIdentity
-                    .characterID,
-              character.supports(outputRoute) else {
+        guard character.supports(outputRoute) else {
             throw TuringRuntimeError.invalidConfig(
-                "hamReceiverSpatial requires the CatEye81 runtime."
+                "\(character.characterID) does not support hamReceiverSpatial."
             )
         }
         guard descriptor.transmission

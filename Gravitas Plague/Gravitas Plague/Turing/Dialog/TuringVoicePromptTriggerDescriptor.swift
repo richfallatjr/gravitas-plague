@@ -13,6 +13,7 @@ struct TuringVoicePromptTriggerDescriptor: Codable, Sendable, Hashable {
   let emotion: String
   let promptContext: String?
   let promptTemplateID: TuringVoicePromptTemplateID?
+  let communicationMedium: String?
 
   init(
     schemaVersion: Int,
@@ -26,7 +27,8 @@ struct TuringVoicePromptTriggerDescriptor: Codable, Sendable, Hashable {
     intent: String,
     emotion: String,
     promptContext: String? = nil,
-    promptTemplateID: TuringVoicePromptTemplateID? = nil
+    promptTemplateID: TuringVoicePromptTemplateID? = nil,
+    communicationMedium: String? = nil
   ) {
     self.schemaVersion = schemaVersion
     self.voicePromptID = voicePromptID
@@ -40,6 +42,7 @@ struct TuringVoicePromptTriggerDescriptor: Codable, Sendable, Hashable {
     self.emotion = emotion
     self.promptContext = promptContext
     self.promptTemplateID = promptTemplateID
+    self.communicationMedium = communicationMedium
   }
 
   var effectiveAuthoredStoryContext: String {
@@ -52,6 +55,26 @@ struct TuringVoicePromptTriggerDescriptor: Codable, Sendable, Hashable {
 
   var effectivePromptTemplateID: TuringVoicePromptTemplateID {
     promptTemplateID ?? .characterIntent
+  }
+
+  var effectiveCommunicationMedium: String {
+    if let communicationMedium = communicationMedium?
+      .trimmingCharacters(in: .whitespacesAndNewlines),
+      communicationMedium.isEmpty == false {
+      return communicationMedium
+    }
+    switch outputContext {
+    case .hamReceiverSpatial:
+      return "ham radio"
+    case .walkieSpatial, .walkieOutgoingGlobal, .walkieOutgoingHeadset:
+      return "walkie talkie"
+    case .roomGlobal:
+      return "the room"
+    case .crankRadioSpatial:
+      return "public emergency radio"
+    default:
+      return outputContext.rawValue
+    }
   }
 }
 
@@ -66,6 +89,9 @@ enum TuringVoicePromptTemplateID:
   case broadcasterRadio
   case cateye81HamReceiver
   case richHamReceiver
+  case chapter02CharacterIntent
+  case chapter02Broadcaster
+  case chapter02CatEye81
 
   var resourcePath: String {
     switch self {
@@ -79,6 +105,12 @@ enum TuringVoicePromptTemplateID:
       return "Turing/Prompts/voicePrompt_cateye81HamReceiver.txt"
     case .richHamReceiver:
       return "Turing/Prompts/voicePrompt_richHamReceiver.txt"
+    case .chapter02CharacterIntent:
+      return "Turing/Prompts/voicePrompt_chapter02CharacterIntent.txt"
+    case .chapter02Broadcaster:
+      return "Turing/Prompts/voicePrompt_chapter02Broadcaster.txt"
+    case .chapter02CatEye81:
+      return "Turing/Prompts/voicePrompt_chapter02CatEye81.txt"
     }
   }
 
@@ -94,18 +126,24 @@ enum TuringVoicePromptTemplateID:
       return "voicePrompt_cateye81HamReceiver"
     case .richHamReceiver:
       return "voicePrompt_richHamReceiver"
+    case .chapter02CharacterIntent:
+      return "voicePrompt_chapter02CharacterIntent"
+    case .chapter02Broadcaster:
+      return "voicePrompt_chapter02Broadcaster"
+    case .chapter02CatEye81:
+      return "voicePrompt_chapter02CatEye81"
     }
   }
 
   var conversationVariant: TuringConversationPromptVariant {
     switch self {
-    case .characterIntent:
+    case .characterIntent, .chapter02CharacterIntent:
       return .standard
     case .roomObjectMemory:
       return .roomObjectMemory
-    case .broadcasterRadio:
+    case .broadcasterRadio, .chapter02Broadcaster:
       return .broadcasterRadio
-    case .cateye81HamReceiver:
+    case .cateye81HamReceiver, .chapter02CatEye81:
       return .cateye81HamReceiver
     case .richHamReceiver:
       return .standard
@@ -180,6 +218,15 @@ enum TuringPromptVoiceStoryContextBuilder {
         voicePromptID: descriptor.voicePromptID,
         storyContext:
           descriptor.effectiveAuthoredStoryContext
+      )
+    }
+
+    if descriptor.effectivePromptTemplateID == .chapter02CharacterIntent ||
+       descriptor.effectivePromptTemplateID == .chapter02Broadcaster ||
+       descriptor.effectivePromptTemplateID == .chapter02CatEye81 {
+      return TuringAuthoredPromptVoiceContext(
+        voicePromptID: descriptor.voicePromptID,
+        storyContext: descriptor.effectiveAuthoredStoryContext
       )
     }
 

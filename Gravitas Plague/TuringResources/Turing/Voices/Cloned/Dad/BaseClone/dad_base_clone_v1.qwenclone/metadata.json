@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "voiceID": "dad_base_clone_v1",
+  "characterID": "dad",
+  "displayName": "Dad",
+  "language": "english",
+  "modelFamily": "qwen3-tts-base",
+  "modelID": "qwen3-tts-12hz-1.7b-base-4bit",
+  "quantization": "4bit",
+  "profileKind": "qwenBaseCloneReferenceProfile",
+  "sourceProvider": "local_recording",
+  "defaultVariantID": "dad_reference_fast_01",
+  "allowFallback": false,
+  "allowRuntimeRefAudioEncoding": false,
+  "allowPrerecordedDialoguePlayback": false,
+  "variants": [
+    {
+      "variantID": "dad_reference_fast_01",
+      "path": "variants/dad_reference_fast_01/variant.json"
+    }
+  ]
+}

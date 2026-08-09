@@ -8,6 +8,7 @@ struct VoicePromptRequest: Codable, Sendable, Hashable {
     let prerecordingTranscript: String
     let storyIntent: String?
     let promptTemplateID: TuringVoicePromptTemplateID
+    let communicationMedium: String?
 
     init(
         id: String,
@@ -16,7 +17,8 @@ struct VoicePromptRequest: Codable, Sendable, Hashable {
         promptContext: String,
         prerecordingTranscript: String,
         storyIntent: String? = nil,
-        promptTemplateID: TuringVoicePromptTemplateID = .characterIntent
+        promptTemplateID: TuringVoicePromptTemplateID = .characterIntent,
+        communicationMedium: String? = nil
     ) {
         self.id = id
         self.characterProfileID = characterProfileID
@@ -25,6 +27,7 @@ struct VoicePromptRequest: Codable, Sendable, Hashable {
         self.prerecordingTranscript = prerecordingTranscript
         self.storyIntent = storyIntent
         self.promptTemplateID = promptTemplateID
+        self.communicationMedium = communicationMedium
     }
 }
 

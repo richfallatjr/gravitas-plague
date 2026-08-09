@@ -44,6 +44,18 @@ nonisolated enum TuringCatEye81VoiceIdentity {
         "Turing/Voices/Cloned/CatEye81/BaseClone/cateye81_base_clone_v1.qwenclone"
 }
 
+nonisolated enum TuringDadVoiceIdentity {
+    static let characterID = "dad"
+    static let speakerID = "dad"
+    static let voiceID = "dad_base_clone_v1"
+    static let displayName = "Dad"
+    static let chapter02OutbreakNightProfileID =
+        "dad.chapter02.outbreakNight"
+
+    static let cloneProfileResourcePath =
+        "Turing/Voices/Cloned/Dad/BaseClone/dad_base_clone_v1.qwenclone"
+}
+
 nonisolated enum TuringDialogueThreadIdentity {
     static let bigMikeRich = "dialogue.big_mike.rich"
 }

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "scriptPointID": "chapter02.dadFrame.rich.dadDisappeared.001",
+  "trigger": { "kind": "userPlay", "delaySeconds": 0 },
+  "transmission": {
+    "prerecordingID": "chapter02.dadFrame.rich.dadDisappeared.001",
+    "voicePromptID": "chapter02.rich.dadFrame.dadDisappeared.promptVoice.001",
+    "characterID": "rich",
+    "conversationKey": "chapter02.object.dad_frame.dad_disappeared",
+    "outputRoute": "roomGlobal",
+    "computeStart": "foundationBeforePrerecording",
+    "fillerMode": "continuousFromPrerecordingToGenerated",
+    "commSFX": { "openBeforePrerecording": false, "sendAfterGenerated": false, "sendingLeadInAfterGeneratedSeconds": null },
+    "fixedLeadInSeconds": null,
+    "generationPipeline": null,
+    "interactionSurface": "dadFrame",
+    "backgroundMusic": {
+      "resourcePath": "Turing/Audio/Music/dad-photo-memory-score.mp3",
+      "gainDB": -25,
+      "loops": true,
+      "fadeInSeconds": 0.75,
+      "fadeOutSeconds": 1.25,
+      "stopBoundary": "promptVoicePlaybackCompleted"
+    }
+  },
+  "progression": { "nextScriptPointID": null, "automaticAdvance": false, "interactionGateAfterCompletion": "microphone" }
+}

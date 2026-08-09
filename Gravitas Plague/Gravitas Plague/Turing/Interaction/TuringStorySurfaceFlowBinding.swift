@@ -99,4 +99,67 @@ extension TuringStorySurfaceFlowBinding {
         conversationOutputRoute: .hamReceiverSpatial,
         interactionSurface: .hamReceiver
     )
+
+    static let chapter02CrankMissingPersons = Self(
+        rootScriptPointID: "chapter02.crankRadio.broadcaster.missingPersons.001",
+        terminalScriptPointID: "chapter02.crankRadio.broadcaster.missingPersons.001",
+        conversationKey: "chapter02.object.crank_radio.missing_persons",
+        conversationCharacterID: "broadcaster",
+        conversationOutputRoute: .crankRadioSpatial,
+        interactionSurface: .crankRadio
+    )
+
+    static let chapter02DadHam = Self(
+        rootScriptPointID: "chapter02.hamReceiver.dad.script01",
+        terminalScriptPointID: "chapter02.hamReceiver.dad.script03",
+        conversationKey: "chapter02.object.ham_receiver.dad_outbreak_night",
+        conversationCharacterID: "dad",
+        conversationOutputRoute: .hamReceiverSpatial,
+        interactionSurface: .hamReceiver
+    )
+
+    static let chapter02BigMikeWalkie = Self(
+        rootScriptPointID: "chapter02.walkie.bigMike.script01",
+        terminalScriptPointID: "chapter02.walkie.bigMike.script03",
+        conversationKey: "chapter02.dialogue.big_mike.rich.outbreak_night",
+        conversationCharacterID: "big_mike",
+        conversationOutputRoute: .walkieSpatial,
+        interactionSurface: .walkie
+    )
+
+    static let chapter02DadPhoto = Self(
+        rootScriptPointID: "chapter02.dadFrame.rich.dadDisappeared.001",
+        terminalScriptPointID: "chapter02.dadFrame.rich.dadDisappeared.001",
+        conversationKey: "chapter02.object.dad_frame.dad_disappeared",
+        conversationCharacterID: "rich",
+        conversationOutputRoute: .roomGlobal,
+        interactionSurface: .dadFrame
+    )
+
+    static let chapter02CrankGridFailure = Self(
+        rootScriptPointID: "chapter02.crankRadio.broadcaster.gridFailure.002",
+        terminalScriptPointID: "chapter02.crankRadio.broadcaster.gridFailure.002",
+        conversationKey: "chapter02.object.crank_radio.grid_failure",
+        conversationCharacterID: "broadcaster",
+        conversationOutputRoute: .crankRadioSpatial,
+        interactionSurface: .crankRadio
+    )
+
+    static let chapter02PostBattleHam = Self(
+        rootScriptPointID: "chapter02.hamReceiver.rich.revelation.001",
+        terminalScriptPointID: "chapter02.hamReceiver.cateye81.revelation.002",
+        conversationKey: "chapter02.object.ham_receiver.revelation",
+        conversationCharacterID: "cateye81",
+        conversationOutputRoute: .hamReceiverSpatial,
+        interactionSurface: .hamReceiver
+    )
+
+    static let chapter02CrankGravitasPSA = Self(
+        rootScriptPointID: "chapter02.crankRadio.broadcaster.gravitasPSA.003",
+        terminalScriptPointID: "chapter02.crankRadio.broadcaster.gravitasPSA.003",
+        conversationKey: "chapter02.object.crank_radio.gravitas_psa",
+        conversationCharacterID: "broadcaster",
+        conversationOutputRoute: .crankRadioSpatial,
+        interactionSurface: .crankRadio
+    )
 }

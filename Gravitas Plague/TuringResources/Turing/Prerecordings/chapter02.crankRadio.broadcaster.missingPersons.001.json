@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter02.crankRadio.broadcaster.missingPersons.001",
+  "speaker": "broadcaster",
+  "voiceID": "broadcaster_base_clone_v1",
+  "voiceVariantID": "broadcaster_reference_fast_01",
+  "audioFile": "pr-broadcast-missing-persons.mp3",
+  "transcriptMode": "manual",
+  "transcript": "This is a Black Creek County missing persons bulletin.\n\nAuthorities are searching for seven women reported missing from occupied homes between midnight and dawn.\n\nNo residence showed signs of forced entry. In every case, phones, vehicles, identification, and personal belongings remained inside.\n\nOne missing woman was last seen wearing a pale-yellow long-sleeve pajama top and matching pale-yellow pajama pants. She is believed to be barefoot.\n\nHer husband woke shortly after three in the morning and found the front door open and the bed empty.\n\nResidents should report any verified sighting to county emergency services.\n\nThis bulletin will repeat.",
+  "summary": "Black Creek County reports seven women missing from occupied homes without forced entry.",
+  "voicePromptIntent": "Continue using chapter02.broadcaster.missingPersons.promptVoice.001.",
+  "defaultEmotion": "orderly county-bulletin delivery with restrained concern"
+}

@@ -12,6 +12,11 @@ final class StoryTitleCardFlowTests: XCTestCase {
         )
         XCTAssertEqual(StoryTitleCardCatalog.chapter01.title, "Chapter 1")
         XCTAssertEqual(StoryTitleCardCatalog.chapter01.subtitle, "Dad?")
+        XCTAssertEqual(StoryTitleCardCatalog.chapter02.title, "Chapter 2")
+        XCTAssertEqual(
+            StoryTitleCardCatalog.chapter02.subtitle,
+            "The Night the Lights Went Out"
+        )
         XCTAssertEqual(
             StoryTitleCardCatalog.endOfAvailableContent.title,
             "Gravitas Plague"
@@ -26,6 +31,10 @@ final class StoryTitleCardFlowTests: XCTestCase {
         )
         XCTAssertEqual(
             StoryTitleCardCatalog.chapter01.holdSeconds,
+            .milliseconds(7_500)
+        )
+        XCTAssertEqual(
+            StoryTitleCardCatalog.chapter02.holdSeconds,
             .milliseconds(7_500)
         )
         XCTAssertEqual(
@@ -82,11 +91,32 @@ final class StoryTitleCardFlowTests: XCTestCase {
         XCTAssertEqual(request.menuMusicPolicy, .playThroughCard)
     }
 
-    func testChapterOneIsTheOnlyUnlockedSuccessorToPrologue() {
+    func testUnlockedEpisodeSuccessorsFollowTheAuthoredChapterOrder() {
         XCTAssertEqual(
             TuringEpisodeCatalog.nextUnlockedEpisode(after: .prologue),
             .chapter01
         )
-        XCTAssertNil(TuringEpisodeCatalog.nextUnlockedEpisode(after: .chapter01))
+        XCTAssertEqual(
+            TuringEpisodeCatalog.nextUnlockedEpisode(after: .chapter01),
+            .chapter02
+        )
+        XCTAssertNil(TuringEpisodeCatalog.nextUnlockedEpisode(after: .chapter02))
+    }
+
+    func testChapterOneCardStopsPrologueAftermathOnlyAfterFade() {
+        XCTAssertTrue(
+            StoryTitleCardDestination.advance(
+                from: .prologue,
+                to: .chapter01
+            ).stopsPrologueAftermathAfterFade
+        )
+        XCTAssertTrue(
+            StoryTitleCardDestination.start(.chapter01)
+                .stopsPrologueAftermathAfterFade
+        )
+        XCTAssertFalse(
+            StoryTitleCardDestination.start(.prologue)
+                .stopsPrologueAftermathAfterFade
+        )
     }
 }

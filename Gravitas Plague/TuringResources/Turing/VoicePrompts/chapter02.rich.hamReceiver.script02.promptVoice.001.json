@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter02.rich.hamReceiver.script02.promptVoice.001",
+  "speakerID": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "characterProfileID": "rich.chapter02.outbreakNight",
+  "listenerProfileID": "dad.chapter02.outbreakNight",
+  "outputContext": "roomGlobal",
+  "conversationKey": "chapter02.object.ham_receiver.dad_outbreak_night",
+  "intent": "I am finished pretending this is another repair Dad can complete. Fear and death are breaking through the county traffic, and every minute he stays makes the distance between us feel permanent. I need him to choose being my father over being the man everyone calls when something fails.",
+  "emotion": "frightened, angry, and pleading through direct technical language",
+  "communicationMedium": "ham radio",
+  "promptTemplateID": "chapter02CharacterIntent"
+}

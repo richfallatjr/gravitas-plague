@@ -59,6 +59,25 @@
       "revision": "sha256:87dfb34255935a2c879a881e7936a36b907687db2e10c38c9826a2807eaa39e9",
       "defaultVariantID": "broadcaster_reference_fast_01",
       "selectionCatalogPath": "selection-catalog.json"
+    },
+    {
+      "allowFallback": false,
+      "displayName": "Dad",
+      "enabled": true,
+      "id": "dad_base_clone_v1",
+      "kind": "baseCloneProfile",
+      "language": "english",
+      "modelID": "qwen3-tts-12hz-1.7b-base-4bit",
+      "profileKind": "qwenBaseCloneReferenceProfile",
+      "profilePath": "Turing/Voices/Cloned/Dad/BaseClone/dad_base_clone_v1.qwenclone",
+      "runtimeMode": "baseClone",
+      "speakerID": "dad",
+      "voiceID": "dad_base_clone_v1",
+      "characterID": "dad",
+      "resourcePath": "Turing/Voices/Cloned/Dad/BaseClone/dad_base_clone_v1.qwenclone",
+      "revision": "sha256:7973e54973b811dcd0f6b665d45f7aec2cc4d1fef573d660d94cfd158dc9c27d",
+      "defaultVariantID": "dad_reference_fast_01",
+      "selectionCatalogPath": "selection-catalog.json"
     }
   ]
 }

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter02.hamReceiver.dad.script03.001",
+  "speaker": "dad",
+  "voiceID": "dad_base_clone_v1",
+  "voiceVariantID": "dad_reference_fast_01",
+  "audioFile": "pr-dad-ham-receiver-do-not-come-looking.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Listen to me.\n\nA man spends his life thinking he can fix what breaks.\n\nThen comes a night when the whole world breaks at once.\n\nYou cannot save the whole world, Rich. You keep what is in front of you.\n\nThat house is in front of you.\n\nKeep it.\n\nI’ll come if I can.\n\nIf I don’t, you do not come looking.",
+  "summary": "Dad orders Rich to keep the house and not come looking if he cannot return.",
+  "voicePromptIntent": "Continue using chapter02.dad.hamReceiver.script03.promptVoice.001.",
+  "defaultEmotion": "loving, final, and expressed as a firm order"
+}

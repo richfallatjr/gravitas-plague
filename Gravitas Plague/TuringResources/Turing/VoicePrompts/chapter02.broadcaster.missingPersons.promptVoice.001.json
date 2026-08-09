@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter02.broadcaster.missingPersons.promptVoice.001",
+  "speakerID": "broadcaster",
+  "voiceID": "broadcaster_base_clone_v1",
+  "characterProfileID": "broadcaster",
+  "listenerProfileID": "rich.chapter02.present",
+  "outputContext": "crankRadioSpatial",
+  "conversationKey": "chapter02.object.crank_radio.missing_persons",
+  "intent": "I am reading a routine county bulletin while the pattern grows stranger with every address. Husbands and children are waking to open doors, empty beds, untouched cars, and no sign of struggle. The language remains orderly because the county still believes these women are lost somewhere inside a world that can be searched.",
+  "emotion": "orderly and professional while the pattern grows increasingly strange",
+  "communicationMedium": "public emergency radio",
+  "promptTemplateID": "chapter02Broadcaster"
+}

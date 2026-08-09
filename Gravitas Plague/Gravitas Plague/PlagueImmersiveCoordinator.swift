@@ -134,6 +134,11 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     private var chapter01DadFinalBattleCoordinator:
         Chapter01DadFinalBattleCoordinator?
     private var chapter01Coordinator: Chapter01Coordinator?
+    private var chapter02WindowWomanCoordinator:
+        Chapter02WindowWomanCoordinator?
+    private var chapter02WomanBattleCoordinator:
+        Chapter02WomanBattleCoordinator?
+    private var chapter02Coordinator: Chapter02Coordinator?
     private var prologueStoryActionRouter: PrologueStoryActionRouter?
     private var prologueCompletionCoordinator: TuringPrologueCompletionCoordinator?
     private var storyCompletionRouter: TuringStoryCompletionRouter?
@@ -615,13 +620,61 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             try await self.handleStoryEpisodeBoundary(event)
         }
         dadFinalBattle.setCompletionSink(chapterCoordinator)
+
+        let chapter02Surfaces = Chapter02SurfaceSequenceCoordinator(
+            walkie: turingStoryWalkieInteractionController,
+            dadFrame: turingStoryDadFrameInteractionController,
+            crankRadio: turingRollingBenchBundleController
+                .crankRadioInteractionController,
+            hamReceiver: turingRollingBenchBundleController
+                .hamReceiverInteractionController
+        )
+        let chapter02WindowWoman = Chapter02WindowWomanCoordinator(
+            windowBundle: turingWindowBundleController,
+            sceneRoot: root
+        )
+        let chapter02WomanBattle = Chapter02WomanBattleCoordinator(
+            sceneRoot: root,
+            door: turingDoorBundleController,
+            onEnemyPrepared: { [weak self] enemyID, controller in
+                self?.prepareChapter02WomanAudioAndCallbacks(
+                    enemyID: enemyID,
+                    controller: controller
+                )
+            },
+            onEnemyRemoved: { [weak self] enemyID in
+                self?.audioController.stopHostAudioSource(id: enemyID)
+            },
+            playerTargetProvider: { [weak self] in
+                self?.spatialProvider.currentPose()?.headPosition
+            },
+            onPlayerDamage: { [weak self] amount in
+                self?.audioController.playRandomPlayerDamageHit()
+                self?.onPlayerDamaged?(Int(amount))
+            }
+        )
+        let chapter02 = Chapter02Coordinator(
+            surfaces: chapter02Surfaces,
+            womanWindow: chapter02WindowWoman,
+            womanBattle: chapter02WomanBattle
+        )
+        chapter02.onEpisodeBoundary = { [weak self] event in
+            guard let self else {
+                throw StoryTitleCardError.missingRouteOwner
+            }
+            try await self.handleStoryEpisodeBoundary(event)
+        }
         let completionRouter = TuringStoryCompletionRouter(
             prologue: completionCoordinator,
-            chapter01: chapterCoordinator
+            chapter01: chapterCoordinator,
+            chapter02: chapter02
         )
         chapter01DadWindowCoordinator = dadWindow
         chapter01DadFinalBattleCoordinator = dadFinalBattle
         chapter01Coordinator = chapterCoordinator
+        chapter02WindowWomanCoordinator = chapter02WindowWoman
+        chapter02WomanBattleCoordinator = chapter02WomanBattle
+        chapter02Coordinator = chapter02
         storyCompletionRouter = completionRouter
         let highMemoryPreflight = StoryTuringHighMemoryPreflightAdapter(
             door: turingDoorBundleController,
@@ -943,6 +996,49 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         }
     }
 
+    private func prepareChapter02WomanAudioAndCallbacks(
+        enemyID: UUID,
+        controller: JockRetargetTestController
+    ) {
+        print(
+            "[Chapter02WomanLighting] room-side spouse uses automatic " +
+                "passthrough lighting explicitIBLReceiver=false"
+        )
+        audioController.attachHostAudioSource(
+            id: enemyID,
+            hostRootEntity: controller.rootEntity,
+            archetype: .spouse,
+            headAudioEntity: controller.characterAudioEmitter,
+            breathingStartDelay: 0
+        )
+        controller.onPunchHit = { [weak self, weak controller] region in
+            guard let controller else { return }
+            self?.audioController.playConfirmedCharacterFaceHitSound(
+                archetype: .spouse,
+                enemyID: controller.hordeBenchmarkID,
+                hitRegion: region,
+                sourceID: enemyID
+            )
+        }
+        controller.onCharacterDamageHit = { [weak self] in
+            self?.audioController.playCharacterDamageHit(
+                archetype: .spouse,
+                enemyID: enemyID,
+                sourceID: enemyID
+            )
+        }
+        controller.onCharacterDeath = { [weak self] in
+            self?.audioController.playCharacterDeath(
+                archetype: .spouse,
+                enemyID: enemyID,
+                sourceID: enemyID
+            )
+        }
+        controller.onAttackStarted = {
+            print("[Chapter02WomanBattle] spouse attack animation started")
+        }
+    }
+
     private func prepareChapter01RobotAudioAndCallbacks(
         enemyID: UUID,
         controller: JockRetargetTestController
@@ -1214,6 +1310,13 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 )
             }
         }
+        if episodeID != .chapter02 {
+            Task { @MainActor [weak self] in
+                await self?.chapter02Coordinator?.cancel(
+                    reason: "newStoryEpisode.\(episodeID.rawValue)"
+                )
+            }
+        }
         prologueStoryActionRouter?.reset(
             reason: "newStoryEpisode.\(episodeID.rawValue)"
         )
@@ -1256,6 +1359,39 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             return
         }
 
+        if episodeID == .chapter02 {
+            Task { @MainActor [weak self] in
+                guard let self,
+                      let chapter02Coordinator = self.chapter02Coordinator else {
+                    return
+                }
+                do {
+                    let transitionID = UUID()
+                    let lease = try await self.acquireTitleCardTransitionLease(
+                        transitionID: transitionID,
+                        source: "directChapter02Start"
+                    )
+                    try await chapter02Coordinator.beginAtRoot(
+                        transitionLease: lease
+                    )
+                    try await chapter02Coordinator.titleCardDidFullyFade(
+                        requestID: transitionID
+                    )
+                } catch {
+                    self.showTemporaryInstructionHUD(
+                        "Chapter unavailable. Check required window, voice, and animation assets.",
+                        clearAfterSeconds: 5,
+                        reason: "chapter02OpeningUnavailable"
+                    )
+                    print(
+                        "[Chapter02] ERROR root start failed: \(error.localizedDescription)"
+                    )
+                }
+            }
+            print("[TuringStory] Chapter 02 logical start requested noRescan=true")
+            return
+        }
+
         roomSkinningCoordinator.cancelRoomSkinning()
 
         print(
@@ -1274,7 +1410,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     private func continueStoryEpisode(
         _ episodeID: TuringEpisodeID
     ) {
-        guard episodeID == .chapter01 else {
+        guard episodeID == .chapter01 || episodeID == .chapter02 else {
             print(
                 "[TuringStory] ERROR unsupported immersive continuation episodeID=\(episodeID.rawValue)"
             )
@@ -1282,7 +1418,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         }
 
         battle01Coordinator?.cancel(
-            reason: "continueStoryEpisode.chapter01"
+            reason: "continueStoryEpisode.\(episodeID.rawValue)"
         )
         prologueStoryActionRouter?.reset(
             reason: "continueStoryEpisode.chapter01"
@@ -1291,6 +1427,27 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
+                if episodeID == .chapter02 {
+                    guard let chapter02Coordinator = self.chapter02Coordinator,
+                          let snapshot = await Chapter02ProgressStore.shared
+                            .currentSnapshot() else {
+                        throw Chapter02Error.stageNotEstablished
+                    }
+                    let transitionID = UUID()
+                    let lease = try await self.acquireTitleCardTransitionLease(
+                        transitionID: transitionID,
+                        source: "directChapter02Continue"
+                    )
+                    _ = try await chapter02Coordinator
+                        .resumeFromSavedCheckpoint(
+                            snapshot: snapshot,
+                            transitionLease: lease
+                        )
+                    try await chapter02Coordinator.titleCardDidFullyFade(
+                        requestID: transitionID
+                    )
+                    return
+                }
                 guard let chapter01Coordinator =
                         self.chapter01Coordinator else {
                     throw Chapter01Error.openingResourceUnavailable(
@@ -1303,16 +1460,16 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 self.showTemporaryInstructionHUD(
                     "Chapter continuation unavailable.",
                     clearAfterSeconds: 5,
-                    reason: "chapter01ContinueUnavailable"
+                    reason: "\(episodeID.rawValue)ContinueUnavailable"
                 )
                 print(
-                    "[Chapter01] ERROR continue failed: \(error.localizedDescription)"
+                    "[\(episodeID.rawValue)] ERROR continue failed: \(error.localizedDescription)"
                 )
             }
         }
 
         print(
-            "[TuringStory] Chapter 01 logical continuation requested noRescan=true"
+            "[TuringStory] \(episodeID.rawValue) logical continuation requested noRescan=true"
         )
     }
 
@@ -1336,6 +1493,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         battle01Coordinator?.cancel(reason: "roomRescan.\(reason)")
         Task { @MainActor [weak self] in
             await self?.chapter01Coordinator?.cancel(
+                reason: "roomRescan.\(reason)"
+            )
+            await self?.chapter02Coordinator?.cancel(
                 reason: "roomRescan.\(reason)"
             )
         }
@@ -1868,6 +2028,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         await TuringEpisodeFlowController.shared.quiesceForStoryTeleport(reason: reason)
         battle01Coordinator?.cancel(reason: reason)
         await chapter01Coordinator?.cancel(reason: reason)
+        await chapter02Coordinator?.cancel(reason: reason)
         prologueCompletionCoordinator?.reset(reason: reason)
         print("""
         [TuringStoryTeleport] transient runtime quiesced
@@ -1941,6 +2102,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         case .absent:
             battle01Coordinator?.cancel(reason: "storyTeleport.absent.\(teleportID.uuidString)")
             await chapter01Coordinator?.cancel(
+                reason: "storyTeleport.absent.\(teleportID.uuidString)"
+            )
+            await chapter02Coordinator?.cancel(
                 reason: "storyTeleport.absent.\(teleportID.uuidString)"
             )
             prologueStoryActionRouter?.reset(reason: "storyTeleport.absent")
@@ -2552,6 +2716,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             deltaTime: TimeInterval(deltaTime),
             playerTargetWorldPosition: currentHeadPosition
         )
+        chapter02Coordinator?.update(
+            deltaTime: TimeInterval(deltaTime),
+            playerTargetWorldPosition: currentHeadPosition
+        )
 
         if let currentPose {
             latestPlayerPoseSnapshot = timingProfiler.measure("snapshot.player_pose") {
@@ -2704,10 +2872,14 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         let chapter01Robot = chapter01RobotEncounterCoordinator
         let chapter01 = chapter01Coordinator
         let chapter01DadBattle = chapter01DadFinalBattleCoordinator
+        let chapter02 = chapter02Coordinator
         chapter01RobotEncounterCoordinator = nil
         chapter01DadWindowCoordinator = nil
         chapter01DadFinalBattleCoordinator = nil
         chapter01Coordinator = nil
+        chapter02WindowWomanCoordinator = nil
+        chapter02WomanBattleCoordinator = nil
+        chapter02Coordinator = nil
         storyCompletionRouter = nil
         prologueStoryActionRouter = nil
         prologueCompletionCoordinator = nil
@@ -2716,6 +2888,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             await chapter01?.cancel(reason: "immersiveShutdown")
             await chapter01DadBattle?.cancel(reason: "immersiveShutdown")
             await chapter01Robot?.cancel(reason: "immersiveShutdown")
+            await chapter02?.cancel(reason: "immersiveShutdown")
             await TuringHighMemoryPreflightCoordinator.shared.clear()
             await TuringEpisodeFlowController.shared
                 .setCompletionEventSink(nil)
@@ -2791,6 +2964,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         battle01Coordinator?.cancel(reason: "userQuitOrClose")
         Task { @MainActor [weak self] in
             await self?.chapter01Coordinator?.cancel(
+                reason: "userQuitOrClose"
+            )
+            await self?.chapter02Coordinator?.cancel(
                 reason: "userQuitOrClose"
             )
         }
@@ -2890,6 +3066,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         battle01Coordinator?.cancel(reason: "modeSwitchToHorde")
         Task { @MainActor [weak self] in
             await self?.chapter01Coordinator?.cancel(
+                reason: "modeSwitchToHorde"
+            )
+            await self?.chapter02Coordinator?.cancel(
                 reason: "modeSwitchToHorde"
             )
         }
@@ -6305,6 +6484,15 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
             )
             disposition = .releaseAfterFade
 
+        case .start(.chapter02):
+            guard let chapter02Coordinator else {
+                throw StoryTitleCardError.missingRouteOwner
+            }
+            try await chapter02Coordinator.beginAtRoot(
+                transitionLease: transitionLease
+            )
+            disposition = .retainedByDestination
+
         case .continueFrom(.prologue(let snapshot)):
             try await StoryInteractionArbiter.shared.setStableInteractionPolicy(
                 .unrestricted,
@@ -6333,20 +6521,44 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
                     transitionLease: transitionLease
                 )
 
+        case .continueFrom(.chapter02(let snapshot)):
+            guard let chapter02Coordinator else {
+                throw StoryTitleCardError.missingRouteOwner
+            }
+            disposition = try await chapter02Coordinator
+                .resumeFromSavedCheckpoint(
+                    snapshot: snapshot,
+                    transitionLease: transitionLease
+                )
+
         case .advance(let completed, let next):
-            guard TuringEpisodeCatalog.nextUnlockedEpisode(after: completed) == next,
-                  next == .chapter01,
-                  let chapter01Coordinator else {
+            guard TuringEpisodeCatalog.nextUnlockedEpisode(after: completed) == next else {
                 throw StoryTitleCardError.invalidNaturalDestination
             }
-            try await chapter01Coordinator.beginAtRoot(
-                transitionLease: transitionLease
-            )
-            if completed == .prologue {
+            switch (completed, next) {
+            case (.prologue, .chapter01):
+                guard let chapter01Coordinator else {
+                    throw StoryTitleCardError.missingRouteOwner
+                }
+                try await chapter01Coordinator.beginAtRoot(
+                    transitionLease: transitionLease
+                )
                 try await prologueCompletionCoordinator?
                     .commitPendingEpisodeBoundary()
+                disposition = .releaseAfterFade
+
+            case (.chapter01, .chapter02):
+                guard let chapter02Coordinator else {
+                    throw StoryTitleCardError.missingRouteOwner
+                }
+                try await chapter02Coordinator.beginAtRoot(
+                    transitionLease: transitionLease
+                )
+                disposition = .retainedByDestination
+
+            default:
+                throw StoryTitleCardError.invalidNaturalDestination
             }
-            disposition = .releaseAfterFade
 
         case .endOfAvailableContent(let completedEpisode):
             guard TuringEpisodeCatalog.nextUnlockedEpisode(
@@ -6373,6 +6585,69 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
         return disposition
     }
 
+    func titleCardTransitionDidFullyFade(
+        _ destination: StoryTitleCardDestination,
+        requestID: UUID
+    ) async throws {
+        switch destination {
+        case .start(.chapter02),
+             .continueFrom(.chapter02),
+             .advance(from: .chapter01, to: .chapter02):
+            guard let chapter02Coordinator else {
+                throw StoryTitleCardError.missingRouteOwner
+            }
+            try await chapter02Coordinator.titleCardDidFullyFade(
+                requestID: requestID
+            )
+
+        case .start,
+             .continueFrom,
+             .advance,
+             .endOfAvailableContent:
+            break
+        }
+    }
+
+    func titleCardTransitionCompleted(
+        _ destination: StoryTitleCardDestination,
+        requestID: UUID
+    ) async {
+        guard case .continueFrom(.chapter02) = destination,
+              let chapter02Coordinator else {
+            return
+        }
+        do {
+            guard let lease = try await chapter02Coordinator
+                .takeTerminalContinuationLease(requestID: requestID) else {
+                return
+            }
+            let request = StoryTitleCardTransitionRequest(
+                requestID: requestID,
+                source: .naturalEpisodeBoundary,
+                descriptor: StoryTitleCardCatalog.endOfAvailableContent,
+                destination: .endOfAvailableContent(
+                    completedEpisode: .chapter02
+                ),
+                menuMusicPolicy: .unchanged
+            )
+            try storyTitleCardTransitionCoordinator.accept(
+                request,
+                ownership: .transferred(lease)
+            )
+        } catch {
+            await StoryInteractionArbiter.shared
+                .releaseCurrentStoryTransition(
+                    transitionID: requestID,
+                    reason: "chapter02TerminalContinuationFailed"
+                )
+            showTemporaryInstructionHUD(
+                "Story transition failed: \(error.localizedDescription)",
+                clearAfterSeconds: 4,
+                reason: "chapter02TerminalContinuationFailed"
+            )
+        }
+    }
+
     func titleCardTransitionFailed(
         _ error: Error,
         request: StoryTitleCardTransitionRequest
@@ -6395,6 +6670,18 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
                 await self?.prologueCompletionCoordinator?
                     .episodeBoundaryFailed(reason: error.localizedDescription)
             }
+        }
+        switch request.destination {
+        case .start(.chapter02),
+             .continueFrom(.chapter02),
+             .advance(from: .chapter01, to: .chapter02):
+            Task { @MainActor [weak self] in
+                await self?.chapter02Coordinator?.cancel(
+                    reason: "titleCardFailed.\(request.requestID.uuidString)"
+                )
+            }
+        default:
+            break
         }
     }
 

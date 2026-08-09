@@ -63,4 +63,8 @@ extension TuringFlowDescriptor.Transmission {
     var usesCompositePipeline: Bool {
         voicePromptID == nil && generationPipeline != nil
     }
+
+    var isPrerecordingOnly: Bool {
+        voicePromptID == nil && generationPipeline == nil
+    }
 }

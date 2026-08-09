@@ -103,7 +103,8 @@ actor TuringPromptVoiceStageExecutor: TuringSpeechStageExecuting {
                 promptContext: promptVoiceContext.storyContext,
                 prerecordingTranscript: priorTranscript,
                 storyIntent: prompt.intent,
-                promptTemplateID: prompt.effectivePromptTemplateID
+                promptTemplateID: prompt.effectivePromptTemplateID,
+                communicationMedium: prompt.effectiveCommunicationMedium
             )
         )
         guard plan.segments.isEmpty == false else {

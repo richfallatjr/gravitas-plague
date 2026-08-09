@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter02.hamReceiver.rich.revelation.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-ham-receiever-what-do-you-believe.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Cat Eye Eight-One, this is Rich.\n\nThe woman outside was one of the first missing persons.\n\nHer husband was calling the county bands before the power failed. She disappeared from their house in the night and came to mine weeks later infected.\n\nDad vanished that same night.\n\nThe nukes went up. The lights went out. Then the dead started walking.\n\nTell me what you think is happening.\n\nNot what the government called it.\n\nWhat you believe.",
+  "summary": "Rich asks CatEye81 to interpret the pattern beyond official terminology.",
+  "voicePromptIntent": "Continue using chapter02.rich.hamReceiver.revelation.promptVoice.001.",
+  "defaultEmotion": "exhausted, haunted, and asking for meaning"
+}

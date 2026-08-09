@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter02.cateye81.hamReceiver.revelation.promptVoice.002",
+  "speakerID": "cateye81",
+  "voiceID": "cateye81_base_clone_v1",
+  "characterProfileID": "cateye81.chapter02.present",
+  "listenerProfileID": "rich.chapter02.present",
+  "outputContext": "hamReceiverSpatial",
+  "conversationKey": "chapter02.object.ham_receiver.revelation",
+  "intent": "I have believed in the end times since childhood, but belief was easy when Revelation lived beyond the horizon. Now the horsemen feel less like symbols than the plain order of events: war, hunger, plague, and death. I believe Satan is moving through mankind’s appetite for ruin, and the world is being handed over piece by piece to the thing it served.",
+  "emotion": "grave, faithful, and careful to identify belief as belief",
+  "communicationMedium": "ham radio",
+  "promptTemplateID": "chapter02CatEye81"
+}

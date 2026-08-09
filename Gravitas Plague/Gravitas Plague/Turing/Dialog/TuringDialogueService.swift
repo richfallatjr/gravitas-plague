@@ -30,6 +30,8 @@ actor TuringDialogueService {
             replacements: [
                 "{{characterDisplayName}}": profile.displayName,
                 "{{listenerDisplayName}}": listenerProfile.displayName,
+                "{{communicationMedium}}": request.communicationMedium
+                    ?? "walkie talkie",
                 "{{characterBackstory}}": profile.writeup,
                 "{{storyIntent}}": request.storyIntent
                     ?? request.promptContext,

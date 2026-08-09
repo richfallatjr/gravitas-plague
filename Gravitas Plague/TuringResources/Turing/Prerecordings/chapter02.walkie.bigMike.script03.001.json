@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter02.walkie.bigMike.script03.001",
+  "speaker": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "voiceVariantID": "broadcast_reference_fast_01",
+  "audioFile": "pr-big-mike-payback-for-dad.mp3",
+  "transcriptMode": "manual",
+  "transcript": "I’m closer to the relay.\n\nYour father kept my family alive through that ice storm and never let me pay him.\n\nTonight I pay him.\n\nI’m taking the service truck to the north road. I’ll go as far as the bridge and look for his headlights.\n\nYou stay in that house.\n\nIf one of us comes back, somebody needs to be there to hear the engine.",
+  "summary": "Mike takes responsibility for searching toward the relay and orders Rich to remain home.",
+  "voicePromptIntent": "Continue using chapter02.bigMike.walkie.script03.promptVoice.001.",
+  "defaultEmotion": "loyal, resolute, and quietly aware of the risk"
+}

@@ -230,6 +230,39 @@ final class StoryInteractionArbiterTests: XCTestCase {
         XCTAssertEqual(snapshot.capabilities, [.walkieMicrophone, .doorOpen])
     }
 
+    func testBattleDoorAppearsOnlyAfterGrandmaLoadPermission() async throws {
+        let arbiter = StoryInteractionArbiter()
+        let battleID = UUID()
+        let battleLease = try await arbiter.claimBattle(
+            battleInstanceID: battleID,
+            source: "battle01Test"
+        )
+        await arbiter.updateDoorState(.loading, reason: "portalLoading")
+        await arbiter.updateDoorState(.closedReady, reason: "portalReady")
+
+        var snapshot = await arbiter.currentSnapshot()
+        XCTAssertEqual(snapshot.doorPresentation, .hidden)
+        XCTAssertFalse(snapshot.capabilities.contains(.doorOpen))
+
+        try await arbiter.setBattleDoorPermission(
+            .playerMayOpen,
+            battleLease: battleLease,
+            reason: "grandmaLoaded"
+        )
+        snapshot = await arbiter.currentSnapshot()
+        XCTAssertEqual(snapshot.doorPresentation, .open)
+        XCTAssertEqual(snapshot.capabilities, [.doorOpen])
+
+        try await arbiter.setBattleDoorPermission(
+            .hiddenAndLocked,
+            battleLease: battleLease,
+            reason: "grandmaAtA3"
+        )
+        snapshot = await arbiter.currentSnapshot()
+        XCTAssertEqual(snapshot.doorPresentation, .hidden)
+        XCTAssertTrue(snapshot.capabilities.isEmpty)
+    }
+
     func testOwnershipTransfersNeverPublishNilOwnerGap() async throws {
         let arbiter = StoryInteractionArbiter()
         let stream = await arbiter.snapshots()

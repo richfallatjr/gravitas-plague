@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter02.broadcaster.gridFailure.promptVoice.002",
+  "speakerID": "broadcaster",
+  "voiceID": "broadcaster_base_clone_v1",
+  "characterProfileID": "broadcaster",
+  "listenerProfileID": "rich.chapter02.present",
+  "outputContext": "crankRadioSpatial",
+  "conversationKey": "chapter02.object.crank_radio.grid_failure",
+  "intent": "I am the last public voice before the grid goes dark. There is no promise of rescue left in the message. I give the living only what remains within reach: water, walls, darkness, and time. Beneath the procedure is the knowledge that entire cities are dying beyond the range of the broadcast.",
+  "emotion": "controlled emergency procedure carrying finality",
+  "communicationMedium": "public emergency radio",
+  "promptTemplateID": "chapter02Broadcaster"
+}

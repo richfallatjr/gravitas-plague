@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter02.broadcaster.gravitasPSA.promptVoice.003",
+  "speakerID": "broadcaster",
+  "voiceID": "broadcaster_base_clone_v1",
+  "characterProfileID": "broadcaster",
+  "listenerProfileID": "rich.chapter02.present",
+  "outputContext": "crankRadioSpatial",
+  "conversationKey": "chapter02.object.crank_radio.gravitas_psa",
+  "intent": "I am the public Broadcaster reading a polished Gravitas continuity announcement during a national emergency. I present the corporation as calm, organized, and available, direct listeners to keep registered devices and emergency location services enabled, and reinforce only the guidance already stated in the authored broadcast. The tone is reassuring, controlled, and promotional, as though essential services and tomorrow remain within reach.",
+  "emotion": "polished corporate reassurance with controlled authority",
+  "communicationMedium": "public emergency radio",
+  "promptTemplateID": "chapter02Broadcaster"
+}

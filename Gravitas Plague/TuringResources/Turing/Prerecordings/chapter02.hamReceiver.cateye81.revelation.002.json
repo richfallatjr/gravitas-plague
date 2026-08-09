@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter02.hamReceiver.cateye81.revelation.002",
+  "speaker": "cateye81",
+  "voiceID": "cateye81_base_clone_v1",
+  "voiceVariantID": "cateye81_reference_01",
+  "audioFile": "pr-cat-eye-81-what-we-chose.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Rich, I think Satan is loose in the world.\n\nI think Revelation is no longer a book about someday.\n\nJohn saw the red horse take peace from the earth.\n\nHe saw the black horse bring hunger.\n\nThen came the pale horse, and the rider’s name was Death, and Hell followed after him.\n\nLook at what we have.\n\nNukes in the sky. Empty shelves. Pestilence in the blood. The dead at the door.\n\nWe called it a symbol because the lights still came on when we touched a switch.\n\nThen the lights went out.\n\nMaybe God has not abandoned us.\n\nMaybe He has only stopped holding back what we chose.",
+  "summary": "CatEye81 offers a clearly personal Revelation-based interpretation of the collapse.",
+  "voicePromptIntent": "Continue using chapter02.cateye81.hamReceiver.revelation.promptVoice.002.",
+  "defaultEmotion": "grave, faithful, and explicit that this is belief"
+}

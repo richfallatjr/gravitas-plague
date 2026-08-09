@@ -15,6 +15,8 @@ final class TuringBroadcasterCrankRadioFlowRoute:
         any TuringGeneratedGapBridge
     private var cueHandlesByPlaybackRunID:
         [String: TuringAudioPlaybackHandle] = [:]
+    private static let finalPSAScriptPointID =
+        "chapter02.crankRadio.broadcaster.gravitasPSA.003"
 
     convenience init() {
         self.init(
@@ -132,17 +134,27 @@ final class TuringBroadcasterCrankRadioFlowRoute:
             reason:
                 "foundationCompletedBeforeEmergencyCue"
         )
-        let handle =
-            try await radioBed.startEmergencyCue(
+        let handle: TuringAudioPlaybackHandle
+        if isFinalPSA(descriptor) {
+            handle = try await radioBed.startAuthoredCue(
+                ownerID: identity.playbackRunID,
+                resourceName: "gravitas-opening-jingle",
+                fileExtension: "mp3",
+                label: "chapter02GravitasOpeningJingle"
+            )
+        } else {
+            handle = try await radioBed.startEmergencyCue(
                 ownerID: identity.playbackRunID
             )
+        }
         cueHandlesByPlaybackRunID[
             identity.playbackRunID
         ] = handle
         print("""
-        [TuringBroadcasterFlow] generated compute released by alarm
+        [TuringBroadcasterFlow] generated compute released by authored cue
           playbackRunID: \(identity.playbackRunID)
           cueHandleID: \(handle.id.uuidString)
+          cueKind: \(isFinalPSA(descriptor) ? "openingJingle" : "emergencyDataBurst")
           prerecordingQueued: false
         """)
     }
@@ -183,7 +195,7 @@ final class TuringBroadcasterCrankRadioFlowRoute:
         descriptor: TuringFlowDescriptor,
         identity: TuringFlowIdentity,
         succeeded: Bool
-    ) async {
+    ) async throws {
         cueHandlesByPlaybackRunID[
             identity.playbackRunID
         ] = nil
@@ -194,6 +206,35 @@ final class TuringBroadcasterCrankRadioFlowRoute:
         )
         guard isInitialTransmission(descriptor) else {
             return
+        }
+        if succeeded && isFinalPSA(descriptor) {
+            do {
+                let closingHandle = try await radioBed.startAuthoredCue(
+                    ownerID: identity.playbackRunID,
+                    resourceName: "gravitas-closing-bumper",
+                    fileExtension: "mp3",
+                    label: "chapter02GravitasClosingBumper"
+                )
+                print(
+                    "[TuringBroadcasterFlow] closing bumper started " +
+                        "playbackRunID=\(identity.playbackRunID) " +
+                        "handleID=\(closingHandle.id.uuidString)"
+                )
+                try await radioBed.waitForEmergencyCueCompletion(
+                    closingHandle,
+                    ownerID: identity.playbackRunID
+                )
+                print(
+                    "[TuringBroadcasterFlow] closing bumper actual completion " +
+                        "playbackRunID=\(identity.playbackRunID)"
+                )
+            } catch {
+                await radioBed.endSession(
+                    ownerID: identity.playbackRunID,
+                    reason: "chapter02ClosingBumperFailed"
+                )
+                throw error
+            }
         }
         await radioBed.endSession(
             ownerID: identity.playbackRunID,
@@ -209,5 +250,11 @@ final class TuringBroadcasterCrankRadioFlowRoute:
     ) -> Bool {
         descriptor.transmission.prerecordingID !=
             "none"
+    }
+
+    private func isFinalPSA(
+        _ descriptor: TuringFlowDescriptor
+    ) -> Bool {
+        descriptor.scriptPointID == Self.finalPSAScriptPointID
     }
 }
