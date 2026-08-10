@@ -141,6 +141,9 @@ final class Chapter02WomanBattleCoordinator {
         cleanupTask = nil
         richPRTask = nil
         await richPR.cancel(reason: reason)
+        await Chapter02BattleMusicActor.shared.stop(
+            reason: "chapter02WomanBattle.cancel.\(reason)"
+        )
         combat.cancelAndRelease(reason: reason)
         intro.cancelAndRelease(reason: reason)
         let enemyID = prepared?.enemyID
@@ -261,6 +264,9 @@ final class Chapter02WomanBattleCoordinator {
                 portalMirror: mirror
             )
             self.prepared = prepared
+            try await Chapter02BattleMusicActor.shared.startIfNeeded(
+                reason: "chapter02WomanBattle.portalLoaded.ensureActive"
+            )
 
             let registryController = try womanLease
                 .relinquishControllerToBattleRegistry()
@@ -294,18 +300,7 @@ final class Chapter02WomanBattleCoordinator {
                         battle01Definition.portalHandoff
                             .exitThresholdPortalLocalZMeters
                 ),
-                onInitialIdleStarted: { [weak self] in
-                    guard let self else { return }
-                    self.richPRTask = Task {
-                        try await self.richPR.play(
-                            resourcePath:
-                                "Turing/Audio/prerecordings/pr-rich-women-battle.mp3",
-                            runID:
-                                "chapter02.womanBattle.\(battleInstanceID.uuidString)",
-                            label: "chapter02.womanBattle.richPR"
-                        )
-                    }
-                },
+                onInitialIdleStarted: {},
                 onStateChange: { [weak self] _ in
                     guard self?.battleInstanceID == battleInstanceID else {
                         return
@@ -333,6 +328,12 @@ final class Chapter02WomanBattleCoordinator {
                     reason: "chapter02Woman.pushDoor"
                 )
             }
+            guard door.battleDoorState == .open else {
+                throw Chapter02Error.invalidRuntimeTransfer(
+                    "Rich battle PR requires the door to be fully open"
+                )
+            }
+            startRichBattlePR(battleInstanceID: battleInstanceID)
             state = .portalCrossing
             try await intro.performPortalCrossing()
             try Task.checkCancellation()
@@ -414,7 +415,9 @@ final class Chapter02WomanBattleCoordinator {
                     retentionPolicy: .remove,
                     fullPortalReleased:
                         !self.door.battlePortalFullExteriorResident,
-                    musicStillPlaying: false
+                    musicStillPlaying:
+                        await Chapter02BattleMusicActor.shared
+                            .hasActiveSession()
                 )
                 self.door.setBattleInteractionLocked(
                     false,
@@ -447,6 +450,23 @@ final class Chapter02WomanBattleCoordinator {
                 )
             }
         }
+    }
+
+    private func startRichBattlePR(battleInstanceID: UUID) {
+        guard richPRTask == nil else { return }
+        richPRTask = Task {
+            try await richPR.play(
+                resourcePath:
+                    "Turing/Audio/prerecordings/pr-rich-women-battle.mp3",
+                runID:
+                    "chapter02.womanBattle.\(battleInstanceID.uuidString)",
+                label: "chapter02.womanBattle.richPR"
+            )
+        }
+        print(
+            "[Chapter02WomanBattle] Rich PR started after door fully opened " +
+                "battleInstanceID=\(battleInstanceID.uuidString)"
+        )
     }
 
     private func resetTransient(finalState: State) {

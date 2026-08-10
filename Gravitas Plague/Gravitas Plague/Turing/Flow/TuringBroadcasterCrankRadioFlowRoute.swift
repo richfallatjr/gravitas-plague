@@ -134,18 +134,32 @@ final class TuringBroadcasterCrankRadioFlowRoute:
             reason:
                 "foundationCompletedBeforeEmergencyCue"
         )
-        let handle: TuringAudioPlaybackHandle
         if isFinalPSA(descriptor) {
-            handle = try await radioBed.startAuthoredCue(
-                ownerID: identity.playbackRunID,
-                resourceName: "gravitas-opening-jingle",
-                fileExtension: "mp3",
-                label: "chapter02GravitasOpeningJingle"
+            _ = await Chapter02BattleMusicActor.shared.duck(
+                ownerID: chapter02BattleMusicOwnerID(identity)
             )
-        } else {
-            handle = try await radioBed.startEmergencyCue(
-                ownerID: identity.playbackRunID
-            )
+        }
+        let handle: TuringAudioPlaybackHandle
+        do {
+            if isFinalPSA(descriptor) {
+                handle = try await radioBed.startAuthoredCue(
+                    ownerID: identity.playbackRunID,
+                    resourceName: "gravitas-opening-jingle",
+                    fileExtension: "mp3",
+                    label: "chapter02GravitasOpeningJingle"
+                )
+            } else {
+                handle = try await radioBed.startEmergencyCue(
+                    ownerID: identity.playbackRunID
+                )
+            }
+        } catch {
+            if isFinalPSA(descriptor) {
+                await Chapter02BattleMusicActor.shared.restore(
+                    ownerID: chapter02BattleMusicOwnerID(identity)
+                )
+            }
+            throw error
         }
         cueHandlesByPlaybackRunID[
             identity.playbackRunID
@@ -233,6 +247,9 @@ final class TuringBroadcasterCrankRadioFlowRoute:
                     ownerID: identity.playbackRunID,
                     reason: "chapter02ClosingBumperFailed"
                 )
+                await Chapter02BattleMusicActor.shared.restore(
+                    ownerID: chapter02BattleMusicOwnerID(identity)
+                )
                 throw error
             }
         }
@@ -243,6 +260,11 @@ final class TuringBroadcasterCrankRadioFlowRoute:
                     ? "broadcasterPromptVoiceFinished"
                     : "broadcasterPromptVoiceFailed"
         )
+        if isFinalPSA(descriptor) {
+            await Chapter02BattleMusicActor.shared.restore(
+                ownerID: chapter02BattleMusicOwnerID(identity)
+            )
+        }
     }
 
     private func isInitialTransmission(
@@ -256,5 +278,11 @@ final class TuringBroadcasterCrankRadioFlowRoute:
         _ descriptor: TuringFlowDescriptor
     ) -> Bool {
         descriptor.scriptPointID == Self.finalPSAScriptPointID
+    }
+
+    private func chapter02BattleMusicOwnerID(
+        _ identity: TuringFlowIdentity
+    ) -> String {
+        "chapter02.crankPSA.\(identity.playbackRunID)"
     }
 }

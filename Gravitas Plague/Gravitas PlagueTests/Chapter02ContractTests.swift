@@ -200,6 +200,35 @@ final class Chapter02ContractTests: XCTestCase {
         )
     }
 
+    func testChapterTwoBattleMusicUsesAuthoredLoopAndFinalCrankDucking() throws {
+        XCTAssertEqual(Chapter02BattleMusicActor.targetGainDB, 0)
+        XCTAssertEqual(
+            Chapter02BattleMusicActor.resourcePath,
+            "Turing/Audio/chapter02/battle-03-music.mp3"
+        )
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: try TuringResourceLoader.resourceURL(
+                    resourcePath: Chapter02BattleMusicActor.resourcePath
+                ).path
+            )
+        )
+        XCTAssertTrue(
+            Chapter02BattleMusicInteractionPolicy.ducksConversation(
+                conversationKey:
+                    TuringStorySurfaceFlowBinding.chapter02CrankGravitasPSA
+                        .conversationKey
+            )
+        )
+        XCTAssertFalse(
+            Chapter02BattleMusicInteractionPolicy.ducksConversation(
+                conversationKey:
+                    TuringStorySurfaceFlowBinding.chapter02PostBattleHam
+                        .conversationKey
+            )
+        )
+    }
+
     func testChapterTwoTemplatesPresentPriorPRBeforeStoryIntent() throws {
         for path in [
             "Turing/Prompts/voicePrompt_chapter02CharacterIntent.txt",

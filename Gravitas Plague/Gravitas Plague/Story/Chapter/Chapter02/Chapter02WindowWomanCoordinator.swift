@@ -4,9 +4,6 @@ import simd
 
 @MainActor
 protocol Chapter02WindowWomanCompletionSink: AnyObject {
-    func womanWindowPresentationReady(
-        _ event: Chapter02WomanWindowReadyEvent
-    ) async throws
     func womanStagedForDoor(
         _ event: Chapter02WomanStagedForDoorEvent
     ) async throws
@@ -16,12 +13,6 @@ protocol Chapter02WindowWomanCompletionSink: AnyObject {
 @MainActor
 final class Chapter02WindowWomanCoordinator {
     static let idleDurationSeconds: TimeInterval = 20
-    static let attackClipIDs = [
-        "charged-slash-left",
-        "charged-slash-right",
-        "left_hook_01",
-        "right_hook_01"
-    ]
 
     private let windowBundle: TuringStoryWindowBundleController
     private let sceneRoot: Entity
@@ -37,10 +28,7 @@ final class Chapter02WindowWomanCoordinator {
     private var activeTask: Task<Void, Never>?
     private var pathContinuation: CheckedContinuation<Void, Error>?
     private var clipContinuation: CheckedContinuation<Void, Error>?
-    private var idleContinuation: CheckedContinuation<Void, Never>?
-    private var idleSleepTask: Task<Void, Never>?
     private var activeClipToken: UUID?
-    private var exitRequested = false
     private var generation: UInt64 = 0
     private var contextAcquired = false
 
@@ -116,13 +104,6 @@ final class Chapter02WindowWomanCoordinator {
         }
     }
 
-    func requestExit() {
-        guard runtime != nil else { return }
-        exitRequested = true
-        state = .exitRequested
-        print("[Chapter02Woman] deterministic exit requested")
-    }
-
     func stageHiddenRuntimeForDoor() async throws {
         guard activeTask == nil,
               let runtime,
@@ -166,9 +147,7 @@ final class Chapter02WindowWomanCoordinator {
         pathFollower.update(deltaTime: deltaTime)
         switch state {
         case .turningLeftAtCenter,
-             .centeredIdle,
-             .presentingAttack,
-             .exitRequested,
+             .centeredIdle20Seconds,
              .turningRightToExit:
             let route = runtime?.context.route
             if let route {
@@ -194,7 +173,6 @@ final class Chapter02WindowWomanCoordinator {
         finishPath(.failure(CancellationError()))
         runtime?.controller?.cancelScriptedClipCompletion()
         finishClip(.failure(CancellationError()))
-        finishIdleWait()
         await richPR.cancel(reason: reason)
         if let lease = runtime?.lease {
             _ = try? await lease.release(reason: .storyReset)
@@ -202,7 +180,6 @@ final class Chapter02WindowWomanCoordinator {
         runtime = nil
         chapterRunID = nil
         completionSink = nil
-        exitRequested = false
         if contextAcquired {
             await windowBundle.releaseChapter01DadCinematicContext(
                 reason: reason
@@ -249,72 +226,35 @@ final class Chapter02WindowWomanCoordinator {
             floorPosition: route.centerWorldPosition,
             orientation: route.centerFacingWindowWorldOrientation
         )
-        try await runPresentationLoop(
-            controller: controller,
-            chapterRunID: chapterRunID,
-            generation: generation
-        )
-        try requireCurrent(generation)
         try await performExit(
             controller: controller,
             runtime: runtime,
-            chapterRunID: chapterRunID
+            chapterRunID: chapterRunID,
+            generation: generation
         )
-    }
-
-    private func runPresentationLoop(
-        controller: JockRetargetTestController,
-        chapterRunID: UUID,
-        generation: UInt64
-    ) async throws {
-        var cycle = 0
-        var notifiedReady = false
-        while true {
-            try requireCurrent(generation)
-            state = .centeredIdle(cycle: cycle)
-            try controller.playScriptedIdleLoop(clipID: "idle_01")
-            if !notifiedReady {
-                notifiedReady = true
-                try await completionSink?.womanWindowPresentationReady(
-                    Chapter02WomanWindowReadyEvent(
-                        chapterRunID: chapterRunID
-                    )
-                )
-            }
-            await waitForIdleOrExit()
-            try requireCurrent(generation)
-            if exitRequested { return }
-
-            for (index, clipID) in Self.attackClipIDs.enumerated() {
-                state = .presentingAttack(
-                    cycle: cycle,
-                    index: index,
-                    clipID: clipID
-                )
-                try await playPresentationClip(
-                    controller: controller,
-                    clipID: clipID
-                )
-                try requireCurrent(generation)
-                if exitRequested { return }
-            }
-            cycle += 1
-        }
     }
 
     private func performExit(
         controller: JockRetargetTestController,
         runtime: Chapter02WindowWomanRuntime,
-        chapterRunID: UUID
+        chapterRunID: UUID,
+        generation: UInt64
     ) async throws {
         let route = runtime.context.route
         try controller.playScriptedIdleLoop(clipID: "idle_01")
+        try await Chapter02BattleMusicActor.shared.startIfNeeded(
+            reason: "chapter02WomanWindow.richPRCue"
+        )
         async let richPlayback: Void = richPR.play(
             resourcePath:
                 "Turing/Audio/prerecordings/pr-rich-women-window.mp3",
             runID: "chapter02.windowExit.\(chapterRunID.uuidString)",
             label: "chapter02.windowRecognition"
         )
+        state = .centeredIdle20Seconds
+        try await Task.sleep(for: .seconds(Self.idleDurationSeconds))
+        try requireCurrent(generation)
+
         state = .turningRightToExit
         try await playTurn(controller: controller, direction: .right)
         Chapter02WindowWomanRuntimeFactory.installWorldPose(
@@ -427,28 +367,6 @@ final class Chapter02WindowWomanCoordinator {
         }
     }
 
-    private func playPresentationClip(
-        controller: JockRetargetTestController,
-        clipID: String
-    ) async throws {
-        let token = UUID()
-        activeClipToken = token
-        try await withCheckedThrowingContinuation { continuation in
-            clipContinuation = continuation
-            do {
-                try controller.playScriptedPresentationClip(
-                    clipID: clipID,
-                    token: token
-                ) { [weak self] returned, result in
-                    guard self?.activeClipToken == returned else { return }
-                    self?.finishClip(result)
-                }
-            } catch {
-                finishClip(.failure(error))
-            }
-        }
-    }
-
     private func finishPath(_ result: Result<Void, Error>) {
         guard let continuation = pathContinuation else { return }
         pathContinuation = nil
@@ -460,40 +378,6 @@ final class Chapter02WindowWomanCoordinator {
         guard let continuation = clipContinuation else { return }
         clipContinuation = nil
         continuation.resume(with: result)
-    }
-
-    private func waitForIdleOrExit() async {
-        guard !exitRequested else { return }
-        await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                idleContinuation = continuation
-                idleSleepTask = Task { @MainActor [weak self] in
-                    do {
-                        try await Task.sleep(
-                            for: .seconds(Self.idleDurationSeconds)
-                        )
-                    } catch {
-                        return
-                    }
-                    self?.finishIdleWait()
-                }
-                if exitRequested {
-                    finishIdleWait()
-                }
-            }
-        } onCancel: {
-            Task { @MainActor [weak self] in
-                self?.finishIdleWait()
-            }
-        }
-    }
-
-    private func finishIdleWait() {
-        idleSleepTask?.cancel()
-        idleSleepTask = nil
-        guard let continuation = idleContinuation else { return }
-        idleContinuation = nil
-        continuation.resume()
     }
 
     private func requireCurrent(_ expectedGeneration: UInt64) throws {

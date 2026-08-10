@@ -63,19 +63,13 @@ enum Chapter02WindowWomanState: Sendable, Equatable {
     case atEntry
     case walkingEntryToCenter
     case turningLeftAtCenter
-    case centeredIdle(cycle: Int)
-    case presentingAttack(cycle: Int, index: Int, clipID: String)
-    case exitRequested
+    case centeredIdle20Seconds
     case turningRightToExit
     case walkingCenterToExit
     case stagedForDoor
     case transferredToPortalIntro
     case failed(String)
     case cancelled
-}
-
-struct Chapter02WomanWindowReadyEvent: Sendable {
-    let chapterRunID: UUID
 }
 
 struct Chapter02WomanStagedForDoorEvent: Sendable {

@@ -63,14 +63,10 @@ final class Chapter02Coordinator:
         await episodeFlow.resetEpisode(reason: "chapter02.root")
         surfaces.closeAll(reason: "chapter02.root.preload")
         pendingActivationCheckpoint = .root
-        state = .loadingWomanRuntime
-        try await womanWindow.prepareHidden(
-            chapterRunID: runID,
-            completionSink: self
-        )
+        state = .missingPersonsReady
         print(
-            "[Chapter02] root preloaded under black chapterRunID=\(runID.uuidString) " +
-                "roomRescan=false spouseImports=1 presentationStarted=false"
+            "[Chapter02] root ready under black chapterRunID=\(runID.uuidString) " +
+                "roomRescan=false spouseImports=0 womanRuntimeDeferred=true"
         )
     }
 
@@ -105,15 +101,12 @@ final class Chapter02Coordinator:
              .bigMikeWalkieCompleted,
              .dadPhotoCompleted,
              .blackoutBroadcastCompleted,
-             .womanExitPending,
-             .womanBattlePending:
+             .womanExitPending:
+            state = stateForReadyCheckpoint(snapshot.checkpoint)
+
+        case .womanBattlePending:
             state = .loadingWomanRuntime
-            try await womanWindow.prepareHidden(
-                chapterRunID: runID,
-                completionSink: self
-            )
-            pendingDirectBattleRestore =
-                snapshot.checkpoint == .womanBattlePending
+            pendingDirectBattleRestore = true
 
         case .womanBattleCompleted,
              .postBattleHamCompleted:
@@ -149,15 +142,27 @@ final class Chapter02Coordinator:
              .missingPersonsCompleted,
              .dadHamCompleted,
              .bigMikeWalkieCompleted,
-             .dadPhotoCompleted,
-             .blackoutBroadcastCompleted,
+             .dadPhotoCompleted:
+            await releaseTitleTransitionLease(
+                reason: "chapter02.continue.\(checkpoint.rawValue)"
+            )
+            surfaces.restore(
+                checkpoint: checkpoint,
+                reason: "chapter02.continue.\(checkpoint.rawValue)"
+            )
+            state = stateForReadyCheckpoint(checkpoint)
+
+        case .blackoutBroadcastCompleted,
              .womanExitPending:
-            try womanWindow.activatePresentation()
+            try await transferTitleLeaseToBattleAndStartWindow()
 
         case .womanBattlePending:
             try await beginDirectBattleRestore()
 
         case .womanBattleCompleted:
+            try await Chapter02BattleMusicActor.shared.startIfNeeded(
+                reason: "chapter02.continue.postBattle"
+            )
             await releaseTitleTransitionLease(
                 reason: "chapter02.continue.postBattle"
             )
@@ -166,6 +171,9 @@ final class Chapter02Coordinator:
             )
 
         case .postBattleHamCompleted:
+            try await Chapter02BattleMusicActor.shared.startIfNeeded(
+                reason: "chapter02.continue.gravitasPSA"
+            )
             await releaseTitleTransitionLease(
                 reason: "chapter02.continue.gravitasPSA"
             )
@@ -260,8 +268,9 @@ final class Chapter02Coordinator:
                     reason: "chapter02.gridFailure.completed"
                 )
             surfaces.closeAll(reason: "chapter02.womanExit")
-            state = .womanExitingWindow
-            womanWindow.requestExit()
+            try await startWindowCinematic(
+                reason: "chapter02.gridFailure.completed"
+            )
 
         case "chapter02.hamReceiver.rich.revelation.001":
             break
@@ -312,28 +321,6 @@ final class Chapter02Coordinator:
         )
     }
 
-    func womanWindowPresentationReady(
-        _ event: Chapter02WomanWindowReadyEvent
-    ) async throws {
-        guard event.chapterRunID == chapterRunID,
-              let checkpoint = await progress.currentSnapshot()?.checkpoint else {
-            throw Chapter02Error.staleEvent
-        }
-        if checkpoint == .blackoutBroadcastCompleted ||
-            checkpoint == .womanExitPending {
-            try await transferTitleLeaseToBattleAndExit()
-            return
-        }
-        await releaseTitleTransitionLease(
-            reason: "chapter02.windowPresentationReady"
-        )
-        surfaces.restore(
-            checkpoint: checkpoint,
-            reason: "chapter02.windowPresentationReady"
-        )
-        state = stateForReadyCheckpoint(checkpoint)
-    }
-
     func womanStagedForDoor(
         _ event: Chapter02WomanStagedForDoorEvent
     ) async throws {
@@ -362,6 +349,9 @@ final class Chapter02Coordinator:
     func womanWindowFailed(chapterRunID: UUID, message: String) async {
         guard chapterRunID == self.chapterRunID else { return }
         state = .failed(message)
+        await Chapter02BattleMusicActor.shared.stop(
+            reason: "chapter02.windowFailed"
+        )
         await releaseTitleTransitionLease(reason: "chapter02.windowFailed")
         if let battleLease {
             self.battleLease = nil
@@ -389,6 +379,9 @@ final class Chapter02Coordinator:
     func womanBattleFailed(chapterRunID: UUID, message: String) async {
         guard chapterRunID == self.chapterRunID else { return }
         state = .failed(message)
+        await Chapter02BattleMusicActor.shared.stop(
+            reason: "chapter02.battleFailed"
+        )
     }
 
     func update(
@@ -423,7 +416,7 @@ final class Chapter02Coordinator:
         state = .cancelled
     }
 
-    private func transferTitleLeaseToBattleAndExit() async throws {
+    private func transferTitleLeaseToBattleAndStartWindow() async throws {
         guard let titleTransitionLease else {
             throw Chapter02Error.staleEvent
         }
@@ -437,8 +430,9 @@ final class Chapter02Coordinator:
         battleLease = transferred
         battleInstanceID = instanceID
         surfaces.closeAll(reason: "chapter02.continue.womanExit")
-        state = .womanExitingWindow
-        womanWindow.requestExit()
+        try await startWindowCinematic(
+            reason: "chapter02.continue.womanExit"
+        )
     }
 
     private func beginDirectBattleRestore() async throws {
@@ -448,6 +442,11 @@ final class Chapter02Coordinator:
             throw Chapter02Error.staleEvent
         }
         pendingDirectBattleRestore = false
+        state = .loadingWomanRuntime
+        try await womanWindow.prepareHidden(
+            chapterRunID: chapterRunID,
+            completionSink: self
+        )
         try await womanWindow.stageHiddenRuntimeForDoor()
         let instanceID = UUID()
         let transferred = try await arbiter.transferStoryTransitionToBattle(
@@ -470,6 +469,36 @@ final class Chapter02Coordinator:
             battleLease: transferred,
             completionSink: self
         )
+    }
+
+    private func startWindowCinematic(reason: String) async throws {
+        guard let chapterRunID, battleLease != nil else {
+            throw Chapter02Error.staleEvent
+        }
+        state = .loadingWomanRuntime
+        do {
+            try await womanWindow.prepareHidden(
+                chapterRunID: chapterRunID,
+                completionSink: self
+            )
+            state = .womanExitingWindow
+            try womanWindow.activatePresentation()
+            print(
+                "[Chapter02] woman window cinematic started reason=\(reason) " +
+                    "spouseImports=1 turingActive=false"
+            )
+        } catch {
+            if let battleLease {
+                self.battleLease = nil
+                await arbiter.release(
+                    battleLease,
+                    reason: "\(reason).windowPreparationFailed"
+                )
+            }
+            battleInstanceID = nil
+            state = .failed(error.localizedDescription)
+            throw error
+        }
     }
 
     private func releaseTitleTransitionLease(reason: String) async {

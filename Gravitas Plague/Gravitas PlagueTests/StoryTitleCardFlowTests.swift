@@ -119,4 +119,16 @@ final class StoryTitleCardFlowTests: XCTestCase {
                 .stopsPrologueAftermathAfterFade
         )
     }
+
+    func testTerminalCardStopsChapterTwoBattleMusicOnlyAfterFade() {
+        XCTAssertTrue(
+            StoryTitleCardDestination.endOfAvailableContent(
+                completedEpisode: .chapter02
+            ).stopsChapter02BattleMusicAfterFade
+        )
+        XCTAssertFalse(
+            StoryTitleCardDestination.start(.chapter02)
+                .stopsChapter02BattleMusicAfterFade
+        )
+    }
 }

@@ -75,6 +75,18 @@ enum TuringFlowConversationRunner {
             )
         }
 
+        let musicOwnerID =
+            "chapter02.conversation.\(request.conversationRunID.uuidString)"
+        let ducksChapter02Music =
+            Chapter02BattleMusicInteractionPolicy.ducksConversation(
+                conversationKey: request.conversationKey
+            )
+        if ducksChapter02Music {
+            _ = await Chapter02BattleMusicActor.shared.duck(
+                ownerID: musicOwnerID
+            )
+        }
+
         let result = await runWithInteractionLease(
             request: request,
             interactionLease: interactionLease,
@@ -85,6 +97,11 @@ enum TuringFlowConversationRunner {
             interactionLease,
             reason: "conversationFinished"
         )
+        if ducksChapter02Music {
+            await Chapter02BattleMusicActor.shared.restore(
+                ownerID: musicOwnerID
+            )
+        }
         return result
     }
 

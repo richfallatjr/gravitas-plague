@@ -32,6 +32,19 @@ enum StoryTitleCardDestination: Sendable, Equatable {
             return false
         }
     }
+
+    var stopsChapter02BattleMusicAfterFade: Bool {
+        switch self {
+        case .advance(from: .chapter02, to: _),
+             .endOfAvailableContent(completedEpisode: .chapter02):
+            return true
+        case .start,
+             .continueFrom,
+             .advance,
+             .endOfAvailableContent:
+            return false
+        }
+    }
 }
 
 enum StoryTitleCardMenuMusicPolicy: String, Sendable, Equatable {

@@ -238,6 +238,18 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
             )
         }
 
+        if request.destination.stopsChapter02BattleMusicAfterFade {
+            await Chapter02BattleMusicActor.shared.stop(
+                reason:
+                    "chapter02TitleCardBlackoutFullyFaded.\(request.source.rawValue)"
+            )
+            print(
+                "[StoryTitleCard] Chapter 2 battle music stopped after " +
+                    "the next title card fully faded requestID=" +
+                    request.requestID.uuidString + " opacity=0.0"
+            )
+        }
+
         if disposition == .releaseAfterFade {
             await StoryInteractionArbiter.shared.release(
                 lease,
