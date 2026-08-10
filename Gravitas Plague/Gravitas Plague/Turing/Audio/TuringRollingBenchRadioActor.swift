@@ -130,7 +130,8 @@ actor TuringRollingBenchRadioBedActor:
         return try await startCue(
             ownerID: ownerID,
             fileURL: assets.cueURL,
-            label: "crankRadioEmergencyCue"
+            label: "crankRadioEmergencyCue",
+            gainDB: Float(TuringRollingBenchTuning.cueGainDB)
         )
     }
 
@@ -148,14 +149,16 @@ actor TuringRollingBenchRadioBedActor:
         return try await startCue(
             ownerID: ownerID,
             fileURL: fileURL,
-            label: label
+            label: label,
+            gainDB: 0
         )
     }
 
     private func startCue(
         ownerID: String,
         fileURL: URL,
-        label: String
+        label: String,
+        gainDB: Float
     ) async throws -> TuringAudioPlaybackHandle {
         guard activeOwnerID == ownerID,
               let endpoint else {
@@ -178,10 +181,7 @@ actor TuringRollingBenchRadioBedActor:
                 fileURL: fileURL,
                 kind: .radioCue,
                 label: label,
-                gainDB:
-                    Float(
-                        TuringRollingBenchTuning.cueGainDB
-                    ),
+                gainDB: gainDB,
                 loops: false
             )
         )
@@ -192,6 +192,7 @@ actor TuringRollingBenchRadioBedActor:
           handleID: \(handle.id.uuidString)
           file: \(fileURL.lastPathComponent)
           label: \(label)
+          gainDB: \(gainDB)
           ttsTriggerBoundary: alarmStarted
         """)
         return handle
