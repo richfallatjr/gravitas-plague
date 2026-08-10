@@ -18,6 +18,12 @@ final class TuringBroadcasterCrankRadioFlowRoute:
     private static let finalPSAScriptPointID =
         "chapter02.crankRadio.broadcaster.gravitasPSA.003"
 
+    nonisolated static func usesEmergencyDataBurst(
+        scriptPointID: String
+    ) -> Bool {
+        !scriptPointID.hasPrefix("chapter02.")
+    }
+
     convenience init() {
         self.init(
             radioBed:
@@ -148,10 +154,19 @@ final class TuringBroadcasterCrankRadioFlowRoute:
                     fileExtension: "mp3",
                     label: "chapter02GravitasOpeningJingle"
                 )
-            } else {
+            } else if Self.usesEmergencyDataBurst(
+                scriptPointID: descriptor.scriptPointID
+            ) {
                 handle = try await radioBed.startEmergencyCue(
                     ownerID: identity.playbackRunID
                 )
+            } else {
+                print(
+                    "[TuringBroadcasterFlow] Chapter 2 pre-alarm skipped " +
+                        "scriptPointID=\(descriptor.scriptPointID) " +
+                        "playbackRunID=\(identity.playbackRunID)"
+                )
+                return
             }
         } catch {
             if isFinalPSA(descriptor) {
@@ -178,6 +193,12 @@ final class TuringBroadcasterCrankRadioFlowRoute:
         identity: TuringFlowIdentity
     ) async throws {
         guard isInitialTransmission(descriptor) else {
+            return
+        }
+        guard isFinalPSA(descriptor) ||
+                Self.usesEmergencyDataBurst(
+                    scriptPointID: descriptor.scriptPointID
+                ) else {
             return
         }
         guard let handle =

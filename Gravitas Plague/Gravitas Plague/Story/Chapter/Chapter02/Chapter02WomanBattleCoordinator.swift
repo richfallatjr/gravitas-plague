@@ -405,6 +405,10 @@ final class Chapter02WomanBattleCoordinator {
                     retentionPolicy: .remove
                 )
                 await self.womanLease?.markReleased()
+                await Chapter02BattleMusicActor.shared
+                    .fadeToPostBattleLevel(
+                        reason: "chapter02WomanBattle.geometryReleased"
+                    )
                 try await self.door.closeForBattleAndUnloadPortal(
                     ownerID: battleInstanceID,
                     reason: "chapter02WomanBattle.enemyReleased"

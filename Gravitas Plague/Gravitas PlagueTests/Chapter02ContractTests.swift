@@ -170,6 +170,38 @@ final class Chapter02ContractTests: XCTestCase {
         }
     }
 
+    func testChapterTwoWalkieUsesPrologueStaticAndSendContracts() throws {
+        let store = TuringFlowDescriptorStore()
+        let rich = try store.require(
+            "chapter02.walkie.rich.script02"
+        )
+        let mike = try store.require(
+            "chapter02.walkie.bigMike.script03"
+        )
+        let prologueRich = try store.require("prologue.scriptPoint02")
+        let prologueMike = try store.require("prologue.scriptPoint03")
+
+        XCTAssertEqual(
+            rich.transmission.commSFX,
+            prologueRich.transmission.commSFX
+        )
+        XCTAssertTrue(
+            TuringRichWalkieFlowRoute
+                .usesIncomingStaticBeforePrerecording(
+                    scriptPointID: rich.scriptPointID
+                )
+        )
+        XCTAssertEqual(
+            mike.transmission.computeStart,
+            prologueMike.transmission.computeStart
+        )
+        XCTAssertEqual(
+            mike.transmission.fixedLeadInSeconds,
+            prologueMike.transmission.fixedLeadInSeconds
+        )
+        XCTAssertEqual(mike.transmission.fixedLeadInSeconds, 10)
+    }
+
     func testWindowAndBattleRecognitionCuesArePrerecordedOnly() throws {
         let store = TuringFlowDescriptorStore()
         for id in [
@@ -200,8 +232,32 @@ final class Chapter02ContractTests: XCTestCase {
         )
     }
 
+    func testChapterTwoCrankFlowsDoNotUseGenericPreAlarm() {
+        for scriptPointID in [
+            "chapter02.crankRadio.broadcaster.missingPersons.001",
+            "chapter02.crankRadio.broadcaster.gridFailure.002",
+            "chapter02.crankRadio.broadcaster.gravitasPSA.003"
+        ] {
+            XCTAssertFalse(
+                TuringBroadcasterCrankRadioFlowRoute
+                    .usesEmergencyDataBurst(scriptPointID: scriptPointID),
+                scriptPointID
+            )
+        }
+
+        XCTAssertTrue(
+            TuringBroadcasterCrankRadioFlowRoute
+                .usesEmergencyDataBurst(
+                    scriptPointID:
+                        "prologue.crankRadio.broadcaster.broadcast.001"
+                )
+        )
+    }
+
     func testChapterTwoBattleMusicUsesAuthoredLoopAndFinalCrankDucking() throws {
         XCTAssertEqual(Chapter02BattleMusicActor.targetGainDB, 0)
+        XCTAssertTrue(Chapter02BattleMusicActor.postBattleGainDB.isInfinite)
+        XCTAssertLessThan(Chapter02BattleMusicActor.postBattleGainDB, 0)
         XCTAssertEqual(
             Chapter02BattleMusicActor.resourcePath,
             "Turing/Audio/chapter02/battle-03-music.mp3"

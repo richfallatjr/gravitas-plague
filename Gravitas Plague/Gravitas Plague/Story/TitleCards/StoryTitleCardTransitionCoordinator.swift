@@ -191,6 +191,13 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
             descriptor: request.descriptor,
             originFromDevice: originFromDevice
         )
+        if request.destination.stopsChapter02BattleMusicAfterFade {
+            await Chapter02BattleMusicActor.shared
+                .fadeToFullLevelForTitleCard(
+                    reason:
+                        "chapter02TitleCardPresented.\(request.source.rawValue)"
+                )
+        }
         state = .presenting(request.requestID, request.descriptor.id)
         try await ContinuousClock().sleep(for: request.descriptor.holdSeconds)
         try requireCurrent(request.requestID)

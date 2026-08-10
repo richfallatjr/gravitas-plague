@@ -10,7 +10,7 @@
     "outputRoute": "walkieOutgoingGlobal",
     "computeStart": "foundationBeforePrerecording",
     "fillerMode": "continuousFromPrerecordingToGenerated",
-    "commSFX": { "openBeforePrerecording": false, "sendAfterGenerated": false, "sendingLeadInAfterGeneratedSeconds": null },
+    "commSFX": { "openBeforePrerecording": true, "sendAfterGenerated": true, "sendingLeadInAfterGeneratedSeconds": null },
     "fixedLeadInSeconds": null,
     "generationPipeline": null,
     "interactionSurface": "walkie",

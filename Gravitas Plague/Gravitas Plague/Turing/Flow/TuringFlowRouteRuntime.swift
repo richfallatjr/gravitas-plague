@@ -409,6 +409,12 @@ final class TuringRichWalkieFlowRoute:
     let outputRoute =
         TuringVoiceOutputContext.walkieOutgoingGlobal
 
+    nonisolated static func usesIncomingStaticBeforePrerecording(
+        scriptPointID: String
+    ) -> Bool {
+        scriptPointID == "chapter02.walkie.rich.script02"
+    }
+
     func validate(
         descriptor: TuringFlowDescriptor,
         character: TuringCharacterRuntimeDefinition
@@ -466,6 +472,17 @@ final class TuringRichWalkieFlowRoute:
         descriptor: TuringFlowDescriptor,
         identity: TuringFlowIdentity
     ) async throws {
+        if Self.usesIncomingStaticBeforePrerecording(
+            scriptPointID: descriptor.scriptPointID
+        ) {
+            await TuringWalkieCommsFXController.shared
+                .retainAmbientWalkieStatic(
+                    ownerID: incomingStaticOwnerID(identity: identity),
+                    reason:
+                        "flow.\(identity.flowInstanceID.uuidString).incomingStaticBeforeRich"
+                )
+        }
+
         guard descriptor.transmission.commSFX
             .openBeforePrerecording else {
             return
@@ -477,6 +494,23 @@ final class TuringRichWalkieFlowRoute:
             .playScriptedOpenComm(
                 reason:
                     "flow.\(identity.flowInstanceID.uuidString).richOpen"
+            )
+    }
+
+    func beginPrerecordingLeadInIfNeeded(
+        descriptor: TuringFlowDescriptor,
+        identity: TuringFlowIdentity
+    ) async throws {
+        guard Self.usesIncomingStaticBeforePrerecording(
+            scriptPointID: descriptor.scriptPointID
+        ) else {
+            return
+        }
+        await TuringWalkieCommsFXController.shared
+            .releaseAmbientWalkieStatic(
+                ownerID: incomingStaticOwnerID(identity: identity),
+                reason:
+                    "flow.\(identity.flowInstanceID.uuidString).richPrerecordingReady"
             )
     }
 
@@ -512,6 +546,16 @@ final class TuringRichWalkieFlowRoute:
         identity: TuringFlowIdentity,
         succeeded: Bool
     ) async {
+        if Self.usesIncomingStaticBeforePrerecording(
+            scriptPointID: descriptor.scriptPointID
+        ) {
+            await TuringWalkieCommsFXController.shared
+                .releaseAmbientWalkieStatic(
+                    ownerID: incomingStaticOwnerID(identity: identity),
+                    reason:
+                        "flow.\(identity.flowInstanceID.uuidString).richFinished"
+                )
+        }
         if succeeded == false {
             await TuringWalkieCommsFXController.shared
                 .stopAll(
@@ -519,6 +563,12 @@ final class TuringRichWalkieFlowRoute:
                         "flow.\(identity.flowInstanceID.uuidString).richFailed"
                 )
         }
+    }
+
+    private func incomingStaticOwnerID(
+        identity: TuringFlowIdentity
+    ) -> String {
+        "turingFlow.incomingStatic.\(identity.flowInstanceID.uuidString)"
     }
 }
 

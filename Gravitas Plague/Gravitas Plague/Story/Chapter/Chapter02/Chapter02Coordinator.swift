@@ -160,7 +160,7 @@ final class Chapter02Coordinator:
             try await beginDirectBattleRestore()
 
         case .womanBattleCompleted:
-            try await Chapter02BattleMusicActor.shared.startIfNeeded(
+            try await Chapter02BattleMusicActor.shared.startPostBattleIfNeeded(
                 reason: "chapter02.continue.postBattle"
             )
             await releaseTitleTransitionLease(
@@ -171,7 +171,7 @@ final class Chapter02Coordinator:
             )
 
         case .postBattleHamCompleted:
-            try await Chapter02BattleMusicActor.shared.startIfNeeded(
+            try await Chapter02BattleMusicActor.shared.startPostBattleIfNeeded(
                 reason: "chapter02.continue.gravitasPSA"
             )
             await releaseTitleTransitionLease(
