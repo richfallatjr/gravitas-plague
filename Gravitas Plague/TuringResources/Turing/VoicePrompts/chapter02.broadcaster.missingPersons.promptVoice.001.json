@@ -7,7 +7,7 @@
   "listenerProfileID": "rich.chapter02.present",
   "outputContext": "crankRadioSpatial",
   "conversationKey": "chapter02.object.crank_radio.missing_persons",
-  "intent": "I am reading a routine county bulletin while the pattern grows stranger with every address. Husbands and children are waking to open doors, empty beds, untouched cars, and no sign of struggle. The language remains orderly because the county still believes these women are lost somewhere inside a world that can be searched.",
+  "intent": "Three families reported the same detail before the disappearances: the missing woman stood awake at an exterior door, listening toward the darkness, although no one else could hear anything. County officials still classify the cases as stress-related wandering or sleepwalking. I add instructions to secure deadbolts, record the time of any unusual behavior, and report sightings without approaching. The tone remains calm enough to make the pattern more disturbing.",
   "emotion": "orderly and professional while the pattern grows increasingly strange",
   "communicationMedium": "public emergency radio",
   "promptTemplateID": "chapter02Broadcaster"

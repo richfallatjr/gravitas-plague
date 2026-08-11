@@ -7,7 +7,7 @@
   "listenerProfileID": "dad.chapter02.outbreakNight",
   "outputContext": "roomGlobal",
   "conversationKey": "chapter02.object.ham_receiver.dad_outbreak_night",
-  "intent": "I am finished pretending this is another repair Dad can complete. Fear and death are breaking through the county traffic, and every minute he stays makes the distance between us feel permanent. I need him to choose being my father over being the man everyone calls when something fails.",
+  "intent": "I have Dad’s coat and the spare service-truck keys in my hands, and I am already calculating the fastest route to the relay. The north bridge may still be open, but every report from the road is worse than the last. I am angry that strangers are receiving the final minutes that belong to us. Someone else can inherit the broken tower. I need Dad to choose the one promise only he can keep.",
   "emotion": "frightened, angry, and pleading through direct technical language",
   "communicationMedium": "ham radio",
   "promptTemplateID": "chapter02CharacterIntent"

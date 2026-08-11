@@ -7,6 +7,6 @@
   "listenerProfileID": "rich",
   "outputContext": "walkieSpatial",
   "conversationKey": "dialogue.big_mike.rich",
-  "intent": "You are asking if Rich can hear you. You are worried because you have not heard from Rich at your regular cadence and something may be wrong. Continue after the authored radio contact without repeating it. Give Rich a believable, direct reason to answer.",
+  "intent": "I have been checking on Rich every fifteen minutes since the county lines began failing, and he has now missed two check-ins. That is not like him. I need three answers before anything else: whether he is inside, whether the house is locked, and whether he is hurt. I keep my voice clipped and procedural because if I sound afraid, he will know how bad this feels.",
   "emotion": "worried, controlled, protective"
 }

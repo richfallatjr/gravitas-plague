@@ -7,7 +7,7 @@
   "listenerProfileID": "dad.chapter02.outbreakNight",
   "outputContext": "roomGlobal",
   "conversationKey": "chapter02.object.dad_frame.dad_disappeared",
-  "intent": "I am looking at the photograph after burying Dad. Mike found the truck but never found the man who drove it. I have spent every day since turning Dad’s last order into evidence for and against myself. Obedience kept me alive long enough to see what the Plague made of him.",
+  "intent": "Mike found Dad’s relay notebook on the passenger seat. The last complete entry listed several calls about women standing at open doors, and beneath it Dad had written only: “They all heard something.” The next line stopped halfway across the page. I have treated his order to keep the house as proof that I did the right thing, but the notebook makes me wonder whether he stayed because he had already recognized the beginning of the Plague.",
   "emotion": "grieving, reflective, and uncertain what obedience cost",
   "communicationMedium": "the room while looking at Dad's photograph",
   "promptTemplateID": "chapter02CharacterIntent"

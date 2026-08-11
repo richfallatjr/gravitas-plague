@@ -7,7 +7,7 @@
   "listenerProfileID": "rich.chapter02.outbreakNight",
   "outputContext": "hamReceiverSpatial",
   "conversationKey": "chapter02.object.ham_receiver.dad_outbreak_night",
-  "intent": "I know the relay may be the last useful thing I ever repair, and I know Rich may hear my decision as abandonment. I am asking him to survive the choice I am making. My love reaches him as an order because an order is the only protection I can still send across the dark.",
+  "intent": "If I return, Rich must verify that I am still myself before opening the house. I give him our private creek question: ask what scared the fish, and accept only the answer that Rich was talking too loud. He must keep the door locked even if the person outside has my face, my truck, and my voice. I make the instruction sound technical because I cannot say goodbye.",
   "emotion": "final, loving, and disciplined",
   "communicationMedium": "ham radio",
   "promptTemplateID": "chapter02CharacterIntent"

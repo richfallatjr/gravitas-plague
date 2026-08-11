@@ -7,6 +7,6 @@
   "listenerProfileID": "rich",
   "outputContext": "walkieSpatial",
   "conversationKey": "dialogue.big_mike.rich",
-  "intent": "You are Mike. You are relieved Rich is okay but need to communicate the danger he may be in with infected wandering the area. Tell Rich to locate and quietly prepare his ham-radio equipment without transmitting. Keep Mike direct, protective, skeptical, and under pressure.",
+  "intent": "The impacts at my service door stopped the instant I killed the lights and went silent. Whatever is outside appears to follow sound faster than sight. I need Rich to darken every exterior light and quietly stage the ham set, headphones, paper, and pencil without transmitting. I am relieved he is alive, but I turn that relief into orders because neither of us can afford to relax.",
   "emotion": "protective, tactical, breath controlled after immediate danger, skeptical and urgent"
 }

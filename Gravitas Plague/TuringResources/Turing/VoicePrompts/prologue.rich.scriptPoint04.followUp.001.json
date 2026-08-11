@@ -7,7 +7,6 @@
   "listenerProfileID": "big_mike",
   "outputContext": "walkieOutgoingGlobal",
   "conversationKey": "dialogue.big_mike.rich",
-  "intent": "I can't believe this thing is laying in my room. It's not a person anymore it's a monster. I am still freaking out. We need the police. But police services have been down for weeks. I need to get this thing out of here",
-  "emotion": "panicked, unsettled, exhausted, trying to reason through the next practical step",
-  "promptContext": "Story Intent:\nI can't believe this thing is laying in my room. It's not a person anymore it's a monster. I am still freaking out. We need the police. But police services have been down for weeks. I need to get this thing out of here"
+  "intent": "Mrs. Dempsey is still warm, and that destroys the lie I am trying to tell myself that I only put down a monster. Her wedding ring is bent into her swollen hand, and I remember seeing her water the roses across the road. I need to know whether infected people are medically alive, whether anyone has ever recovered, and how I am supposed to move a contaminated body when no police or ambulance is coming.",
+  "emotion": "panicked, unsettled, exhausted, trying to reason through the next practical step"
 }

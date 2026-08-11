@@ -7,7 +7,6 @@
   "listenerProfileID": "rich",
   "outputContext": "walkieSpatial",
   "conversationKey": "dialogue.big_mike.rich",
-  "intent": "I'm trying to support Rich but he may have messed up. I'll just let him know he did what he had to do. We both need to keep our eyes sharp and help each other out to stay safe. I am glad Rich is alright. Rich needs to get that ham radio functional so we can communicate better with the outside world which is completely the grid now.",
-  "emotion": "controlled, uneasy, protective, trying and failing to sound casual",
-  "promptContext": "Story Intent:\nI'm trying to support Rich but he may have messed up. I'll just let him know he did what he had to do. We both need to keep our eyes sharp and help each other out to stay safe. I am glad Rich is alright. Rich needs to get that ham radio functional so we can communicate better with the outside world which is completely the grid now."
+  "intent": "The source cut off before naming the hospital, and every rebroadcast seems to lose another detail, so I do not trust it blindly. It confirms enough to treat blood and saliva as dangerous. I tell Rich to cover his hands and face before moving Mrs. Dempsey, then give him something useful to do: a weak carrier is still pulsing beyond the local bands, and his ham set may reach whoever is operating it. I offer blunt friendship, not easy absolution.",
+  "emotion": "controlled, uneasy, protective, trying and failing to sound casual"
 }

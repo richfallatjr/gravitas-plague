@@ -8,6 +8,6 @@
   "outputContext": "crankRadioSpatial",
   "conversationKey": "object.crank_radio",
   "promptTemplateID": "broadcasterRadio",
-  "intent": "Continue the public emergency broadcast with additional verified guidance. Reinforce staying indoors, securing entrances, avoiding contact with aggressive animals or bodily fluids, monitoring this frequency, and waiting for clear verified instructions. Clearly state that no verified cause, cure, or broader operational details are available at this time. Do not address any individual listener or introduce private events, Gravitas Corporation, antigen drones, or unverified government operations.",
+  "intent": "I continue in an impersonal public-service tone with additional household containment guidance. List fever, severe sleeplessness, broken speech, fixation, and cloudy eyes as symptoms residents should record by time of onset. Aggressive pets should be isolated, exterior alarms and lights disabled, and familiar voices should not be used to lure an infected person closer. No verified cause, cure, or reliable recovery threshold is available.",
   "emotion": "calm, formal public-safety delivery with measured urgency"
 }

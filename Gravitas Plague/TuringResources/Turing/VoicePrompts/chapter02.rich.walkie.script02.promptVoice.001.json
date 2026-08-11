@@ -7,7 +7,7 @@
   "listenerProfileID": "big_mike.chapter02.outbreakNight",
   "outputContext": "walkieOutgoingGlobal",
   "conversationKey": "chapter02.dialogue.big_mike.rich.outbreak_night",
-  "intent": "Leaving may kill me, but staying feels like choosing Dad’s death from a safe room. His final words have already begun turning into guilt. I need Mike to give me a reason to remain that is stronger than fear.",
+  "intent": "Dad always takes the north road from the relay, and I have already put on my coat and found the spare keys. If Mike cannot give me a concrete reason to remain, I will leave within minutes. I am not asking him to calm me down. I am asking him to take responsibility for what happens if obedience becomes the reason Dad dies alone.",
   "emotion": "frightened, guilty, and resistant to staying behind",
   "communicationMedium": "walkie talkie",
   "promptTemplateID": "chapter02CharacterIntent"

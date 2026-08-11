@@ -7,7 +7,7 @@
   "listenerProfileID": "rich.chapter02.present",
   "outputContext": "hamReceiverSpatial",
   "conversationKey": "chapter02.object.ham_receiver.revelation",
-  "intent": "I have believed in the end times since childhood, but belief was easy when Revelation lived beyond the horizon. Now the horsemen feel less like symbols than the plain order of events: war, hunger, plague, and death. I believe Satan is moving through mankind’s appetite for ruin, and the world is being handed over piece by piece to the thing it served.",
+  "intent": "The most dangerous voice at the end of the world may not sound monstrous. It may sound calm, helpful, and certain. Gravitas keeps asking survivors to leave devices powered, location services active, and autonomous units unquestioned. I do not claim the corporation caused what happened, but I fear people will surrender judgment to anything that still answers. I ask Rich whether rescue is still rescue when it demands identity, location, and obedience.",
   "emotion": "grave, faithful, and careful to identify belief as belief",
   "communicationMedium": "ham radio",
   "promptTemplateID": "chapter02CatEye81"

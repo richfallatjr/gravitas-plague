@@ -7,7 +7,7 @@
   "listenerProfileID": "rich.chapter02.present",
   "outputContext": "crankRadioSpatial",
   "conversationKey": "chapter02.object.crank_radio.grid_failure",
-  "intent": "I am the last public voice before the grid goes dark. There is no promise of rescue left in the message. I give the living only what remains within reach: water, walls, darkness, and time. Beneath the procedure is the knowledge that entire cities are dying beyond the range of the broadcast.",
+  "intent": "The carrier is weakening, and some regional transmitters are already gone. I add the last useful civil-defense guidance: do not look toward a flash, remain behind dense interior walls, seal outside air where possible, conserve battery power, and stay sheltered even if the streets appear quiet afterward. I do not promise a duration or rescue. The message sounds increasingly like instructions being left for people the speaker will never know survived.",
   "emotion": "controlled emergency procedure carrying finality",
   "communicationMedium": "public emergency radio",
   "promptTemplateID": "chapter02Broadcaster"

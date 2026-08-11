@@ -211,7 +211,7 @@ final class TuringFlowResourceParityTests:
             promptContext.storyContext,
             """
             Story Intent:
-            I'm trying to support Rich but he may have messed up. I'll just let him know he did what he had to do. We both need to keep our eyes sharp and help each other out to stay safe. I am glad Rich is alright. Rich needs to get that ham radio functional so we can communicate better with the outside world which is completely the grid now.
+            The source cut off before naming the hospital, and every rebroadcast seems to lose another detail, so I do not trust it blindly. It confirms enough to treat blood and saliva as dangerous. I tell Rich to cover his hands and face before moving Mrs. Dempsey, then give him something useful to do: a weak carrier is still pulsing beyond the local bands, and his ham set may reach whoever is operating it. I offer blunt friendship, not easy absolution.
             """
         )
         XCTAssertFalse(
@@ -411,9 +411,10 @@ final class TuringFlowResourceParityTests:
         )
         XCTAssertTrue(
             prompt.contains(
-                "Paraphrase the Story Intent in {{characterDisplayName}}'s voice."
+                "Use the story material as direction for new dialogue, not wording to recite."
             )
         )
+        XCTAssertFalse(prompt.contains("Paraphrase the Story Intent"))
         XCTAssertTrue(
             prompt.hasPrefix(
                 "You are {{characterDisplayName}}."
@@ -461,6 +462,90 @@ final class TuringFlowResourceParityTests:
                 "{{voicePromptSeedIntent}}"
             )
         )
+    }
+
+    func testEveryPromptVoiceTemplatePlacesStoryMaterialAfterPRAndImmediatelyBeforeRules()
+        throws {
+        let templateIDs: [TuringVoicePromptTemplateID] = [
+            .characterIntent,
+            .roomObjectMemory,
+            .broadcasterRadio,
+            .cateye81HamReceiver,
+            .richHamReceiver,
+            .chapter02CharacterIntent,
+            .chapter02Broadcaster,
+            .chapter02CatEye81
+        ]
+
+        for templateID in templateIDs {
+            let url = try TuringResourceLoader.resourceURL(
+                resourcePath: templateID.resourcePath
+            )
+            let prompt = try String(contentsOf: url, encoding: .utf8)
+            let profileRange = try XCTUnwrap(
+                prompt.range(of: "{{characterBackstory}}"),
+                templateID.rawValue
+            )
+            let transcriptRange = try XCTUnwrap(
+                prompt.range(of: "{{prerecordingTranscript}}"),
+                templateID.rawValue
+            )
+            let storyRange = try XCTUnwrap(
+                prompt.range(of: "{{storyIntent}}"),
+                templateID.rawValue
+            )
+            let rulesRange = try XCTUnwrap(
+                prompt.range(of: "Rules:"),
+                templateID.rawValue
+            )
+            let schemaRange = try XCTUnwrap(
+                prompt.range(of: "Return this exact sparse JSON schema:"),
+                templateID.rawValue
+            )
+
+            XCTAssertLessThan(
+                profileRange.lowerBound,
+                transcriptRange.lowerBound,
+                templateID.rawValue
+            )
+            XCTAssertLessThan(
+                transcriptRange.lowerBound,
+                storyRange.lowerBound,
+                templateID.rawValue
+            )
+            XCTAssertLessThan(
+                storyRange.lowerBound,
+                rulesRange.lowerBound,
+                templateID.rawValue
+            )
+            XCTAssertLessThan(
+                rulesRange.lowerBound,
+                schemaRange.lowerBound,
+                templateID.rawValue
+            )
+
+            let betweenStoryAndRules = String(
+                prompt[storyRange.upperBound..<rulesRange.lowerBound]
+            )
+            XCTAssertTrue(
+                betweenStoryAndRules.trimmingCharacters(
+                    in: .whitespacesAndNewlines
+                ).isEmpty,
+                "\(templateID.rawValue) inserts context after story material"
+            )
+            XCTAssertEqual(
+                prompt.components(separatedBy: "{{storyIntent}}").count - 1,
+                1,
+                templateID.rawValue
+            )
+            XCTAssertEqual(
+                prompt.components(
+                    separatedBy: "{{prerecordingTranscript}}"
+                ).count - 1,
+                1,
+                templateID.rawValue
+            )
+        }
     }
 
     func testConversationPromptUsesOnlyApprovedContextInputs()

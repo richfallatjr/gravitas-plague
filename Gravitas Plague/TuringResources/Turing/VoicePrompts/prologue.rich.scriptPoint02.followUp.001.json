@@ -7,6 +7,6 @@
   "listenerProfileID": "big_mike",
   "outputContext": "walkieOutgoingGlobal",
   "conversationKey": "dialogue.big_mike.rich",
-  "intent": "Continue Rich's same outgoing transmission after the authored PR. Say that the receive side appears alive but the transmitter is still uncertain. Ask Big Mike what he personally saw and what stimulus the woman reacted to: sound, light, movement, or voice. Use no more than one brief dry observation. Do not repeat the whole PR, narrate Rich's actions, or write Big Mike's lines.",
+  "intent": "The receive meter is pulsing at a steady interval, so someone or something is still transmitting, but I am not keying the ham microphone until I know whether the signal is automated or monitored. I need Mike to separate what he personally witnessed from neighborhood rumor and tell me exactly what drew the woman’s attention. I hide my fear behind technical questions and one brief dry observation about our emergency plan never covering this.",
   "emotion": "relieved to hear Mike, tired, skeptical, quick, controlled, increasingly alert"
 }

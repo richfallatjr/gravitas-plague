@@ -7,7 +7,7 @@
   "listenerProfileID": "rich.chapter02.outbreakNight",
   "outputContext": "walkieSpatial",
   "conversationKey": "chapter02.dialogue.big_mike.rich.outbreak_night",
-  "intent": "I am hearing the end of the world in broken pieces and reducing it to the two facts I can still act upon: Rich is alive, and Dad is away from home. Fear makes me blunt. I need Rich’s situation before grief sends him out onto the road.",
+  "intent": "I have heard the launch warning from three sources, and none of them agree on which cities were hit. Cars are moving without headlights toward the south road, and a red glow is rising beyond the ridge without thunder. I do not speculate for Rich. I need to know whether he is sheltered, whether Dad has the service truck, and whether any route remains that I can reach before panic closes it.",
   "emotion": "blunt, urgent, and protective",
   "communicationMedium": "walkie talkie",
   "promptTemplateID": "chapter02CharacterIntent"
