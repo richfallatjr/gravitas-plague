@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter03.hamReceiver.rich.faith.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-ham-receiver-faith.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Cat Eye Eight-One, you need to hear this.\n\nMike killed a scavenger. Broke his neck.\n\nMinutes later, that same man came through my front door infected.\n\nI put him down again.\n\nHe was not bitten.\n\nHe died, and then he got back up.\n\nIf that happens to everybody, the bombs did not end the outbreak.\n\nThey made millions of bodies for it.\n\nI used to believe in God.\n\nA long time ago.\n\nI found my Bible tonight and opened Revelation.\n\nTell me straight.\n\nIs this what you think we are living through?",
+  "summary": "Rich asks CatEye81 whether the outbreak follows Revelation.",
+  "voicePromptIntent": "Continue using chapter03.rich.faith.promptVoice.001.",
+  "defaultEmotion": "shaken, searching, and direct"
+}

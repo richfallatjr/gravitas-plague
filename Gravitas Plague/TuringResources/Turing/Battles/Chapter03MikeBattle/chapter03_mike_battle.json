@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "battleID": "chapter03.mikeBattle.001",
+  "enemy": {
+    "storyEnemyID": "chapter03_infected_big_mike",
+    "characterID": "neighbor",
+    "sourceAsset": "neighbor_biped.usdz",
+    "idleDurationSeconds": 0.0,
+    "turnCount": 2,
+    "turnDegreesPerCompletion": 90.0,
+    "storyAcceptedHitCapacityMultiplier": 2,
+    "acceptedCapacityNumerator": 4,
+    "acceptedCapacityDenominator": 3
+  },
+  "playerConfirmedHitsToKill": 10,
+  "music": [
+    { "lane": "bigMikePhaseOne", "resourcePath": "Turing/Audio/chapter03/big-mike-battle-01-music.mp3", "gainDB": -7.0, "loop": false },
+    { "lane": "bigMikePhaseTwo", "resourcePath": "Turing/Audio/chapter03/big-mike-battle-02-music.mp3", "gainDB": -7.0, "loop": false }
+  ],
+  "richCues": [
+    { "cueID": "mikeRecognition", "prerecordingID": "chapter03.battle.mike.recognition.001", "gainDB": -5.0 },
+    { "cueID": "mikeSurrender", "prerecordingID": "chapter03.battle.mike.surrender.002", "gainDB": -5.0 }
+  ],
+  "surrenderMusicCrossfadeSeconds": 1.5,
+  "postSurrenderPrerecordingBeatSeconds": 1.0,
+  "fadeToBlackSeconds": 1.5
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter03.broadcaster.continuity.promptVoice.001",
+  "speakerID": "broadcaster",
+  "voiceID": "broadcaster_base_clone_v1",
+  "characterProfileID": "broadcaster",
+  "listenerProfileID": "rich.chapter02.present",
+  "outputContext": "crankRadioSpatial",
+  "conversationKey": "chapter03.object.crank_radio.continuity",
+  "intent": "I am the familiar, reassuring corporate voice calmly declaring Gravitas the sole authority over the surviving population. I introduce mandatory registration, continuous location tracking, biometric verification, restricted travel, ration control, private-property access, and force against resistance as reasonable safety measures. Unregistered people become ineligible for aid. I never sound hostile because Gravitas no longer needs to threaten anyone openly; it controls the only remaining path to help.",
+  "emotion": "calm, reassuring, and institutionally absolute",
+  "communicationMedium": "emergency broadcast radio",
+  "promptTemplateID": "chapter02Broadcaster"
+}

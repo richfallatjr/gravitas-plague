@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter03.battle.mike.surrender.002",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-mike-battle-02.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Alright, big buddy.\n\nThat’s it.\n\nThe door’s shut.\n\nYou’re in here with me, and you’re not reaching the road.\n\nI could keep swinging.\n\nMaybe I even put you down.\n\nThen tomorrow it’s another face I know and another excuse to keep breathing.\n\nI can’t do it anymore.\n\nDad.\n\nMrs. Dempsey.\n\nThat woman.\n\nNow you.\n\nFor what?\n\nOne more night alone while Gravitas tells me survival makes me good?\n\nFuck the house.\n\nFuck the medicine.\n\nFuck their war.\n\nI don’t want to kill you.\n\nI know what happens if I stop.\n\nI’m stopping anyway.\n\nCome on, Mike.\n\nI’m done.",
+  "summary": "Rich stops fighting and surrenders to Mike.",
+  "voicePromptIntent": "Battle PR only. No generated continuation.",
+  "defaultEmotion": "exhausted, grieving, and resolved"
+}

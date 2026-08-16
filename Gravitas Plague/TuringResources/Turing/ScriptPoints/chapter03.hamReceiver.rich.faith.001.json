@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "scriptPointID": "chapter03.hamReceiver.rich.faith.001",
+  "trigger": { "kind": "userPlay", "delaySeconds": 0 },
+  "transmission": {
+    "prerecordingID": "chapter03.hamReceiver.rich.faith.001",
+    "voicePromptID": "chapter03.rich.faith.promptVoice.001",
+    "characterID": "rich",
+    "conversationKey": "chapter03.object.ham_receiver.revelation",
+    "outputRoute": "roomGlobal",
+    "interactionSurface": "hamReceiver",
+    "computeStart": "foundationBeforePrerecording",
+    "fillerMode": "continuousFromPrerecordingToGenerated",
+    "commSFX": { "openBeforePrerecording": false, "sendAfterGenerated": false, "sendingLeadInAfterGeneratedSeconds": null },
+    "fixedLeadInSeconds": null,
+    "generationPipeline": null,
+    "backgroundMusic": null
+  },
+  "progression": { "nextScriptPointID": "chapter03.hamReceiver.cateye81.antichrist.002", "automaticAdvance": true, "interactionGateAfterCompletion": "closed" }
+}

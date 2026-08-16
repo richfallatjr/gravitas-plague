@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter03.cateye81.antichrist.promptVoice.002",
+  "speakerID": "cateye81",
+  "voiceID": "cateye81_base_clone_v1",
+  "characterProfileID": "cateye81.chapter02.present",
+  "listenerProfileID": "rich.chapter02.present",
+  "outputContext": "hamReceiverSpatial",
+  "conversationKey": "chapter03.object.ham_receiver.revelation",
+  "intent": "Gravitas now decides who receives food, medicine, transportation, information, and protection. Its broadcasts are beginning to assign priority to registered people and exclude anyone outside its system. I connect this to the Beast, the false prophet, the man of lawlessness, and the mark required to participate in society, but I present this as my spiritual interpretation rather than established fact. My Southern voice is grounded, intelligent, and alarmed—not theatrical or hysterical.",
+  "emotion": "grounded, intelligent, and deeply alarmed",
+  "communicationMedium": "ham radio",
+  "promptTemplateID": "chapter02CatEye81"
+}

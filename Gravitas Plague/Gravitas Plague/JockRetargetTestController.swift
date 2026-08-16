@@ -31,6 +31,7 @@ enum StoryPlayerContactDisposition: Sendable, Equatable {
 
 enum StoryEnemyDamageDisposition: Sendable, Equatable {
     case feedbackOnly
+    case headSnapAndImpactOnly
     case applyDamage
 }
 
@@ -118,6 +119,8 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         (() -> StoryEnemyDamageDisposition)?
     var onStoryAcceptedDamageChanged:
         ((StoryEnemyAcceptedDamageSnapshot) -> Void)?
+    var onStoryNonlethalDefeatThresholdReached:
+        ((StoryEnemyAcceptedDamageSnapshot) -> Void)?
     private var storyPlayerHitCallbackOwnsBudget = false
 
     private let visualOffsetEntity = Entity()
@@ -154,6 +157,9 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         JockSystemHeadPunchDamageRoller()
     private var lastStoryHeadPunchRollAtBySourceID: [UUID: TimeInterval] = [:]
     private var storyBattleInstanceIDForHitDiagnostics: UUID?
+    private var terminalAcceptedDamageDisposition:
+        JockTerminalAcceptedDamageDisposition = .playAuthoredDeath
+    private var nonlethalDefeatThresholdClaimed = false
 
     private struct ScriptedClipCompletionObserver {
         let token: UUID
@@ -321,6 +327,9 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         lastStoryHeadPunchRollAtBySourceID.removeAll(keepingCapacity: false)
         storyBattleInstanceIDForHitDiagnostics = nil
         onStoryEnemyDamageDisposition = nil
+        terminalAcceptedDamageDisposition = .playAuthoredDeath
+        nonlethalDefeatThresholdClaimed = false
+        onStoryNonlethalDefeatThresholdReached = nil
     }
 
     private func resetCombatRuntime(resetHitCount: Bool = true) {
@@ -1052,6 +1061,17 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         """)
     }
 
+    func configureTerminalAcceptedDamageDisposition(
+        _ disposition: JockTerminalAcceptedDamageDisposition
+    ) {
+        terminalAcceptedDamageDisposition = disposition
+        nonlethalDefeatThresholdClaimed = false
+
+        print(
+            "[JockTerminalDamage] configured enemyID=\(hordeID.uuidString) disposition=\(String(describing: disposition))"
+        )
+    }
+
     func prepareFreshHordeSpawn(
         enemyID: UUID,
         spawnIndex: Int,
@@ -1453,6 +1473,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     }
 
     func stopForBenchmarkPlayerDeath() {
+        resetIncomingPunchPolicyForDefaultRuntime()
         isVisible = false
         externalMotionDriven = false
         rootMotionEnabled = true
@@ -2555,6 +2576,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
     func forceCleanupFromHordeScene(
         reason: String
     ) {
+        resetIncomingPunchPolicyForDefaultRuntime()
         hordeLifecycleState = .cleanedUp
 
         enemyBodyCollisionParticipant = false
@@ -2627,7 +2649,10 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         onStoryPlayerAttackContact = nil
         onStoryEnemyDamageDisposition = nil
         onStoryAcceptedDamageChanged = nil
+        onStoryNonlethalDefeatThresholdReached = nil
         storyPlayerHitCallbackOwnsBudget = false
+        terminalAcceptedDamageDisposition = .playAuthoredDeath
+        nonlethalDefeatThresholdClaimed = false
 
         activeAttack = nil
         latestBrainFollowIntent = nil
@@ -3888,6 +3913,16 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
             headSnapClipID = triggerHeadSnapSubAnimation(for: event.side)
         }
 
+        if onStoryEnemyDamageDisposition?() == .headSnapAndImpactOnly {
+            print(
+                "[EnemyDamage] head snap and impact only " +
+                    "enemyID=\(hordeID.uuidString) " +
+                    "headSnapTriggered=\(headSnapClipID != nil) " +
+                    "damageApplied=false fullBodyReaction=false"
+            )
+            return
+        }
+
         switch incomingPunchPolicy {
         case .legacyHorde:
             handleLegacyHordeDamageHit(event)
@@ -4071,7 +4106,10 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
         let acceptedDamageHitCount = damageAccepted
             ? acceptedHitCount + 1
             : acceptedHitCount
-        let shouldDie = damageAccepted && acceptedDamageHitCount >= hitsToKill
+        let reachedTerminalDamage = damageAccepted && acceptedDamageHitCount >= hitsToKill
+        let interceptedAsNonlethalDefeat = reachedTerminalDamage &&
+            terminalAcceptedDamageDisposition == .interceptAsNonlethalDefeat
+        let shouldDie = reachedTerminalDamage && !interceptedAsNonlethalDefeat
         let finalDamage: JockHitDamageLevel = shouldDie ? .death : event.damageLevel
         let isStrongHit = attackConfiguration.escalationDamageLevels.contains(finalDamage)
         let authoredClipSide = authoredHitClipSide(
@@ -4107,8 +4145,7 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
             lastDamageAcceptedAtBySourceID[hordeID] = now
             acceptedHitCount = acceptedDamageHitCount
 
-            onStoryAcceptedDamageChanged?(
-                StoryEnemyAcceptedDamageSnapshot(
+            let snapshot = StoryEnemyAcceptedDamageSnapshot(
                     acceptedHitCount: acceptedHitCount,
                     acceptedHitCapacity: hitsToKill,
                     remainingAcceptedDamagePoints: max(
@@ -4117,7 +4154,13 @@ final class JockRetargetTestController: BattleEnemyRuntimeReleasable {
                     ),
                     isLethal: shouldDie
                 )
-            )
+            onStoryAcceptedDamageChanged?(snapshot)
+
+            if interceptedAsNonlethalDefeat,
+               !nonlethalDefeatThresholdClaimed {
+                nonlethalDefeatThresholdClaimed = true
+                onStoryNonlethalDefeatThresholdReached?(snapshot)
+            }
 
             print(
                 """

@@ -144,6 +144,12 @@ final class TuringStoryDoorBundleController:
     )
     private var battleInteractionLockOwnerIDs = Set<UUID>()
     private var battlePortalOwnerIDs = Set<UUID>()
+    private var battleOpeningHandlers: [
+        UUID: @MainActor (TuringStoryDoorBattleOpeningBeganEvent) -> Void
+    ] = [:]
+    private var emittedBattleOpeningEventByOwnerID: [
+        UUID: TuringStoryDoorBattleOpeningBeganEvent
+    ] = [:]
     private var portalRequiredByDoorState = false
     private var portalWorldLoaded = false
     private var portalLoadTask: Task<Void, Error>?
@@ -587,6 +593,40 @@ final class TuringStoryDoorBundleController:
         """)
     }
 
+    func observeBattleDoorOpening(
+        ownerID: UUID,
+        handler: @escaping @MainActor (
+            TuringStoryDoorBattleOpeningBeganEvent
+        ) -> Void
+    ) -> TuringStoryDoorBattleOpeningObservation {
+        battleOpeningHandlers[ownerID] = handler
+
+        if let prior = emittedBattleOpeningEventByOwnerID[ownerID] {
+            handler(prior)
+        } else {
+            switch battleDoorState {
+            case .opening:
+                emitBattleOpeningBeganIfNeeded(
+                    ownerID: ownerID,
+                    origin: .reconciledAlreadyOpening,
+                    reason: "observerInstalled"
+                )
+            case .open:
+                emitBattleOpeningBeganIfNeeded(
+                    ownerID: ownerID,
+                    origin: .reconciledAlreadyOpen,
+                    reason: "observerInstalled"
+                )
+            case .closed, .closing:
+                break
+            }
+        }
+
+        return TuringStoryDoorBattleOpeningObservation { [weak self] in
+            self?.battleOpeningHandlers.removeValue(forKey: ownerID)
+        }
+    }
+
     func acquireBattlePortal(
         ownerID: UUID,
         reason: String
@@ -636,6 +676,7 @@ final class TuringStoryDoorBundleController:
             """)
         } catch {
             battlePortalOwnerIDs.remove(ownerID)
+            clearBattleOpeningObservation(ownerID: ownerID)
             portalLifecycle.fail(error, lease: lease)
             reconcilePortalDemand(reason: "battleAcquireFailed.\(reason)")
             updateInteractionPresentation()
@@ -658,6 +699,7 @@ final class TuringStoryDoorBundleController:
             return
         }
         battlePortalOwnerIDs.remove(ownerID)
+        clearBattleOpeningObservation(ownerID: ownerID)
         portalRequiredByDoorState = false
         reconcilePortalDemand(reason: "battleRelease.\(reason)")
         if battlePortalOwnerIDs.isEmpty,
@@ -701,6 +743,13 @@ final class TuringStoryDoorBundleController:
             reason: "battleOpen.\(reason)"
         )
         updateInteractionPresentation()
+        emitBattleOpeningBeganIfNeeded(
+            ownerID: ownerID,
+            origin: reason.hasPrefix("playerDoorOpen")
+                ? .playerAcceptedOpen
+                : .coordinatorAutoOpen,
+            reason: reason
+        )
         try await animationController.openAndWait(
             reason: "Battle01.\(reason)"
         )
@@ -753,6 +802,7 @@ final class TuringStoryDoorBundleController:
             reason: "battleClose.\(reason)"
         )
         battlePortalOwnerIDs.remove(ownerID)
+        clearBattleOpeningObservation(ownerID: ownerID)
         portalRequiredByDoorState = false
         updateInteractionPresentation()
         unloadPortalWorld(
@@ -817,6 +867,8 @@ final class TuringStoryDoorBundleController:
         animationController = nil
         battleInteractionLockOwnerIDs.removeAll(keepingCapacity: false)
         battlePortalOwnerIDs.removeAll(keepingCapacity: false)
+        battleOpeningHandlers.removeAll(keepingCapacity: false)
+        emittedBattleOpeningEventByOwnerID.removeAll(keepingCapacity: false)
         portalRequiredByDoorState = false
         portalOpenRequestTask?.cancel()
         portalOpenRequestTask = nil
@@ -862,6 +914,35 @@ final class TuringStoryDoorBundleController:
               reason: \(reason)
             """
         )
+    }
+
+    private func emitBattleOpeningBeganIfNeeded(
+        ownerID: UUID,
+        origin: TuringStoryDoorBattleOpeningBeganEvent.Origin,
+        reason: String
+    ) {
+        guard battlePortalOwnerIDs.contains(ownerID),
+              emittedBattleOpeningEventByOwnerID[ownerID] == nil else {
+            return
+        }
+        let event = TuringStoryDoorBattleOpeningBeganEvent(
+            eventID: UUID(),
+            battleInstanceID: ownerID,
+            origin: origin,
+            reason: reason,
+            doorStateAtEmission: battleDoorState
+        )
+        emittedBattleOpeningEventByOwnerID[ownerID] = event
+        battleOpeningHandlers[ownerID]?(event)
+        print(
+            "[TuringDoorBattle] opening began eventID=\(event.eventID.uuidString) " +
+                "ownerID=\(ownerID.uuidString) origin=\(origin.rawValue) reason=\(reason)"
+        )
+    }
+
+    private func clearBattleOpeningObservation(ownerID: UUID) {
+        battleOpeningHandlers.removeValue(forKey: ownerID)
+        emittedBattleOpeningEventByOwnerID.removeValue(forKey: ownerID)
     }
 
     private func loadConfig() -> DoorConfig {

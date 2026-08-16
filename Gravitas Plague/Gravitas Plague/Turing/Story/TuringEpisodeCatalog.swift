@@ -57,23 +57,19 @@ enum TuringEpisodeCatalog {
             availability: .unlocked,
             stripArtwork: .chapter02Strip,
             contentRevision: "chapter02.v1"
+        ),
+        TuringEpisodeDescriptor(
+            id: .chapter03,
+            title: "Chapter 3",
+            subtitle: "Light at the End of the Tunnel",
+            scriptResourcePath: nil,
+            availability: .unlocked,
+            stripArtwork: .chapter03Strip,
+            contentRevision: "chapter03.v1"
         )
     ]
 
-    nonisolated static let chapter03PickerEpisode = TuringEpisodeDescriptor(
-        id: .chapter03,
-        title: "Chapter 3",
-        subtitle: "Light at the End of the Tunnel",
-        scriptResourcePath: nil,
-        availability: .unlocked,
-        stripArtwork: .chapter03Strip,
-        contentRevision: "chapter03.lightTunnelTest.v2"
-    )
-
-    // Chapter 3 is directly selectable for testing without changing the
-    // Chapter 2 end-of-content progression boundary.
-    nonisolated static let productionPickerEpisodes =
-        productionEpisodes + [chapter03PickerEpisode]
+    nonisolated static let productionPickerEpisodes = productionEpisodes
 
     nonisolated static let developmentEpisodes = productionPickerEpisodes
 

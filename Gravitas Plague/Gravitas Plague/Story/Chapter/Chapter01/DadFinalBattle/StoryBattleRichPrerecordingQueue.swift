@@ -1,6 +1,16 @@
 import AVFoundation
 import Foundation
 
+nonisolated struct StoryBattlePrerecordingStartedEvent:
+    Sendable,
+    Equatable
+{
+    let battleInstanceID: UUID
+    let cueID: String
+    let prerecordingID: String
+    let playbackID: UUID
+}
+
 @MainActor
 final class StoryBattleRichPrerecordingQueue: NSObject, AVAudioPlayerDelegate {
     enum QueueError: LocalizedError {
@@ -36,9 +46,12 @@ final class StoryBattleRichPrerecordingQueue: NSObject, AVAudioPlayerDelegate {
     private var requested = Set<CueKey>()
     private var activeCue: Cue?
     private var activePlayer: AVAudioPlayer?
+    private var activePlaybackID: UUID?
     private var cueWaiters: [CueKey: [CheckedContinuation<Void, Error>]] = [:]
     private var drainWaiters:
         [UUID: [UUID: CheckedContinuation<Void, Never>]] = [:]
+    var onActualPlaybackStarted:
+        ((StoryBattlePrerecordingStartedEvent) -> Void)?
 
     func reserve(_ cue: Cue) {
         let key = CueKey(
@@ -70,6 +83,18 @@ final class StoryBattleRichPrerecordingQueue: NSObject, AVAudioPlayerDelegate {
                 "cueID=\(cue.cueID) pendingCount=\(pending.count)"
         )
         reconcile()
+    }
+
+    func enqueueAndWait(_ cue: Cue) async throws {
+        let key = CueKey(
+            battleInstanceID: cue.battleInstanceID,
+            cueID: cue.cueID
+        )
+        try await withCheckedThrowingContinuation {
+            (continuation: CheckedContinuation<Void, Error>) in
+            cueWaiters[key, default: []].append(continuation)
+            enqueue(cue)
+        }
     }
 
     func releaseReservationAndEnqueue(
@@ -126,6 +151,7 @@ final class StoryBattleRichPrerecordingQueue: NSObject, AVAudioPlayerDelegate {
         if let battleInstanceID {
             resumeDrainWaiters(battleInstanceID: battleInstanceID)
         } else {
+            onActualPlaybackStarted = nil
             for id in drainWaiters.keys {
                 resumeDrainWaiters(battleInstanceID: id)
             }
@@ -146,9 +172,24 @@ final class StoryBattleRichPrerecordingQueue: NSObject, AVAudioPlayerDelegate {
             player.numberOfLoops = 0
             player.volume = Self.linearGain(decibels: next.gainDB)
             player.prepareToPlay()
-            guard player.play() else { throw QueueError.playbackDidNotStart }
+            let playbackID = UUID()
             activeCue = next
             activePlayer = player
+            activePlaybackID = playbackID
+            guard player.play() else {
+                activeCue = nil
+                activePlayer = nil
+                activePlaybackID = nil
+                throw QueueError.playbackDidNotStart
+            }
+            onActualPlaybackStarted?(
+                StoryBattlePrerecordingStartedEvent(
+                    battleInstanceID: next.battleInstanceID,
+                    cueID: next.cueID,
+                    prerecordingID: next.descriptor.prerecordingID,
+                    playbackID: playbackID
+                )
+            )
             print(
                 "[StoryBattleRichPR] actual start " +
                     "battleInstanceID=\(next.battleInstanceID.uuidString) " +
@@ -198,6 +239,7 @@ final class StoryBattleRichPrerecordingQueue: NSObject, AVAudioPlayerDelegate {
         guard let cue = activeCue else { return }
         activePlayer = nil
         activeCue = nil
+        activePlaybackID = nil
         let key = CueKey(
             battleInstanceID: cue.battleInstanceID,
             cueID: cue.cueID

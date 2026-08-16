@@ -6,6 +6,11 @@ enum JockIncomingPunchPolicy: Equatable, Sendable {
     case storyRobotTenPercent
 }
 
+enum JockTerminalAcceptedDamageDisposition: Equatable, Sendable {
+    case playAuthoredDeath
+    case interceptAsNonlethalDefeat
+}
+
 enum JockStoryHeadPunchDecision: String, Equatable, Sendable {
     case duplicateFeedbackOnly = "duplicate_feedback_only"
     case overlayOnly = "overlay_only"

@@ -71,10 +71,12 @@ match = re.search(
 )
 if not match:
     fail("could not inspect production episode catalog")
-if "id: .chapter03" in match.group(1):
-    fail("Chapter 3 must not alter the Chapter 2 production progression boundary")
-if "productionPickerEpisodes" not in catalog or "chapter03PickerEpisode" not in catalog:
-    fail("Chapter 3 direct picker entry is missing")
+if "id: .chapter03" not in match.group(1):
+    fail("production Chapter 3 entry is missing")
+if "productionPickerEpisodes = productionEpisodes" not in catalog:
+    fail("Chapter 3 picker and production progression catalogs diverged")
+if "static let current: Self = .authoredOpening" not in sources:
+    fail("Chapter 3 still starts from the former tunnel-only test root")
 if not PICKER_ART.is_file() or PICKER_ART.stat().st_size == 0:
     fail("Chapter 3 picker strip artwork is missing or empty")
 if not ANIMATED_ANGEL.is_file() or ANIMATED_ANGEL.stat().st_size == 0:
@@ -139,6 +141,19 @@ for required_visual in (
         fail(f"required circular portal contract is missing: {required_visual}")
 
 definition = json.loads(DEFINITION.read_text())
+definition_source = (
+    CHAPTER / "LightTunnel/Chapter03LightTunnelDefinition.swift"
+).read_text()
+if definition.get("sequenceID") != "chapter03.cinematic.lightTunnel.001":
+    fail("working tunnel sequence identity changed")
+if definition.get("contentRevision") != "chapter03.lightTunnelTest.v2":
+    fail("working tunnel content revision changed")
+if 'static let currentContentRevision = "chapter03.lightTunnelTest.v2"' not in definition_source:
+    fail("tunnel definition no longer owns its independent content revision")
+if "contentRevision == Self.currentContentRevision" not in definition_source:
+    fail("tunnel validation is not using the tunnel-owned content revision")
+if "contentRevision == Chapter03ProgressSnapshot.currentContentRevision" in definition_source:
+    fail("tunnel definition is incorrectly coupled to Chapter 3 save revision")
 if not MUSIC.is_file() or MUSIC.stat().st_size == 0:
     fail("canonical Chapter 3 music is missing or empty")
 if not ANGEL_PR.is_file() or ANGEL_PR.stat().st_size == 0:

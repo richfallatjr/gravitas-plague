@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter03.walkie.rich.connectsMen.002",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-walkie-connects-men.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Mike, listen carefully.\n\nI just killed an infected man inside my house.\n\nAsian. Shaved head. Biker jacket.\n\nHis neck was bent almost sideways when he came through the door.\n\nThat has to be your guy.\n\nHe didn’t wander here, either. He came straight for the house like he knew where the medicine was.\n\nMike, stop telling me it looks worse than it is.\n\nHow much blood did you lose?\n\nCan you stand?\n\nDo you need one of the antigen cartridges?\n\nTell me where you are and keep talking.\n\nI mean it.\n\nDo not go quiet on me.",
+  "summary": "Rich connects the biker to Mike's scavenger and demands the truth about Mike's wound.",
+  "voicePromptIntent": "Continue using chapter03.rich.connectsMen.promptVoice.002.",
+  "defaultEmotion": "terrified, analytical, and urgent"
+}

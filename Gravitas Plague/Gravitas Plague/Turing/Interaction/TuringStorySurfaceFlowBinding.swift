@@ -162,4 +162,31 @@ extension TuringStorySurfaceFlowBinding {
         conversationOutputRoute: .crankRadioSpatial,
         interactionSurface: .crankRadio
     )
+
+    static let chapter03WalkieScavenger = Self(
+        rootScriptPointID: "chapter03.walkie.bigMike.scavengerReport.001",
+        terminalScriptPointID: "chapter03.walkie.bigMike.fading.003",
+        conversationKey: "chapter03.dialogue.big_mike.rich.scavenger",
+        conversationCharacterID: "big_mike",
+        conversationOutputRoute: .walkieSpatial,
+        interactionSurface: .walkie
+    )
+
+    static let chapter03HamRevelation = Self(
+        rootScriptPointID: "chapter03.hamReceiver.rich.faith.001",
+        terminalScriptPointID: "chapter03.hamReceiver.cateye81.antichrist.002",
+        conversationKey: "chapter03.object.ham_receiver.revelation",
+        conversationCharacterID: "cateye81",
+        conversationOutputRoute: .hamReceiverSpatial,
+        interactionSurface: .hamReceiver
+    )
+
+    static let chapter03CrankContinuity = Self(
+        rootScriptPointID: "chapter03.crankRadio.broadcaster.continuity.001",
+        terminalScriptPointID: "chapter03.crankRadio.broadcaster.continuity.001",
+        conversationKey: "chapter03.object.crank_radio.continuity",
+        conversationCharacterID: "broadcaster",
+        conversationOutputRoute: .crankRadioSpatial,
+        interactionSurface: .crankRadio
+    )
 }

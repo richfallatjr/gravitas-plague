@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter03.bigMike.scavengerReport.promptVoice.001",
+  "speakerID": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "characterProfileID": "big_mike.chapter01.fourChances",
+  "listenerProfileID": "rich.chapter02.present",
+  "outputContext": "walkieSpatial",
+  "conversationKey": "chapter03.dialogue.big_mike.rich.scavenger",
+  "intent": "The knife went deeper than I admit, breathing hurts, and standing is becoming difficult. I treat the injury like an inconvenience because I need Rich calm and inside. The scavenger believed Gravitas drones were deliberately or carelessly leading desperate people toward medicine. I warn Rich not to reveal the antigen over any radio and refuse to let him come check on me.",
+  "emotion": "badly wounded, protective, and deliberately controlled",
+  "communicationMedium": "walkie talkie",
+  "promptTemplateID": "chapter02CharacterIntent"
+}

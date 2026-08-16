@@ -18,25 +18,53 @@ actor Chapter03ProgressStore {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        guard let data = defaults.data(forKey: Key.snapshot),
-              let decoded = try? Self.decode(data) else {
+        guard let data = defaults.data(forKey: Key.snapshot) else {
             return
         }
-        snapshot = decoded
+        do {
+            let decoded = try Self.decodeOrMigrate(data)
+            snapshot = decoded
+            if decoded.contentRevision == Chapter03ProgressSnapshot.currentContentRevision {
+                defaults.set(try JSONEncoder().encode(decoded), forKey: Key.snapshot)
+            }
+        } catch {
+            print("[Chapter03Progress] incompatible snapshot retained for diagnosis error=\(error.localizedDescription)")
+        }
     }
 
     nonisolated static func decode(
         _ data: Data
     ) throws -> Chapter03ProgressSnapshot {
+        try decodeOrMigrate(data)
+    }
+
+    nonisolated static func decodeOrMigrate(
+        _ data: Data,
+        now: Date = Date()
+    ) throws -> Chapter03ProgressSnapshot {
         let value = try JSONDecoder().decode(
             Chapter03ProgressSnapshot.self,
             from: data
         )
-        guard value.schemaVersion == Chapter03ProgressSnapshot.currentSchemaVersion,
-              value.contentRevision == Chapter03ProgressSnapshot.currentContentRevision else {
+        guard value.schemaVersion == Chapter03ProgressSnapshot.currentSchemaVersion else {
             throw Chapter03Error.incompatibleProgress
         }
-        return value
+        if value.contentRevision == Chapter03ProgressSnapshot.currentContentRevision {
+            return value
+        }
+        guard value.contentRevision == "chapter03.lightTunnelTest.v2" else {
+            throw Chapter03Error.incompatibleProgress
+        }
+        // The legacy revision represented a tunnel-only development route. It
+        // cannot prove completion of the production battles and device flows.
+        return Chapter03ProgressSnapshot(
+            schemaVersion: Chapter03ProgressSnapshot.currentSchemaVersion,
+            contentRevision: Chapter03ProgressSnapshot.currentContentRevision,
+            checkpoint: .root,
+            revision: value.revision + 1,
+            sourceEventIDs: value.sourceEventIDs,
+            committedAt: now
+        )
     }
 
     func currentSnapshot() -> Chapter03ProgressSnapshot? {

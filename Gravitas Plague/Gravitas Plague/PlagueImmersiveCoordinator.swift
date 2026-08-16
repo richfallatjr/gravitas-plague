@@ -686,7 +686,90 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 self?.spatialProvider.currentTrackedDeviceTransform()
             }
         )
+        let chapter03Surfaces = Chapter03SurfaceSequenceCoordinator(
+            walkie: turingStoryWalkieInteractionController,
+            hamReceiver: turingRollingBenchBundleController
+                .hamReceiverInteractionController,
+            crankRadio: turingRollingBenchBundleController
+                .crankRadioInteractionController
+        )
+        let chapter03RoomPresentation = Chapter03RoomPresentationController(
+            roots: [
+                "door": turingDoorBundleController.root,
+                "window": turingWindowBundleController.root,
+                "walkie": turingWalkieBundleController.root,
+                "rollingBench": turingRollingBenchBundleController.root,
+                "poster": wallPosterUIController.root
+            ],
+            adjustments: turingStoryPlacementAdjustmentCoordinator,
+            surfaces: chapter03Surfaces,
+            fingerprintProvider: { [weak self] in
+                guard let self else {
+                    throw Chapter03Error.storyStageNotEstablished
+                }
+                return try self.establishedLayoutFingerprint()
+            }
+        )
+        let chapter03BikerMusic = Chapter03BattleMusicController()
+        let chapter03MikeMusic = Chapter03BattleMusicController()
+        let chapter03BikerBattle = Chapter03BikerBattleCoordinator(
+            sceneRoot: root,
+            door: turingDoorBundleController,
+            music: chapter03BikerMusic,
+            onEnemyPrepared: { [weak self] enemyID, controller in
+                self?.prepareChapter03BattleAudioAndCallbacks(
+                    enemyID: enemyID,
+                    controller: controller,
+                    archetype: .biker,
+                    label: "biker"
+                )
+            },
+            onEnemyRemoved: { [weak self] enemyID in
+                self?.audioController.stopHostAudioSource(id: enemyID)
+            },
+            playerTargetProvider: { [weak self] in
+                self?.spatialProvider.currentPose()?.headPosition
+            },
+            onPlayerContactFeedback: { [weak self] amount in
+                self?.audioController.playRandomPlayerDamageHit()
+                self?.onPlayerDamaged?(amount)
+            },
+            onPlayerDeath: { [weak self] in
+                self?.handleChapter01PlayerDeath(source: .chapter03Biker)
+            }
+        )
+        let chapter03MikeBattle = Chapter03MikeBattleCoordinator(
+            sceneRoot: root,
+            door: turingDoorBundleController,
+            music: chapter03MikeMusic,
+            roomPresentation: chapter03RoomPresentation,
+            onEnemyPrepared: { [weak self] enemyID, controller in
+                self?.prepareChapter03BattleAudioAndCallbacks(
+                    enemyID: enemyID,
+                    controller: controller,
+                    archetype: .neighbor,
+                    label: "bigMike"
+                )
+            },
+            onEnemyRemoved: { [weak self] enemyID in
+                self?.audioController.stopHostAudioSource(id: enemyID)
+            },
+            playerTargetProvider: { [weak self] in
+                self?.spatialProvider.currentPose()?.headPosition
+            },
+            onPlayerContactFeedback: { [weak self] amount in
+                self?.audioController.playRandomPlayerDamageHit()
+                self?.onPlayerDamaged?(amount)
+            },
+            onPlayerDeath: { [weak self] in
+                self?.handleChapter01PlayerDeath(source: .chapter03Mike)
+            }
+        )
         let chapter03 = Chapter03Coordinator(
+            bikerBattle: chapter03BikerBattle,
+            surfaces: chapter03Surfaces,
+            mikeBattle: chapter03MikeBattle,
+            roomPresentation: chapter03RoomPresentation,
             lightTunnel: chapter03LightTunnel,
             layoutFingerprintProvider: { [weak self] in
                 guard let self else {
@@ -718,7 +801,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         let completionRouter = TuringStoryCompletionRouter(
             prologue: completionCoordinator,
             chapter01: chapterCoordinator,
-            chapter02: chapter02
+            chapter02: chapter02,
+            chapter03: chapter03
         )
         chapter01DadWindowCoordinator = dadWindow
         chapter01DadFinalBattleCoordinator = dadFinalBattle
@@ -1088,6 +1172,50 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         }
         controller.onAttackStarted = {
             print("[Chapter02WomanBattle] spouse attack animation started")
+        }
+    }
+
+    private func prepareChapter03BattleAudioAndCallbacks(
+        enemyID: UUID,
+        controller: JockRetargetTestController,
+        archetype: PlagueCharacterArchetype,
+        label: String
+    ) {
+        print(
+            "[Chapter03BattleLighting] room-side \(archetype.rawValue) uses automatic passthrough lighting explicitIBLReceiver=false"
+        )
+        audioController.attachHostAudioSource(
+            id: enemyID,
+            hostRootEntity: controller.rootEntity,
+            archetype: archetype,
+            headAudioEntity: controller.characterAudioEmitter,
+            breathingStartDelay: 0
+        )
+        controller.onPunchHit = { [weak self, weak controller] region in
+            guard let controller else { return }
+            self?.audioController.playConfirmedCharacterFaceHitSound(
+                archetype: archetype,
+                enemyID: controller.hordeBenchmarkID,
+                hitRegion: region,
+                sourceID: enemyID
+            )
+        }
+        controller.onCharacterDamageHit = { [weak self] in
+            self?.audioController.playCharacterDamageHit(
+                archetype: archetype,
+                enemyID: enemyID,
+                sourceID: enemyID
+            )
+        }
+        controller.onCharacterDeath = { [weak self] in
+            self?.audioController.playCharacterDeath(
+                archetype: archetype,
+                enemyID: enemyID,
+                sourceID: enemyID
+            )
+        }
+        controller.onAttackStarted = {
+            print("[Chapter03Battle] attack animation started label=\(label)")
         }
     }
 
@@ -2784,6 +2912,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             playerTargetWorldPosition: currentHeadPosition
         )
         chapter02Coordinator?.update(
+            deltaTime: TimeInterval(deltaTime),
+            playerTargetWorldPosition: currentHeadPosition
+        )
+        chapter03Coordinator?.update(
             deltaTime: TimeInterval(deltaTime),
             playerTargetWorldPosition: currentHeadPosition
         )
@@ -6589,7 +6721,7 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
                 blackoutRequestID: requestID,
                 resetProgress: true
             )
-            disposition = .destinationOwnsFullBlackAndLease
+            disposition = .transferredByDestination
 
         case .continueFrom(.prologue(let snapshot)):
             try await StoryInteractionArbiter.shared.setStableInteractionPolicy(
@@ -6665,6 +6797,18 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
                 )
                 disposition = .retainedByDestination
 
+            case (.chapter02, .chapter03):
+                guard let chapter03Coordinator else {
+                    throw StoryTitleCardError.missingRouteOwner
+                }
+                try await chapter03Coordinator.beginAtRoot(
+                    chapterRunID: requestID,
+                    transitionLease: transitionLease,
+                    blackoutRequestID: requestID,
+                    resetProgress: true
+                )
+                disposition = .transferredByDestination
+
             default:
                 throw StoryTitleCardError.invalidNaturalDestination
             }
@@ -6714,6 +6858,16 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
                 throw StoryTitleCardError.missingRouteOwner
             }
             try await chapter02Coordinator.titleCardDidFullyFade(
+                requestID: requestID
+            )
+
+        case .start(.chapter03),
+             .continueFrom(.chapter03),
+             .advance(from: .chapter02, to: .chapter03):
+            guard let chapter03Coordinator else {
+                throw StoryTitleCardError.missingRouteOwner
+            }
+            try await chapter03Coordinator.titleCardDidFullyFade(
                 requestID: requestID
             )
 

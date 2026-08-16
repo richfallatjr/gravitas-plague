@@ -1,6 +1,8 @@
 import Foundation
 
 nonisolated struct Chapter03LightTunnelDefinition: Codable, Sendable, Equatable {
+    static let currentContentRevision = "chapter03.lightTunnelTest.v2"
+
     let schemaVersion: Int
     let sequenceID: String
     let contentRevision: String
@@ -14,7 +16,7 @@ nonisolated struct Chapter03LightTunnelDefinition: Codable, Sendable, Equatable 
             throw Chapter03Error.definitionInvalid("schemaVersion must be 1")
         }
         guard sequenceID == "chapter03.cinematic.lightTunnel.001",
-              contentRevision == Chapter03ProgressSnapshot.currentContentRevision else {
+              contentRevision == Self.currentContentRevision else {
             throw Chapter03Error.definitionInvalid("identity or content revision mismatch")
         }
         try music.validate()

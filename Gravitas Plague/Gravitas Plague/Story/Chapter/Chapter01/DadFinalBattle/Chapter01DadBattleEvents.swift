@@ -26,12 +26,16 @@ enum Chapter01DadFinalBattleState: String, Sendable {
 enum ChapterPlayerDeathSource: String, Sendable {
     case robot
     case dadFinalBattle
+    case chapter03Biker
+    case chapter03Mike
 
     var confirmedHitsToKill: Int {
         switch self {
         case .robot:
             return 5
         case .dadFinalBattle:
+            return 10
+        case .chapter03Biker, .chapter03Mike:
             return 10
         }
     }

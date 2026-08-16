@@ -2,8 +2,8 @@ import XCTest
 @testable import Gravitas_Plague
 
 final class Chapter03DefinitionAndCatalogTests: XCTestCase {
-    func testProductionPickerExposesChapter03PlaceholderWithoutAdvancingChapter02() {
-        XCTAssertFalse(
+    func testProductionCatalogAdvancesChapter02IntoAuthoredChapter03() {
+        XCTAssertTrue(
             TuringEpisodeCatalog.productionEpisodes.contains {
                 $0.id == .chapter03
             }
@@ -13,7 +13,11 @@ final class Chapter03DefinitionAndCatalogTests: XCTestCase {
         }
         XCTAssertEqual(pickerEpisode?.stripArtwork, .chapter03Strip)
         XCTAssertTrue(pickerEpisode?.isUnlocked == true)
-        XCTAssertNil(TuringEpisodeCatalog.nextUnlockedEpisode(after: .chapter02))
+        XCTAssertEqual(
+            TuringEpisodeCatalog.nextUnlockedEpisode(after: .chapter02),
+            .chapter03
+        )
+        XCTAssertEqual(Chapter03RootPlan.current, .authoredOpening)
         XCTAssertEqual(
             StoryTitleCardCatalog.chapter03LightTunnelTest.title,
             "Chapter 3"
@@ -21,6 +25,41 @@ final class Chapter03DefinitionAndCatalogTests: XCTestCase {
         XCTAssertEqual(
             StoryTitleCardCatalog.chapter03LightTunnelTest.subtitle,
             "Light at the End of the Tunnel"
+        )
+    }
+
+    func testChapter03BattleDefinitionsUseOneShotMinusSevenDBMusic() throws {
+        let store = Chapter03BattleDefinitionStore()
+        let biker = try store.load(.biker)
+        let mike = try store.load(.mike)
+
+        XCTAssertEqual(biker.playerConfirmedHitsToKill, 10)
+        XCTAssertEqual(mike.playerConfirmedHitsToKill, 10)
+        XCTAssertEqual(biker.music.map(\.gainDB), [-7])
+        XCTAssertEqual(mike.music.map(\.gainDB), [-7, -7])
+        XCTAssertTrue((biker.music + mike.music).allSatisfy { !$0.loop })
+        XCTAssertEqual(mike.enemy.acceptedCapacityNumerator, 4)
+        XCTAssertEqual(mike.enemy.acceptedCapacityDenominator, 3)
+        XCTAssertEqual(mike.postSurrenderPrerecordingBeatSeconds, 1)
+        XCTAssertEqual(mike.fadeToBlackSeconds, 1.5)
+    }
+
+    func testMikeCapacityIsCeilingThirtyThreePercentAboveDadEquivalent() {
+        XCTAssertEqual(
+            Chapter03BattleEnemyFactory.mikeAcceptedHitCapacity(
+                dadEquivalentCapacity: 9,
+                numerator: 4,
+                denominator: 3
+            ),
+            12
+        )
+        XCTAssertEqual(
+            Chapter03BattleEnemyFactory.mikeAcceptedHitCapacity(
+                dadEquivalentCapacity: 10,
+                numerator: 4,
+                denominator: 3
+            ),
+            14
         )
     }
 

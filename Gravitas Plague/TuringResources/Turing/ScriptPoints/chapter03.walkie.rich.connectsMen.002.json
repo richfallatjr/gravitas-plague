@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "scriptPointID": "chapter03.walkie.rich.connectsMen.002",
+  "trigger": { "kind": "priorScriptPointCompleted", "delaySeconds": 0 },
+  "transmission": {
+    "prerecordingID": "chapter03.walkie.rich.connectsMen.002",
+    "voicePromptID": "chapter03.rich.connectsMen.promptVoice.002",
+    "characterID": "rich",
+    "conversationKey": "chapter03.dialogue.big_mike.rich.scavenger",
+    "outputRoute": "walkieOutgoingGlobal",
+    "interactionSurface": "walkie",
+    "computeStart": "foundationBeforePrerecording",
+    "fillerMode": "continuousFromPrerecordingToGenerated",
+    "commSFX": { "openBeforePrerecording": true, "sendAfterGenerated": true, "sendingLeadInAfterGeneratedSeconds": null },
+    "fixedLeadInSeconds": null,
+    "generationPipeline": null,
+    "backgroundMusic": null
+  },
+  "progression": { "nextScriptPointID": "chapter03.walkie.bigMike.fading.003", "automaticAdvance": true, "interactionGateAfterCompletion": "closed" }
+}

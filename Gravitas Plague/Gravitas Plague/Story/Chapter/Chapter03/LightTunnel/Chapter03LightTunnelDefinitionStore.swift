@@ -25,6 +25,18 @@ nonisolated struct Chapter03LightTunnelDefinitionStore {
 
     func loadProduction(bundle: Bundle = .main) async throws
         -> Chapter03LightTunnelResolvedDefinition {
+        guard bundle.url(
+            forResource: "heaven-sunrise",
+            withExtension: "exr"
+        ) != nil else {
+            throw Chapter03Error.heavenResourceMissing("heaven-sunrise.exr")
+        }
+        guard bundle.url(
+            forResource: "angel_posed_01",
+            withExtension: "usdz"
+        ) != nil else {
+            throw Chapter03Error.angelResourceMissing("angel_posed_01.usdz")
+        }
         let definition = try TuringResourceLoader.decodeResource(
             Chapter03LightTunnelDefinition.self,
             resourcePath: Self.resourcePath,

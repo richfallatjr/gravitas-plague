@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter03.walkie.bigMike.scavengerReport.001",
+  "speaker": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "voiceVariantID": "broadcast_reference_fast_01",
+  "audioFile": "pr-big-mike-reports-scavenger.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Rich, I had a situation over here.\n\nGuy came through the side gate hunting supplies. Asian, mid-thirties, shaved head, biker jacket.\n\nSaid he’d been following Gravitas drones because wherever those things land, somebody has medicine.\n\nI told him to move on.\n\nHe pulled a knife.\n\nI got behind him and broke his neck. He’s dead.\n\nHe got one shot in first, under my left rib.\n\nLooks worse than it is. I wrapped it tight.\n\nI’m gonna sit for a minute, catch my breath.\n\nYou stay inside, and keep the antigen off every open channel.",
+  "summary": "Mike reports killing a scavenger and conceals the severity of his wound.",
+  "voicePromptIntent": "Continue using chapter03.bigMike.scavengerReport.promptVoice.001.",
+  "defaultEmotion": "wounded, controlled, and protective"
+}

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter03.bigMike.fading.promptVoice.003",
+  "speakerID": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "characterProfileID": "big_mike.chapter01.fourChances",
+  "listenerProfileID": "rich.chapter02.present",
+  "outputContext": "walkieSpatial",
+  "conversationKey": "chapter03.dialogue.big_mike.rich.scavenger",
+  "intent": "I know the stab wound is probably mortal, and the dead scavenger reaching Rich tells me what may happen after I die. My thinking is slowing and my speech is becoming labored, but I refuse to panic over the radio. I pretend rest may help while making Rich promise not to trust my face, voice, or familiar behavior if my body reaches his house.",
+  "emotion": "fading, protective, and forcing out a final warning",
+  "communicationMedium": "walkie talkie",
+  "promptTemplateID": "chapter02CharacterIntent"
+}

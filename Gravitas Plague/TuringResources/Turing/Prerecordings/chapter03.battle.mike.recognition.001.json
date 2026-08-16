@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter03.battle.mike.recognition.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-mike-battle-01.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Mike?\n\nMike, stop.\n\nLook at me.\n\nIt’s Rich.\n\nYou told me not to open the door. I listened. I did exactly what you said.\n\nBut I need you, man.\n\nI cannot be the only one left in this house.\n\nNot after Dad.\n\nNot after everybody.\n\nPlease, give me something.\n\nSay my name.\n\nTell me I’m wrong.\n\nHit the wall. Point at the radio. Do anything that belongs to you.\n\nDo not make me fight you.\n\nI cannot put you down too.\n\nMike—stop.\n\nPlease.\n\nThis cannot be how you come home.",
+  "summary": "Rich recognizes Mike and begs him to show any sign of himself.",
+  "voicePromptIntent": "Battle PR only. No generated continuation.",
+  "defaultEmotion": "pleading, grief-stricken, and afraid"
+}

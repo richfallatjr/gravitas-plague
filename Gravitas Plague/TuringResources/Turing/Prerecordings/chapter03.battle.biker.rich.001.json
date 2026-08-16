@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter03.battle.biker.rich.001",
+  "speaker": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "voiceVariantID": "rich_reference_01",
+  "audioFile": "pr-rich-biker-battle.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Hey—whoa, whoa.\n\nWhat the fuck do you think you’re doing?\n\nYou kick in my door, charge me in my own house, and think I’m gonna back up?\n\nNo.\n\nThis is my house.\n\nI’ve buried people I knew because they came through that doorway. You’re just some bald asshole in a biker jacket who picked the wrong place.\n\nCome on.\n\nYou wanted inside so bad?\n\nGet in here. Let’s see what you’ve got.\n\nAnd what the hell happened to your neck?\n\nJesus.\n\nNo—don’t answer.\n\nI’m about to finish the job.",
+  "summary": "Rich confronts the infected biker entering his house.",
+  "voicePromptIntent": "Battle PR only. No generated continuation.",
+  "defaultEmotion": "angry, defensive, and committed"
+}

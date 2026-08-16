@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter03.hamReceiver.cateye81.antichrist.002",
+  "speaker": "cateye81",
+  "voiceID": "cateye81_base_clone_v1",
+  "voiceVariantID": "cateye81_reference_01",
+  "audioFile": "pr-cat-eye-81-revelations.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Rich, I think you found the piece we were missing.\n\nRevelation gives us the Beast—the Antichrist, the man of lawlessness—and a false prophet that convinces people the Beast is salvation.\n\nLook at Gravitas.\n\nGovernment, news, hospitals—gone.\n\nGravitas replaced all of them.\n\nIt controls the signal, the medicine, the drones, and the maps.\n\nEvery message says keep your device on, give us your location, obey the machine.\n\nGravitas is the Beast.\n\nThat calm voice is its false prophet.\n\nThe Antichrist does not need horns.\n\nIt can arrive as the only company still answering the phone.",
+  "summary": "CatEye81 interprets Gravitas through Revelation while distinguishing belief from proof.",
+  "voicePromptIntent": "Continue using chapter03.cateye81.antichrist.promptVoice.002.",
+  "defaultEmotion": "grounded, intelligent, and alarmed"
+}

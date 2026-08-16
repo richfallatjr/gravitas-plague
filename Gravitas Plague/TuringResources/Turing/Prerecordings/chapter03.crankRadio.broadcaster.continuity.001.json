@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter03.crankRadio.broadcaster.continuity.001",
+  "speaker": "broadcaster",
+  "voiceID": "broadcaster_base_clone_v1",
+  "voiceVariantID": "broadcaster_reference_fast_01",
+  "audioFile": "pr-broadcast-gravitas-continuity.mp3",
+  "transcriptMode": "manual",
+  "transcript": "This is the Gravitas Continuity Authority.\n\nCivil government, emergency services, and national broadcast systems are no longer operational.\n\nGravitas is now the sole verified coordinator of food, medicine, shelter, power, and transportation for the surviving population.\n\nKeep all registered devices powered.\n\nKeep location services and biometric identification enabled.\n\nTravel outside assigned continuity zones requires authorization.\n\nAutonomous Gravitas units may enter private property, inspect occupants, isolate symptomatic persons, and use force against interference.\n\nUnregistered individuals cannot be verified and may be denied treatment or protection.\n\nThere is no alternate rescue system.\n\nThere is no secondary authority.\n\nRemain calm.\n\nRemain connected.\n\nCompliance is survival.\n\nGravitas.\n\nTomorrow, delivered.",
+  "summary": "The Authority declares Gravitas the sole surviving civil coordinator.",
+  "voicePromptIntent": "Continue using chapter03.broadcaster.continuity.promptVoice.001.",
+  "defaultEmotion": "reassuring, formal, and absolute"
+}

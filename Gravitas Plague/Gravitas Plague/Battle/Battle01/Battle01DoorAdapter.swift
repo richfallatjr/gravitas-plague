@@ -26,6 +26,12 @@ protocol TuringStoryDoorBattleControlling: AnyObject {
         ownerID: UUID,
         reason: String
     )
+    func observeBattleDoorOpening(
+        ownerID: UUID,
+        handler: @escaping @MainActor (
+            TuringStoryDoorBattleOpeningBeganEvent
+        ) -> Void
+    ) -> TuringStoryDoorBattleOpeningObservation
     func acquireBattlePortal(ownerID: UUID, reason: String) async throws
     func releaseBattlePortal(ownerID: UUID, reason: String)
     func openForBattle(ownerID: UUID, reason: String) async throws

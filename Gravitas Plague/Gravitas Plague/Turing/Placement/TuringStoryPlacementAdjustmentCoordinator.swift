@@ -2,6 +2,11 @@ import Foundation
 import RealityKit
 import simd
 
+nonisolated struct TuringStoryAdjustmentSuspensionReceipt: Sendable, Equatable {
+    let activeScanID: String?
+    let hadVisibleBars: Bool
+}
+
 @MainActor
 final class TuringStoryPlacementAdjustmentCoordinator {
     private enum Tuning {
@@ -272,6 +277,39 @@ final class TuringStoryPlacementAdjustmentCoordinator {
         activeSlotByProp.removeAll()
         cache = TuringStoryPlacementCandidateCache(slotsByProp: [:])
         bars.hideAll(reason: reason)
+    }
+
+    func suspendPresentationForCinematic(
+        reason: String
+    ) -> TuringStoryAdjustmentSuspensionReceipt {
+        let receipt = TuringStoryAdjustmentSuspensionReceipt(
+            activeScanID: activeScanID,
+            hadVisibleBars: activeScanID != nil
+        )
+        if let drag = activeDrag {
+            adapters[drag.propID]?.cancelPlacementPreview()
+            activeDrag = nil
+        }
+        bars.hideAll(reason: reason)
+        print(
+            "[TuringPlacementAdjust] presentation suspended scanID=\(activeScanID ?? "none") reason=\(reason)"
+        )
+        return receipt
+    }
+
+    func restorePresentationAfterCinematic(
+        _ receipt: TuringStoryAdjustmentSuspensionReceipt,
+        reason: String
+    ) {
+        guard receipt.hadVisibleBars,
+              receipt.activeScanID == activeScanID else {
+            return
+        }
+        bars.show(activeSlots: activeSlotByProp)
+        refreshBarAvailability()
+        print(
+            "[TuringPlacementAdjust] presentation restored scanID=\(activeScanID ?? "none") reason=\(reason)"
+        )
     }
 
     private func step(

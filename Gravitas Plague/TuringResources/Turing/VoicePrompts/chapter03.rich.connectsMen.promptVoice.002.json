@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter03.rich.connectsMen.promptVoice.002",
+  "speakerID": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "characterProfileID": "rich.chapter02.present",
+  "listenerProfileID": "big_mike.chapter01.fourChances",
+  "outputContext": "walkieOutgoingGlobal",
+  "conversationKey": "chapter03.dialogue.big_mike.rich.scavenger",
+  "intent": "I realize the infected man I fought must be the scavenger Mike killed. His neck was already broken when he entered my house. I need Mike to describe the wound honestly, stay awake, and tell me exactly where he is. I suspect Mike is dying, but I hide that fear behind direct medical and practical questions because I cannot say the word yet.",
+  "emotion": "terrified, analytical, and refusing to let Mike fade",
+  "communicationMedium": "walkie talkie",
+  "promptTemplateID": "chapter02CharacterIntent"
+}

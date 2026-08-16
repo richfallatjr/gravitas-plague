@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "voicePromptID": "chapter03.rich.faith.promptVoice.001",
+  "speakerID": "rich",
+  "voiceID": "rich_base_clone_v1",
+  "characterProfileID": "rich.chapter02.present",
+  "listenerProfileID": "cateye81.chapter02.present",
+  "outputContext": "roomGlobal",
+  "conversationKey": "chapter03.object.ham_receiver.revelation",
+  "intent": "Death may release something already present inside every human being. That would connect Dad, the biker, the missing people, the nuclear exchange, and the collapse of civilization. I stopped believing because the ordinary world made faith feel unnecessary, but Revelation now resembles the order of events around me. Mike may be dying while I transmit, so I need CatEye81 to answer directly rather than comfort me.",
+  "emotion": "shaken, searching, and urgently direct",
+  "communicationMedium": "ham radio",
+  "promptTemplateID": "chapter02CharacterIntent"
+}

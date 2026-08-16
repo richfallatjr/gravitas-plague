@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "scriptPointID": "chapter03.crankRadio.broadcaster.continuity.001",
+  "trigger": { "kind": "userPlay", "delaySeconds": 0 },
+  "transmission": {
+    "prerecordingID": "chapter03.crankRadio.broadcaster.continuity.001",
+    "voicePromptID": "chapter03.broadcaster.continuity.promptVoice.001",
+    "characterID": "broadcaster",
+    "conversationKey": "chapter03.object.crank_radio.continuity",
+    "outputRoute": "crankRadioSpatial",
+    "interactionSurface": "crankRadio",
+    "computeStart": "foundationBeforePrerecording",
+    "fillerMode": "none",
+    "commSFX": { "openBeforePrerecording": false, "sendAfterGenerated": false, "sendingLeadInAfterGeneratedSeconds": null },
+    "fixedLeadInSeconds": null,
+    "generationPipeline": null,
+    "backgroundMusic": null
+  },
+  "progression": { "nextScriptPointID": null, "automaticAdvance": false, "interactionGateAfterCompletion": "closed" }
+}

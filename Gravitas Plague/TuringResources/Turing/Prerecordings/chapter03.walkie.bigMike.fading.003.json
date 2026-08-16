@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "prerecordingID": "chapter03.walkie.bigMike.fading.003",
+  "speaker": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "voiceVariantID": "broadcast_reference_fast_01",
+  "audioFile": "pr-big-mike-dont-open-door.mp3",
+  "transcriptMode": "manual",
+  "transcript": "Yeah.\n\nThat’s him.\n\nSame jacket. Same head.\n\nBut, Rich... he was gone.\n\nI felt his neck break. He dropped and never took another breath.\n\nI don’t understand how he got to you.\n\nI can’t get up. Every time I move, the bleeding starts again.\n\nNo antigen.\n\nDon’t waste it on a knife wound.\n\nListen to me.\n\nIf I come to your door, you do not answer.\n\nI don’t care what I say or how much I sound like me.\n\nKeep it shut.\n\nI’m just gonna rest a minute.\n\nI’ll call you.",
+  "summary": "Mike admits he cannot stand and warns Rich not to trust him at the door.",
+  "voicePromptIntent": "Continue using chapter03.bigMike.fading.promptVoice.003.",
+  "defaultEmotion": "fading, controlled, and protective"
+}
