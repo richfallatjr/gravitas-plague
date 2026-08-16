@@ -57,6 +57,7 @@ final class Chapter03LightTunnelPresenter {
         let portalWorld = Entity()
         portalWorld.name = "Chapter03HeavenPortalWorld"
         portalWorld.components.set(WorldComponent())
+        PlagueNativeBloomInstaller.installStrictBloom(on: portalWorld)
 
         let portalDome = makeInsideFacingDome(
             resources: resources,
@@ -75,6 +76,7 @@ final class Chapter03LightTunnelPresenter {
         let emitter = Entity()
         emitter.name = "Chapter03AngelLightAudioEmitter"
         emitter.position = angel.root.position
+        emitter.components.set(SpatialAudioComponent())
         portalWorld.addChild(emitter)
 
         let aperture = try makeCircularPortalAperture(
@@ -106,6 +108,7 @@ final class Chapter03LightTunnelPresenter {
               startDistanceMeters: \(definition.startDistanceMeters)
               endDistanceMeters: \(definition.endDistanceMeters)
               approachDurationSeconds: \(definition.approachDurationSeconds)
+              postApproachTravelMeters: \(definition.postApproachTravelMeters)
               angelInsideOffsetMeters: \(definition.angelInsideOffsetMeters)
               rectangularFrames: 0
               whiteWash: 0
@@ -125,21 +128,41 @@ final class Chapter03LightTunnelPresenter {
         }
         let visual = definition.visual
         let boundedTime = max(0, min(mediaTimeSeconds, durationSeconds))
-        let progress = Float(
+        let approachProgress = Float(
             min(1, boundedTime / visual.approachDurationSeconds)
         )
-        let distance = visual.startDistanceMeters +
-            (visual.endDistanceMeters - visual.startDistanceMeters) * progress
+        let initialDistance = visual.startDistanceMeters +
+            (visual.endDistanceMeters - visual.startDistanceMeters) *
+            approachProgress
+        let remainingDuration = max(
+            0,
+            durationSeconds - visual.approachDurationSeconds
+        )
+        let postApproachProgress: Float
+        if remainingDuration > 0, boundedTime > visual.approachDurationSeconds {
+            postApproachProgress = Float(
+                min(
+                    1,
+                    (boundedTime - visual.approachDurationSeconds) /
+                        remainingDuration
+                )
+            )
+        } else {
+            postApproachProgress = 0
+        }
+        let distance = initialDistance -
+            visual.postApproachTravelMeters * postApproachProgress
         portalTravelRoot.position = SIMD3<Float>(0, 0, -distance)
 
         let distanceBucket = Int(distance.rounded(.down))
         if distanceBucket != lastLoggedDistanceBucket,
-           distanceBucket % 5 == 0 || progress >= 1 {
+           distanceBucket % 5 == 0 || postApproachProgress >= 1 {
             lastLoggedDistanceBucket = distanceBucket
             print(
                 "[Chapter03LightTunnel] circular portal approach " +
                     "mediaTime=\(String(format: "%.2f", boundedTime)) " +
-                    "progress=\(String(format: "%.3f", progress)) " +
+                    "approachProgress=\(String(format: "%.3f", approachProgress)) " +
+                    "postApproachProgress=\(String(format: "%.3f", postApproachProgress)) " +
                     "distanceMeters=\(String(format: "%.3f", distance))"
             )
         }
@@ -159,6 +182,9 @@ final class Chapter03LightTunnelPresenter {
         root?.removeFromParent()
         root = nil
         portalTravelRoot = nil
+        if let portalWorld {
+            PlagueNativeBloomInstaller.removeBloom(from: portalWorld)
+        }
         portalWorld = nil
         portalAperture = nil
         portalDome = nil

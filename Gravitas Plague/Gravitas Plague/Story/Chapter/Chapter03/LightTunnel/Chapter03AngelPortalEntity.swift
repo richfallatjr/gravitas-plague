@@ -4,27 +4,34 @@ import simd
 
 @MainActor
 final class Chapter03AngelPortalEntity {
+    private enum PresentationVariant: String {
+        case staticPosed
+        case animatedFloat
+    }
+
     private enum Layout {
-        static let resourceName = "angel_biped"
-        static let clipID = "angel_float_pose_01"
-        static let authoredFacingCorrectionRadians: Float = .pi
+        static let activeVariant: PresentationVariant = .staticPosed
+        static let staticResourceName = "angel_posed_01"
+        static let animatedResourceName = "angel_biped"
+        static let animatedClipID = "angel_float_pose_01"
+        static let authoredFacingCorrectionRadians: Float = 0
     }
 
     let root: Entity
 
     private let visual: Entity
-    private let modelEntity: ModelEntity
-    private let poseDriver: JockRuntimeDriver
+    private let presentationVariant: PresentationVariant
+    private let poseDriver: JockRuntimeDriver?
 
     private init(
         root: Entity,
         visual: Entity,
-        modelEntity: ModelEntity,
-        poseDriver: JockRuntimeDriver
+        presentationVariant: PresentationVariant,
+        poseDriver: JockRuntimeDriver?
     ) {
         self.root = root
         self.visual = visual
-        self.modelEntity = modelEntity
+        self.presentationVariant = presentationVariant
         self.poseDriver = poseDriver
     }
 
@@ -32,17 +39,90 @@ final class Chapter03AngelPortalEntity {
         insideOffsetMeters: Float,
         rootYOffsetMeters: Float
     ) async throws -> Chapter03AngelPortalEntity {
+        switch Layout.activeVariant {
+        case .staticPosed:
+            return try await loadStaticPosed(
+                insideOffsetMeters: insideOffsetMeters,
+                rootYOffsetMeters: rootYOffsetMeters
+            )
+        case .animatedFloat:
+            return try await loadAnimatedFloat(
+                insideOffsetMeters: insideOffsetMeters,
+                rootYOffsetMeters: rootYOffsetMeters
+            )
+        }
+    }
+
+    private static func loadStaticPosed(
+        insideOffsetMeters: Float,
+        rootYOffsetMeters: Float
+    ) async throws -> Chapter03AngelPortalEntity {
         guard let assetURL = Bundle.main.url(
-            forResource: Layout.resourceName,
+            forResource: Layout.staticResourceName,
             withExtension: "usdz"
         ) else {
             throw Chapter03Error.angelResourceMissing(
-                "\(Layout.resourceName).usdz"
+                "\(Layout.staticResourceName).usdz"
             )
         }
 
         let visual = try await Entity(contentsOf: assetURL)
-        visual.name = "Chapter03AngelVisual"
+        let emissionReport = try Chapter03AngelEmissionApplier.apply(
+            to: visual,
+            assetName: assetURL.lastPathComponent
+        )
+        visual.name = "Chapter03StaticPosedAngelVisual"
+        stripInteraction(from: visual)
+        visual.scale = SIMD3<Float>(repeating: 1)
+        visual.position = .zero
+
+        let root = makePortalRoot(
+            visual: visual,
+            insideOffsetMeters: insideOffsetMeters,
+            rootYOffsetMeters: rootYOffsetMeters
+        )
+
+        print(
+            """
+            [Chapter03Angel] static portal pose installed
+              asset=\(assetURL.lastPathComponent)
+              authoredScale=1
+              portalLocalPosition=\(root.position)
+              runtimeEmissionIntensity=\(Chapter03AngelEmissionApplier.targetIntensity)
+              emissiveMaterialsUpdated=\(emissionReport.emissiveMaterialsUpdated)
+              yawDegrees=0
+              animatedMachineryRetained=true
+              animatedMachineryLoaded=false
+              transitionsToPassthrough=false
+            """
+        )
+
+        return Chapter03AngelPortalEntity(
+            root: root,
+            visual: visual,
+            presentationVariant: .staticPosed,
+            poseDriver: nil
+        )
+    }
+
+    // Retained as the ready-to-reactivate animated variant. The active static
+    // path never calls this method and therefore does not create a rig adapter,
+    // runtime driver, or prepared animation clip.
+    private static func loadAnimatedFloat(
+        insideOffsetMeters: Float,
+        rootYOffsetMeters: Float
+    ) async throws -> Chapter03AngelPortalEntity {
+        guard let assetURL = Bundle.main.url(
+            forResource: Layout.animatedResourceName,
+            withExtension: "usdz"
+        ) else {
+            throw Chapter03Error.angelResourceMissing(
+                "\(Layout.animatedResourceName).usdz"
+            )
+        }
+
+        let visual = try await Entity(contentsOf: assetURL)
+        visual.name = "Chapter03AnimatedAngelVisual"
         stripInteraction(from: visual)
 
         guard let modelEntity = firstSkinnedModelEntity(in: visual) else {
@@ -66,10 +146,10 @@ final class Chapter03AngelPortalEntity {
 
         let manifest = try JockAnimationLibraryLoader.loadManifest()
         guard let summary = manifest.clips.first(where: {
-            $0.clipID == Layout.clipID && $0.approvedForRuntime
+            $0.clipID == Layout.animatedClipID && $0.approvedForRuntime
         }) else {
             throw Chapter03Error.angelPoseUnavailable(
-                "missing approved clip \(Layout.clipID)"
+                "missing approved clip \(Layout.animatedClipID)"
             )
         }
         let poseClip = try JockAnimationLibraryLoader.loadClip(summary: summary)
@@ -93,6 +173,46 @@ final class Chapter03AngelPortalEntity {
         visual.scale = SIMD3<Float>(repeating: 1)
         visual.position = .zero
 
+        let root = makePortalRoot(
+            visual: visual,
+            insideOffsetMeters: insideOffsetMeters,
+            rootYOffsetMeters: rootYOffsetMeters
+        )
+
+        print(
+                "[Chapter03Angel] portal pose installed " +
+                "asset=\(assetURL.lastPathComponent) " +
+                "clip=\(Layout.animatedClipID) " +
+                "authoredScale=1 " +
+                "portalLocalPosition=\(root.position) " +
+                "yawDegrees=0 transitionsToPassthrough=false"
+        )
+
+        return Chapter03AngelPortalEntity(
+            root: root,
+            visual: visual,
+            presentationVariant: .animatedFloat,
+            poseDriver: poseDriver
+        )
+    }
+
+    func release(reason: String) {
+        let preparedClipCount = poseDriver?.releasePreparedRuntime(
+            reason: "chapter03Angel.\(reason)"
+        ) ?? 0
+        root.removeFromParent()
+        print(
+            "[Chapter03Angel] portal pose released " +
+                "variant=\(presentationVariant.rawValue) " +
+                "reason=\(reason) preparedClipCount=\(preparedClipCount)"
+        )
+    }
+
+    private static func makePortalRoot(
+        visual: Entity,
+        insideOffsetMeters: Float,
+        rootYOffsetMeters: Float
+    ) -> Entity {
         let root = Entity()
         root.name = "Chapter03PortalAngelRoot"
         root.position = SIMD3<Float>(
@@ -105,33 +225,7 @@ final class Chapter03AngelPortalEntity {
             axis: SIMD3<Float>(0, 1, 0)
         )
         root.addChild(visual)
-
-        print(
-                "[Chapter03Angel] portal pose installed " +
-                "asset=\(assetURL.lastPathComponent) " +
-                "clip=\(Layout.clipID) " +
-                "authoredScale=1 " +
-                "portalLocalPosition=\(root.position) " +
-                "yawDegrees=180 transitionsToPassthrough=false"
-        )
-
-        return Chapter03AngelPortalEntity(
-            root: root,
-            visual: visual,
-            modelEntity: modelEntity,
-            poseDriver: poseDriver
-        )
-    }
-
-    func release(reason: String) {
-        let preparedClipCount = poseDriver.releasePreparedRuntime(
-            reason: "chapter03Angel.\(reason)"
-        )
-        root.removeFromParent()
-        print(
-            "[Chapter03Angel] portal pose released " +
-                "reason=\(reason) preparedClipCount=\(preparedClipCount)"
-        )
+        return root
     }
 
     private static func firstSkinnedModelEntity(in entity: Entity) -> ModelEntity? {

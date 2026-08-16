@@ -17,6 +17,8 @@ enum Chapter03Error: LocalizedError {
     case angelPoseUnavailable(String)
     case heavenResourceMissing(String)
     case heavenResourceInvalid(String)
+    case angelPrerecordingResourceMissing(String)
+    case angelPrerecordingInvalid(String)
 
     var errorDescription: String? {
         switch self {
@@ -52,6 +54,10 @@ enum Chapter03Error: LocalizedError {
             return "The Chapter 3 portal environment is missing: \(resource)."
         case .heavenResourceInvalid(let resource):
             return "The Chapter 3 portal environment could not be decoded: \(resource)."
+        case .angelPrerecordingResourceMissing(let resource):
+            return "The Chapter 3 Angel recording is missing: \(resource)."
+        case .angelPrerecordingInvalid(let reason):
+            return "The Chapter 3 Angel recording is invalid: \(reason)."
         }
     }
 }

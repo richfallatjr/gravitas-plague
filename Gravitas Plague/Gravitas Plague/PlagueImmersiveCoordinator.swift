@@ -676,9 +676,11 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             cinematicWorld: cinematicWorldPresentationCoordinator
         )
         let chapter03Music = Chapter03LightTunnelMusicController()
+        let chapter03AngelPrerecording = StorySpatialPrerecordingPlayer()
         let chapter03LightTunnel = Chapter03LightTunnelCoordinator(
             presenter: chapter03Presenter,
             music: chapter03Music,
+            angelPrerecording: chapter03AngelPrerecording,
             cinematicWorld: cinematicWorldPresentationCoordinator,
             deviceTransformProvider: { [weak self] in
                 self?.spatialProvider.currentTrackedDeviceTransform()

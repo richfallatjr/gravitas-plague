@@ -24,7 +24,7 @@ final class Chapter03DefinitionAndCatalogTests: XCTestCase {
         )
     }
 
-    func testCircularPortalDefinitionAndSafetyBoundsValidate() throws {
+    func testCircularPortalAndPortalArrivalAngelDefinitionValidate() throws {
         let definition = Chapter03LightTunnelDefinition(
             schemaVersion: 1,
             sequenceID: "chapter03.cinematic.lightTunnel.001",
@@ -43,12 +43,20 @@ final class Chapter03DefinitionAndCatalogTests: XCTestCase {
                 startDistanceMeters: 30.48,
                 endDistanceMeters: 3.048,
                 approachDurationSeconds: 60,
+                postApproachTravelMeters: 0.9144,
                 angelInsideOffsetMeters: 1,
                 angelRootYOffsetMeters: -0.9,
                 domeRadiusMeters: 12,
                 domeCenterOffsetZMeters: -9
             ),
-            angelPrerecording: nil,
+            angelPrerecording: .init(
+                descriptorResourcePath:
+                    "Turing/Cinematics/Chapter03/pr_angel_01.json",
+                trigger: .atPortalArrival,
+                musicDuckGainDB: -23,
+                duckAttackSeconds: 0.75,
+                duckReleaseSeconds: 0.75
+            ),
             completion: .init(
                 waitForMusicActualCompletion: true,
                 waitForAngelPrerecordingIfStarted: true,
@@ -56,7 +64,20 @@ final class Chapter03DefinitionAndCatalogTests: XCTestCase {
             )
         )
         XCTAssertNoThrow(try definition.validate())
-        XCTAssertNil(definition.angelPrerecording)
+        XCTAssertEqual(
+            definition.angelPrerecording?.musicDuckGainDB,
+            -23
+        )
+    }
+
+    func testAngelPrerecordingStartsAtTenFootPortalArrival() throws {
+        let start = try Chapter03LightTunnelDefinitionStore
+            .portalArrivalStartMediaTime(
+                musicDurationSeconds: 240.039167,
+                portalArrivalMediaTimeSeconds: 60,
+                prerecordingDurationSeconds: 145.763250
+            )
+        XCTAssertEqual(start, 60, accuracy: 0.000001)
     }
 
     func testPortalOutsideAuthoredDiameterIsRejected() {
@@ -65,6 +86,7 @@ final class Chapter03DefinitionAndCatalogTests: XCTestCase {
             startDistanceMeters: 30.48,
             endDistanceMeters: 3.048,
             approachDurationSeconds: 60,
+            postApproachTravelMeters: 0.9144,
             angelInsideOffsetMeters: 1,
             angelRootYOffsetMeters: -0.9,
             domeRadiusMeters: 12,

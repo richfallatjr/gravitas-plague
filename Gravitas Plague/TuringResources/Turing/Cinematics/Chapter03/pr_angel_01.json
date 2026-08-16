@@ -1,0 +1,9 @@
+{
+  "id": "chapter03.cinematic.angel.lightTunnel.001",
+  "speakerDisplayName": "Angel",
+  "audioFile": "Turing/Audio/chapter03/pr-angel-01.mp3",
+  "transcriptMode": "none",
+  "transcript": "",
+  "outputRoute": "cinematicEmitterSpatial",
+  "gainDB": 0.0
+}

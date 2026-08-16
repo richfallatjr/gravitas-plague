@@ -65,7 +65,8 @@ nonisolated struct Chapter03AngelPrerecordingDefinition: Codable, Sendable, Equa
 
     nonisolated func validate() throws {
         guard !descriptorResourcePath.isEmpty,
-              musicDuckGainDB <= 0,
+              trigger == .atPortalArrival,
+              musicDuckGainDB == -23,
               duckAttackSeconds >= 0,
               duckReleaseSeconds >= 0 else {
             throw Chapter03Error.definitionInvalid("Angel prerecording is only partially configured")
@@ -73,8 +74,11 @@ nonisolated struct Chapter03AngelPrerecordingDefinition: Codable, Sendable, Equa
     }
 }
 
-nonisolated enum Chapter03AngelPrerecordingTrigger: Codable, Sendable, Equatable {
-    case portalInstantiated
-    case portalArrived
-    case mediaTimeSeconds(Double)
+nonisolated enum Chapter03AngelPrerecordingTrigger:
+    String,
+    Codable,
+    Sendable,
+    Equatable
+{
+    case atPortalArrival
 }

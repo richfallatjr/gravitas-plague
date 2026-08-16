@@ -5,6 +5,7 @@ nonisolated struct Chapter03LightTunnelVisualDefinition: Codable, Sendable, Equa
     let startDistanceMeters: Float
     let endDistanceMeters: Float
     let approachDurationSeconds: Double
+    let postApproachTravelMeters: Float
     let angelInsideOffsetMeters: Float
     let angelRootYOffsetMeters: Float
     let domeRadiusMeters: Float
@@ -19,6 +20,9 @@ nonisolated struct Chapter03LightTunnelVisualDefinition: Codable, Sendable, Equa
               abs(endDistanceMeters - 3.048) < 0.01,
               startDistanceMeters > endDistanceMeters,
               approachDurationSeconds == 60,
+              postApproachTravelMeters.isFinite,
+              abs(postApproachTravelMeters - 0.9144) < 0.001,
+              endDistanceMeters > postApproachTravelMeters,
               angelInsideOffsetMeters.isFinite,
               angelInsideOffsetMeters >= 0.75,
               angelInsideOffsetMeters <= 1.25,

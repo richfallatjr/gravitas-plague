@@ -16,12 +16,19 @@
     "startDistanceMeters": 30.48,
     "endDistanceMeters": 3.048,
     "approachDurationSeconds": 60.0,
+    "postApproachTravelMeters": 0.9144,
     "angelInsideOffsetMeters": 1.0,
     "angelRootYOffsetMeters": -0.9,
     "domeRadiusMeters": 12.0,
     "domeCenterOffsetZMeters": -9.0
   },
-  "angelPrerecording": null,
+  "angelPrerecording": {
+    "descriptorResourcePath": "Turing/Cinematics/Chapter03/pr_angel_01.json",
+    "trigger": "atPortalArrival",
+    "musicDuckGainDB": -23.0,
+    "duckAttackSeconds": 0.75,
+    "duckReleaseSeconds": 0.75
+  },
   "completion": {
     "waitForMusicActualCompletion": true,
     "waitForAngelPrerecordingIfStarted": true,

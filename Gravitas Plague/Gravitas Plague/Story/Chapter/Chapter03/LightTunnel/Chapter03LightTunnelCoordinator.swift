@@ -5,6 +5,7 @@ import simd
 final class Chapter03LightTunnelCoordinator {
     private let presenter: Chapter03LightTunnelPresenter
     private let music: Chapter03LightTunnelMusicController
+    private let angelPrerecording: StorySpatialPrerecordingPlayer
     private let cinematicWorld: CinematicWorldPresentationCoordinator
     private let deviceTransformProvider: () -> simd_float4x4?
     private weak var blackout: ImmersiveBlackoutController?
@@ -14,6 +15,9 @@ final class Chapter03LightTunnelCoordinator {
     private var eventTask: Task<Void, Never>?
     private var portalArrivalLogged = false
     private var musicActuallyCompleted = false
+    private var angelPrerecordingStarted = false
+    private var angelPrerecordingActuallyCompleted = false
+    private var isFinishing = false
 
     var onCompleted: ((Chapter03LightTunnelCompletedEvent) async -> Void)?
     var onFailed: ((UUID, Error) async -> Void)?
@@ -21,13 +25,23 @@ final class Chapter03LightTunnelCoordinator {
     init(
         presenter: Chapter03LightTunnelPresenter,
         music: Chapter03LightTunnelMusicController,
+        angelPrerecording: StorySpatialPrerecordingPlayer,
         cinematicWorld: CinematicWorldPresentationCoordinator,
         deviceTransformProvider: @escaping () -> simd_float4x4?
     ) {
         self.presenter = presenter
         self.music = music
+        self.angelPrerecording = angelPrerecording
         self.cinematicWorld = cinematicWorld
         self.deviceTransformProvider = deviceTransformProvider
+        angelPrerecording.onCompleted = { [weak self] runID, succeeded in
+            Task { @MainActor in
+                await self?.angelPrerecordingCompleted(
+                    runID: runID,
+                    succeeded: succeeded
+                )
+            }
+        }
     }
 
     func bind(blackout: ImmersiveBlackoutController) {
@@ -58,6 +72,19 @@ final class Chapter03LightTunnelCoordinator {
                 originFromDevice: originFromDevice,
                 definition: definition.visual
             )
+            if let resolvedAngel = request.resolvedDefinition.angelPrerecording {
+                guard let emitter = presenter.angelAudioEmitter else {
+                    throw Chapter03Error.angelPrerecordingInvalid(
+                        "portal Angel emitter was not installed"
+                    )
+                }
+                try await angelPrerecording.prepare(
+                    runID: request.chapterRunID,
+                    audioURL: resolvedAngel.audioURL,
+                    emitter: emitter,
+                    gainDB: resolvedAngel.descriptor.gainDB
+                )
+            }
             let stream = try await music.prepareAndPlay(
                 runID: request.chapterRunID,
                 resourceURL: request.resolvedDefinition.musicURL,
@@ -66,6 +93,9 @@ final class Chapter03LightTunnelCoordinator {
             activeRequest = request
             portalArrivalLogged = false
             musicActuallyCompleted = false
+            angelPrerecordingStarted = false
+            angelPrerecordingActuallyCompleted = false
+            isFinishing = false
             state = .portalApproaching(request.chapterRunID)
             eventTask = Task { @MainActor [weak self] in
                 do {
@@ -84,6 +114,7 @@ final class Chapter03LightTunnelCoordinator {
                     "originColumnW=\(originFromDevice.columns.3)"
             )
         } catch {
+            angelPrerecording.stop(reason: "chapter03PreparationFailed")
             presenter.remove(
                 runID: request.chapterRunID,
                 reason: "musicPreparationFailed"
@@ -96,6 +127,8 @@ final class Chapter03LightTunnelCoordinator {
         eventTask?.cancel()
         eventTask = nil
         guard let request = activeRequest else {
+            angelPrerecording.stop(reason: reason)
+            isFinishing = false
             if releasePresentation {
                 presenter.remove(runID: nil, reason: reason)
             }
@@ -103,6 +136,8 @@ final class Chapter03LightTunnelCoordinator {
             return
         }
         activeRequest = nil
+        isFinishing = false
+        angelPrerecording.stop(reason: reason)
         await music.stop(runID: request.chapterRunID, reason: reason)
         if releasePresentation {
             presenter.remove(runID: request.chapterRunID, reason: reason)
@@ -124,7 +159,8 @@ final class Chapter03LightTunnelCoordinator {
             modelEntityCount: presenter.modelEntityCount,
             activeMusicPlayerCount: musicPlayers,
             activeMusicTimeObserverCount: musicObservers,
-            activeAngelPlaybackControllerCount: 0,
+            activeAngelPlaybackControllerCount:
+                angelPrerecording.activePlaybackControllerCount,
             activeAngelResourceCount: presenter.angelResourceCount,
             activeTaskCount: eventTask == nil ? 0 : 1,
             cinematicOwnerReleased: cinematicReleased
@@ -160,21 +196,98 @@ final class Chapter03LightTunnelCoordinator {
                         "mediaTime=\(seconds) distanceMeters=3.048"
                 )
             }
+            try await startAngelPrerecordingIfNeeded(
+                mediaTimeSeconds: seconds,
+                request: request
+            )
         case .completed:
             musicActuallyCompleted = true
             state = .drainingAuthoredMedia(request.chapterRunID)
-            try await finish(request)
+            try await finishIfReady(request)
         case .failed(let message):
             throw Chapter03Error.musicPlaybackFailed(message)
         }
     }
 
-    private func finish(_ request: Chapter03LightTunnelRequest) async throws {
-        guard musicActuallyCompleted else {
-            throw Chapter03Error.musicPlaybackFailed("actual completion was not observed")
+    private func startAngelPrerecordingIfNeeded(
+        mediaTimeSeconds: Double,
+        request: Chapter03LightTunnelRequest
+    ) async throws {
+        guard !angelPrerecordingStarted,
+              let resolved = request.resolvedDefinition.angelPrerecording,
+              mediaTimeSeconds >= resolved.startMediaTimeSeconds else {
+            return
         }
+        try await music.setGainDB(
+            resolved.definition.musicDuckGainDB,
+            rampSeconds: resolved.definition.duckAttackSeconds,
+            runID: request.chapterRunID
+        )
+        try angelPrerecording.play(runID: request.chapterRunID)
+        angelPrerecordingStarted = true
+        print(
+            """
+            [Chapter03AngelPR] portal-arrival playback triggered
+              musicMediaTimeSeconds: \(mediaTimeSeconds)
+              scheduledMediaTimeSeconds: \(resolved.startMediaTimeSeconds)
+              musicDuckGainDB: \(resolved.definition.musicDuckGainDB)
+              expectedMusicEndSeconds: \(request.resolvedDefinition.musicDurationSeconds)
+            """
+        )
+    }
+
+    private func angelPrerecordingCompleted(
+        runID: UUID,
+        succeeded: Bool
+    ) async {
+        guard let request = activeRequest,
+              request.chapterRunID == runID else { return }
+        guard succeeded else {
+            await fail(
+                Chapter03Error.angelPrerecordingInvalid(
+                    "actual playback did not complete successfully"
+                ),
+                runID: runID
+            )
+            return
+        }
+        angelPrerecordingActuallyCompleted = true
+        do {
+            try await music.setGainDB(
+                request.resolvedDefinition.definition.music.gainDB,
+                rampSeconds: request.resolvedDefinition
+                    .definition.angelPrerecording?.duckReleaseSeconds ?? 0,
+                runID: runID
+            )
+            print(
+                "[Chapter03AngelPR] actual completion restored music " +
+                    "runID=\(runID.uuidString) " +
+                    "gainDB=\(request.resolvedDefinition.definition.music.gainDB)"
+            )
+            try await finishIfReady(request)
+        } catch {
+            await fail(error, runID: runID)
+        }
+    }
+
+    private func finishIfReady(
+        _ request: Chapter03LightTunnelRequest
+    ) async throws {
+        guard musicActuallyCompleted else { return }
+        if request.resolvedDefinition.angelPrerecording != nil {
+            guard angelPrerecordingStarted,
+                  angelPrerecordingActuallyCompleted else {
+                print(
+                    "[Chapter03LightTunnel] music completed; awaiting Angel PR actual completion"
+                )
+                return
+            }
+        }
+        guard !isFinishing else { return }
+        isFinishing = true
         try await ContinuousClock().sleep(for: .seconds(2))
         try await presenter.fadeOutAndRemove(runID: request.chapterRunID)
+        angelPrerecording.stop(reason: "actualCompletionDrained")
         await music.stop(
             runID: request.chapterRunID,
             reason: "actualCompletionDrained"
@@ -187,8 +300,9 @@ final class Chapter03LightTunnelCoordinator {
             musicActuallyCompleted: true,
             angelPrerecordingWasConfigured:
                 request.resolvedDefinition.definition.angelPrerecording != nil,
-            angelPrerecordingWasStarted: false,
-            angelPrerecordingActuallyCompleted: false,
+            angelPrerecordingWasStarted: angelPrerecordingStarted,
+            angelPrerecordingActuallyCompleted:
+                angelPrerecordingActuallyCompleted,
             interactionLease: request.interactionLease,
             blackoutRequestID: request.blackoutRequestID
         )
