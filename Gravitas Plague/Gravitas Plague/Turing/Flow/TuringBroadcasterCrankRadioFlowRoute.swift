@@ -21,7 +21,7 @@ final class TuringBroadcasterCrankRadioFlowRoute:
     nonisolated static func usesEmergencyDataBurst(
         scriptPointID: String
     ) -> Bool {
-        !scriptPointID.hasPrefix("chapter02.")
+        scriptPointID.hasPrefix("prologue.")
     }
 
     convenience init() {
@@ -162,7 +162,7 @@ final class TuringBroadcasterCrankRadioFlowRoute:
                 )
             } else {
                 print(
-                    "[TuringBroadcasterFlow] Chapter 2 pre-alarm skipped " +
+                    "[TuringBroadcasterFlow] pre-PR authored cue skipped " +
                         "scriptPointID=\(descriptor.scriptPointID) " +
                         "playbackRunID=\(identity.playbackRunID)"
                 )

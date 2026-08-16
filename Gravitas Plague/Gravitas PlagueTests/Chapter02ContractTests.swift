@@ -252,6 +252,13 @@ final class Chapter02ContractTests: XCTestCase {
                         "prologue.crankRadio.broadcaster.broadcast.001"
                 )
         )
+        XCTAssertFalse(
+            TuringBroadcasterCrankRadioFlowRoute
+                .usesEmergencyDataBurst(
+                    scriptPointID:
+                        "chapter03.crankRadio.broadcaster.continuity.001"
+                )
+        )
     }
 
     func testChapterTwoBattleMusicUsesAuthoredLoopAndFinalCrankDucking() throws {
