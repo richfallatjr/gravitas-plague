@@ -57,6 +57,17 @@ enum TuringStoryContinuationTarget: Sendable, Equatable {
             return StoryTitleCardCatalog.descriptor(for: episodeID)
         }
     }
+
+    var titleCardDestination: StoryTitleCardDestination {
+        switch self {
+        case .chapter03(let snapshot)
+            where snapshot.checkpoint == .endCardPending ||
+                snapshot.checkpoint == .complete:
+            return .endOfAvailableContent(completedEpisode: .chapter03)
+        case .prologue, .chapter01, .chapter02, .chapter03:
+            return .continueFrom(self)
+        }
+    }
 }
 
 @MainActor

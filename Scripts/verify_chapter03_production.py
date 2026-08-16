@@ -123,6 +123,28 @@ def main() -> None:
         fail("production Chapter 3 does not preflight Heaven resources before Mike")
     if "heavyVisualsLoaded=false" not in coordinator:
         fail("Chapter 3 tunnel preflight must leave heavy visuals deferred")
+    terminal_handoff = coordinator.split("private func lightTunnelCompleted", 1)[1]
+    terminal_handoff = terminal_handoff.split("private func lightTunnelFailed", 1)[0]
+    if "requestID: event.blackoutRequestID" not in terminal_handoff:
+        fail("terminal title card does not inherit the full-black ownership ID")
+    if "requestID: event.chapterRunID" in terminal_handoff:
+        fail("terminal title card incorrectly reuses the Chapter run ID")
+    if "titleTransitionID=\\(event.blackoutRequestID.uuidString)" not in terminal_handoff:
+        fail("terminal full-black ownership transfer is not logged")
+    continuation_store = (
+        ROOT / "Gravitas Plague/Gravitas Plague/Turing/Story/"
+        "TuringStoryProgressStore.swift"
+    ).read_text()
+    continuation_picker = (
+        ROOT / "Gravitas Plague/Gravitas Plague/Turing/Story/"
+        "TuringStoryEpisodePickerView.swift"
+    ).read_text()
+    if "var titleCardDestination: StoryTitleCardDestination" not in continuation_store:
+        fail("Chapter 3 terminal continuation has no destination override")
+    if "return .endOfAvailableContent(completedEpisode: .chapter03)" not in continuation_store:
+        fail("Chapter 3 end-card checkpoint does not resume as terminal content")
+    if "destination: target.titleCardDestination" not in continuation_picker:
+        fail("episode picker bypasses the terminal continuation destination")
     if "unsafeReasons" not in mike_source:
         fail("Mike-to-Heaven release still reports only an opaque safety failure")
 

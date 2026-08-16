@@ -483,11 +483,17 @@ final class Chapter03Coordinator:
             )
             state = .ending(event.chapterRunID)
             let request = StoryTitleCardTransitionRequest(
-                requestID: event.chapterRunID,
+                requestID: event.blackoutRequestID,
                 source: .naturalEpisodeBoundary,
                 descriptor: StoryTitleCardCatalog.endOfAvailableContent,
                 destination: .endOfAvailableContent(completedEpisode: .chapter03),
                 menuMusicPolicy: .unchanged
+            )
+            print(
+                "[Chapter03Transition] Heaven tunnel transferring full-black ownership " +
+                    "chapterRunID=\(event.chapterRunID.uuidString) " +
+                    "titleTransitionID=\(event.blackoutRequestID.uuidString) " +
+                    "leaseOwner=\(event.interactionLease.owner)"
             )
             guard let onEndCardRequested else {
                 throw StoryTitleCardError.missingRouteOwner

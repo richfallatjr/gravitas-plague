@@ -182,7 +182,7 @@ struct TuringStoryEpisodePickerView: View {
                     requestID: UUID(),
                     source: .episodePickerContinue,
                     descriptor: target.titleCardDescriptor,
-                    destination: .continueFrom(target),
+                    destination: target.titleCardDestination,
                     menuMusicPolicy: .playThroughCard
                 )
                 session.requestStoryTitleCardTransition(request)
