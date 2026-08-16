@@ -1,7 +1,19 @@
 {
   "schema": "com.gravitas.source_rig_registry.v0",
-  "generated_at": "2026-08-01T01:45:12.142822+00:00",
+  "generated_at": "2026-08-14T22:42:30.831433+00:00",
   "source_rigs": [
+    {
+      "source_rig_id": "angel_biped_3e23483ddb22",
+      "character_id": "angel_biped",
+      "display_name": "Angel Biped",
+      "skeleton_hash": "3e23483ddb22b5d9f79b943131c30ff9ce2d537749a32e8ae5f75dfe604fcabc",
+      "relative_path": "Rigs/SourceRigs/angel_biped_3e23483ddb22.source_rig.json",
+      "source_asset_file": "angel_biped_float_pose.usdz",
+      "canonical_rig_id": "GravitasMeshyBiped24",
+      "canonical_rig_version": "001",
+      "created_at": "2026-08-14T22:42:30.830797+00:00",
+      "updated_at": "2026-08-14T22:42:30.830804+00:00"
+    },
     {
       "source_rig_id": "dad_biped_9ddc45fe6105",
       "character_id": "dad_biped",

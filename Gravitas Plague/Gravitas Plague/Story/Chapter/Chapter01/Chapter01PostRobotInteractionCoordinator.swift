@@ -95,9 +95,33 @@ final class Chapter01PostRobotInteractionCoordinator {
     ) async throws {
         try await applySnapshot(snapshot, reason: reason)
         if releaseWhenReady {
-            await arbiter.release(
+            let releasedSnapshot = await arbiter.releaseAndCurrentSnapshot(
                 transitionLease,
                 reason: "\(reason).ready"
+            )
+            guard releasedSnapshot.exclusiveOwner == nil,
+                  releasedSnapshot.doorState == .closedUnloaded,
+                  releasedSnapshot.dadFramePresentation == .play,
+                  releasedSnapshot.capabilities.contains(.dadFramePlay) else {
+                print(
+                    "[Chapter01PostRobot] ERROR first branch presentation rejected " +
+                        "owner=\(releasedSnapshot.exclusiveOwner?.logValue ?? "none") " +
+                        "doorState=\(releasedSnapshot.doorState.rawValue) " +
+                        "dadFrame=\(releasedSnapshot.dadFramePresentation.rawValue) " +
+                        "capabilities=\(releasedSnapshot.capabilities.map(\.rawValue).sorted())"
+                )
+                throw Chapter01Error.postRobotBranchNotAvailable(.dadFrame)
+            }
+
+            // Apply the authoritative release snapshot immediately. The stream
+            // remains the normal update path, but it cannot drop the first hub
+            // action while its observer is resuming after the battle teardown.
+            dadFrame.applyInteractionSnapshot(releasedSnapshot)
+            walkie.applyInteractionSnapshot(releasedSnapshot)
+            hamReceiver.applyInteractionSnapshot(releasedSnapshot)
+            print(
+                "[Chapter01PostRobot] first branch presented synchronously " +
+                    "dadFrame=play"
             )
         }
     }

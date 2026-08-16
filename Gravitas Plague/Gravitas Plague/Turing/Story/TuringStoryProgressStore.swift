@@ -5,6 +5,7 @@ enum TuringStoryContinuationTarget: Sendable, Equatable {
     case prologue(TuringEpisodeContinuationSnapshot)
     case chapter01(Chapter01ProgressSnapshot)
     case chapter02(Chapter02ProgressSnapshot)
+    case chapter03(Chapter03ProgressSnapshot)
 
     var episodeID: TuringEpisodeID {
         switch self {
@@ -14,6 +15,8 @@ enum TuringStoryContinuationTarget: Sendable, Equatable {
             return .chapter01
         case .chapter02:
             return .chapter02
+        case .chapter03:
+            return .chapter03
         }
     }
 
@@ -24,6 +27,8 @@ enum TuringStoryContinuationTarget: Sendable, Equatable {
         case .chapter01(let snapshot):
             return snapshot.committedAt
         case .chapter02(let snapshot):
+            return snapshot.committedAt
+        case .chapter03(let snapshot):
             return snapshot.committedAt
         }
     }
@@ -37,6 +42,19 @@ enum TuringStoryContinuationTarget: Sendable, Equatable {
                 .rawValue ?? snapshot.checkpoint.rawValue
         case .chapter02(let snapshot):
             return snapshot.checkpoint.rawValue
+        case .chapter03(let snapshot):
+            return snapshot.checkpoint.rawValue
+        }
+    }
+
+    var titleCardDescriptor: StoryTitleCardDescriptor {
+        switch self {
+        case .chapter03(let snapshot)
+            where snapshot.checkpoint == .endCardPending ||
+                snapshot.checkpoint == .complete:
+            return StoryTitleCardCatalog.endOfAvailableContent
+        case .prologue, .chapter01, .chapter02, .chapter03:
+            return StoryTitleCardCatalog.descriptor(for: episodeID)
         }
     }
 }
@@ -54,9 +72,11 @@ final class TuringStoryProgressStore: ObservableObject {
     @Published private(set) var snapshot: TuringEpisodeContinuationSnapshot?
     @Published private(set) var chapter01Snapshot: Chapter01ProgressSnapshot?
     @Published private(set) var chapter02Snapshot: Chapter02ProgressSnapshot?
+    @Published private(set) var chapter03Snapshot: Chapter03ProgressSnapshot?
     @Published private(set) var invalidSnapshotReason: String?
     @Published private(set) var invalidChapter01SnapshotReason: String?
     @Published private(set) var invalidChapter02SnapshotReason: String?
+    @Published private(set) var invalidChapter03SnapshotReason: String?
 
     private let defaults: UserDefaults
     private let encoder = JSONEncoder()
@@ -72,6 +92,14 @@ final class TuringStoryProgressStore: ObservableObject {
         .receive(on: RunLoop.main)
         .sink { [weak self] _ in
             self?.reloadChapter01FromDefaults()
+        }
+        .store(in: &cancellables)
+        NotificationCenter.default.publisher(
+            for: .chapter03ProgressDidChange
+        )
+        .receive(on: RunLoop.main)
+        .sink { [weak self] _ in
+            self?.reloadChapter03FromDefaults()
         }
         .store(in: &cancellables)
         NotificationCenter.default.publisher(
@@ -116,7 +144,16 @@ final class TuringStoryProgressStore: ObservableObject {
             return .chapter02(chapter02Snapshot)
         }()
 
-        return [prologueTarget, chapterTarget, chapter02Target]
+        let chapter03Target: TuringStoryContinuationTarget? = {
+            guard let chapter03Snapshot,
+                  chapter03Snapshot.contentRevision ==
+                    Chapter03ProgressSnapshot.currentContentRevision else {
+                return nil
+            }
+            return .chapter03(chapter03Snapshot)
+        }()
+
+        return [prologueTarget, chapterTarget, chapter02Target, chapter03Target]
             .compactMap { $0 }
             .max(by: { $0.committedAt < $1.committedAt })
     }
@@ -132,9 +169,11 @@ final class TuringStoryProgressStore: ObservableObject {
         invalidSnapshotReason = nil
         invalidChapter01SnapshotReason = nil
         invalidChapter02SnapshotReason = nil
+        invalidChapter03SnapshotReason = nil
         reloadPrologueFromDefaults()
         reloadChapter01FromDefaults()
         reloadChapter02FromDefaults()
+        reloadChapter03FromDefaults()
     }
 
     private func reloadPrologueFromDefaults() {
@@ -215,6 +254,25 @@ final class TuringStoryProgressStore: ObservableObject {
             invalidChapter02SnapshotReason = error.localizedDescription
             print(
                 "[TuringContinuation] invalid Chapter02 snapshot reason=\(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func reloadChapter03FromDefaults() {
+        guard let data = defaults.data(
+            forKey: Chapter03ProgressStore.Key.snapshot
+        ) else {
+            chapter03Snapshot = nil
+            return
+        }
+        do {
+            chapter03Snapshot = try Chapter03ProgressStore.decode(data)
+        } catch {
+            chapter03Snapshot = nil
+            invalidChapter03SnapshotReason = error.localizedDescription
+            print(
+                "[TuringContinuation] invalid Chapter03 snapshot " +
+                    "reason=\(error.localizedDescription)"
             )
         }
     }

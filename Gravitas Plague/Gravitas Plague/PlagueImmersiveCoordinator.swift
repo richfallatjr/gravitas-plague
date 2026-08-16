@@ -139,11 +139,14 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     private var chapter02WomanBattleCoordinator:
         Chapter02WomanBattleCoordinator?
     private var chapter02Coordinator: Chapter02Coordinator?
+    private var chapter03Coordinator: Chapter03Coordinator?
     private var prologueStoryActionRouter: PrologueStoryActionRouter?
     private var prologueCompletionCoordinator: TuringPrologueCompletionCoordinator?
     private var storyCompletionRouter: TuringStoryCompletionRouter?
     private let storyTitleCardTransitionCoordinator =
         StoryTitleCardTransitionCoordinator()
+    private let cinematicWorldPresentationCoordinator =
+        CinematicWorldPresentationCoordinator()
     private var turingHighMemoryPreflightAdapter:
         StoryTuringHighMemoryPreflightAdapter?
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
@@ -356,13 +359,18 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
     func configureStoryTitleCardPresentation(
         presenter: StoryTitleCardWorldPresenter,
-        blackout: ImmersiveBlackoutController
+        blackout: ImmersiveBlackoutController,
+        cinematicWorldAnchor: AnchorEntity
     ) {
         storyTitleCardTransitionCoordinator.bind(
             world: self,
             presenter: presenter,
             blackout: blackout
         )
+        cinematicWorldPresentationCoordinator.bind(
+            worldAnchor: cinematicWorldAnchor
+        )
+        chapter03Coordinator?.bind(blackout: blackout)
     }
 
     func makeSceneRoot(
@@ -664,6 +672,47 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             }
             try await self.handleStoryEpisodeBoundary(event)
         }
+        let chapter03Presenter = Chapter03LightTunnelPresenter(
+            cinematicWorld: cinematicWorldPresentationCoordinator
+        )
+        let chapter03Music = Chapter03LightTunnelMusicController()
+        let chapter03LightTunnel = Chapter03LightTunnelCoordinator(
+            presenter: chapter03Presenter,
+            music: chapter03Music,
+            cinematicWorld: cinematicWorldPresentationCoordinator,
+            deviceTransformProvider: { [weak self] in
+                self?.spatialProvider.currentTrackedDeviceTransform()
+            }
+        )
+        let chapter03 = Chapter03Coordinator(
+            lightTunnel: chapter03LightTunnel,
+            layoutFingerprintProvider: { [weak self] in
+                guard let self else {
+                    throw Chapter03Error.storyStageNotEstablished
+                }
+                return try self.establishedLayoutFingerprint()
+            }
+        )
+        chapter03.onEndCardRequested = { [weak self] request, lease, blackoutID in
+            guard let self else {
+                throw StoryTitleCardError.missingRouteOwner
+            }
+            try self.storyTitleCardTransitionCoordinator.accept(
+                request,
+                ownership: .transferredAlreadyFullBlack(
+                    lease: lease,
+                    blackoutRequestID: blackoutID
+                )
+            )
+        }
+        chapter03.onFailure = { [weak self] error in
+            self?.showTemporaryInstructionHUD(
+                "Chapter 3 failed: \(error.localizedDescription)",
+                clearAfterSeconds: 5,
+                reason: "chapter03LightTunnelFailed"
+            )
+            self?.onStoryEpisodePickerRequested?("chapter03LightTunnelFailed")
+        }
         let completionRouter = TuringStoryCompletionRouter(
             prologue: completionCoordinator,
             chapter01: chapterCoordinator,
@@ -675,6 +724,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         chapter02WindowWomanCoordinator = chapter02WindowWoman
         chapter02WomanBattleCoordinator = chapter02WomanBattle
         chapter02Coordinator = chapter02
+        chapter03Coordinator = chapter03
         storyCompletionRouter = completionRouter
         let highMemoryPreflight = StoryTuringHighMemoryPreflightAdapter(
             door: turingDoorBundleController,
@@ -1077,7 +1127,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         }
         return Chapter01RobotAudioAttachmentLease(
             enemyID: enemyID,
-            audioController: audioController
+            audioController: audioController,
+            audioEmitter: controller.characterAudioEmitter
         )
     }
 
@@ -1317,6 +1368,13 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 )
             }
         }
+        if episodeID != .chapter03 {
+            Task { @MainActor [weak self] in
+                await self?.chapter03Coordinator?.cancel(
+                    reason: "newStoryEpisode.\(episodeID.rawValue)"
+                )
+            }
+        }
         prologueStoryActionRouter?.reset(
             reason: "newStoryEpisode.\(episodeID.rawValue)"
         )
@@ -1496,6 +1554,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 reason: "roomRescan.\(reason)"
             )
             await self?.chapter02Coordinator?.cancel(
+                reason: "roomRescan.\(reason)"
+            )
+            await self?.chapter03Coordinator?.cancel(
                 reason: "roomRescan.\(reason)"
             )
         }
@@ -2029,6 +2090,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         battle01Coordinator?.cancel(reason: reason)
         await chapter01Coordinator?.cancel(reason: reason)
         await chapter02Coordinator?.cancel(reason: reason)
+        await chapter03Coordinator?.cancel(reason: reason)
         prologueCompletionCoordinator?.reset(reason: reason)
         print("""
         [TuringStoryTeleport] transient runtime quiesced
@@ -2105,6 +2167,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 reason: "storyTeleport.absent.\(teleportID.uuidString)"
             )
             await chapter02Coordinator?.cancel(
+                reason: "storyTeleport.absent.\(teleportID.uuidString)"
+            )
+            await chapter03Coordinator?.cancel(
                 reason: "storyTeleport.absent.\(teleportID.uuidString)"
             )
             prologueStoryActionRouter?.reset(reason: "storyTeleport.absent")
@@ -2880,6 +2945,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         chapter02WindowWomanCoordinator = nil
         chapter02WomanBattleCoordinator = nil
         chapter02Coordinator = nil
+        let chapter03 = chapter03Coordinator
+        chapter03Coordinator = nil
         storyCompletionRouter = nil
         prologueStoryActionRouter = nil
         prologueCompletionCoordinator = nil
@@ -2927,6 +2994,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             reason: "immersiveShutdown"
         )
         Task { @MainActor in
+            await chapter03?.cancel(reason: "immersiveShutdown")
             await turingStoryWalkieInteractionController.shutdown(
                 reason: "immersiveShutdown"
             )
@@ -2967,6 +3035,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 reason: "userQuitOrClose"
             )
             await self?.chapter02Coordinator?.cancel(
+                reason: "userQuitOrClose"
+            )
+            await self?.chapter03Coordinator?.cancel(
                 reason: "userQuitOrClose"
             )
         }
@@ -3069,6 +3140,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 reason: "modeSwitchToHorde"
             )
             await self?.chapter02Coordinator?.cancel(
+                reason: "modeSwitchToHorde"
+            )
+            await self?.chapter03Coordinator?.cancel(
                 reason: "modeSwitchToHorde"
             )
         }
@@ -5769,6 +5843,11 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         guard !isPlayerDeathSequenceActive else { return }
 
         storyTitleCardTransitionCoordinator.cancelForDeath()
+        Task { @MainActor [weak self] in
+            await self?.chapter03Coordinator?.cancel(
+                reason: "actualPlayerDeath.horde"
+            )
+        }
 
         isPlayerDeathSequenceActive = true
         hordeRuntimePhase = .playerDead
@@ -5875,6 +5954,11 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         guard !isPlayerDeathSequenceActive else { return }
 
         storyTitleCardTransitionCoordinator.cancelForDeath()
+        Task { @MainActor [weak self] in
+            await self?.chapter03Coordinator?.cancel(
+                reason: "actualPlayerDeath.chapter01"
+            )
+        }
 
         isPlayerDeathSequenceActive = true
 
@@ -6493,6 +6577,18 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
             )
             disposition = .retainedByDestination
 
+        case .start(.chapter03):
+            guard let chapter03Coordinator else {
+                throw StoryTitleCardError.missingRouteOwner
+            }
+            try await chapter03Coordinator.beginAtRoot(
+                chapterRunID: requestID,
+                transitionLease: transitionLease,
+                blackoutRequestID: requestID,
+                resetProgress: true
+            )
+            disposition = .destinationOwnsFullBlackAndLease
+
         case .continueFrom(.prologue(let snapshot)):
             try await StoryInteractionArbiter.shared.setStableInteractionPolicy(
                 .unrestricted,
@@ -6529,6 +6625,17 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
                 .resumeFromSavedCheckpoint(
                     snapshot: snapshot,
                     transitionLease: transitionLease
+                )
+
+        case .continueFrom(.chapter03(let snapshot)):
+            guard let chapter03Coordinator else {
+                throw StoryTitleCardError.missingRouteOwner
+            }
+            disposition = try await chapter03Coordinator
+                .resumeFromSavedCheckpoint(
+                    snapshot: snapshot,
+                    transitionLease: transitionLease,
+                    requestID: requestID
                 )
 
         case .advance(let completed, let next):
@@ -6570,6 +6677,14 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
             onStoryEpisodePickerRequested?(
                 "endOfAvailableContent.\(completedEpisode.rawValue)"
             )
+            if completedEpisode == .chapter03 {
+                guard let chapter03Coordinator else {
+                    throw StoryTitleCardError.missingRouteOwner
+                }
+                try await chapter03Coordinator.markEndCardRouteCommitted(
+                    sourceEventID: requestID
+                )
+            }
             disposition = .releaseAfterFade
         }
 
@@ -6677,6 +6792,14 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
              .advance(from: .chapter01, to: .chapter02):
             Task { @MainActor [weak self] in
                 await self?.chapter02Coordinator?.cancel(
+                    reason: "titleCardFailed.\(request.requestID.uuidString)"
+                )
+            }
+        case .start(.chapter03),
+             .continueFrom(.chapter03),
+             .endOfAvailableContent(completedEpisode: .chapter03):
+            Task { @MainActor [weak self] in
+                await self?.chapter03Coordinator?.cancel(
                     reason: "titleCardFailed.\(request.requestID.uuidString)"
                 )
             }

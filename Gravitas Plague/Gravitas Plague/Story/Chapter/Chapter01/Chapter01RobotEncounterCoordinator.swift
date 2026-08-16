@@ -274,8 +274,15 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
 
         let speechEndpoint = try Chapter01RobotAudioRoute.requireEndpoint()
         await speech.install(endpoint: speechEndpoint)
-        try runtime.controller.playScriptedIdleLoop(
-            clipID: definition.animations.idle
+        let threshold = doorContext.robotDoorThreshold.position(relativeTo: nil)
+        let roomFacingTarget = runtime.mirror.roomSideTarget(
+            distance: 0.75,
+            floorY: threshold.y
+        )
+        try playExteriorIdle(
+            controller: runtime.controller,
+            clipID: definition.animations.idle,
+            roomFacingTarget: roomFacingTarget
         )
         transition(to: .exteriorIdle)
 
@@ -731,6 +738,22 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
         points: [(String, SIMD3<Float>)]
     ) async throws {
         guard points.count >= 2 else { return }
+        controller.useAuthoredCharacterHeadingCorrection()
+        let initialMotionForward = PhaseOneMath.normalizedOrFallback(
+            SIMD3<Float>(
+                points[1].1.x - points[0].1.x,
+                0,
+                points[1].1.z - points[0].1.z
+            ),
+            fallback: SIMD3<Float>(0, 0, -1)
+        )
+        controller.rootEntity.setOrientation(
+            simd_quatf(
+                from: SIMD3<Float>(0, 0, -1),
+                to: initialMotionForward
+            ),
+            relativeTo: nil
+        )
         let segments = zip(points, points.dropFirst()).map { from, to in
             ScriptedAnchorPathFollower.Segment(
                 fromID: from.0,
@@ -789,6 +812,38 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
                 self?.finishApproach(.failure(CancellationError()))
             }
         }
+    }
+
+    private func playExteriorIdle(
+        controller: JockRetargetTestController,
+        clipID: String,
+        roomFacingTarget: SIMD3<Float>
+    ) throws {
+        controller.useAuthoredCharacterHeadingCorrection()
+        try controller.playScriptedIdleLoop(clipID: clipID)
+
+        let rootPosition = controller.rootEntity.position(relativeTo: nil)
+        let roomForward = PhaseOneMath.normalizedOrFallback(
+            SIMD3<Float>(
+                roomFacingTarget.x - rootPosition.x,
+                0,
+                roomFacingTarget.z - rootPosition.z
+            ),
+            fallback: SIMD3<Float>(0, 0, -1)
+        )
+        let idleRootForward = -roomForward
+        controller.rootEntity.setOrientation(
+            simd_quatf(
+                from: SIMD3<Float>(0, 0, -1),
+                to: idleRootForward
+            ),
+            relativeTo: nil
+        )
+        print(
+            "[Chapter01RobotHeading] initial exterior idle faces room " +
+                "roomForward=\(roomForward) rootForward=\(idleRootForward) " +
+                "authoredVisualCorrection=true"
+        )
     }
 
     private func finishPath(_ result: Result<Void, Error>) {

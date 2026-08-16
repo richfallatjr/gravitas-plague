@@ -143,12 +143,14 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
         }
 
         let lease: StoryInteractionLease
+        let entersAlreadyFullBlack: Bool
         switch ownership {
         case .acquireFromStableState:
             lease = try await world.acquireTitleCardTransitionLease(
                 transitionID: request.requestID,
                 source: request.source.rawValue
             )
+            entersAlreadyFullBlack = false
         case .transferred(let transferred):
             try await StoryInteractionArbiter.shared.requireCurrent(transferred)
             guard case .storyTransition(let transitionID) = transferred.owner,
@@ -156,6 +158,22 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
                 throw StoryInteractionClaimError.invalidTransfer
             }
             lease = transferred
+            entersAlreadyFullBlack = false
+        case .transferredAlreadyFullBlack(
+            let transferred,
+            let blackoutRequestID
+        ):
+            try await StoryInteractionArbiter.shared.requireCurrent(transferred)
+            guard case .storyTransition(let transitionID) = transferred.owner,
+                  transitionID == request.requestID,
+                  blackoutRequestID == request.requestID else {
+                throw StoryInteractionClaimError.invalidTransfer
+            }
+            try blackout.requireFullBlackOwnership(
+                requestID: blackoutRequestID
+            )
+            lease = transferred
+            entersAlreadyFullBlack = true
         }
 
         if request.menuMusicPolicy == .stopOnAcceptance {
@@ -174,11 +192,21 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
                 " originFromDeviceColumnW=\(originFromDevice.columns.3)"
         )
 
-        state = .fadingToBlack(request.requestID)
-        try await blackout.fadeToFullBlack(
-            duration: request.descriptor.fadeToBlackSeconds,
-            requestID: request.requestID
-        )
+        if entersAlreadyFullBlack {
+            try blackout.requireFullBlackOwnership(
+                requestID: request.requestID
+            )
+            print(
+                "[StoryTitleCard] entered from existing full black " +
+                    "requestID=\(request.requestID.uuidString) opacity=1.0"
+            )
+        } else {
+            state = .fadingToBlack(request.requestID)
+            try await blackout.fadeToFullBlack(
+                duration: request.descriptor.fadeToBlackSeconds,
+                requestID: request.requestID
+            )
+        }
         try requireCurrent(request.requestID)
         try await StoryInteractionArbiter.shared.requireCurrent(lease)
         print(
@@ -211,6 +239,29 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
             requestID: request.requestID
         )
         try requireCurrent(request.requestID)
+
+        if disposition == .destinationOwnsFullBlackAndLease {
+            try blackout.requireFullBlackOwnership(
+                requestID: request.requestID
+            )
+            if request.menuMusicPolicy == .playThroughCard {
+                await PlagueMainMenuMusicActor.shared.stop(
+                    reason: "titleCardHandedOffFullBlack.\(request.source.rawValue)"
+                )
+            }
+            activeTask = nil
+            activeRequestID = nil
+            state = .idle
+            await world.titleCardTransitionCompleted(
+                request.destination,
+                requestID: request.requestID
+            )
+            print(
+                "[StoryTitleCard] destination retained full black and lease " +
+                    "requestID=\(request.requestID.uuidString) opacity=1.0"
+            )
+            return
+        }
 
         state = .fadingFromBlack(request.requestID)
         try await blackout.fadeBackUp(

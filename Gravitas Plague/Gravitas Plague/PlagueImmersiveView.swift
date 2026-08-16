@@ -47,7 +47,8 @@ struct PlagueImmersiveView: View {
             storyTitleCardPresenter.bind(worldAnchor: youDiedWorldAnchor)
             coordinator.configureStoryTitleCardPresentation(
                 presenter: storyTitleCardPresenter,
-                blackout: deathPresentationController
+                blackout: deathPresentationController,
+                cinematicWorldAnchor: youDiedWorldAnchor
             )
 
             let presenter = youDiedWorldCardPresenter

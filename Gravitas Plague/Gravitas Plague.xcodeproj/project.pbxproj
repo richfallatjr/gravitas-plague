@@ -51,6 +51,8 @@
 		8E1A10692FCD000100000001 /* ../dad_biped_ior.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10682FCD000100000001 /* ../dad_biped_ior.png */; };
 		8E1A10702FCD000100000001 /* ../day-groundplane-tile.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10712FCD000100000001 /* ../day-groundplane-tile.png */; };
 		8E1A10722FCD000100000001 /* ../night-groundplane-tile.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10732FCD000100000001 /* ../night-groundplane-tile.png */; };
+		8E1A10742FCD000100000001 /* ../angel_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10752FCD000100000001 /* ../angel_biped.usdz */; };
+		8E1A10762FCD000100000001 /* ../heaven-sunrise.exr in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10772FCD000100000001 /* ../heaven-sunrise.exr */; };
 		8E2B20032FCE000100000001 /* Turing in Resources */ = {isa = PBXBuildFile; fileRef = 8E2B20042FCE000100000001 /* Turing */; };
 		8E3C30102FCF100100000001 /* TuringQwenNative in Frameworks */ = {isa = PBXBuildFile; productRef = 8E3C30122FCF100100000001 /* TuringQwenNative */; };
 /* End PBXBuildFile section */
@@ -120,6 +122,8 @@
 		8E1A10682FCD000100000001 /* ../dad_biped_ior.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = ../dad_biped_ior.png; sourceTree = SOURCE_ROOT; };
 		8E1A10712FCD000100000001 /* ../day-groundplane-tile.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../day-groundplane-tile.png"; sourceTree = SOURCE_ROOT; };
 		8E1A10732FCD000100000001 /* ../night-groundplane-tile.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "../night-groundplane-tile.png"; sourceTree = SOURCE_ROOT; };
+		8E1A10752FCD000100000001 /* ../angel_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../angel_biped.usdz; sourceTree = SOURCE_ROOT; };
+		8E1A10772FCD000100000001 /* ../heaven-sunrise.exr */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../heaven-sunrise.exr"; sourceTree = SOURCE_ROOT; };
 		8E2B20042FCE000100000001 /* Turing */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Turing; path = TuringResources/Turing; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
@@ -230,6 +234,8 @@
 				8E1A102F2FCD000100000001 /* ../neighbor_biped.usdz */,
 				8E1A10662FCD000100000001 /* ../neighbor_biped_ior.png */,
 				8E1A103F2FCD000100000001 /* ../robot_biped.usdz */,
+				8E1A10752FCD000100000001 /* ../angel_biped.usdz */,
+				8E1A10772FCD000100000001 /* ../heaven-sunrise.exr */,
 				8E1A10372FCD000100000001 /* ../plague_menu_ui_clean.png */,
 				8E1A10392FCD000100000001 /* ../plague_menu_ui_mockup.png */,
 				8E1A103B2FCD000100000001 /* ../plague_menu_horde_button.png */,
@@ -406,6 +412,8 @@
 				8E1A102E2FCD000100000001 /* ../neighbor_biped.usdz in Resources */,
 				8E1A10672FCD000100000001 /* ../neighbor_biped_ior.png in Resources */,
 				8E1A103E2FCD000100000001 /* ../robot_biped.usdz in Resources */,
+				8E1A10742FCD000100000001 /* ../angel_biped.usdz in Resources */,
+				8E1A10762FCD000100000001 /* ../heaven-sunrise.exr in Resources */,
 				8E1A10362FCD000100000001 /* ../plague_menu_ui_clean.png in Resources */,
 				8E1A10382FCD000100000001 /* ../plague_menu_ui_mockup.png in Resources */,
 				8E1A103A2FCD000100000001 /* ../plague_menu_horde_button.png in Resources */,

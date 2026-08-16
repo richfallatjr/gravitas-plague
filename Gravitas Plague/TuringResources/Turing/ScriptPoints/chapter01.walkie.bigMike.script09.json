@@ -12,7 +12,7 @@
     "computeStart": "foundationBeforePrerecording",
     "fillerMode": "continuousFromPrerecordingToGenerated",
     "commSFX": { "openBeforePrerecording": false, "sendAfterGenerated": false, "sendingLeadInAfterGeneratedSeconds": null },
-    "fixedLeadInSeconds": null,
+    "fixedLeadInSeconds": 10,
     "generationPipeline": null,
     "backgroundMusic": null
   },

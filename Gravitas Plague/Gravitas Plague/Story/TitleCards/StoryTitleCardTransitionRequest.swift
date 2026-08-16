@@ -70,12 +70,17 @@ struct StoryTitleCardTransitionRequest: Sendable, Equatable {
 enum StoryTitleCardLeaseOrigin: Sendable {
     case acquireFromStableState
     case transferred(StoryInteractionLease)
+    case transferredAlreadyFullBlack(
+        lease: StoryInteractionLease,
+        blackoutRequestID: UUID
+    )
 }
 
 enum StoryTitleCardRouteLeaseDisposition: Sendable, Equatable {
     case releaseAfterFade
     case retainedByDestination
     case transferredByDestination
+    case destinationOwnsFullBlackAndLease
 }
 
 nonisolated struct StoryEpisodeBoundaryEvent: Sendable, Hashable {

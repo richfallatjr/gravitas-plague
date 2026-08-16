@@ -111,6 +111,25 @@ final class DeathPresentationController: ObservableObject {
         }
     }
 
+    func requireFullBlackOwnership(requestID: UUID) throws {
+        try requireCurrentTitleRequest(requestID)
+        guard isActive, abs(blackoutOpacity - 1.0) <= 0.0001 else {
+            throw StoryTitleCardError.fullBlackOwnershipRequired
+        }
+    }
+
+    func transferFullBlackOwnership(
+        from oldRequestID: UUID,
+        to newRequestID: UUID
+    ) throws {
+        try requireFullBlackOwnership(requestID: oldRequestID)
+        activeTitleRequestID = newRequestID
+        print(
+            "[ImmersiveBlackout] ownership transferred " +
+                "from=\(oldRequestID.uuidString) to=\(newRequestID.uuidString) opacity=1.0"
+        )
+    }
+
     func reset() {
         blackoutTask?.cancel()
         blackoutTask = nil

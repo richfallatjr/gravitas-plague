@@ -1,4 +1,5 @@
 import Foundation
+import RealityKit
 
 @MainActor
 protocol Chapter01RobotAudioAttachment: AnyObject {
@@ -12,20 +13,43 @@ protocol Chapter01RobotAudioAttachment: AnyObject {
 final class Chapter01RobotAudioAttachmentLease: Chapter01RobotAudioAttachment {
     let enemyID: UUID
 
-    private weak var audioController: GravitasDemoAudioController?
+    private let stopHostAudioSource: @MainActor (UUID) -> Void
+    private let detachAudioEmitter: @MainActor () -> Void
     private(set) var isActive = true
 
-    init(enemyID: UUID, audioController: GravitasDemoAudioController) {
+    init(
+        enemyID: UUID,
+        audioController: GravitasDemoAudioController,
+        audioEmitter: Entity?
+    ) {
         self.enemyID = enemyID
-        self.audioController = audioController
+        stopHostAudioSource = { [weak audioController] enemyID in
+            audioController?.stopHostAudioSource(id: enemyID)
+        }
+        detachAudioEmitter = { [weak audioEmitter] in
+            audioEmitter?.removeFromParent()
+        }
+    }
+
+    init(
+        enemyID: UUID,
+        stopHostAudioSource: @escaping @MainActor (UUID) -> Void,
+        detachAudioEmitter: @escaping @MainActor () -> Void = {}
+    ) {
+        self.enemyID = enemyID
+        self.stopHostAudioSource = stopHostAudioSource
+        self.detachAudioEmitter = detachAudioEmitter
     }
 
     func deactivate(reason: String) async {
-        guard isActive else { return }
+        let wasActive = isActive
+        stopHostAudioSource(enemyID)
+        detachAudioEmitter()
         isActive = false
-        audioController?.stopHostAudioSource(id: enemyID)
         print(
-            "[Chapter01RobotAudio] deactivated enemyID=\(enemyID.uuidString) reason=\(reason)"
+            "[Chapter01RobotAudio] force-deactivated " +
+                "enemyID=\(enemyID.uuidString) " +
+                "wasActive=\(wasActive) reason=\(reason)"
         )
     }
 }

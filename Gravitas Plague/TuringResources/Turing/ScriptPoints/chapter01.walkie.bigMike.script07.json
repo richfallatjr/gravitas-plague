@@ -18,7 +18,7 @@
       "sendAfterGenerated": false,
       "sendingLeadInAfterGeneratedSeconds": null
     },
-    "fixedLeadInSeconds": null,
+    "fixedLeadInSeconds": 10,
     "generationPipeline": null,
     "interactionSurface": "walkie",
     "backgroundMusic": null

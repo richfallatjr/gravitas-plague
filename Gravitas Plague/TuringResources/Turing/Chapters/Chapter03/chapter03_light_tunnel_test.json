@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "sequenceID": "chapter03.cinematic.lightTunnel.001",
+  "contentRevision": "chapter03.lightTunnelTest.v2",
+  "music": {
+    "resourcePath": "Turing/Audio/chapter03/chapter03-light-at-the-end-of-the-tunnel.mp3",
+    "minimumDurationSeconds": 180.0,
+    "maximumDurationSeconds": 240.0,
+    "loop": false,
+    "gainDB": -15.0,
+    "fadeInSeconds": 1.5,
+    "fadeOutSeconds": 1.5
+  },
+  "visual": {
+    "portalDiameterMeters": 2.286,
+    "startDistanceMeters": 30.48,
+    "endDistanceMeters": 3.048,
+    "approachDurationSeconds": 60.0,
+    "angelInsideOffsetMeters": 1.0,
+    "angelRootYOffsetMeters": -0.9,
+    "domeRadiusMeters": 12.0,
+    "domeCenterOffsetZMeters": -9.0
+  },
+  "angelPrerecording": null,
+  "completion": {
+    "waitForMusicActualCompletion": true,
+    "waitForAngelPrerecordingIfStarted": true,
+    "destination": "endOfAvailableContent"
+  }
+}

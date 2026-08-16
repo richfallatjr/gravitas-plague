@@ -12,7 +12,7 @@ struct TuringStoryEpisodePickerView: View {
 #if DEBUG || GR_TURING_DIAGNOSTICS
     private let episodes = TuringEpisodeCatalog.developmentEpisodes
 #else
-    private let episodes = TuringEpisodeCatalog.productionEpisodes
+    private let episodes = TuringEpisodeCatalog.productionPickerEpisodes
 #endif
 
     var body: some View {
@@ -181,9 +181,7 @@ struct TuringStoryEpisodePickerView: View {
                 let request = StoryTitleCardTransitionRequest(
                     requestID: UUID(),
                     source: .episodePickerContinue,
-                    descriptor: StoryTitleCardCatalog.descriptor(
-                        for: target.episodeID
-                    ),
+                    descriptor: target.titleCardDescriptor,
                     destination: .continueFrom(target),
                     menuMusicPolicy: .playThroughCard
                 )

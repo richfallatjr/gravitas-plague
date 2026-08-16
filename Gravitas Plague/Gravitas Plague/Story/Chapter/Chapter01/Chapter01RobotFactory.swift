@@ -74,6 +74,7 @@ final class Chapter01RobotFactory {
             controller.setCombatEnabled(false)
             controller.setExternalMotionDriven(true)
             controller.setRootMotionEnabled(false)
+            controller.useAuthoredCharacterHeadingCorrection()
             controller.setupCharacterAudioEmitterFromAttributes()
 
             if controller.rootEntity.parent == nil {

@@ -52,6 +52,17 @@ struct TuringEpisodePickerView: View {
                 .padding(.vertical, 4)
 
             Button {
+                startChapter03LightTunnelTest()
+            } label: {
+                Label(
+                    "Start Chapter 3 - Light Tunnel Test",
+                    systemImage: "light.max"
+                )
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(openingEpisodeID != nil)
+
+            Button {
                 runStoryRoomScanAgain()
             } label: {
                 HStack(spacing: 8) {
@@ -209,6 +220,29 @@ struct TuringEpisodePickerView: View {
     }
 
 #if DEBUG || GR_TURING_DIAGNOSTICS
+    private func startChapter03LightTunnelTest() {
+        guard openingEpisodeID == nil else { return }
+        openingEpisodeID = .chapter03
+        Task { @MainActor in
+            defer { openingEpisodeID = nil }
+            guard await ensureImmersiveSpaceForTuringHUD(
+                reason: "chapter03LightTunnelTest"
+            ) else {
+                qwenDebugStatus = "Failed: immersive space unavailable"
+                return
+            }
+            let request = StoryTitleCardTransitionRequest(
+                requestID: UUID(),
+                source: .episodePickerStart,
+                descriptor: StoryTitleCardCatalog.chapter03LightTunnelTest,
+                destination: .start(.chapter03),
+                menuMusicPolicy: .playThroughCard
+            )
+            session.requestStoryTitleCardTransition(request)
+            dismiss()
+        }
+    }
+
     private func runStoryRoomScanAgain() {
         guard !roomScanRequestStarting else {
             return

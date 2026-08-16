@@ -5,6 +5,7 @@ struct StoryTitleCardDescriptor: Sendable, Hashable {
         case prologue
         case chapter01
         case chapter02
+        case chapter03
         case endOfAvailableContent
     }
 

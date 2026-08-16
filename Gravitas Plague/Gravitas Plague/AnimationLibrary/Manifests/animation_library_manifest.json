@@ -1,8 +1,49 @@
 {
   "schema": "com.gravitas.animation_library_manifest.v0",
   "library_id": "GravitasPlagueAnimationLibrary",
-  "generated_at": "2026-08-01T01:45:12.149329+00:00",
+  "generated_at": "2026-08-14T22:42:30.832793+00:00",
   "clips": [
+    {
+      "clip_id": "angel_float_pose_01",
+      "display_name": "Angel Float Pose 01",
+      "relative_path": "Clips/Idle/angel_float_pose_01.jockanim.json",
+      "rig_id": "GravitasMeshyBiped24",
+      "rig_version": "001",
+      "pose_mode": "absoluteLocal",
+      "clip_type": "full_body_animation",
+      "affected_joints": [],
+      "blend_in_frames": 0,
+      "blend_out_frames": 0,
+      "base_animation_continues": false,
+      "category": [
+        "idle"
+      ],
+      "emotion": [
+        "serene",
+        "ethereal"
+      ],
+      "threat": [
+        "passive"
+      ],
+      "story": [
+        "chapter03",
+        "death_tunnel",
+        "angel"
+      ],
+      "looping": true,
+      "duration_seconds": 1.0,
+      "locomotion_type": "stationary",
+      "world_space_motion": "none",
+      "locomotion_enabled": false,
+      "locomotion_start_mode": "after_transition",
+      "approved_for_runtime": true,
+      "debug_only": false,
+      "source_rig_id": "angel_biped_3e23483ddb22",
+      "source_character_id": "angel_biped",
+      "source_skeleton_hash": "3e23483ddb22b5d9f79b943131c30ff9ce2d537749a32e8ae5f75dfe604fcabc",
+      "source_rig_relative_path": "Rigs/SourceRigs/angel_biped_3e23483ddb22.source_rig.json",
+      "updated_at": "2026-08-14T22:42:30.832786+00:00"
+    },
     {
       "clip_id": "charged-slash-left",
       "display_name": "Charged slash left",

@@ -4,6 +4,7 @@ nonisolated enum TuringEpisodeID: String, Codable, CaseIterable, Identifiable, S
     case prologue
     case chapter01
     case chapter02
+    case chapter03
 
     nonisolated var id: String { rawValue }
 }
@@ -59,12 +60,27 @@ enum TuringEpisodeCatalog {
         )
     ]
 
-    nonisolated static let developmentEpisodes = productionEpisodes
+    nonisolated static let chapter03PickerEpisode = TuringEpisodeDescriptor(
+        id: .chapter03,
+        title: "Chapter 3",
+        subtitle: "Light at the End of the Tunnel",
+        scriptResourcePath: nil,
+        availability: .unlocked,
+        stripArtwork: .chapter03Strip,
+        contentRevision: "chapter03.lightTunnelTest.v2"
+    )
+
+    // Chapter 3 is directly selectable for testing without changing the
+    // Chapter 2 end-of-content progression boundary.
+    nonisolated static let productionPickerEpisodes =
+        productionEpisodes + [chapter03PickerEpisode]
+
+    nonisolated static let developmentEpisodes = productionPickerEpisodes
 
     nonisolated static func descriptor(
         for id: TuringEpisodeID
     ) -> TuringEpisodeDescriptor? {
-        return productionEpisodes.first { $0.id == id }
+        return productionPickerEpisodes.first { $0.id == id }
     }
 
     nonisolated static func nextUnlockedEpisode(

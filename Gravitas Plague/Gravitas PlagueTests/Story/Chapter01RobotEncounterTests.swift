@@ -4,7 +4,61 @@ import XCTest
 
 @testable import Gravitas_Plague
 
+@MainActor
 final class Chapter01RobotEncounterTests: XCTestCase {
+    func testEveryChapter01RichToMikeSendUsesEstablishedCommsContract() throws {
+        let store = TuringFlowDescriptorStore()
+        let prologueRich = try store.require("prologue.scriptPoint02")
+        let prologueMike = try store.require("prologue.scriptPoint03")
+
+        let pairs = [
+            (
+                try store.require("chapter01.walkie.rich.script06"),
+                try store.require("chapter01.walkie.bigMike.script07")
+            ),
+            (
+                try store.require("chapter01.walkie.rich.script08"),
+                try store.require("chapter01.walkie.bigMike.script09")
+            )
+        ]
+
+        for (rich, mike) in pairs {
+            XCTAssertEqual(
+                rich.transmission.commSFX,
+                prologueRich.transmission.commSFX,
+                rich.scriptPointID
+            )
+            XCTAssertEqual(
+                mike.transmission.fixedLeadInSeconds,
+                prologueMike.transmission.fixedLeadInSeconds,
+                mike.scriptPointID
+            )
+            XCTAssertEqual(
+                mike.transmission.fixedLeadInSeconds,
+                10,
+                mike.scriptPointID
+            )
+        }
+    }
+
+    func testRobotAudioTeardownForceStopsEveryCleanupAttempt() async {
+        let enemyID = UUID()
+        var stoppedIDs: [UUID] = []
+        var detachCount = 0
+        let lease = Chapter01RobotAudioAttachmentLease(
+            enemyID: enemyID,
+            stopHostAudioSource: { stoppedIDs.append($0) },
+            detachAudioEmitter: { detachCount += 1 }
+        )
+
+        await lease.deactivate(reason: "doorClosed")
+        await lease.deactivate(reason: "cleanupFallback")
+
+        XCTAssertFalse(lease.isActive)
+        XCTAssertEqual(stoppedIDs, [enemyID, enemyID])
+        XCTAssertEqual(detachCount, 2)
+    }
+
     func testAntigenRemainsHiddenOnRollingCart() {
         XCTAssertFalse(StoryItemRewardPresenter.displaysAntigenOnRollingCart)
     }

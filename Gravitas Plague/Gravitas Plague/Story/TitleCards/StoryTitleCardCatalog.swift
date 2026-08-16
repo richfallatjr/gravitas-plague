@@ -28,6 +28,15 @@ enum StoryTitleCardCatalog {
         fadeFromBlackSeconds: .milliseconds(750)
     )
 
+    static let chapter03LightTunnelTest = StoryTitleCardDescriptor(
+        id: .chapter03,
+        title: "Chapter 3",
+        subtitle: "Light at the End of the Tunnel",
+        fadeToBlackSeconds: .milliseconds(750),
+        holdSeconds: .milliseconds(5_000),
+        fadeFromBlackSeconds: .milliseconds(750)
+    )
+
     static let endOfAvailableContent = StoryTitleCardDescriptor(
         id: .endOfAvailableContent,
         title: "Gravitas Plague",
@@ -47,6 +56,8 @@ enum StoryTitleCardCatalog {
             return chapter01
         case .chapter02:
             return chapter02
+        case .chapter03:
+            return chapter03LightTunnelTest
         }
     }
 }

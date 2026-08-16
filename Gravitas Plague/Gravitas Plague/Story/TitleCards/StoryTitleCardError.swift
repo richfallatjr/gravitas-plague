@@ -9,6 +9,7 @@ enum StoryTitleCardError: LocalizedError {
     case invalidNaturalDestination
     case terminalCardUsedWithUnlockedSuccessor
     case terminalPlaybackIncomplete
+    case fullBlackOwnershipRequired
 
     var errorDescription: String? {
         switch self {
@@ -28,6 +29,8 @@ enum StoryTitleCardError: LocalizedError {
             return "The end card cannot run while another Chapter is available."
         case .terminalPlaybackIncomplete:
             return "The Chapter ending was requested before its final playback completed."
+        case .fullBlackOwnershipRequired:
+            return "The cinematic requires ownership of an existing full-black transition."
         }
     }
 }
