@@ -55,6 +55,12 @@ final class TuringStoryPropBillboardIconController {
 
         iconEntity = icon
         physicalHitTarget = hitTarget
+        TuringStoryDeviceActivityIconController.shared.register(
+            surface: .walkie,
+            parent: iconAnchor,
+            transform: icon.transform,
+            size: visualSize
+        )
         apply(.hidden)
 
         print("""
@@ -120,6 +126,9 @@ final class TuringStoryPropBillboardIconController {
         }
         iconEntity?.removeFromParent()
         physicalHitTarget?.removeFromParent()
+        TuringStoryDeviceActivityIconController.shared.unregister(
+            surface: .walkie
+        )
         iconEntity = nil
         physicalHitTarget = nil
     }
@@ -180,24 +189,18 @@ final class TuringStoryPropBillboardIconController {
             return cached
         }
 
-        var material = UnlitMaterial()
-        if let texture = try? makeSymbolTexture(
+        let material = (try? TuringStoryActionIconVisualStyle.material(
             symbolName: symbolName
-        ) {
-            material.color = .init(
-                tint: WallStickerStyle.twoStopsDownTint,
-                texture: .init(texture)
-            )
-        } else {
-            material.color = .init(
-                tint: WallStickerStyle.twoStopsDownTint
-            )
-        }
-        material.blending = .transparent(
-            opacity: .init(floatLiteral: 0.92)
-        )
-        material.faceCulling = .none
+        )) ?? fallbackIconMaterial()
         cachedIconMaterials[symbolName] = material
+        return material
+    }
+
+    private func fallbackIconMaterial() -> UnlitMaterial {
+        var material = UnlitMaterial()
+        material.color = .init(tint: .orange)
+        material.blending = .transparent(opacity: .init(floatLiteral: 0.92))
+        material.faceCulling = .none
         return material
     }
 

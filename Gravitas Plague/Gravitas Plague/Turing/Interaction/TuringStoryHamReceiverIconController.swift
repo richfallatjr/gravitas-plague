@@ -102,6 +102,12 @@ final class TuringStoryHamReceiverIconController {
 
         iconEntity = icon
         physicalHitTarget = physicalTarget
+        TuringStoryDeviceActivityIconController.shared.register(
+            surface: .hamReceiver,
+            parent: iconAnchor,
+            transform: icon.transform,
+            size: Self.visualSize
+        )
         apply(.hidden)
 
         print("""
@@ -175,6 +181,9 @@ final class TuringStoryHamReceiverIconController {
         }
         iconEntity?.removeFromParent()
         physicalHitTarget?.removeFromParent()
+        TuringStoryDeviceActivityIconController.shared.unregister(
+            surface: .hamReceiver
+        )
         iconEntity = nil
         physicalHitTarget = nil
     }
@@ -241,29 +250,18 @@ final class TuringStoryHamReceiverIconController {
             cachedMaterials[symbolName] {
             return cached
         }
-        var material = UnlitMaterial()
-        if let texture =
-            try? symbolTexture(
-                symbolName: symbolName
-            ) {
-            material.color = .init(
-                tint:
-                    WallStickerStyle
-                        .twoStopsDownTint,
-                texture: .init(texture)
-            )
-        } else {
-            material.color = .init(
-                tint:
-                    WallStickerStyle
-                        .twoStopsDownTint
-            )
-        }
-        material.blending = .transparent(
-            opacity: .init(floatLiteral: 0.92)
-        )
-        material.faceCulling = .none
+        let material = (try? TuringStoryActionIconVisualStyle.material(
+            symbolName: symbolName
+        )) ?? fallbackMaterial()
         cachedMaterials[symbolName] = material
+        return material
+    }
+
+    private func fallbackMaterial() -> UnlitMaterial {
+        var material = UnlitMaterial()
+        material.color = .init(tint: .orange)
+        material.blending = .transparent(opacity: .init(floatLiteral: 0.92))
+        material.faceCulling = .none
         return material
     }
 

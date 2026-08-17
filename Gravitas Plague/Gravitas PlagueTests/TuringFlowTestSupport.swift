@@ -446,6 +446,8 @@ final class StubFlowPlayback:
     private var completedCount = 0
     private var finished = false
     private var fillerPlayed = false
+    private var authoredOnly = false
+    private var authoredInputSealed = false
     private var waiters:
         [CheckedContinuation<Void, Never>] = []
 
@@ -475,6 +477,34 @@ final class StubFlowPlayback:
         await recorder.record(
             "playback.begin"
         )
+    }
+
+    func beginAuthoredRun(identity: TuringFlowIdentity) async {
+        self.identity = identity
+        authoredOnly = true
+        authoredInputSealed = false
+        prerecordingCompleted = true
+        await recorder.record("playback.authored.begin")
+    }
+
+    func enqueueAuthoredMedia(_ item: TuringAuthoredMediaItem) async throws {
+        guard authoredOnly, authoredInputSealed == false else {
+            throw TuringRuntimeError.invalidConfig(
+                "Test authored playback is not accepting media."
+            )
+        }
+        await recorder.record("authored.\(item.id).started")
+        await recorder.record("authored.\(item.id).completed")
+    }
+
+    func sealAuthoredInput() async {
+        authoredInputSealed = true
+        await recorder.record("playback.authored.sealed")
+        await finish()
+    }
+
+    func waitUntilAuthoredPlaybackFinished() async throws {
+        await waitUntilPlaybackFinished()
     }
 
     func expectPrerecordingBeforeGenerated() async {

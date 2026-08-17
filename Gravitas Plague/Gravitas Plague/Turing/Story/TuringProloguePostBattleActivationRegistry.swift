@@ -75,7 +75,14 @@ actor TuringProloguePostBattleActivationRegistry {
         rootScriptPointID: String,
         trigger: TuringFlowTriggerSource
     ) async throws -> TuringExternalActivationContext? {
-        guard case .userPlay = trigger,
+        let isAcceptedTrigger: Bool
+        switch trigger {
+        case .userPlay, .playModeAutoplay:
+            isAcceptedTrigger = true
+        default:
+            isAcceptedTrigger = false
+        }
+        guard isAcceptedTrigger,
               let contract = TuringProloguePostBattleDeviceCatalog
                 .byRootScriptPointID[rootScriptPointID] else {
             return nil
@@ -83,7 +90,14 @@ actor TuringProloguePostBattleActivationRegistry {
 
         _ = try await progress.requirePlayable(contract.deviceID)
         let interaction = await arbiter.currentSnapshot()
-        guard interaction.capabilities.contains(contract.playCapability) else {
+        let requiresVisibleCapability: Bool
+        if case .userPlay = trigger {
+            requiresVisibleCapability = true
+        } else {
+            requiresVisibleCapability = false
+        }
+        guard requiresVisibleCapability == false ||
+                interaction.capabilities.contains(contract.playCapability) else {
             throw ProloguePostBattleActivationError
                 .playCapabilityMissing(contract.deviceID)
         }
@@ -127,8 +141,15 @@ actor TuringProloguePostBattleActivationRegistry {
         event: TuringScriptPointCompletionEvent,
         contract: ProloguePostBattleDeviceContract
     ) throws -> Record {
-        guard event.actualPlaybackCompleted else {
+        guard event.actualPlaybackCompleted,
+              event.actualTerminalPlaybackCompleted else {
             throw ProloguePostBattleActivationError.terminalPlaybackIncomplete
+        }
+        if event.experienceMode == .play {
+            guard event.completionBasis == .authoredMediaPlaybackCompleted else {
+                throw ProloguePostBattleActivationError
+                    .terminalPlaybackIncomplete
+            }
         }
         guard event.scriptPointID == contract.terminalScriptPointID else {
             throw ProloguePostBattleActivationError.wrongTerminalScriptPoint

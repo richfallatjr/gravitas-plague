@@ -18,6 +18,9 @@ nonisolated enum ProloguePostBattleTerminalTriggerRequirement: Sendable, Equatab
     case priorScriptPointCompleted(parentScriptPointID: String)
 
     func matches(_ actual: TuringFlowTriggerSource) -> Bool {
+        if case .playModeAutoplay = actual {
+            return true
+        }
         switch (self, actual) {
         case (.userPlay, .userPlay):
             return true
@@ -96,10 +99,10 @@ nonisolated enum TuringProloguePostBattleDeviceCatalog {
     )
 
     static let ordered: [ProloguePostBattleDeviceContract] = [
-        walkie,
-        dadPhoto,
         crankRadio,
-        hamReceiver
+        walkie,
+        hamReceiver,
+        dadPhoto
     ]
 
     static let byID = Dictionary(

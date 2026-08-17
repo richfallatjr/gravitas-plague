@@ -453,6 +453,70 @@ final class TuringFlowEngineParityTests:
         }
     }
 
+    func testPlayModeRunsAuthoredMediaWithoutFoundationOrQwen() async throws {
+        let harness = try makeHarness(
+            behavior: .failed("Foundation must not be called in Play mode."),
+            completionOrder: [],
+            open: true,
+            send: true
+        )
+        let authoredURL = URL(
+            fileURLWithPath: "/tmp/\(harness.scriptPointID).pr.wav"
+        )
+        try Data().write(to: authoredURL, options: .atomic)
+        defer { try? FileManager.default.removeItem(at: authoredURL) }
+
+        let result = await harness.engine.run(
+            scriptPointID: harness.scriptPointID,
+            trigger: .playModeAutoplay(parentBoundaryID: "test.boundary"),
+            executionMode: .play
+        )
+
+        XCTAssertTrue(result.succeeded, result.message)
+        XCTAssertEqual(result.experienceMode, .play)
+        XCTAssertEqual(result.completionBasis, .authoredMediaPlaybackCompleted)
+        XCTAssertEqual(result.expectedGeneratedSegmentCount, 0)
+
+        let events = await harness.recorder.snapshot()
+        XCTAssertFalse(events.contains("foundation.started"))
+        XCTAssertFalse(events.contains("qwen.started"))
+        assertOrder(
+            events,
+            [
+                "route.open",
+                "playback.authored.begin",
+                "authored.\(harness.scriptPointID).pr.started",
+                "authored.\(harness.scriptPointID).pr.completed",
+                "playback.authored.sealed",
+                "playback.finished",
+                "route.send",
+                "route.finish.true"
+            ]
+        )
+    }
+
+    func testPlayModeScriptPoint05TreatmentUsesOnlySecondPrerecording() {
+        let treatment = StoryPlayModeTreatmentCatalog.treatment(
+            for: "prologue.scriptPoint05"
+        )
+        guard case .replaceWithPrerecordings(let ids) =
+                treatment.authoredMediaPolicy else {
+            return XCTFail("Expected ScriptPoint05 replacement media.")
+        }
+        XCTAssertEqual(
+            ids,
+            ["prologue.walkie.bigMike.scriptPoint05.002"]
+        )
+        XCTAssertEqual(
+            treatment.audit?.skippedPrimaryPrerecordingID,
+            "prologue.walkie.bigMike.scriptPoint05.001"
+        )
+        XCTAssertEqual(
+            treatment.audit?.skippedGeneratedStageIDs,
+            ["headlineReading", "promptVoice"]
+        )
+    }
+
     private struct Harness {
         let scriptPointID: String
         let recorder:

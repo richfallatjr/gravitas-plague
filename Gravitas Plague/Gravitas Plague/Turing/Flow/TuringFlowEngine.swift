@@ -83,7 +83,8 @@ actor TuringFlowEngine {
 
     func run(
         scriptPointID: String,
-        trigger: TuringFlowTriggerSource
+        trigger: TuringFlowTriggerSource,
+        executionMode: StoryExperienceMode = .interactive
     ) async -> TuringFlowResult {
         guard activeFlow == nil else {
             return .ignored(
@@ -108,8 +109,11 @@ actor TuringFlowEngine {
                     scriptPointID
                 )
 
-            guard trigger.kind ==
-                    descriptor.trigger.kind ||
+            guard (executionMode == .play && {
+                        if case .playModeAutoplay = trigger { return true }
+                        return false
+                    }()) ||
+                    trigger.kind == descriptor.trigger.kind ||
                     trigger.kind == .manualDebug else {
                 return .ignored(
                     .triggerMismatch,
@@ -128,7 +132,8 @@ actor TuringFlowEngine {
                 try prerecordingStore.audioURL(
                     for: prerecording
                 )
-            if let voicePromptID =
+            if executionMode == .interactive,
+               let voicePromptID =
                 descriptor.transmission.voicePromptID {
                 voicePrompt =
                     try voicePromptStore.descriptor(
@@ -162,10 +167,12 @@ actor TuringFlowEngine {
             prerecordingID:
                 prerecording.prerecordingID,
             voicePromptID:
-                Self.identityVoicePromptID(
-                    descriptor: descriptor,
-                    voicePrompt: voicePrompt
-                ),
+                executionMode == .play
+                    ? "authoredOnly"
+                    : Self.identityVoicePromptID(
+                        descriptor: descriptor,
+                        voicePrompt: voicePrompt
+                    ),
             interactionSurface:
                 descriptor.transmission
                     .effectiveInteractionSurface
@@ -202,6 +209,14 @@ actor TuringFlowEngine {
                 )
             ]
         )
+
+        if executionMode == .play {
+            return await runAuthoredPath(
+                descriptor: descriptor,
+                character: character,
+                identity: identity
+            )
+        }
 
         do {
             try Self.validateIdentity(
@@ -1074,6 +1089,132 @@ actor TuringFlowEngine {
                     [],
                 message:
                     "\(scriptPointID) failed: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func runAuthoredPath(
+        descriptor: TuringFlowDescriptor,
+        character: TuringCharacterRuntimeDefinition,
+        identity: TuringFlowIdentity
+    ) async -> TuringFlowResult {
+        let treatment = StoryPlayModeTreatmentCatalog.treatment(
+            for: descriptor.scriptPointID
+        )
+        var route: (any TuringFlowRouteRuntime)?
+        do {
+            let plan = try TuringAuthoredMediaPlanResolver(
+                prerecordingStore: prerecordingStore
+            ).resolve(
+                descriptor: descriptor,
+                treatment: treatment
+            )
+            let resolvedRoute = try await routeResolver.require(
+                descriptor.transmission.outputRoute
+            )
+            route = resolvedRoute
+            await MainActor.run {
+                TuringStoryDeviceActivityIconController.shared.setPresentation(
+                    .playing(
+                        surface: descriptor.transmission.effectiveInteractionSurface
+                    )
+                )
+            }
+            defer {
+                Task { @MainActor in
+                    TuringStoryDeviceActivityIconController.shared
+                        .setPresentation(.hidden)
+                }
+            }
+
+            let policyDescription: String
+            switch treatment.authoredMediaPolicy {
+            case .standard:
+                policyDescription = "standard"
+            case .replaceWithPrerecordings:
+                policyDescription = "replaceWithPrerecordings"
+            }
+            print("""
+            [StoryPlayMode] authored plan resolved
+              scriptPointID: \(descriptor.scriptPointID)
+              treatment: \(policyDescription)
+              authoredMediaIDs: \(plan.items.map(\.id))
+              foundationRequests: 0
+              freshInstancesWarmed: 0
+              qwenRenders: 0
+              decoderRuns: 0
+            """)
+            if let audit = treatment.audit {
+                print("""
+                [StoryPlayMode] authored replacement
+                  primaryPRSkipped: \(audit.skippedPrimaryPrerecordingID)
+                  generatedStagesSkipped: \(audit.skippedGeneratedStageIDs.joined(separator: ","))
+                  authoredMediaIDs: \(plan.items.map(\.id))
+                """)
+            }
+
+            let result = try await TuringAuthoredFlowRunner().run(
+                descriptor: descriptor,
+                identity: identity,
+                mediaPlan: plan,
+                character: character,
+                route: resolvedRoute
+            )
+            await TuringFlowInteractionGateController.shared.applyCompletionGate(
+                .closed,
+                identity: identity
+            )
+            print("""
+            [StoryPlayMode] action completed
+              scriptPointID: \(descriptor.scriptPointID)
+              finalMediaID: \(plan.items.last?.id ?? "none")
+              actualTerminalPlaybackCompleted: true
+              completionBasis: authoredMediaPlaybackCompleted
+            """)
+            return result
+        } catch is CancellationError {
+            if let route {
+                try? await route.finish(
+                    descriptor: descriptor,
+                    identity: identity,
+                    succeeded: false
+                )
+            }
+            await TuringFlowInteractionGateController.shared.failFlow(
+                identity: identity,
+                reason: "authoredPlaybackCancelled"
+            )
+            return TuringFlowResult(
+                outcome: .cancelled,
+                identity: identity,
+                expectedGeneratedSegmentCount: 0,
+                completedGeneratedSegmentCount: 0,
+                skippedGeneratedSegmentIndices: [],
+                message: "Cancelled \(descriptor.scriptPointID)",
+                experienceMode: .play,
+                completionBasis: .authoredMediaPlaybackCompleted
+            )
+        } catch {
+            if let route {
+                try? await route.finish(
+                    descriptor: descriptor,
+                    identity: identity,
+                    succeeded: false
+                )
+            }
+            await TuringFlowInteractionGateController.shared.failFlow(
+                identity: identity,
+                reason: error.localizedDescription
+            )
+            return TuringFlowResult(
+                outcome: .playbackFailed,
+                identity: identity,
+                expectedGeneratedSegmentCount: 0,
+                completedGeneratedSegmentCount: 0,
+                skippedGeneratedSegmentIndices: [],
+                message: "\(descriptor.scriptPointID) failed: \(error.localizedDescription)",
+                experienceMode: .play,
+                completionBasis: .authoredMediaPlaybackCompleted
             )
         }
     }

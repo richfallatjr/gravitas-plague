@@ -8,6 +8,9 @@ nonisolated struct TuringScriptPointCompletionEvent: Sendable, Equatable {
     let triggerSource: TuringFlowTriggerSource
     let externalActivation: TuringExternalActivationContext?
     let actualPlaybackCompleted: Bool
+    let experienceMode: StoryExperienceMode
+    let completionBasis: TuringScriptPointCompletionBasis
+    let actualTerminalPlaybackCompleted: Bool
 }
 
 nonisolated struct TuringConversationPlaybackCompletionEvent: Sendable, Equatable {
@@ -128,7 +131,8 @@ actor TuringEpisodeFlowController {
 
         switch trigger {
         case .userPlay,
-             .continuationRestore:
+             .continuationRestore,
+             .playModeAutoplay:
             await PlagueMainMenuMusicActor.shared.stop(
                 reason: "devicePlay.\(scriptPointID).\(trigger.logValue)"
             )
@@ -139,6 +143,14 @@ actor TuringEpisodeFlowController {
         }
 
         let sequenceID = UUID()
+        let capturedMode: StoryExperienceMode
+        if case .manualDebug = trigger {
+            capturedMode = .interactive
+        } else {
+            capturedMode = await MainActor.run {
+                StoryExperienceModeController.shared.modeForNewStoryAction()
+            }
+        }
         activeSequenceID = sequenceID
         activeSequenceLifecycle = nil
         activeSequenceLastDescriptor = nil
@@ -147,7 +159,8 @@ actor TuringEpisodeFlowController {
             scriptPointID: scriptPointID,
             trigger: trigger,
             allowExplicitReplay: allowExplicitReplay,
-            sequenceID: sequenceID
+            sequenceID: sequenceID,
+            experienceMode: capturedMode
         )
         await finishActiveSequence(
             sequenceID: sequenceID,
@@ -164,9 +177,11 @@ actor TuringEpisodeFlowController {
         scriptPointID: String,
         trigger: TuringFlowTriggerSource,
         allowExplicitReplay: Bool,
-        sequenceID: UUID
+        sequenceID: UUID,
+        experienceMode: StoryExperienceMode
     ) async -> TuringVoiceRunResult {
-        if catalogValidated == false,
+        if experienceMode == .interactive,
+           catalogValidated == false,
            let catalogValidator {
             do {
                 try await catalogValidator
@@ -329,12 +344,13 @@ actor TuringEpisodeFlowController {
             let result = await engine.run(
                 scriptPointID:
                     scheduledPointID,
-                trigger: scheduledTrigger
+                trigger: scheduledTrigger,
+                executionMode: experienceMode
             )
             let hasAutomaticSuccessor =
                 result.succeeded &&
-                descriptor.progression
-                    .automaticAdvance &&
+                (descriptor.progression.automaticAdvance ||
+                    experienceMode == .play) &&
                 descriptor.progression
                     .nextScriptPointID != nil
             await lifecycle.pointDidFinish(
@@ -406,8 +422,9 @@ actor TuringEpisodeFlowController {
                     )
                 }
 
-                if progression.automaticAdvance {
-                    guard nextDescriptor.trigger.kind == .priorScriptPointCompleted else {
+                if progression.automaticAdvance || experienceMode == .play {
+                    guard experienceMode == .play ||
+                            nextDescriptor.trigger.kind == .priorScriptPointCompleted else {
                         return .failed(
                             "\(scheduledPointID) requests automatic advance, but \(nextScriptPointID) is not triggered by priorScriptPointCompleted."
                         )
@@ -432,9 +449,13 @@ actor TuringEpisodeFlowController {
                     }
 
                     scheduledPointID = nextScriptPointID
-                    scheduledTrigger = .priorScriptPointCompleted(
-                        parentScriptPointID: descriptor.scriptPointID
-                    )
+                    scheduledTrigger = experienceMode == .play
+                        ? .playModeAutoplay(
+                            parentBoundaryID: descriptor.scriptPointID
+                        )
+                        : .priorScriptPointCompleted(
+                            parentScriptPointID: descriptor.scriptPointID
+                        )
                     continue
                 }
 
@@ -707,6 +728,9 @@ actor TuringEpisodeFlowController {
         await TuringFlowInteractionGateController
             .shared
             .reset(reason: reason)
+        await MainActor.run {
+            StoryModeActionCoordinator.shared.reset(reason: reason)
+        }
 
         print("""
         [TuringFlow] episode progression reset
@@ -794,7 +818,10 @@ actor TuringEpisodeFlowController {
             flowInstanceID: identity.flowInstanceID,
             triggerSource: triggerSource,
             externalActivation: activeExternalActivation,
-            actualPlaybackCompleted: true
+            actualPlaybackCompleted: true,
+            experienceMode: result.experienceMode,
+            completionBasis: result.completionBasis,
+            actualTerminalPlaybackCompleted: true
         )
         let disposition = try await completionEventSink?
             .scriptPointCompleted(event) ?? .useDescriptorProgression

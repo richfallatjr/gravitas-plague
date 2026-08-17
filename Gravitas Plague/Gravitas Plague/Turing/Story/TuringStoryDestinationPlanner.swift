@@ -21,7 +21,8 @@ enum TuringStoryDestinationPlanner {
     }
 
     static func destination(
-        for snapshot: TuringEpisodeContinuationSnapshot
+        for snapshot: TuringEpisodeContinuationSnapshot,
+        experienceMode: StoryExperienceMode = .interactive
     ) throws -> TuringStoryDestination {
         guard snapshot.schemaVersion == TuringEpisodeContinuationSnapshot.currentSchemaVersion,
               snapshot.episodeID == .prologue,
@@ -33,6 +34,23 @@ enum TuringStoryDestinationPlanner {
         case .notStarted:
             return try startOfEpisode(.prologue)
         case .script01PromptVoiceCompleted:
+            if experienceMode == .play {
+                return TuringStoryDestination(
+                    episodeID: .prologue,
+                    checkpoint: snapshot.checkpoint,
+                    completedScriptPointIDs: ["prologue.scriptPoint01"],
+                    pendingConversationAdvance: nil,
+                    walkieAction: .play(
+                        scriptPointID: "prologue.scriptPoint02",
+                        trigger: .playModeAutoplay(
+                            parentBoundaryID: "prologue.scriptPoint01"
+                        )
+                    ),
+                    doorState: nil,
+                    battleState: .absent,
+                    mediaState: .silent
+                )
+            }
             return TuringStoryDestination(
                 episodeID: .prologue,
                 checkpoint: snapshot.checkpoint,

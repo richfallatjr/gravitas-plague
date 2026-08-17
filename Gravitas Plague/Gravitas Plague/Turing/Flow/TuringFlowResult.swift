@@ -1,5 +1,14 @@
 import Foundation
 
+nonisolated enum TuringScriptPointCompletionBasis:
+    String,
+    Sendable,
+    Equatable
+{
+    case authoredMediaPlaybackCompleted
+    case interactiveGeneratedPlaybackCompleted
+}
+
 struct TuringFlowResult: Sendable, Equatable {
     enum Outcome: String, Sendable, Equatable {
         case succeeded
@@ -20,6 +29,29 @@ struct TuringFlowResult: Sendable, Equatable {
     let completedGeneratedSegmentCount: Int
     let skippedGeneratedSegmentIndices: [Int]
     let message: String
+    let experienceMode: StoryExperienceMode
+    let completionBasis: TuringScriptPointCompletionBasis
+
+    init(
+        outcome: Outcome,
+        identity: TuringFlowIdentity?,
+        expectedGeneratedSegmentCount: Int,
+        completedGeneratedSegmentCount: Int,
+        skippedGeneratedSegmentIndices: [Int],
+        message: String,
+        experienceMode: StoryExperienceMode = .interactive,
+        completionBasis: TuringScriptPointCompletionBasis =
+            .interactiveGeneratedPlaybackCompleted
+    ) {
+        self.outcome = outcome
+        self.identity = identity
+        self.expectedGeneratedSegmentCount = expectedGeneratedSegmentCount
+        self.completedGeneratedSegmentCount = completedGeneratedSegmentCount
+        self.skippedGeneratedSegmentIndices = skippedGeneratedSegmentIndices
+        self.message = message
+        self.experienceMode = experienceMode
+        self.completionBasis = completionBasis
+    }
 
     var succeeded: Bool {
         outcome == .succeeded

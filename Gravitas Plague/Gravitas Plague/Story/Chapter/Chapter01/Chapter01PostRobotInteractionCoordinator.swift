@@ -99,10 +99,15 @@ final class Chapter01PostRobotInteractionCoordinator {
                 transitionLease,
                 reason: "\(reason).ready"
             )
+            let mode = StoryExperienceModeController.shared.modeForNewStoryAction()
+            let presentationIsValid = mode == .play
+                ? releasedSnapshot.dadFramePresentation == .hidden &&
+                    releasedSnapshot.capabilities.contains(.dadFramePlay) == false
+                : releasedSnapshot.dadFramePresentation == .play &&
+                    releasedSnapshot.capabilities.contains(.dadFramePlay)
             guard releasedSnapshot.exclusiveOwner == nil,
                   releasedSnapshot.doorState == .closedUnloaded,
-                  releasedSnapshot.dadFramePresentation == .play,
-                  releasedSnapshot.capabilities.contains(.dadFramePlay) else {
+                  presentationIsValid else {
                 print(
                     "[Chapter01PostRobot] ERROR first branch presentation rejected " +
                         "owner=\(releasedSnapshot.exclusiveOwner?.logValue ?? "none") " +
@@ -121,7 +126,7 @@ final class Chapter01PostRobotInteractionCoordinator {
             hamReceiver.applyInteractionSnapshot(releasedSnapshot)
             print(
                 "[Chapter01PostRobot] first branch presented synchronously " +
-                    "dadFrame=play"
+                    "dadFrame=\(releasedSnapshot.dadFramePresentation.rawValue) mode=\(mode.rawValue)"
             )
         }
     }
@@ -147,6 +152,34 @@ final class Chapter01PostRobotInteractionCoordinator {
             snapshot.postRobot.gateStates,
             reason: reason
         )
+        if let branch = Chapter01PostRobotBranch.allCases.first(
+            where: {
+                snapshot.postRobot.isAvailable($0) &&
+                    snapshot.postRobot.completedBranches.contains($0) == false
+            }
+        ) {
+            let binding: TuringStorySurfaceFlowBinding
+            switch branch {
+            case .dadFrame:
+                binding = .chapter01FourChancesDad
+            case .walkie:
+                binding = .chapter01FourChancesWalkie
+            case .hamReceiver:
+                binding = .chapter01FourChancesHam
+            }
+            let mode = StoryExperienceModeController.shared.modeForNewStoryAction()
+            StoryModeActionCoordinator.shared.activate(
+                .init(
+                    episodeID: .chapter01,
+                    rootScriptPointID: binding.rootScriptPointID,
+                    durableBoundaryID:
+                        "chapter01.postRobot.\(snapshot.revision).\(branch.rawValue)",
+                    sourceEventID: UUID()
+                ),
+                mode: mode,
+                interactiveArm: { }
+            )
+        }
         print(
             "[Chapter01PostRobot] sequential gates applied " +
                 "dad=\(snapshot.postRobot.state(for: .dadFrame).rawValue) " +

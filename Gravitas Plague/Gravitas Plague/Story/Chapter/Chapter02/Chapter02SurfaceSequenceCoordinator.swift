@@ -103,23 +103,33 @@ final class Chapter02SurfaceSequenceCoordinator {
         reason: String
     ) {
         closeAll(reason: "\(reason).closePrior")
-        switch binding.interactionSurface {
-        case .walkie:
-            walkie.bind(binding, initialState: .play, reason: reason)
-        case .dadFrame:
-            dadFrame.bind(binding, initialState: .play, reason: reason)
-        case .crankRadio:
-            crankRadio.bind(binding, initialState: .play, reason: reason)
-        case .hamReceiver:
-            hamReceiver.bind(binding, initialState: .play, reason: reason)
-        default:
-            preconditionFailure(
-                "Unsupported Chapter 2 interaction surface \(binding.interactionSurface.rawValue)"
-            )
+        let interactiveArm = { [weak self] in
+            guard let self else { return }
+            switch binding.interactionSurface {
+            case .walkie:
+                self.walkie.bind(binding, initialState: .play, reason: reason)
+            case .dadFrame:
+                self.dadFrame.bind(binding, initialState: .play, reason: reason)
+            case .crankRadio:
+                self.crankRadio.bind(binding, initialState: .play, reason: reason)
+            case .hamReceiver:
+                self.hamReceiver.bind(binding, initialState: .play, reason: reason)
+            }
         }
+        let mode = StoryExperienceModeController.shared.modeForNewStoryAction()
+        StoryModeActionCoordinator.shared.activate(
+            .init(
+                episodeID: .chapter02,
+                rootScriptPointID: binding.rootScriptPointID,
+                durableBoundaryID: "chapter02.\(reason).\(binding.rootScriptPointID)",
+                sourceEventID: UUID()
+            ),
+            mode: mode,
+            interactiveArm: interactiveArm
+        )
         print(
-            "[Chapter02] surface armed surface=\(binding.interactionSurface.rawValue) " +
-                "root=\(binding.rootScriptPointID) reason=\(reason)"
+            "[Chapter02] surface activated surface=\(binding.interactionSurface.rawValue) " +
+                "root=\(binding.rootScriptPointID) mode=\(mode.rawValue) reason=\(reason)"
         )
     }
 }

@@ -1470,6 +1470,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                     .updateAtmosphereIfNeeded(atmosphere)
             }
 
+        case .updateStoryExperienceMode(let mode):
+            wallPosterUIController.updateStoryExperienceModeIcon(mode)
+
         case .updatePortalLoopGainDB(let gainDB):
             hordePortalManager.updatePortalLoopGainDB(gainDB)
 
@@ -2333,12 +2336,33 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         let reason = "storyTeleport.\(teleportID.uuidString)"
         switch destination {
         case .play(let scriptPointID, let trigger):
-            turingStoryWalkieInteractionController.armPlay(
-                action: .startScriptPoint(id: scriptPointID, trigger: trigger),
-                reason: reason
+            let mode = StoryExperienceModeController.shared
+                .modeForNewStoryAction()
+            StoryModeActionCoordinator.shared.activate(
+                .init(
+                    episodeID: .prologue,
+                    rootScriptPointID: scriptPointID,
+                    durableBoundaryID:
+                        "prologue.teleport.\(teleportID.uuidString).\(scriptPointID)",
+                    sourceEventID: teleportID
+                ),
+                mode: mode,
+                interactiveArm: { [weak self] in
+                    self?.turingStoryWalkieInteractionController.armPlay(
+                        action: .startScriptPoint(
+                            id: scriptPointID,
+                            trigger: trigger
+                        ),
+                        reason: reason
+                    )
+                }
             )
         case .microphone:
-            turingStoryWalkieInteractionController.armMicrophone(reason: reason)
+            if StoryExperienceModeController.shared.modeForNewStoryAction() == .interactive {
+                turingStoryWalkieInteractionController.armMicrophone(reason: reason)
+            } else {
+                turingStoryWalkieInteractionController.hideForStoryTeleport(reason: reason)
+            }
         case .hidden:
             turingStoryWalkieInteractionController.hideForStoryTeleport(reason: reason)
         }
@@ -3063,6 +3087,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
     func shutdown() {
         storyTitleCardTransitionCoordinator.reset(reason: "immersiveShutdown")
+        StoryModeActionCoordinator.shared.reset(reason: "immersiveShutdown")
+        TuringStoryDeviceActivityIconController.shared.removeAll()
         StoryInteractionPresentationCoordinator.shared.stop()
         TuringStoryStateTeleportCoordinator.shared.detach(self)
         TuringStoryStageCoordinator.shared.invalidate(reason: "immersiveShutdown")
@@ -6730,7 +6756,9 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
                 reason: "titleCard.continue.prologue"
             )
             let plan = try TuringStoryDestinationPlanner.destination(
-                for: snapshot
+                for: snapshot,
+                experienceMode: StoryExperienceModeController.shared
+                    .modeForNewStoryAction()
             )
             try await TuringStoryStateTeleportCoordinator.shared.apply(
                 plan,

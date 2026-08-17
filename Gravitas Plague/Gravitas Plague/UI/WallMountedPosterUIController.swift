@@ -23,6 +23,8 @@ final class WallMountedPosterUIController:
     private var posterEntity: ModelEntity?
     private var buttonEntities: [Entity] = []
     private let dayNightIconController = TuringStoryPosterDayNightIconController()
+    private let experienceModeIconController =
+        TuringStoryPosterExperienceModeIconController()
 
     private weak var wallManager: WallPlaneManager?
     private weak var hordePortalManager: HordePortalManager?
@@ -58,11 +60,16 @@ final class WallMountedPosterUIController:
         )
     }
 
+    func updateStoryExperienceModeIcon(_ mode: StoryExperienceMode) {
+        experienceModeIconController.update(currentMode: mode)
+    }
+
     init() {
         WallPosterUIButtonComponent.registerComponent()
         WallPosterKillSwitchComponent.registerComponent()
         WallPosterLeaderboardButtonComponent.registerComponent()
         TuringStoryDayNightPosterButtonComponent.registerComponent()
+        TuringStoryExperienceModePosterButtonComponent.registerComponent()
         root.name = "WallPosterWorldLockedRoot"
         contentRoot.name = "WallPosterMutableContentRoot"
         root.addChild(contentRoot)
@@ -264,6 +271,8 @@ final class WallMountedPosterUIController:
         committedAdjustmentContentScale = SIMD3<Float>(repeating: 1)
         adjustmentPreviewInFlight = false
         posterEntity = nil
+        dayNightIconController.remove()
+        experienceModeIconController.remove()
         buttonEntities.removeAll()
         contentRoot.children.removeAll()
         contentRoot.transform = .identity
@@ -918,6 +927,13 @@ private extension WallMountedPosterUIController {
             posterHeight: posterHeight,
             atmosphere: .night
         )
+        experienceModeIconController.install(
+            posterContentRoot: contentRoot,
+            posterWidth: posterWidth,
+            posterHeight: posterHeight,
+            currentMode: StoryExperienceModeController.shared
+                .modeForNewStoryAction()
+        )
 
         print(
             """
@@ -925,6 +941,7 @@ private extension WallMountedPosterUIController {
               trophy: true
               closeX: true
               dayNightWindow: true
+              storyExperienceMode: true
               tint: two_stops_down
               pureWhite: false
             """

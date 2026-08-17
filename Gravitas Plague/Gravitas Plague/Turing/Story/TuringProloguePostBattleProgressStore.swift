@@ -96,6 +96,14 @@ nonisolated struct ProloguePostBattleSnapshot: Codable, Sendable, Equatable {
         deviceStates[device] ?? .play
     }
 
+    func nextRequiredDevice(
+        ordered contracts: [ProloguePostBattleDeviceContract]
+    ) -> ProloguePostBattleDeviceID? {
+        contracts.map(\.deviceID).first {
+            state(for: $0) == .play
+        }
+    }
+
     func validated() throws -> Self {
         guard schemaVersion == Self.currentSchemaVersion,
               contentRevision == Self.currentContentRevision else {
@@ -289,7 +297,10 @@ actor TuringProloguePostBattleProgressStore {
             throw ProloguePostBattleProgressError.hubNotUnlocked
         }
         guard snapshot.boundaryState == .notReady,
-              snapshot.deviceStates[deviceID] == .play else {
+              snapshot.deviceStates[deviceID] == .play,
+              snapshot.nextRequiredDevice(
+                ordered: TuringProloguePostBattleDeviceCatalog.ordered
+              ) == deviceID else {
             throw ProloguePostBattleProgressError.deviceNotPlayable(deviceID)
         }
         return snapshot

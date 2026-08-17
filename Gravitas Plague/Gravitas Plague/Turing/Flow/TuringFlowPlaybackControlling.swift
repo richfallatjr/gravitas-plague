@@ -8,6 +8,11 @@ nonisolated protocol TuringFlowPlaybackControlling: AnyObject, Sendable {
         expectedSegmentCount: Int?
     ) async
 
+    func beginAuthoredRun(identity: TuringFlowIdentity) async
+    func enqueueAuthoredMedia(_ item: TuringAuthoredMediaItem) async throws
+    func sealAuthoredInput() async
+    func waitUntilAuthoredPlaybackFinished() async throws
+
     func expectPrerecordingBeforeGenerated() async
 
     func enqueuePrerecording(id: String, fileURL: URL) async

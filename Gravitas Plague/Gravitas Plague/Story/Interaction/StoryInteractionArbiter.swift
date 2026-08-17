@@ -16,6 +16,7 @@ actor StoryInteractionArbiter {
     private var battleDoorPermissions: [UUID: StoryBattleDoorPermission] = [:]
     private var stableInteractionPolicy: StoryStableInteractionPolicy =
         .unrestricted
+    private var experienceMode: StoryExperienceMode = .play
     private let snapshotHub = StoryInteractionSnapshotHub()
 
     func snapshots() async -> AsyncStream<StoryInteractionSnapshot> {
@@ -24,6 +25,15 @@ actor StoryInteractionArbiter {
 
     func currentSnapshot() -> StoryInteractionSnapshot {
         makeSnapshot()
+    }
+
+    func updateExperienceMode(
+        _ mode: StoryExperienceMode,
+        reason: String
+    ) async {
+        guard experienceMode != mode else { return }
+        experienceMode = mode
+        await publish(reason: "experienceMode.\(reason)")
     }
 
     func updateTuringGate(_ gate: StoryTuringGateState, reason: String) async {
@@ -568,6 +578,17 @@ actor StoryInteractionArbiter {
             dadFrame = .hidden
             crankRadio = .hidden
             hamReceiver = .hidden
+        } else if experienceMode == .play {
+            capabilities = stableInteractionPolicy.permitsDoorInteraction
+                ? [.doorOpen]
+                : []
+            walkie = .hidden
+            dadFrame = .hidden
+            crankRadio = .hidden
+            hamReceiver = .hidden
+            door = stableInteractionPolicy.permitsDoorInteraction
+                ? .open
+                : .hidden
         } else {
             let walkieGate = stableInteractionPolicy.allowedTuringSurfaces
                 .contains(.walkie)
@@ -689,6 +710,7 @@ actor StoryInteractionArbiter {
           doorState: \(snapshot.doorState.rawValue)
           exclusiveOwner: \(snapshot.exclusiveOwner?.logValue ?? "none")
           stablePolicy: \(stableInteractionPolicy.id.rawValue)
+          experienceMode: \(experienceMode.rawValue)
           capabilities: \(snapshot.capabilities.map(\.rawValue).sorted())
           walkie: \(snapshot.walkiePresentation.rawValue)
           door: \(snapshot.doorPresentation.rawValue)

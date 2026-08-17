@@ -23,17 +23,44 @@ final class Chapter03SurfaceSequenceCoordinator {
     }
 
     func armWalkie(reason: String) {
-        closeAll(reason: "\(reason).closePrior")
-        walkie.bind(.chapter03WalkieScavenger, initialState: .play, reason: reason)
+        activate(.chapter03WalkieScavenger, reason: reason)
     }
 
     func armHam(reason: String) {
-        closeAll(reason: "\(reason).closePrior")
-        hamReceiver.bind(.chapter03HamRevelation, initialState: .play, reason: reason)
+        activate(.chapter03HamRevelation, reason: reason)
     }
 
     func armCrank(reason: String) {
+        activate(.chapter03CrankContinuity, reason: reason)
+    }
+
+    private func activate(
+        _ binding: TuringStorySurfaceFlowBinding,
+        reason: String
+    ) {
         closeAll(reason: "\(reason).closePrior")
-        crankRadio.bind(.chapter03CrankContinuity, initialState: .play, reason: reason)
+        let mode = StoryExperienceModeController.shared.modeForNewStoryAction()
+        StoryModeActionCoordinator.shared.activate(
+            .init(
+                episodeID: .chapter03,
+                rootScriptPointID: binding.rootScriptPointID,
+                durableBoundaryID: "chapter03.\(reason).\(binding.rootScriptPointID)",
+                sourceEventID: UUID()
+            ),
+            mode: mode,
+            interactiveArm: { [weak self] in
+                guard let self else { return }
+                switch binding.interactionSurface {
+                case .walkie:
+                    self.walkie.bind(binding, initialState: .play, reason: reason)
+                case .hamReceiver:
+                    self.hamReceiver.bind(binding, initialState: .play, reason: reason)
+                case .crankRadio:
+                    self.crankRadio.bind(binding, initialState: .play, reason: reason)
+                case .dadFrame:
+                    break
+                }
+            }
+        )
     }
 }

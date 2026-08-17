@@ -120,6 +120,9 @@ actor TuringStoryWalkiePlaybackCoordinator {
     private var endpointEventTask: Task<Void, Never>?
     private var waitContinuations: [CheckedContinuation<Void, Never>] = []
     private var fillerFiles: [URL]
+    private var authoredOnlyRun = false
+    private var authoredInputSealed = false
+    private var authoredFailureReason: String?
 
     init(
         policy: Policy = Policy(),
@@ -198,6 +201,8 @@ actor TuringStoryWalkiePlaybackCoordinator {
         await startEndpointEventPumpIfNeeded()
 
         self.runID = runID
+        self.authoredOnlyRun = false
+        self.authoredInputSealed = false
         self.acceptedPrerecordingID = nil
         self.expectedSegmentCount = expectedSegmentCount
         self.nextPlaybackSegmentIndex = 0
@@ -249,6 +254,81 @@ actor TuringStoryWalkiePlaybackCoordinator {
         """)
 
         await reconcile(reason: "runStarted")
+    }
+
+    func beginAuthoredRun(identity: TuringFlowIdentity) async {
+        await runCancelled(reason: "beginNewAuthoredRun")
+        await startEndpointEventPumpIfNeeded()
+
+        flowIdentity = identity
+        runID = identity.playbackRunID
+        acceptedPrerecordingID = nil
+        expectedSegmentCount = 0
+        nextPlaybackSegmentIndex = 0
+        completedGeneratedPlaybackCount = 0
+        activeComputeSegments.removeAll(keepingCapacity: false)
+        pendingGenerated.removeAll(keepingCapacity: false)
+        pendingPrerecording = nil
+        pendingAuthoredBridges.removeAll(keepingCapacity: false)
+        acceptedAuthoredBridgeIDs.removeAll(keepingCapacity: false)
+        prerecordingExpected = false
+        prerecordingHasPlayed = true
+        skippedSegments.removeAll(keepingCapacity: false)
+        allComputeFinished = true
+        activeItem = .none
+        firstPrerollRemaining = 0
+        deadAirTask?.cancel()
+        deadAirTask = nil
+        fillerFiles = []
+        authoredOnlyRun = true
+        authoredInputSealed = false
+        authoredFailureReason = nil
+        runActive = true
+
+        print("""
+        [StoryPlayMode] authored playback run opened
+          runID: \(identity.playbackRunID)
+          scriptPointID: \(identity.scriptPointID)
+          generatedFileStoreOpened: false
+          fillerCatalogLoaded: false
+        """)
+    }
+
+    func enqueueAuthoredMedia(_ item: TuringAuthoredMediaItem) async throws {
+        guard runActive, authoredOnlyRun, authoredInputSealed == false else {
+            throw TuringRuntimeError.invalidConfig(
+                "Authored media was submitted outside an open authored run."
+            )
+        }
+        guard acceptedAuthoredBridgeIDs.insert(item.id).inserted else {
+            throw TuringRuntimeError.invalidConfig(
+                "Duplicate authored media item \(item.id)."
+            )
+        }
+        pendingAuthoredBridges[0, default: []].append(
+            AuthoredBridgeClip(
+                id: item.id,
+                fileURL: item.fileURL,
+                beforeGeneratedSegmentIndex: 0
+            )
+        )
+        print("[StoryPlayMode] authored media queued id=\(item.id) role=\(item.role.rawValue) file=\(item.fileURL.lastPathComponent)")
+        await reconcile(reason: "authoredMediaQueued")
+    }
+
+    func sealAuthoredInput() async {
+        guard runActive, authoredOnlyRun else { return }
+        authoredInputSealed = true
+        await reconcile(reason: "authoredInputSealed")
+    }
+
+    func waitUntilAuthoredPlaybackFinished() async throws {
+        await waitUntilPlaybackFinished()
+        if let authoredFailureReason {
+            throw TuringRuntimeError.invalidConfig(
+                "Authored playback failed: \(authoredFailureReason)"
+            )
+        }
     }
 
     func expectPrerecordingBeforeGenerated() async {
@@ -538,6 +618,10 @@ actor TuringStoryWalkiePlaybackCoordinator {
 
     func runCancelled(reason: String) async {
         guard runActive || activeItem != .none else { return }
+        let wasAuthoredOnlyRun = authoredOnlyRun
+        if wasAuthoredOnlyRun {
+            authoredFailureReason = reason
+        }
         print("""
         [TuringPlaybackTrace] run cancellation requested
           reason: \(reason)
@@ -554,7 +638,7 @@ actor TuringStoryWalkiePlaybackCoordinator {
         await endExternalGeneratedGap(
             reason: "runCancelled.\(reason)"
         )
-        if let runID {
+        if let runID, wasAuthoredOnlyRun == false {
             await fileStore.endRun(runID, reason: "cancel.\(reason)")
         }
         pendingGenerated.removeAll(keepingCapacity: false)
@@ -564,6 +648,8 @@ actor TuringStoryWalkiePlaybackCoordinator {
         prerecordingHasPlayed = false
         skippedSegments.removeAll(keepingCapacity: false)
         activeComputeSegments.removeAll(keepingCapacity: false)
+        authoredOnlyRun = false
+        authoredInputSealed = false
         print("""
         [TuringPlaybackRebuild] run cancelled
           reason: \(reason)
@@ -1261,6 +1347,11 @@ actor TuringStoryWalkiePlaybackCoordinator {
 
     private var isFinished: Bool {
         guard runActive else { return true }
+        if authoredOnlyRun {
+            return authoredInputSealed &&
+                pendingAuthoredBridges.isEmpty &&
+                activeItem == .none
+        }
         if let expectedSegmentCount,
            nextPlaybackSegmentIndex < expectedSegmentCount {
             return false
@@ -1315,7 +1406,7 @@ actor TuringStoryWalkiePlaybackCoordinator {
             reason: "runFinished.\(reason)"
         )
         runActive = false
-        if let runID {
+        if let runID, authoredOnlyRun == false {
             await fileStore.endRun(runID, reason: "finish.\(reason)")
         }
         print("""
@@ -1324,6 +1415,8 @@ actor TuringStoryWalkiePlaybackCoordinator {
           reason: \(reason)
         """)
         resumeWaiters()
+        authoredOnlyRun = false
+        authoredInputSealed = false
     }
 
     private func endExternalGeneratedGap(

@@ -13,6 +13,7 @@ struct TuringFlowDescriptor: Codable, Sendable, Hashable {
 
         enum Kind: String, Codable, Sendable, Hashable {
             case userPlay
+            case playModeAutoplay
             case priorConversationPlaybackCompleted
             case priorScriptPointCompleted
             case manualDebug
@@ -143,6 +144,7 @@ extension TuringFlowDescriptor.Progression {
 
 nonisolated enum TuringFlowTriggerSource: Sendable, Hashable {
     case userPlay
+    case playModeAutoplay(parentBoundaryID: String)
     case priorConversationPlaybackCompleted(parentScriptPointID: String)
     case priorScriptPointCompleted(parentScriptPointID: String)
     case continuationRestore(checkpoint: TuringPrologueCheckpoint)
@@ -153,7 +155,8 @@ extension TuringFlowTriggerSource {
     var interactionStartMode: TuringInteractionStartMode {
         switch self {
         case .priorConversationPlaybackCompleted,
-             .priorScriptPointCompleted:
+             .priorScriptPointCompleted,
+             .playModeAutoplay:
             return .automatic
         case .userPlay,
              .continuationRestore,
@@ -166,6 +169,8 @@ extension TuringFlowTriggerSource {
         switch self {
         case .userPlay:
             return .userPlay
+        case .playModeAutoplay:
+            return .playModeAutoplay
         case .priorConversationPlaybackCompleted:
             return .priorConversationPlaybackCompleted
         case .priorScriptPointCompleted:
@@ -195,6 +200,8 @@ extension TuringFlowTriggerSource {
         switch self {
         case .userPlay:
             return "userPlay"
+        case .playModeAutoplay(let parentBoundaryID):
+            return "playModeAutoplay.\(parentBoundaryID)"
         case .priorConversationPlaybackCompleted(let parent):
             return "priorConversationPlaybackCompleted.\(parent)"
         case .priorScriptPointCompleted(let parent):

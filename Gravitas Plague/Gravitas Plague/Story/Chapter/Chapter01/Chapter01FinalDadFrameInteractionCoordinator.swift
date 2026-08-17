@@ -93,6 +93,18 @@ final class Chapter01FinalDadFrameInteractionCoordinator {
             ],
             reason: reason
         )
+        let mode = StoryExperienceModeController.shared.modeForNewStoryAction()
+        StoryModeActionCoordinator.shared.activate(
+            .init(
+                episodeID: .chapter01,
+                rootScriptPointID: finalBinding.rootScriptPointID,
+                durableBoundaryID:
+                    "chapter01.finalDadFrame.\(checkpoint.rawValue)",
+                sourceEventID: UUID()
+            ),
+            mode: mode,
+            interactiveArm: { }
+        )
         try await arbiter.setStableInteractionPolicy(
             .chapter01FinalDadFrameOnly,
             storyTransitionLease: transitionLease,
@@ -107,10 +119,12 @@ final class Chapter01FinalDadFrameInteractionCoordinator {
         } else {
             releasedSnapshot = await arbiter.currentSnapshot()
         }
-        let expectedPresentation: StoryDadFramePresentation =
-            finalState == .play ? .play : .microphone
-        let expectedCapability: StoryInteractionCapability =
-            finalState == .play ? .dadFramePlay : .dadFrameMicrophone
+        let expectedPresentation: StoryDadFramePresentation = mode == .play
+            ? .hidden
+            : (finalState == .play ? .play : .microphone)
+        let expectedCapability: StoryInteractionCapability? = mode == .play
+            ? nil
+            : (finalState == .play ? .dadFramePlay : .dadFrameMicrophone)
         let ownerIsValid = releaseWhenReady
             ? releasedSnapshot.exclusiveOwner == nil
             : releasedSnapshot.exclusiveOwner == transitionLease.owner
@@ -120,7 +134,9 @@ final class Chapter01FinalDadFrameInteractionCoordinator {
                 ? releasedSnapshot.dadFramePresentation == expectedPresentation
                 : releasedSnapshot.dadFramePresentation == .hidden),
               (releaseWhenReady
-                ? releasedSnapshot.capabilities == [expectedCapability]
+                ? (expectedCapability.map {
+                    releasedSnapshot.capabilities == [$0]
+                  } ?? releasedSnapshot.capabilities.isEmpty)
                 : releasedSnapshot.capabilities.isEmpty) else {
             print(
                 "[Chapter01FinalDadFrame] ERROR stable presentation rejected " +

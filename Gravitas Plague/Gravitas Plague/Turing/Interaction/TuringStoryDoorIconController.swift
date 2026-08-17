@@ -165,6 +165,20 @@ final class TuringStoryDoorIconController {
     private func makeIconMaterial(
         presentation: TuringStoryDoorInteractionPresentation
     ) -> UnlitMaterial {
+        let symbolName: String
+        switch presentation {
+        case .open:
+            symbolName = "door.left.hand.open"
+        case .close:
+            symbolName = "door.left.hand.closed"
+        case .hidden:
+            symbolName = "door.left.hand.closed"
+        }
+        if let styled = try? TuringStoryActionIconVisualStyle.material(
+            symbolName: symbolName
+        ) {
+            return styled
+        }
         var material = UnlitMaterial()
         if let texture = try? makeIconTexture(presentation: presentation) {
             material.color = .init(

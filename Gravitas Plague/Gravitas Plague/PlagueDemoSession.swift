@@ -129,6 +129,7 @@ final class PlagueDemoSession: ObservableObject {
         case requestTuringStoryPlacementRoomScan(String)
         case restartTuringStoryPlacementRoomScan(String)
         case updatePortalHDRIAtmosphere(PortalHDRIAtmosphere)
+        case updateStoryExperienceMode(StoryExperienceMode)
         case updatePortalLoopGainDB(Float)
         case updateEnemyCollisionDebugVisible(Bool)
     }
@@ -175,6 +176,7 @@ final class PlagueDemoSession: ObservableObject {
     @Published var forestAppearanceStatus = "Appearance idle."
     @Published var roomSkinningStatus = "Room skinning idle."
     @Published var portalHDRIAtmosphere: PortalHDRIAtmosphere = .night
+    @Published private(set) var storyExperienceMode: StoryExperienceMode = .play
     @Published var portalHDRIRevision: Int = 0
     @Published var portalLoopGainDB: Float = HordePortalAudioSettings.portalLoopGainDB {
         didSet {
@@ -235,6 +237,7 @@ final class PlagueDemoSession: ObservableObject {
     private var controlWindowBackgroundIgnoreReason: String?
     private var controlWindowDismissedForWallUI = false
     private var activeStoryStagePreparationGeneration: Int?
+    private var storyExperienceModeCancellable: AnyCancellable?
     private let lifetimeWavesClearedKey =
         "gravitas_plague_lifetime_waves_cleared"
     private let localHighestWaveReachedKey =
@@ -248,6 +251,15 @@ final class PlagueDemoSession: ObservableObject {
     init() {
         PlagueUILegacySuppressionKeys.clear()
         resetRuntimeUIForFreshLaunch()
+        let modeController = StoryExperienceModeController.shared
+        storyExperienceMode = modeController.modeForNewStoryAction()
+        storyExperienceModeCancellable = modeController.$mode
+            .removeDuplicates()
+            .sink { [weak self] mode in
+                guard let self else { return }
+                self.storyExperienceMode = mode
+                self.send(.updateStoryExperienceMode(mode))
+            }
         loadHordeLeaderboardStats()
         PlagueGameCenterManager.shared.authenticateIfNeeded()
     }
@@ -1248,5 +1260,13 @@ final class PlagueDemoSession: ObservableObject {
         )
 
         send(.updatePortalHDRIAtmosphere(portalHDRIAtmosphere))
+    }
+
+    func toggleStoryExperienceMode() {
+        Task { @MainActor in
+            await StoryExperienceModeController.shared.requestToggle(
+                source: "wallPoster"
+            )
+        }
     }
 }

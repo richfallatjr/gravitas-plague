@@ -17,6 +17,29 @@ final class TuringProloguePostBattleProgressTests: XCTestCase {
         XCTAssertTrue(snapshot.completionEvidence.isEmpty)
     }
 
+    func testCanonicalPostBattleOrderIsCrankWalkieHamDad() {
+        XCTAssertEqual(
+            TuringProloguePostBattleDeviceCatalog.ordered.map(\.deviceID),
+            [.crankRadio, .walkie, .hamReceiver, .dadPhoto]
+        )
+    }
+
+    func testOrderedRevealAcceptsOnlyFirstIncompleteDevice() async throws {
+        let (store, defaults, suite) = try makeStore()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        _ = try await store.unlockAfterBattleRuntimeReleased()
+
+        _ = try await store.requirePlayable(.crankRadio)
+        await XCTAssertThrowsErrorAsync {
+            _ = try await store.requirePlayable(.walkie)
+        }
+
+        _ = try await store.completeDevice(
+            evidence: makeEvidence(device: .crankRadio)
+        )
+        _ = try await store.requirePlayable(.walkie)
+    }
+
     func testAllTwentyFourCompletionOrdersPersistTheFourthBeforeTransition() async throws {
         for order in permutations(ProloguePostBattleDeviceID.allCases) {
             let (store, defaults, suite) = try makeStore()
@@ -323,6 +346,18 @@ final class TuringProloguePostBattleProgressTests: XCTestCase {
             var remainder = values
             remainder.remove(at: index)
             return permutations(remainder).map { [value] + $0 }
+        }
+    }
+
+    private func XCTAssertThrowsErrorAsync(
+        _ expression: () async throws -> Void,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        do {
+            try await expression()
+            XCTFail("Expected an error.", file: file, line: line)
+        } catch {
         }
     }
 }

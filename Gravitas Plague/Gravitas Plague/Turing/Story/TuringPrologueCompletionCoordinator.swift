@@ -204,13 +204,20 @@ final class TuringPrologueCompletionCoordinator: TuringStoryCompletionEventSink 
                 "The Prologue device hub cannot be restored from \(snapshot.boundaryState.rawValue)."
             )
         }
-        for contract in TuringProloguePostBattleDeviceCatalog.ordered
-        where snapshot.state(for: contract.deviceID) == .microphone {
-            try await TuringConversationContextRehydrator.rehydrate(
-                terminalScriptPointID: contract.terminalScriptPointID
-            )
+        let mode = StoryExperienceModeController.shared.modeForNewStoryAction()
+        if mode == .interactive {
+            for contract in TuringProloguePostBattleDeviceCatalog.ordered
+            where snapshot.state(for: contract.deviceID) == .microphone {
+                try await TuringConversationContextRehydrator.rehydrate(
+                    terminalScriptPointID: contract.terminalScriptPointID
+                )
+            }
         }
 
+        // Keep the logical bindings staged in both modes. The arbiter strips
+        // every device capability and presentation while Play is committed.
+        // This lets a deferred switch to Interactive reveal the same durable
+        // boundary without replaying or rebuilding the hub.
         walkie.stageBinding(
             .prologuePostBattleWalkie,
             initialState: .closed,
@@ -232,6 +239,21 @@ final class TuringPrologueCompletionCoordinator: TuringStoryCompletionEventSink 
             gateStates(for: snapshot),
             reason: "prologuePostBattleHub.\(reason).revision.\(snapshot.revision)"
         )
+        if let nextID = snapshot.nextRequiredDevice(
+            ordered: TuringProloguePostBattleDeviceCatalog.ordered
+        ), let contract = TuringProloguePostBattleDeviceCatalog.byID[nextID] {
+            StoryModeActionCoordinator.shared.activate(
+                .init(
+                    episodeID: .prologue,
+                    rootScriptPointID: contract.rootScriptPointID,
+                    durableBoundaryID:
+                        "prologue.postBattle.\(snapshot.revision).\(nextID.rawValue)",
+                    sourceEventID: UUID()
+                ),
+                mode: mode,
+                interactiveArm: { }
+            )
+        }
         print(
             "[TuringProloguePostBattle] hub restored revision=\(snapshot.revision) " +
                 "states=\(stateLog(snapshot))"
@@ -288,13 +310,20 @@ final class TuringPrologueCompletionCoordinator: TuringStoryCompletionEventSink 
     private func gateStates(
         for snapshot: ProloguePostBattleSnapshot
     ) -> [StoryInteractionSurfaceID: TuringFlowInteractionGateController.State] {
-        Dictionary(
+        let next = snapshot.nextRequiredDevice(
+            ordered: TuringProloguePostBattleDeviceCatalog.ordered
+        )
+        return Dictionary(
             uniqueKeysWithValues:
                 TuringProloguePostBattleDeviceCatalog.ordered.map { contract in
-                    let state: TuringFlowInteractionGateController.State =
-                        snapshot.state(for: contract.deviceID) == .microphone
-                            ? .microphone
-                            : .play
+                    let state: TuringFlowInteractionGateController.State
+                    if snapshot.state(for: contract.deviceID) == .microphone {
+                        state = .microphone
+                    } else if contract.deviceID == next {
+                        state = .play
+                    } else {
+                        state = .closed
+                    }
                     return (contract.interactionSurface, state)
                 }
         )
