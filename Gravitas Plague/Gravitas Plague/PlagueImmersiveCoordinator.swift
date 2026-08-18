@@ -293,6 +293,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     var onWallPosterUIActiveChanged: ((Bool) -> Void)?
     var onTuringStoryStagePlacementCommitted: ((String) -> Void)?
     var onTuringStoryStagePlacementFailed: ((Error, String) -> Void)?
+    var onStoryModeSwitchRuntimeTornDown: ((String) -> Void)?
     var onHordeWaveReached: ((Int) -> Void)?
     var onHordeWaveCleared: ((Int) -> Void)?
     var onHordeSessionEnded: (() -> Void)?
@@ -330,6 +331,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     private var hordeWaitingForRoomScan = false
     private var hordeWaitingForFloorPromptShown = false
     private var hordeRoomScanCompletionTask: Task<Void, Never>?
+    private var operationModeSwitchTask: Task<Void, Never>?
+    private var operationModeSwitchGeneration = 0
     private var activeIngressControllers: [UUID: HordePortalInstancedIngressController] = [:]
     private var retainedPortalMirrorControllersByEnemyID: [UUID: HordePortalInstancedIngressController] = [:]
     private var hordeDeathReplacementState: HordeWaveDeathReplacementState?
@@ -1408,7 +1411,20 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             prepareForUserQuitOrClose()
 
         case .startHordeRoomScanOnly:
+            guard operationModeSwitchTask == nil else {
+                print(
+                    "[PlagueModeSwitch] duplicate Horde scan ignored " +
+                        "while mode switch is active"
+                )
+                return
+            }
             beginHordeRoomScanForBenchmark()
+
+        case .switchOperationMode(let mode, let source):
+            switchOperationModeFromPoster(
+                to: mode,
+                source: source
+            )
 
         case .startRoomSkinningScan:
             roomSkinningCoordinator.startRoomSkinning()
@@ -1439,11 +1455,25 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             }
 
         case .requestStoryWalkieBundlePlacement:
+            guard operationModeSwitchTask == nil else {
+                print(
+                    "[PlagueModeSwitch] duplicate Story scan ignored " +
+                        "while mode switch is active"
+                )
+                return
+            }
             requestTuringStoryPlacementRoomScan(
                 reason: "storyModeRequested"
             )
 
         case .requestTuringStoryPlacementRoomScan(let reason):
+            guard operationModeSwitchTask == nil else {
+                print(
+                    "[PlagueModeSwitch] duplicate Story scan ignored " +
+                        "while mode switch is active reason=\(reason)"
+                )
+                return
+            }
             requestTuringStoryPlacementRoomScan(
                 reason: reason
             )
@@ -1595,6 +1625,191 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
               runtimeReady: false
               qwenSmokeAutoRun: false
             """
+        )
+    }
+
+    private func switchOperationModeFromPoster(
+        to destination: PlagueDemoSession.PlagueOperationMode,
+        source: String
+    ) {
+        guard destination == .story || destination == .horde else {
+            print(
+                "[PlagueModeSwitch] ignored unsupported destination=" +
+                    "\(destination.rawValue) source=\(source)"
+            )
+            return
+        }
+
+        operationModeSwitchGeneration += 1
+        let generation = operationModeSwitchGeneration
+        let previousSwitchTask = operationModeSwitchTask
+        previousSwitchTask?.cancel()
+
+        operationModeSwitchTask = Task { @MainActor [weak self] in
+            await previousSwitchTask?.value
+
+            guard let self else { return }
+            defer {
+                if self.operationModeSwitchGeneration == generation {
+                    self.operationModeSwitchTask = nil
+                }
+            }
+            guard !Task.isCancelled,
+                  self.operationModeSwitchGeneration == generation else {
+                print(
+                    "[PlagueModeSwitch] superseded before teardown " +
+                        "destination=\(destination.rawValue) " +
+                        "generation=\(generation)"
+                )
+                return
+            }
+            let reason =
+                "posterModeSwitch.\(source).\(destination.rawValue).\(generation)"
+
+            print(
+                "[PlagueModeSwitch] teardown started " +
+                    "destination=\(destination.rawValue) " +
+                    "generation=\(generation) source=\(source)"
+            )
+
+            await self.tearDownOperationModeRuntime(reason: reason)
+
+            guard !Task.isCancelled,
+                  self.operationModeSwitchGeneration == generation else {
+                print(
+                    "[PlagueModeSwitch] superseded after teardown " +
+                        "destination=\(destination.rawValue) " +
+                        "generation=\(generation)"
+                )
+                return
+            }
+
+            switch destination {
+            case .story:
+                guard let onStoryModeSwitchRuntimeTornDown =
+                        self.onStoryModeSwitchRuntimeTornDown else {
+                    print(
+                        "[PlagueModeSwitch] Story scan blocked " +
+                            "reason=missingTeardownCompletionSink " +
+                            "source=\(source)"
+                    )
+                    return
+                }
+                onStoryModeSwitchRuntimeTornDown(source)
+                guard case .preparing =
+                        TuringStoryStageCoordinator.shared.state else {
+                    print(
+                        "[PlagueModeSwitch] Story scan blocked " +
+                            "reason=stagePreparationNotStarted " +
+                            "source=\(source)"
+                    )
+                    return
+                }
+                self.requestTuringStoryPlacementRoomScan(
+                    reason: reason
+                )
+
+            case .horde:
+                self.beginHordeRoomScanForBenchmark()
+
+            case .walkLoop:
+                return
+            }
+
+            print(
+                "[PlagueModeSwitch] destination scan started " +
+                    "destination=\(destination.rawValue) " +
+                    "generation=\(generation) source=\(source)"
+            )
+        }
+    }
+
+    private func tearDownOperationModeRuntime(
+        reason: String
+    ) async {
+        turingHUDDelayedClearTask?.cancel()
+        turingHUDDelayedClearTask = nil
+        instructionHUD.clear()
+        turingStoryPlacementAdjustmentCoordinator.cancel(
+            reason: reason
+        )
+        pendingTuringDebugRescanReason = nil
+        activeTuringDebugRescanAttempt = nil
+        pendingTuringPlacementScanReasons.removeAll()
+        await turingStoryWallLayoutCoordinator.cancelAndWait(
+            reason: reason
+        )
+        turingHUDDelayedClearTask?.cancel()
+        turingHUDDelayedClearTask = nil
+        instructionHUD.clear()
+        cancelTuringStoryPlacementRoomScan(reason: reason)
+        turingStoryPlacementScanCompleted = false
+        turingStoryPlacementSpinResult = nil
+        turingStoryScanSpinTracker.reset()
+
+        stopHordeBenchmark()
+        resetHordeBenchmarkDeathPresentation()
+        jockRetargetController?.stopFollowDemo()
+        jockRetargetController?.stopClip()
+        jockRetargetController?.hide()
+        audioController.stopAllAudio()
+
+        storyTitleCardTransitionCoordinator.reset(reason: reason)
+        StoryModeActionCoordinator.shared.reset(reason: reason)
+        TuringStoryDeviceActivityIconController.shared.removeAll()
+        battle01Coordinator?.cancel(reason: reason)
+        prologueStoryActionRouter?.reset(reason: reason)
+        prologueCompletionCoordinator?.reset(reason: reason)
+
+        await chapter01Coordinator?.cancel(reason: reason)
+        await chapter02Coordinator?.cancel(reason: reason)
+        await chapter03Coordinator?.cancel(reason: reason)
+        await TuringEpisodeFlowController.shared.resetEpisode(
+            reason: reason
+        )
+        await turingStoryWalkieInteractionController.shutdown(
+            reason: reason
+        )
+        await turingStoryDadFrameInteractionController.shutdown(
+            reason: reason
+        )
+        await turingRollingBenchBundleController
+            .crankRadioInteractionController
+            .shutdown(reason: reason)
+        await turingRollingBenchBundleController
+            .hamReceiverInteractionController
+            .shutdown(reason: reason)
+        await TuringFlowMediaCueCoordinator.shared.stopAll(
+            reason: reason
+        )
+        await StoryInteractionArbiter.shared.reset(reason: reason)
+
+        TuringStoryWalkieAudioRoute.clear(reason: reason)
+        TuringRollingBenchAudioRoute.clear(reason: reason)
+        TuringHamReceiverAudioRoute.clear(reason: reason)
+
+        turingStoryWallLayoutCoordinator.resetForRetry()
+
+        turingStoryWalkieInteractionController.walkieRemoved(
+            reason: reason
+        )
+        turingStoryDadFrameInteractionController.dadFrameRemoved(
+            reason: reason
+        )
+        turingDoorBundleController.reset(reason: reason)
+        turingRollingBenchBundleController.reset(reason: reason)
+        turingWindowBundleController.reset(reason: reason)
+        turingWalkieBundleController.reset(reason: reason)
+        wallPosterUIController.resetPlacement(reason: reason)
+
+        hordePortalManager.reset()
+        roomSkinningCoordinator.cancelRoomSkinning()
+        lastWallPosterPlacementAttempt = nil
+        onWallPosterUIActiveChanged?(false)
+
+        print(
+            "[PlagueModeSwitch] teardown completed " +
+                "reason=\(reason) storyRemoved=true hordeRemoved=true"
         )
     }
 
@@ -3086,6 +3301,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     }
 
     func shutdown() {
+        operationModeSwitchGeneration += 1
+        operationModeSwitchTask?.cancel()
+        operationModeSwitchTask = nil
         storyTitleCardTransitionCoordinator.reset(reason: "immersiveShutdown")
         StoryModeActionCoordinator.shared.reset(reason: "immersiveShutdown")
         TuringStoryDeviceActivityIconController.shared.removeAll()
@@ -3189,6 +3407,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     }
 
     private func prepareForUserQuitOrClose() {
+        operationModeSwitchGeneration += 1
+        operationModeSwitchTask?.cancel()
+        operationModeSwitchTask = nil
         battle01Coordinator?.cancel(reason: "userQuitOrClose")
         Task { @MainActor [weak self] in
             await self?.chapter01Coordinator?.cancel(

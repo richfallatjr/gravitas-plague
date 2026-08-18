@@ -155,6 +155,21 @@ final class TuringStoryWallLayoutCoordinator {
         print("[TuringWallSlices] cancelled reason=\(reason)")
     }
 
+    func cancelAndWait(reason: String) async {
+        guard let activeTask = task else {
+            if isPlanningOrCommitting { state = .failed }
+            print("[TuringWallSlices] cancel-and-wait completed reason=\(reason) activeTask=false")
+            return
+        }
+
+        activeTask.cancel()
+        if isPlanningOrCommitting { state = .failed }
+        await activeTask.value
+        task = nil
+
+        print("[TuringWallSlices] cancel-and-wait completed reason=\(reason) activeTask=true")
+    }
+
     private func execute(
         scanID: String,
         walls: [WallCandidate],
@@ -268,6 +283,8 @@ final class TuringStoryWallLayoutCoordinator {
 
                 try await rollingBenchController.prepareForPlannedPlacement()
                 TuringMemoryBudgetProbe.log(label: "afterStoryRollingBenchAssetPrepare")
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 throw TuringStoryWallSliceError.assetPreparationFailed(error.localizedDescription)
             }

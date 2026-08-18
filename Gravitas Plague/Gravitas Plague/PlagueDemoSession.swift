@@ -93,6 +93,19 @@ final class PlagueDemoSession: ObservableObject {
                 return "Walk Loop"
             }
         }
+
+        nonisolated static func requiresRuntimeTeardown(
+            from current: PlagueOperationMode?,
+            to destination: PlagueOperationMode
+        ) -> Bool {
+            switch (current, destination) {
+            case (.story?, .horde), (.horde?, .story):
+                return true
+
+            default:
+                return false
+            }
+        }
     }
 
     enum ImmersiveSpaceStatus: Equatable {
@@ -117,6 +130,10 @@ final class PlagueDemoSession: ObservableObject {
         case prepareForUserQuitOrClose
         case closeDemo
         case startHordeRoomScanOnly
+        case switchOperationMode(
+            PlagueOperationMode,
+            source: String
+        )
         case startRoomSkinningScan
         case confirmRoomSkinningPlacement
         case enterRoomSkinningDoorAdjustment
@@ -281,7 +298,10 @@ final class PlagueDemoSession: ObservableObject {
         latestTuringDictationEvent = TuringDictationEnvelope(event)
     }
 
-    func selectOperationMode(_ mode: PlagueOperationMode) {
+    func selectOperationMode(
+        _ mode: PlagueOperationMode,
+        source: String = "selectOperationMode"
+    ) {
         let availability = operationModeAccessController.snapshot[mode]
 
         guard availability.isUnlocked else {
@@ -298,6 +318,13 @@ final class PlagueDemoSession: ObservableObject {
             return
         }
 
+        let previousOperationMode = selectedOperationMode
+        let requiresRuntimeTeardown =
+            PlagueOperationMode.requiresRuntimeTeardown(
+                from: previousOperationMode,
+                to: mode
+            )
+
         selectedOperationMode = mode
         isPosterUIVisible = true
 
@@ -305,6 +332,9 @@ final class PlagueDemoSession: ObservableObject {
             """
             [PlagueMenu] selected operation mode
               mode: \(mode.rawValue)
+              previousMode: \(previousOperationMode?.rawValue ?? "none")
+              source: \(source)
+              requiresRuntimeTeardown: \(requiresRuntimeTeardown)
               posterRemainsVisible: true
               legacyUIShown: false
             """
@@ -312,15 +342,27 @@ final class PlagueDemoSession: ObservableObject {
 
         switch mode {
         case .story:
-            requestStoryMode(source: "selectOperationMode")
+            requestStoryMode(
+                source: source,
+                previousMode: previousOperationMode
+            )
 
         case .horde:
             experienceMode = .horde
-            Task { @MainActor [weak self] in
+            if requiresRuntimeTeardown {
+                activeStoryStagePreparationGeneration = nil
+                TuringStoryStageCoordinator.shared.invalidate(
+                    reason: "modeSwitch.\(source).storyToHorde"
+                )
+            }
+            startHordeBenchmarkFromPoster(
+                requiresRuntimeTeardown: requiresRuntimeTeardown,
+                source: source
+            )
+            Task { @MainActor in
                 await PlagueMainMenuMusicActor.shared.stop(
                     reason: "hordeModeSelected"
                 )
-                self?.startHordeBenchmarkFromPoster()
             }
 
         case .walkLoop:
@@ -334,14 +376,44 @@ final class PlagueDemoSession: ObservableObject {
         }
     }
 
-    func requestStoryMode(source: String) {
+    func requestStoryMode(
+        source: String,
+        previousMode: PlagueOperationMode? = nil
+    ) {
+        let resolvedPreviousMode = previousMode ?? selectedOperationMode
+        let requiresRuntimeTeardown =
+            PlagueOperationMode.requiresRuntimeTeardown(
+                from: resolvedPreviousMode,
+                to: .story
+            )
+
         selectedOperationMode = .story
+        selectedStoryEpisodeID = nil
         experienceMode = .story
         activeMode = .none
         statusMessage = "Preparing Story mode."
         isStoryEpisodePickerPresented = false
 
         let stage = TuringStoryStageCoordinator.shared
+        if requiresRuntimeTeardown {
+            stage.invalidate(
+                reason: "modeSwitch.\(source).hordeToStory"
+            )
+            activeStoryStagePreparationGeneration = nil
+            send(
+                .switchOperationMode(
+                    .story,
+                    source: source
+                )
+            )
+            print(
+                "[PlagueMenu] Horde-to-Story switch requested " +
+                    "source=\(source) freshRoomScan=true " +
+                    "preparationBeginsAfterTeardown=true"
+            )
+            return
+        }
+
         if stage.isEstablished {
             requestStoryEpisodePicker(source: source)
             return
@@ -355,6 +427,31 @@ final class PlagueDemoSession: ObservableObject {
         let generation = stage.beginPreparation(reason: "storyMode.\(source)")
         activeStoryStagePreparationGeneration = generation
         send(.requestTuringStoryPlacementRoomScan("storyMode.\(source).generation.\(generation)"))
+    }
+
+    func storyModeRuntimeTeardownCompleted(
+        source: String
+    ) {
+        guard selectedOperationMode == .story else {
+            print(
+                "[TuringStoryStage] post-teardown preparation ignored " +
+                    "source=\(source) selectedMode=" +
+                    "\(selectedOperationMode?.rawValue ?? "none")"
+            )
+            return
+        }
+
+        let stage = TuringStoryStageCoordinator.shared
+        let generation = stage.beginPreparation(
+            reason: "storyModeSwitch.\(source)"
+        )
+        activeStoryStagePreparationGeneration = generation
+        statusMessage = "Scanning room for Story mode."
+
+        print(
+            "[TuringStoryStage] post-teardown preparation began " +
+                "source=\(source) generation=\(generation)"
+        )
     }
 
     func storyStagePlacementCommitted(source: String) {
@@ -411,7 +508,10 @@ final class PlagueDemoSession: ObservableObject {
             requestStoryMode(source: "realityKitWallPoster")
 
         case .horde:
-            selectOperationMode(.horde)
+            selectOperationMode(
+                .horde,
+                source: "realityKitWallPoster"
+            )
         }
     }
 
@@ -713,17 +813,33 @@ final class PlagueDemoSession: ObservableObject {
         )
     }
 
-    func startHordeBenchmarkFromPoster() {
+    func startHordeBenchmarkFromPoster(
+        requiresRuntimeTeardown: Bool = false,
+        source: String = "operationPoster"
+    ) {
         isStoryEpisodePickerPresented = false
         selectedOperationMode = .horde
+        selectedStoryEpisodeID = nil
         isPosterUIVisible = true
         activeMode = .jockRetargetTest
         statusMessage = "Running Horde Mode."
         resetPlayerDeathState()
         resetHordeRunLeaderboardStats()
-        send(.startHordeRoomScanOnly)
+        if requiresRuntimeTeardown {
+            send(
+                .switchOperationMode(
+                    .horde,
+                    source: source
+                )
+            )
+        } else {
+            send(.startHordeRoomScanOnly)
+        }
 
-        print("[PlagueMenu] Horde Mode requested from poster UI; waiting for first portal.")
+        print(
+            "[PlagueMenu] Horde Mode requested from poster UI; " +
+                "waiting for fresh room scan. teardown=\(requiresRuntimeTeardown)"
+        )
     }
 
     func startWalkLoopFromPoster() {

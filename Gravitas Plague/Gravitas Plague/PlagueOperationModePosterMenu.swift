@@ -548,7 +548,10 @@ struct PlagueOperationModePosterMenu: View {
         if mode == .story {
             session.requestStoryMode(source: "swiftUIOperationPoster")
         } else {
-            session.selectOperationMode(mode)
+            session.selectOperationMode(
+                mode,
+                source: "swiftUIOperationPoster"
+            )
         }
     }
 }

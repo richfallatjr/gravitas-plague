@@ -27,4 +27,46 @@ final class StoryExperienceModeTests: XCTestCase {
         XCTAssertEqual(trigger.interactionStartMode, .automatic)
         XCTAssertNotEqual(trigger.kind, .userPlay)
     }
+
+    func testStoryAndHordeCrossSwitchesRequireRuntimeTeardown() {
+        XCTAssertTrue(
+            PlagueDemoSession.PlagueOperationMode.requiresRuntimeTeardown(
+                from: .story,
+                to: .horde
+            )
+        )
+        XCTAssertTrue(
+            PlagueDemoSession.PlagueOperationMode.requiresRuntimeTeardown(
+                from: .horde,
+                to: .story
+            )
+        )
+    }
+
+    func testSameModeAndWalkLoopSelectionsDoNotUseStoryHordeTeardown() {
+        XCTAssertFalse(
+            PlagueDemoSession.PlagueOperationMode.requiresRuntimeTeardown(
+                from: .story,
+                to: .story
+            )
+        )
+        XCTAssertFalse(
+            PlagueDemoSession.PlagueOperationMode.requiresRuntimeTeardown(
+                from: .horde,
+                to: .horde
+            )
+        )
+        XCTAssertFalse(
+            PlagueDemoSession.PlagueOperationMode.requiresRuntimeTeardown(
+                from: .walkLoop,
+                to: .story
+            )
+        )
+        XCTAssertFalse(
+            PlagueDemoSession.PlagueOperationMode.requiresRuntimeTeardown(
+                from: nil,
+                to: .horde
+            )
+        )
+    }
 }

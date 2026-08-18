@@ -494,6 +494,11 @@ struct PlagueImmersiveView: View {
             coordinator.onTuringStoryStagePlacementFailed = { error, source in
                 session.storyStagePlacementFailed(error, source: source)
             }
+            coordinator.onStoryModeSwitchRuntimeTornDown = { source in
+                session.storyModeRuntimeTeardownCompleted(
+                    source: source
+                )
+            }
             coordinator.onRoomSkinningStatusChanged = { status in
                 session.roomSkinningStatus = status
             }
