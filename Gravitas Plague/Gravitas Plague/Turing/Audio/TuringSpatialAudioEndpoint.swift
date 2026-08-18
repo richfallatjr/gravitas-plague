@@ -51,6 +51,22 @@ actor TuringSpatialAudioEndpoint: TuringTransientAudioPlaybackEndpoint {
         await eventHub.yield(.cancelled(handle, reason: reason))
     }
 
+    func pause(
+        _ handle: TuringAudioPlaybackHandle,
+        reason: String
+    ) async throws {
+        try await sceneBridge.pause(handle)
+        await eventHub.yield(.paused(handle, reason: reason))
+    }
+
+    func resume(
+        _ handle: TuringAudioPlaybackHandle,
+        reason: String
+    ) async throws {
+        try await sceneBridge.resume(handle)
+        await eventHub.yield(.resumed(handle, reason: reason))
+    }
+
     func stopAll(reason: String) async {
         await sceneBridge.stopAll(reason: reason)
     }

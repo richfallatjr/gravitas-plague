@@ -96,6 +96,7 @@ final class Battle01Coordinator {
         sceneRoot: Entity,
         door: any TuringStoryDoorBattleControlling,
         clock: any BattleClock,
+        richVocalChannel: any StoryRichVocalChannelControlling,
         onEnemyPrepared: @escaping EnemyPreparedHook,
         onEnemyRemoved: @escaping EnemyRemovedHook,
         onEnemyMemoryPresenceChanged: @escaping EnemyMemoryPresenceHook,
@@ -108,7 +109,9 @@ final class Battle01Coordinator {
         self.intro = ScriptedPortalEnemyIntroCoordinator(clock: clock)
         self.combat = Battle01StoryCombatAdapter()
         self.soundtrack = Battle01SoundtrackController()
-        self.richPR = Battle01RichPrerecordingController()
+        self.richPR = Battle01RichPrerecordingController(
+            richVocalChannel: richVocalChannel
+        )
         let enemyRegistry = BattleEnemyRuntimeRegistry()
         let corpsePresenter = BattleCorpsePresentationController(storyRoot: sceneRoot)
         self.enemyRegistry = enemyRegistry

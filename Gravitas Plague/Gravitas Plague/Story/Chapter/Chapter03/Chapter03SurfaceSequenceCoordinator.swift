@@ -39,28 +39,13 @@ final class Chapter03SurfaceSequenceCoordinator {
         reason: String
     ) {
         closeAll(reason: "\(reason).closePrior")
-        let mode = StoryExperienceModeController.shared.modeForNewStoryAction()
         StoryModeActionCoordinator.shared.activate(
             .init(
                 episodeID: .chapter03,
                 rootScriptPointID: binding.rootScriptPointID,
                 durableBoundaryID: "chapter03.\(reason).\(binding.rootScriptPointID)",
                 sourceEventID: UUID()
-            ),
-            mode: mode,
-            interactiveArm: { [weak self] in
-                guard let self else { return }
-                switch binding.interactionSurface {
-                case .walkie:
-                    self.walkie.bind(binding, initialState: .play, reason: reason)
-                case .hamReceiver:
-                    self.hamReceiver.bind(binding, initialState: .play, reason: reason)
-                case .crankRadio:
-                    self.crankRadio.bind(binding, initialState: .play, reason: reason)
-                case .dadFrame:
-                    break
-                }
-            }
+            )
         )
     }
 }

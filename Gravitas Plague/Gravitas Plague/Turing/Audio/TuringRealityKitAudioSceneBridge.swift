@@ -86,6 +86,26 @@ final class TuringRealityKitAudioSceneBridge {
         active.entity.removeFromParent()
     }
 
+    func pause(_ handle: TuringAudioPlaybackHandle) throws {
+        guard let active = activeByID[handle.id],
+              active.handle == handle else {
+            throw TuringRuntimeError.invalidConfig(
+                "Spatial playback handle is stale."
+            )
+        }
+        active.controller.pause()
+    }
+
+    func resume(_ handle: TuringAudioPlaybackHandle) throws {
+        guard let active = activeByID[handle.id],
+              active.handle == handle else {
+            throw TuringRuntimeError.invalidConfig(
+                "Spatial playback handle is stale."
+            )
+        }
+        active.controller.play()
+    }
+
     func stopAll(reason: String) {
         let values = Array(activeByID.values)
         activeByID.removeAll(keepingCapacity: false)

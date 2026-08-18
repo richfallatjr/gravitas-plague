@@ -102,12 +102,6 @@ final class TuringStoryHamReceiverIconController {
 
         iconEntity = icon
         physicalHitTarget = physicalTarget
-        TuringStoryDeviceActivityIconController.shared.register(
-            surface: .hamReceiver,
-            parent: iconAnchor,
-            transform: icon.transform,
-            size: Self.visualSize
-        )
         apply(.hidden)
 
         print("""
@@ -122,7 +116,8 @@ final class TuringStoryHamReceiverIconController {
 
     func apply(
         _ presentation:
-            StoryHamReceiverPresentation
+            StoryHamReceiverPresentation,
+        activity: StoryTuringActivityPresentation = .hidden
     ) {
         guard let iconEntity,
               let physicalHitTarget else {
@@ -135,7 +130,16 @@ final class TuringStoryHamReceiverIconController {
 
         switch presentation {
         case .hidden:
-            iconEntity.isEnabled = false
+            switch activity {
+            case .authoredPlaying, .conversationPlaying:
+                updateIcon(symbolName: "play.fill", on: iconEntity)
+                iconEntity.isEnabled = true
+            case .processingEllipsis:
+                updateIcon(symbolName: "ellipsis", on: iconEntity)
+                iconEntity.isEnabled = true
+            case .hidden:
+                iconEntity.isEnabled = false
+            }
             physicalHitTarget.isEnabled = false
 
         case .play:
@@ -181,9 +185,6 @@ final class TuringStoryHamReceiverIconController {
         }
         iconEntity?.removeFromParent()
         physicalHitTarget?.removeFromParent()
-        TuringStoryDeviceActivityIconController.shared.unregister(
-            surface: .hamReceiver
-        )
         iconEntity = nil
         physicalHitTarget = nil
     }

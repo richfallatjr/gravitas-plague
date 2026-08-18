@@ -7,6 +7,41 @@ enum StoryTuringGateState: String, Sendable, Equatable {
     case microphone
 }
 
+nonisolated enum StoryTuringActionPresentation: String, Sendable, Equatable {
+    case hidden
+    case play
+    case microphone
+}
+
+nonisolated enum StoryTuringActivityPresentation: String, Sendable, Equatable {
+    case hidden
+    case authoredPlaying
+    case processingEllipsis
+    case conversationPlaying
+}
+
+nonisolated struct StoryTuringSurfacePresentation: Sendable, Equatable {
+    let action: StoryTuringActionPresentation
+    let activity: StoryTuringActivityPresentation
+
+    static let hidden = StoryTuringSurfacePresentation(
+        action: .hidden,
+        activity: .hidden
+    )
+}
+
+nonisolated struct StoryLiveConversationChildToken:
+    Sendable,
+    Equatable,
+    Hashable
+{
+    let id: UUID
+    let sessionID: UUID
+    let turnID: UUID
+    let parentLeaseID: UUID
+    let selectedSurface: StoryInteractionSurfaceID
+}
+
 nonisolated enum StoryInteractionSurfaceID:
     String,
     Codable,
@@ -146,6 +181,8 @@ struct StoryInteractionSnapshot: Sendable, Equatable {
         StoryCrankRadioPresentation
     let hamReceiverPresentation:
         StoryHamReceiverPresentation
+    let turingSurfacePresentations:
+        [StoryInteractionSurfaceID: StoryTuringSurfacePresentation]
 
     init(
         revision: UInt64,
@@ -159,7 +196,9 @@ struct StoryInteractionSnapshot: Sendable, Equatable {
         crankRadioPresentation:
             StoryCrankRadioPresentation = .hidden,
         hamReceiverPresentation:
-            StoryHamReceiverPresentation = .hidden
+            StoryHamReceiverPresentation = .hidden,
+        turingSurfacePresentations:
+            [StoryInteractionSurfaceID: StoryTuringSurfacePresentation] = [:]
     ) {
         self.revision = revision
         self.turingGate = turingGate
@@ -173,6 +212,7 @@ struct StoryInteractionSnapshot: Sendable, Equatable {
             crankRadioPresentation
         self.hamReceiverPresentation =
             hamReceiverPresentation
+        self.turingSurfacePresentations = turingSurfacePresentations
     }
 }
 

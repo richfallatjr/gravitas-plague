@@ -17,6 +17,16 @@ actor StoryInteractionArbiter {
     private var stableInteractionPolicy: StoryStableInteractionPolicy =
         .unrestricted
     private var experienceMode: StoryExperienceMode = .play
+    private struct LiveConversationPresentation {
+        let parentLeaseID: UUID
+        let sessionID: UUID
+        let generation: UInt64
+        var seedIDsBySurface: [StoryInteractionSurfaceID: UUID]
+        var actions: [StoryInteractionSurfaceID: StoryTuringActionPresentation]
+        var activities: [StoryInteractionSurfaceID: StoryTuringActivityPresentation]
+        var activeChild: StoryLiveConversationChildToken?
+    }
+    private var liveConversationPresentation: LiveConversationPresentation?
     private let snapshotHub = StoryInteractionSnapshotHub()
 
     func snapshots() async -> AsyncStream<StoryInteractionSnapshot> {
@@ -25,6 +35,10 @@ actor StoryInteractionArbiter {
 
     func currentSnapshot() -> StoryInteractionSnapshot {
         makeSnapshot()
+    }
+
+    func currentStableInteractionPolicy() -> StoryStableInteractionPolicy {
+        stableInteractionPolicy
     }
 
     func updateExperienceMode(
@@ -372,6 +386,114 @@ actor StoryInteractionArbiter {
         }
     }
 
+    func installLiveConversationAvailability(
+        parentLease: StoryInteractionLease,
+        sessionID: UUID,
+        generation: UInt64,
+        eligibleSeeds: TuringLiveConversationSeedRegistrySnapshot,
+        authoredActivitySurface: StoryInteractionSurfaceID?,
+        reason: String
+    ) async throws {
+        try requireLiveConversationParent(parentLease)
+        let seedIDs = eligibleSeeds.seedsBySurface.mapValues(\.seedID)
+        let actions = Dictionary(
+            uniqueKeysWithValues: seedIDs.keys.map { ($0, StoryTuringActionPresentation.microphone) }
+        )
+        var activities:
+            [StoryInteractionSurfaceID: StoryTuringActivityPresentation] = [:]
+        if let authoredActivitySurface,
+           actions[authoredActivitySurface] == nil {
+            activities[authoredActivitySurface] = .authoredPlaying
+        }
+        liveConversationPresentation = LiveConversationPresentation(
+            parentLeaseID: parentLease.id,
+            sessionID: sessionID,
+            generation: generation,
+            seedIDsBySurface: seedIDs,
+            actions: actions,
+            activities: activities,
+            activeChild: nil
+        )
+        await publish(reason: "liveConversationInstalled.\(reason)")
+    }
+
+    func claimLiveConversationChild(
+        parentLease: StoryInteractionLease,
+        sessionID: UUID,
+        turnID: UUID,
+        selectedSurface: StoryInteractionSurfaceID,
+        reason: String
+    ) async throws -> StoryLiveConversationChildToken {
+        try requireLiveConversationParent(parentLease)
+        guard var presentation = liveConversationPresentation,
+              presentation.parentLeaseID == parentLease.id,
+              presentation.sessionID == sessionID,
+              presentation.activeChild == nil,
+              presentation.actions[selectedSurface] == .microphone else {
+            throw StoryInteractionClaimError.interactionNotPermitted
+        }
+        let token = StoryLiveConversationChildToken(
+            id: UUID(),
+            sessionID: sessionID,
+            turnID: turnID,
+            parentLeaseID: parentLease.id,
+            selectedSurface: selectedSurface
+        )
+        presentation.actions.removeAll(keepingCapacity: true)
+        presentation.activities.removeAll(keepingCapacity: true)
+        presentation.activeChild = token
+        liveConversationPresentation = presentation
+        await publish(reason: "liveConversationChildClaimed.\(reason)")
+        return token
+    }
+
+    func updateLiveConversationPresentation(
+        childToken: StoryLiveConversationChildToken,
+        actions: [StoryInteractionSurfaceID: StoryTuringActionPresentation],
+        activities: [StoryInteractionSurfaceID: StoryTuringActivityPresentation],
+        childStillActive: Bool,
+        reason: String
+    ) async throws {
+        guard var presentation = liveConversationPresentation,
+              presentation.activeChild == childToken else {
+            throw StoryInteractionClaimError.staleLease
+        }
+        presentation.actions = actions.filter {
+            presentation.seedIDsBySurface[$0.key] != nil
+        }
+        presentation.activities = activities
+        if childStillActive == false {
+            presentation.activeChild = nil
+        }
+        liveConversationPresentation = presentation
+        await publish(reason: "liveConversationUpdated.\(reason)")
+    }
+
+    func removeLiveConversationSession(
+        parentLease: StoryInteractionLease,
+        sessionID: UUID,
+        generation: UInt64,
+        reason: String
+    ) async {
+        guard let presentation = liveConversationPresentation,
+              presentation.parentLeaseID == parentLease.id,
+              presentation.sessionID == sessionID,
+              presentation.generation == generation else {
+            return
+        }
+        liveConversationPresentation = nil
+        await publish(reason: "liveConversationRemoved.\(reason)")
+    }
+
+    private func requireLiveConversationParent(
+        _ lease: StoryInteractionLease
+    ) throws {
+        guard exclusiveLease == lease,
+              case .turingFlow = lease.owner else {
+            throw StoryInteractionClaimError.staleLease
+        }
+    }
+
     func setStableInteractionPolicy(
         _ policy: StoryStableInteractionPolicy,
         storyTransitionLease: StoryInteractionLease,
@@ -434,6 +556,9 @@ actor StoryInteractionArbiter {
         if case .battle(let battleInstanceID) = lease.owner {
             battleDoorPermissions.removeValue(forKey: battleInstanceID)
         }
+        if liveConversationPresentation?.parentLeaseID == lease.id {
+            liveConversationPresentation = nil
+        }
         exclusiveLease = nil
         print("""
         [StoryInteraction] lease released
@@ -456,6 +581,7 @@ actor StoryInteractionArbiter {
         exclusiveLease = nil
         battleDoorPermissions.removeAll(keepingCapacity: false)
         stableInteractionPolicy = .unrestricted
+        liveConversationPresentation = nil
         await publish(reason: "reset.\(reason)")
     }
 
@@ -529,10 +655,53 @@ actor StoryInteractionArbiter {
             StoryCrankRadioPresentation
         let hamReceiver:
             StoryHamReceiverPresentation
+        var surfacePresentations:
+            [StoryInteractionSurfaceID: StoryTuringSurfacePresentation] = [:]
 
         if let exclusiveLease {
             switch exclusiveLease.owner {
-            case .turingFlow, .storyTransition:
+            case .turingFlow:
+                if let live = liveConversationPresentation,
+                   live.parentLeaseID == exclusiveLease.id {
+                    var resolvedCapabilities:
+                        Set<StoryInteractionCapability> = []
+                    for surface in StoryInteractionSurfaceID.allCases {
+                        let presentation = StoryTuringSurfacePresentation(
+                            action: live.actions[surface] ?? .hidden,
+                            activity: live.activities[surface] ?? .hidden
+                        )
+                        surfacePresentations[surface] = presentation
+                        guard presentation.action == .microphone else { continue }
+                        switch surface {
+                        case .walkie:
+                            resolvedCapabilities.insert(.walkieMicrophone)
+                        case .dadFrame:
+                            resolvedCapabilities.insert(.dadFrameMicrophone)
+                        case .crankRadio:
+                            resolvedCapabilities.insert(.crankRadioMicrophone)
+                        case .hamReceiver:
+                            resolvedCapabilities.insert(.hamReceiverMicrophone)
+                        }
+                    }
+                    capabilities = resolvedCapabilities
+                    walkie = live.actions[.walkie] == .microphone
+                        ? .microphone : .hidden
+                    dadFrame = live.actions[.dadFrame] == .microphone
+                        ? .microphone : .hidden
+                    crankRadio = live.actions[.crankRadio] == .microphone
+                        ? .microphone : .hidden
+                    hamReceiver = live.actions[.hamReceiver] == .microphone
+                        ? .microphone : .hidden
+                    door = .hidden
+                } else {
+                    capabilities = []
+                    walkie = .hidden
+                    door = .hidden
+                    dadFrame = .hidden
+                    crankRadio = .hidden
+                    hamReceiver = .hidden
+                }
+            case .storyTransition:
                 capabilities = []
                 walkie = .hidden
                 door = .hidden
@@ -693,7 +862,8 @@ actor StoryInteractionArbiter {
             doorPresentation: door,
             dadFramePresentation: dadFrame,
             crankRadioPresentation: crankRadio,
-            hamReceiverPresentation: hamReceiver
+            hamReceiverPresentation: hamReceiver,
+            turingSurfacePresentations: surfacePresentations
         )
     }
 

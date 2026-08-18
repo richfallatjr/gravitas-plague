@@ -9,9 +9,28 @@ nonisolated protocol TuringFlowPlaybackControlling: AnyObject, Sendable {
     ) async
 
     func beginAuthoredRun(identity: TuringFlowIdentity) async
+    func configureGeneratedPlayback(
+        _ configuration: TuringGeneratedPlaybackConfiguration
+    ) async
+    func generatedPlaybackGateDidChange() async
     func enqueueAuthoredMedia(_ item: TuringAuthoredMediaItem) async throws
     func sealAuthoredInput() async
     func waitUntilAuthoredPlaybackFinished() async throws
+    func setPlaybackLifecycleSink(
+        _ sink: (any TuringFlowPlaybackLifecycleSink)?
+    ) async
+    func lifecycleEvents() async -> AsyncStream<TuringFlowPlaybackLifecycleEvent>
+    func acquireAuthoredProgressionHold(
+        liveSessionID: UUID,
+        reason: String
+    ) async throws -> TuringAuthoredProgressionHoldToken
+    func releaseAuthoredProgressionHold(
+        _ token: TuringAuthoredProgressionHoldToken,
+        reason: String
+    ) async throws
+    func waitUntilCurrentSpokenItemCompletes(
+        hold: TuringAuthoredProgressionHoldToken
+    ) async throws
 
     func expectPrerecordingBeforeGenerated() async
 
@@ -37,4 +56,38 @@ nonisolated protocol TuringFlowPlaybackControlling: AnyObject, Sendable {
     func waitUntilPlaybackFinished() async
     func completedGeneratedSegmentCount() async -> Int
     func runCancelled(reason: String) async
+}
+
+extension TuringFlowPlaybackControlling {
+    func setPlaybackLifecycleSink(
+        _ sink: (any TuringFlowPlaybackLifecycleSink)?
+    ) async {}
+
+    func configureGeneratedPlayback(
+        _ configuration: TuringGeneratedPlaybackConfiguration
+    ) async {}
+
+    func generatedPlaybackGateDidChange() async {}
+
+    func lifecycleEvents() async -> AsyncStream<TuringFlowPlaybackLifecycleEvent> {
+        AsyncStream { $0.finish() }
+    }
+
+    func acquireAuthoredProgressionHold(
+        liveSessionID: UUID,
+        reason: String
+    ) async throws -> TuringAuthoredProgressionHoldToken {
+        throw TuringRuntimeError.invalidConfig(
+            "Playback owner does not support authored progression holds."
+        )
+    }
+
+    func releaseAuthoredProgressionHold(
+        _ token: TuringAuthoredProgressionHoldToken,
+        reason: String
+    ) async throws {}
+
+    func waitUntilCurrentSpokenItemCompletes(
+        hold: TuringAuthoredProgressionHoldToken
+    ) async throws {}
 }

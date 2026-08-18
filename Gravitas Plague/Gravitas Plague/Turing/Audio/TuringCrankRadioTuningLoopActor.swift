@@ -2,6 +2,13 @@
 import CryptoKit
 import Foundation
 
+nonisolated struct TuringCrankRadioOrientationToken: Sendable, Equatable {
+    let id: UUID
+    let ownerID: String
+    let handleID: UUID
+    let fileName: String
+}
+
 actor TuringCrankRadioTuningLoopActor: TuringGeneratedGapBridge {
     static let shared = TuringCrankRadioTuningLoopActor()
 
@@ -166,6 +173,41 @@ actor TuringCrankRadioTuningLoopActor: TuringGeneratedGapBridge {
                   reason: \(reason)
                 """)
             }
+            return
+        }
+        await stopActiveLoop(reason: reason)
+    }
+
+    func beginPrerecordingOrientation(
+        ownerID: String,
+        reason: String
+    ) async throws -> TuringCrankRadioOrientationToken {
+        try await startLoop(
+            ownerID: ownerID,
+            waitingForSegmentIndex: 0,
+            reason: reason
+        )
+        guard let handle = activeHandle,
+              let resource = activeResource,
+              activeOwnerID == ownerID else {
+            throw TuningError.noPlayableResource
+        }
+        return TuringCrankRadioOrientationToken(
+            id: UUID(),
+            ownerID: ownerID,
+            handleID: handle.id,
+            fileName: resource.fileName
+        )
+    }
+
+    func endPrerecordingOrientation(
+        _ token: TuringCrankRadioOrientationToken,
+        reason: String
+    ) async {
+        guard activeOwnerID == token.ownerID,
+              activeHandle?.id == token.handleID,
+              activeResource?.fileName == token.fileName else {
+            print("[TuringPROrientation] stale crank token ignored token=\(token.id.uuidString)")
             return
         }
         await stopActiveLoop(reason: reason)
@@ -396,7 +438,7 @@ actor TuringCrankRadioTuningLoopActor: TuringGeneratedGapBridge {
               generatedFlowContinues: true
             """)
 
-        case .started:
+        case .started, .paused, .resumed:
             break
         }
     }

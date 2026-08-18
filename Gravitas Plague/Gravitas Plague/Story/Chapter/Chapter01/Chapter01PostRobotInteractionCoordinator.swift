@@ -99,12 +99,9 @@ final class Chapter01PostRobotInteractionCoordinator {
                 transitionLease,
                 reason: "\(reason).ready"
             )
-            let mode = StoryExperienceModeController.shared.modeForNewStoryAction()
-            let presentationIsValid = mode == .play
-                ? releasedSnapshot.dadFramePresentation == .hidden &&
-                    releasedSnapshot.capabilities.contains(.dadFramePlay) == false
-                : releasedSnapshot.dadFramePresentation == .play &&
-                    releasedSnapshot.capabilities.contains(.dadFramePlay)
+            let presentationIsValid =
+                releasedSnapshot.dadFramePresentation == .hidden &&
+                releasedSnapshot.capabilities.contains(.dadFramePlay) == false
             guard releasedSnapshot.exclusiveOwner == nil,
                   releasedSnapshot.doorState == .closedUnloaded,
                   presentationIsValid else {
@@ -126,7 +123,7 @@ final class Chapter01PostRobotInteractionCoordinator {
             hamReceiver.applyInteractionSnapshot(releasedSnapshot)
             print(
                 "[Chapter01PostRobot] first branch presented synchronously " +
-                    "dadFrame=\(releasedSnapshot.dadFramePresentation.rawValue) mode=\(mode.rawValue)"
+                    "dadFrame=\(releasedSnapshot.dadFramePresentation.rawValue) mode=play"
             )
         }
     }
@@ -167,7 +164,6 @@ final class Chapter01PostRobotInteractionCoordinator {
             case .hamReceiver:
                 binding = .chapter01FourChancesHam
             }
-            let mode = StoryExperienceModeController.shared.modeForNewStoryAction()
             StoryModeActionCoordinator.shared.activate(
                 .init(
                     episodeID: .chapter01,
@@ -175,9 +171,7 @@ final class Chapter01PostRobotInteractionCoordinator {
                     durableBoundaryID:
                         "chapter01.postRobot.\(snapshot.revision).\(branch.rawValue)",
                     sourceEventID: UUID()
-                ),
-                mode: mode,
-                interactiveArm: { }
+                )
             )
         }
         print(

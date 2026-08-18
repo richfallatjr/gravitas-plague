@@ -94,34 +94,17 @@ final class Chapter01Coordinator:
             reason: "chapter01.root"
         )
         walkie.episodeStarted(.chapter01)
-        let mode = StoryExperienceModeController.shared.modeForNewStoryAction()
         StoryModeActionCoordinator.shared.activate(
             .init(
                 episodeID: .chapter01,
                 rootScriptPointID: "chapter01.walkie.rich.script06",
                 durableBoundaryID: "chapter01.root.\(runID.uuidString)",
                 sourceEventID: runID
-            ),
-            mode: mode,
-            interactiveArm: { [weak self] in
-                guard let self else { return }
-                self.walkie.bind(
-                    .chapter01OpeningWalkie,
-                    initialState: .play,
-                    reason: "chapter01.root"
-                )
-                self.walkie.armPlay(
-                    action: .startScriptPoint(
-                        id: "chapter01.walkie.rich.script06",
-                        trigger: .userPlay
-                    ),
-                    reason: "chapter01.root"
-                )
-            }
+            )
         )
         state = .rootReady
         print(
-            "[Chapter01] root activated chapterRunID=\(runID.uuidString) scriptPointID=chapter01.walkie.rich.script06 mode=\(mode.rawValue) noRescan=true"
+            "[Chapter01] root activated chapterRunID=\(runID.uuidString) scriptPointID=chapter01.walkie.rich.script06 mode=play noRescan=true"
         )
     }
 

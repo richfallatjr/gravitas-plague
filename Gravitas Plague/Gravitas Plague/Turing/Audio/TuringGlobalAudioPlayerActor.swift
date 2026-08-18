@@ -99,6 +99,33 @@ actor TuringGlobalAudioPlayerActor: TuringAudioPlaybackEndpoint {
         await eventHub.yield(.cancelled(handle, reason: reason))
     }
 
+    func pause(
+        _ handle: TuringAudioPlaybackHandle,
+        reason: String
+    ) async throws {
+        guard let active, active.handle == handle else {
+            throw TuringRuntimeError.invalidConfig(
+                "Global playback handle is stale."
+            )
+        }
+        active.player.pause()
+        await eventHub.yield(.paused(handle, reason: reason))
+    }
+
+    func resume(
+        _ handle: TuringAudioPlaybackHandle,
+        reason: String
+    ) async throws {
+        guard let active,
+              active.handle == handle,
+              active.player.play() else {
+            throw TuringRuntimeError.invalidConfig(
+                "Global playback failed to resume."
+            )
+        }
+        await eventHub.yield(.resumed(handle, reason: reason))
+    }
+
     fileprivate func finished(
         playerID: ObjectIdentifier,
         successfully: Bool

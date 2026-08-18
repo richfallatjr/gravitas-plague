@@ -178,6 +178,14 @@ final class TuringStoryDadFrameInteractionController:
     }
 
     func microphoneHoldBegan(source: String) {
+        if TuringStoryLiveMicrophoneActionRouter.shared.microphoneHoldBegan(
+            surface: .dadFrame,
+            source: source,
+            dictation: dictation,
+            eventSink: eventSink
+        ) {
+            return
+        }
         guard ready,
               holdActive == false,
               latestSnapshot.capabilities
@@ -295,6 +303,12 @@ final class TuringStoryDadFrameInteractionController:
     }
 
     func microphoneHoldEnded(source: String) {
+        if TuringStoryLiveMicrophoneActionRouter.shared.microphoneHoldEnded(
+            surface: .dadFrame,
+            source: source
+        ) {
+            return
+        }
         guard holdActive else {
             return
         }
@@ -457,7 +471,13 @@ final class TuringStoryDadFrameInteractionController:
         let appliedPresentation = ready
             ? snapshot.dadFramePresentation
             : .hidden
-        iconController.apply(appliedPresentation)
+        iconController.apply(
+            appliedPresentation,
+            activity: ready
+                ? snapshot.turingSurfacePresentations[.dadFrame]?.activity
+                    ?? .hidden
+                : .hidden
+        )
         if snapshot.dadFramePresentation != .hidden ||
             appliedPresentation != .hidden {
             print(

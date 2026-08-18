@@ -4,8 +4,36 @@ import QuartzCore
 import RealityKit
 import simd
 
+private final class PlayerDeathDelegateProxy: NSObject, AVAudioPlayerDelegate {
+    private let completion: @MainActor (ObjectIdentifier, Bool) -> Void
+
+    init(completion: @escaping @MainActor (ObjectIdentifier, Bool) -> Void) {
+        self.completion = completion
+    }
+
+    nonisolated func audioPlayerDidFinishPlaying(
+        _ player: AVAudioPlayer,
+        successfully flag: Bool
+    ) {
+        let playerID = ObjectIdentifier(player)
+        Task { @MainActor [completion] in
+            completion(playerID, flag)
+        }
+    }
+
+    nonisolated func audioPlayerDecodeErrorDidOccur(
+        _ player: AVAudioPlayer,
+        error: Error?
+    ) {
+        let playerID = ObjectIdentifier(player)
+        Task { @MainActor [completion] in
+            completion(playerID, false)
+        }
+    }
+}
+
 @MainActor
-final class GravitasDemoAudioController {
+final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
     enum AudioError: LocalizedError {
         case missingResource(String)
         case playerCreationFailed(String, Error)
@@ -169,6 +197,16 @@ final class GravitasDemoAudioController {
     private var lastPlayerDamageFileName: String?
     private var playerDeathPlayersByFileName: [String: AVAudioPlayer] = [:]
     private var lastPlayerDeathFileName: String?
+    private var activeBattleSpeechTokens = Set<StoryRichBattleSpeechToken>()
+
+    private struct ActivePlayerDeathVocal {
+        let token: StoryPlayerDeathVocalToken
+        let player: AVAudioPlayer
+        var externallyOwned: Bool
+    }
+
+    private var activePlayerDeathVocal: ActivePlayerDeathVocal?
+    private var playerDeathDelegateProxy: PlayerDeathDelegateProxy?
 
     private let radioAudioEntity = Entity()
     private let hostHeadAudioEntity = Entity()
@@ -1028,6 +1066,7 @@ final class GravitasDemoAudioController {
         stopSpatialDemoControllers()
         stopPlayerDamagePlayers()
         stopPlayerDeathPlayers()
+        activeBattleSpeechTokens.removeAll(keepingCapacity: false)
         stopPortalOneShotControllers()
         stopActiveSpatialOneShots()
         stopActiveCharacterVocals()
@@ -1410,6 +1449,15 @@ final class GravitasDemoAudioController {
     func playRandomPlayerDamageHit() {
         prepareIfNeeded()
 
+        guard playerDamageVocalSuppressed == false else {
+            print(
+                "[RichVocalChannel] damage vocal suppressed " +
+                    "battleSpeechCount=\(activeBattleSpeechTokens.count) " +
+                    "deathVocalActive=\(activePlayerDeathVocal != nil)"
+            )
+            return
+        }
+
         guard !playerDamagePlayersByFileName.isEmpty else {
             print("[Gravitas Audio] No player damage sounds available.")
             return
@@ -1443,35 +1491,223 @@ final class GravitasDemoAudioController {
 
     @discardableResult
     func playRandomPlayerDeathAndReturnDuration() -> TimeInterval {
+        if let activePlayerDeathVocal {
+            stopPlayerDeathVocal(
+                token: activePlayerDeathVocal.token,
+                reason: "replaceActualPlayerDeath"
+            )
+        }
+        do {
+            return try startRandomPlayerDeathVocal(
+                purpose: .actualPlayerDeath,
+                ownerID: "existingPlayerDeathPresentation"
+            ).durationSeconds
+        } catch {
+            print("[PlayerDeath] ERROR \(error.localizedDescription)")
+            return 0
+        }
+    }
+
+    var playerDamageVocalSuppressed: Bool {
+        activeBattleSpeechTokens.isEmpty == false || activePlayerDeathVocal != nil
+    }
+
+    func beginBattleSpeech(
+        battleInstanceID: UUID,
+        cueID: String,
+        playbackID: UUID
+    ) -> StoryRichBattleSpeechToken {
+        let token = StoryRichBattleSpeechToken(
+            id: UUID(),
+            battleInstanceID: battleInstanceID,
+            cueID: cueID,
+            playbackID: playbackID
+        )
+        let wasSuppressed = playerDamageVocalSuppressed
+        activeBattleSpeechTokens.insert(token)
+        if wasSuppressed == false {
+            stopActivePlayerDamageVocalsForRichSpeech()
+        }
+        print(
+            "[RichVocalChannel] battle speech acquired " +
+                "battleInstanceID=\(battleInstanceID.uuidString) cueID=\(cueID) " +
+                "playbackID=\(playbackID.uuidString) token=\(token.id.uuidString)"
+        )
+        return token
+    }
+
+    func endBattleSpeech(
+        token: StoryRichBattleSpeechToken,
+        reason: String
+    ) {
+        guard activeBattleSpeechTokens.remove(token) != nil else {
+            print(
+                "[RichVocalChannel] stale battle speech release ignored " +
+                    "token=\(token.id.uuidString) reason=\(reason)"
+            )
+            return
+        }
+        print(
+            "[RichVocalChannel] battle speech released " +
+                "token=\(token.id.uuidString) reason=\(reason) " +
+                "remaining=\(activeBattleSpeechTokens.count)"
+        )
+    }
+
+    func requirePlayerDeathVocalResources() throws {
         prepareIfNeeded()
+        guard playerDeathPlayersByFileName.isEmpty == false else {
+            throw AudioError.missingResource("die_01.wav or die_02.wav")
+        }
+    }
 
-        guard !playerDeathPlayersByFileName.isEmpty else {
-            print("[Gravitas Audio] No player death sounds available.")
-            return 0.0
+    func startRandomPlayerDeathVocal(
+        purpose: StoryPlayerDeathVocalPurpose,
+        ownerID: String
+    ) throws -> StoryPlayerDeathVocalToken {
+        try requirePlayerDeathVocalResources()
+
+        if let active = activePlayerDeathVocal {
+            switch (active.token.purpose, purpose) {
+            case (.chapter03TunnelBridge, .actualPlayerDeath):
+                stopPlayerDeathVocal(
+                    token: active.token,
+                    reason: "preemptedByActualPlayerDeath"
+                )
+            case (.actualPlayerDeath, .chapter03TunnelBridge):
+                throw AudioError.playerCreationFailed(
+                    "chapter03TunnelBridge",
+                    NSError(
+                        domain: "StoryRichVocalChannel",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey:
+                            "An actual player-death vocal is already active."]
+                    )
+                )
+            default:
+                throw AudioError.playerCreationFailed(
+                    purpose.rawValue,
+                    NSError(
+                        domain: "StoryRichVocalChannel",
+                        code: 2,
+                        userInfo: [NSLocalizedDescriptionKey:
+                            "The active death vocal must be explicitly stopped before replacement."]
+                    )
+                )
+            }
         }
 
-        var candidateFileNames = Array(playerDeathPlayersByFileName.keys)
-
-        if let lastPlayerDeathFileName,
-           candidateFileNames.count > 1 {
-            candidateFileNames.removeAll { $0 == lastPlayerDeathFileName }
+        var candidates = Array(playerDeathPlayersByFileName.keys)
+        if let lastPlayerDeathFileName, candidates.count > 1 {
+            candidates.removeAll { $0 == lastPlayerDeathFileName }
+        }
+        guard let fileName = candidates.randomElement(),
+              let player = playerDeathPlayersByFileName[fileName] else {
+            throw AudioError.missingResource("die_01.wav or die_02.wav")
         }
 
-        guard let selectedFileName = candidateFileNames.randomElement(),
-              let player = playerDeathPlayersByFileName[selectedFileName] else {
-            print("[PlayerDeath] ERROR failed to select player death sound.")
-            return 0.0
-        }
-
+        stopActivePlayerDamageVocalsForRichSpeech()
         player.stop()
         player.currentTime = 0
-        player.play()
+        let token = StoryPlayerDeathVocalToken(
+            id: UUID(),
+            purpose: purpose,
+            ownerID: ownerID,
+            fileName: fileName,
+            durationSeconds: player.duration,
+            playerObjectID: String(describing: ObjectIdentifier(player))
+        )
+        let proxy = PlayerDeathDelegateProxy { [weak self] playerID, successfully in
+            self?.playerDeathVocalActuallyFinished(
+                playerID: playerID,
+                successfully: successfully
+            )
+        }
+        player.delegate = proxy
+        playerDeathDelegateProxy = proxy
+        activePlayerDeathVocal = ActivePlayerDeathVocal(
+            token: token,
+            player: player,
+            externallyOwned: true
+        )
+        guard player.play() else {
+            activePlayerDeathVocal = nil
+            playerDeathDelegateProxy = nil
+            player.delegate = nil
+            throw AudioError.playerCreationFailed(
+                fileName,
+                NSError(
+                    domain: "StoryRichVocalChannel",
+                    code: 3,
+                    userInfo: [NSLocalizedDescriptionKey: "AVAudioPlayer refused playback."]
+                )
+            )
+        }
+        lastPlayerDeathFileName = fileName
+        print(
+            "[RichVocalChannel] death vocal started purpose=\(purpose.rawValue) " +
+                "ownerID=\(ownerID) file=\(fileName).wav token=\(token.id.uuidString)"
+        )
+        return token
+    }
 
-        lastPlayerDeathFileName = selectedFileName
+    func stopPlayerDeathVocal(
+        token: StoryPlayerDeathVocalToken,
+        reason: String
+    ) {
+        guard let active = activePlayerDeathVocal,
+              active.token == token else { return }
+        active.player.stop()
+        active.player.currentTime = 0
+        active.player.delegate = nil
+        activePlayerDeathVocal = nil
+        playerDeathDelegateProxy = nil
+        print(
+            "[RichVocalChannel] death vocal stopped token=\(token.id.uuidString) " +
+                "reason=\(reason)"
+        )
+    }
 
-        print("[PlayerDeath] playing \(selectedFileName).wav")
+    func relinquishPlayerDeathVocalToNaturalCompletion(
+        token: StoryPlayerDeathVocalToken,
+        reason: String
+    ) {
+        guard var active = activePlayerDeathVocal,
+              active.token == token else {
+            print(
+                "[RichVocalChannel] death vocal already completed before relinquish " +
+                    "token=\(token.id.uuidString) reason=\(reason)"
+            )
+            return
+        }
+        active.externallyOwned = false
+        activePlayerDeathVocal = active
+        print(
+            "[RichVocalChannel] death vocal relinquished to natural completion " +
+                "token=\(token.id.uuidString) reason=\(reason)"
+        )
+    }
 
-        return player.duration
+    private func playerDeathVocalActuallyFinished(
+        playerID: ObjectIdentifier,
+        successfully: Bool
+    ) {
+        guard let active = activePlayerDeathVocal,
+              ObjectIdentifier(active.player) == playerID else { return }
+        active.player.delegate = nil
+        activePlayerDeathVocal = nil
+        playerDeathDelegateProxy = nil
+        print(
+            "[RichVocalChannel] death vocal actual completion " +
+                "token=\(active.token.id.uuidString) successfully=\(successfully)"
+        )
+    }
+
+    private func stopActivePlayerDamageVocalsForRichSpeech() {
+        for player in playerDamagePlayersByFileName.values {
+            player.stop()
+            player.currentTime = 0
+        }
     }
 
     private func startRadioStatic() {
@@ -1822,8 +2058,11 @@ final class GravitasDemoAudioController {
         for player in playerDeathPlayersByFileName.values {
             player.stop()
             player.currentTime = 0
+            player.delegate = nil
         }
 
+        activePlayerDeathVocal = nil
+        playerDeathDelegateProxy = nil
         lastPlayerDeathFileName = nil
     }
 

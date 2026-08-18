@@ -8,9 +8,36 @@ nonisolated struct TuringAuthoredMediaItem: Sendable, Equatable {
         case closingBumper
     }
 
+    enum OrientationMode: String, Sendable, Equatable {
+        case none
+        case runnerOwnedPrimary
+        case playbackOwnedBridge
+    }
+
+    let scriptPointID: String
     let id: String
     let role: Role
     let fileURL: URL
+    let liveConversationCatalogEntry:
+        TuringLiveConversationCatalog.Entry?
+    let orientationMode: OrientationMode
+
+    init(
+        scriptPointID: String = "unknown",
+        id: String,
+        role: Role,
+        fileURL: URL,
+        liveConversationCatalogEntry:
+            TuringLiveConversationCatalog.Entry? = nil,
+        orientationMode: OrientationMode = .none
+    ) {
+        self.scriptPointID = scriptPointID
+        self.id = id
+        self.role = role
+        self.fileURL = fileURL
+        self.liveConversationCatalogEntry = liveConversationCatalogEntry
+        self.orientationMode = orientationMode
+    }
 }
 
 nonisolated struct TuringAuthoredMediaPlan: Sendable, Equatable {
@@ -20,12 +47,22 @@ nonisolated struct TuringAuthoredMediaPlan: Sendable, Equatable {
 
 struct TuringAuthoredMediaPlanResolver: Sendable {
     private let prerecordingStore: any TuringPrerecordingLoading
+    private let liveConversationCatalog:
+        TuringLiveConversationCatalogStore?
 
     init(
         prerecordingStore: any TuringPrerecordingLoading =
-            TuringPrerecordingStore()
-    ) {
+            TuringPrerecordingStore(),
+        liveConversationCatalog:
+            TuringLiveConversationCatalogStore? = nil
+    ) throws {
         self.prerecordingStore = prerecordingStore
+        if let liveConversationCatalog {
+            self.liveConversationCatalog = liveConversationCatalog
+        } else {
+            self.liveConversationCatalog =
+                try TuringLiveConversationCatalogStore()
+        }
     }
 
     func resolve(
@@ -54,10 +91,37 @@ struct TuringAuthoredMediaPlanResolver: Sendable {
         let items = try ids.compactMap { id, role -> TuringAuthoredMediaItem? in
             guard id != "none", seen.insert(id).inserted else { return nil }
             let recording = try prerecordingStore.descriptor(id: id)
+            let orientationMode: TuringAuthoredMediaItem.OrientationMode
+            switch role {
+            case .primaryPrerecording
+                where TuringPrerecordingOrientationEligibility.permits(
+                    descriptor: descriptor,
+                    role: role
+                ):
+                orientationMode = .runnerOwnedPrimary
+            case .authoredBridge
+                where TuringPrerecordingOrientationEligibility.permits(
+                    descriptor: descriptor,
+                    role: role
+                ):
+                orientationMode = .playbackOwnedBridge
+            case .primaryPrerecording, .authoredBridge,
+                 .openingCue, .closingBumper:
+                orientationMode = .none
+            }
             return TuringAuthoredMediaItem(
+                scriptPointID: descriptor.scriptPointID,
                 id: id,
                 role: role,
-                fileURL: try prerecordingStore.audioURL(for: recording)
+                fileURL: try prerecordingStore.audioURL(for: recording),
+                liveConversationCatalogEntry:
+                    (role == .primaryPrerecording || role == .authoredBridge)
+                    ? liveConversationCatalog?.entry(
+                        scriptPointID: descriptor.scriptPointID,
+                        authoredPrerecordingID: id
+                    )
+                    : nil,
+                orientationMode: orientationMode
             )
         }
         guard items.isEmpty == false else {
@@ -71,4 +135,3 @@ struct TuringAuthoredMediaPlanResolver: Sendable {
         )
     }
 }
-

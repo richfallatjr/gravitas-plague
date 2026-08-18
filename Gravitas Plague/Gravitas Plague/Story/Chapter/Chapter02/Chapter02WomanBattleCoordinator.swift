@@ -35,7 +35,7 @@ final class Chapter02WomanBattleCoordinator {
     private let registry = BattleEnemyRuntimeRegistry()
     private let corpsePresenter: BattleCorpsePresentationController
     private let cleanup: BattleRuntimeCleanupCoordinator
-    private let richPR = Chapter02PrerecordingPlayer()
+    private let richPR: Chapter02PrerecordingPlayer
     private let onEnemyPrepared:
         @MainActor (UUID, JockRetargetTestController) -> Void
     private let onEnemyRemoved: @MainActor (UUID) -> Void
@@ -58,6 +58,7 @@ final class Chapter02WomanBattleCoordinator {
     init(
         sceneRoot: Entity,
         door: any TuringStoryDoorBattleControlling,
+        richVocalChannel: any StoryRichVocalChannelControlling,
         onEnemyPrepared: @escaping @MainActor (
             UUID,
             JockRetargetTestController
@@ -68,6 +69,9 @@ final class Chapter02WomanBattleCoordinator {
     ) {
         self.sceneRoot = sceneRoot
         self.door = door
+        self.richPR = Chapter02PrerecordingPlayer(
+            richVocalChannel: richVocalChannel
+        )
         self.onEnemyPrepared = onEnemyPrepared
         self.onEnemyRemoved = onEnemyRemoved
         self.playerTargetProvider = playerTargetProvider
@@ -464,7 +468,8 @@ final class Chapter02WomanBattleCoordinator {
                     "Turing/Audio/prerecordings/pr-rich-women-battle.mp3",
                 runID:
                     "chapter02.womanBattle.\(battleInstanceID.uuidString)",
-                label: "chapter02.womanBattle.richPR"
+                label: "chapter02.womanBattle.richPR",
+                battleInstanceID: battleInstanceID
             )
         }
         print(

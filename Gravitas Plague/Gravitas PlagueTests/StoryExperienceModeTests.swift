@@ -3,15 +3,11 @@ import XCTest
 
 @MainActor
 final class StoryExperienceModeTests: XCTestCase {
-    func testModeContractDefaultsToPlayAndUsesInverseToggleSymbols() {
+    func testProductionModeContractDefaultsToPlay() {
         XCTAssertEqual(
             StoryExperienceModeController.shared.modeForNewStoryAction(),
             .play
         )
-        XCTAssertEqual(StoryExperienceMode.play.posterToggleSymbolName, "sparkles")
-        XCTAssertEqual(StoryExperienceMode.interactive.posterToggleSymbolName, "play.fill")
-        XCTAssertEqual(StoryExperienceMode.play.toggleDestination, .interactive)
-        XCTAssertEqual(StoryExperienceMode.interactive.toggleDestination, .play)
     }
 
     func testExperienceModeIsNotCodable() {

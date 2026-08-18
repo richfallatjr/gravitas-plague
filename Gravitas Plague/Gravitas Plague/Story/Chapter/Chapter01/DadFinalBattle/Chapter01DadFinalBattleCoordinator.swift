@@ -16,7 +16,7 @@ final class Chapter01DadFinalBattleCoordinator {
     private let intro: ScriptedPortalEnemyIntroCoordinator
     private let music = Chapter01DadBattleMusicController()
     private let damageClock = Chapter01DadBattleDamageClock()
-    private let richQueue = StoryBattleRichPrerecordingQueue()
+    private let richQueue: StoryBattleRichPrerecordingQueue
     private let enemyRegistry = BattleEnemyRuntimeRegistry()
     private let corpsePresenter: BattleCorpsePresentationController
     private let runtimeCleanup: BattleRuntimeCleanupCoordinator
@@ -45,6 +45,7 @@ final class Chapter01DadFinalBattleCoordinator {
         sceneRoot: Entity,
         door: any TuringStoryDoorBattleControlling,
         clock: any BattleClock,
+        richVocalChannel: any StoryRichVocalChannelControlling,
         arbiter: StoryInteractionArbiter = .shared,
         onEnemyPrepared: @escaping Chapter01DadBattleEnemyFactory.PreparedCallback,
         onEnemyRemoved: @escaping EnemyRemovedHook,
@@ -58,6 +59,9 @@ final class Chapter01DadFinalBattleCoordinator {
         self.door = door
         self.arbiter = arbiter
         self.clock = clock
+        self.richQueue = StoryBattleRichPrerecordingQueue(
+            richVocalChannel: richVocalChannel
+        )
         self.intro = ScriptedPortalEnemyIntroCoordinator(clock: clock)
         self.corpsePresenter = BattleCorpsePresentationController(
             storyRoot: sceneRoot

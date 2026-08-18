@@ -58,12 +58,6 @@ final class TuringStoryDadFrameIconController {
         dadFrameRoot.addChild(hitTarget)
         iconEntity = icon
         physicalHitTarget = hitTarget
-        TuringStoryDeviceActivityIconController.shared.register(
-            surface: .dadFrame,
-            parent: iconAnchor,
-            transform: icon.transform,
-            size: visualSize
-        )
         apply(.hidden)
 
         print("""
@@ -82,7 +76,8 @@ final class TuringStoryDadFrameIconController {
     }
 
     func apply(
-        _ presentation: StoryDadFramePresentation
+        _ presentation: StoryDadFramePresentation,
+        activity: StoryTuringActivityPresentation = .hidden
     ) {
         guard let iconEntity,
               let physicalHitTarget else {
@@ -93,7 +88,16 @@ final class TuringStoryDadFrameIconController {
 
         switch presentation {
         case .hidden:
-            iconEntity.isEnabled = false
+            switch activity {
+            case .authoredPlaying, .conversationPlaying:
+                updateIconMaterial(symbolName: "play.fill", on: iconEntity)
+                iconEntity.isEnabled = true
+            case .processingEllipsis:
+                updateIconMaterial(symbolName: "ellipsis", on: iconEntity)
+                iconEntity.isEnabled = true
+            case .hidden:
+                iconEntity.isEnabled = false
+            }
             physicalHitTarget.isEnabled = false
         case .play:
             updateIconMaterial(
@@ -133,9 +137,6 @@ final class TuringStoryDadFrameIconController {
         }
         iconEntity?.removeFromParent()
         physicalHitTarget?.removeFromParent()
-        TuringStoryDeviceActivityIconController.shared.unregister(
-            surface: .dadFrame
-        )
         iconEntity = nil
         physicalHitTarget = nil
     }

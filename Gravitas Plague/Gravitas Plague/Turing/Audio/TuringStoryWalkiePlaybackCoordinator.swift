@@ -1,7 +1,7 @@
 import AVFoundation
 import Foundation
 
-actor TuringStoryWalkiePlaybackCoordinator {
+actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
     enum VoiceRoute: String, Sendable {
         case walkieSpatial
         case playerGlobal
@@ -44,14 +44,21 @@ actor TuringStoryWalkiePlaybackCoordinator {
         let fileURL: URL
     }
 
-    private struct AuthoredBridgeClip {
-        let id: String
-        let fileURL: URL
+    private struct AuthoredBridgeClip: Equatable {
+        let item: TuringAuthoredMediaItem
         let beforeGeneratedSegmentIndex: Int
+
+        var id: String { item.id }
+        var fileURL: URL { item.fileURL }
     }
 
     private enum ActiveItem: Equatable {
         case none
+        case startingAuthored(
+            clip: AuthoredBridgeClip,
+            requestID: UUID
+        )
+        case orientingAuthored(clip: AuthoredBridgeClip)
         case prerecording(
             id: String,
             handle: TuringAudioPlaybackHandle,
@@ -59,11 +66,15 @@ actor TuringStoryWalkiePlaybackCoordinator {
             startedAt: Date
         )
         case authoredBridge(
-            id: String,
-            beforeGeneratedSegmentIndex: Int,
+            clip: AuthoredBridgeClip,
             handle: TuringAudioPlaybackHandle,
             fileURL: URL,
             startedAt: Date
+        )
+        case startingGenerated(
+            segmentIndex: Int,
+            requestID: UUID,
+            fileURL: URL
         )
         case generated(
             segmentIndex: Int,
@@ -82,11 +93,13 @@ actor TuringStoryWalkiePlaybackCoordinator {
         var handle: TuringAudioPlaybackHandle? {
             switch self {
             case .prerecording(_, let handle, _, _),
-                 .authoredBridge(_, _, let handle, _, _),
+                 .authoredBridge(_, let handle, _, _),
                  .generated(_, let handle, _, _),
                  .filler(let handle, _, _):
                 return handle
-            case .none, .deadAir, .cancelled:
+            case .none, .startingAuthored, .orientingAuthored,
+                 .startingGenerated,
+                 .deadAir, .cancelled:
                 return nil
             }
         }
@@ -123,6 +136,17 @@ actor TuringStoryWalkiePlaybackCoordinator {
     private var authoredOnlyRun = false
     private var authoredInputSealed = false
     private var authoredFailureReason: String?
+    private let lifecycleHub = TuringFlowPlaybackLifecycleHub()
+    private weak var playbackLifecycleSink:
+        (any TuringFlowPlaybackLifecycleSink)?
+    private var authoredProgressionHolds:
+        [UUID: TuringAuthoredProgressionHoldToken] = [:]
+    private var currentItemBoundaryWaiters:
+        [CheckedContinuation<Void, Never>] = []
+    private var pausedSpokenReceipts:
+        [UUID: TuringSpokenCoverPauseReceipt] = [:]
+    private var generatedPlaybackConfiguration:
+        TuringGeneratedPlaybackConfiguration = .routeDefault
 
     init(
         policy: Policy = Policy(),
@@ -195,6 +219,16 @@ actor TuringStoryWalkiePlaybackCoordinator {
         flowIdentity = identity
     }
 
+    func configureGeneratedPlayback(
+        _ configuration: TuringGeneratedPlaybackConfiguration
+    ) async {
+        generatedPlaybackConfiguration = configuration
+    }
+
+    func generatedPlaybackGateDidChange() async {
+        await reconcile(reason: "generatedPlaybackGateChanged")
+    }
+
     func beginRun(runID: String, expectedSegmentCount: Int?) async {
         await runCancelled(reason: "beginNewRun")
 
@@ -222,6 +256,9 @@ actor TuringStoryWalkiePlaybackCoordinator {
         self.deadAirTask?.cancel()
         self.deadAirTask = nil
         self.runActive = true
+        self.authoredProgressionHolds.removeAll(keepingCapacity: false)
+        self.pausedSpokenReceipts.removeAll(keepingCapacity: false)
+        resumeCurrentItemBoundaryWaiters()
 
         do {
             _ = try await fileStore.beginRun(runID)
@@ -283,6 +320,9 @@ actor TuringStoryWalkiePlaybackCoordinator {
         authoredOnlyRun = true
         authoredInputSealed = false
         authoredFailureReason = nil
+        authoredProgressionHolds.removeAll(keepingCapacity: false)
+        pausedSpokenReceipts.removeAll(keepingCapacity: false)
+        resumeCurrentItemBoundaryWaiters()
         runActive = true
 
         print("""
@@ -307,8 +347,7 @@ actor TuringStoryWalkiePlaybackCoordinator {
         }
         pendingAuthoredBridges[0, default: []].append(
             AuthoredBridgeClip(
-                id: item.id,
-                fileURL: item.fileURL,
+                item: item,
                 beforeGeneratedSegmentIndex: 0
             )
         )
@@ -328,6 +367,199 @@ actor TuringStoryWalkiePlaybackCoordinator {
             throw TuringRuntimeError.invalidConfig(
                 "Authored playback failed: \(authoredFailureReason)"
             )
+        }
+    }
+
+    func lifecycleEvents() async -> AsyncStream<TuringFlowPlaybackLifecycleEvent> {
+        await lifecycleHub.stream()
+    }
+
+    func setPlaybackLifecycleSink(
+        _ sink: (any TuringFlowPlaybackLifecycleSink)?
+    ) async {
+        playbackLifecycleSink = sink
+    }
+
+    func acquireAuthoredProgressionHold(
+        liveSessionID: UUID,
+        reason: String
+    ) async throws -> TuringAuthoredProgressionHoldToken {
+        guard runActive, authoredOnlyRun, let runID else {
+            throw TuringRuntimeError.invalidConfig(
+                "Authored progression hold requires an active authored run."
+            )
+        }
+        let token = TuringAuthoredProgressionHoldToken(
+            id: UUID(),
+            playbackRunID: runID,
+            liveSessionID: liveSessionID
+        )
+        authoredProgressionHolds[token.id] = token
+        print("[TuringLiveConversation] progression hold acquired token=\(token.id.uuidString) runID=\(runID) reason=\(reason)")
+        return token
+    }
+
+    func releaseAuthoredProgressionHold(
+        _ token: TuringAuthoredProgressionHoldToken,
+        reason: String
+    ) async throws {
+        guard let stored = authoredProgressionHolds.removeValue(forKey: token.id),
+              stored == token,
+              token.playbackRunID == runID else {
+            throw TuringRuntimeError.invalidConfig(
+                "Authored progression hold token is stale."
+            )
+        }
+        print("[TuringLiveConversation] progression hold released token=\(token.id.uuidString) reason=\(reason)")
+        await reconcile(reason: "progressionHoldReleased")
+    }
+
+    func waitUntilCurrentSpokenItemCompletes(
+        hold: TuringAuthoredProgressionHoldToken
+    ) async throws {
+        guard authoredProgressionHolds[hold.id] == hold else {
+            throw TuringRuntimeError.invalidConfig(
+                "Authored progression hold token is stale."
+            )
+        }
+        if activeItem.handle == nil,
+           pausedSpokenReceipts.values.contains(where: { $0.handle != nil }) == false {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            currentItemBoundaryWaiters.append(continuation)
+        }
+    }
+
+    func pauseCurrentSpokenMedia(
+        interruptionID: UUID
+    ) async throws -> TuringSpokenCoverPauseReceipt {
+        guard let runID else {
+            throw TuringRuntimeError.invalidConfig(
+                "Spoken cover has no active playback run."
+            )
+        }
+
+        let itemIdentity: String
+        let handle: TuringAudioPlaybackHandle
+        let authoredItemID: String?
+        switch activeItem {
+        case .authoredBridge(let clip, let activeHandle, _, _):
+            guard clip.item.liveConversationCatalogEntry != nil else {
+                throw TuringRuntimeError.invalidConfig(
+                    "The current authored item is not conversation eligible."
+                )
+            }
+            itemIdentity = clip.id
+            authoredItemID = clip.id
+            handle = activeHandle
+        case .generated(let segmentIndex, let activeHandle, _, _):
+            itemIdentity = "generated.\(segmentIndex)"
+            authoredItemID = nil
+            handle = activeHandle
+        default:
+            throw TuringRuntimeError.invalidConfig(
+                "There is no active spoken media to pause."
+            )
+        }
+
+        let receipt = TuringSpokenCoverPauseReceipt(
+            interruptionID: interruptionID,
+            playbackRunID: runID,
+            itemIdentity: itemIdentity,
+            handle: handle,
+            result: .paused
+        )
+        pausedSpokenReceipts[interruptionID] = receipt
+        do {
+            try await endpoint.pause(
+                handle,
+                reason: "liveConversation.\(interruptionID.uuidString)"
+            )
+        } catch {
+            if activeItem.handle != handle {
+                pausedSpokenReceipts.removeValue(forKey: interruptionID)
+                return TuringSpokenCoverPauseReceipt(
+                    interruptionID: interruptionID,
+                    playbackRunID: runID,
+                    itemIdentity: itemIdentity,
+                    handle: nil,
+                    result: .completedBeforePause
+                )
+            }
+            pausedSpokenReceipts.removeValue(forKey: interruptionID)
+            throw error
+        }
+
+        if let authoredItemID {
+            await emitLifecycleEvent(
+                .authoredMediaPaused(
+                    runID: runID,
+                    itemID: authoredItemID,
+                    handle: handle,
+                    interruptionID: interruptionID
+                )
+            )
+        }
+        return receipt
+    }
+
+    func resumeCurrentSpokenMedia(
+        _ receipt: TuringSpokenCoverPauseReceipt
+    ) async throws {
+        guard receipt.playbackRunID == runID else {
+            throw TuringRuntimeError.invalidConfig(
+                "Spoken cover pause receipt belongs to another run."
+            )
+        }
+        guard receipt.result == .paused,
+              let handle = receipt.handle else {
+            return
+        }
+        guard pausedSpokenReceipts.removeValue(
+            forKey: receipt.interruptionID
+        ) != nil else {
+            return
+        }
+        guard activeItem.handle == handle else {
+            return
+        }
+        try await endpoint.resume(
+            handle,
+            reason: "liveConversation.\(receipt.interruptionID.uuidString)"
+        )
+        if case .authoredBridge(let clip, _, _, _) = activeItem {
+            await emitLifecycleEvent(
+                .authoredMediaResumed(
+                    runID: handle.runID,
+                    itemID: clip.id,
+                    handle: handle,
+                    interruptionID: receipt.interruptionID
+                )
+            )
+        }
+    }
+
+    func waitUntilSpokenMediaCompletes(
+        _ receipt: TuringSpokenCoverPauseReceipt
+    ) async throws {
+        guard receipt.playbackRunID == runID else {
+            throw TuringRuntimeError.invalidConfig(
+                "Spoken cover pause receipt belongs to another run."
+            )
+        }
+        if receipt.itemIdentity.hasPrefix("generated.") {
+            await waitUntilPlaybackFinished()
+            return
+        }
+        guard let handle = receipt.handle else {
+            return
+        }
+        if activeItem.handle != handle {
+            return
+        }
+        await withCheckedContinuation { continuation in
+            currentItemBoundaryWaiters.append(continuation)
         }
     }
 
@@ -404,8 +636,12 @@ actor TuringStoryWalkiePlaybackCoordinator {
         }
 
         let clip = AuthoredBridgeClip(
-            id: id,
-            fileURL: fileURL,
+            item: TuringAuthoredMediaItem(
+                scriptPointID: flowIdentity?.scriptPointID ?? "unknown",
+                id: id,
+                role: .authoredBridge,
+                fileURL: fileURL
+            ),
             beforeGeneratedSegmentIndex: beforeGeneratedSegmentIndex
         )
         pendingAuthoredBridges[
@@ -648,12 +884,18 @@ actor TuringStoryWalkiePlaybackCoordinator {
         prerecordingHasPlayed = false
         skippedSegments.removeAll(keepingCapacity: false)
         activeComputeSegments.removeAll(keepingCapacity: false)
+        authoredProgressionHolds.removeAll(keepingCapacity: false)
+        pausedSpokenReceipts.removeAll(keepingCapacity: false)
+        resumeCurrentItemBoundaryWaiters()
         authoredOnlyRun = false
         authoredInputSealed = false
         print("""
         [TuringPlaybackRebuild] run cancelled
           reason: \(reason)
         """)
+        if let runID {
+            await emitLifecycleEvent(.failed(runID: runID, reason: reason))
+        }
         resumeWaiters()
     }
 
@@ -672,8 +914,12 @@ actor TuringStoryWalkiePlaybackCoordinator {
         _ event: TuringAudioPlaybackEvent
     ) async {
         switch event {
-        case .started:
-            return
+        case .started(let handle):
+            await playbackStarted(handle)
+        case .paused(let handle, let reason):
+            print("[TuringAudioOffload] endpoint playback paused handleID=\(handle.id.uuidString) reason=\(reason)")
+        case .resumed(let handle, let reason):
+            print("[TuringAudioOffload] endpoint playback resumed handleID=\(handle.id.uuidString) reason=\(reason)")
         case .completed(let handle, let successfully):
             await playbackCompleted(handle: handle, successfully: successfully)
         case .failed(let requestID, let eventRunID, let message):
@@ -695,6 +941,12 @@ actor TuringStoryWalkiePlaybackCoordinator {
     private func reconcile(reason: String) async {
         guard runActive else { return }
         guard activeItem == .none else { return }
+
+        if authoredOnlyRun,
+           authoredProgressionHolds.isEmpty == false {
+            resumeCurrentItemBoundaryWaiters()
+            return
+        }
 
         while skippedSegments.remove(nextPlaybackSegmentIndex) != nil {
             print("""
@@ -748,13 +1000,31 @@ actor TuringStoryWalkiePlaybackCoordinator {
             return
         }
 
-        if let clip = pendingGenerated.removeValue(forKey: nextPlaybackSegmentIndex) {
+        if let clip = pendingGenerated[nextPlaybackSegmentIndex] {
+            if let gate = generatedPlaybackConfiguration.startGate {
+                switch await gate.currentState() {
+                case .closed:
+                    return
+                case .cancelled(let message):
+                    await runCancelled(reason: "generatedGateCancelled.\(message)")
+                    return
+                case .open:
+                    break
+                }
+            }
+            pendingGenerated.removeValue(forKey: nextPlaybackSegmentIndex)
             await startGenerated(clip, reason: reason)
             return
         }
 
         if isFinished {
             await finishRun(reason: "allDone")
+            return
+        }
+
+        if allComputeFinished == false,
+           nextPlaybackSegmentIndex == 0,
+           generatedPlaybackConfiguration.initialGapOwnership == .externallyOwned {
             return
         }
 
@@ -803,7 +1073,51 @@ actor TuringStoryWalkiePlaybackCoordinator {
         }
     }
 
+    private func playbackStarted(
+        _ handle: TuringAudioPlaybackHandle
+    ) async {
+        guard handle.runID == runID else { return }
+        switch activeItem {
+        case .startingAuthored(let clip, let requestID)
+            where requestID == handle.requestID:
+            activeItem = .authoredBridge(
+                clip: clip,
+                handle: handle,
+                fileURL: clip.fileURL,
+                startedAt: Date()
+            )
+            await emitLifecycleEvent(
+                .authoredMediaStarted(
+                    runID: handle.runID,
+                    item: clip.item,
+                    handle: handle
+                )
+            )
+            print("[TuringPlaybackLifecycle] authored actual start id=\(clip.id) handleID=\(handle.id.uuidString)")
+
+        case .startingGenerated(let segmentIndex, let requestID, let fileURL)
+            where requestID == handle.requestID:
+            activeItem = .generated(
+                segmentIndex: segmentIndex,
+                handle: handle,
+                fileURL: fileURL,
+                startedAt: Date()
+            )
+            await emitLifecycleEvent(
+                .generatedSegmentStarted(
+                    runID: handle.runID,
+                    segmentIndex: segmentIndex,
+                    handle: handle
+                )
+            )
+
+        default:
+            break
+        }
+    }
+
     private func playOneShot(
+        requestID: UUID = UUID(),
         fileURL: URL,
         kind: TuringAudioClipKind,
         label: String
@@ -842,7 +1156,7 @@ actor TuringStoryWalkiePlaybackCoordinator {
         }
         return try await endpoint.play(
             TuringAudioPlaybackRequest(
-                requestID: UUID(),
+                requestID: requestID,
                 runID: runID,
                 fileURL: fileURL,
                 kind: kind,
@@ -968,6 +1282,35 @@ actor TuringStoryWalkiePlaybackCoordinator {
             return
         }
         do {
+            if clip.item.orientationMode == .playbackOwnedBridge {
+                guard let flowIdentity else {
+                    throw TuringRuntimeError.invalidConfig(
+                        "Authored bridge orientation requires a flow identity."
+                    )
+                }
+                activeItem = .orientingAuthored(clip: clip)
+                let descriptor = try TuringFlowDescriptorStore().require(
+                    clip.item.scriptPointID
+                )
+                _ = try await TuringPrerecordingOrientationCoordinator.shared.run(
+                    TuringPrerecordingOrientationRequest(
+                        flowIdentity: flowIdentity,
+                        descriptor: descriptor,
+                        mediaItemID: clip.id,
+                        mediaRole: clip.item.role,
+                        interactionSurface: flowIdentity.interactionSurface
+                    )
+                )
+                guard activeItem == .orientingAuthored(clip: clip) else {
+                    return
+                }
+                activeItem = .none
+            }
+            let requestID = UUID()
+            activeItem = .startingAuthored(
+                clip: clip,
+                requestID: requestID
+            )
             print("""
             [TuringPlaybackTrace] authored bridge playback request
               id: \(clip.id)
@@ -977,17 +1320,10 @@ actor TuringStoryWalkiePlaybackCoordinator {
               nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
             """)
             let handle = try await playOneShot(
+                requestID: requestID,
                 fileURL: clip.fileURL,
                 kind: .prerecording,
                 label: clip.id
-            )
-            activeItem = .authoredBridge(
-                id: clip.id,
-                beforeGeneratedSegmentIndex:
-                    clip.beforeGeneratedSegmentIndex,
-                handle: handle,
-                fileURL: clip.fileURL,
-                startedAt: Date()
             )
             print("""
             [TuringStagedSpeech] authored bridge playback started
@@ -999,6 +1335,10 @@ actor TuringStoryWalkiePlaybackCoordinator {
               completionSource: \(completionSourceLogName)
             """)
         } catch {
+            if case .startingAuthored(let pending, _) = activeItem,
+               pending.id == clip.id {
+                activeItem = .none
+            }
             print("""
             [TuringStagedSpeech] authored bridge playback failed
               id: \(clip.id)
@@ -1017,6 +1357,12 @@ actor TuringStoryWalkiePlaybackCoordinator {
             return
         }
         do {
+            let requestID = UUID()
+            activeItem = .startingGenerated(
+                segmentIndex: clip.segmentIndex,
+                requestID: requestID,
+                fileURL: clip.fileURL
+            )
             await endExternalGeneratedGap(
                 reason:
                     "generatedReady.\(clip.segmentIndex).\(reason)"
@@ -1048,16 +1394,10 @@ actor TuringStoryWalkiePlaybackCoordinator {
               pendingGenerated: \(pendingGenerated.keys.sorted())
             """)
             let handle = try await playOneShot(
+                requestID: requestID,
                 fileURL: clip.fileURL,
                 kind: .generated,
                 label: String(format: "segment_%04d", clip.segmentIndex)
-            )
-            let startedAt = Date()
-            activeItem = .generated(
-                segmentIndex: clip.segmentIndex,
-                handle: handle,
-                fileURL: clip.fileURL,
-                startedAt: startedAt
             )
             if let flowIdentity {
                 TuringFlowLog.event(
@@ -1082,6 +1422,10 @@ actor TuringStoryWalkiePlaybackCoordinator {
               completionGate: coordinatorActiveHandleMatch
             """)
         } catch {
+            if case .startingGenerated(let index, _, _) = activeItem,
+               index == clip.segmentIndex {
+                activeItem = .none
+            }
             skippedSegments.insert(clip.segmentIndex)
             await fileStore.delete(clip, reason: "generatedStartFailed")
             print("""
@@ -1232,21 +1576,31 @@ actor TuringStoryWalkiePlaybackCoordinator {
             await reconcile(reason: "prerecordingCompleted")
 
         case .authoredBridge(
-            let id,
-            let beforeGeneratedSegmentIndex,
+            let clip,
             let activeHandle,
             let fileURL,
             let startedAt
         )
             where activeHandle == handle:
             activeItem = .none
+            pausedSpokenReceipts = pausedSpokenReceipts.filter {
+                $0.value.handle != handle
+            }
+            resumeCurrentItemBoundaryWaiters()
+            await emitLifecycleEvent(
+                .authoredMediaCompleted(
+                    runID: handle.runID,
+                    itemID: clip.id,
+                    handle: handle
+                )
+            )
             print("""
             [TuringStagedSpeech] authored bridge playback completed
-              id: \(id)
+              id: \(clip.id)
               handleID: \(handle.id.uuidString)
               file: \(fileURL.lastPathComponent)
               elapsedSeconds: \(String(format: "%.3f", Date().timeIntervalSince(startedAt)))
-              beforeGeneratedSegmentIndex: \(beforeGeneratedSegmentIndex)
+              beforeGeneratedSegmentIndex: \(clip.beforeGeneratedSegmentIndex)
               nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
               completionSource: \(completionSourceLogName)
             """)
@@ -1270,6 +1624,10 @@ actor TuringStoryWalkiePlaybackCoordinator {
             nextPlaybackSegmentIndex = segmentIndex + 1
             completedGeneratedPlaybackCount += 1
             activeItem = .none
+            pausedSpokenReceipts = pausedSpokenReceipts.filter {
+                $0.value.handle != handle
+            }
+            resumeCurrentItemBoundaryWaiters()
             if let flowIdentity {
                 TuringFlowLog.event(
                     "generated playback completed",
@@ -1297,6 +1655,15 @@ actor TuringStoryWalkiePlaybackCoordinator {
                 segmentIndex: segmentIndex,
                 reason: "generatedPlaybackCompleted"
             )
+            if let expectedSegmentCount,
+               segmentIndex + 1 >= expectedSegmentCount {
+                await emitLifecycleEvent(
+                    .generatedPlaybackCompleted(
+                        runID: handle.runID,
+                        finalSegmentIndex: segmentIndex
+                    )
+                )
+            }
             await reconcile(reason: "generatedCompleted")
 
         case .filler(
@@ -1349,6 +1716,7 @@ actor TuringStoryWalkiePlaybackCoordinator {
         guard runActive else { return true }
         if authoredOnlyRun {
             return authoredInputSealed &&
+                authoredProgressionHolds.isEmpty &&
                 pendingAuthoredBridges.isEmpty &&
                 activeItem == .none
         }
@@ -1441,6 +1809,21 @@ actor TuringStoryWalkiePlaybackCoordinator {
         }
     }
 
+    private func resumeCurrentItemBoundaryWaiters() {
+        let continuations = currentItemBoundaryWaiters
+        currentItemBoundaryWaiters.removeAll(keepingCapacity: false)
+        for continuation in continuations {
+            continuation.resume()
+        }
+    }
+
+    private func emitLifecycleEvent(
+        _ event: TuringFlowPlaybackLifecycleEvent
+    ) async {
+        await playbackLifecycleSink?.receivePlaybackLifecycleEvent(event)
+        await lifecycleHub.yield(event)
+    }
+
     private func nextFillerURL() -> URL? {
         guard fillerFiles.isEmpty == false else { return nil }
         if policy.avoidImmediateFillerRepeat,
@@ -1455,6 +1838,12 @@ actor TuringStoryWalkiePlaybackCoordinator {
         switch activeItem {
         case .none:
             return "none"
+        case .startingAuthored(let clip, let requestID):
+            return "startingAuthored.\(clip.id).\(requestID.uuidString)"
+        case .orientingAuthored(let clip):
+            return "orientingAuthored.\(clip.id)"
+        case .startingGenerated(let segmentIndex, let requestID, _):
+            return "startingGenerated.\(segmentIndex).\(requestID.uuidString)"
         case .generated(
             let segmentIndex,
             let handle,
@@ -1467,14 +1856,13 @@ actor TuringStoryWalkiePlaybackCoordinator {
             let elapsed = Date().timeIntervalSince(startedAt)
             return "prerecording.\(id).\(fileURL.lastPathComponent).\(handle.id.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
         case .authoredBridge(
-            let id,
-            let beforeGeneratedSegmentIndex,
+            let clip,
             let handle,
             let fileURL,
             let startedAt
         ):
             let elapsed = Date().timeIntervalSince(startedAt)
-            return "authoredBridge.\(id).before=\(beforeGeneratedSegmentIndex).\(fileURL.lastPathComponent).\(handle.id.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
+            return "authoredBridge.\(clip.id).before=\(clip.beforeGeneratedSegmentIndex).\(fileURL.lastPathComponent).\(handle.id.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
         case .filler(let handle, let fileURL, let startedAt):
             let elapsed = Date().timeIntervalSince(startedAt)
             return "filler.\(fileURL.lastPathComponent).\(handle.id.uuidString).elapsed=\(Self.formatSeconds(elapsed))"

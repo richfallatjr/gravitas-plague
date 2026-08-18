@@ -141,4 +141,31 @@ enum TuringStoryWalkieAudioRoute {
     static func stopSendingStaticLoop(reason: String) async {
         await staticState?.stopSending(reason: reason)
     }
+
+    static func startRetainedSendingStaticLoop(
+        fileURL: URL,
+        ownerID: String,
+        reason: String
+    ) async throws -> TuringAudioPlaybackHandle {
+        guard let staticState else {
+            throw TuringWalkieAudioError.missingWalkieEmitter
+        }
+        return try await staticState.startRetainedSending(
+            fileURL: fileURL,
+            runID: reason,
+            ownerID: ownerID
+        )
+    }
+
+    static func stopRetainedSendingStaticLoop(
+        ownerID: String,
+        handle: TuringAudioPlaybackHandle,
+        reason: String
+    ) async {
+        await staticState?.stopRetainedSending(
+            ownerID: ownerID,
+            handle: handle,
+            reason: reason
+        )
+    }
 }

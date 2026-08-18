@@ -464,6 +464,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             sceneRoot: root,
             door: turingDoorBundleController,
             clock: ProductionBattleClock(),
+            richVocalChannel: audioController,
             onEnemyPrepared: { [weak self] enemyID, controller in
                 self?.prepareBattle01EnemyAudioAndCallbacks(
                     enemyID: enemyID,
@@ -564,6 +565,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             sceneRoot: root,
             door: turingDoorBundleController,
             clock: ProductionBattleClock(),
+            richVocalChannel: audioController,
             onEnemyPrepared: { [weak self] enemyID, controller in
                 self?.prepareChapter01DadBattleAudioAndCallbacks(
                     enemyID: enemyID,
@@ -647,6 +649,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         let chapter02WomanBattle = Chapter02WomanBattleCoordinator(
             sceneRoot: root,
             door: turingDoorBundleController,
+            richVocalChannel: audioController,
             onEnemyPrepared: { [weak self] enemyID, controller in
                 self?.prepareChapter02WomanAudioAndCallbacks(
                     enemyID: enemyID,
@@ -719,6 +722,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             sceneRoot: root,
             door: turingDoorBundleController,
             music: chapter03BikerMusic,
+            richVocalChannel: audioController,
             onEnemyPrepared: { [weak self] enemyID, controller in
                 self?.prepareChapter03BattleAudioAndCallbacks(
                     enemyID: enemyID,
@@ -746,6 +750,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             door: turingDoorBundleController,
             music: chapter03MikeMusic,
             roomPresentation: chapter03RoomPresentation,
+            richVocalChannel: audioController,
             onEnemyPrepared: { [weak self] enemyID, controller in
                 self?.prepareChapter03BattleAudioAndCallbacks(
                     enemyID: enemyID,
@@ -774,6 +779,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             mikeBattle: chapter03MikeBattle,
             roomPresentation: chapter03RoomPresentation,
             lightTunnel: chapter03LightTunnel,
+            richVocalChannel: audioController,
             layoutFingerprintProvider: { [weak self] in
                 guard let self else {
                     throw Chapter03Error.storyStageNotEstablished
@@ -1322,6 +1328,12 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             instructionHUD.clear()
             print("[TuringHUD] player dictation cleared for qwenSpeech")
 
+        case .questionDisplayExpired:
+            turingHUDDelayedClearTask?.cancel()
+            turingHUDDelayedClearTask = nil
+            instructionHUD.clear()
+            print("[TuringHUD] player question cleared; device ellipsis remains")
+
         case .responseSegmentZeroReady(let clearAfterSeconds):
             turingHUDDelayedClearTask?.cancel()
             print("""
@@ -1499,9 +1511,6 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 await self?.turingDoorBundleController
                     .updateAtmosphereIfNeeded(atmosphere)
             }
-
-        case .updateStoryExperienceMode(let mode):
-            wallPosterUIController.updateStoryExperienceModeIcon(mode)
 
         case .updatePortalLoopGainDB(let gainDB):
             hordePortalManager.updatePortalLoopGainDB(gainDB)
@@ -1756,7 +1765,6 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
         storyTitleCardTransitionCoordinator.reset(reason: reason)
         StoryModeActionCoordinator.shared.reset(reason: reason)
-        TuringStoryDeviceActivityIconController.shared.removeAll()
         battle01Coordinator?.cancel(reason: reason)
         prologueStoryActionRouter?.reset(reason: reason)
         prologueCompletionCoordinator?.reset(reason: reason)
@@ -2550,9 +2558,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     ) async throws {
         let reason = "storyTeleport.\(teleportID.uuidString)"
         switch destination {
-        case .play(let scriptPointID, let trigger):
-            let mode = StoryExperienceModeController.shared
-                .modeForNewStoryAction()
+        case .play(let scriptPointID, _):
             StoryModeActionCoordinator.shared.activate(
                 .init(
                     episodeID: .prologue,
@@ -2560,24 +2566,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                     durableBoundaryID:
                         "prologue.teleport.\(teleportID.uuidString).\(scriptPointID)",
                     sourceEventID: teleportID
-                ),
-                mode: mode,
-                interactiveArm: { [weak self] in
-                    self?.turingStoryWalkieInteractionController.armPlay(
-                        action: .startScriptPoint(
-                            id: scriptPointID,
-                            trigger: trigger
-                        ),
-                        reason: reason
-                    )
-                }
+                )
             )
         case .microphone:
-            if StoryExperienceModeController.shared.modeForNewStoryAction() == .interactive {
-                turingStoryWalkieInteractionController.armMicrophone(reason: reason)
-            } else {
-                turingStoryWalkieInteractionController.hideForStoryTeleport(reason: reason)
-            }
+            turingStoryWalkieInteractionController.hideForStoryTeleport(reason: reason)
         case .hidden:
             turingStoryWalkieInteractionController.hideForStoryTeleport(reason: reason)
         }
@@ -3306,7 +3298,6 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         operationModeSwitchTask = nil
         storyTitleCardTransitionCoordinator.reset(reason: "immersiveShutdown")
         StoryModeActionCoordinator.shared.reset(reason: "immersiveShutdown")
-        TuringStoryDeviceActivityIconController.shared.removeAll()
         StoryInteractionPresentationCoordinator.shared.stop()
         TuringStoryStateTeleportCoordinator.shared.detach(self)
         TuringStoryStageCoordinator.shared.invalidate(reason: "immersiveShutdown")
@@ -6978,8 +6969,7 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
             )
             let plan = try TuringStoryDestinationPlanner.destination(
                 for: snapshot,
-                experienceMode: StoryExperienceModeController.shared
-                    .modeForNewStoryAction()
+                experienceMode: .play
             )
             try await TuringStoryStateTeleportCoordinator.shared.apply(
                 plan,

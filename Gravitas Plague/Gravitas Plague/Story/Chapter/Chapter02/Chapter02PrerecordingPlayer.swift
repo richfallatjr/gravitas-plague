@@ -1,20 +1,28 @@
 import Foundation
 
-actor Chapter02PrerecordingPlayer {
+@MainActor
+final class Chapter02PrerecordingPlayer {
     private let endpoint: any TuringAudioPlaybackEndpoint
+    private weak var richVocalChannel:
+        (any StoryRichVocalChannelControlling)?
     private var activeHandle: TuringAudioPlaybackHandle?
+    private var activeBattleSpeechToken: StoryRichBattleSpeechToken?
 
     init(
         endpoint: any TuringAudioPlaybackEndpoint =
-            TuringGlobalAudioPlayerActor()
+            TuringGlobalAudioPlayerActor(),
+        richVocalChannel:
+            (any StoryRichVocalChannelControlling)? = nil
     ) {
         self.endpoint = endpoint
+        self.richVocalChannel = richVocalChannel
     }
 
     func play(
         resourcePath: String,
         runID: String,
         label: String,
+        battleInstanceID: UUID? = nil,
         gainDB: Float = -5
     ) async throws {
         let url = try TuringResourceLoader.resourceURL(
@@ -38,8 +46,20 @@ actor Chapter02PrerecordingPlayer {
         activeHandle = handle
         for await event in events {
             switch event {
+            case .started(let returned) where returned == handle:
+                if let battleInstanceID,
+                   activeBattleSpeechToken == nil,
+                   let richVocalChannel {
+                    activeBattleSpeechToken =
+                        richVocalChannel.beginBattleSpeech(
+                            battleInstanceID: battleInstanceID,
+                            cueID: label,
+                            playbackID: handle.id
+                        )
+                }
             case .completed(let returned, let successfully)
                 where returned == handle:
+                releaseBattleSpeech(reason: "actualCompletion")
                 activeHandle = nil
                 guard successfully else {
                     throw TuringRuntimeError.invalidConfig(
@@ -49,9 +69,11 @@ actor Chapter02PrerecordingPlayer {
                 return
             case .failed(let failedRequestID, let failedRunID, let message)
                 where failedRequestID == requestID && failedRunID == runID:
+                releaseBattleSpeech(reason: "endpointFailure")
                 activeHandle = nil
                 throw TuringRuntimeError.invalidConfig(message)
             case .cancelled(let returned, let reason) where returned == handle:
+                releaseBattleSpeech(reason: "cancelled.\(reason)")
                 activeHandle = nil
                 throw TuringRuntimeError.invalidConfig(
                     "Chapter 2 prerecording was cancelled: \(reason)"
@@ -60,6 +82,7 @@ actor Chapter02PrerecordingPlayer {
                 continue
             }
         }
+        releaseBattleSpeech(reason: "eventStreamEnded")
         throw TuringRuntimeError.invalidConfig(
             "Chapter 2 prerecording event stream ended: \(label)."
         )
@@ -69,5 +92,15 @@ actor Chapter02PrerecordingPlayer {
         guard let activeHandle else { return }
         self.activeHandle = nil
         await endpoint.stop(activeHandle, reason: reason)
+        releaseBattleSpeech(reason: reason)
+    }
+
+    private func releaseBattleSpeech(reason: String) {
+        guard let activeBattleSpeechToken else { return }
+        richVocalChannel?.endBattleSpeech(
+            token: activeBattleSpeechToken,
+            reason: reason
+        )
+        self.activeBattleSpeechToken = nil
     }
 }

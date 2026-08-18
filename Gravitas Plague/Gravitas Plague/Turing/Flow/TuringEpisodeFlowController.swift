@@ -145,11 +145,16 @@ actor TuringEpisodeFlowController {
         let sequenceID = UUID()
         let capturedMode: StoryExperienceMode
         if case .manualDebug = trigger {
-            capturedMode = .interactive
-        } else {
-            capturedMode = await MainActor.run {
-                StoryExperienceModeController.shared.modeForNewStoryAction()
+            #if DEBUG || INTERNAL_BUILD
+            let promptVoiceEnabled = await MainActor.run {
+                TuringExperimentalPromptVoiceController.shared.isEnabled
             }
+            capturedMode = promptVoiceEnabled ? .interactive : .play
+            #else
+            capturedMode = .play
+            #endif
+        } else {
+            capturedMode = .play
         }
         activeSequenceID = sequenceID
         activeSequenceLifecycle = nil
@@ -180,12 +185,12 @@ actor TuringEpisodeFlowController {
         sequenceID: UUID,
         experienceMode: StoryExperienceMode
     ) async -> TuringVoiceRunResult {
-        if experienceMode == .interactive,
-           catalogValidated == false,
+        if catalogValidated == false,
            let catalogValidator {
             do {
                 try await catalogValidator
                     .validate()
+                try TuringLiveConversationCatalogValidator().validate()
                 catalogValidated = true
             } catch {
                 return .failed(
@@ -345,7 +350,9 @@ actor TuringEpisodeFlowController {
                 scriptPointID:
                     scheduledPointID,
                 trigger: scheduledTrigger,
-                executionMode: experienceMode
+                executionMode: experienceMode,
+                flowSequenceID: sequenceID,
+                interactionLease: activeInteractionLease
             )
             let hasAutomaticSuccessor =
                 result.succeeded &&
@@ -646,6 +653,10 @@ actor TuringEpisodeFlowController {
             return
         }
 
+        await TuringLiveConversationSessionCoordinator.shared.detach(
+            reason: "sequenceBoundary.\(reason)"
+        )
+
         if activeSequenceLifecycleEnded == false {
             activeSequenceLifecycleEnded = true
             if let activeSequenceLifecycle {
@@ -725,6 +736,9 @@ actor TuringEpisodeFlowController {
             reason:
                 "episodeFlowReset.\(reason)"
         )
+        await TuringLiveConversationSeedRegistry.shared.clearAll(
+            reason: "episodeFlowReset.\(reason)"
+        )
         await TuringFlowInteractionGateController
             .shared
             .reset(reason: reason)
@@ -756,6 +770,9 @@ actor TuringEpisodeFlowController {
             )
         }
         pendingConversationAdvance = nil
+        await TuringLiveConversationSeedRegistry.shared.clearAll(
+            reason: "storyTeleport.\(reason)"
+        )
         print("[TuringFlow] quiesced for Story teleport reason=\(reason)")
     }
 
@@ -778,6 +795,9 @@ actor TuringEpisodeFlowController {
             self.pendingConversationAdvance = nil
         }
         await inputStore.clearAll(reason: "storyTeleportRestore")
+        await TuringLiveConversationSeedRegistry.shared.clearAll(
+            reason: "storyTeleportRestore"
+        )
         print("""
         [TuringContinuation] episode flow restored
           completedScriptPointIDs: \(completedScriptPointIDs.sorted())

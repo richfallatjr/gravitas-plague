@@ -27,7 +27,7 @@ final class Chapter03BikerBattleCoordinator {
     private let arbiter: StoryInteractionArbiter
     private let intro: ScriptedPortalEnemyIntroCoordinator
     private let music: Chapter03BattleMusicController
-    private let richQueue = StoryBattleRichPrerecordingQueue()
+    private let richQueue: StoryBattleRichPrerecordingQueue
     private let registry = BattleEnemyRuntimeRegistry()
     private let cleanup: BattleRuntimeCleanupCoordinator
     private let onEnemyRemoved: @MainActor (UUID) -> Void
@@ -54,6 +54,7 @@ final class Chapter03BikerBattleCoordinator {
         sceneRoot: Entity,
         door: any TuringStoryDoorBattleControlling,
         music: Chapter03BattleMusicController,
+        richVocalChannel: any StoryRichVocalChannelControlling,
         clock: any BattleClock = ProductionBattleClock(),
         arbiter: StoryInteractionArbiter = .shared,
         onEnemyPrepared: @escaping Chapter03BattleEnemyFactory.PreparedCallback,
@@ -64,6 +65,9 @@ final class Chapter03BikerBattleCoordinator {
     ) {
         self.door = door
         self.music = music
+        self.richQueue = StoryBattleRichPrerecordingQueue(
+            richVocalChannel: richVocalChannel
+        )
         self.arbiter = arbiter
         self.intro = ScriptedPortalEnemyIntroCoordinator(clock: clock)
         self.enemyFactory = Chapter03BattleEnemyFactory(

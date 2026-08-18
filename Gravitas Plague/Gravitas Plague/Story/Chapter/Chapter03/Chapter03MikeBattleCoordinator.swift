@@ -13,6 +13,7 @@ struct Chapter03MikeBattleReleasedEvent {
     let doorState: TuringStoryDoorBattleState
     let richPrerecordingQueueDrained: Bool
     let activeBattleMusicHandleCount: Int
+    let heavenBridgeDeathVocalToken: StoryPlayerDeathVocalToken
 
     var isSafeForHeaven: Bool {
         unsafeReasons.isEmpty
@@ -69,7 +70,8 @@ final class Chapter03MikeBattleCoordinator {
     private let clock: any BattleClock
     private let intro: ScriptedPortalEnemyIntroCoordinator
     private let music: Chapter03BattleMusicController
-    private let richQueue = StoryBattleRichPrerecordingQueue()
+    private let richQueue: StoryBattleRichPrerecordingQueue
+    private let richVocalChannel: any StoryRichVocalChannelControlling
     private let registry = BattleEnemyRuntimeRegistry()
     private let cleanup: BattleRuntimeCleanupCoordinator
     private let roomPresentation: Chapter03RoomPresentationController
@@ -98,12 +100,14 @@ final class Chapter03MikeBattleCoordinator {
     private var defeatTask: Task<Void, Never>?
     private var crossfadeTask: Task<Void, Never>?
     private var suppressionReceipt: Chapter03RoomSuppressionReceipt?
+    private var heavenBridgeDeathVocalToken: StoryPlayerDeathVocalToken?
 
     init(
         sceneRoot: Entity,
         door: any TuringStoryDoorBattleControlling,
         music: Chapter03BattleMusicController,
         roomPresentation: Chapter03RoomPresentationController,
+        richVocalChannel: any StoryRichVocalChannelControlling,
         clock: any BattleClock = ProductionBattleClock(),
         arbiter: StoryInteractionArbiter = .shared,
         onEnemyPrepared: @escaping Chapter03BattleEnemyFactory.PreparedCallback,
@@ -115,6 +119,10 @@ final class Chapter03MikeBattleCoordinator {
         self.door = door
         self.music = music
         self.roomPresentation = roomPresentation
+        self.richVocalChannel = richVocalChannel
+        self.richQueue = StoryBattleRichPrerecordingQueue(
+            richVocalChannel: richVocalChannel
+        )
         self.clock = clock
         self.arbiter = arbiter
         self.intro = ScriptedPortalEnemyIntroCoordinator(clock: clock)
@@ -151,6 +159,7 @@ final class Chapter03MikeBattleCoordinator {
         }
         _ = blackout
         try await arbiter.requireCurrent(battleLease)
+        try richVocalChannel.requirePlayerDeathVocalResources()
         let definition = try definitionStore.load(.mike)
         try music.prepare(definition: definition)
         let recognition = try makeCue(
@@ -268,6 +277,7 @@ final class Chapter03MikeBattleCoordinator {
         doorObservation?.cancel()
         doorObservation = nil
         richQueue.cancel(battleInstanceID: instanceID, reason: reason)
+        stopOwnedHeavenBridgeDeathVocal(reason: "cancel.\(reason)")
         if blackout?.blackoutOpacity == 1 {
             combat?.releaseUnderFullBlack(reason: reason)
         } else {
@@ -370,6 +380,19 @@ final class Chapter03MikeBattleCoordinator {
             guard let self else { return }
             do {
                 try await self.richQueue.enqueueAndWait(surrenderCue)
+                let deathToken = try self.richVocalChannel
+                    .startRandomPlayerDeathVocal(
+                        purpose: .chapter03TunnelBridge,
+                        ownerID:
+                            "chapter03.mike.heaven.\(battleInstanceID.uuidString)"
+                    )
+                self.heavenBridgeDeathVocalToken = deathToken
+                print(
+                    "[Chapter03DeathBridge] started after final Rich PR " +
+                        "battleInstanceID=\(battleInstanceID.uuidString) " +
+                        "file=\(deathToken.fileName) " +
+                        "duration=\(deathToken.durationSeconds)"
+                )
                 try await self.clock.sleep(
                     for: .seconds(
                         self.definition?.postSurrenderPrerecordingBeatSeconds ?? 1
@@ -417,6 +440,11 @@ final class Chapter03MikeBattleCoordinator {
     ) async throws {
         guard let blackout, let definition, let battleLease else {
             throw Chapter03Error.staleRun
+        }
+        guard let heavenBridgeDeathVocalToken else {
+            throw Chapter03Error.definitionInvalid(
+                "The Mike-to-Heaven death-vocal bridge did not start."
+            )
         }
         let transitionID = UUID()
         async let scoreFade: Void = music.fadeOutAndStopAll(
@@ -481,7 +509,8 @@ final class Chapter03MikeBattleCoordinator {
             doorState: door.battleDoorState,
             richPrerecordingQueueDrained:
                 richQueue.isDrained(battleInstanceID: battleInstanceID),
-            activeBattleMusicHandleCount: music.activeHandleCount
+            activeBattleMusicHandleCount: music.activeHandleCount,
+            heavenBridgeDeathVocalToken: heavenBridgeDeathVocalToken
         )
         print(
             "[Chapter03Transition] Mike release audited " +
@@ -498,6 +527,7 @@ final class Chapter03MikeBattleCoordinator {
         try await completionSink.chapter03MikeBattleReleased(
             releaseEvent
         )
+        self.heavenBridgeDeathVocalToken = nil
         clear()
     }
 
@@ -553,6 +583,7 @@ final class Chapter03MikeBattleCoordinator {
     }
 
     private func fail(chapterRunID: UUID, error: Error) async {
+        stopOwnedHeavenBridgeDeathVocal(reason: "failure.\(error.localizedDescription)")
         await completionSink?.chapter03MikeBattleFailed(
             chapterRunID: chapterRunID,
             error: error
@@ -574,5 +605,14 @@ final class Chapter03MikeBattleCoordinator {
         defeatTask = nil
         crossfadeTask = nil
         handledDoorEvents.removeAll(keepingCapacity: false)
+    }
+
+    private func stopOwnedHeavenBridgeDeathVocal(reason: String) {
+        guard let heavenBridgeDeathVocalToken else { return }
+        richVocalChannel.stopPlayerDeathVocal(
+            token: heavenBridgeDeathVocalToken,
+            reason: reason
+        )
+        self.heavenBridgeDeathVocalToken = nil
     }
 }

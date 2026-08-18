@@ -6,7 +6,9 @@ actor TuringAuthoredFlowRunner {
         identity: TuringFlowIdentity,
         mediaPlan: TuringAuthoredMediaPlan,
         character: TuringCharacterRuntimeDefinition,
-        route: any TuringFlowRouteRuntime
+        route: any TuringFlowRouteRuntime,
+        parentSequenceID: UUID,
+        parentInteractionLease: StoryInteractionLease
     ) async throws -> TuringFlowResult {
         for item in mediaPlan.items {
             guard FileManager.default.fileExists(atPath: item.fileURL.path) else {
@@ -19,6 +21,20 @@ actor TuringAuthoredFlowRunner {
         try await route.validate(descriptor: descriptor, character: character)
         await route.runFixedLeadInIfNeeded(descriptor: descriptor, identity: identity)
         try await route.playOpenIfNeeded(descriptor: descriptor, identity: identity)
+        if let primary = mediaPlan.items.first(
+            where: { $0.orientationMode == .runnerOwnedPrimary }
+        ) {
+            _ = try await TuringPrerecordingOrientationCoordinator.shared.run(
+                TuringPrerecordingOrientationRequest(
+                    flowIdentity: identity,
+                    descriptor: descriptor,
+                    mediaItemID: primary.id,
+                    mediaRole: primary.role,
+                    interactionSurface:
+                        descriptor.transmission.effectiveInteractionSurface
+                )
+            )
+        }
         try await route.beginPrerecordingLeadInIfNeeded(
             descriptor: descriptor,
             identity: identity
@@ -35,11 +51,33 @@ actor TuringAuthoredFlowRunner {
         )
         await playback.configureFlowIdentity(identity)
         await playback.beginAuthoredRun(identity: identity)
-        for item in mediaPlan.items {
-            try await playback.enqueueAuthoredMedia(item)
+        let liveConversationCoordinator =
+            await TuringLiveConversationSessionCoordinator.shared
+        do {
+            try await liveConversationCoordinator.attach(
+                parentSequenceID: parentSequenceID,
+                parentLease: parentInteractionLease,
+                descriptor: descriptor,
+                identity: identity,
+                playback: playback
+            )
+            for item in mediaPlan.items {
+                try await playback.enqueueAuthoredMedia(item)
+            }
+            await playback.sealAuthoredInput()
+            try await playback.waitUntilAuthoredPlaybackFinished()
+            await liveConversationCoordinator.detach(
+                reason: "authoredFlowCompleted.\(descriptor.scriptPointID)"
+            )
+        } catch {
+            await liveConversationCoordinator.detach(
+                reason: "authoredFlowFailed.\(descriptor.scriptPointID)"
+            )
+            await playback.runCancelled(
+                reason: "authoredFlowFailed.\(error.localizedDescription)"
+            )
+            throw error
         }
-        await playback.sealAuthoredInput()
-        try await playback.waitUntilAuthoredPlaybackFinished()
 
         try await route.playSendIfNeeded(descriptor: descriptor, identity: identity)
         try await route.finish(descriptor: descriptor, identity: identity, succeeded: true)

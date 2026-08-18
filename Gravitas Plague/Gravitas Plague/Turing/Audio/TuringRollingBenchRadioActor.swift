@@ -388,7 +388,7 @@ actor TuringRollingBenchRadioBedActor:
                 failedCueRequests[requestID] = message
             }
 
-        case .started:
+        case .started, .paused, .resumed:
             break
         }
     }

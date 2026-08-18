@@ -43,16 +43,39 @@ enum TuringStoryActionIconVisualStyle {
         default: glyphName = symbolName
         }
         let configuration = UIImage.SymbolConfiguration(pointSize: 150, weight: .bold)
-        guard let symbol = UIImage(systemName: glyphName, withConfiguration: configuration),
-              let glyph = symbol.withTintColor(.white, renderingMode: .alwaysOriginal).cgImage else {
+        guard let symbol = UIImage(
+            systemName: glyphName,
+            withConfiguration: configuration
+        )?.withTintColor(
+            UIColor(
+                red: 0.992,
+                green: 0.914,
+                blue: 0.643,
+                alpha: 1
+            ),
+            renderingMode: .alwaysOriginal
+        ) else {
             throw TuringRuntimeError.invalidConfig("Unable to render Story action icon \(symbolName).")
         }
-        return makeImage(name: symbolName) { context, rect in
-            let inset = rect.insetBy(dx: 64, dy: 64)
-            context.saveGState()
-            context.clip(to: inset, mask: glyph)
-            drawGradient(in: context, center: CGPoint(x: rect.midX, y: rect.midY), radius: inset.width * 0.7)
-            context.restoreGState()
+        return makeImage(name: symbolName) { _, rect in
+            let maximumGlyphSize = CGSize(width: 112, height: 112)
+            let sourceSize = symbol.size
+            let scale = min(
+                maximumGlyphSize.width / sourceSize.width,
+                maximumGlyphSize.height / sourceSize.height
+            )
+            let drawSize = CGSize(
+                width: sourceSize.width * scale,
+                height: sourceSize.height * scale
+            )
+            symbol.draw(
+                in: CGRect(
+                    x: rect.midX - drawSize.width * 0.5,
+                    y: rect.midY - drawSize.height * 0.5,
+                    width: drawSize.width,
+                    height: drawSize.height
+                )
+            )
         }
     }
 

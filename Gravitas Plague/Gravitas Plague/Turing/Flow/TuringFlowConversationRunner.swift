@@ -1,5 +1,47 @@
 import Foundation
 
+@MainActor
+private final class TuringConversationResponsePlaybackLifecycleSink:
+    TuringFlowPlaybackLifecycleSink
+{
+    let turnID: UUID
+    let playbackRunID: String
+    let conversationSink: (any TuringConversationLifecycleSink)?
+    private var segmentZeroStartDelivered = false
+
+    init(
+        turnID: UUID,
+        playbackRunID: String,
+        conversationSink: (any TuringConversationLifecycleSink)?
+    ) {
+        self.turnID = turnID
+        self.playbackRunID = playbackRunID
+        self.conversationSink = conversationSink
+    }
+
+    func receivePlaybackLifecycleEvent(
+        _ event: TuringFlowPlaybackLifecycleEvent
+    ) async {
+        guard event.runID == playbackRunID,
+              segmentZeroStartDelivered == false,
+              case .generatedSegmentStarted(
+                _,
+                let segmentIndex,
+                let handle
+              ) = event,
+              segmentIndex == 0 else {
+            return
+        }
+        segmentZeroStartDelivered = true
+        await conversationSink?.emit(
+            .responsePlaybackStarted(
+                turnID: turnID,
+                handle: handle
+            )
+        )
+    }
+}
+
 struct TuringFlowConversationRequest: Sendable {
     let conversationRunID: UUID
     let characterID: String
@@ -8,6 +50,12 @@ struct TuringFlowConversationRequest: Sendable {
     let playerDictation: String
     let interactionLease: StoryInteractionLease?
     let interactionSurface: StoryInteractionSurfaceID
+    let immutableSeed: TuringLiveConversationSeed?
+    let leasePolicy: TuringConversationLeasePolicy
+    let progressionPolicy: TuringConversationProgressionPolicy
+    let completionPresentation: TuringConversationCompletionPresentation
+    let playbackConfiguration: TuringGeneratedPlaybackConfiguration
+    let lifecycleSink: (any TuringConversationLifecycleSink)?
 
     init(
         conversationRunID: UUID = UUID(),
@@ -16,7 +64,13 @@ struct TuringFlowConversationRequest: Sendable {
         conversationKey: String,
         playerDictation: String,
         interactionLease: StoryInteractionLease? = nil,
-        interactionSurface: StoryInteractionSurfaceID = .walkie
+        interactionSurface: StoryInteractionSurfaceID = .walkie,
+        immutableSeed: TuringLiveConversationSeed? = nil,
+        leasePolicy: TuringConversationLeasePolicy = .ownedByConversation,
+        progressionPolicy: TuringConversationProgressionPolicy = .existingInteractiveBehavior,
+        completionPresentation: TuringConversationCompletionPresentation = .restoreStableMicrophone,
+        playbackConfiguration: TuringGeneratedPlaybackConfiguration = .routeDefault,
+        lifecycleSink: (any TuringConversationLifecycleSink)? = nil
     ) {
         self.conversationRunID = conversationRunID
         self.characterID = characterID
@@ -25,6 +79,12 @@ struct TuringFlowConversationRequest: Sendable {
         self.playerDictation = playerDictation
         self.interactionLease = interactionLease
         self.interactionSurface = interactionSurface
+        self.immutableSeed = immutableSeed
+        self.leasePolicy = leasePolicy
+        self.progressionPolicy = progressionPolicy
+        self.completionPresentation = completionPresentation
+        self.playbackConfiguration = playbackConfiguration
+        self.lifecycleSink = lifecycleSink
     }
 }
 
@@ -37,22 +97,43 @@ enum TuringFlowConversationRunner {
     ) async -> TuringVoiceRunResult {
         let interactionLease: StoryInteractionLease
         do {
-            if let suppliedLease = request.interactionLease {
+            switch request.leasePolicy {
+            case .ownedByConversation:
+                if let suppliedLease = request.interactionLease {
+                    try await StoryInteractionArbiter.shared.requireCurrent(
+                        suppliedLease
+                    )
+                    interactionLease = suppliedLease
+                } else {
+                    interactionLease = try await TuringHighMemoryPreflightCoordinator
+                        .shared
+                        .acquireInteractionLease(
+                            runID:
+                                "conversation.\(request.conversationRunID.uuidString)",
+                            source: "conversationVoice",
+                            mode: .manual,
+                            interactionSurface:
+                                request.interactionSurface
+                        )
+                }
+
+            case .borrowedFromAuthoredFlow(
+                let parentFlowInstanceID,
+                let parentLeaseID
+            ):
+                guard let suppliedLease = request.interactionLease,
+                      suppliedLease.id == parentLeaseID,
+                      case .turingFlow = suppliedLease.owner,
+                      request.immutableSeed?.parentFlowInstanceID ==
+                        parentFlowInstanceID else {
+                    throw TuringRuntimeError.invalidConfig(
+                        "Live conversation borrowed lease identity is invalid."
+                    )
+                }
                 try await StoryInteractionArbiter.shared.requireCurrent(
                     suppliedLease
                 )
                 interactionLease = suppliedLease
-            } else {
-                interactionLease = try await TuringHighMemoryPreflightCoordinator
-                    .shared
-                    .acquireInteractionLease(
-                        runID:
-                            "conversation.\(request.conversationRunID.uuidString)",
-                        source: "conversationVoice",
-                        mode: .manual,
-                        interactionSurface:
-                            request.interactionSurface
-                    )
             }
         } catch {
             let snapshot =
@@ -93,10 +174,12 @@ enum TuringFlowConversationRunner {
             inputStore: inputStore,
             onSegmentZeroReady: onSegmentZeroReady
         )
-        await StoryInteractionArbiter.shared.release(
-            interactionLease,
-            reason: "conversationFinished"
-        )
+        if case .ownedByConversation = request.leasePolicy {
+            await StoryInteractionArbiter.shared.release(
+                interactionLease,
+                reason: "conversationFinished"
+            )
+        }
         if ducksChapter02Music {
             await Chapter02BattleMusicActor.shared.restore(
                 ownerID: musicOwnerID
@@ -144,6 +227,17 @@ enum TuringFlowConversationRunner {
                         request.characterID
                     )
 
+            if let seed = request.immutableSeed {
+                guard seed.characterID == runtime.characterID,
+                      seed.outputRoute == request.outputRoute,
+                      seed.conversationKey == request.conversationKey,
+                      seed.interactionSurface == request.interactionSurface else {
+                    throw TuringRuntimeError.invalidConfig(
+                        "Live conversation immutable seed does not match the requested runtime."
+                    )
+                }
+            }
+
             guard runtime.supports(
                 request.outputRoute
             ) else {
@@ -187,31 +281,75 @@ enum TuringFlowConversationRunner {
                 .configureFlowIdentity(
                     identity
                 )
+            await playback.configureGeneratedPlayback(
+                request.playbackConfiguration
+            )
+            let responsePlaybackLifecycleSink =
+                await TuringConversationResponsePlaybackLifecycleSink(
+                    turnID: conversationRunID,
+                    playbackRunID: identity.playbackRunID,
+                    conversationSink: request.lifecycleSink
+                )
+            defer {
+                withExtendedLifetime(responsePlaybackLifecycleSink) {}
+            }
+            await playback.setPlaybackLifecycleSink(
+                responsePlaybackLifecycleSink
+            )
+            await request.lifecycleSink?.responsePlaybackOwnerReady(
+                turnID: conversationRunID,
+                playback: playback
+            )
+            await request.lifecycleSink?.emit(
+                .responsePlaybackOwnerReady(
+                    turnID: conversationRunID,
+                    playbackRunID: identity.playbackRunID
+                )
+            )
 
             failureStage = "resolvingConversationInputs"
-            let prerecordingTranscript =
-                await inputStore.prerecordingTranscript(
-                    for:
-                        request.conversationKey
+            let prerecordingTranscript: String
+            let promptVoiceStoryContext: String
+            let promptVariant: TuringConversationPromptVariant
+            let characterProfileID: String
+            if let seed = request.immutableSeed {
+                prerecordingTranscript = seed.prerecordingTranscript
+                promptVoiceStoryContext = seed.promptVoiceStoryContext
+                promptVariant = seed.promptVariant
+                characterProfileID = seed.characterProfileID
+                print("""
+                [TuringLiveConversation] immutable prompt seed selected
+                  seedID: \(seed.seedID.uuidString)
+                  prerecordingID: \(seed.prerecordingID)
+                  prerecordingSHA256: \(seed.prerecordingProof.sha256)
+                  voicePromptID: \(seed.voicePromptID)
+                  voicePromptSHA256: \(seed.voicePromptProof.sha256)
+                  storyContextSHA256: \(TuringFlowHash.sha256(seed.promptVoiceStoryContext))
+                  characterProfileID: \(seed.characterProfileID)
+                  promptVariant: \(seed.promptVariant.rawValue)
+                  conversationKey: \(seed.conversationKey)
+                  interactionSurface: \(seed.interactionSurface.rawValue)
+                  dialogueHistoryIncluded: false
+                """)
+            } else {
+                prerecordingTranscript = await inputStore.prerecordingTranscript(
+                    for: request.conversationKey
                 )
-            guard let promptVoiceStoryContext =
-                await inputStore.promptVoiceStoryContext(
-                    for:
-                        request.conversationKey
+                guard let mutableContext = await inputStore.promptVoiceStoryContext(
+                    for: request.conversationKey
                 ) else {
-                throw TuringRuntimeError.invalidConfig(
-                    "Conversation requires the current promptVoice Story Context for \(request.conversationKey)."
+                    throw TuringRuntimeError.invalidConfig(
+                        "Conversation requires the current promptVoice Story Context for \(request.conversationKey)."
+                    )
+                }
+                promptVoiceStoryContext = mutableContext
+                promptVariant = await inputStore.promptVariant(
+                    for: request.conversationKey
                 )
+                characterProfileID = await inputStore.characterProfileID(
+                    for: request.conversationKey
+                ) ?? runtime.characterID
             }
-            let promptVariant =
-                await inputStore.promptVariant(
-                    for: request.conversationKey
-                )
-            let characterProfileID =
-                await inputStore.characterProfileID(
-                    for: request.conversationKey
-                ) ??
-                runtime.characterID
 
             print("""
             [TuringFlow] conversation promptVoice Story Context resolved
@@ -227,6 +365,9 @@ enum TuringFlowConversationRunner {
             """)
 
             failureStage = "submittingFoundationConversationPrompt"
+            await request.lifecycleSink?.emit(
+                .foundationStarted(turnID: conversationRunID)
+            )
             let foundationContext =
                 TuringFoundationRequestContext(
                     flowRunID:
@@ -264,6 +405,13 @@ enum TuringFlowConversationRunner {
                                 )
                         )
                     }
+
+            await request.lifecycleSink?.emit(
+                .foundationCompleted(
+                    turnID: conversationRunID,
+                    segmentCount: plan.segments.count
+                )
+            )
 
             guard plan.segments.isEmpty == false else {
                 throw TuringRuntimeError
@@ -310,6 +458,19 @@ enum TuringFlowConversationRunner {
                             index,
                             audio in
 
+                            await request.lifecycleSink?.emit(
+                                .segmentPublished(
+                                    turnID: conversationRunID,
+                                    index: index
+                                )
+                            )
+                            if index == 0 {
+                                await request.lifecycleSink?.emit(
+                                    .segmentZeroPrepared(
+                                        turnID: conversationRunID
+                                    )
+                                )
+                            }
                             await firstReady
                                 .notifyIfNeeded(
                                     segmentIndex:
@@ -337,7 +498,21 @@ enum TuringFlowConversationRunner {
 
                 await playback
                     .qwenComputeAllFinished()
+                await request.lifecycleSink?.emit(
+                    .allTTSComputeFinished(
+                        turnID: conversationRunID,
+                        expectedCount: plan.segments.count,
+                        skippedIndices: report.skippedSegmentIndices.sorted()
+                    )
+                )
             } catch {
+                await request.lifecycleSink?.emit(
+                    .failed(
+                        turnID: conversationRunID,
+                        stage: "qwen",
+                        message: error.localizedDescription
+                    )
+                )
                 await playback
                     .qwenComputeFailed(
                         expectedSegmentCount:
@@ -353,14 +528,10 @@ enum TuringFlowConversationRunner {
                     identity: identity,
                     succeeded: false
                 )
-                await TuringFlowInteractionGateController
-                    .shared
-                    .restoreMicrophoneAfterConversation(
-                        conversationRunID:
-                            conversationRunID,
-                        surfaceID:
-                            request.interactionSurface
-                    )
+                await restoreMicrophoneIfOwned(
+                    request: request,
+                    conversationRunID: conversationRunID
+                )
 
                 return .failed(
                     "Conversation Qwen generation failed: \(error.localizedDescription)"
@@ -383,14 +554,10 @@ enum TuringFlowConversationRunner {
                     identity: identity,
                     succeeded: false
                 )
-                await TuringFlowInteractionGateController
-                    .shared
-                    .restoreMicrophoneAfterConversation(
-                        conversationRunID:
-                            conversationRunID,
-                        surfaceID:
-                            request.interactionSurface
-                    )
+                await restoreMicrophoneIfOwned(
+                    request: request,
+                    conversationRunID: conversationRunID
+                )
 
                 return .failed(
                     "Conversation generated speech was incomplete. Expected \(plan.segments.count), played \(completed), skipped \(report.skippedSegmentIndices.sorted())."
@@ -404,6 +571,10 @@ enum TuringFlowConversationRunner {
                 succeeded: true
             )
 
+            await request.lifecycleSink?.emit(
+                .responsePlaybackCompleted(turnID: conversationRunID)
+            )
+
             print("""
             [TuringFlow] conversation playback completed
               conversationRunID: \(conversationRunID.uuidString)
@@ -413,15 +584,20 @@ enum TuringFlowConversationRunner {
               completionSource: actualPlaybackCompletion
             """)
 
+            if case .neverAdvanceStory = request.progressionPolicy {
+                return .succeeded(
+                    "Finished \(runtime.displayName) live conversation response"
+                )
+            }
+
             guard let pending = await TuringEpisodeFlowController.shared
                 .pendingConversationAdvanceContext(
                     for: request.conversationKey
                 ) else {
-                await TuringFlowInteractionGateController.shared
-                    .restoreMicrophoneAfterConversation(
-                        conversationRunID: conversationRunID,
-                        surfaceID: request.interactionSurface
-                    )
+                await restoreMicrophoneIfOwned(
+                    request: request,
+                    conversationRunID: conversationRunID
+                )
                 return .succeeded(
                     "Finished \(runtime.displayName) conversation response"
                 )
@@ -461,6 +637,13 @@ enum TuringFlowConversationRunner {
                 "Conversation checkpoint was saved but authored progression was unavailable."
             )
         } catch {
+            await request.lifecycleSink?.emit(
+                .failed(
+                    turnID: conversationRunID,
+                    stage: failureStage,
+                    message: error.localizedDescription
+                )
+            )
             print("""
             [TuringConversationFailure] conversationVoice failed
               conversationRunID: \(conversationRunID.uuidString)
@@ -483,19 +666,30 @@ enum TuringFlowConversationRunner {
                     reason:
                         "conversationFailed.\(conversationRunID.uuidString)"
                 )
-            await TuringFlowInteractionGateController
-                .shared
-                .restoreMicrophoneAfterConversation(
-                    conversationRunID:
-                        conversationRunID,
-                    surfaceID:
-                        request.interactionSurface
-                )
+            await restoreMicrophoneIfOwned(
+                request: request,
+                conversationRunID: conversationRunID
+            )
 
             return .failed(
                 error.localizedDescription
             )
         }
+    }
+
+    private static func restoreMicrophoneIfOwned(
+        request: TuringFlowConversationRequest,
+        conversationRunID: UUID
+    ) async {
+        guard case .restoreStableMicrophone =
+                request.completionPresentation else {
+            return
+        }
+        await TuringFlowInteractionGateController.shared
+            .restoreMicrophoneAfterConversation(
+                conversationRunID: conversationRunID,
+                surfaceID: request.interactionSurface
+            )
     }
 }
 

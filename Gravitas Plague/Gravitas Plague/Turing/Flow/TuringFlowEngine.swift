@@ -84,7 +84,9 @@ actor TuringFlowEngine {
     func run(
         scriptPointID: String,
         trigger: TuringFlowTriggerSource,
-        executionMode: StoryExperienceMode = .interactive
+        executionMode: StoryExperienceMode = .interactive,
+        flowSequenceID: UUID? = nil,
+        interactionLease: StoryInteractionLease? = nil
     ) async -> TuringFlowResult {
         guard activeFlow == nil else {
             return .ignored(
@@ -214,7 +216,9 @@ actor TuringFlowEngine {
             return await runAuthoredPath(
                 descriptor: descriptor,
                 character: character,
-                identity: identity
+                identity: identity,
+                flowSequenceID: flowSequenceID,
+                interactionLease: interactionLease
             )
         }
 
@@ -499,6 +503,22 @@ actor TuringFlowEngine {
                                 : "prerecordingQueued"
                         )
                     ]
+                )
+            }
+
+            if TuringPrerecordingOrientationEligibility.permits(
+                descriptor: descriptor,
+                role: .primaryPrerecording
+            ) {
+                _ = try await TuringPrerecordingOrientationCoordinator.shared.run(
+                    TuringPrerecordingOrientationRequest(
+                        flowIdentity: identity,
+                        descriptor: descriptor,
+                        mediaItemID: prerecording.prerecordingID,
+                        mediaRole: .primaryPrerecording,
+                        interactionSurface:
+                            descriptor.transmission.effectiveInteractionSurface
+                    )
                 )
             }
 
@@ -1096,7 +1116,9 @@ actor TuringFlowEngine {
     private func runAuthoredPath(
         descriptor: TuringFlowDescriptor,
         character: TuringCharacterRuntimeDefinition,
-        identity: TuringFlowIdentity
+        identity: TuringFlowIdentity,
+        flowSequenceID: UUID?,
+        interactionLease: StoryInteractionLease?
     ) async -> TuringFlowResult {
         let treatment = StoryPlayModeTreatmentCatalog.treatment(
             for: descriptor.scriptPointID
@@ -1113,20 +1135,6 @@ actor TuringFlowEngine {
                 descriptor.transmission.outputRoute
             )
             route = resolvedRoute
-            await MainActor.run {
-                TuringStoryDeviceActivityIconController.shared.setPresentation(
-                    .playing(
-                        surface: descriptor.transmission.effectiveInteractionSurface
-                    )
-                )
-            }
-            defer {
-                Task { @MainActor in
-                    TuringStoryDeviceActivityIconController.shared
-                        .setPresentation(.hidden)
-                }
-            }
-
             let policyDescription: String
             switch treatment.authoredMediaPolicy {
             case .standard:
@@ -1153,15 +1161,24 @@ actor TuringFlowEngine {
                 """)
             }
 
+            guard let flowSequenceID,
+                  let interactionLease else {
+                throw TuringRuntimeError.invalidConfig(
+                    "Authored Story requires its parent sequence and interaction lease."
+                )
+            }
+
             let result = try await TuringAuthoredFlowRunner().run(
                 descriptor: descriptor,
                 identity: identity,
                 mediaPlan: plan,
                 character: character,
-                route: resolvedRoute
+                route: resolvedRoute,
+                parentSequenceID: flowSequenceID,
+                parentInteractionLease: interactionLease
             )
             await TuringFlowInteractionGateController.shared.applyCompletionGate(
-                .closed,
+                descriptor.progression.effectiveInteractionGateAfterCompletion,
                 identity: identity
             )
             print("""
@@ -1290,6 +1307,21 @@ actor TuringFlowEngine {
                 descriptor: descriptor,
                 identity: identity
             )
+            if TuringPrerecordingOrientationEligibility.permits(
+                descriptor: descriptor,
+                role: .primaryPrerecording
+            ) {
+                _ = try await TuringPrerecordingOrientationCoordinator.shared.run(
+                    TuringPrerecordingOrientationRequest(
+                        flowIdentity: identity,
+                        descriptor: descriptor,
+                        mediaItemID: prerecording.prerecordingID,
+                        mediaRole: .primaryPrerecording,
+                        interactionSurface:
+                            descriptor.transmission.effectiveInteractionSurface
+                    )
+                )
+            }
             await createdPlayback.enqueuePrerecording(
                 id: prerecording.prerecordingID,
                 fileURL: prerecordingURL

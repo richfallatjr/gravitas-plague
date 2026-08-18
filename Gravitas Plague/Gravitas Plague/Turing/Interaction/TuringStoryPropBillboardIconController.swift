@@ -55,12 +55,6 @@ final class TuringStoryPropBillboardIconController {
 
         iconEntity = icon
         physicalHitTarget = hitTarget
-        TuringStoryDeviceActivityIconController.shared.register(
-            surface: .walkie,
-            parent: iconAnchor,
-            transform: icon.transform,
-            size: visualSize
-        )
         apply(.hidden)
 
         print("""
@@ -73,7 +67,10 @@ final class TuringStoryPropBillboardIconController {
         """)
     }
 
-    func apply(_ presentation: Presentation) {
+    func apply(
+        _ presentation: Presentation,
+        activity: StoryTuringActivityPresentation = .hidden
+    ) {
         guard let iconEntity,
               let physicalHitTarget else {
             return
@@ -84,7 +81,16 @@ final class TuringStoryPropBillboardIconController {
 
         switch presentation {
         case .hidden:
-            iconEntity.isEnabled = false
+            switch activity {
+            case .authoredPlaying, .conversationPlaying:
+                updateIconMaterial(symbolName: "play.fill", on: iconEntity)
+                iconEntity.isEnabled = true
+            case .processingEllipsis:
+                updateIconMaterial(symbolName: "ellipsis", on: iconEntity)
+                iconEntity.isEnabled = true
+            case .hidden:
+                iconEntity.isEnabled = false
+            }
             physicalHitTarget.isEnabled = false
 
         case .play:
@@ -126,9 +132,6 @@ final class TuringStoryPropBillboardIconController {
         }
         iconEntity?.removeFromParent()
         physicalHitTarget?.removeFromParent()
-        TuringStoryDeviceActivityIconController.shared.unregister(
-            surface: .walkie
-        )
         iconEntity = nil
         physicalHitTarget = nil
     }

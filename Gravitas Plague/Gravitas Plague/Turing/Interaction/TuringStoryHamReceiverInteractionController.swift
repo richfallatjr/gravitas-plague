@@ -287,6 +287,14 @@ final class TuringStoryHamReceiverInteractionController:
     func microphoneHoldBegan(
         source: String
     ) {
+        if TuringStoryLiveMicrophoneActionRouter.shared.microphoneHoldBegan(
+            surface: .hamReceiver,
+            source: source,
+            dictation: dictation,
+            eventSink: eventSink
+        ) {
+            return
+        }
         guard ready,
               holdActive == false,
               latestSnapshot.capabilities
@@ -424,6 +432,12 @@ final class TuringStoryHamReceiverInteractionController:
     func microphoneHoldEnded(
         source: String
     ) {
+        if TuringStoryLiveMicrophoneActionRouter.shared.microphoneHoldEnded(
+            surface: .hamReceiver,
+            source: source
+        ) {
+            return
+        }
         guard holdActive else {
             return
         }
@@ -625,6 +639,10 @@ final class TuringStoryHamReceiverInteractionController:
             ready
                 ? snapshot
                     .hamReceiverPresentation
+                : .hidden,
+            activity: ready
+                ? snapshot.turingSurfacePresentations[.hamReceiver]?.activity
+                    ?? .hidden
                 : .hidden
         )
     }

@@ -9,6 +9,7 @@ actor TuringWalkieStaticStateActor {
     private let endpoint: any TuringAudioPlaybackEndpoint
     private var ambientHandle: TuringAudioPlaybackHandle?
     private var sendingHandle: TuringAudioPlaybackHandle?
+    private var sendingOwnerID: String?
     private var ambientRetentionOwners = Set<String>()
 
     init(endpoint: any TuringAudioPlaybackEndpoint) {
@@ -110,10 +111,52 @@ actor TuringWalkieStaticStateActor {
         )
     }
 
+    func startRetainedSending(
+        fileURL: URL,
+        runID: String,
+        ownerID: String
+    ) async throws -> TuringAudioPlaybackHandle {
+        if let sendingHandle {
+            guard sendingOwnerID == ownerID else {
+                throw TuringRuntimeError.invalidConfig(
+                    "Walkie sending static belongs to another owner."
+                )
+            }
+            return sendingHandle
+        }
+        let handle = try await endpoint.play(
+            .init(
+                requestID: UUID(),
+                runID: runID,
+                fileURL: fileURL,
+                kind: .sendingStatic,
+                route: .storyWalkie,
+                label: "sendingStatic.liveConversation",
+                gainDB: Gain.sendingDB,
+                shouldLoop: true,
+                cachePolicy: .bundled
+            )
+        )
+        sendingHandle = handle
+        sendingOwnerID = ownerID
+        return handle
+    }
+
     func stopSending(reason: String) async {
         guard let handle = sendingHandle else { return }
         sendingHandle = nil
+        sendingOwnerID = nil
         await endpoint.stop(handle, reason: reason)
+    }
+
+    func stopRetainedSending(
+        ownerID: String,
+        handle: TuringAudioPlaybackHandle,
+        reason: String
+    ) async {
+        guard sendingOwnerID == ownerID,
+              sendingHandle == handle else { return }
+        await stopSending(reason: reason)
     }
 
     func stopAll(reason: String) async {

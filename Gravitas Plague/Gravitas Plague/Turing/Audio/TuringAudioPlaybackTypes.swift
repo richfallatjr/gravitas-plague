@@ -65,6 +65,8 @@ nonisolated struct TuringAudioPlaybackHandle: Hashable, Sendable {
 
 nonisolated enum TuringAudioPlaybackEvent: Sendable, Equatable {
     case started(TuringAudioPlaybackHandle)
+    case paused(TuringAudioPlaybackHandle, reason: String)
+    case resumed(TuringAudioPlaybackHandle, reason: String)
     case completed(TuringAudioPlaybackHandle, successfully: Bool)
     case failed(requestID: UUID, runID: String, message: String)
     case cancelled(TuringAudioPlaybackHandle, reason: String)
@@ -75,12 +77,42 @@ nonisolated protocol TuringAudioPlaybackEndpoint: Sendable {
         _ request: TuringAudioPlaybackRequest
     ) async throws -> TuringAudioPlaybackHandle
 
+    func pause(
+        _ handle: TuringAudioPlaybackHandle,
+        reason: String
+    ) async throws
+
+    func resume(
+        _ handle: TuringAudioPlaybackHandle,
+        reason: String
+    ) async throws
+
     func stop(
         _ handle: TuringAudioPlaybackHandle,
         reason: String
     ) async
 
     func events() async -> AsyncStream<TuringAudioPlaybackEvent>
+}
+
+extension TuringAudioPlaybackEndpoint {
+    func pause(
+        _ handle: TuringAudioPlaybackHandle,
+        reason: String
+    ) async throws {
+        throw TuringRuntimeError.invalidConfig(
+            "Audio endpoint does not support pausing \(handle.id.uuidString)."
+        )
+    }
+
+    func resume(
+        _ handle: TuringAudioPlaybackHandle,
+        reason: String
+    ) async throws {
+        throw TuringRuntimeError.invalidConfig(
+            "Audio endpoint does not support resuming \(handle.id.uuidString)."
+        )
+    }
 }
 
 nonisolated protocol TuringTransientAudioPlaybackEndpoint:

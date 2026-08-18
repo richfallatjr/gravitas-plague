@@ -1,5 +1,15 @@
 import Foundation
 
+nonisolated struct TuringWalkieSendingStaticToken:
+    Sendable,
+    Equatable,
+    Hashable
+{
+    let id: UUID
+    let ownerID: String
+    let handle: TuringAudioPlaybackHandle
+}
+
 @MainActor
 final class TuringWalkieCommsFXController {
     static let shared = TuringWalkieCommsFXController()
@@ -48,6 +58,55 @@ final class TuringWalkieCommsFXController {
     func stopSendingLeadIn(reason: String) async {
         await worker.stopSendingLeadIn(reason: reason)
         await TuringStoryWalkieAudioRoute.stopSendingStaticLoop(reason: reason)
+    }
+
+    func beginLiveConversationSendingStatic(
+        ownerID: String,
+        reason: String
+    ) async throws -> TuringWalkieSendingStaticToken {
+        guard await installEndpointIfAvailable() else {
+            throw TuringWalkieAudioError.missingWalkieEmitter
+        }
+        let url = try await worker.sendingStaticURL()
+        let handle = try await TuringStoryWalkieAudioRoute
+            .startRetainedSendingStaticLoop(
+                fileURL: url,
+                ownerID: ownerID,
+                reason: reason
+            )
+        return TuringWalkieSendingStaticToken(
+            id: UUID(),
+            ownerID: ownerID,
+            handle: handle
+        )
+    }
+
+    func endLiveConversationSendingStatic(
+        token: TuringWalkieSendingStaticToken,
+        reason: String
+    ) async {
+        await TuringStoryWalkieAudioRoute.stopRetainedSendingStaticLoop(
+            ownerID: token.ownerID,
+            handle: token.handle,
+            reason: reason
+        )
+    }
+
+    func beginPrerecordingOrientationSendingStatic(
+        ownerID: String,
+        reason: String
+    ) async throws -> TuringWalkieSendingStaticToken {
+        try await beginLiveConversationSendingStatic(
+            ownerID: ownerID,
+            reason: reason
+        )
+    }
+
+    func endPrerecordingOrientationSendingStatic(
+        token: TuringWalkieSendingStaticToken,
+        reason: String
+    ) async {
+        await endLiveConversationSendingStatic(token: token, reason: reason)
     }
 
     func startAmbientWalkieStatic(reason: String) async {

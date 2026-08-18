@@ -147,15 +147,6 @@ struct PlagueImmersiveView: View {
         )
         .simultaneousGesture(
             TapGesture()
-                .targetedToEntity(where: .has(TuringStoryExperienceModePosterButtonComponent.self))
-                .onEnded { _ in
-                    Task { @MainActor in
-                        session.toggleStoryExperienceMode()
-                    }
-                }
-        )
-        .simultaneousGesture(
-            TapGesture()
                 .targetedToEntity(where: .has(TuringStoryDoorTriggerComponent.self))
                 .onEnded { _ in
                     Task { @MainActor in

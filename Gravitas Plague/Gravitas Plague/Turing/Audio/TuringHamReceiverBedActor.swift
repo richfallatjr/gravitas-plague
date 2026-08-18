@@ -194,7 +194,7 @@ actor TuringHamReceiverBedActor:
               error: \(message)
             """)
 
-        case .started:
+        case .started, .paused, .resumed:
             break
         }
     }

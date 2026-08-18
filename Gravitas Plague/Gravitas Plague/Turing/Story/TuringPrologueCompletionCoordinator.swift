@@ -121,6 +121,9 @@ final class TuringPrologueCompletionCoordinator: TuringStoryCompletionEventSink 
             await closePostBattleHub(
                 reason: "allDevicesCompleted.\(event.eventID.uuidString)"
             )
+            await TuringLiveConversationSeedRegistry.shared.clearAll(
+                reason: "prologueChapterBoundary"
+            )
             await publishEpisodeBoundary(boundaryEvent)
             return .interactionLeaseTransferred
         }
@@ -204,20 +207,8 @@ final class TuringPrologueCompletionCoordinator: TuringStoryCompletionEventSink 
                 "The Prologue device hub cannot be restored from \(snapshot.boundaryState.rawValue)."
             )
         }
-        let mode = StoryExperienceModeController.shared.modeForNewStoryAction()
-        if mode == .interactive {
-            for contract in TuringProloguePostBattleDeviceCatalog.ordered
-            where snapshot.state(for: contract.deviceID) == .microphone {
-                try await TuringConversationContextRehydrator.rehydrate(
-                    terminalScriptPointID: contract.terminalScriptPointID
-                )
-            }
-        }
-
-        // Keep the logical bindings staged in both modes. The arbiter strips
-        // every device capability and presentation while Play is committed.
-        // This lets a deferred switch to Interactive reveal the same durable
-        // boundary without replaying or rebuilding the hub.
+        // Keep logical bindings staged for the authored sequence. Optional live
+        // microphones are presented independently from these latent gates.
         walkie.stageBinding(
             .prologuePostBattleWalkie,
             initialState: .closed,
@@ -249,9 +240,7 @@ final class TuringPrologueCompletionCoordinator: TuringStoryCompletionEventSink 
                     durableBoundaryID:
                         "prologue.postBattle.\(snapshot.revision).\(nextID.rawValue)",
                     sourceEventID: UUID()
-                ),
-                mode: mode,
-                interactiveArm: { }
+                )
             )
         }
         print(

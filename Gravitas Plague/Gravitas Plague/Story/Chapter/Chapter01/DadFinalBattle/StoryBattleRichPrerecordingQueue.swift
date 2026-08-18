@@ -47,11 +47,18 @@ final class StoryBattleRichPrerecordingQueue: NSObject, AVAudioPlayerDelegate {
     private var activeCue: Cue?
     private var activePlayer: AVAudioPlayer?
     private var activePlaybackID: UUID?
+    private var activeBattleSpeechToken: StoryRichBattleSpeechToken?
+    private let richVocalChannel: any StoryRichVocalChannelControlling
     private var cueWaiters: [CueKey: [CheckedContinuation<Void, Error>]] = [:]
     private var drainWaiters:
         [UUID: [UUID: CheckedContinuation<Void, Never>]] = [:]
     var onActualPlaybackStarted:
         ((StoryBattlePrerecordingStartedEvent) -> Void)?
+
+    init(richVocalChannel: any StoryRichVocalChannelControlling) {
+        self.richVocalChannel = richVocalChannel
+        super.init()
+    }
 
     func reserve(_ cue: Cue) {
         let key = CueKey(
@@ -182,6 +189,11 @@ final class StoryBattleRichPrerecordingQueue: NSObject, AVAudioPlayerDelegate {
                 activePlaybackID = nil
                 throw QueueError.playbackDidNotStart
             }
+            activeBattleSpeechToken = richVocalChannel.beginBattleSpeech(
+                battleInstanceID: next.battleInstanceID,
+                cueID: next.cueID,
+                playbackID: playbackID
+            )
             onActualPlaybackStarted?(
                 StoryBattlePrerecordingStartedEvent(
                     battleInstanceID: next.battleInstanceID,
@@ -237,6 +249,13 @@ final class StoryBattleRichPrerecordingQueue: NSObject, AVAudioPlayerDelegate {
 
     private func finishActive(successfully: Bool, reason: String) {
         guard let cue = activeCue else { return }
+        if let activeBattleSpeechToken {
+            richVocalChannel.endBattleSpeech(
+                token: activeBattleSpeechToken,
+                reason: reason
+            )
+            self.activeBattleSpeechToken = nil
+        }
         activePlayer = nil
         activeCue = nil
         activePlaybackID = nil

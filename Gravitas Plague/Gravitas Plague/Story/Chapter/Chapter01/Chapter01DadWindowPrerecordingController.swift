@@ -182,7 +182,7 @@ actor Chapter01DadWindowPrerecordingController {
                 activeHandle = nil
                 throw PlaybackError.interrupted(reason)
 
-            case .started:
+            case .started, .paused, .resumed:
                 continue
             }
         }

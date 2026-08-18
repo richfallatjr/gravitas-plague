@@ -16,6 +16,7 @@ final class Chapter03Coordinator:
     private let roomPresentation: Chapter03RoomPresentationController
     private let definitionStore: Chapter03LightTunnelDefinitionStore
     private let lightTunnel: Chapter03LightTunnelCoordinator
+    private let richVocalChannel: any StoryRichVocalChannelControlling
     private let layoutFingerprintProvider:
         () throws -> TuringStoryEstablishedLayoutFingerprint
     private weak var blackout: ImmersiveBlackoutController?
@@ -31,6 +32,8 @@ final class Chapter03Coordinator:
     private var handledCompletionEventIDs = Set<UUID>()
     private var preparedLightTunnelDefinition:
         Chapter03LightTunnelResolvedDefinition?
+    private var pendingHeavenBridgeDeathVocalToken:
+        StoryPlayerDeathVocalToken?
 
     var onEndCardRequested: ((
         StoryTitleCardTransitionRequest,
@@ -45,6 +48,7 @@ final class Chapter03Coordinator:
         mikeBattle: Chapter03MikeBattleCoordinator,
         roomPresentation: Chapter03RoomPresentationController,
         lightTunnel: Chapter03LightTunnelCoordinator,
+        richVocalChannel: any StoryRichVocalChannelControlling,
         layoutFingerprintProvider:
             @escaping () throws -> TuringStoryEstablishedLayoutFingerprint,
         progress: Chapter03ProgressStore = .shared,
@@ -57,6 +61,7 @@ final class Chapter03Coordinator:
         self.mikeBattle = mikeBattle
         self.roomPresentation = roomPresentation
         self.lightTunnel = lightTunnel
+        self.richVocalChannel = richVocalChannel
         self.layoutFingerprintProvider = layoutFingerprintProvider
         self.progress = progress
         self.definitionStore = definitionStore
@@ -385,12 +390,21 @@ final class Chapter03Coordinator:
         activeBattleInstanceID = nil
         transitionLease = event.storyTransitionLease
         blackoutRequestID = event.blackoutRequestID
+        pendingHeavenBridgeDeathVocalToken =
+            event.heavenBridgeDeathVocalToken
         state = .suppressingRoom(event.chapterRunID)
-        try await startLightTunnel(
-            chapterRunID: event.chapterRunID,
-            transitionLease: event.storyTransitionLease,
-            blackoutRequestID: event.blackoutRequestID
-        )
+        do {
+            try await startLightTunnel(
+                chapterRunID: event.chapterRunID,
+                transitionLease: event.storyTransitionLease,
+                blackoutRequestID: event.blackoutRequestID
+            )
+        } catch {
+            stopPendingHeavenBridgeDeathVocal(
+                reason: "lightTunnelStartFailed.\(error.localizedDescription)"
+            )
+            throw error
+        }
     }
 
     func chapter03MikeBattleFailed(chapterRunID: UUID, error: Error) async {
@@ -411,6 +425,7 @@ final class Chapter03Coordinator:
         await bikerBattle.cancel(reason: reason)
         await mikeBattle.cancel(reason: reason)
         await lightTunnel.cancel(reason: reason)
+        stopPendingHeavenBridgeDeathVocal(reason: "chapterCancel.\(reason)")
         if let titleTransitionLease {
             self.titleTransitionLease = nil
             await arbiter.release(titleTransitionLease, reason: reason)
@@ -461,6 +476,13 @@ final class Chapter03Coordinator:
                 resolvedDefinition: resolved
             )
         )
+        if let token = pendingHeavenBridgeDeathVocalToken {
+            richVocalChannel.relinquishPlayerDeathVocalToNaturalCompletion(
+                token: token,
+                reason: "chapter03HeavenTunnelStarted"
+            )
+            pendingHeavenBridgeDeathVocalToken = nil
+        }
         preparedLightTunnelDefinition = nil
         state = .portalApproaching(chapterRunID)
         print(
@@ -533,6 +555,9 @@ final class Chapter03Coordinator:
 
     private func fail(runID: UUID, error: Error) async {
         guard chapterRunID == runID else { return }
+        stopPendingHeavenBridgeDeathVocal(
+            reason: "chapterFailure.\(error.localizedDescription)"
+        )
         print(
             "[Chapter03Transition] FAILED runID=\(runID.uuidString) " +
                 "state=\(String(describing: state)) " +
@@ -547,5 +572,14 @@ final class Chapter03Coordinator:
         guard let titleTransitionLease else { return }
         self.titleTransitionLease = nil
         await arbiter.release(titleTransitionLease, reason: reason)
+    }
+
+    private func stopPendingHeavenBridgeDeathVocal(reason: String) {
+        guard let pendingHeavenBridgeDeathVocalToken else { return }
+        richVocalChannel.stopPlayerDeathVocal(
+            token: pendingHeavenBridgeDeathVocalToken,
+            reason: reason
+        )
+        self.pendingHeavenBridgeDeathVocalToken = nil
     }
 }

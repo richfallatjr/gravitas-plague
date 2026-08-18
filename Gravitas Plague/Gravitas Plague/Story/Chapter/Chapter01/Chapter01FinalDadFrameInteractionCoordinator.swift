@@ -93,7 +93,6 @@ final class Chapter01FinalDadFrameInteractionCoordinator {
             ],
             reason: reason
         )
-        let mode = StoryExperienceModeController.shared.modeForNewStoryAction()
         StoryModeActionCoordinator.shared.activate(
             .init(
                 episodeID: .chapter01,
@@ -101,9 +100,7 @@ final class Chapter01FinalDadFrameInteractionCoordinator {
                 durableBoundaryID:
                     "chapter01.finalDadFrame.\(checkpoint.rawValue)",
                 sourceEventID: UUID()
-            ),
-            mode: mode,
-            interactiveArm: { }
+            )
         )
         try await arbiter.setStableInteractionPolicy(
             .chapter01FinalDadFrameOnly,
@@ -119,12 +116,8 @@ final class Chapter01FinalDadFrameInteractionCoordinator {
         } else {
             releasedSnapshot = await arbiter.currentSnapshot()
         }
-        let expectedPresentation: StoryDadFramePresentation = mode == .play
-            ? .hidden
-            : (finalState == .play ? .play : .microphone)
-        let expectedCapability: StoryInteractionCapability? = mode == .play
-            ? nil
-            : (finalState == .play ? .dadFramePlay : .dadFrameMicrophone)
+        let expectedPresentation: StoryDadFramePresentation = .hidden
+        let expectedCapability: StoryInteractionCapability? = nil
         let ownerIsValid = releaseWhenReady
             ? releasedSnapshot.exclusiveOwner == nil
             : releasedSnapshot.exclusiveOwner == transitionLease.owner

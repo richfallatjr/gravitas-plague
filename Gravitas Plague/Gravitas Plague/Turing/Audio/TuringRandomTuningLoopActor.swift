@@ -2,6 +2,14 @@
 import CryptoKit
 import Foundation
 
+nonisolated struct TuringRandomTuningOrientationToken: Sendable, Equatable {
+    let id: UUID
+    let channelID: String
+    let ownerID: String
+    let handleID: UUID
+    let fileName: String
+}
+
 actor TuringRandomTuningLoopActor:
     TuringGeneratedGapBridge
 {
@@ -216,6 +224,43 @@ actor TuringRandomTuningLoopActor:
         reason: String
     ) async {
         guard activeOwnerID == ownerID else {
+            return
+        }
+        await stopActiveLoop(reason: reason)
+    }
+
+    func beginPrerecordingOrientation(
+        ownerID: String,
+        reason: String
+    ) async throws -> TuringRandomTuningOrientationToken {
+        try await startLoop(
+            ownerID: ownerID,
+            waitingForSegmentIndex: 0,
+            reason: reason
+        )
+        guard let handle = activeHandle,
+              let resource = activeResource,
+              activeOwnerID == ownerID else {
+            throw TuningError.noPlayableResource(configuration.deviceID)
+        }
+        return TuringRandomTuningOrientationToken(
+            id: UUID(),
+            channelID: configuration.deviceID,
+            ownerID: ownerID,
+            handleID: handle.id,
+            fileName: resource.fileName
+        )
+    }
+
+    func endPrerecordingOrientation(
+        _ token: TuringRandomTuningOrientationToken,
+        reason: String
+    ) async {
+        guard token.channelID == configuration.deviceID,
+              activeOwnerID == token.ownerID,
+              activeHandle?.id == token.handleID,
+              activeResource?.fileName == token.fileName else {
+            print("[TuringPROrientation] stale random tuning token ignored token=\(token.id.uuidString)")
             return
         }
         await stopActiveLoop(reason: reason)
@@ -452,7 +497,7 @@ actor TuringRandomTuningLoopActor:
               error: \(message)
             """)
 
-        case .started:
+        case .started, .paused, .resumed:
             break
         }
     }

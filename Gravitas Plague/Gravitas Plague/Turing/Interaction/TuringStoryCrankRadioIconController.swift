@@ -102,12 +102,6 @@ final class TuringStoryCrankRadioIconController {
 
         iconEntity = icon
         physicalHitTarget = physicalTarget
-        TuringStoryDeviceActivityIconController.shared.register(
-            surface: .crankRadio,
-            parent: iconAnchor,
-            transform: icon.transform,
-            size: Self.visualSize
-        )
         apply(.hidden)
 
         print("""
@@ -122,7 +116,8 @@ final class TuringStoryCrankRadioIconController {
 
     func apply(
         _ presentation:
-            StoryCrankRadioPresentation
+            StoryCrankRadioPresentation,
+        activity: StoryTuringActivityPresentation = .hidden
     ) {
         guard let iconEntity,
               let physicalHitTarget else {
@@ -135,7 +130,16 @@ final class TuringStoryCrankRadioIconController {
 
         switch presentation {
         case .hidden:
-            iconEntity.isEnabled = false
+            switch activity {
+            case .authoredPlaying, .conversationPlaying:
+                updateIcon(symbolName: "play.fill", on: iconEntity)
+                iconEntity.isEnabled = true
+            case .processingEllipsis:
+                updateIcon(symbolName: "ellipsis", on: iconEntity)
+                iconEntity.isEnabled = true
+            case .hidden:
+                iconEntity.isEnabled = false
+            }
             physicalHitTarget.isEnabled = false
 
         case .play:
@@ -181,9 +185,6 @@ final class TuringStoryCrankRadioIconController {
         }
         iconEntity?.removeFromParent()
         physicalHitTarget?.removeFromParent()
-        TuringStoryDeviceActivityIconController.shared.unregister(
-            surface: .crankRadio
-        )
         iconEntity = nil
         physicalHitTarget = nil
     }

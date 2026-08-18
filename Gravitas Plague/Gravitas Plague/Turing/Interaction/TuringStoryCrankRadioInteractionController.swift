@@ -282,6 +282,14 @@ final class TuringStoryCrankRadioInteractionController:
     func microphoneHoldBegan(
         source: String
     ) {
+        if TuringStoryLiveMicrophoneActionRouter.shared.microphoneHoldBegan(
+            surface: .crankRadio,
+            source: source,
+            dictation: dictation,
+            eventSink: eventSink
+        ) {
+            return
+        }
         guard ready,
               holdActive == false,
               latestSnapshot.capabilities
@@ -419,6 +427,12 @@ final class TuringStoryCrankRadioInteractionController:
     func microphoneHoldEnded(
         source: String
     ) {
+        if TuringStoryLiveMicrophoneActionRouter.shared.microphoneHoldEnded(
+            surface: .crankRadio,
+            source: source
+        ) {
+            return
+        }
         guard holdActive else {
             return
         }
@@ -637,6 +651,10 @@ final class TuringStoryCrankRadioInteractionController:
             ready
                 ? snapshot
                     .crankRadioPresentation
+                : .hidden,
+            activity: ready
+                ? snapshot.turingSurfacePresentations[.crankRadio]?.activity
+                    ?? .hidden
                 : .hidden
         )
     }

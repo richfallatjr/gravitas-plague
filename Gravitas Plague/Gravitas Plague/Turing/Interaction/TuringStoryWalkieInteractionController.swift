@@ -9,7 +9,8 @@ protocol TuringStoryWalkieInteractionEventSink: AnyObject {
 }
 
 extension PlagueDemoSession:
-    TuringStoryWalkieInteractionEventSink
+    TuringStoryWalkieInteractionEventSink,
+    TuringLiveConversationHUDEventSink
 {
 }
 
@@ -268,6 +269,14 @@ final class TuringStoryWalkieInteractionController {
     }
 
     func microphoneHoldBegan(source: String) {
+        if TuringStoryLiveMicrophoneActionRouter.shared.microphoneHoldBegan(
+            surface: .walkie,
+            source: source,
+            dictation: dictation,
+            eventSink: eventSink
+        ) {
+            return
+        }
         guard walkieReady,
               latestInteractionSnapshot.capabilities.contains(.walkieMicrophone),
               holdActive == false else {
@@ -350,6 +359,12 @@ final class TuringStoryWalkieInteractionController {
     }
 
     func microphoneHoldEnded(source: String) {
+        if TuringStoryLiveMicrophoneActionRouter.shared.microphoneHoldEnded(
+            surface: .walkie,
+            source: source
+        ) {
+            return
+        }
         guard holdActive else {
             return
         }
@@ -530,14 +545,16 @@ extension TuringStoryWalkieInteractionController:
             iconController.apply(.hidden)
             return
         }
+        let activity = snapshot.turingSurfacePresentations[.walkie]?.activity
+            ?? .hidden
 
         switch snapshot.walkiePresentation {
         case .hidden:
-            iconController.apply(.hidden)
+            iconController.apply(.hidden, activity: activity)
         case .play:
-            iconController.apply(.play)
+            iconController.apply(.play, activity: activity)
         case .microphone:
-            iconController.apply(.microphone)
+            iconController.apply(.microphone, activity: activity)
         }
 
         print("""

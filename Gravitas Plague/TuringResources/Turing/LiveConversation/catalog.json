@@ -1,0 +1,401 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "scriptPointID": "chapter01.dadFrame.rich.fourChances.001",
+      "authoredPrerecordingID": "chapter01.room.rich.dadFrame.fourChances.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "dadFrame",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter01.dadFrame.rich.script03",
+      "authoredPrerecordingID": "chapter01.room.rich.dadFrame.script03.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "dadFrame",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter01.hamReceiver.cateye81.script05",
+      "authoredPrerecordingID": "chapter01.room.cateye81.hamReceiver.script05.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "hamReceiver",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter01.hamReceiver.rich.script04",
+      "authoredPrerecordingID": "chapter01.room.rich.hamReceiver.script04.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "hamReceiver",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter01.walkie.bigMike.script07",
+      "authoredPrerecordingID": "chapter01.walkie.bigMike.script07.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "walkie",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter01.walkie.bigMike.script09",
+      "authoredPrerecordingID": "chapter01.walkie.bigMike.script09.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "walkie",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter01.walkie.rich.script06",
+      "authoredPrerecordingID": "chapter01.walkie.rich.script06.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "walkie",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter01.walkie.rich.script08",
+      "authoredPrerecordingID": "chapter01.walkie.rich.script08.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "walkie",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter02.crankRadio.broadcaster.gravitasPSA.003",
+      "authoredPrerecordingID": "chapter02.crankRadio.broadcaster.gravitasPSA.003",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "crankRadio",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter02.crankRadio.broadcaster.gridFailure.002",
+      "authoredPrerecordingID": "chapter02.crankRadio.broadcaster.gridFailure.002",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "crankRadio",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter02.crankRadio.broadcaster.missingPersons.001",
+      "authoredPrerecordingID": "chapter02.crankRadio.broadcaster.missingPersons.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "crankRadio",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter02.dadFrame.rich.dadDisappeared.001",
+      "authoredPrerecordingID": "chapter02.dadFrame.rich.dadDisappeared.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "dadFrame",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter02.hamReceiver.cateye81.revelation.002",
+      "authoredPrerecordingID": "chapter02.hamReceiver.cateye81.revelation.002",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "hamReceiver",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter02.hamReceiver.dad.script01",
+      "authoredPrerecordingID": "chapter02.hamReceiver.dad.script01.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "hamReceiver",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter02.hamReceiver.dad.script03",
+      "authoredPrerecordingID": "chapter02.hamReceiver.dad.script03.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "hamReceiver",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter02.hamReceiver.rich.revelation.001",
+      "authoredPrerecordingID": "chapter02.hamReceiver.rich.revelation.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "hamReceiver",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter02.hamReceiver.rich.script02",
+      "authoredPrerecordingID": "chapter02.hamReceiver.rich.script02.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "hamReceiver",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter02.walkie.bigMike.script01",
+      "authoredPrerecordingID": "chapter02.walkie.bigMike.script01.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "walkie",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter02.walkie.bigMike.script03",
+      "authoredPrerecordingID": "chapter02.walkie.bigMike.script03.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "walkie",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter02.walkie.rich.script02",
+      "authoredPrerecordingID": "chapter02.walkie.rich.script02.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "walkie",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter03.crankRadio.broadcaster.continuity.001",
+      "authoredPrerecordingID": "chapter03.crankRadio.broadcaster.continuity.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "crankRadio",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter03.hamReceiver.cateye81.antichrist.002",
+      "authoredPrerecordingID": "chapter03.hamReceiver.cateye81.antichrist.002",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "hamReceiver",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter03.hamReceiver.rich.faith.001",
+      "authoredPrerecordingID": "chapter03.hamReceiver.rich.faith.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "hamReceiver",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter03.walkie.bigMike.fading.003",
+      "authoredPrerecordingID": "chapter03.walkie.bigMike.fading.003",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "walkie",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter03.walkie.bigMike.scavengerReport.001",
+      "authoredPrerecordingID": "chapter03.walkie.bigMike.scavengerReport.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "walkie",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "chapter03.walkie.rich.connectsMen.002",
+      "authoredPrerecordingID": "chapter03.walkie.rich.connectsMen.002",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "walkie",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "prologue.crankRadioBroadcast.001",
+      "authoredPrerecordingID": "prologue.room.broadcaster.crankRadio.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "crankRadio",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "prologue.dadPhotoMemory.001",
+      "authoredPrerecordingID": "prologue.room.rich.dadPhotoMemory.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "dadFrame",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "prologue.hamReceiver.cateye81.001",
+      "authoredPrerecordingID": "prologue.room.cateye81.hamReceiver.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "hamReceiver",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "prologue.hamReceiver.cateye81.003",
+      "authoredPrerecordingID": "prologue.room.cateye81.hamReceiver.003",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "hamReceiver",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "prologue.hamReceiver.rich.002",
+      "authoredPrerecordingID": "prologue.room.rich.hamReceiver.002",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "hamReceiver",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "prologue.scriptPoint01",
+      "authoredPrerecordingID": "prologue.walkie.bigMike.richContact.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "walkie",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "prologue.scriptPoint02",
+      "authoredPrerecordingID": "prologue.walkie.rich.scriptPoint02.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "walkie",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "prologue.scriptPoint03",
+      "authoredPrerecordingID": "prologue.walkie.bigMike.scriptPoint03.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "walkie",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "prologue.scriptPoint04",
+      "authoredPrerecordingID": "prologue.walkie.rich.scriptPoint04.001",
+      "voicePromptSource": {
+        "kind": "transmission",
+        "stageID": null,
+        "voicePromptID": null
+      },
+      "interactionSurface": "walkie",
+      "retention": "currentAuthoredItem"
+    },
+    {
+      "scriptPointID": "prologue.scriptPoint05",
+      "authoredPrerecordingID": "prologue.walkie.bigMike.scriptPoint05.002",
+      "voicePromptSource": {
+        "kind": "generationPipelineStage",
+        "stageID": "promptVoice",
+        "voicePromptID": null
+      },
+      "interactionSurface": "walkie",
+      "retention": "untilExplicitInvalidation"
+    }
+  ]
+}

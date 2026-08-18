@@ -11,12 +11,7 @@ final class StoryModeActionCoordinator {
         let sourceEventID: UUID
     }
 
-    private struct QueuedAction {
-        let action: PendingAction
-        let interactiveArm: @MainActor () -> Void
-    }
-
-    private var queue: [QueuedAction] = []
+    private var queue: [PendingAction] = []
     private var consumedBoundaryIDs = Set<String>()
     private var runInFlight = false
     private var generation: UInt64 = 0
@@ -36,40 +31,16 @@ final class StoryModeActionCoordinator {
         interactionTask?.cancel()
     }
 
-    func activate(
-        _ action: PendingAction,
-        mode: StoryExperienceMode,
-        interactiveArm: @MainActor @escaping () -> Void
-    ) {
-        switch mode {
-        case .interactive:
-            interactiveArm()
-        case .play:
-            guard consumedBoundaryIDs.contains(action.durableBoundaryID) == false,
-                  queue.contains(where: {
-                      $0.action.durableBoundaryID == action.durableBoundaryID
-                  }) == false else {
-                return
-            }
-            queue.append(
-                QueuedAction(
-                    action: action,
-                    interactiveArm: interactiveArm
-                )
-            )
-            Task { [weak self] in
-                await TuringFlowInteractionGateController.shared
-                    .applyStableStatesAtomically(
-                        Dictionary(
-                            uniqueKeysWithValues:
-                                StoryInteractionSurfaceID.allCases.map {
-                                    ($0, .closed)
-                                }
-                        ),
-                        reason: "playMode.pending.\(action.durableBoundaryID)"
-                    )
-                await self?.drainIfPossible()
-            }
+    func activate(_ action: PendingAction) {
+        guard consumedBoundaryIDs.contains(action.durableBoundaryID) == false,
+              queue.contains(where: {
+                  $0.durableBoundaryID == action.durableBoundaryID
+              }) == false else {
+            return
+        }
+        queue.append(action)
+        Task { [weak self] in
+            await self?.drainIfPossible()
         }
     }
 
@@ -89,26 +60,22 @@ final class StoryModeActionCoordinator {
 
     private func drainIfPossible() async {
         guard runInFlight == false,
-              let queued = queue.first else {
+              let action = queue.first else {
             return
         }
         let snapshot = await StoryInteractionArbiter.shared.currentSnapshot()
-        guard snapshot.exclusiveOwner == nil,
+        guard runInFlight == false,
+              queue.first == action,
+              snapshot.exclusiveOwner == nil,
               snapshot.doorState == .closedUnloaded else {
             return
         }
 
-        let mode = StoryExperienceModeController.shared.modeForNewStoryAction()
         queue.removeFirst()
-        guard mode == .play else {
-            queued.interactiveArm()
-            return
-        }
 
-        consumedBoundaryIDs.insert(queued.action.durableBoundaryID)
+        consumedBoundaryIDs.insert(action.durableBoundaryID)
         runInFlight = true
         let activeGeneration = generation
-        let action = queued.action
         print("""
         [StoryPlayMode] action started
           episodeID: \(action.episodeID.rawValue)
