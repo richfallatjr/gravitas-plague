@@ -118,18 +118,18 @@ enum TuringFlowConversationRunner {
                 }
 
             case .borrowedFromAuthoredFlow(
-                let parentFlowInstanceID,
+                let hostFlowSequenceID,
+                let hostFlowInstanceID,
                 let parentLeaseID
             ):
-                guard let suppliedLease = request.interactionLease,
-                      suppliedLease.id == parentLeaseID,
-                      case .turingFlow = suppliedLease.owner,
-                      request.immutableSeed?.parentFlowInstanceID ==
-                        parentFlowInstanceID else {
-                    throw TuringRuntimeError.invalidConfig(
-                        "Live conversation borrowed lease identity is invalid."
+                let suppliedLease = try TuringBorrowedAuthoredFlowLeaseValidator
+                    .requireValid(
+                        hostFlowSequenceID: hostFlowSequenceID,
+                        hostFlowInstanceID: hostFlowInstanceID,
+                        parentLeaseID: parentLeaseID,
+                        suppliedLease: request.interactionLease,
+                        seed: request.immutableSeed
                     )
-                }
                 try await StoryInteractionArbiter.shared.requireCurrent(
                     suppliedLease
                 )
@@ -210,14 +210,33 @@ enum TuringFlowConversationRunner {
             request.conversationRunID
         var failureStage = "validatingPlayerDictation"
 
-        await TuringFlowInteractionGateController
-            .shared
-            .beginConversation(
-                conversationRunID:
-                    conversationRunID,
-                surfaceID:
-                    request.interactionSurface
-            )
+        switch request.leasePolicy {
+        case .ownedByConversation:
+            await TuringFlowInteractionGateController
+                .shared
+                .beginConversation(
+                    conversationRunID:
+                        conversationRunID,
+                    surfaceID:
+                        request.interactionSurface
+                )
+
+        case .borrowedFromAuthoredFlow(
+            let hostFlowSequenceID,
+            let hostFlowInstanceID,
+            _
+        ):
+            print("""
+            [TuringLiveConversation] authored interaction gate preserved
+              conversationRunID: \(conversationRunID.uuidString)
+              hostFlowSequenceID: \(hostFlowSequenceID.uuidString)
+              hostFlowInstanceID: \(hostFlowInstanceID.uuidString)
+              seedOriginSequenceID: \(request.immutableSeed?.parentFlowSequenceID.uuidString ?? "none")
+              seedOriginFlowInstanceID: \(request.immutableSeed?.parentFlowInstanceID.uuidString ?? "none")
+              surface: \(request.interactionSurface.rawValue)
+              gateOwnership: inheritedFromAuthoredFlow
+            """)
+        }
 
         do {
             failureStage = "loadingCharacterRuntime"

@@ -6,6 +6,13 @@ struct Chapter01DadExitWalkStartedEvent: Sendable {
     let locomotionActuallyStarted: Bool
 }
 
+struct Chapter01DadWindowMidpointEvent: Sendable {
+    let chapterRunID: UUID
+    let storyTransitionLease: StoryInteractionLease
+    let centeredIdleElapsedSeconds: TimeInterval
+    let centeredIdleDurationSeconds: TimeInterval
+}
+
 struct Chapter01DadRuntimeReleaseReport: Sendable, Equatable {
     let chapterRunID: UUID
     let heavyRuntimeReleased: Bool
@@ -26,6 +33,10 @@ struct Chapter01DadWindowFailureEvent: Sendable {
 
 @MainActor
 protocol Chapter01DadWindowCompletionSink: AnyObject {
+    func dadWindowMidpointReached(
+        _ event: Chapter01DadWindowMidpointEvent
+    ) async throws
+
     func dadExitWalkStarted(
         _ event: Chapter01DadExitWalkStartedEvent
     ) async throws

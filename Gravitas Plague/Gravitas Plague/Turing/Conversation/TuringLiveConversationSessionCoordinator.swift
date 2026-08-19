@@ -49,6 +49,22 @@ final class TuringLiveConversationSessionCoordinator:
                 "Authored playback does not support exact spoken-cover pause and resume."
             )
         }
+        if let liveSession = session,
+           liveSession.parentLease.id == parentLease.id,
+           liveSession.progressionHold == nil,
+           liveSession.activeTurnID == nil,
+           turns.isEmpty {
+            try await replaceAttachmentPreservingRetainedAvailability(
+                parentSequenceID: parentSequenceID,
+                parentLease: parentLease,
+                descriptor: descriptor,
+                identity: identity,
+                playback: playback,
+                spokenPlayback: spokenPlayback,
+                previousSession: liveSession
+            )
+            return
+        }
         await detach(reason: "replaceAttachment")
         generation &+= 1
         attachment = Attachment(
@@ -61,6 +77,33 @@ final class TuringLiveConversationSessionCoordinator:
         )
         await playback.setPlaybackLifecycleSink(self)
         print("[TuringLiveConversation] attached sequenceID=\(parentSequenceID.uuidString) flowInstanceID=\(identity.flowInstanceID.uuidString)")
+    }
+
+    func authoredFlowDidComplete(reason: String) async {
+        guard let liveSession = session,
+              liveSession.activeTurnID == nil,
+              turns.isEmpty else {
+            return
+        }
+        if let currentAuthoredSeed {
+            await seedRegistry.authoredItemCompleted(
+                seedID: currentAuthoredSeed.seedID
+            )
+        }
+        currentAuthoredItemID = nil
+        currentAuthoredSeed = nil
+        if await restoreRetainedAvailabilityIfPossible(
+            session: liveSession,
+            reason: reason
+        ) {
+            print(
+                "[TuringLiveConversation] authored flow completed; " +
+                    "retained microphones remain active reason=\(reason)"
+            )
+            return
+        }
+        presentedSeedIDs.removeAll(keepingCapacity: false)
+        await finishSessionIfIdle(reason: reason)
     }
 
     func detach(reason: String) async {
@@ -80,10 +123,12 @@ final class TuringLiveConversationSessionCoordinator:
                 generation: session.generation,
                 reason: reason
             )
-            try? await session.authoredPlayback.releaseAuthoredProgressionHold(
-                session.progressionHold,
-                reason: reason
-            )
+            if let progressionHold = session.progressionHold {
+                try? await session.authoredPlayback.releaseAuthoredProgressionHold(
+                    progressionHold,
+                    reason: reason
+                )
+            }
         }
         if let currentAuthoredSeed {
             await seedRegistry.authoredItemCompleted(seedID: currentAuthoredSeed.seedID)
@@ -164,7 +209,7 @@ final class TuringLiveConversationSessionCoordinator:
             activeChildPresentationCount: turns.values.filter {
                 $0.childReleased == false
             }.count,
-            activeProgressionHoldCount: session == nil ? 0 : 1,
+            activeProgressionHoldCount: session?.progressionHold == nil ? 0 : 1,
             parentLeaseStillCurrent: parentLeaseStillCurrent
         )
     }
@@ -185,6 +230,38 @@ final class TuringLiveConversationSessionCoordinator:
                 source: source,
                 dictation: dictation
             )
+        }
+    }
+
+    func prepareForPrerecordingPreFiller(
+        _ item: TuringAuthoredMediaItem
+    ) async {
+        guard let attachment,
+              item.liveConversationCatalogEntry != nil else {
+            return
+        }
+        if currentAuthoredItemID == item.id,
+           currentAuthoredSeed?.authoredMediaItemID == item.id,
+           session != nil {
+            return
+        }
+        do {
+            try await installAuthoredAvailability(
+                item: item,
+                attachment: attachment,
+                acquireProgressionHold: false,
+                reason: "prerecordingPreFiller"
+            )
+            print(
+                "[TuringLiveConversation] pre-filler microphones installed " +
+                    "itemID=\(item.id)"
+            )
+        } catch {
+            print(
+                "[TuringLiveConversation] pre-filler availability rejected " +
+                    "itemID=\(item.id) error=\(error.localizedDescription)"
+            )
+            await finishSessionIfIdle(reason: "preFillerAvailabilityFailed")
         }
     }
 
@@ -247,9 +324,28 @@ final class TuringLiveConversationSessionCoordinator:
             }
             turn.questionTimer?.cancel()
             turn.questionTimer = nil
-            if let token = turn.initialFillerToken {
-                turn.initialFillerToken = nil
-                await filler.end(token, reason: "responsePlaybackStarted")
+            if let initialFillerToken = turn.initialFillerToken {
+                await prepareInitialFillerForSpokenPlayback(
+                    turn,
+                    reason: "responsePlaybackStarted"
+                )
+                if turn.initialFillerToken != nil {
+                    switch initialFillerToken {
+                    case .dadPhoto:
+                        print(
+                            "[TuringDadPhotoMusic] retained through TTS playback " +
+                                "turnID=\(turn.turnID.uuidString)"
+                        )
+                    case .walkie(let token):
+                        print(
+                            "[TuringWalkieStatic] ambient retained through conversation playback " +
+                                "turnID=\(turn.turnID.uuidString) " +
+                                "ownerID=\(token.ownerID)"
+                        )
+                    case .crankRadio, .hamReceiver:
+                        break
+                    }
+                }
             }
             publishHUD(turn: turn, kind: .responsePlaybackStarted)
             try? await arbiter.updateLiveConversationPresentation(
@@ -265,6 +361,10 @@ final class TuringLiveConversationSessionCoordinator:
         case .responsePlaybackCompleted:
             turn.responseCompleted = true
             turn.state = .completed
+            await releaseInitialFillerIfNeeded(
+                turn,
+                reason: "responsePlaybackCompleted"
+            )
             publishHUD(turn: turn, kind: .responsePlaybackFinished)
             if activeResponseTurnID == turn.turnID {
                 activeResponseTurnID = nil
@@ -278,7 +378,11 @@ final class TuringLiveConversationSessionCoordinator:
                 reason: "conversationFailed.\(stage)",
                 publishFailure: false
             )
-            await finishTurnAndSession(turn, reason: "conversationFailed.\(stage)")
+            await finishTurnAndSession(
+                turn,
+                reason: "conversationFailed.\(stage)",
+                restoreCurrentAuthoredAvailability: true
+            )
         }
     }
 
@@ -317,57 +421,33 @@ final class TuringLiveConversationSessionCoordinator:
         _ item: TuringAuthoredMediaItem,
         attachment: Attachment
     ) async {
-        currentAuthoredItemID = item.id
-        guard let entry = item.liveConversationCatalogEntry else {
+        guard item.liveConversationCatalogEntry != nil else {
+            currentAuthoredItemID = item.id
             currentAuthoredSeed = nil
             return
         }
         do {
-            let seed = try TuringLiveConversationSeedResolver().resolve(
-                entry: entry,
-                item: item,
-                descriptor: attachment.descriptor,
-                parentSequenceID: attachment.parentSequenceID,
-                identity: attachment.identity
-            )
-            await seedRegistry.authoredItemStarted(seed: seed)
-            currentAuthoredSeed = seed
-            let stablePolicy = await arbiter.currentStableInteractionPolicy()
-            let snapshot = await seedRegistry.snapshot(
-                allowedSurfaces: stablePolicy.allowedTuringSurfaces
-            )
-            let liveSession: TuringLiveConversationSession
-            if let session {
-                liveSession = session
-            } else {
-                let sessionID = UUID()
-                let hold = try await attachment.playback.acquireAuthoredProgressionHold(
-                    liveSessionID: sessionID,
+            if currentAuthoredItemID == item.id,
+               let seed = currentAuthoredSeed,
+               seed.authoredMediaItemID == item.id,
+               let existingSession = session {
+                let heldSession = try await ensureProgressionHold(
+                    existingSession,
                     reason: "eligibleAuthoredMediaStarted.\(item.id)"
                 )
-                liveSession = TuringLiveConversationSession(
-                    sessionID: sessionID,
-                    generation: generation,
-                    parentFlowSequenceID: attachment.parentSequenceID,
-                    parentFlowInstanceID: attachment.identity.flowInstanceID,
-                    parentPlaybackRunID: attachment.identity.playbackRunID,
-                    parentLease: attachment.parentLease,
-                    authoredPlayback: attachment.playback,
-                    progressionHold: hold,
-                    activeTurnID: nil
+                session = heldSession
+                print(
+                    "[TuringLiveConversation] pre-filler seed promoted to authored media " +
+                        "itemID=\(item.id) seedID=\(seed.seedID.uuidString)"
                 )
-                session = liveSession
+                return
             }
-            presentedSeedIDs = snapshot.seedsBySurface.mapValues(\.seedID)
-            try await arbiter.installLiveConversationAvailability(
-                parentLease: liveSession.parentLease,
-                sessionID: liveSession.sessionID,
-                generation: liveSession.generation,
-                eligibleSeeds: snapshot,
-                authoredActivitySurface: seed.interactionSurface,
-                reason: "authoredMediaStarted.\(item.id)"
+            try await installAuthoredAvailability(
+                item: item,
+                attachment: attachment,
+                acquireProgressionHold: true,
+                reason: "authoredMediaStarted"
             )
-            print("[TuringLiveConversation] seed installed itemID=\(item.id) seedID=\(seed.seedID.uuidString)")
         } catch {
             print("[TuringLiveConversation] seed rejected itemID=\(item.id) error=\(error.localizedDescription)")
             await finishSessionIfIdle(reason: "seedResolutionFailed")
@@ -380,8 +460,15 @@ final class TuringLiveConversationSessionCoordinator:
             await seedRegistry.authoredItemCompleted(seedID: currentAuthoredSeed.seedID)
         }
         currentAuthoredItemID = nil
-        if session?.activeTurnID == nil {
+        if let liveSession = session,
+           liveSession.activeTurnID == nil {
             currentAuthoredSeed = nil
+            if await restoreRetainedAvailabilityIfPossible(
+                session: liveSession,
+                reason: "authoredMediaCompletedWithoutQuestion"
+            ) {
+                return
+            }
             presentedSeedIDs.removeAll(keepingCapacity: false)
             await finishSessionIfIdle(reason: "authoredMediaCompletedWithoutQuestion")
         }
@@ -408,7 +495,9 @@ final class TuringLiveConversationSessionCoordinator:
         do {
             let seed = try await seedRegistry.recaptureForSelection(
                 surface: surface,
-                expectedSeedID: expectedSeedID
+                expectedSeedID: expectedSeedID,
+                hostSequenceID: liveSession.parentFlowSequenceID,
+                hostFlowInstanceID: liveSession.parentFlowInstanceID
             )
             childToken = try await arbiter.claimLiveConversationChild(
                 parentLease: liveSession.parentLease,
@@ -417,6 +506,11 @@ final class TuringLiveConversationSessionCoordinator:
                 selectedSurface: surface,
                 reason: source
             )
+            liveSession = try await ensureProgressionHold(
+                liveSession,
+                reason: "microphoneSelected.\(surface.rawValue)"
+            )
+            session = liveSession
             computeToken = try await computeAdmission.reserve(
                 sessionID: liveSession.sessionID,
                 turnID: turnID
@@ -459,7 +553,11 @@ final class TuringLiveConversationSessionCoordinator:
             guard dictation.isRecording else {
                 clearPendingHold(surface: surface)
                 await cancelTurn(turn, reason: "dictationDidNotStart", publishFailure: true)
-                await finishTurnAndSession(turn, reason: "dictationDidNotStart")
+                await finishTurnAndSession(
+                    turn,
+                    reason: "dictationDidNotStart",
+                    restoreCurrentAuthoredAvailability: true
+                )
                 return
             }
             let submitImmediately = pendingHoldEndRequested
@@ -519,7 +617,9 @@ final class TuringLiveConversationSessionCoordinator:
             turn.question = transcript
             turn.state = .submitted
             publishHUD(turn: turn, kind: .questionSubmitted(transcript))
-            try await turn.coverPlayback.resumeCurrentSpokenMedia(turn.coverReceipt)
+            if turn.selectedSurface == .walkie {
+                await beginInitialFillerIfNeeded(turn)
+            }
             turn.questionTimer = Task { [weak self, weak turn] in
                 try? await Task.sleep(for: Self.submittedQuestionHold)
                 guard Task.isCancelled == false, let self, let turn,
@@ -535,10 +635,8 @@ final class TuringLiveConversationSessionCoordinator:
             }
             turn.coverWaiter = Task { [weak self, weak turn] in
                 guard let self, let turn else { return }
-                try? await turn.coverPlayback.waitUntilSpokenMediaCompletes(
-                    turn.coverReceipt
-                )
-                guard Task.isCancelled == false else { return }
+                let coverCompleted = await self.resumeAndWaitForSpokenCover(turn)
+                guard Task.isCancelled == false, coverCompleted else { return }
                 await self.coverDidComplete(turnID: turn.turnID)
             }
             turn.responseTask = Task { [weak self, weak turn] in
@@ -554,7 +652,8 @@ final class TuringLiveConversationSessionCoordinator:
                         interactionSurface: turn.selectedSurface,
                         immutableSeed: turn.seed,
                         leasePolicy: .borrowedFromAuthoredFlow(
-                            parentFlowInstanceID: liveSession.parentFlowInstanceID,
+                            hostFlowSequenceID: liveSession.parentFlowSequenceID,
+                            hostFlowInstanceID: liveSession.parentFlowInstanceID,
                             parentLeaseID: liveSession.parentLease.id
                         ),
                         progressionPolicy: .neverAdvanceStory,
@@ -577,7 +676,48 @@ final class TuringLiveConversationSessionCoordinator:
             print("[TuringLiveConversation] question submitted turnID=\(turnID.uuidString) source=\(source)")
         } catch {
             await cancelTurn(turn, reason: "dictationSubmissionFailed", publishFailure: true)
-            await finishTurnAndSession(turn, reason: "dictationSubmissionFailed")
+            await finishTurnAndSession(
+                turn,
+                reason: "dictationSubmissionFailed",
+                restoreCurrentAuthoredAvailability: true
+            )
+        }
+    }
+
+    private func resumeAndWaitForSpokenCover(
+        _ turn: TuringLiveConversationTurn
+    ) async -> Bool {
+        if turn.coverReceipt.result == .paused,
+           turn.initialFillerToken?
+                .mustEndBeforeSpokenCoverResumes == true {
+            try? await Task.sleep(for: Self.submittedQuestionHold)
+            guard Task.isCancelled == false else { return false }
+            await prepareInitialFillerForSpokenPlayback(
+                turn,
+                reason: "spokenCoverResuming"
+            )
+            print(
+                "[TuringLiveConversation] initial filler ended before " +
+                    "spoken cover resumed turnID=\(turn.turnID.uuidString) " +
+                    "surface=\(turn.selectedSurface.rawValue)"
+            )
+        }
+
+        do {
+            try await turn.coverPlayback.resumeCurrentSpokenMedia(
+                turn.coverReceipt
+            )
+            try await turn.coverPlayback.waitUntilSpokenMediaCompletes(
+                turn.coverReceipt
+            )
+            return true
+        } catch {
+            guard Task.isCancelled == false else { return false }
+            await handleRunnerFailure(
+                turnID: turn.turnID,
+                message: "Device operation failed."
+            )
+            return false
         }
     }
 
@@ -586,24 +726,35 @@ final class TuringLiveConversationSessionCoordinator:
         turn.coverCompleted = true
         turn.state = .waitingForCover
         if turn.selectedSurface == .dadFrame || turn.segmentZeroPrepared == false {
-            turn.initialFillerToken = await filler.begin(
-                request: TuringLiveConversationInitialFillerRequest(
-                    ownerID: "live.\(turn.turnID.uuidString)",
-                    surface: turn.selectedSurface,
-                    seed: turn.seed
-                )
-            )
+            await beginInitialFillerIfNeeded(turn)
         }
         await turn.playbackGate.open()
         await turn.responsePlayback?.generatedPlaybackGateDidChange()
         print("[TuringLiveConversation] cover completed gate opened turnID=\(turnID.uuidString) segmentZeroPrepared=\(turn.segmentZeroPrepared)")
     }
 
+    private func beginInitialFillerIfNeeded(
+        _ turn: TuringLiveConversationTurn
+    ) async {
+        guard turn.initialFillerToken == nil else { return }
+        turn.initialFillerToken = await filler.begin(
+            request: TuringLiveConversationInitialFillerRequest(
+                ownerID: "live.\(turn.turnID.uuidString)",
+                surface: turn.selectedSurface,
+                seed: turn.seed
+            )
+        )
+    }
+
     private func handleRunnerFailure(turnID: UUID, message: String) async {
         guard let turn = turns[turnID], turn.state != .completed else { return }
         publishHUD(turn: turn, kind: .failed(message))
         await cancelTurn(turn, reason: "runnerFailed", publishFailure: false)
-        await finishTurnAndSession(turn, reason: "runnerFailed")
+        await finishTurnAndSession(
+            turn,
+            reason: "runnerFailed",
+            restoreCurrentAuthoredAvailability: true
+        )
     }
 
     private func cancelTurn(
@@ -623,10 +774,7 @@ final class TuringLiveConversationSessionCoordinator:
         if let responsePlayback = turn.responsePlayback {
             await responsePlayback.runCancelled(reason: reason)
         }
-        if let token = turn.initialFillerToken {
-            turn.initialFillerToken = nil
-            await filler.end(token, reason: reason)
-        }
+        await releaseInitialFillerIfNeeded(turn, reason: reason)
         try? await turn.coverPlayback.resumeCurrentSpokenMedia(turn.coverReceipt)
         if turn.allComputeFinished == false {
             turn.allComputeFinished = true
@@ -638,9 +786,33 @@ final class TuringLiveConversationSessionCoordinator:
         }
     }
 
-    private func finishTurnAndSession(
+    private func releaseInitialFillerIfNeeded(
         _ turn: TuringLiveConversationTurn,
         reason: String
+    ) async {
+        guard let token = turn.initialFillerToken else { return }
+        turn.initialFillerToken = nil
+        await filler.end(token, reason: reason)
+    }
+
+    private func prepareInitialFillerForSpokenPlayback(
+        _ turn: TuringLiveConversationTurn,
+        reason: String
+    ) async {
+        guard let token = turn.initialFillerToken,
+              token.mustEndBeforeSpokenCoverResumes else {
+            return
+        }
+        await filler.responsePlaybackWillStart(token, reason: reason)
+        if token.endsWhenResponsePlaybackStarts {
+            turn.initialFillerToken = nil
+        }
+    }
+
+    private func finishTurnAndSession(
+        _ turn: TuringLiveConversationTurn,
+        reason: String,
+        restoreCurrentAuthoredAvailability: Bool = false
     ) async {
         guard var liveSession = session,
               turns[turn.turnID] != nil else { return }
@@ -667,7 +839,27 @@ final class TuringLiveConversationSessionCoordinator:
         }
         session = liveSession
         if turns.isEmpty {
+            if restoreCurrentAuthoredAvailability,
+               await restoreAuthoredAvailabilityAfterOptionalFailure(
+                    session: liveSession,
+                    seed: turn.seed,
+                    reason: reason
+               ) {
+                return
+            }
+            if let currentAuthoredSeed {
+                await seedRegistry.authoredItemCompleted(
+                    seedID: currentAuthoredSeed.seedID
+                )
+            }
             currentAuthoredSeed = nil
+            currentAuthoredItemID = nil
+            if await restoreRetainedAvailabilityIfPossible(
+                session: liveSession,
+                reason: reason
+            ) {
+                return
+            }
             presentedSeedIDs.removeAll(keepingCapacity: false)
             await finishSessionIfIdle(reason: reason)
         } else if let activeResponseTurnID,
@@ -676,6 +868,164 @@ final class TuringLiveConversationSessionCoordinator:
                   waitingResponseTurnID == nil {
             await exposeNextTurnMicrophonesIfPossible(for: activeResponse)
         }
+    }
+
+    private func restoreAuthoredAvailabilityAfterOptionalFailure(
+        session liveSession: TuringLiveConversationSession,
+        seed: TuringLiveConversationSeed,
+        reason: String
+    ) async -> Bool {
+        await seedRegistry.restoreForOptionalFailureRetry(seed: seed)
+        let stablePolicy = await arbiter.currentStableInteractionPolicy()
+        let snapshot = await seedRegistry.snapshot(
+            allowedSurfaces: stablePolicy.allowedTuringSurfaces,
+            hostSequenceID: liveSession.parentFlowSequenceID,
+            hostFlowInstanceID: liveSession.parentFlowInstanceID
+        )
+        guard snapshot.seedsBySurface[seed.interactionSurface]?
+                .seedID == seed.seedID else {
+            return false
+        }
+        if await restoreRetainedAvailabilityIfPossible(
+            session: liveSession,
+            reason: "optionalFailureRecovered.\(reason)"
+        ) {
+            print(
+                "[TuringLiveConversation] optional failure recovered " +
+                    "itemID=\(seed.authoredMediaItemID) " +
+                    "surface=\(seed.interactionSurface.rawValue) " +
+                    "reason=\(reason)"
+            )
+            return true
+        }
+        print(
+            "[TuringLiveConversation] optional failure recovery failed " +
+                "itemID=\(seed.authoredMediaItemID) reason=\(reason)"
+        )
+        return false
+    }
+
+    private func restoreRetainedAvailabilityIfPossible(
+        session liveSession: TuringLiveConversationSession,
+        reason: String
+    ) async -> Bool {
+        let stablePolicy = await arbiter.currentStableInteractionPolicy()
+        let snapshot = await seedRegistry.snapshot(
+            allowedSurfaces: stablePolicy.allowedTuringSurfaces,
+            hostSequenceID: liveSession.parentFlowSequenceID,
+            hostFlowInstanceID: liveSession.parentFlowInstanceID
+        )
+        guard snapshot.seedsBySurface.isEmpty == false else {
+            return false
+        }
+
+        do {
+            try await arbiter.installLiveConversationAvailability(
+                parentLease: liveSession.parentLease,
+                sessionID: liveSession.sessionID,
+                generation: liveSession.generation,
+                eligibleSeeds: snapshot,
+                authoredActivitySurface: nil,
+                reason: "retainedAvailability.\(reason)"
+            )
+            presentedSeedIDs = snapshot.seedsBySurface.mapValues(\.seedID)
+
+            if let progressionHold = liveSession.progressionHold {
+                var releasedSession = liveSession
+                releasedSession.progressionHold = nil
+                session = releasedSession
+                do {
+                    try await liveSession.authoredPlayback
+                        .releaseAuthoredProgressionHold(
+                            progressionHold,
+                            reason: reason
+                        )
+                } catch {
+                    session = liveSession
+                    throw error
+                }
+            } else {
+                session = liveSession
+            }
+            print(
+                "[TuringLiveConversation] retained microphones restored " +
+                    "surfaces=\(snapshot.seedsBySurface.keys.map(\.rawValue).sorted()) " +
+                    "reason=\(reason)"
+            )
+            return true
+        } catch {
+            print(
+                "[TuringLiveConversation] retained microphone restore failed " +
+                    "reason=\(reason) error=\(error.localizedDescription)"
+            )
+            return false
+        }
+    }
+
+    private func replaceAttachmentPreservingRetainedAvailability(
+        parentSequenceID: UUID,
+        parentLease: StoryInteractionLease,
+        descriptor: TuringFlowDescriptor,
+        identity: TuringFlowIdentity,
+        playback: any TuringFlowPlaybackControlling,
+        spokenPlayback: any TuringSpokenCoverControlling,
+        previousSession: TuringLiveConversationSession
+    ) async throws {
+        await attachment?.playback.setPlaybackLifecycleSink(nil)
+        generation &+= 1
+        let replacement = Attachment(
+            parentSequenceID: parentSequenceID,
+            parentLease: parentLease,
+            descriptor: descriptor,
+            identity: identity,
+            playback: playback,
+            spokenPlayback: spokenPlayback
+        )
+        attachment = replacement
+        await playback.setPlaybackLifecycleSink(self)
+
+        let stablePolicy = await arbiter.currentStableInteractionPolicy()
+        let snapshot = await seedRegistry.snapshot(
+            allowedSurfaces: stablePolicy.allowedTuringSurfaces,
+            hostSequenceID: parentSequenceID,
+            hostFlowInstanceID: identity.flowInstanceID
+        )
+        let replacementSession = TuringLiveConversationSession(
+            sessionID: previousSession.sessionID,
+            generation: generation,
+            parentFlowSequenceID: parentSequenceID,
+            parentFlowInstanceID: identity.flowInstanceID,
+            parentPlaybackRunID: identity.playbackRunID,
+            parentLease: parentLease,
+            authoredPlayback: playback,
+            progressionHold: nil,
+            activeTurnID: nil
+        )
+        session = replacementSession
+        currentAuthoredSeed = nil
+        currentAuthoredItemID = nil
+        presentedSeedIDs = snapshot.seedsBySurface.mapValues(\.seedID)
+        do {
+            try await arbiter.installLiveConversationAvailability(
+                parentLease: parentLease,
+                sessionID: replacementSession.sessionID,
+                generation: replacementSession.generation,
+                eligibleSeeds: snapshot,
+                authoredActivitySurface: nil,
+                reason: "attachmentReplacedWithRetainedAvailability"
+            )
+        } catch {
+            await playback.setPlaybackLifecycleSink(nil)
+            attachment = nil
+            session = nil
+            presentedSeedIDs.removeAll(keepingCapacity: false)
+            throw error
+        }
+        print(
+            "[TuringLiveConversation] attachment replaced without hiding retained " +
+                "microphones sequenceID=\(parentSequenceID.uuidString) " +
+                "flowInstanceID=\(identity.flowInstanceID.uuidString)"
+        )
     }
 
     private func finishSessionIfIdle(reason: String) async {
@@ -688,12 +1038,96 @@ final class TuringLiveConversationSessionCoordinator:
             generation: liveSession.generation,
             reason: reason
         )
-        try? await liveSession.authoredPlayback.releaseAuthoredProgressionHold(
-            liveSession.progressionHold,
-            reason: reason
-        )
+        if let progressionHold = liveSession.progressionHold {
+            try? await liveSession.authoredPlayback.releaseAuthoredProgressionHold(
+                progressionHold,
+                reason: reason
+            )
+        }
         session = nil
         hudEventSink = nil
+    }
+
+    private func installAuthoredAvailability(
+        item: TuringAuthoredMediaItem,
+        attachment: Attachment,
+        acquireProgressionHold: Bool,
+        reason: String
+    ) async throws {
+        guard let entry = item.liveConversationCatalogEntry else {
+            return
+        }
+        let seed = try TuringLiveConversationSeedResolver().resolve(
+            entry: entry,
+            item: item,
+            descriptor: attachment.descriptor,
+            parentSequenceID: attachment.parentSequenceID,
+            identity: attachment.identity
+        )
+        await seedRegistry.authoredItemStarted(seed: seed)
+        currentAuthoredItemID = item.id
+        currentAuthoredSeed = seed
+
+        var liveSession: TuringLiveConversationSession
+        if let session {
+            liveSession = session
+        } else {
+            liveSession = TuringLiveConversationSession(
+                sessionID: UUID(),
+                generation: generation,
+                parentFlowSequenceID: attachment.parentSequenceID,
+                parentFlowInstanceID: attachment.identity.flowInstanceID,
+                parentPlaybackRunID: attachment.identity.playbackRunID,
+                parentLease: attachment.parentLease,
+                authoredPlayback: attachment.playback,
+                progressionHold: nil,
+                activeTurnID: nil
+            )
+        }
+        if acquireProgressionHold {
+            liveSession = try await ensureProgressionHold(
+                liveSession,
+                reason: "\(reason).\(item.id)"
+            )
+        }
+        session = liveSession
+
+        let stablePolicy = await arbiter.currentStableInteractionPolicy()
+        let snapshot = await seedRegistry.snapshot(
+            allowedSurfaces: stablePolicy.allowedTuringSurfaces,
+            hostSequenceID: liveSession.parentFlowSequenceID,
+            hostFlowInstanceID: liveSession.parentFlowInstanceID
+        )
+        presentedSeedIDs = snapshot.seedsBySurface.mapValues(\.seedID)
+        try await arbiter.installLiveConversationAvailability(
+            parentLease: liveSession.parentLease,
+            sessionID: liveSession.sessionID,
+            generation: liveSession.generation,
+            eligibleSeeds: snapshot,
+            authoredActivitySurface: seed.interactionSurface,
+            reason: "\(reason).\(item.id)"
+        )
+        print(
+            "[TuringLiveConversation] seed installed " +
+                "itemID=\(item.id) seedID=\(seed.seedID.uuidString) " +
+                "phase=\(reason)"
+        )
+    }
+
+    private func ensureProgressionHold(
+        _ liveSession: TuringLiveConversationSession,
+        reason: String
+    ) async throws -> TuringLiveConversationSession {
+        guard liveSession.progressionHold == nil else {
+            return liveSession
+        }
+        var updated = liveSession
+        updated.progressionHold = try await liveSession.authoredPlayback
+            .acquireAuthoredProgressionHold(
+                liveSessionID: liveSession.sessionID,
+                reason: reason
+            )
+        return updated
     }
 
     private func exposeNextTurnMicrophonesIfPossible(
@@ -709,7 +1143,9 @@ final class TuringLiveConversationSessionCoordinator:
         }
         let stablePolicy = await arbiter.currentStableInteractionPolicy()
         let snapshot = await seedRegistry.snapshot(
-            allowedSurfaces: stablePolicy.allowedTuringSurfaces
+            allowedSurfaces: stablePolicy.allowedTuringSurfaces,
+            hostSequenceID: liveSession.parentFlowSequenceID,
+            hostFlowInstanceID: liveSession.parentFlowInstanceID
         )
         var eligible = snapshot.seedsBySurface
         eligible.removeValue(forKey: activeResponse.selectedSurface)

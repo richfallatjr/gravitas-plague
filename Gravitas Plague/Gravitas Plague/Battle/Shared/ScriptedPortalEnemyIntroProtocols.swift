@@ -16,6 +16,28 @@ struct ScriptedPortalEnemyIntroConfiguration: Sendable, Equatable {
     let turnDegreesPerCompletion: Float
     let revealThresholdPortalLocalZMeters: Float
     let exitThresholdPortalLocalZMeters: Float
+    let idleClipID: String?
+    let walkClipID: String?
+
+    init(
+        idleDurationSeconds: Double,
+        turnCount: Int,
+        turnDegreesPerCompletion: Float,
+        revealThresholdPortalLocalZMeters: Float,
+        exitThresholdPortalLocalZMeters: Float,
+        idleClipID: String? = nil,
+        walkClipID: String? = nil
+    ) {
+        self.idleDurationSeconds = idleDurationSeconds
+        self.turnCount = turnCount
+        self.turnDegreesPerCompletion = turnDegreesPerCompletion
+        self.revealThresholdPortalLocalZMeters =
+            revealThresholdPortalLocalZMeters
+        self.exitThresholdPortalLocalZMeters =
+            exitThresholdPortalLocalZMeters
+        self.idleClipID = idleClipID
+        self.walkClipID = walkClipID
+    }
 }
 
 enum ScriptedPortalEnemyIntroState: String, Sendable, Equatable {

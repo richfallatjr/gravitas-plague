@@ -110,6 +110,17 @@ def main() -> None:
         "pendingHoldEndRequested",
         "let submitImmediately = pendingHoldEndRequested",
         "turn.selectedSurface == .dadFrame || turn.segmentZeroPrepared == false",
+        "restoreAuthoredAvailabilityAfterOptionalFailure",
+        "optional failure recovered",
+        "restoreForOptionalFailureRetry",
+        "prepareForPrerecordingPreFiller",
+        "pre-filler microphones installed",
+        "progressionHold: nil",
+        "ensureProgressionHold",
+        "authoredFlowDidComplete",
+        "restoreRetainedAvailabilityIfPossible",
+        "retained microphones restored",
+        "replaceAttachmentPreservingRetainedAvailability",
     )
     for marker in required:
         if marker not in coordinator:
@@ -124,6 +135,55 @@ def main() -> None:
         if forbidden in coordinator:
             fail(f"live coordinator contains forbidden ownership behavior: {forbidden}")
 
+    walkie_filler_start = coordinator.find(
+        "if turn.selectedSurface == .walkie {\n"
+        "                await beginInitialFillerIfNeeded(turn)"
+    )
+    cover_waiter = coordinator.find(
+        "let coverCompleted = await self.resumeAndWaitForSpokenCover(turn)"
+    )
+    helper_start = coordinator.find(
+        "private func resumeAndWaitForSpokenCover("
+    )
+    filler_release = coordinator.find(
+        "await prepareInitialFillerForSpokenPlayback(",
+        helper_start,
+    )
+    cover_resume = coordinator.find(
+        "try await turn.coverPlayback.resumeCurrentSpokenMedia(",
+        helper_start,
+    )
+    if (
+        min(
+            walkie_filler_start,
+            cover_waiter,
+            helper_start,
+            filler_release,
+            cover_resume,
+        ) < 0
+        or walkie_filler_start > cover_waiter
+        or filler_release > cover_resume
+        or "mustEndBeforeSpokenCoverResumes == true" not in coordinator[
+            helper_start:cover_resume
+        ]
+    ):
+        fail("walkie send cover does not begin before resumed authored media")
+
+    walkie_comms = (
+        APP / "Turing/Audio/TuringWalkieCommsFXController.swift"
+    ).read_text()
+    for marker in (
+        "await retainAmbientWalkieStatic(",
+        "await worker.playSendCommAndStartSendingLeadIn(reason: reason)",
+        "await worker.beginSendingLeadIn(reason: reason)",
+        "await worker.stopSendingLeadIn(reason: reason)",
+        "await releaseAmbientWalkieStatic(",
+        "let ambientRetained = await retainAmbientWalkieStatic(",
+        "randomBursts=true reason=",
+    ):
+        if marker not in walkie_comms:
+            fail(f"live walkie send cover is incomplete: {marker}")
+
     conversation_runner = (
         APP / "Turing/Flow/TuringFlowConversationRunner.swift"
     ).read_text()
@@ -137,6 +197,48 @@ def main() -> None:
             fail(f"conversation response playback missing direct lifecycle marker: {marker}")
     if "playbackLifecycleTask" in conversation_runner:
         fail("conversation response playback reverted to a task-based lifecycle observer")
+    borrowed_gate_pattern = re.compile(
+        r"switch request\.leasePolicy \{.*?"
+        r"case \.ownedByConversation:.*?"
+        r"\.beginConversation\(.*?"
+        r"case \.borrowedFromAuthoredFlow\(.*?"
+        r"gateOwnership: inheritedFromAuthoredFlow",
+        re.DOTALL,
+    )
+    if borrowed_gate_pattern.search(conversation_runner) is None:
+        fail(
+            "borrowed live conversations can overwrite the authored flow gate owner"
+        )
+
+    authored_runner = (
+        APP / "Turing/Flow/TuringAuthoredFlowRunner.swift"
+    ).read_text()
+    prefill_install = authored_runner.find(
+        ".prepareForPrerecordingPreFiller(firstEligibleItem)"
+    )
+    fixed_lead_in = authored_runner.find(".runFixedLeadInIfNeeded(")
+    route_open = authored_runner.find(".playOpenIfNeeded(")
+    if min(prefill_install, fixed_lead_in, route_open) < 0 or not (
+        prefill_install < fixed_lead_in < route_open
+    ):
+        fail("live microphones are not installed before authored pre-fillers")
+    if ".authoredFlowDidComplete(" not in authored_runner:
+        fail("normal authored completion does not retain applicable microphones")
+    if (
+        'detach(\n                reason: "authoredFlowCompleted.'
+        in authored_runner
+    ):
+        fail("normal authored completion still detaches live microphones")
+
+    playback_source = (
+        APP / "Turing/Audio/TuringStoryWalkiePlaybackCoordinator.swift"
+    ).read_text()
+    for marker in (
+        'itemIdentity: "prerecordingPreFiller"',
+        "result: .completedBeforePause",
+    ):
+        if marker not in playback_source:
+            fail(f"pre-filler microphone cannot create a valid cover receipt: {marker}")
 
     filler = (
         APP / "Turing/Conversation/TuringLiveConversationInitialFiller.swift"
@@ -171,13 +273,50 @@ def main() -> None:
     if 'processingStarted(finalTranscript: "...")' in session_source:
         fail("literal ellipsis is still routed through the full-width transcript HUD")
 
+    immersive = (APP / "PlagueImmersiveCoordinator.swift").read_text()
+    if immersive.count("scheduleTuringHUDClear(") < 3:
+        fail("dictation and response failures do not self-clear from the HUD")
+
+    foundation = (
+        APP / "Turing/Foundation/TuringFoundationModelsRunner.swift"
+    ).read_text()
+    for marker in (
+        'purpose.hasPrefix("conversationPrompt_")',
+        "return .permissiveContentTransformations",
+    ):
+        if marker not in foundation:
+            fail(f"conversationVoice is not uniformly permissive: {marker}")
+
+    live_router = (
+        APP / "Turing/Conversation/TuringStoryLiveMicrophoneActionRouter.swift"
+    ).read_text()
+    if "coordinator.ownsMicrophoneHold(surface: surface)" not in live_router:
+        fail("duplicate live microphone begins can fall through to the legacy claim path")
+
     icon_style = (
         APP / "Turing/Interaction/TuringStoryActionIconVisualStyle.swift"
     ).read_text()
-    if "symbol.draw(" not in icon_style:
-        fail("Story SF Symbols are not drawn with aspect-preserving UIKit geometry")
     if "clip(to: inset, mask: glyph)" in icon_style:
         fail("Story SF Symbols are still stretched into a square Core Graphics mask")
+    for marker in (
+        "makeGradientGlyphImage",
+        "alignmentCenteredDrawRect",
+        "blendMode: .destinationIn",
+        "symbol.alignmentRectInsets",
+    ):
+        if marker not in icon_style:
+            fail(f"Story action glyph gradient/alignment is incomplete: {marker}")
+
+    walkie_icon = (
+        APP / "Turing/Interaction/TuringStoryPropBillboardIconController.swift"
+    ).read_text()
+    for marker in (
+        "walkieIconWorldUpOffsetMeters: Float = 0.0508",
+        "icon.setPosition(",
+        "iconWorldUpOffsetMeters:",
+    ):
+        if marker not in walkie_icon:
+            fail(f"walkie icon two-inch world-up offset is missing: {marker}")
 
     playback = (
         APP / "Turing/Audio/TuringStoryWalkiePlaybackCoordinator.swift"
@@ -256,6 +395,15 @@ def main() -> None:
         fail("ScriptPoint05 must source promptVoice from the generation pipeline")
     if script05["retention"] != "untilExplicitInvalidation":
         fail("ScriptPoint05 must retain its second-PR seed until explicit invalidation")
+    expiring_entries = [
+        entry for entry in entries
+        if entry["retention"] != "untilExplicitInvalidation"
+    ]
+    if expiring_entries:
+        fail(
+            "Every eligible device microphone must survive authored playback; "
+            f"expiring entries: {[entry['scriptPointID'] for entry in expiring_entries]}"
+        )
     if any(
         entry["scriptPointID"] == "prologue.scriptPoint05"
         and entry["authoredPrerecordingID"].endswith(".001")

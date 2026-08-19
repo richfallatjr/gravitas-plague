@@ -10,7 +10,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "dadFrame",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter01.dadFrame.rich.script03",
@@ -21,7 +21,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "dadFrame",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter01.hamReceiver.cateye81.script05",
@@ -32,7 +32,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "hamReceiver",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter01.hamReceiver.rich.script04",
@@ -43,7 +43,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "hamReceiver",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter01.walkie.bigMike.script07",
@@ -54,7 +54,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "walkie",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter01.walkie.bigMike.script09",
@@ -65,7 +65,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "walkie",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter01.walkie.rich.script06",
@@ -76,7 +76,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "walkie",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter01.walkie.rich.script08",
@@ -87,7 +87,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "walkie",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter02.crankRadio.broadcaster.gravitasPSA.003",
@@ -98,7 +98,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "crankRadio",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter02.crankRadio.broadcaster.gridFailure.002",
@@ -109,7 +109,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "crankRadio",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter02.crankRadio.broadcaster.missingPersons.001",
@@ -120,7 +120,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "crankRadio",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter02.dadFrame.rich.dadDisappeared.001",
@@ -131,7 +131,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "dadFrame",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter02.hamReceiver.cateye81.revelation.002",
@@ -142,7 +142,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "hamReceiver",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter02.hamReceiver.dad.script01",
@@ -153,7 +153,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "hamReceiver",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter02.hamReceiver.dad.script03",
@@ -164,7 +164,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "hamReceiver",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter02.hamReceiver.rich.revelation.001",
@@ -175,7 +175,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "hamReceiver",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter02.hamReceiver.rich.script02",
@@ -186,7 +186,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "hamReceiver",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter02.walkie.bigMike.script01",
@@ -197,7 +197,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "walkie",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter02.walkie.bigMike.script03",
@@ -208,7 +208,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "walkie",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter02.walkie.rich.script02",
@@ -219,7 +219,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "walkie",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter03.crankRadio.broadcaster.continuity.001",
@@ -230,7 +230,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "crankRadio",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter03.hamReceiver.cateye81.antichrist.002",
@@ -241,7 +241,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "hamReceiver",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter03.hamReceiver.rich.faith.001",
@@ -252,7 +252,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "hamReceiver",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter03.walkie.bigMike.fading.003",
@@ -263,7 +263,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "walkie",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter03.walkie.bigMike.scavengerReport.001",
@@ -274,7 +274,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "walkie",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "chapter03.walkie.rich.connectsMen.002",
@@ -285,7 +285,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "walkie",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "prologue.crankRadioBroadcast.001",
@@ -296,7 +296,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "crankRadio",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "prologue.dadPhotoMemory.001",
@@ -307,7 +307,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "dadFrame",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "prologue.hamReceiver.cateye81.001",
@@ -318,7 +318,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "hamReceiver",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "prologue.hamReceiver.cateye81.003",
@@ -329,7 +329,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "hamReceiver",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "prologue.hamReceiver.rich.002",
@@ -340,7 +340,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "hamReceiver",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "prologue.scriptPoint01",
@@ -351,7 +351,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "walkie",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "prologue.scriptPoint02",
@@ -362,7 +362,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "walkie",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "prologue.scriptPoint03",
@@ -373,7 +373,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "walkie",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "prologue.scriptPoint04",
@@ -384,7 +384,7 @@
         "voicePromptID": null
       },
       "interactionSurface": "walkie",
-      "retention": "currentAuthoredItem"
+      "retention": "untilExplicitInvalidation"
     },
     {
       "scriptPointID": "prologue.scriptPoint05",

@@ -202,7 +202,8 @@ enum TuringQwenNativeSpeechDecoder {
                 hidden,
                 blockIndex: blockIndex + 1,
                 upsampleRate: config.decoderConfig.upsampleRates[blockIndex],
-                reader: reader
+                reader: reader,
+                performanceMode: performanceMode
             )
             materializeDecoderStage(
                 hidden,
@@ -547,7 +548,8 @@ enum TuringQwenNativeSpeechDecoder {
         _ input: MLXArray,
         blockIndex: Int,
         upsampleRate: Int,
-        reader: TuringQwenNativeSafetensorsReader
+        reader: TuringQwenNativeSafetensorsReader,
+        performanceMode: TuringQwenNativePerformanceMode
     ) throws -> MLXArray {
         var hidden = try snakeBeta(
             input,
@@ -564,6 +566,11 @@ enum TuringQwenNativeSpeechDecoder {
             rightCrop: upsampleRate,
             reader: reader
         )
+        materializeDecoderStage(
+            hidden,
+            label: "speechDecoder.decoder.\(blockIndex).upsample",
+            performanceMode: performanceMode
+        )
 
         for residualUnit in 2...4 {
             hidden = try decoderResidualUnit(
@@ -571,6 +578,11 @@ enum TuringQwenNativeSpeechDecoder {
                 prefix: "decoder.decoder.\(blockIndex).block.\(residualUnit)",
                 dilation: [1, 3, 9][residualUnit - 2],
                 reader: reader
+            )
+            materializeDecoderStage(
+                hidden,
+                label: "speechDecoder.decoder.\(blockIndex).residual.\(residualUnit)",
+                performanceMode: performanceMode
             )
         }
 

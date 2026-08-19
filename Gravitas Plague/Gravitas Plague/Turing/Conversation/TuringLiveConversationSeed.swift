@@ -43,6 +43,21 @@ nonisolated struct TuringLiveConversationSeed: Sendable, Equatable {
             playbackRunID: parentPlaybackRunID
         )
     }
+
+    func isEligible(
+        forHostSequenceID hostSequenceID: UUID,
+        hostFlowInstanceID: UUID
+    ) -> Bool {
+        switch catalogRetention {
+        case .currentAuthoredItem:
+            return parentFlowSequenceID == hostSequenceID &&
+                parentFlowInstanceID == hostFlowInstanceID
+        case .currentFlowSequence:
+            return parentFlowSequenceID == hostSequenceID
+        case .untilExplicitInvalidation:
+            return true
+        }
+    }
 }
 
 struct TuringLiveConversationSeedResolver: Sendable {
@@ -209,6 +224,17 @@ actor TuringLiveConversationSeedRegistry {
         }
     }
 
+    func restoreForOptionalFailureRetry(
+        seed: TuringLiveConversationSeed
+    ) {
+        seedsBySurface[seed.interactionSurface] = seed
+        print(
+            "[TuringLiveConversation] seed restored for retry " +
+                "surface=\(seed.interactionSurface.rawValue) " +
+                "seedID=\(seed.seedID.uuidString)"
+        )
+    }
+
     func flowSequenceCompleted(sequenceID: UUID) {
         seedsBySurface = seedsBySurface.filter { _, seed in
             seed.parentFlowSequenceID != sequenceID ||
@@ -222,27 +248,45 @@ actor TuringLiveConversationSeedRegistry {
     }
 
     func snapshot(
-        allowedSurfaces: Set<StoryInteractionSurfaceID>
+        allowedSurfaces: Set<StoryInteractionSurfaceID>,
+        hostSequenceID: UUID,
+        hostFlowInstanceID: UUID
     ) -> TuringLiveConversationSeedRegistrySnapshot {
         .init(
             seedsBySurface: seedsBySurface.filter {
-                allowedSurfaces.contains($0.key)
+                allowedSurfaces.contains($0.key) &&
+                    $0.value.isEligible(
+                        forHostSequenceID: hostSequenceID,
+                        hostFlowInstanceID: hostFlowInstanceID
+                    )
             }
         )
     }
 
     func recaptureForSelection(
         surface: StoryInteractionSurfaceID,
-        expectedSeedID: UUID
+        expectedSeedID: UUID,
+        hostSequenceID: UUID,
+        hostFlowInstanceID: UUID
     ) throws -> TuringLiveConversationSeed {
         guard let seed = seedsBySurface[surface],
               seed.seedID == expectedSeedID,
+              seed.isEligible(
+                forHostSequenceID: hostSequenceID,
+                hostFlowInstanceID: hostFlowInstanceID
+              ),
               TuringLiveConversationSeedResolver().proofsStillMatch(seed) else {
             throw TuringRuntimeError.invalidConfig(
                 "The selected live conversation seed is stale."
             )
         }
         return seed
+    }
+
+    func hasAvailableSeed(
+        surface: StoryInteractionSurfaceID
+    ) -> Bool {
+        seedsBySurface[surface] != nil
     }
 
     func clearAll(reason: String) {

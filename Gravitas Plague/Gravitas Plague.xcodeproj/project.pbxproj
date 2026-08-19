@@ -7,15 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		8E1A10012FCD000100000001 /* ../idle-01.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10042FCD000100000001 /* ../idle-01.usdz */; };
-		8E1A10022FCD000100000001 /* ../idle-turn-right-01.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10052FCD000100000001 /* ../idle-turn-right-01.usdz */; };
-		8E1A10032FCD000100000001 /* ../unstable-walk.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10062FCD000100000001 /* ../unstable-walk.usdz */; };
 		8E1A10092FCD000100000001 /* ARKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E1A10072FCD000100000001 /* ARKit.framework */; };
 		8E1A100A2FCD000100000001 /* RealityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E1A10082FCD000100000001 /* RealityKit.framework */; };
-		8E1A100E2FCD000100000001 /* ../idle-turn-right-02.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */; };
 		8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */; };
 		8E1A10112FCD000100000001 /* ../dad_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10122FCD000100000001 /* ../dad_biped.usdz */; };
-		8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */; };
+		8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.m4a in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.m4a */; };
 		8E1A10142FCD000100000001 /* ../Narrow-band-analog.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */; };
 		8E1A10152FCD000100000001 /* ../Create_a_short_emerg_beeping.wav in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A101A2FCD000100000001 /* ../Create_a_short_emerg_beeping.wav */; };
 		8E1A10162FCD000100000001 /* ../EmergencyBroadcast.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A101B2FCD000100000001 /* ../EmergencyBroadcast.mp3 */; };
@@ -32,8 +28,6 @@
 		8E1A10302FCD000100000001 /* ../spouse_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10312FCD000100000001 /* ../spouse_biped.usdz */; };
 		8E1A10322FCD000100000001 /* ../biker_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10332FCD000100000001 /* ../biker_biped.usdz */; };
 		8E1A10342FCD000100000001 /* ../grandma_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10352FCD000100000001 /* ../grandma_biped.usdz */; };
-		8E1A10362FCD000100000001 /* ../plague_menu_ui_clean.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10372FCD000100000001 /* ../plague_menu_ui_clean.png */; };
-		8E1A10382FCD000100000001 /* ../plague_menu_ui_mockup.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10392FCD000100000001 /* ../plague_menu_ui_mockup.png */; };
 		8E1A103A2FCD000100000001 /* ../plague_menu_horde_button.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A103B2FCD000100000001 /* ../plague_menu_horde_button.png */; };
 		8E1A103C2FCD000100000001 /* ../plague_menu_walk_button.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A103D2FCD000100000001 /* ../plague_menu_walk_button.png */; };
 		8E1A103E2FCD000100000001 /* ../robot_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A103F2FCD000100000001 /* ../robot_biped.usdz */; };
@@ -47,11 +41,8 @@
 		8E1A10612FCD000100000001 /* Gravitas Plague/PortalGlyphs in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10602FCD000100000001 /* Gravitas Plague/PortalGlyphs */; };
 		8E1A10622FCD000100000001 /* ../music-box.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10632FCD000100000001 /* ../music-box.mp3 */; };
 		8E1A10642FCD000100000001 /* ../user-interface.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10652FCD000100000001 /* ../user-interface.png */; };
-		8E1A10672FCD000100000001 /* ../neighbor_biped_ior.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10662FCD000100000001 /* ../neighbor_biped_ior.png */; };
-		8E1A10692FCD000100000001 /* ../dad_biped_ior.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10682FCD000100000001 /* ../dad_biped_ior.png */; };
 		8E1A10702FCD000100000001 /* ../day-groundplane-tile.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10712FCD000100000001 /* ../day-groundplane-tile.png */; };
 		8E1A10722FCD000100000001 /* ../night-groundplane-tile.png in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10732FCD000100000001 /* ../night-groundplane-tile.png */; };
-		8E1A10742FCD000100000001 /* ../angel_biped.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10752FCD000100000001 /* ../angel_biped.usdz */; };
 		8E1A10762FCD000100000001 /* ../heaven-sunrise.exr in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10772FCD000100000001 /* ../heaven-sunrise.exr */; };
 		8E1A10782FCD000100000001 /* ../angel_posed_01.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10792FCD000100000001 /* ../angel_posed_01.usdz */; };
 		8E2B20032FCE000100000001 /* Turing in Resources */ = {isa = PBXBuildFile; fileRef = 8E2B20042FCE000100000001 /* Turing */; };
@@ -87,7 +78,7 @@
 		8E1A100D2FCD000100000001 /* ../idle-turn-right-02.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../idle-turn-right-02.usdz"; sourceTree = SOURCE_ROOT; };
 		8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */ = {isa = PBXFileReference; lastKnownFileType = folder; path = "Gravitas Plague/AnimationLibrary"; sourceTree = SOURCE_ROOT; };
 		8E1A10122FCD000100000001 /* ../dad_biped.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../dad_biped.usdz; sourceTree = SOURCE_ROOT; };
-		8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = ../GravitasPlagueBackgroundLoop.wav; sourceTree = SOURCE_ROOT; };
+		8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.m4a */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../GravitasPlagueBackgroundLoop.m4a; sourceTree = SOURCE_ROOT; };
 		8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = "../Narrow-band-analog.wav"; sourceTree = SOURCE_ROOT; };
 		8E1A101A2FCD000100000001 /* ../Create_a_short_emerg_beeping.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = ../Create_a_short_emerg_beeping.wav; sourceTree = SOURCE_ROOT; };
 		8E1A101B2FCD000100000001 /* ../EmergencyBroadcast.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = ../EmergencyBroadcast.mp3; sourceTree = SOURCE_ROOT; };
@@ -133,6 +124,74 @@
 		8E3C30202FCF200100000001 /* Exceptions for "Gravitas Plague" folder in "Gravitas Plague" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				"AnimationLibrary/Clips/Dummy/dummy_calisthenics_v001.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/charged-slash-left.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/charged-slash-right.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/charged-slash.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/dead_fall_backward_01.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/dead_fall_backward_02.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/dead_fall_forward_01.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/head_snap_left.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/head_snap_right.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/hit_hard_left_01.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/hit_hard_right_01.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/hit_light_left_01.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/hit_light_right_01.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/hit_medium_left_01.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/hit_medium_left_02.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/hit_medium_right_01.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/hit_medium_right_02.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/left_hook_01.jockanim.json",
+				"AnimationLibrary/Clips/HitReact/right_hook_01.jockanim.json",
+				"AnimationLibrary/Clips/Idle/angel_float_pose_01.jockanim.json",
+				"AnimationLibrary/Clips/Idle/drone_idle_01.jockanim.json",
+				"AnimationLibrary/Clips/Idle/idle_01.jockanim.json",
+				"AnimationLibrary/Clips/Idle/mocap_test_01.jockanim.json",
+				"AnimationLibrary/Clips/Turn/turn_left_90.jockanim.json",
+				"AnimationLibrary/Clips/Turn/turn_right_90.jockanim.json",
+				"AnimationLibrary/Clips/Turn/turn_right_90_180.jockanim.json",
+				"AnimationLibrary/Clips/Walk/robot_walk_01.jockanim.json",
+				"AnimationLibrary/Clips/Walk/unstable_walk_01.jockanim.json",
+				"AnimationLibrary/Manifests/animation_library_manifest.json",
+				"AnimationLibrary/Manifests/jock_runtime_clip_overrides.json",
+				"AnimationLibrary/Rigs/GravitasMeshyBiped24_v001.rig.json",
+				"AnimationLibrary/Rigs/SourceRigs/angel_biped_3e23483ddb22.source_rig.json",
+				"AnimationLibrary/Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
+				"AnimationLibrary/Rigs/SourceRigs/robot_biped_b1f44d95e841.source_rig.json",
+				"AnimationLibrary/Rigs/SourceRigs/robot_biped_ef4ae12ac07d.source_rig.json",
+				"AnimationLibrary/Rigs/SourceRigs/source_rig_registry.json",
+				"AnimationLibrary/SkeletonMaps/MeshyBiped24_identity.map.json",
+				"PortalGlyphs/.gitkeep",
+				"PortalGlyphs/arrow-01.png",
+				"PortalGlyphs/claw-01.png",
+				"PortalGlyphs/claw-02.png",
+				"PortalGlyphs/cross-01.png",
+				"PortalGlyphs/demon-01.png",
+				"PortalGlyphs/eye-01.png",
+				"PortalGlyphs/eye-02.png",
+				"PortalGlyphs/fire-01.png",
+				"PortalGlyphs/glyphs-01-circle.png",
+				"PortalGlyphs/glyphs-01-dir.png",
+				"PortalGlyphs/glyphs-01-floor.png",
+				"PortalGlyphs/glyphs-02-circle.png",
+				"PortalGlyphs/glyphs-02-dir.png",
+				"PortalGlyphs/glyphs-02-floor.png",
+				"PortalGlyphs/glyphs-03-circle.png",
+				"PortalGlyphs/glyphs-03-dir.png",
+				"PortalGlyphs/glyphs-04-circle.png",
+				"PortalGlyphs/glyphs-04-dir.png",
+				"PortalGlyphs/glyphs-05-circle.png",
+				"PortalGlyphs/glyphs-06.png",
+				"PortalGlyphs/glyphs-07.png",
+				"PortalGlyphs/glyphs-08.png",
+				"PortalGlyphs/glyphs-09.png",
+				"PortalGlyphs/hand-01.png",
+				"PortalGlyphs/hand-02.png",
+				"PortalGlyphs/haze-01.png",
+				"PortalGlyphs/mors-01.png",
+				"PortalGlyphs/sigil-01.png",
+				"PortalGlyphs/sigil-02.png",
+				"PortalGlyphs/this-is-the-way-01.png",
 				Turing/QwenNative,
 			);
 			target = 2D78FE2F2FCCF44A0063708B /* Gravitas Plague */;
@@ -255,7 +314,7 @@
 				8E2B20042FCE000100000001 /* Turing */,
 				8E1A10602FCD000100000001 /* Gravitas Plague/PortalGlyphs */,
 				8E1A100F2FCD000100000001 /* Gravitas Plague/AnimationLibrary */,
-				8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav */,
+				8E1A10182FCD000100000001 /* ../GravitasPlagueBackgroundLoop.m4a */,
 				8E1A10632FCD000100000001 /* ../music-box.mp3 */,
 				8E1A10192FCD000100000001 /* ../Narrow-band-analog.wav */,
 				8E1A101A2FCD000100000001 /* ../Create_a_short_emerg_beeping.wav */,
@@ -403,23 +462,14 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8E1A10012FCD000100000001 /* ../idle-01.usdz in Resources */,
-				8E1A10022FCD000100000001 /* ../idle-turn-right-01.usdz in Resources */,
-				8E1A100E2FCD000100000001 /* ../idle-turn-right-02.usdz in Resources */,
-				8E1A10032FCD000100000001 /* ../unstable-walk.usdz in Resources */,
 				8E1A10112FCD000100000001 /* ../dad_biped.usdz in Resources */,
-				8E1A10692FCD000100000001 /* ../dad_biped_ior.png in Resources */,
 				8E1A10302FCD000100000001 /* ../spouse_biped.usdz in Resources */,
 				8E1A10322FCD000100000001 /* ../biker_biped.usdz in Resources */,
 				8E1A10342FCD000100000001 /* ../grandma_biped.usdz in Resources */,
 				8E1A102E2FCD000100000001 /* ../neighbor_biped.usdz in Resources */,
-				8E1A10672FCD000100000001 /* ../neighbor_biped_ior.png in Resources */,
 				8E1A103E2FCD000100000001 /* ../robot_biped.usdz in Resources */,
-				8E1A10742FCD000100000001 /* ../angel_biped.usdz in Resources */,
 				8E1A10782FCD000100000001 /* ../angel_posed_01.usdz in Resources */,
 				8E1A10762FCD000100000001 /* ../heaven-sunrise.exr in Resources */,
-				8E1A10362FCD000100000001 /* ../plague_menu_ui_clean.png in Resources */,
-				8E1A10382FCD000100000001 /* ../plague_menu_ui_mockup.png in Resources */,
 				8E1A103A2FCD000100000001 /* ../plague_menu_horde_button.png in Resources */,
 				8E1A103C2FCD000100000001 /* ../plague_menu_walk_button.png in Resources */,
 				8E1A10432FCD000100000001 /* ../forest-overcast-01.exr in Resources */,
@@ -434,7 +484,7 @@
 				8E1A10612FCD000100000001 /* Gravitas Plague/PortalGlyphs in Resources */,
 				8E1A10102FCD000100000001 /* Gravitas Plague/AnimationLibrary in Resources */,
 				8E2B20032FCE000100000001 /* Turing in Resources */,
-				8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.wav in Resources */,
+				8E1A10132FCD000100000001 /* ../GravitasPlagueBackgroundLoop.m4a in Resources */,
 				8E1A10622FCD000100000001 /* ../music-box.mp3 in Resources */,
 				8E1A10142FCD000100000001 /* ../Narrow-band-analog.wav in Resources */,
 				8E1A10152FCD000100000001 /* ../Create_a_short_emerg_beeping.wav in Resources */,
@@ -659,12 +709,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Gravitas Plague/Gravitas_Plague.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Gravitas Plague";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSHandsTrackingUsageDescription = "Gravitas Plague uses hand tracking to detect player interactions with nearby infected characters.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Use the microphone while you hold the Story dictation button.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Use speech recognition so you can talk to Story Mode characters.";
@@ -699,12 +750,13 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Gravitas Plague/Gravitas_Plague.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Gravitas Plague";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSHandsTrackingUsageDescription = "Gravitas Plague uses hand tracking to detect player interactions with nearby infected characters.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Use the microphone while you hold the Story dictation button.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Use speech recognition so you can talk to Story Mode characters.";

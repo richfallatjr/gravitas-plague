@@ -3,9 +3,35 @@ import Foundation
 nonisolated enum TuringConversationLeasePolicy: Sendable {
     case ownedByConversation
     case borrowedFromAuthoredFlow(
-        parentFlowInstanceID: UUID,
+        hostFlowSequenceID: UUID,
+        hostFlowInstanceID: UUID,
         parentLeaseID: UUID
     )
+}
+
+nonisolated enum TuringBorrowedAuthoredFlowLeaseValidator {
+    static func requireValid(
+        hostFlowSequenceID: UUID,
+        hostFlowInstanceID: UUID,
+        parentLeaseID: UUID,
+        suppliedLease: StoryInteractionLease?,
+        seed: TuringLiveConversationSeed?
+    ) throws -> StoryInteractionLease {
+        guard let suppliedLease,
+              suppliedLease.id == parentLeaseID,
+              case .turingFlow(let runID) = suppliedLease.owner,
+              runID == hostFlowSequenceID.uuidString,
+              let seed,
+              seed.isEligible(
+                forHostSequenceID: hostFlowSequenceID,
+                hostFlowInstanceID: hostFlowInstanceID
+              ) else {
+            throw TuringRuntimeError.invalidConfig(
+                "Live conversation borrowed lease identity is invalid."
+            )
+        }
+        return suppliedLease
+    }
 }
 
 nonisolated enum TuringConversationProgressionPolicy: Sendable {

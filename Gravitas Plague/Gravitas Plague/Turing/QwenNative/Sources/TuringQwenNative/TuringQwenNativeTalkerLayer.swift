@@ -133,6 +133,7 @@ enum TuringQwenNativeTalkerForwardRunner {
               label: \(logLabel)
               layerCount: \(config.talkerConfig.numHiddenLayers)
               sequenceLength: \(sequenceLength)
+              commandBufferBoundary: perLayer
             """)
         }
 
@@ -150,9 +151,13 @@ enum TuringQwenNativeTalkerForwardRunner {
             )
             hidden = layerResult.hiddenStates
             cacheLayers.append(layerResult.cacheLayer)
-            if performanceMode.shouldForceEveryEval {
-                eval(hidden)
-            }
+            // Bound the initial prompt forward to one materialized layer per
+            // command buffer. Generated one-step execution remains unchanged.
+            eval(
+                hidden,
+                layerResult.cacheLayer.keys,
+                layerResult.cacheLayer.values
+            )
             if performanceMode.shouldClearMLXCacheEveryRow {
                 TuringQwenNativeMemoryControl.clearCache(label: "talker.\(logLabel).layer.\(layerIndex)")
             }
@@ -174,16 +179,12 @@ enum TuringQwenNativeTalkerForwardRunner {
             eps: Float(config.talkerConfig.rmsNormEps),
             performanceMode: performanceMode
         )
-        if performanceMode.shouldForceEveryEval {
-            eval(finalHidden)
-        }
+        eval(finalHidden)
         let finalLastHidden = finalHidden[
             (sequenceLength - 1)..<sequenceLength,
             axis: 1
         ]
-        if performanceMode.shouldForceEveryEval {
-            eval(finalLastHidden)
-        }
+        eval(finalLastHidden)
         if performanceMode.shouldClearMLXCacheEveryRow {
             TuringQwenNativeMemoryControl.clearCache(label: "talker.\(logLabel).finalNorm")
         }

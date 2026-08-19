@@ -748,13 +748,43 @@ actor StoryInteractionArbiter {
             crankRadio = .hidden
             hamReceiver = .hidden
         } else if experienceMode == .play {
-            capabilities = stableInteractionPolicy.permitsDoorInteraction
-                ? [.doorOpen]
-                : []
-            walkie = .hidden
-            dadFrame = .hidden
-            crankRadio = .hidden
-            hamReceiver = .hidden
+            var resolvedCapabilities:
+                Set<StoryInteractionCapability> =
+                    stableInteractionPolicy.permitsDoorInteraction
+                    ? [.doorOpen]
+                    : []
+
+            let walkieMicrophoneAvailable =
+                stableInteractionPolicy.allowedTuringSurfaces.contains(.walkie) &&
+                turingGates[.walkie] == .microphone
+            let dadFrameMicrophoneAvailable =
+                stableInteractionPolicy.allowedTuringSurfaces.contains(.dadFrame) &&
+                turingGates[.dadFrame] == .microphone
+            let crankRadioMicrophoneAvailable =
+                stableInteractionPolicy.allowedTuringSurfaces.contains(.crankRadio) &&
+                turingGates[.crankRadio] == .microphone
+            let hamReceiverMicrophoneAvailable =
+                stableInteractionPolicy.allowedTuringSurfaces.contains(.hamReceiver) &&
+                turingGates[.hamReceiver] == .microphone
+
+            if walkieMicrophoneAvailable {
+                resolvedCapabilities.insert(.walkieMicrophone)
+            }
+            if dadFrameMicrophoneAvailable {
+                resolvedCapabilities.insert(.dadFrameMicrophone)
+            }
+            if crankRadioMicrophoneAvailable {
+                resolvedCapabilities.insert(.crankRadioMicrophone)
+            }
+            if hamReceiverMicrophoneAvailable {
+                resolvedCapabilities.insert(.hamReceiverMicrophone)
+            }
+
+            capabilities = resolvedCapabilities
+            walkie = walkieMicrophoneAvailable ? .microphone : .hidden
+            dadFrame = dadFrameMicrophoneAvailable ? .microphone : .hidden
+            crankRadio = crankRadioMicrophoneAvailable ? .microphone : .hidden
+            hamReceiver = hamReceiverMicrophoneAvailable ? .microphone : .hidden
             door = stableInteractionPolicy.permitsDoorInteraction
                 ? .open
                 : .hidden

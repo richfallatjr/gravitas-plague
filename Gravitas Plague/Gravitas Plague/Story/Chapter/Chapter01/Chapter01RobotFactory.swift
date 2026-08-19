@@ -80,15 +80,19 @@ final class Chapter01RobotFactory {
             if controller.rootEntity.parent == nil {
                 sceneRoot.addChild(controller.rootEntity)
             }
-            let start = doorContext.robotDoorThreshold.position(relativeTo: nil)
+            let start = doorContext.robotExteriorStart.position(relativeTo: nil)
             let mid = doorContext.robotExteriorMid.position(relativeTo: nil)
-            let forward = PhaseOneMath.normalizedOrFallback(
-                SIMD3<Float>(start.x - mid.x, 0, start.z - mid.z),
+            let routeToDoor = PhaseOneMath.normalizedOrFallback(
+                SIMD3<Float>(mid.x - start.x, 0, mid.z - start.z),
                 fallback: SIMD3<Float>(0, 0, -1)
             )
+            let initialForward = -routeToDoor
             controller.rootEntity.setPosition(start, relativeTo: nil)
             controller.rootEntity.setOrientation(
-                simd_quatf(from: SIMD3<Float>(0, 0, -1), to: forward),
+                simd_quatf(
+                    from: SIMD3<Float>(0, 0, -1),
+                    to: initialForward
+                ),
                 relativeTo: nil
             )
             controller.lockRootToFloorY(start.y)
@@ -125,8 +129,10 @@ final class Chapter01RobotFactory {
               acceptedHitsToDestroy: \(acceptedHitsToDestroy)
               incomingHitAcceptanceProbability: \(definition.combat.incomingPlayerHitAcceptanceProbability)
               hordeConfigurationChanged: false
-              initialAnchor: \(doorContext.robotDoorThreshold.name)
-              initialState: idleAtDoorThreshold
+              initialAnchor: \(doorContext.robotExteriorStart.name)
+              initialState: portalIdleFacingAway
+              initialForward: \(initialForward)
+              orientationBasis: opposite_exterior_start_to_mid_route
               sourceVisible: false
               mirrorID: \(mirror.id.uuidString)
             """)

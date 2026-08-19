@@ -134,7 +134,7 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
 
     private let backgroundMusicFile = BundleAudioFile(
         fileName: "GravitasPlagueBackgroundLoop",
-        fileExtension: "wav"
+        fileExtension: "m4a"
     )
 
     private let hordeMusicBoxFile = BundleAudioFile(

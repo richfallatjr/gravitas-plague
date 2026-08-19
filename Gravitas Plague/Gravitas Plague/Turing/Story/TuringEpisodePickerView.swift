@@ -173,9 +173,11 @@ struct TuringEpisodePickerView: View {
         .padding(24)
         .frame(minWidth: 520)
         .onAppear {
+#if DEBUG || GR_TURING_DIAGNOSTICS
             dictationCoordinator.onEvent = { event in
                 session.publishTuringDictationEvent(event)
             }
+#endif
         }
     }
 

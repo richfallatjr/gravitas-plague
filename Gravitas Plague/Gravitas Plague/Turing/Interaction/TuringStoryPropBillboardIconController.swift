@@ -7,6 +7,8 @@ import simd
 final class TuringStoryPropBillboardIconController {
     typealias Presentation = TuringStoryWalkiePresentation
 
+    private static let walkieIconWorldUpOffsetMeters: Float = 0.0508
+
     private var iconEntity: ModelEntity?
     private var physicalHitTarget: Entity?
     private var cachedIconMaterials:
@@ -51,6 +53,15 @@ final class TuringStoryPropBillboardIconController {
             walkieRoot: walkieRoot
         )
         iconAnchor.addChild(icon)
+        let anchorWorldPosition = iconAnchor.position(relativeTo: nil)
+        icon.setPosition(
+            anchorWorldPosition + SIMD3<Float>(
+                0,
+                Self.walkieIconWorldUpOffsetMeters,
+                0
+            ),
+            relativeTo: nil
+        )
         walkieRoot.addChild(hitTarget)
 
         iconEntity = icon
@@ -64,6 +75,7 @@ final class TuringStoryPropBillboardIconController {
           physicalTarget: \(hitTarget.name)
           visualSizeMeters: \(visualSize)
           hitTargetSizeMeters: \(WallStickerStyle.stickerSizeMeters)
+          iconWorldUpOffsetMeters: \(Self.walkieIconWorldUpOffsetMeters)
         """)
     }
 

@@ -64,6 +64,65 @@ final class TuringWalkieCommsFXController {
         ownerID: String,
         reason: String
     ) async throws -> TuringWalkieSendingStaticToken {
+        let token = try await beginRetainedSendingStatic(
+            ownerID: ownerID,
+            reason: reason
+        )
+        let ambientRetained = await retainAmbientWalkieStatic(
+            ownerID: ownerID,
+            reason: "liveConversation.\(reason)"
+        )
+        await worker.playSendCommAndStartSendingLeadIn(reason: reason)
+        await worker.beginSendingLeadIn(reason: reason)
+        print("[TuringWalkieComms] live send cover started ownerID=\(ownerID) sendComm=true ambient=\(ambientRetained) randomBursts=true reason=\(reason)")
+        return token
+    }
+
+    func endLiveConversationSendingStatic(
+        token: TuringWalkieSendingStaticToken,
+        reason: String
+    ) async {
+        await endLiveConversationSendingCover(
+            token: token,
+            reason: reason
+        )
+        await releaseAmbientWalkieStatic(
+            ownerID: token.ownerID,
+            reason: reason
+        )
+        print("[TuringWalkieComms] live ambient released ownerID=\(token.ownerID) reason=\(reason)")
+    }
+
+    func endLiveConversationSendingCover(
+        token: TuringWalkieSendingStaticToken,
+        reason: String
+    ) async {
+        await worker.stopSendingLeadIn(reason: reason)
+        await endRetainedSendingStatic(token: token, reason: reason)
+        print("[TuringWalkieComms] live send cover stopped ownerID=\(token.ownerID) ambientRetained=true reason=\(reason)")
+    }
+
+    func beginPrerecordingOrientationSendingStatic(
+        ownerID: String,
+        reason: String
+    ) async throws -> TuringWalkieSendingStaticToken {
+        try await beginRetainedSendingStatic(
+            ownerID: ownerID,
+            reason: reason
+        )
+    }
+
+    func endPrerecordingOrientationSendingStatic(
+        token: TuringWalkieSendingStaticToken,
+        reason: String
+    ) async {
+        await endRetainedSendingStatic(token: token, reason: reason)
+    }
+
+    private func beginRetainedSendingStatic(
+        ownerID: String,
+        reason: String
+    ) async throws -> TuringWalkieSendingStaticToken {
         guard await installEndpointIfAvailable() else {
             throw TuringWalkieAudioError.missingWalkieEmitter
         }
@@ -81,7 +140,7 @@ final class TuringWalkieCommsFXController {
         )
     }
 
-    func endLiveConversationSendingStatic(
+    private func endRetainedSendingStatic(
         token: TuringWalkieSendingStaticToken,
         reason: String
     ) async {
@@ -92,23 +151,6 @@ final class TuringWalkieCommsFXController {
         )
     }
 
-    func beginPrerecordingOrientationSendingStatic(
-        ownerID: String,
-        reason: String
-    ) async throws -> TuringWalkieSendingStaticToken {
-        try await beginLiveConversationSendingStatic(
-            ownerID: ownerID,
-            reason: reason
-        )
-    }
-
-    func endPrerecordingOrientationSendingStatic(
-        token: TuringWalkieSendingStaticToken,
-        reason: String
-    ) async {
-        await endLiveConversationSendingStatic(token: token, reason: reason)
-    }
-
     func startAmbientWalkieStatic(reason: String) async {
         guard let url = try? await worker.ambientStaticURL() else { return }
         _ = await TuringStoryWalkieAudioRoute.startAmbientWalkieStaticLoop(
@@ -117,12 +159,13 @@ final class TuringWalkieCommsFXController {
         )
     }
 
+    @discardableResult
     func retainAmbientWalkieStatic(
         ownerID: String,
         reason: String
-    ) async {
-        guard let url = try? await worker.ambientStaticURL() else { return }
-        _ = await TuringStoryWalkieAudioRoute
+    ) async -> Bool {
+        guard let url = try? await worker.ambientStaticURL() else { return false }
+        return await TuringStoryWalkieAudioRoute
             .retainAmbientWalkieStaticLoop(
                 fileURL: url,
                 ownerID: ownerID,

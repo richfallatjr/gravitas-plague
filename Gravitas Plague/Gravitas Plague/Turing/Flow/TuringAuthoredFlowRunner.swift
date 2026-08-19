@@ -19,31 +19,6 @@ actor TuringAuthoredFlowRunner {
         }
 
         try await route.validate(descriptor: descriptor, character: character)
-        await route.runFixedLeadInIfNeeded(descriptor: descriptor, identity: identity)
-        try await route.playOpenIfNeeded(descriptor: descriptor, identity: identity)
-        if let primary = mediaPlan.items.first(
-            where: { $0.orientationMode == .runnerOwnedPrimary }
-        ) {
-            _ = try await TuringPrerecordingOrientationCoordinator.shared.run(
-                TuringPrerecordingOrientationRequest(
-                    flowIdentity: identity,
-                    descriptor: descriptor,
-                    mediaItemID: primary.id,
-                    mediaRole: primary.role,
-                    interactionSurface:
-                        descriptor.transmission.effectiveInteractionSurface
-                )
-            )
-        }
-        try await route.beginPrerecordingLeadInIfNeeded(
-            descriptor: descriptor,
-            identity: identity
-        )
-        try await route.waitForPrerecordingLeadInCompletionIfNeeded(
-            descriptor: descriptor,
-            identity: identity
-        )
-
         let playback = try await route.makePlayback(
             descriptor: descriptor,
             character: character,
@@ -61,12 +36,48 @@ actor TuringAuthoredFlowRunner {
                 identity: identity,
                 playback: playback
             )
+            if let firstEligibleItem = mediaPlan.items.first(
+                where: { $0.liveConversationCatalogEntry != nil }
+            ) {
+                await liveConversationCoordinator
+                    .prepareForPrerecordingPreFiller(firstEligibleItem)
+            }
+            await route.runFixedLeadInIfNeeded(
+                descriptor: descriptor,
+                identity: identity
+            )
+            try await route.playOpenIfNeeded(
+                descriptor: descriptor,
+                identity: identity
+            )
+            if let primary = mediaPlan.items.first(
+                where: { $0.orientationMode == .runnerOwnedPrimary }
+            ) {
+                _ = try await TuringPrerecordingOrientationCoordinator.shared.run(
+                    TuringPrerecordingOrientationRequest(
+                        flowIdentity: identity,
+                        descriptor: descriptor,
+                        mediaItemID: primary.id,
+                        mediaRole: primary.role,
+                        interactionSurface:
+                            descriptor.transmission.effectiveInteractionSurface
+                    )
+                )
+            }
+            try await route.beginPrerecordingLeadInIfNeeded(
+                descriptor: descriptor,
+                identity: identity
+            )
+            try await route.waitForPrerecordingLeadInCompletionIfNeeded(
+                descriptor: descriptor,
+                identity: identity
+            )
             for item in mediaPlan.items {
                 try await playback.enqueueAuthoredMedia(item)
             }
             await playback.sealAuthoredInput()
             try await playback.waitUntilAuthoredPlaybackFinished()
-            await liveConversationCoordinator.detach(
+            await liveConversationCoordinator.authoredFlowDidComplete(
                 reason: "authoredFlowCompleted.\(descriptor.scriptPointID)"
             )
         } catch {

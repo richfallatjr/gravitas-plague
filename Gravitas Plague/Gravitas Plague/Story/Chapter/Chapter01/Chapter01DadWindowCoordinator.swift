@@ -20,6 +20,8 @@ enum Chapter01DadWindowState: Sendable, Equatable {
 @MainActor
 final class Chapter01DadWindowCoordinator {
     private static let centeredIdleDurationSeconds: TimeInterval = 20
+    private static let robotIntroStartSeconds: TimeInterval =
+        centeredIdleDurationSeconds / 2
 
     private let windowBundle: TuringStoryWindowBundleController
     private let heavyRuntimeRegistry: StoryHeavyRuntimeRegistry
@@ -262,7 +264,27 @@ final class Chapter01DadWindowCoordinator {
             )
 
         try await Task.sleep(
-            for: .seconds(Self.centeredIdleDurationSeconds)
+            for: .seconds(Self.robotIntroStartSeconds)
+        )
+        try requireCurrent(request, generation: generation)
+        try await request.completionSink.dadWindowMidpointReached(
+            Chapter01DadWindowMidpointEvent(
+                chapterRunID: request.chapterRunID,
+                storyTransitionLease: request.storyTransitionLease,
+                centeredIdleElapsedSeconds: Self.robotIntroStartSeconds,
+                centeredIdleDurationSeconds: Self.centeredIdleDurationSeconds
+            )
+        )
+        print(
+            "[Chapter01Dad] authored midpoint reached; Robot portal intro started " +
+                "elapsedSeconds=\(Self.robotIntroStartSeconds) " +
+                "idleDurationSeconds=\(Self.centeredIdleDurationSeconds)"
+        )
+        try await Task.sleep(
+            for: .seconds(
+                Self.centeredIdleDurationSeconds -
+                    Self.robotIntroStartSeconds
+            )
         )
         try requireCurrent(request, generation: generation)
 

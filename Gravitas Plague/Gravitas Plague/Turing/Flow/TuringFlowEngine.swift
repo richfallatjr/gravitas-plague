@@ -962,7 +962,7 @@ actor TuringFlowEngine {
 
             await TuringFlowInteractionGateController
                 .shared
-                .applyCompletionGate(
+                .applyCompletionGatePreservingRetainedConversation(
                     effectiveGate,
                     identity: identity
                 )
@@ -1177,10 +1177,11 @@ actor TuringFlowEngine {
                 parentSequenceID: flowSequenceID,
                 parentInteractionLease: interactionLease
             )
-            await TuringFlowInteractionGateController.shared.applyCompletionGate(
-                descriptor.progression.effectiveInteractionGateAfterCompletion,
-                identity: identity
-            )
+            await TuringFlowInteractionGateController.shared
+                .applyCompletionGatePreservingRetainedConversation(
+                    descriptor.progression.effectiveInteractionGateAfterCompletion,
+                    identity: identity
+                )
             print("""
             [StoryPlayMode] action completed
               scriptPointID: \(descriptor.scriptPointID)
@@ -1383,7 +1384,7 @@ actor TuringFlowEngine {
             let effectiveGate = descriptor.progression
                 .effectiveInteractionGateAfterCompletion
             await TuringFlowInteractionGateController.shared
-                .applyCompletionGate(
+                .applyCompletionGatePreservingRetainedConversation(
                     effectiveGate,
                     identity: identity
                 )

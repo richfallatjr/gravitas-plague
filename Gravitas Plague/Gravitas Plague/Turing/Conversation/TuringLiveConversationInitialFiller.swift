@@ -11,6 +11,28 @@ nonisolated enum TuringLiveConversationInitialFillerToken: Sendable, Equatable {
     case crankRadio(ownerID: String)
     case hamReceiver(ownerID: String)
     case walkie(TuringWalkieSendingStaticToken)
+
+    var endsWhenResponsePlaybackStarts: Bool {
+        switch self {
+        case .dadPhoto:
+            return false
+        case .walkie:
+            // The outgoing sending-static cover ends, but the ambient walkie
+            // layer remains retained through Mike's spoken response.
+            return false
+        case .crankRadio, .hamReceiver:
+            return true
+        }
+    }
+
+    var mustEndBeforeSpokenCoverResumes: Bool {
+        switch self {
+        case .dadPhoto:
+            return false
+        case .crankRadio, .hamReceiver, .walkie:
+            return true
+        }
+    }
 }
 
 nonisolated struct TuringLiveConversationInitialFillerRequest: Sendable {
@@ -99,6 +121,32 @@ final class TuringLiveConversationInitialFillerController {
                 token: token,
                 reason: reason
             )
+        }
+    }
+
+    func responsePlaybackWillStart(
+        _ token: TuringLiveConversationInitialFillerToken,
+        reason: String
+    ) async {
+        switch token {
+        case .dadPhoto:
+            return
+        case .crankRadio(let ownerID):
+            await TuringCrankRadioTuningLoopActor.shared.endGap(
+                ownerID: ownerID,
+                reason: reason
+            )
+        case .hamReceiver(let ownerID):
+            await TuringRandomTuningLoopActor.hamReceiver.endGap(
+                ownerID: ownerID,
+                reason: reason
+            )
+        case .walkie(let token):
+            await TuringWalkieCommsFXController.shared
+                .endLiveConversationSendingCover(
+                    token: token,
+                    reason: reason
+                )
         }
     }
 }

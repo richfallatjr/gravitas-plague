@@ -50,4 +50,47 @@ final class TuringWalkieStaticStateActorTests: XCTestCase {
             ["immersiveShutdown"]
         )
     }
+
+    func testConversationSendingCoverStopsWhileAmbientRemainsRetained() async throws {
+        let endpoint = FakeRichGlobalClipPlayer()
+        let state = TuringWalkieStaticStateActor(endpoint: endpoint)
+        let ownerID = "live.test"
+
+        try await state.retainAmbient(
+            fileURL: URL(fileURLWithPath: "/tmp/walkie-ambient.mp3"),
+            runID: "conversation.test",
+            ownerID: ownerID
+        )
+        let sendingHandle = try await state.startRetainedSending(
+            fileURL: URL(fileURLWithPath: "/tmp/walkie-sending.mp3"),
+            runID: "conversation.test",
+            ownerID: ownerID
+        )
+
+        await state.stopRetainedSending(
+            ownerID: ownerID,
+            handle: sendingHandle,
+            reason: "responsePlaybackStarted"
+        )
+        await state.stopAmbient(reason: "unrelatedResponseStartStop")
+
+        let responseStartCancelReasons =
+            await endpoint.cancelReasonsSnapshot()
+        XCTAssertEqual(
+            responseStartCancelReasons,
+            ["responsePlaybackStarted"]
+        )
+
+        await state.releaseAmbient(
+            ownerID: ownerID,
+            reason: "responsePlaybackCompleted"
+        )
+
+        let responseCompletionCancelReasons =
+            await endpoint.cancelReasonsSnapshot()
+        XCTAssertEqual(
+            responseCompletionCancelReasons,
+            ["responsePlaybackStarted", "responsePlaybackCompleted"]
+        )
+    }
 }

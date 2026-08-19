@@ -414,12 +414,11 @@ final class Chapter01Coordinator:
         )
     }
 
-    func dadExitWalkStarted(
-        _ event: Chapter01DadExitWalkStartedEvent
+    func dadWindowMidpointReached(
+        _ event: Chapter01DadWindowMidpointEvent
     ) async throws {
         guard let chapterRunID,
               event.chapterRunID == chapterRunID,
-              event.locomotionActuallyStarted,
               let lease = storyTransitionLease,
               lease == event.storyTransitionLease else {
             throw Chapter01Error.staleDadEvent
@@ -433,7 +432,25 @@ final class Chapter01Coordinator:
         storyTransitionLease = nil
         state = .robot
         print(
-            "[Chapter01] Dad exit locomotion started; Robot encounter accepted chapterRunID=\(chapterRunID.uuidString)"
+            "[Chapter01] Dad midpoint reached; Robot encounter accepted " +
+                "chapterRunID=\(chapterRunID.uuidString) " +
+                "elapsedSeconds=\(event.centeredIdleElapsedSeconds) " +
+                "idleDurationSeconds=\(event.centeredIdleDurationSeconds)"
+        )
+    }
+
+    func dadExitWalkStarted(
+        _ event: Chapter01DadExitWalkStartedEvent
+    ) async throws {
+        guard let chapterRunID,
+              event.chapterRunID == chapterRunID,
+              event.locomotionActuallyStarted else {
+            throw Chapter01Error.staleDadEvent
+        }
+        print(
+            "[Chapter01] Dad exit locomotion started; " +
+                "Robot encounter already active from Dad midpoint " +
+                "chapterRunID=\(chapterRunID.uuidString)"
         )
     }
 

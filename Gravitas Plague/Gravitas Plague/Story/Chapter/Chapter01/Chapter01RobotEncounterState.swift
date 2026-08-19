@@ -5,6 +5,9 @@ enum Chapter01RobotEncounterState: Sendable, Equatable {
     case preparingExterior
     case preparingRobot
     case exteriorIdle
+    case exteriorTurnOne
+    case exteriorTurnTwo
+    case approachingDoor
     case openingDoor
     case enteringPortal
     case approachingPlayer

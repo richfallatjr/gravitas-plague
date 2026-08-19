@@ -4,8 +4,38 @@ import XCTest
 
 @MainActor
 final class StoryInteractionArbiterTests: XCTestCase {
+    func testPlayModeHidesPlayActionsButKeepsStableMicrophones() async {
+        let arbiter = StoryInteractionArbiter()
+
+        await arbiter.updateTuringGates(
+            [
+                .walkie: .play,
+                .dadFrame: .microphone,
+                .crankRadio: .microphone,
+                .hamReceiver: .closed
+            ],
+            reason: "test"
+        )
+
+        let snapshot = await arbiter.currentSnapshot()
+        XCTAssertEqual(snapshot.walkiePresentation, .hidden)
+        XCTAssertEqual(snapshot.dadFramePresentation, .microphone)
+        XCTAssertEqual(snapshot.crankRadioPresentation, .microphone)
+        XCTAssertEqual(snapshot.hamReceiverPresentation, .hidden)
+        XCTAssertEqual(snapshot.doorPresentation, .open)
+        XCTAssertEqual(
+            snapshot.capabilities,
+            [
+                .dadFrameMicrophone,
+                .crankRadioMicrophone,
+                .doorOpen
+            ]
+        )
+    }
+
     func testPlayAndMicrophoneCapabilityMatrix() async {
         let arbiter = StoryInteractionArbiter()
+        await arbiter.updateExperienceMode(.interactive, reason: "test")
 
         await arbiter.updateTuringGate(.play, reason: "test")
         var snapshot = await arbiter.currentSnapshot()

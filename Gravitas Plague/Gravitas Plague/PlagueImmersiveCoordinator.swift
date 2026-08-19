@@ -1358,22 +1358,42 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             print("[TuringHUD] player dictation cleared")
 
         case .responseFailed(let message):
-            turingHUDDelayedClearTask?.cancel()
-            turingHUDDelayedClearTask = nil
             showInstructionHUD("Device operation failed.")
+            scheduleTuringHUDClear(
+                after: 2.0,
+                reason: "responseFailure"
+            )
             print("""
             [TuringHUD] response failure shown
               error: \(message)
             """)
 
         case .failed(let message):
-            turingHUDDelayedClearTask?.cancel()
-            turingHUDDelayedClearTask = nil
             showInstructionHUD("Dictation failed.")
+            scheduleTuringHUDClear(
+                after: 2.0,
+                reason: "dictationFailure"
+            )
             print("""
             [TuringHUD] player dictation shown state=failed
               error: \(message)
             """)
+        }
+    }
+
+    private func scheduleTuringHUDClear(
+        after seconds: TimeInterval,
+        reason: String
+    ) {
+        turingHUDDelayedClearTask?.cancel()
+        turingHUDDelayedClearTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(
+                nanoseconds: UInt64(max(0, seconds) * 1_000_000_000)
+            )
+            guard Task.isCancelled == false else { return }
+            self?.instructionHUD.clear()
+            self?.turingHUDDelayedClearTask = nil
+            print("[TuringHUD] failure cleared reason=\(reason)")
         }
     }
 
@@ -3065,7 +3085,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             .transferStoryTransitionToBattle(
                 storyTransitionLease: storyTransitionLease,
                 battleInstanceID: chapterRunID,
-                reason: "dadExitWalkActuallyStarted"
+                reason: "dadWindowAuthoredMidpointReached"
             )
         do {
             try await chapter01RobotEncounterCoordinator.start(

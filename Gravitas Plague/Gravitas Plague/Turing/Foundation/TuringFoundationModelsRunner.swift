@@ -30,16 +30,17 @@ enum TuringFoundationPromptPurposePolicy {
     static func guardrailMode(
         for purpose: String
     ) -> TuringFoundationModelGuardrailMode {
+        if purpose.hasPrefix("conversationPrompt_") {
+            return .permissiveContentTransformations
+        }
+
         switch purpose {
         case "voicePrompt_characterIntent",
-             "conversationPrompt_scriptPoint05",
              "voicePrompt_roomObjectMemory",
-             "conversationPrompt_roomObjectMemory",
              "voicePrompt_cateye81HamReceiver",
              "voicePrompt_richHamReceiver",
              "voicePrompt_chapter02CharacterIntent",
-             "voicePrompt_chapter02CatEye81",
-             "conversationPrompt_cateye81HamReceiver":
+             "voicePrompt_chapter02CatEye81":
             return .permissiveContentTransformations
 
         default:

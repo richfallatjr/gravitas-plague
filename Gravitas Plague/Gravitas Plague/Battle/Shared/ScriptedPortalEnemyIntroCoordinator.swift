@@ -54,7 +54,13 @@ final class ScriptedPortalEnemyIntroCoordinator {
             throw IntroError.cancelled("notInstalled")
         }
 
-        try prepared.sourceController.playScriptedIdleLoop()
+        if let idleClipID = configuration.idleClipID {
+            try prepared.sourceController.playScriptedIdleLoop(
+                clipID: idleClipID
+            )
+        } else {
+            try prepared.sourceController.playScriptedIdleLoop()
+        }
         onStateChange?(.portalIdleFacingAway)
         try await onInitialIdleStarted?()
         print("[ScriptedPortalIntro] idle started durationSeconds=\(configuration.idleDurationSeconds)")
@@ -89,7 +95,8 @@ final class ScriptedPortalEnemyIntroCoordinator {
             segments: [
                 .init(fromID: "zombie_a1", toID: "zombie_a2", fromWorld: a1, toWorld: a2),
                 .init(fromID: "zombie_a2", toID: "zombie_a3", fromWorld: a2, toWorld: a3)
-            ]
+            ],
+            walkClipID: configuration.walkClipID
         )
         print("[ScriptedPortalIntro] arrived at door threshold")
     }
@@ -115,7 +122,8 @@ final class ScriptedPortalEnemyIntroCoordinator {
                     fromWorld: a3,
                     toWorld: target
                 )
-            ]
+            ],
+            walkClipID: configuration.walkClipID
         )
         prepared.sourceRoot.isEnabled = true
         if !prepared.portalMirror.exited {
@@ -205,13 +213,18 @@ final class ScriptedPortalEnemyIntroCoordinator {
 
     private func follow(
         controller: JockRetargetTestController,
-        segments: [ScriptedAnchorPathFollower.Segment]
+        segments: [ScriptedAnchorPathFollower.Segment],
+        walkClipID: String?
     ) async throws {
         try await withCheckedThrowingContinuation {
             (continuation: CheckedContinuation<Void, Error>) in
             pathContinuation = continuation
             do {
-                try follower.begin(controller: controller, segments: segments) { [weak self] in
+                try follower.begin(
+                    controller: controller,
+                    segments: segments,
+                    walkClipID: walkClipID
+                ) { [weak self] in
                     guard let self else { return }
                     let completion = self.pathContinuation
                     self.pathContinuation = nil

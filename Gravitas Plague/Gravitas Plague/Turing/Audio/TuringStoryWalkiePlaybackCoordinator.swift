@@ -457,7 +457,20 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             itemIdentity = "generated.\(segmentIndex)"
             authoredItemID = nil
             handle = activeHandle
-        default:
+        case .none, .startingAuthored, .orientingAuthored,
+             .startingGenerated, .filler, .deadAir:
+            return TuringSpokenCoverPauseReceipt(
+                interruptionID: interruptionID,
+                playbackRunID: runID,
+                itemIdentity: "prerecordingPreFiller",
+                handle: nil,
+                result: .completedBeforePause
+            )
+        case .cancelled:
+            throw TuringRuntimeError.invalidConfig(
+                "The spoken cover playback run was cancelled."
+            )
+        case .prerecording:
             throw TuringRuntimeError.invalidConfig(
                 "There is no active spoken media to pause."
             )

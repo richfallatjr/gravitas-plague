@@ -28,6 +28,9 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
     private let rewardPresenter: StoryItemRewardPresenter
     private let heavyRuntimeRegistry: StoryHeavyRuntimeRegistry
     private let progressStore: Chapter01ProgressStore
+    private let portalIntro = ScriptedPortalEnemyIntroCoordinator(
+        clock: ProductionBattleClock()
+    )
     private let pathFollower = ScriptedAnchorPathFollower()
     private let approachController = Chapter01RobotApproachController()
     private let approachTargetClamp: Chapter01RobotApproachController.TargetClamp
@@ -45,6 +48,7 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
     private var approachContinuation: CheckedContinuation<Void, Error>?
     private var playerHitBudget: StoryPlayerHitBudget?
     private var portalMotionMode: PortalMotionMode = .none
+    private var portalIntroActive = false
     private var warningPlayed = false
     private var movementDuringRecovery = false
     private var robotDeathHandled = false
@@ -180,6 +184,10 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
     }
 
     func update(deltaTime: TimeInterval) {
+        if portalIntroActive {
+            portalIntro.update(deltaTime: deltaTime)
+            return
+        }
         let combatTracksPlayer =
             state == .attackingNoncompliance || state == .stabilityRecovery
         let pose = spatialProvider.currentPose()
@@ -254,7 +262,10 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
             ownerID: request.chapterRunID,
             reason: "chapter01RobotAnimationPresent"
         )
-        let doorContext = try door.chapter01RobotDoorContext()
+        let battleDoorContext = try door.battlePortalContext()
+        let doorContext = Chapter01RobotDoorContext(
+            battleContext: battleDoorContext
+        )
 
         transition(to: .preparingRobot)
         let runtime = try await robotFactory.prepare(
@@ -274,40 +285,78 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
 
         let speechEndpoint = try Chapter01RobotAudioRoute.requireEndpoint()
         await speech.install(endpoint: speechEndpoint)
-        let threshold = doorContext.robotDoorThreshold.position(relativeTo: nil)
-        let roomFacingTarget = runtime.mirror.roomSideTarget(
-            distance: 0.75,
-            floorY: threshold.y
+        let sharedIntroDefinition = try Battle01DefinitionStore().load()
+        let introEnemy = ScriptedPortalPreparedEnemy(
+            enemyID: runtime.identity.enemyID,
+            sourceController: runtime.controller,
+            sourceRoot: runtime.roomRoot,
+            portalMirror: runtime.mirror
         )
-        try playExteriorIdle(
-            controller: runtime.controller,
-            clipID: definition.animations.idle,
-            roomFacingTarget: roomFacingTarget
+        portalIntro.install(
+            prepared: introEnemy,
+            doorContext: battleDoorContext,
+            configuration: ScriptedPortalEnemyIntroConfiguration(
+                idleDurationSeconds:
+                    sharedIntroDefinition.enemy.idleDurationSeconds,
+                turnCount: sharedIntroDefinition.enemy.turnCount,
+                turnDegreesPerCompletion:
+                    sharedIntroDefinition.enemy.turnDegreesPerCompletion,
+                revealThresholdPortalLocalZMeters:
+                    sharedIntroDefinition.portalHandoff
+                        .revealThresholdPortalLocalZMeters,
+                exitThresholdPortalLocalZMeters:
+                    sharedIntroDefinition.portalHandoff
+                        .exitThresholdPortalLocalZMeters,
+                idleClipID: definition.animations.idle,
+                walkClipID: definition.animations.walk
+            )
+        ) { [weak self] introState in
+            switch introState {
+            case .portalIdleFacingAway:
+                self?.transition(to: .exteriorIdle)
+            case .turnOne:
+                self?.transition(to: .exteriorTurnOne)
+            case .turnTwo:
+                self?.transition(to: .exteriorTurnTwo)
+            case .approachingDoor:
+                self?.transition(to: .approachingDoor)
+            case .portalCrossing:
+                self?.transition(to: .enteringPortal)
+            }
+        }
+        try await StoryInteractionArbiter.shared.setBattleDoorPermission(
+            .playerMayOpen,
+            battleLease: request.battleLease,
+            reason: "chapter01.robotLoadedAtExteriorStart"
         )
-        transition(to: .exteriorIdle)
-
-        transition(to: .openingDoor)
-        try await door.openForBattle(
-            ownerID: request.chapterRunID,
-            reason: "chapter01RobotIngress"
-        )
+        portalIntroActive = true
+        try await portalIntro.performApproach()
         try requireCurrent(request, generation: generation)
 
-        transition(to: .enteringPortal)
-        portalMotionMode = .ingress
-        let roomTarget = runtime.mirror.roomSideTarget(
-            distance: 0.75,
-            floorY: doorContext.robotDoorThreshold.position(relativeTo: nil).y
+        try await StoryInteractionArbiter.shared.setBattleDoorPermission(
+            .hiddenAndLocked,
+            battleLease: request.battleLease,
+            reason: "chapter01.robotReachedDoorThreshold"
         )
-        try await walk(
-            controller: runtime.controller,
-            clipID: definition.animations.walk,
-            points: [
-                ("robotDoorThreshold", doorContext.robotDoorThreshold.position(relativeTo: nil)),
-                ("robotRoomEntry", roomTarget)
-            ]
+        door.setBattleInteractionLocked(
+            true,
+            ownerID: request.chapterRunID,
+            reason: "chapter01RobotAtDoorThreshold"
         )
-        portalMotionMode = .none
+        if door.battleDoorState != .open {
+            transition(to: .openingDoor)
+            try runtime.controller.playScriptedIdleLoop(
+                clipID: definition.animations.idle
+            )
+            try await door.openForBattle(
+                ownerID: request.chapterRunID,
+                reason: "chapter01RobotIngress"
+            )
+            try requireCurrent(request, generation: generation)
+        }
+
+        try await portalIntro.performPortalCrossing()
+        portalIntroActive = false
 
         transition(to: .approachingPlayer)
         try await approach(
@@ -769,7 +818,8 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
                     try pathFollower.begin(
                         controller: controller,
                         segments: segments,
-                        walkClipID: clipID
+                        walkClipID: clipID,
+                        transitionToWalkClip: true
                     ) { [weak self] in
                         self?.finishPath(.success(()))
                     }
@@ -814,38 +864,6 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
         }
     }
 
-    private func playExteriorIdle(
-        controller: JockRetargetTestController,
-        clipID: String,
-        roomFacingTarget: SIMD3<Float>
-    ) throws {
-        controller.useAuthoredCharacterHeadingCorrection()
-        try controller.playScriptedIdleLoop(clipID: clipID)
-
-        let rootPosition = controller.rootEntity.position(relativeTo: nil)
-        let roomForward = PhaseOneMath.normalizedOrFallback(
-            SIMD3<Float>(
-                roomFacingTarget.x - rootPosition.x,
-                0,
-                roomFacingTarget.z - rootPosition.z
-            ),
-            fallback: SIMD3<Float>(0, 0, -1)
-        )
-        let idleRootForward = -roomForward
-        controller.rootEntity.setOrientation(
-            simd_quatf(
-                from: SIMD3<Float>(0, 0, -1),
-                to: idleRootForward
-            ),
-            relativeTo: nil
-        )
-        print(
-            "[Chapter01RobotHeading] initial exterior idle faces room " +
-                "roomForward=\(roomForward) rootForward=\(idleRootForward) " +
-                "authoredVisualCorrection=true"
-        )
-    }
-
     private func finishPath(_ result: Result<Void, Error>) {
         let continuation = pathContinuation
         pathContinuation = nil
@@ -874,6 +892,8 @@ final class Chapter01RobotEncounterCoordinator: Chapter01RobotEncounterControlli
         generation &+= 1
         recoveryMonitorTask?.cancel()
         recoveryMonitorTask = nil
+        portalIntroActive = false
+        portalIntro.cancelAndRelease(reason: reason)
         pathFollower.cancel(reason: reason)
         approachController.cancel(reason: reason)
         finishPath(.failure(CancellationError()))

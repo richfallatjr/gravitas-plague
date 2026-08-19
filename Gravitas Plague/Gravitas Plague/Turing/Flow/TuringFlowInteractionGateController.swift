@@ -181,6 +181,31 @@ final class TuringFlowInteractionGateController: ObservableObject {
         set(next, identity: identity, reason: "pointCompleted")
     }
 
+    func applyCompletionGatePreservingRetainedConversation(
+        _ gate: TuringFlowDescriptor.Progression.InteractionGate,
+        identity: TuringFlowIdentity
+    ) async {
+        let hasRetainedConversation =
+            await TuringLiveConversationSeedRegistry.shared
+                .hasAvailableSeed(surface: identity.interactionSurface)
+        let effectiveGate: TuringFlowDescriptor.Progression.InteractionGate =
+            gate == .closed && hasRetainedConversation
+                ? .microphone
+                : gate
+
+        if effectiveGate != gate {
+            print("""
+            [TuringFlowGate] retained conversation preserved microphone
+              scriptPointID: \(identity.scriptPointID)
+              surface: \(identity.interactionSurface.rawValue)
+              authoredCompletionGate: \(gate.rawValue)
+              effectiveCompletionGate: \(effectiveGate.rawValue)
+            """)
+        }
+
+        applyCompletionGate(effectiveGate, identity: identity)
+    }
+
     func beginConversation(conversationRunID: UUID) {
         beginConversation(
             conversationRunID: conversationRunID,

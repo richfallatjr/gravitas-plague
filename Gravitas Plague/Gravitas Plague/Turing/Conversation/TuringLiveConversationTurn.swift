@@ -9,7 +9,7 @@ struct TuringLiveConversationSession {
     let parentPlaybackRunID: String
     let parentLease: StoryInteractionLease
     let authoredPlayback: any TuringFlowPlaybackControlling
-    let progressionHold: TuringAuthoredProgressionHoldToken
+    var progressionHold: TuringAuthoredProgressionHoldToken?
     var activeTurnID: UUID?
 }
 
