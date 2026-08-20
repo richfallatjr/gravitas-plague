@@ -124,44 +124,44 @@
 		8E3C30202FCF200100000001 /* Exceptions for "Gravitas Plague" folder in "Gravitas Plague" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				"AnimationLibrary/Clips/Dummy/dummy_calisthenics_v001.jockanim.json",
+				AnimationLibrary/Clips/Dummy/dummy_calisthenics_v001.jockanim.json,
 				"AnimationLibrary/Clips/HitReact/charged-slash-left.jockanim.json",
 				"AnimationLibrary/Clips/HitReact/charged-slash-right.jockanim.json",
 				"AnimationLibrary/Clips/HitReact/charged-slash.jockanim.json",
-				"AnimationLibrary/Clips/HitReact/dead_fall_backward_01.jockanim.json",
-				"AnimationLibrary/Clips/HitReact/dead_fall_backward_02.jockanim.json",
-				"AnimationLibrary/Clips/HitReact/dead_fall_forward_01.jockanim.json",
-				"AnimationLibrary/Clips/HitReact/head_snap_left.jockanim.json",
-				"AnimationLibrary/Clips/HitReact/head_snap_right.jockanim.json",
-				"AnimationLibrary/Clips/HitReact/hit_hard_left_01.jockanim.json",
-				"AnimationLibrary/Clips/HitReact/hit_hard_right_01.jockanim.json",
-				"AnimationLibrary/Clips/HitReact/hit_light_left_01.jockanim.json",
-				"AnimationLibrary/Clips/HitReact/hit_light_right_01.jockanim.json",
-				"AnimationLibrary/Clips/HitReact/hit_medium_left_01.jockanim.json",
-				"AnimationLibrary/Clips/HitReact/hit_medium_left_02.jockanim.json",
-				"AnimationLibrary/Clips/HitReact/hit_medium_right_01.jockanim.json",
-				"AnimationLibrary/Clips/HitReact/hit_medium_right_02.jockanim.json",
-				"AnimationLibrary/Clips/HitReact/left_hook_01.jockanim.json",
-				"AnimationLibrary/Clips/HitReact/right_hook_01.jockanim.json",
-				"AnimationLibrary/Clips/Idle/angel_float_pose_01.jockanim.json",
-				"AnimationLibrary/Clips/Idle/drone_idle_01.jockanim.json",
-				"AnimationLibrary/Clips/Idle/idle_01.jockanim.json",
-				"AnimationLibrary/Clips/Idle/mocap_test_01.jockanim.json",
-				"AnimationLibrary/Clips/Turn/turn_left_90.jockanim.json",
-				"AnimationLibrary/Clips/Turn/turn_right_90.jockanim.json",
-				"AnimationLibrary/Clips/Turn/turn_right_90_180.jockanim.json",
-				"AnimationLibrary/Clips/Walk/robot_walk_01.jockanim.json",
-				"AnimationLibrary/Clips/Walk/unstable_walk_01.jockanim.json",
-				"AnimationLibrary/Manifests/animation_library_manifest.json",
-				"AnimationLibrary/Manifests/jock_runtime_clip_overrides.json",
-				"AnimationLibrary/Rigs/GravitasMeshyBiped24_v001.rig.json",
-				"AnimationLibrary/Rigs/SourceRigs/angel_biped_3e23483ddb22.source_rig.json",
-				"AnimationLibrary/Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json",
-				"AnimationLibrary/Rigs/SourceRigs/robot_biped_b1f44d95e841.source_rig.json",
-				"AnimationLibrary/Rigs/SourceRigs/robot_biped_ef4ae12ac07d.source_rig.json",
-				"AnimationLibrary/Rigs/SourceRigs/source_rig_registry.json",
-				"AnimationLibrary/SkeletonMaps/MeshyBiped24_identity.map.json",
-				"PortalGlyphs/.gitkeep",
+				AnimationLibrary/Clips/HitReact/dead_fall_backward_01.jockanim.json,
+				AnimationLibrary/Clips/HitReact/dead_fall_backward_02.jockanim.json,
+				AnimationLibrary/Clips/HitReact/dead_fall_forward_01.jockanim.json,
+				AnimationLibrary/Clips/HitReact/head_snap_left.jockanim.json,
+				AnimationLibrary/Clips/HitReact/head_snap_right.jockanim.json,
+				AnimationLibrary/Clips/HitReact/hit_hard_left_01.jockanim.json,
+				AnimationLibrary/Clips/HitReact/hit_hard_right_01.jockanim.json,
+				AnimationLibrary/Clips/HitReact/hit_light_left_01.jockanim.json,
+				AnimationLibrary/Clips/HitReact/hit_light_right_01.jockanim.json,
+				AnimationLibrary/Clips/HitReact/hit_medium_left_01.jockanim.json,
+				AnimationLibrary/Clips/HitReact/hit_medium_left_02.jockanim.json,
+				AnimationLibrary/Clips/HitReact/hit_medium_right_01.jockanim.json,
+				AnimationLibrary/Clips/HitReact/hit_medium_right_02.jockanim.json,
+				AnimationLibrary/Clips/HitReact/left_hook_01.jockanim.json,
+				AnimationLibrary/Clips/HitReact/right_hook_01.jockanim.json,
+				AnimationLibrary/Clips/Idle/angel_float_pose_01.jockanim.json,
+				AnimationLibrary/Clips/Idle/drone_idle_01.jockanim.json,
+				AnimationLibrary/Clips/Idle/idle_01.jockanim.json,
+				AnimationLibrary/Clips/Idle/mocap_test_01.jockanim.json,
+				AnimationLibrary/Clips/Turn/turn_left_90.jockanim.json,
+				AnimationLibrary/Clips/Turn/turn_right_90_180.jockanim.json,
+				AnimationLibrary/Clips/Turn/turn_right_90.jockanim.json,
+				AnimationLibrary/Clips/Walk/robot_walk_01.jockanim.json,
+				AnimationLibrary/Clips/Walk/unstable_walk_01.jockanim.json,
+				AnimationLibrary/Manifests/animation_library_manifest.json,
+				AnimationLibrary/Manifests/jock_runtime_clip_overrides.json,
+				AnimationLibrary/Rigs/GravitasMeshyBiped24_v001.rig.json,
+				AnimationLibrary/Rigs/SourceRigs/angel_biped_3e23483ddb22.source_rig.json,
+				AnimationLibrary/Rigs/SourceRigs/dad_biped_9ddc45fe6105.source_rig.json,
+				AnimationLibrary/Rigs/SourceRigs/robot_biped_b1f44d95e841.source_rig.json,
+				AnimationLibrary/Rigs/SourceRigs/robot_biped_ef4ae12ac07d.source_rig.json,
+				AnimationLibrary/Rigs/SourceRigs/source_rig_registry.json,
+				AnimationLibrary/SkeletonMaps/MeshyBiped24_identity.map.json,
+				PortalGlyphs/.gitkeep,
 				"PortalGlyphs/arrow-01.png",
 				"PortalGlyphs/claw-01.png",
 				"PortalGlyphs/claw-02.png",
@@ -709,7 +709,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Gravitas Plague/Gravitas_Plague.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 24;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -729,7 +729,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.3;
+				MARKETING_VERSION = 3.5;
 				PRODUCT_BUNDLE_IDENTIFIER = "GravitasDiscover.Gravitas-Plague";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -750,7 +750,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Gravitas Plague/Gravitas_Plague.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 24;
+				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_TEAM = X7LJQ9VB44;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
@@ -770,7 +770,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 3.3;
+				MARKETING_VERSION = 3.5;
 				PRODUCT_BUNDLE_IDENTIFIER = "GravitasDiscover.Gravitas-Plague";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
