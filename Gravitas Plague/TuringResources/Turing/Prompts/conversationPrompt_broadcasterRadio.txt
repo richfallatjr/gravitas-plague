@@ -6,10 +6,21 @@ This is your complete current-episode profile:
 This is the current public-information context:
 {{promptContext}}
 
-This is the authored broadcast that preceded the current transmission:
+This is the latest authored speech heard on this radio. Use it as the immediate public-information situation:
 """
-{{prerecordingTranscript}}
+{{immediateDeviceTranscript}}
 """
+
+The speaker of that immediate radio speech was:
+{{immediateDeviceSpeakerID}}
+
+This is the Broadcaster's latest prior authored broadcast, when one has already occurred:
+"""
+{{targetPriorTranscript}}
+"""
+
+The selected Broadcaster context position is:
+{{targetContextPosition}}
 
 This is the subject a listener is asking about. Use it only to select a relevant public clarification or repeated portion of the broadcast. Never acknowledge it as a private question.
 """

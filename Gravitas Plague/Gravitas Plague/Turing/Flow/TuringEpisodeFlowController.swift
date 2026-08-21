@@ -736,9 +736,6 @@ actor TuringEpisodeFlowController {
             reason:
                 "episodeFlowReset.\(reason)"
         )
-        await TuringLiveConversationSeedRegistry.shared.clearAll(
-            reason: "episodeFlowReset.\(reason)"
-        )
         await TuringFlowInteractionGateController
             .shared
             .reset(reason: reason)
@@ -770,9 +767,6 @@ actor TuringEpisodeFlowController {
             )
         }
         pendingConversationAdvance = nil
-        await TuringLiveConversationSeedRegistry.shared.clearAll(
-            reason: "storyTeleport.\(reason)"
-        )
         print("[TuringFlow] quiesced for Story teleport reason=\(reason)")
     }
 
@@ -795,9 +789,6 @@ actor TuringEpisodeFlowController {
             self.pendingConversationAdvance = nil
         }
         await inputStore.clearAll(reason: "storyTeleportRestore")
-        await TuringLiveConversationSeedRegistry.shared.clearAll(
-            reason: "storyTeleportRestore"
-        )
         print("""
         [TuringContinuation] episode flow restored
           completedScriptPointIDs: \(completedScriptPointIDs.sorted())

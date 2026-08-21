@@ -121,9 +121,6 @@ final class TuringPrologueCompletionCoordinator: TuringStoryCompletionEventSink 
             await closePostBattleHub(
                 reason: "allDevicesCompleted.\(event.eventID.uuidString)"
             )
-            await TuringLiveConversationSeedRegistry.shared.clearAll(
-                reason: "prologueChapterBoundary"
-            )
             await publishEpisodeBoundary(boundaryEvent)
             return .interactionLeaseTransferred
         }

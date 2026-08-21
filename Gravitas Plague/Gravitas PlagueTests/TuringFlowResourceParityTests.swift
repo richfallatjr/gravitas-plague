@@ -566,14 +566,22 @@ final class TuringFlowResourceParityTests:
             "{{userInput}}",
             "{{characterProfile}}",
             "{{promptContext}}",
-            "{{prerecordingTranscript}}"
+            "{{immediateDeviceTranscript}}",
+            "{{immediateDeviceSpeakerID}}",
+            "{{targetPriorTranscript}}",
+            "{{targetContextPosition}}"
         ] {
             XCTAssertTrue(prompt.contains(placeholder))
         }
+        XCTAssertFalse(prompt.contains("{{prerecordingTranscript}}"))
         XCTAssertFalse(prompt.contains("{{lastVoicePromptSeed}}"))
         XCTAssertFalse(prompt.contains("{{dialogueHistoryJSON}}"))
         XCTAssertFalse(prompt.contains("{{episodeStateForWordsOnly}}"))
-        XCTAssertTrue(prompt.contains("This is what you last said:"))
+        XCTAssertTrue(
+            prompt.contains(
+                "This is the latest authored speech heard on this device."
+            )
+        )
         XCTAssertFalse(prompt.contains("Current prerecording transcript:"))
     }
 
@@ -597,7 +605,11 @@ final class TuringFlowResourceParityTests:
         )
         XCTAssertTrue(prompt.contains("{{characterBackstory}}"))
         XCTAssertTrue(prompt.contains("{{promptContext}}"))
-        XCTAssertTrue(prompt.contains("{{prerecordingTranscript}}"))
+        XCTAssertTrue(prompt.contains("{{immediateDeviceTranscript}}"))
+        XCTAssertTrue(prompt.contains("{{immediateDeviceSpeakerID}}"))
+        XCTAssertTrue(prompt.contains("{{targetPriorTranscript}}"))
+        XCTAssertTrue(prompt.contains("{{targetContextPosition}}"))
+        XCTAssertFalse(prompt.contains("{{prerecordingTranscript}}"))
         XCTAssertTrue(prompt.contains("{{userInput}}"))
         XCTAssertTrue(
             prompt.contains(

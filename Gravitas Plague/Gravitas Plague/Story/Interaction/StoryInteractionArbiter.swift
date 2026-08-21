@@ -17,6 +17,11 @@ actor StoryInteractionArbiter {
     private var stableInteractionPolicy: StoryStableInteractionPolicy =
         .unrestricted
     private var experienceMode: StoryExperienceMode = .play
+    private var microphoneGeneration: UInt64 = 0
+    private var microphoneEpisodeID: TuringEpisodeID?
+    private var microphoneSegmentID: String?
+    private var latchedMicrophoneSlots:
+        [StoryInteractionSurfaceID: TuringLatchedMicrophoneSlot] = [:]
     private struct LiveConversationPresentation {
         let parentLeaseID: UUID
         let sessionID: UUID
@@ -39,6 +44,134 @@ actor StoryInteractionArbiter {
 
     func currentStableInteractionPolicy() -> StoryStableInteractionPolicy {
         stableInteractionPolicy
+    }
+
+    func currentConversationMicrophoneGeneration() -> UInt64 {
+        microphoneGeneration
+    }
+
+    func currentLatchedConversationSlots()
+        -> [StoryInteractionSurfaceID: TuringLatchedMicrophoneSlot]
+    {
+        latchedMicrophoneSlots
+    }
+
+    func beginConversationChapter(
+        episodeID: TuringEpisodeID,
+        segmentID: String,
+        reason: String
+    ) async -> UInt64 {
+        microphoneGeneration &+= 1
+        microphoneEpisodeID = episodeID
+        microphoneSegmentID = segmentID
+        latchedMicrophoneSlots.removeAll(keepingCapacity: false)
+        liveConversationPresentation = nil
+        await publish(reason: "microphones.chapter.\(reason)")
+        return microphoneGeneration
+    }
+
+    func latchConversationMicrophone(
+        slot: TuringLatchedMicrophoneSlot,
+        expectedGeneration: UInt64,
+        reason: String
+    ) async throws {
+        guard expectedGeneration == microphoneGeneration,
+              slot.generation == microphoneGeneration,
+              slot.episodeID == microphoneEpisodeID else {
+            throw StoryInteractionClaimError.staleLease
+        }
+        if let microphoneSegmentID {
+            guard slot.segmentID == microphoneSegmentID else {
+                throw StoryInteractionClaimError.staleLease
+            }
+        } else {
+            microphoneSegmentID = slot.segmentID
+        }
+        latchedMicrophoneSlots[slot.surface] = slot
+        await publish(reason: "microphones.latched.\(reason)")
+    }
+
+    func replaceConversationMicrophonesForContinue(
+        episodeID: TuringEpisodeID,
+        segmentID: String,
+        slots: [StoryInteractionSurfaceID: TuringLatchedMicrophoneSlot],
+        reason: String
+    ) async -> UInt64 {
+        microphoneGeneration &+= 1
+        microphoneEpisodeID = episodeID
+        microphoneSegmentID = segmentID
+        latchedMicrophoneSlots = slots.reduce(into: [:]) { result, pair in
+            let slot = pair.value
+            guard pair.key == slot.surface,
+                  slot.episodeID == episodeID,
+                  slot.segmentID == segmentID else {
+                return
+            }
+            let seed = slot.seed.withMicrophoneGeneration(
+                microphoneGeneration
+            )
+            result[pair.key] = TuringLatchedMicrophoneSlot(
+                slotID: slot.slotID,
+                generation: microphoneGeneration,
+                episodeID: episodeID,
+                segmentID: segmentID,
+                surface: slot.surface,
+                activationMomentID: slot.activationMomentID,
+                targetCharacterID: slot.targetCharacterID,
+                seed: seed
+            )
+        }
+        liveConversationPresentation = nil
+        await publish(reason: "microphones.continue.\(reason)")
+        return microphoneGeneration
+    }
+
+    func clearConversationMicrophones(
+        boundary: TuringConversationMicrophoneBoundary,
+        reason: String
+    ) async -> UInt64 {
+        clearConversationMicrophonesState(
+            boundary: boundary,
+            clearEpisode: boundary == .teardown
+        )
+        await publish(reason: "microphones.cleared.\(reason)")
+        return microphoneGeneration
+    }
+
+    func currentLatchedConversationSeedSnapshot(
+        allowedSurfaces: Set<StoryInteractionSurfaceID>
+    ) -> TuringLiveConversationSeedRegistrySnapshot {
+        TuringLiveConversationSeedRegistrySnapshot(
+            seedsBySurface: latchedMicrophoneSlots.reduce(into: [:]) {
+                result, pair in
+                guard allowedSurfaces.contains(pair.key) else { return }
+                result[pair.key] = pair.value.seed
+            }
+        )
+    }
+
+    func recaptureLatchedConversationSeed(
+        surface: StoryInteractionSurfaceID,
+        expectedSeedID: UUID
+    ) throws -> TuringLiveConversationSeed {
+        guard let slot = latchedMicrophoneSlots[surface],
+              slot.generation == microphoneGeneration,
+              slot.seed.seedID == expectedSeedID,
+              TuringLiveConversationSeedResolver().proofsStillMatch(slot.seed) else {
+            throw StoryInteractionClaimError.staleLease
+        }
+        return slot.seed
+    }
+
+    func currentLatchedConversationSeed(
+        surface: StoryInteractionSurfaceID
+    ) throws -> TuringLiveConversationSeed {
+        guard let slot = latchedMicrophoneSlots[surface],
+              slot.generation == microphoneGeneration,
+              TuringLiveConversationSeedResolver().proofsStillMatch(slot.seed) else {
+            throw StoryInteractionClaimError.interactionNotPermitted
+        }
+        return slot.seed
     }
 
     func updateExperienceMode(
@@ -297,6 +430,9 @@ actor StoryInteractionArbiter {
             throw StoryInteractionClaimError.staleLease
         }
         guard case .turingFlow = turingLease.owner else {
+            throw StoryInteractionClaimError.invalidTransfer
+        }
+        guard liveConversationPresentation?.activeChild == nil else {
             throw StoryInteractionClaimError.invalidTransfer
         }
         return await transfer(
@@ -582,6 +718,10 @@ actor StoryInteractionArbiter {
         battleDoorPermissions.removeAll(keepingCapacity: false)
         stableInteractionPolicy = .unrestricted
         liveConversationPresentation = nil
+        clearConversationMicrophonesState(
+            boundary: .teardown,
+            clearEpisode: true
+        )
         await publish(reason: "reset.\(reason)")
     }
 
@@ -590,6 +730,10 @@ actor StoryInteractionArbiter {
         source: String
     ) async -> StoryInteractionLease {
         if case .battle(let battleInstanceID) = owner {
+            clearConversationMicrophonesState(
+                boundary: .battle(battleInstanceID),
+                clearEpisode: false
+            )
             battleDoorPermissions[battleInstanceID] = .hiddenAndLocked
         }
         let lease = StoryInteractionLease(id: UUID(), owner: owner)
@@ -613,6 +757,10 @@ actor StoryInteractionArbiter {
             battleDoorPermissions.removeValue(forKey: oldBattleInstanceID)
         }
         if case .battle(let newBattleInstanceID) = owner {
+            clearConversationMicrophonesState(
+                boundary: .battle(newBattleInstanceID),
+                clearEpisode: false
+            )
             battleDoorPermissions[newBattleInstanceID] = .hiddenAndLocked
         }
         let newLease = StoryInteractionLease(id: UUID(), owner: owner)
@@ -644,6 +792,24 @@ actor StoryInteractionArbiter {
           reason: \(error.localizedDescription)
         """)
         throw error
+    }
+
+    private func clearConversationMicrophonesState(
+        boundary: TuringConversationMicrophoneBoundary,
+        clearEpisode: Bool
+    ) {
+        microphoneGeneration &+= 1
+        latchedMicrophoneSlots.removeAll(keepingCapacity: false)
+        microphoneSegmentID = nil
+        if clearEpisode {
+            microphoneEpisodeID = nil
+        }
+        liveConversationPresentation = nil
+        print(
+            "[TuringLiveConversation] microphone generation cleared " +
+                "generation=\(microphoneGeneration) " +
+                "boundary=\(boundary.logValue)"
+        )
     }
 
     private func makeSnapshot() -> StoryInteractionSnapshot {
@@ -756,16 +922,20 @@ actor StoryInteractionArbiter {
 
             let walkieMicrophoneAvailable =
                 stableInteractionPolicy.allowedTuringSurfaces.contains(.walkie) &&
-                turingGates[.walkie] == .microphone
+                (turingGates[.walkie] == .microphone ||
+                    latchedMicrophoneSlots[.walkie] != nil)
             let dadFrameMicrophoneAvailable =
                 stableInteractionPolicy.allowedTuringSurfaces.contains(.dadFrame) &&
-                turingGates[.dadFrame] == .microphone
+                (turingGates[.dadFrame] == .microphone ||
+                    latchedMicrophoneSlots[.dadFrame] != nil)
             let crankRadioMicrophoneAvailable =
                 stableInteractionPolicy.allowedTuringSurfaces.contains(.crankRadio) &&
-                turingGates[.crankRadio] == .microphone
+                (turingGates[.crankRadio] == .microphone ||
+                    latchedMicrophoneSlots[.crankRadio] != nil)
             let hamReceiverMicrophoneAvailable =
                 stableInteractionPolicy.allowedTuringSurfaces.contains(.hamReceiver) &&
-                turingGates[.hamReceiver] == .microphone
+                (turingGates[.hamReceiver] == .microphone ||
+                    latchedMicrophoneSlots[.hamReceiver] != nil)
 
             if walkieMicrophoneAvailable {
                 resolvedCapabilities.insert(.walkieMicrophone)
@@ -789,22 +959,37 @@ actor StoryInteractionArbiter {
                 ? .open
                 : .hidden
         } else {
-            let walkieGate = stableInteractionPolicy.allowedTuringSurfaces
+            var walkieGate = stableInteractionPolicy.allowedTuringSurfaces
                 .contains(.walkie)
                 ? (turingGates[.walkie] ?? .closed)
                 : .closed
-            let dadGate = stableInteractionPolicy.allowedTuringSurfaces
+            var dadGate = stableInteractionPolicy.allowedTuringSurfaces
                 .contains(.dadFrame)
                 ? (turingGates[.dadFrame] ?? .closed)
                 : .closed
-            let crankRadioGate = stableInteractionPolicy.allowedTuringSurfaces
+            var crankRadioGate = stableInteractionPolicy.allowedTuringSurfaces
                 .contains(.crankRadio)
                 ? (turingGates[.crankRadio] ?? .closed)
                 : .closed
-            let hamReceiverGate = stableInteractionPolicy.allowedTuringSurfaces
+            var hamReceiverGate = stableInteractionPolicy.allowedTuringSurfaces
                 .contains(.hamReceiver)
                 ? (turingGates[.hamReceiver] ?? .closed)
                 : .closed
+
+            if walkieGate == .closed, latchedMicrophoneSlots[.walkie] != nil {
+                walkieGate = .microphone
+            }
+            if dadGate == .closed, latchedMicrophoneSlots[.dadFrame] != nil {
+                dadGate = .microphone
+            }
+            if crankRadioGate == .closed,
+               latchedMicrophoneSlots[.crankRadio] != nil {
+                crankRadioGate = .microphone
+            }
+            if hamReceiverGate == .closed,
+               latchedMicrophoneSlots[.hamReceiver] != nil {
+                hamReceiverGate = .microphone
+            }
 
             let anyTuringSurfaceBusy =
                 turingGates.values.contains(.busy)
@@ -911,6 +1096,10 @@ actor StoryInteractionArbiter {
           exclusiveOwner: \(snapshot.exclusiveOwner?.logValue ?? "none")
           stablePolicy: \(stableInteractionPolicy.id.rawValue)
           experienceMode: \(experienceMode.rawValue)
+          microphoneGeneration: \(microphoneGeneration)
+          microphoneEpisode: \(microphoneEpisodeID?.rawValue ?? "none")
+          microphoneSegment: \(microphoneSegmentID ?? "none")
+          latchedMicrophones: \(latchedMicrophoneSlots.keys.map(\.rawValue).sorted())
           capabilities: \(snapshot.capabilities.map(\.rawValue).sorted())
           walkie: \(snapshot.walkiePresentation.rawValue)
           door: \(snapshot.doorPresentation.rawValue)

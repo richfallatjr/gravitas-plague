@@ -428,6 +428,10 @@ final class Chapter01Coordinator:
             .robotEncounterPending,
             sourceEventID: UUID()
         )
+        _ = await arbiter.clearConversationMicrophones(
+            boundary: .antigenDroneSequence(chapterRunID),
+            reason: "chapter01.robotAntigenSequence"
+        )
         try await startRobot(chapterRunID, lease, self)
         storyTransitionLease = nil
         state = .robot

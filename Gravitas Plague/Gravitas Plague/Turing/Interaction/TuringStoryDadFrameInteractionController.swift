@@ -387,6 +387,8 @@ final class TuringStoryDadFrameInteractionController:
                 }
                 let transcript =
                     try await self.dictation.endHoldToSend()
+                let seed = try await StoryInteractionArbiter.shared
+                    .currentLatchedConversationSeed(surface: .dadFrame)
                 self.eventSink?.publishTuringDictationEvent(
                     .processingStarted(
                         finalTranscript: transcript
@@ -394,9 +396,9 @@ final class TuringStoryDadFrameInteractionController:
                 )
                 print("""
                 [TuringDadPhoto] conversation submitted
-                  characterID: \(binding.conversationCharacterID)
-                  outputRoute: \(binding.conversationOutputRoute.rawValue)
-                  conversationKey: \(binding.conversationKey)
+                  characterID: \(seed.characterID)
+                  outputRoute: \(seed.outputRoute.rawValue)
+                  conversationKey: \(seed.conversationKey)
                   userInputUTF16: \(transcript.utf16.count)
                   dialogueHistoryIncluded: false
                 """)
@@ -405,14 +407,15 @@ final class TuringStoryDadFrameInteractionController:
                     await TuringFlowConversationRunner.run(
                         request:
                             TuringFlowConversationRequest(
-                                characterID: binding.conversationCharacterID,
-                                outputRoute: binding.conversationOutputRoute,
+                                characterID: seed.characterID,
+                                outputRoute: seed.outputRoute,
                                 conversationKey:
-                                    binding.conversationKey,
+                                    seed.conversationKey,
                                 playerDictation: transcript,
                                 interactionLease: lease,
                                 interactionSurface:
-                                    binding.interactionSurface
+                                    binding.interactionSurface,
+                                immutableSeed: seed
                             ),
                         inputStore: .shared,
                         onSegmentZeroReady: { [weak self] in

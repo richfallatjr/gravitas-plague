@@ -6922,6 +6922,11 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
             transitionLease
         )
 
+        try await prepareConversationMicrophones(
+            for: destination,
+            requestID: requestID
+        )
+
         let disposition: StoryTitleCardRouteLeaseDisposition
         switch destination {
         case .start(.prologue):
@@ -7103,6 +7108,48 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
             """
         )
         return disposition
+    }
+
+    private func prepareConversationMicrophones(
+        for destination: StoryTitleCardDestination,
+        requestID: UUID
+    ) async throws {
+        let arbiter = StoryInteractionArbiter.shared
+        switch destination {
+        case .start(let episodeID), .advance(_, let episodeID):
+            let store = try TuringLiveConversationCatalogStore()
+            guard let segment = store.firstSegment(for: episodeID) else {
+                throw TuringRuntimeError.invalidConfig(
+                    "No initial microphone segment exists for \(episodeID.rawValue)."
+                )
+            }
+            _ = await arbiter.beginConversationChapter(
+                episodeID: episodeID,
+                segmentID: segment.segmentID,
+                reason: "titleCard.\(requestID.uuidString)"
+            )
+
+        case .continueFrom(let target):
+            let generation = await arbiter
+                .currentConversationMicrophoneGeneration()
+            let rehydration = try TuringConversationMicrophoneRehydrator()
+                .resolveSlots(
+                    target: target,
+                    generation: generation
+                )
+            _ = await arbiter.replaceConversationMicrophonesForContinue(
+                episodeID: rehydration.episodeID,
+                segmentID: rehydration.segmentID,
+                slots: rehydration.slots,
+                reason: "titleCard.\(requestID.uuidString)"
+            )
+
+        case .endOfAvailableContent(let episodeID):
+            _ = await arbiter.clearConversationMicrophones(
+                boundary: .chapter(episodeID),
+                reason: "titleCard.end.\(requestID.uuidString)"
+            )
+        }
     }
 
     func titleCardTransitionDidFullyFade(

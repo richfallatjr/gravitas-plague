@@ -42,6 +42,43 @@ nonisolated struct StoryLiveConversationChildToken:
     let selectedSurface: StoryInteractionSurfaceID
 }
 
+nonisolated struct TuringLatchedMicrophoneSlot: Sendable, Equatable {
+    let slotID: UUID
+    let generation: UInt64
+    let episodeID: TuringEpisodeID
+    let segmentID: String
+    let surface: StoryInteractionSurfaceID
+    let activationMomentID: String
+    let targetCharacterID: TuringConversationCharacterID
+    let seed: TuringLiveConversationSeed
+}
+
+nonisolated enum TuringConversationMicrophoneBoundary:
+    Sendable,
+    Equatable
+{
+    case chapter(TuringEpisodeID)
+    case battle(UUID)
+    case antigenDroneSequence(UUID)
+    case startOver(TuringEpisodeID)
+    case teardown
+
+    var logValue: String {
+        switch self {
+        case .chapter(let episodeID):
+            return "chapter.\(episodeID.rawValue)"
+        case .battle(let id):
+            return "battle.\(id.uuidString)"
+        case .antigenDroneSequence(let id):
+            return "antigenDroneSequence.\(id.uuidString)"
+        case .startOver(let episodeID):
+            return "startOver.\(episodeID.rawValue)"
+        case .teardown:
+            return "teardown"
+        }
+    }
+}
+
 nonisolated enum StoryInteractionSurfaceID:
     String,
     Codable,

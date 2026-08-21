@@ -7,30 +7,76 @@ nonisolated struct TuringLiveConversationResourceProof: Sendable, Equatable {
     let sha256: String
 }
 
+nonisolated struct TuringConversationImmediateDeviceContext:
+    Sendable,
+    Equatable
+{
+    let momentID: String
+    let scriptPointID: String
+    let prerecordingID: String
+    let speakerCharacterID: TuringConversationCharacterID
+    let transcript: String
+    let transcriptProof: TuringLiveConversationResourceProof
+}
+
+nonisolated struct TuringConversationTargetCharacterContext:
+    Sendable,
+    Equatable
+{
+    let targetCharacterID: TuringConversationCharacterID
+    let selectedMomentID: String
+    let selectionPosition: TuringConversationTargetContextPosition
+    let voicePromptID: String
+    let voicePromptProof: TuringLiveConversationResourceProof
+    let characterProfileID: String
+    let listenerProfileID: String
+    let voiceID: String
+    let conversationKey: String
+    let outputRoute: TuringVoiceOutputContext
+    let promptVariant: TuringConversationPromptVariant
+    let promptVoiceStoryContext: String
+    let priorTargetTranscript: String?
+}
+
 nonisolated struct TuringLiveConversationSeed: Sendable, Equatable {
     let seedID: UUID
+    let episodeID: TuringEpisodeID
+    let segmentID: String
+    let sourceMomentID: String
+    let microphoneGeneration: UInt64
     let parentFlowSequenceID: UUID
     let parentFlowInstanceID: UUID
     let parentPlaybackRunID: String
     let scriptPointID: String
     let authoredMediaItemID: String
     let authoredMediaRole: TuringAuthoredMediaItem.Role
-    let prerecordingID: String
-    let prerecordingTranscript: String
-    let prerecordingProof: TuringLiveConversationResourceProof
-    let voicePromptID: String
-    let voicePromptProof: TuringLiveConversationResourceProof
-    let characterID: String
-    let characterProfileID: String
-    let listenerProfileID: String
-    let voiceID: String
     let interactionSurface: StoryInteractionSurfaceID
-    let outputRoute: TuringVoiceOutputContext
-    let conversationKey: String
-    let promptVariant: TuringConversationPromptVariant
-    let promptVoiceStoryContext: String
+    let immediateDeviceContext: TuringConversationImmediateDeviceContext
+    let targetContext: TuringConversationTargetCharacterContext
     let backgroundMusic: TuringFlowBackgroundMusicDescriptor?
     let catalogRetention: TuringLiveConversationCatalog.Entry.Retention
+
+    var prerecordingID: String { immediateDeviceContext.prerecordingID }
+    var prerecordingTranscript: String { immediateDeviceContext.transcript }
+    var prerecordingProof: TuringLiveConversationResourceProof {
+        immediateDeviceContext.transcriptProof
+    }
+    var voicePromptID: String { targetContext.voicePromptID }
+    var voicePromptProof: TuringLiveConversationResourceProof {
+        targetContext.voicePromptProof
+    }
+    var characterID: String { targetContext.targetCharacterID.rawValue }
+    var characterProfileID: String { targetContext.characterProfileID }
+    var listenerProfileID: String { targetContext.listenerProfileID }
+    var voiceID: String { targetContext.voiceID }
+    var outputRoute: TuringVoiceOutputContext { targetContext.outputRoute }
+    var conversationKey: String { targetContext.conversationKey }
+    var promptVariant: TuringConversationPromptVariant {
+        targetContext.promptVariant
+    }
+    var promptVoiceStoryContext: String {
+        targetContext.promptVoiceStoryContext
+    }
 
     var authoredIdentity: TuringFlowIdentity {
         TuringFlowIdentity(
@@ -58,6 +104,29 @@ nonisolated struct TuringLiveConversationSeed: Sendable, Equatable {
             return true
         }
     }
+
+    func withMicrophoneGeneration(
+        _ value: UInt64
+    ) -> TuringLiveConversationSeed {
+        TuringLiveConversationSeed(
+            seedID: seedID,
+            episodeID: episodeID,
+            segmentID: segmentID,
+            sourceMomentID: sourceMomentID,
+            microphoneGeneration: value,
+            parentFlowSequenceID: parentFlowSequenceID,
+            parentFlowInstanceID: parentFlowInstanceID,
+            parentPlaybackRunID: parentPlaybackRunID,
+            scriptPointID: scriptPointID,
+            authoredMediaItemID: authoredMediaItemID,
+            authoredMediaRole: authoredMediaRole,
+            interactionSurface: interactionSurface,
+            immediateDeviceContext: immediateDeviceContext,
+            targetContext: targetContext,
+            backgroundMusic: backgroundMusic,
+            catalogRetention: catalogRetention
+        )
+    }
 }
 
 struct TuringLiveConversationSeedResolver: Sendable {
@@ -70,6 +139,7 @@ struct TuringLiveConversationSeedResolver: Sendable {
         descriptor: TuringFlowDescriptor,
         parentSequenceID: UUID,
         identity: TuringFlowIdentity,
+        microphoneGeneration: UInt64,
         bundle: Bundle = .main
     ) throws -> TuringLiveConversationSeed {
         guard item.role == .primaryPrerecording || item.role == .authoredBridge,
@@ -78,6 +148,23 @@ struct TuringLiveConversationSeedResolver: Sendable {
               descriptor.transmission.effectiveInteractionSurface == entry.interactionSurface else {
             throw TuringRuntimeError.invalidConfig(
                 "Live conversation authored-media identity does not match its catalog entry."
+            )
+        }
+
+        let catalogStore = try TuringLiveConversationCatalogStore(bundle: bundle)
+        guard let episode = catalogStore.episode(containing: entry) else {
+            throw TuringRuntimeError.invalidConfig(
+                "Live conversation moment \(entry.momentID) has no episode."
+            )
+        }
+        guard descriptor.transmission.characterID ==
+                entry.speakerCharacterID.rawValue,
+              TuringConversationSurfacePolicy.validates(
+                  target: entry.conversationTargetCharacterID,
+                  for: entry.interactionSurface
+              ) else {
+            throw TuringRuntimeError.invalidConfig(
+                "Live conversation speaker or target policy is invalid for \(entry.momentID)."
             )
         }
 
@@ -90,47 +177,87 @@ struct TuringLiveConversationSeedResolver: Sendable {
                 "Live conversation PR \(item.id) requires a manual transcript."
             )
         }
+        guard prerecording.speaker == entry.speakerCharacterID.rawValue else {
+            throw TuringRuntimeError.invalidConfig(
+                "Live conversation PR speaker does not match \(entry.momentID)."
+            )
+        }
+
+        let selection = try TuringConversationTargetContextResolver(
+            catalog: catalogStore.routingCatalog
+        ).resolve(
+            episodeID: episode.episodeID,
+            currentMoment: entry
+        )
+        let selectedMoment = selection.selectedMoment
+        let targetDescriptor = try TuringFlowDescriptorStore().require(
+            selectedMoment.scriptPointID
+        )
         let voicePromptID = try resolveVoicePromptID(
-            entry: entry,
-            descriptor: descriptor
+            entry: selectedMoment,
+            descriptor: targetDescriptor
         )
         let voicePrompt = try voicePromptStore.descriptor(id: voicePromptID)
-        guard voicePrompt.conversationKey == descriptor.transmission.conversationKey,
-              voicePrompt.outputContext == descriptor.transmission.outputRoute,
-              voicePrompt.speakerID == descriptor.transmission.characterID else {
+        guard voicePrompt.conversationKey ==
+                targetDescriptor.transmission.conversationKey,
+              voicePrompt.outputContext ==
+                targetDescriptor.transmission.outputRoute,
+              voicePrompt.speakerID == selection.targetCharacterID.rawValue else {
             throw TuringRuntimeError.invalidConfig(
-                "Live conversation VoicePrompt does not match \(descriptor.scriptPointID)."
+                "Live conversation target VoicePrompt does not match \(entry.momentID)."
             )
         }
 
         let prerecordingPath = "Turing/Prerecordings/\(item.id).json"
         let voicePromptPath = "Turing/VoicePrompts/\(voicePromptID).json"
+        let priorTargetTranscript: String?
+        if selection.position == .currentOrPrior {
+            priorTargetTranscript = try prerecordingStore.descriptor(
+                id: selectedMoment.authoredPrerecordingID
+            ).transcript
+        } else {
+            priorTargetTranscript = nil
+        }
         let context = TuringPromptVoiceStoryContextBuilder.standard(voicePrompt)
         return TuringLiveConversationSeed(
             seedID: UUID(),
+            episodeID: episode.episodeID,
+            segmentID: entry.segmentID,
+            sourceMomentID: entry.momentID,
+            microphoneGeneration: microphoneGeneration,
             parentFlowSequenceID: parentSequenceID,
             parentFlowInstanceID: identity.flowInstanceID,
             parentPlaybackRunID: identity.playbackRunID,
             scriptPointID: descriptor.scriptPointID,
             authoredMediaItemID: item.id,
             authoredMediaRole: item.role,
-            prerecordingID: prerecording.prerecordingID,
-            prerecordingTranscript: prerecording.transcript,
-            prerecordingProof: try proof(prerecordingPath, bundle: bundle),
-            voicePromptID: voicePrompt.voicePromptID,
-            voicePromptProof: try proof(voicePromptPath, bundle: bundle),
-            characterID: descriptor.transmission.characterID,
-            characterProfileID: voicePrompt.characterProfileID,
-            listenerProfileID: voicePrompt.listenerProfileID,
-            voiceID: voicePrompt.voiceID,
             interactionSurface: entry.interactionSurface,
-            outputRoute: descriptor.transmission.outputRoute,
-            conversationKey: descriptor.transmission.conversationKey,
-            promptVariant: .resolved(
-                scriptPointID: descriptor.scriptPointID,
-                promptTemplateID: voicePrompt.effectivePromptTemplateID
+            immediateDeviceContext: TuringConversationImmediateDeviceContext(
+                momentID: entry.momentID,
+                scriptPointID: entry.scriptPointID,
+                prerecordingID: prerecording.prerecordingID,
+                speakerCharacterID: entry.speakerCharacterID,
+                transcript: prerecording.transcript,
+                transcriptProof: try proof(prerecordingPath, bundle: bundle)
             ),
-            promptVoiceStoryContext: context.storyContext,
+            targetContext: TuringConversationTargetCharacterContext(
+                targetCharacterID: selection.targetCharacterID,
+                selectedMomentID: selectedMoment.momentID,
+                selectionPosition: selection.position,
+                voicePromptID: voicePrompt.voicePromptID,
+                voicePromptProof: try proof(voicePromptPath, bundle: bundle),
+                characterProfileID: voicePrompt.characterProfileID,
+                listenerProfileID: voicePrompt.listenerProfileID,
+                voiceID: voicePrompt.voiceID,
+                conversationKey: voicePrompt.conversationKey,
+                outputRoute: voicePrompt.outputContext,
+                promptVariant: .resolved(
+                    scriptPointID: selectedMoment.scriptPointID,
+                    promptTemplateID: voicePrompt.effectivePromptTemplateID
+                ),
+                promptVoiceStoryContext: context.storyContext,
+                priorTargetTranscript: priorTargetTranscript
+            ),
             backgroundMusic: descriptor.transmission.backgroundMusic,
             catalogRetention: entry.retention
         )
@@ -201,96 +328,4 @@ struct TuringLiveConversationSeedResolver: Sendable {
 
 nonisolated struct TuringLiveConversationSeedRegistrySnapshot: Sendable, Equatable {
     let seedsBySurface: [StoryInteractionSurfaceID: TuringLiveConversationSeed]
-}
-
-actor TuringLiveConversationSeedRegistry {
-    static let shared = TuringLiveConversationSeedRegistry()
-
-    private var seedsBySurface:
-        [StoryInteractionSurfaceID: TuringLiveConversationSeed] = [:]
-
-    func authoredItemStarted(seed: TuringLiveConversationSeed) {
-        seedsBySurface[seed.interactionSurface] = seed
-    }
-
-    func authoredItemCompleted(seedID: UUID) {
-        let expiredSurfaces = seedsBySurface.compactMap { surface, seed in
-            seed.seedID == seedID && seed.catalogRetention == .currentAuthoredItem
-                ? surface
-                : nil
-        }
-        for surface in expiredSurfaces {
-            seedsBySurface.removeValue(forKey: surface)
-        }
-    }
-
-    func restoreForOptionalFailureRetry(
-        seed: TuringLiveConversationSeed
-    ) {
-        seedsBySurface[seed.interactionSurface] = seed
-        print(
-            "[TuringLiveConversation] seed restored for retry " +
-                "surface=\(seed.interactionSurface.rawValue) " +
-                "seedID=\(seed.seedID.uuidString)"
-        )
-    }
-
-    func flowSequenceCompleted(sequenceID: UUID) {
-        seedsBySurface = seedsBySurface.filter { _, seed in
-            seed.parentFlowSequenceID != sequenceID ||
-                seed.catalogRetention == .untilExplicitInvalidation
-        }
-    }
-
-    func invalidate(surface: StoryInteractionSurfaceID, reason: String) {
-        seedsBySurface.removeValue(forKey: surface)
-        print("[TuringLiveConversation] seed invalidated surface=\(surface.rawValue) reason=\(reason)")
-    }
-
-    func snapshot(
-        allowedSurfaces: Set<StoryInteractionSurfaceID>,
-        hostSequenceID: UUID,
-        hostFlowInstanceID: UUID
-    ) -> TuringLiveConversationSeedRegistrySnapshot {
-        .init(
-            seedsBySurface: seedsBySurface.filter {
-                allowedSurfaces.contains($0.key) &&
-                    $0.value.isEligible(
-                        forHostSequenceID: hostSequenceID,
-                        hostFlowInstanceID: hostFlowInstanceID
-                    )
-            }
-        )
-    }
-
-    func recaptureForSelection(
-        surface: StoryInteractionSurfaceID,
-        expectedSeedID: UUID,
-        hostSequenceID: UUID,
-        hostFlowInstanceID: UUID
-    ) throws -> TuringLiveConversationSeed {
-        guard let seed = seedsBySurface[surface],
-              seed.seedID == expectedSeedID,
-              seed.isEligible(
-                forHostSequenceID: hostSequenceID,
-                hostFlowInstanceID: hostFlowInstanceID
-              ),
-              TuringLiveConversationSeedResolver().proofsStillMatch(seed) else {
-            throw TuringRuntimeError.invalidConfig(
-                "The selected live conversation seed is stale."
-            )
-        }
-        return seed
-    }
-
-    func hasAvailableSeed(
-        surface: StoryInteractionSurfaceID
-    ) -> Bool {
-        seedsBySurface[surface] != nil
-    }
-
-    func clearAll(reason: String) {
-        seedsBySurface.removeAll(keepingCapacity: false)
-        print("[TuringLiveConversation] all seeds cleared reason=\(reason)")
-    }
 }

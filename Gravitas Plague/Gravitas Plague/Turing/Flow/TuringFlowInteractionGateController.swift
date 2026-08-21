@@ -185,9 +185,11 @@ final class TuringFlowInteractionGateController: ObservableObject {
         _ gate: TuringFlowDescriptor.Progression.InteractionGate,
         identity: TuringFlowIdentity
     ) async {
+        let retainedConversationSlots =
+            await StoryInteractionArbiter.shared
+                .currentLatchedConversationSlots()
         let hasRetainedConversation =
-            await TuringLiveConversationSeedRegistry.shared
-                .hasAvailableSeed(surface: identity.interactionSurface)
+            retainedConversationSlots[identity.interactionSurface] != nil
         let effectiveGate: TuringFlowDescriptor.Progression.InteractionGate =
             gate == .closed && hasRetainedConversation
                 ? .microphone

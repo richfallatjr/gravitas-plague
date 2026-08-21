@@ -15,10 +15,10 @@ final class TuringLiveConversationSessionCoordinator:
         let identity: TuringFlowIdentity
         let playback: any TuringFlowPlaybackControlling
         let spokenPlayback: any TuringSpokenCoverControlling
+        let microphoneGeneration: UInt64
     }
 
     private let arbiter = StoryInteractionArbiter.shared
-    private let seedRegistry = TuringLiveConversationSeedRegistry.shared
     private let computeAdmission = TuringLiveConversationComputeAdmission.shared
     private let filler = TuringLiveConversationInitialFillerController.shared
 
@@ -67,13 +67,16 @@ final class TuringLiveConversationSessionCoordinator:
         }
         await detach(reason: "replaceAttachment")
         generation &+= 1
+        let microphoneGeneration =
+            await arbiter.currentConversationMicrophoneGeneration()
         attachment = Attachment(
             parentSequenceID: parentSequenceID,
             parentLease: parentLease,
             descriptor: descriptor,
             identity: identity,
             playback: playback,
-            spokenPlayback: spokenPlayback
+            spokenPlayback: spokenPlayback,
+            microphoneGeneration: microphoneGeneration
         )
         await playback.setPlaybackLifecycleSink(self)
         print("[TuringLiveConversation] attached sequenceID=\(parentSequenceID.uuidString) flowInstanceID=\(identity.flowInstanceID.uuidString)")
@@ -84,11 +87,6 @@ final class TuringLiveConversationSessionCoordinator:
               liveSession.activeTurnID == nil,
               turns.isEmpty else {
             return
-        }
-        if let currentAuthoredSeed {
-            await seedRegistry.authoredItemCompleted(
-                seedID: currentAuthoredSeed.seedID
-            )
         }
         currentAuthoredItemID = nil
         currentAuthoredSeed = nil
@@ -129,12 +127,6 @@ final class TuringLiveConversationSessionCoordinator:
                     reason: reason
                 )
             }
-        }
-        if let currentAuthoredSeed {
-            await seedRegistry.authoredItemCompleted(seedID: currentAuthoredSeed.seedID)
-        }
-        if let sequenceID = attachment?.parentSequenceID {
-            await seedRegistry.flowSequenceCompleted(sequenceID: sequenceID)
         }
         session = nil
         attachment = nil
@@ -236,33 +228,11 @@ final class TuringLiveConversationSessionCoordinator:
     func prepareForPrerecordingPreFiller(
         _ item: TuringAuthoredMediaItem
     ) async {
-        guard let attachment,
-              item.liveConversationCatalogEntry != nil else {
-            return
-        }
-        if currentAuthoredItemID == item.id,
-           currentAuthoredSeed?.authoredMediaItemID == item.id,
-           session != nil {
-            return
-        }
-        do {
-            try await installAuthoredAvailability(
-                item: item,
-                attachment: attachment,
-                acquireProgressionHold: false,
-                reason: "prerecordingPreFiller"
-            )
-            print(
-                "[TuringLiveConversation] pre-filler microphones installed " +
-                    "itemID=\(item.id)"
-            )
-        } catch {
-            print(
-                "[TuringLiveConversation] pre-filler availability rejected " +
-                    "itemID=\(item.id) error=\(error.localizedDescription)"
-            )
-            await finishSessionIfIdle(reason: "preFillerAvailabilityFailed")
-        }
+        guard item.liveConversationCatalogEntry != nil else { return }
+        print(
+            "[TuringLiveConversation] pre-filler did not latch microphone " +
+                "itemID=\(item.id) activation=actualAuthoredMediaStart"
+        )
     }
 
     func microphoneHoldEnded(
@@ -456,9 +426,6 @@ final class TuringLiveConversationSessionCoordinator:
 
     private func authoredMediaDidComplete(itemID: String) async {
         guard itemID == currentAuthoredItemID else { return }
-        if let currentAuthoredSeed {
-            await seedRegistry.authoredItemCompleted(seedID: currentAuthoredSeed.seedID)
-        }
         currentAuthoredItemID = nil
         if let liveSession = session,
            liveSession.activeTurnID == nil {
@@ -493,11 +460,9 @@ final class TuringLiveConversationSessionCoordinator:
         var receipt: TuringSpokenCoverPauseReceipt?
         var pausedCoverPlayback: (any TuringSpokenCoverControlling)?
         do {
-            let seed = try await seedRegistry.recaptureForSelection(
+            let seed = try await arbiter.recaptureLatchedConversationSeed(
                 surface: surface,
-                expectedSeedID: expectedSeedID,
-                hostSequenceID: liveSession.parentFlowSequenceID,
-                hostFlowInstanceID: liveSession.parentFlowInstanceID
+                expectedSeedID: expectedSeedID
             )
             childToken = try await arbiter.claimLiveConversationChild(
                 parentLease: liveSession.parentLease,
@@ -847,11 +812,6 @@ final class TuringLiveConversationSessionCoordinator:
                ) {
                 return
             }
-            if let currentAuthoredSeed {
-                await seedRegistry.authoredItemCompleted(
-                    seedID: currentAuthoredSeed.seedID
-                )
-            }
             currentAuthoredSeed = nil
             currentAuthoredItemID = nil
             if await restoreRetainedAvailabilityIfPossible(
@@ -875,12 +835,9 @@ final class TuringLiveConversationSessionCoordinator:
         seed: TuringLiveConversationSeed,
         reason: String
     ) async -> Bool {
-        await seedRegistry.restoreForOptionalFailureRetry(seed: seed)
         let stablePolicy = await arbiter.currentStableInteractionPolicy()
-        let snapshot = await seedRegistry.snapshot(
-            allowedSurfaces: stablePolicy.allowedTuringSurfaces,
-            hostSequenceID: liveSession.parentFlowSequenceID,
-            hostFlowInstanceID: liveSession.parentFlowInstanceID
+        let snapshot = await arbiter.currentLatchedConversationSeedSnapshot(
+            allowedSurfaces: stablePolicy.allowedTuringSurfaces
         )
         guard snapshot.seedsBySurface[seed.interactionSurface]?
                 .seedID == seed.seedID else {
@@ -910,10 +867,8 @@ final class TuringLiveConversationSessionCoordinator:
         reason: String
     ) async -> Bool {
         let stablePolicy = await arbiter.currentStableInteractionPolicy()
-        let snapshot = await seedRegistry.snapshot(
-            allowedSurfaces: stablePolicy.allowedTuringSurfaces,
-            hostSequenceID: liveSession.parentFlowSequenceID,
-            hostFlowInstanceID: liveSession.parentFlowInstanceID
+        let snapshot = await arbiter.currentLatchedConversationSeedSnapshot(
+            allowedSurfaces: stablePolicy.allowedTuringSurfaces
         )
         guard snapshot.seedsBySurface.isEmpty == false else {
             return false
@@ -973,22 +928,23 @@ final class TuringLiveConversationSessionCoordinator:
     ) async throws {
         await attachment?.playback.setPlaybackLifecycleSink(nil)
         generation &+= 1
+        let microphoneGeneration =
+            await arbiter.currentConversationMicrophoneGeneration()
         let replacement = Attachment(
             parentSequenceID: parentSequenceID,
             parentLease: parentLease,
             descriptor: descriptor,
             identity: identity,
             playback: playback,
-            spokenPlayback: spokenPlayback
+            spokenPlayback: spokenPlayback,
+            microphoneGeneration: microphoneGeneration
         )
         attachment = replacement
         await playback.setPlaybackLifecycleSink(self)
 
         let stablePolicy = await arbiter.currentStableInteractionPolicy()
-        let snapshot = await seedRegistry.snapshot(
-            allowedSurfaces: stablePolicy.allowedTuringSurfaces,
-            hostSequenceID: parentSequenceID,
-            hostFlowInstanceID: identity.flowInstanceID
+        let snapshot = await arbiter.currentLatchedConversationSeedSnapshot(
+            allowedSurfaces: stablePolicy.allowedTuringSurfaces
         )
         let replacementSession = TuringLiveConversationSession(
             sessionID: previousSession.sessionID,
@@ -1057,14 +1013,15 @@ final class TuringLiveConversationSessionCoordinator:
         guard let entry = item.liveConversationCatalogEntry else {
             return
         }
-        let seed = try TuringLiveConversationSeedResolver().resolve(
+        let seed = try await TuringConversationMicrophoneActivationCoordinator
+            .shared.authoredMediaStarted(
             entry: entry,
             item: item,
             descriptor: attachment.descriptor,
             parentSequenceID: attachment.parentSequenceID,
-            identity: attachment.identity
+            identity: attachment.identity,
+            expectedMicrophoneGeneration: attachment.microphoneGeneration
         )
-        await seedRegistry.authoredItemStarted(seed: seed)
         currentAuthoredItemID = item.id
         currentAuthoredSeed = seed
 
@@ -1093,10 +1050,8 @@ final class TuringLiveConversationSessionCoordinator:
         session = liveSession
 
         let stablePolicy = await arbiter.currentStableInteractionPolicy()
-        let snapshot = await seedRegistry.snapshot(
-            allowedSurfaces: stablePolicy.allowedTuringSurfaces,
-            hostSequenceID: liveSession.parentFlowSequenceID,
-            hostFlowInstanceID: liveSession.parentFlowInstanceID
+        let snapshot = await arbiter.currentLatchedConversationSeedSnapshot(
+            allowedSurfaces: stablePolicy.allowedTuringSurfaces
         )
         presentedSeedIDs = snapshot.seedsBySurface.mapValues(\.seedID)
         try await arbiter.installLiveConversationAvailability(
@@ -1142,10 +1097,8 @@ final class TuringLiveConversationSessionCoordinator:
             return
         }
         let stablePolicy = await arbiter.currentStableInteractionPolicy()
-        let snapshot = await seedRegistry.snapshot(
-            allowedSurfaces: stablePolicy.allowedTuringSurfaces,
-            hostSequenceID: liveSession.parentFlowSequenceID,
-            hostFlowInstanceID: liveSession.parentFlowInstanceID
+        let snapshot = await arbiter.currentLatchedConversationSeedSnapshot(
+            allowedSurfaces: stablePolicy.allowedTuringSurfaces
         )
         var eligible = snapshot.seedsBySurface
         eligible.removeValue(forKey: activeResponse.selectedSurface)

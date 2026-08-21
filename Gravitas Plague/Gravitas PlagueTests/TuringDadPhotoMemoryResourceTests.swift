@@ -124,6 +124,24 @@ final class TuringDadPhotoMemoryResourceTests: XCTestCase {
             )
             .replacingOccurrences(
                 of:
+                    "This is the latest authored speech heard on this device. It may have been spoken by another person. Use it as the immediate conversational situation:",
+                with:
+                    "This is the latest authored speech heard at the photograph. Use it as the immediate conversational situation:"
+            )
+            .replacingOccurrences(
+                of: "The speaker of that immediate device speech was:",
+                with: "The speaker of that immediate speech was:"
+            )
+            .replacingOccurrences(
+                of: "This is Big Mike's latest prior authored speech, when one has already occurred:",
+                with: "This is Rich's latest prior authored speech, when one has already occurred:"
+            )
+            .replacingOccurrences(
+                of: "The selected Big Mike context position is:",
+                with: "The selected Rich context position is:"
+            )
+            .replacingOccurrences(
+                of:
                     "- Respond to the statement in the walkie-talkie signal in you character's voice.",
                 with:
                     "- Respond to the statement about the photograph in your character's voice."

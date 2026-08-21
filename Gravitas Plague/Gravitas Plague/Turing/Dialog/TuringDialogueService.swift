@@ -139,8 +139,8 @@ actor TuringDialogueService {
             request.promptVariant == .cateye81HamReceiver
         let inputContract =
             usesBackstoryOnly
-                ? "userInput,characterBackstory,promptVoiceStoryContext,prerecordingTranscript"
-                : "userInput,characterProfile,promptVoiceStoryContext,prerecordingTranscript"
+                ? "userInput,characterBackstory,promptVoiceStoryContext,immediateDeviceTranscript,immediateDeviceSpeakerID,targetPriorTranscript,targetContextPosition"
+                : "userInput,characterProfile,promptVoiceStoryContext,immediateDeviceTranscript,immediateDeviceSpeakerID,targetPriorTranscript,targetContextPosition"
         let foundationPurpose =
             request.promptVariant.foundationPurpose
         let prompt = try Self.renderPrompt(
@@ -149,7 +149,11 @@ actor TuringDialogueService {
                 "{{characterProfile}}": profile.promptText,
                 "{{characterBackstory}}": profile.writeup,
                 "{{promptContext}}": request.promptContext,
-                "{{prerecordingTranscript}}": request.prerecordingTranscript,
+                "{{prerecordingTranscript}}": request.immediateDeviceTranscript,
+                "{{immediateDeviceTranscript}}": request.immediateDeviceTranscript,
+                "{{immediateDeviceSpeakerID}}": request.immediateDeviceSpeakerID,
+                "{{targetPriorTranscript}}": request.targetPriorTranscript ?? "",
+                "{{targetContextPosition}}": request.targetContextPosition.rawValue,
                 "{{userInput}}": request.userInput
             ]
         )
@@ -163,14 +167,18 @@ actor TuringDialogueService {
           promptResourcePath: \(promptResourcePath)
           foundationPurpose: \(foundationPurpose)
           inputContract: \(inputContract)
-          prerecordingTranscriptUTF16: \(request.prerecordingTranscript.utf16.count)
+          immediateDeviceTranscriptUTF16: \(request.immediateDeviceTranscript.utf16.count)
+          immediateDeviceSpeakerID: \(request.immediateDeviceSpeakerID)
+          targetPriorTranscriptUTF16: \(request.targetPriorTranscript?.utf16.count ?? 0)
+          targetContextPosition: \(request.targetContextPosition.rawValue)
           dialogueHistoryIncluded: false
           promptVoiceStoryContextIncluded: true
           promptContextSource: authoredPromptVoiceStoryContext
           promptContextSHA256: \(TuringFlowHash.sha256(request.promptContext))
           promptSHA256: \(TuringFlowHash.sha256(prompt))
           promptContextOccurrenceCount: \(Self.occurrenceCount(of: request.promptContext, in: prompt))
-          prerecordingTranscriptOccurrenceCount: \(Self.occurrenceCount(of: request.prerecordingTranscript, in: prompt))
+          immediateDeviceTranscriptOccurrenceCount: \(Self.occurrenceCount(of: request.immediateDeviceTranscript, in: prompt))
+          targetPriorTranscriptOccurrenceCount: \(request.targetPriorTranscript.map { Self.occurrenceCount(of: $0, in: prompt) } ?? 0)
           characterProfileOccurrenceCount: \(Self.occurrenceCount(of: profile.writeup, in: prompt))
           listenerProfileRendered: false
         """)

@@ -520,6 +520,8 @@ final class TuringStoryHamReceiverInteractionController:
                     let transcript =
                         try await self.dictation
                             .endHoldToSend()
+                    let seed = try await StoryInteractionArbiter.shared
+                        .currentLatchedConversationSeed(surface: .hamReceiver)
                     self.eventSink?
                         .publishTuringDictationEvent(
                             .processingStarted(
@@ -529,9 +531,9 @@ final class TuringStoryHamReceiverInteractionController:
                         )
                     print("""
                     [TuringHamReceiver] conversation submitted
-                      characterID: \(binding.conversationCharacterID)
-                      outputRoute: \(binding.conversationOutputRoute.rawValue)
-                      conversationKey: \(binding.conversationKey)
+                      characterID: \(seed.characterID)
+                      outputRoute: \(seed.outputRoute.rawValue)
+                      conversationKey: \(seed.conversationKey)
                       userInputUTF16: \(transcript.utf16.count)
                       dialogueHistoryIncluded: false
                     """)
@@ -544,17 +546,19 @@ final class TuringStoryHamReceiverInteractionController:
                                         conversationRunID:
                                             conversationRunID,
                                         characterID:
-                                            binding.conversationCharacterID,
+                                            seed.characterID,
                                         outputRoute:
-                                            binding.conversationOutputRoute,
+                                            seed.outputRoute,
                                         conversationKey:
-                                            binding.conversationKey,
+                                            seed.conversationKey,
                                         playerDictation:
                                             transcript,
                                         interactionLease:
                                             lease,
                                         interactionSurface:
-                                            binding.interactionSurface
+                                            binding.interactionSurface,
+                                        immutableSeed:
+                                            seed
                                     ),
                                 inputStore:
                                     .shared,

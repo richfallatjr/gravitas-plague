@@ -430,14 +430,17 @@ final class TuringStoryWalkieInteractionController {
                         "Walkie conversation binding is unavailable."
                     )
                 }
+                let seed = try await StoryInteractionArbiter.shared
+                    .currentLatchedConversationSeed(surface: .walkie)
                 let result = await TuringFlowConversationRunner.run(
                     request: TuringFlowConversationRequest(
-                        characterID: binding.conversationCharacterID,
-                        outputRoute: binding.conversationOutputRoute,
-                        conversationKey: binding.conversationKey,
+                        characterID: seed.characterID,
+                        outputRoute: seed.outputRoute,
+                        conversationKey: seed.conversationKey,
                         playerDictation: transcript,
                         interactionLease: interactionLease,
-                        interactionSurface: binding.interactionSurface
+                        interactionSurface: binding.interactionSurface,
+                        immutableSeed: seed
                     ),
                     inputStore: .shared,
                     onSegmentZeroReady: { [weak self] in

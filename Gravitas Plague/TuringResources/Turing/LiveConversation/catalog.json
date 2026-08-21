@@ -1,401 +1,529 @@
 {
-  "schemaVersion": 1,
-  "entries": [
+  "schemaVersion": 2,
+  "episodes": [
     {
-      "scriptPointID": "chapter01.dadFrame.rich.fourChances.001",
-      "authoredPrerecordingID": "chapter01.room.rich.dadFrame.fourChances.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "dadFrame",
-      "retention": "untilExplicitInvalidation"
+      "episodeID": "prologue",
+      "contentRevision": "prologue.v1",
+      "segments": [
+        { "segmentID": "prologue.beforeBattle01", "startsAtBoundaryID": "prologue.start", "boundaryKind": "chapterStart", "narrativeOrdinal": 0 },
+        { "segmentID": "prologue.afterBattle01", "startsAtBoundaryID": "prologue.battle01", "boundaryKind": "battle", "narrativeOrdinal": 1000 }
+      ],
+      "moments": [
+        {
+          "momentID": "prologue.walkie.001",
+          "segmentID": "prologue.beforeBattle01",
+          "narrativeOrdinal": 100,
+          "scriptPointID": "prologue.scriptPoint01",
+          "authoredPrerecordingID": "prologue.walkie.bigMike.richContact.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "walkie",
+          "speakerCharacterID": "big_mike",
+          "conversationTargetCharacterID": "big_mike",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "prologue.walkie.002",
+          "segmentID": "prologue.beforeBattle01",
+          "narrativeOrdinal": 200,
+          "scriptPointID": "prologue.scriptPoint02",
+          "authoredPrerecordingID": "prologue.walkie.rich.scriptPoint02.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "walkie",
+          "speakerCharacterID": "rich",
+          "conversationTargetCharacterID": "big_mike",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "prologue.walkie.003",
+          "segmentID": "prologue.beforeBattle01",
+          "narrativeOrdinal": 300,
+          "scriptPointID": "prologue.scriptPoint03",
+          "authoredPrerecordingID": "prologue.walkie.bigMike.scriptPoint03.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "walkie",
+          "speakerCharacterID": "big_mike",
+          "conversationTargetCharacterID": "big_mike",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "prologue.crankRadio.001",
+          "segmentID": "prologue.afterBattle01",
+          "narrativeOrdinal": 1000,
+          "scriptPointID": "prologue.crankRadioBroadcast.001",
+          "authoredPrerecordingID": "prologue.room.broadcaster.crankRadio.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "crankRadio",
+          "speakerCharacterID": "broadcaster",
+          "conversationTargetCharacterID": "broadcaster",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "prologue.walkie.004",
+          "segmentID": "prologue.afterBattle01",
+          "narrativeOrdinal": 1100,
+          "scriptPointID": "prologue.scriptPoint04",
+          "authoredPrerecordingID": "prologue.walkie.rich.scriptPoint04.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "walkie",
+          "speakerCharacterID": "rich",
+          "conversationTargetCharacterID": "big_mike",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "prologue.walkie.005",
+          "segmentID": "prologue.afterBattle01",
+          "narrativeOrdinal": 1200,
+          "scriptPointID": "prologue.scriptPoint05",
+          "authoredPrerecordingID": "prologue.walkie.bigMike.scriptPoint05.002",
+          "voicePromptSource": { "kind": "generationPipelineStage", "stageID": "promptVoice", "voicePromptID": null },
+          "interactionSurface": "walkie",
+          "speakerCharacterID": "big_mike",
+          "conversationTargetCharacterID": "big_mike",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "prologue.hamReceiver.001",
+          "segmentID": "prologue.afterBattle01",
+          "narrativeOrdinal": 1300,
+          "scriptPointID": "prologue.hamReceiver.cateye81.001",
+          "authoredPrerecordingID": "prologue.room.cateye81.hamReceiver.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "hamReceiver",
+          "speakerCharacterID": "cateye81",
+          "conversationTargetCharacterID": "cateye81",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "prologue.hamReceiver.002",
+          "segmentID": "prologue.afterBattle01",
+          "narrativeOrdinal": 1400,
+          "scriptPointID": "prologue.hamReceiver.rich.002",
+          "authoredPrerecordingID": "prologue.room.rich.hamReceiver.002",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "hamReceiver",
+          "speakerCharacterID": "rich",
+          "conversationTargetCharacterID": "cateye81",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "prologue.hamReceiver.003",
+          "segmentID": "prologue.afterBattle01",
+          "narrativeOrdinal": 1500,
+          "scriptPointID": "prologue.hamReceiver.cateye81.003",
+          "authoredPrerecordingID": "prologue.room.cateye81.hamReceiver.003",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "hamReceiver",
+          "speakerCharacterID": "cateye81",
+          "conversationTargetCharacterID": "cateye81",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "prologue.dadFrame.001",
+          "segmentID": "prologue.afterBattle01",
+          "narrativeOrdinal": 1600,
+          "scriptPointID": "prologue.dadPhotoMemory.001",
+          "authoredPrerecordingID": "prologue.room.rich.dadPhotoMemory.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "dadFrame",
+          "speakerCharacterID": "rich",
+          "conversationTargetCharacterID": "rich",
+          "retention": "untilExplicitInvalidation"
+        }
+      ],
+      "checkpoints": [
+        { "checkpointRawValue": "0", "segmentID": "prologue.beforeBattle01", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "10", "segmentID": "prologue.beforeBattle01", "maximumNarrativeOrdinal": 100 },
+        { "checkpointRawValue": "20", "segmentID": "prologue.beforeBattle01", "maximumNarrativeOrdinal": 100 },
+        { "checkpointRawValue": "30", "segmentID": "prologue.beforeBattle01", "maximumNarrativeOrdinal": 200 },
+        { "checkpointRawValue": "40", "segmentID": "prologue.beforeBattle01", "maximumNarrativeOrdinal": 300 },
+        { "checkpointRawValue": "50", "segmentID": "prologue.afterBattle01", "maximumNarrativeOrdinal": 1100 },
+        { "checkpointRawValue": "60", "segmentID": "prologue.afterBattle01", "maximumNarrativeOrdinal": 1100 },
+        { "checkpointRawValue": "70", "segmentID": "prologue.afterBattle01", "maximumNarrativeOrdinal": 1200 }
+      ]
     },
     {
-      "scriptPointID": "chapter01.dadFrame.rich.script03",
-      "authoredPrerecordingID": "chapter01.room.rich.dadFrame.script03.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "dadFrame",
-      "retention": "untilExplicitInvalidation"
+      "episodeID": "chapter01",
+      "contentRevision": "chapter01.v4",
+      "segments": [
+        { "segmentID": "chapter01.beforeRobotAntigen", "startsAtBoundaryID": "chapter01.start", "boundaryKind": "chapterStart", "narrativeOrdinal": 0 },
+        { "segmentID": "chapter01.afterRobotAntigen.beforeDadBattle", "startsAtBoundaryID": "chapter01.robotAntigenSequence", "boundaryKind": "antigenDroneSequence", "narrativeOrdinal": 1000 },
+        { "segmentID": "chapter01.afterDadBattle", "startsAtBoundaryID": "chapter01.dadFinalBattle.001", "boundaryKind": "battle", "narrativeOrdinal": 2000 }
+      ],
+      "moments": [
+        {
+          "momentID": "chapter01.walkie.006",
+          "segmentID": "chapter01.beforeRobotAntigen",
+          "narrativeOrdinal": 100,
+          "scriptPointID": "chapter01.walkie.rich.script06",
+          "authoredPrerecordingID": "chapter01.walkie.rich.script06.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "walkie",
+          "speakerCharacterID": "rich",
+          "conversationTargetCharacterID": "big_mike",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter01.walkie.007",
+          "segmentID": "chapter01.beforeRobotAntigen",
+          "narrativeOrdinal": 200,
+          "scriptPointID": "chapter01.walkie.bigMike.script07",
+          "authoredPrerecordingID": "chapter01.walkie.bigMike.script07.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "walkie",
+          "speakerCharacterID": "big_mike",
+          "conversationTargetCharacterID": "big_mike",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter01.dadFrame.fourChances",
+          "segmentID": "chapter01.afterRobotAntigen.beforeDadBattle",
+          "narrativeOrdinal": 1000,
+          "scriptPointID": "chapter01.dadFrame.rich.fourChances.001",
+          "authoredPrerecordingID": "chapter01.room.rich.dadFrame.fourChances.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "dadFrame",
+          "speakerCharacterID": "rich",
+          "conversationTargetCharacterID": "rich",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter01.walkie.008",
+          "segmentID": "chapter01.afterRobotAntigen.beforeDadBattle",
+          "narrativeOrdinal": 1100,
+          "scriptPointID": "chapter01.walkie.rich.script08",
+          "authoredPrerecordingID": "chapter01.walkie.rich.script08.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "walkie",
+          "speakerCharacterID": "rich",
+          "conversationTargetCharacterID": "big_mike",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter01.walkie.009",
+          "segmentID": "chapter01.afterRobotAntigen.beforeDadBattle",
+          "narrativeOrdinal": 1200,
+          "scriptPointID": "chapter01.walkie.bigMike.script09",
+          "authoredPrerecordingID": "chapter01.walkie.bigMike.script09.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "walkie",
+          "speakerCharacterID": "big_mike",
+          "conversationTargetCharacterID": "big_mike",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter01.hamReceiver.004",
+          "segmentID": "chapter01.afterRobotAntigen.beforeDadBattle",
+          "narrativeOrdinal": 1300,
+          "scriptPointID": "chapter01.hamReceiver.rich.script04",
+          "authoredPrerecordingID": "chapter01.room.rich.hamReceiver.script04.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "hamReceiver",
+          "speakerCharacterID": "rich",
+          "conversationTargetCharacterID": "cateye81",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter01.hamReceiver.005",
+          "segmentID": "chapter01.afterRobotAntigen.beforeDadBattle",
+          "narrativeOrdinal": 1400,
+          "scriptPointID": "chapter01.hamReceiver.cateye81.script05",
+          "authoredPrerecordingID": "chapter01.room.cateye81.hamReceiver.script05.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "hamReceiver",
+          "speakerCharacterID": "cateye81",
+          "conversationTargetCharacterID": "cateye81",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter01.dadFrame.eulogy",
+          "segmentID": "chapter01.afterDadBattle",
+          "narrativeOrdinal": 2000,
+          "scriptPointID": "chapter01.dadFrame.rich.script03",
+          "authoredPrerecordingID": "chapter01.room.rich.dadFrame.script03.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "dadFrame",
+          "speakerCharacterID": "rich",
+          "conversationTargetCharacterID": "rich",
+          "retention": "untilExplicitInvalidation"
+        }
+      ],
+      "checkpoints": [
+        { "checkpointRawValue": "chapter01.root", "segmentID": "chapter01.beforeRobotAntigen", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter01.script06.completed", "segmentID": "chapter01.beforeRobotAntigen", "maximumNarrativeOrdinal": 100 },
+        { "checkpointRawValue": "chapter01.script07.completed", "segmentID": "chapter01.beforeRobotAntigen", "maximumNarrativeOrdinal": 200 },
+        { "checkpointRawValue": "chapter01.dadWindow.pending", "segmentID": "chapter01.beforeRobotAntigen", "maximumNarrativeOrdinal": 200 },
+        { "checkpointRawValue": "chapter01.robotEncounter.pending", "segmentID": "chapter01.afterRobotAntigen.beforeDadBattle", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter01.antigenGranted", "segmentID": "chapter01.afterRobotAntigen.beforeDadBattle", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter01.hamScript04.pending", "segmentID": "chapter01.afterRobotAntigen.beforeDadBattle", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter01.postRobotHub", "segmentID": "chapter01.afterRobotAntigen.beforeDadBattle", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter01.preDadFinalBattle.ready", "segmentID": "chapter01.afterRobotAntigen.beforeDadBattle", "maximumNarrativeOrdinal": 1400 },
+        { "checkpointRawValue": "chapter01.finalDadFrame.pending", "segmentID": "chapter01.afterDadBattle", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter01.complete", "segmentID": "chapter01.afterDadBattle", "maximumNarrativeOrdinal": 2000 }
+      ]
     },
     {
-      "scriptPointID": "chapter01.hamReceiver.cateye81.script05",
-      "authoredPrerecordingID": "chapter01.room.cateye81.hamReceiver.script05.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "hamReceiver",
-      "retention": "untilExplicitInvalidation"
+      "episodeID": "chapter02",
+      "contentRevision": "chapter02.v1",
+      "segments": [
+        { "segmentID": "chapter02.beforeWomanBattle", "startsAtBoundaryID": "chapter02.start", "boundaryKind": "chapterStart", "narrativeOrdinal": 0 },
+        { "segmentID": "chapter02.afterWomanBattle", "startsAtBoundaryID": "chapter02.womanBattle.001", "boundaryKind": "battle", "narrativeOrdinal": 1500 }
+      ],
+      "moments": [
+        {
+          "momentID": "chapter02.crankRadio.missingPersons",
+          "segmentID": "chapter02.beforeWomanBattle",
+          "narrativeOrdinal": 100,
+          "scriptPointID": "chapter02.crankRadio.broadcaster.missingPersons.001",
+          "authoredPrerecordingID": "chapter02.crankRadio.broadcaster.missingPersons.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "crankRadio",
+          "speakerCharacterID": "broadcaster",
+          "conversationTargetCharacterID": "broadcaster",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter02.hamReceiver.dad.001",
+          "segmentID": "chapter02.beforeWomanBattle",
+          "narrativeOrdinal": 200,
+          "scriptPointID": "chapter02.hamReceiver.dad.script01",
+          "authoredPrerecordingID": "chapter02.hamReceiver.dad.script01.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "hamReceiver",
+          "speakerCharacterID": "dad",
+          "conversationTargetCharacterID": "dad",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter02.hamReceiver.rich.002",
+          "segmentID": "chapter02.beforeWomanBattle",
+          "narrativeOrdinal": 300,
+          "scriptPointID": "chapter02.hamReceiver.rich.script02",
+          "authoredPrerecordingID": "chapter02.hamReceiver.rich.script02.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "hamReceiver",
+          "speakerCharacterID": "rich",
+          "conversationTargetCharacterID": "dad",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter02.hamReceiver.dad.003",
+          "segmentID": "chapter02.beforeWomanBattle",
+          "narrativeOrdinal": 400,
+          "scriptPointID": "chapter02.hamReceiver.dad.script03",
+          "authoredPrerecordingID": "chapter02.hamReceiver.dad.script03.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "hamReceiver",
+          "speakerCharacterID": "dad",
+          "conversationTargetCharacterID": "dad",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter02.walkie.bigMike.001",
+          "segmentID": "chapter02.beforeWomanBattle",
+          "narrativeOrdinal": 500,
+          "scriptPointID": "chapter02.walkie.bigMike.script01",
+          "authoredPrerecordingID": "chapter02.walkie.bigMike.script01.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "walkie",
+          "speakerCharacterID": "big_mike",
+          "conversationTargetCharacterID": "big_mike",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter02.walkie.rich.002",
+          "segmentID": "chapter02.beforeWomanBattle",
+          "narrativeOrdinal": 600,
+          "scriptPointID": "chapter02.walkie.rich.script02",
+          "authoredPrerecordingID": "chapter02.walkie.rich.script02.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "walkie",
+          "speakerCharacterID": "rich",
+          "conversationTargetCharacterID": "big_mike",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter02.walkie.bigMike.003",
+          "segmentID": "chapter02.beforeWomanBattle",
+          "narrativeOrdinal": 700,
+          "scriptPointID": "chapter02.walkie.bigMike.script03",
+          "authoredPrerecordingID": "chapter02.walkie.bigMike.script03.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "walkie",
+          "speakerCharacterID": "big_mike",
+          "conversationTargetCharacterID": "big_mike",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter02.dadFrame.disappearance",
+          "segmentID": "chapter02.beforeWomanBattle",
+          "narrativeOrdinal": 800,
+          "scriptPointID": "chapter02.dadFrame.rich.dadDisappeared.001",
+          "authoredPrerecordingID": "chapter02.dadFrame.rich.dadDisappeared.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "dadFrame",
+          "speakerCharacterID": "rich",
+          "conversationTargetCharacterID": "rich",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter02.crankRadio.gridFailure",
+          "segmentID": "chapter02.beforeWomanBattle",
+          "narrativeOrdinal": 900,
+          "scriptPointID": "chapter02.crankRadio.broadcaster.gridFailure.002",
+          "authoredPrerecordingID": "chapter02.crankRadio.broadcaster.gridFailure.002",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "crankRadio",
+          "speakerCharacterID": "broadcaster",
+          "conversationTargetCharacterID": "broadcaster",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter02.hamReceiver.revelation.rich",
+          "segmentID": "chapter02.afterWomanBattle",
+          "narrativeOrdinal": 1500,
+          "scriptPointID": "chapter02.hamReceiver.rich.revelation.001",
+          "authoredPrerecordingID": "chapter02.hamReceiver.rich.revelation.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "hamReceiver",
+          "speakerCharacterID": "rich",
+          "conversationTargetCharacterID": "cateye81",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter02.hamReceiver.revelation.cateye81",
+          "segmentID": "chapter02.afterWomanBattle",
+          "narrativeOrdinal": 1600,
+          "scriptPointID": "chapter02.hamReceiver.cateye81.revelation.002",
+          "authoredPrerecordingID": "chapter02.hamReceiver.cateye81.revelation.002",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "hamReceiver",
+          "speakerCharacterID": "cateye81",
+          "conversationTargetCharacterID": "cateye81",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter02.crankRadio.gravitasPSA",
+          "segmentID": "chapter02.afterWomanBattle",
+          "narrativeOrdinal": 1700,
+          "scriptPointID": "chapter02.crankRadio.broadcaster.gravitasPSA.003",
+          "authoredPrerecordingID": "chapter02.crankRadio.broadcaster.gravitasPSA.003",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "crankRadio",
+          "speakerCharacterID": "broadcaster",
+          "conversationTargetCharacterID": "broadcaster",
+          "retention": "untilExplicitInvalidation"
+        }
+      ],
+      "checkpoints": [
+        { "checkpointRawValue": "chapter02.root", "segmentID": "chapter02.beforeWomanBattle", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter02.missingPersons.completed", "segmentID": "chapter02.beforeWomanBattle", "maximumNarrativeOrdinal": 100 },
+        { "checkpointRawValue": "chapter02.dadHam.completed", "segmentID": "chapter02.beforeWomanBattle", "maximumNarrativeOrdinal": 400 },
+        { "checkpointRawValue": "chapter02.bigMikeWalkie.completed", "segmentID": "chapter02.beforeWomanBattle", "maximumNarrativeOrdinal": 700 },
+        { "checkpointRawValue": "chapter02.dadPhoto.completed", "segmentID": "chapter02.beforeWomanBattle", "maximumNarrativeOrdinal": 800 },
+        { "checkpointRawValue": "chapter02.blackoutBroadcast.completed", "segmentID": "chapter02.beforeWomanBattle", "maximumNarrativeOrdinal": 900 },
+        { "checkpointRawValue": "chapter02.womanExit.pending", "segmentID": "chapter02.beforeWomanBattle", "maximumNarrativeOrdinal": 900 },
+        { "checkpointRawValue": "chapter02.womanBattle.pending", "segmentID": "chapter02.afterWomanBattle", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter02.womanBattle.completed", "segmentID": "chapter02.afterWomanBattle", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter02.postBattleHam.completed", "segmentID": "chapter02.afterWomanBattle", "maximumNarrativeOrdinal": 1600 },
+        { "checkpointRawValue": "chapter02.gravitasPSA.completed", "segmentID": "chapter02.afterWomanBattle", "maximumNarrativeOrdinal": 1700 },
+        { "checkpointRawValue": "chapter02.complete", "segmentID": "chapter02.afterWomanBattle", "maximumNarrativeOrdinal": 1700 }
+      ]
     },
     {
-      "scriptPointID": "chapter01.hamReceiver.rich.script04",
-      "authoredPrerecordingID": "chapter01.room.rich.hamReceiver.script04.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "hamReceiver",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter01.walkie.bigMike.script07",
-      "authoredPrerecordingID": "chapter01.walkie.bigMike.script07.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "walkie",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter01.walkie.bigMike.script09",
-      "authoredPrerecordingID": "chapter01.walkie.bigMike.script09.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "walkie",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter01.walkie.rich.script06",
-      "authoredPrerecordingID": "chapter01.walkie.rich.script06.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "walkie",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter01.walkie.rich.script08",
-      "authoredPrerecordingID": "chapter01.walkie.rich.script08.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "walkie",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter02.crankRadio.broadcaster.gravitasPSA.003",
-      "authoredPrerecordingID": "chapter02.crankRadio.broadcaster.gravitasPSA.003",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "crankRadio",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter02.crankRadio.broadcaster.gridFailure.002",
-      "authoredPrerecordingID": "chapter02.crankRadio.broadcaster.gridFailure.002",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "crankRadio",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter02.crankRadio.broadcaster.missingPersons.001",
-      "authoredPrerecordingID": "chapter02.crankRadio.broadcaster.missingPersons.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "crankRadio",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter02.dadFrame.rich.dadDisappeared.001",
-      "authoredPrerecordingID": "chapter02.dadFrame.rich.dadDisappeared.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "dadFrame",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter02.hamReceiver.cateye81.revelation.002",
-      "authoredPrerecordingID": "chapter02.hamReceiver.cateye81.revelation.002",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "hamReceiver",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter02.hamReceiver.dad.script01",
-      "authoredPrerecordingID": "chapter02.hamReceiver.dad.script01.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "hamReceiver",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter02.hamReceiver.dad.script03",
-      "authoredPrerecordingID": "chapter02.hamReceiver.dad.script03.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "hamReceiver",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter02.hamReceiver.rich.revelation.001",
-      "authoredPrerecordingID": "chapter02.hamReceiver.rich.revelation.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "hamReceiver",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter02.hamReceiver.rich.script02",
-      "authoredPrerecordingID": "chapter02.hamReceiver.rich.script02.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "hamReceiver",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter02.walkie.bigMike.script01",
-      "authoredPrerecordingID": "chapter02.walkie.bigMike.script01.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "walkie",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter02.walkie.bigMike.script03",
-      "authoredPrerecordingID": "chapter02.walkie.bigMike.script03.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "walkie",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter02.walkie.rich.script02",
-      "authoredPrerecordingID": "chapter02.walkie.rich.script02.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "walkie",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter03.crankRadio.broadcaster.continuity.001",
-      "authoredPrerecordingID": "chapter03.crankRadio.broadcaster.continuity.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "crankRadio",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter03.hamReceiver.cateye81.antichrist.002",
-      "authoredPrerecordingID": "chapter03.hamReceiver.cateye81.antichrist.002",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "hamReceiver",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter03.hamReceiver.rich.faith.001",
-      "authoredPrerecordingID": "chapter03.hamReceiver.rich.faith.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "hamReceiver",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter03.walkie.bigMike.fading.003",
-      "authoredPrerecordingID": "chapter03.walkie.bigMike.fading.003",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "walkie",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter03.walkie.bigMike.scavengerReport.001",
-      "authoredPrerecordingID": "chapter03.walkie.bigMike.scavengerReport.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "walkie",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "chapter03.walkie.rich.connectsMen.002",
-      "authoredPrerecordingID": "chapter03.walkie.rich.connectsMen.002",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "walkie",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "prologue.crankRadioBroadcast.001",
-      "authoredPrerecordingID": "prologue.room.broadcaster.crankRadio.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "crankRadio",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "prologue.dadPhotoMemory.001",
-      "authoredPrerecordingID": "prologue.room.rich.dadPhotoMemory.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "dadFrame",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "prologue.hamReceiver.cateye81.001",
-      "authoredPrerecordingID": "prologue.room.cateye81.hamReceiver.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "hamReceiver",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "prologue.hamReceiver.cateye81.003",
-      "authoredPrerecordingID": "prologue.room.cateye81.hamReceiver.003",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "hamReceiver",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "prologue.hamReceiver.rich.002",
-      "authoredPrerecordingID": "prologue.room.rich.hamReceiver.002",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "hamReceiver",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "prologue.scriptPoint01",
-      "authoredPrerecordingID": "prologue.walkie.bigMike.richContact.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "walkie",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "prologue.scriptPoint02",
-      "authoredPrerecordingID": "prologue.walkie.rich.scriptPoint02.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "walkie",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "prologue.scriptPoint03",
-      "authoredPrerecordingID": "prologue.walkie.bigMike.scriptPoint03.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "walkie",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "prologue.scriptPoint04",
-      "authoredPrerecordingID": "prologue.walkie.rich.scriptPoint04.001",
-      "voicePromptSource": {
-        "kind": "transmission",
-        "stageID": null,
-        "voicePromptID": null
-      },
-      "interactionSurface": "walkie",
-      "retention": "untilExplicitInvalidation"
-    },
-    {
-      "scriptPointID": "prologue.scriptPoint05",
-      "authoredPrerecordingID": "prologue.walkie.bigMike.scriptPoint05.002",
-      "voicePromptSource": {
-        "kind": "generationPipelineStage",
-        "stageID": "promptVoice",
-        "voicePromptID": null
-      },
-      "interactionSurface": "walkie",
-      "retention": "untilExplicitInvalidation"
+      "episodeID": "chapter03",
+      "contentRevision": "chapter03.v1",
+      "segments": [
+        { "segmentID": "chapter03.beforeBikerBattle", "startsAtBoundaryID": "chapter03.start", "boundaryKind": "chapterStart", "narrativeOrdinal": 0 },
+        { "segmentID": "chapter03.afterBiker.beforeMike", "startsAtBoundaryID": "chapter03.bikerBattle.001", "boundaryKind": "battle", "narrativeOrdinal": 1000 },
+        { "segmentID": "chapter03.afterMike", "startsAtBoundaryID": "chapter03.mikeBattle.001", "boundaryKind": "battle", "narrativeOrdinal": 2000 }
+      ],
+      "moments": [
+        {
+          "momentID": "chapter03.walkie.scavengerReport",
+          "segmentID": "chapter03.afterBiker.beforeMike",
+          "narrativeOrdinal": 1000,
+          "scriptPointID": "chapter03.walkie.bigMike.scavengerReport.001",
+          "authoredPrerecordingID": "chapter03.walkie.bigMike.scavengerReport.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "walkie",
+          "speakerCharacterID": "big_mike",
+          "conversationTargetCharacterID": "big_mike",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter03.walkie.connectsMen",
+          "segmentID": "chapter03.afterBiker.beforeMike",
+          "narrativeOrdinal": 1100,
+          "scriptPointID": "chapter03.walkie.rich.connectsMen.002",
+          "authoredPrerecordingID": "chapter03.walkie.rich.connectsMen.002",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "walkie",
+          "speakerCharacterID": "rich",
+          "conversationTargetCharacterID": "big_mike",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter03.walkie.fading",
+          "segmentID": "chapter03.afterBiker.beforeMike",
+          "narrativeOrdinal": 1200,
+          "scriptPointID": "chapter03.walkie.bigMike.fading.003",
+          "authoredPrerecordingID": "chapter03.walkie.bigMike.fading.003",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "walkie",
+          "speakerCharacterID": "big_mike",
+          "conversationTargetCharacterID": "big_mike",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter03.hamReceiver.faith",
+          "segmentID": "chapter03.afterBiker.beforeMike",
+          "narrativeOrdinal": 1300,
+          "scriptPointID": "chapter03.hamReceiver.rich.faith.001",
+          "authoredPrerecordingID": "chapter03.hamReceiver.rich.faith.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "hamReceiver",
+          "speakerCharacterID": "rich",
+          "conversationTargetCharacterID": "cateye81",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter03.hamReceiver.antichrist",
+          "segmentID": "chapter03.afterBiker.beforeMike",
+          "narrativeOrdinal": 1400,
+          "scriptPointID": "chapter03.hamReceiver.cateye81.antichrist.002",
+          "authoredPrerecordingID": "chapter03.hamReceiver.cateye81.antichrist.002",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "hamReceiver",
+          "speakerCharacterID": "cateye81",
+          "conversationTargetCharacterID": "cateye81",
+          "retention": "untilExplicitInvalidation"
+        },
+        {
+          "momentID": "chapter03.crankRadio.continuity",
+          "segmentID": "chapter03.afterBiker.beforeMike",
+          "narrativeOrdinal": 1500,
+          "scriptPointID": "chapter03.crankRadio.broadcaster.continuity.001",
+          "authoredPrerecordingID": "chapter03.crankRadio.broadcaster.continuity.001",
+          "voicePromptSource": { "kind": "transmission", "stageID": null, "voicePromptID": null },
+          "interactionSurface": "crankRadio",
+          "speakerCharacterID": "broadcaster",
+          "conversationTargetCharacterID": "broadcaster",
+          "retention": "untilExplicitInvalidation"
+        }
+      ],
+      "checkpoints": [
+        { "checkpointRawValue": "chapter03.root", "segmentID": "chapter03.beforeBikerBattle", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter03.bikerBattle.pending", "segmentID": "chapter03.beforeBikerBattle", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter03.bikerBattle.completed", "segmentID": "chapter03.afterBiker.beforeMike", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter03.walkie.completed", "segmentID": "chapter03.afterBiker.beforeMike", "maximumNarrativeOrdinal": 1200 },
+        { "checkpointRawValue": "chapter03.ham.completed", "segmentID": "chapter03.afterBiker.beforeMike", "maximumNarrativeOrdinal": 1400 },
+        { "checkpointRawValue": "chapter03.continuityBroadcast.completed", "segmentID": "chapter03.afterBiker.beforeMike", "maximumNarrativeOrdinal": 1500 },
+        { "checkpointRawValue": "chapter03.mikeBattle.pending", "segmentID": "chapter03.afterMike", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter03.heavenTransition.pending", "segmentID": "chapter03.afterMike", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter03.lightTunnel.pending", "segmentID": "chapter03.afterMike", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter03.endCard.pending", "segmentID": "chapter03.afterMike", "maximumNarrativeOrdinal": 0 },
+        { "checkpointRawValue": "chapter03.complete", "segmentID": "chapter03.afterMike", "maximumNarrativeOrdinal": 0 }
+      ]
     }
   ]
 }

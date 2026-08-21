@@ -328,11 +328,18 @@ enum TuringFlowConversationRunner {
 
             failureStage = "resolvingConversationInputs"
             let prerecordingTranscript: String
+            let immediateDeviceSpeakerID: String
+            let targetPriorTranscript: String?
+            let targetContextPosition: TuringConversationTargetContextPosition
             let promptVoiceStoryContext: String
             let promptVariant: TuringConversationPromptVariant
             let characterProfileID: String
             if let seed = request.immutableSeed {
                 prerecordingTranscript = seed.prerecordingTranscript
+                immediateDeviceSpeakerID =
+                    seed.immediateDeviceContext.speakerCharacterID.rawValue
+                targetPriorTranscript = seed.targetContext.priorTargetTranscript
+                targetContextPosition = seed.targetContext.selectionPosition
                 promptVoiceStoryContext = seed.promptVoiceStoryContext
                 promptVariant = seed.promptVariant
                 characterProfileID = seed.characterProfileID
@@ -348,6 +355,10 @@ enum TuringFlowConversationRunner {
                   promptVariant: \(seed.promptVariant.rawValue)
                   conversationKey: \(seed.conversationKey)
                   interactionSurface: \(seed.interactionSurface.rawValue)
+                  immediateDeviceSpeakerID: \(seed.immediateDeviceContext.speakerCharacterID.rawValue)
+                  targetCharacterID: \(seed.targetContext.targetCharacterID.rawValue)
+                  targetContextPosition: \(seed.targetContext.selectionPosition.rawValue)
+                  targetPriorTranscriptIncluded: \(seed.targetContext.priorTargetTranscript != nil)
                   dialogueHistoryIncluded: false
                 """)
             } else {
@@ -368,6 +379,9 @@ enum TuringFlowConversationRunner {
                 characterProfileID = await inputStore.characterProfileID(
                     for: request.conversationKey
                 ) ?? runtime.characterID
+                immediateDeviceSpeakerID = runtime.characterID
+                targetPriorTranscript = nil
+                targetContextPosition = .currentOrPrior
             }
 
             print("""
@@ -417,8 +431,14 @@ enum TuringFlowConversationRunner {
                                         text,
                                     promptContext:
                                         promptVoiceStoryContext,
-                                    prerecordingTranscript:
+                                    immediateDeviceTranscript:
                                         prerecordingTranscript,
+                                    immediateDeviceSpeakerID:
+                                        immediateDeviceSpeakerID,
+                                    targetPriorTranscript:
+                                        targetPriorTranscript,
+                                    targetContextPosition:
+                                        targetContextPosition,
                                     promptVariant:
                                         promptVariant
                                 )

@@ -529,6 +529,8 @@ final class TuringStoryCrankRadioInteractionController:
                     let transcript =
                         try await self.dictation
                             .endHoldToSend()
+                    let seed = try await StoryInteractionArbiter.shared
+                        .currentLatchedConversationSeed(surface: .crankRadio)
                     self.eventSink?
                         .publishTuringDictationEvent(
                             .processingStarted(
@@ -538,9 +540,9 @@ final class TuringStoryCrankRadioInteractionController:
                         )
                     print("""
                     [TuringCrankRadio] conversation submitted
-                      characterID: \(binding.conversationCharacterID)
-                      outputRoute: \(binding.conversationOutputRoute.rawValue)
-                      conversationKey: \(binding.conversationKey)
+                      characterID: \(seed.characterID)
+                      outputRoute: \(seed.outputRoute.rawValue)
+                      conversationKey: \(seed.conversationKey)
                       userInputUTF16: \(transcript.utf16.count)
                       dialogueHistoryIncluded: false
                     """)
@@ -553,20 +555,19 @@ final class TuringStoryCrankRadioInteractionController:
                                         conversationRunID:
                                             conversationRunID,
                                         characterID:
-                                            binding
-                                                .conversationCharacterID,
+                                            seed.characterID,
                                         outputRoute:
-                                            binding
-                                                .conversationOutputRoute,
+                                            seed.outputRoute,
                                         conversationKey:
-                                            binding
-                                                .conversationKey,
+                                            seed.conversationKey,
                                         playerDictation:
                                             transcript,
                                         interactionLease:
                                             lease,
                                         interactionSurface:
-                                            .crankRadio
+                                            .crankRadio,
+                                        immutableSeed:
+                                            seed
                                     ),
                                 inputStore:
                                     .shared,

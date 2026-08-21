@@ -6,10 +6,21 @@ This is your backstory:
 This is the current situation you find yourselves in:
 {{promptContext}}
 
-This is what you last said:
+This is the latest authored speech heard at the photograph. Use it as the immediate conversational situation:
 """
-{{prerecordingTranscript}}
+{{immediateDeviceTranscript}}
 """
+
+The speaker of that immediate speech was:
+{{immediateDeviceSpeakerID}}
+
+This is Rich's latest prior authored speech, when one has already occurred:
+"""
+{{targetPriorTranscript}}
+"""
+
+The selected Rich context position is:
+{{targetContextPosition}}
 
 This is the statement you are responding to. The player said this while talking with you about the photograph.
 """

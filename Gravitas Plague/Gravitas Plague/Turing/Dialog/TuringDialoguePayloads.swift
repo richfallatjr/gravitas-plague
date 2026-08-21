@@ -36,8 +36,13 @@ struct ConversationPromptNoBibleRequest: Codable, Sendable, Hashable {
     let characterProfileID: String
     let userInput: String
     let promptContext: String
-    let prerecordingTranscript: String
+    let immediateDeviceTranscript: String
+    let immediateDeviceSpeakerID: String
+    let targetPriorTranscript: String?
+    let targetContextPosition: TuringConversationTargetContextPosition
     let promptVariant: TuringConversationPromptVariant
+
+    var prerecordingTranscript: String { immediateDeviceTranscript }
 
     init(
         id: String,
@@ -51,7 +56,32 @@ struct ConversationPromptNoBibleRequest: Codable, Sendable, Hashable {
         self.characterProfileID = characterProfileID
         self.userInput = userInput
         self.promptContext = promptContext
-        self.prerecordingTranscript = prerecordingTranscript
+        self.immediateDeviceTranscript = prerecordingTranscript
+        self.immediateDeviceSpeakerID = "same_character"
+        self.targetPriorTranscript = nil
+        self.targetContextPosition = .currentOrPrior
+        self.promptVariant = promptVariant
+    }
+
+    init(
+        id: String,
+        characterProfileID: String,
+        userInput: String,
+        promptContext: String,
+        immediateDeviceTranscript: String,
+        immediateDeviceSpeakerID: String,
+        targetPriorTranscript: String?,
+        targetContextPosition: TuringConversationTargetContextPosition,
+        promptVariant: TuringConversationPromptVariant = .standard
+    ) {
+        self.id = id
+        self.characterProfileID = characterProfileID
+        self.userInput = userInput
+        self.promptContext = promptContext
+        self.immediateDeviceTranscript = immediateDeviceTranscript
+        self.immediateDeviceSpeakerID = immediateDeviceSpeakerID
+        self.targetPriorTranscript = targetPriorTranscript
+        self.targetContextPosition = targetContextPosition
         self.promptVariant = promptVariant
     }
 }
