@@ -94,10 +94,10 @@ nonisolated enum StoryAmbientGunfireCatalogValidator {
     ) throws {
         try require(catalog.schemaVersion == 1, "schemaVersion must be 1")
         try require(catalog.minimumGapSeconds == 5, "minimum gap must be 5 seconds")
-        try require(catalog.maximumGapSeconds == 15, "maximum gap must be 15 seconds")
+        try require(catalog.maximumGapSeconds == 30, "maximum gap must be 30 seconds")
         try require(catalog.distantFixedDistanceFeet == 50, "distant radius must be 50 feet")
-        try require(catalog.dryMinimumDistanceFeet == 50, "dry minimum radius must be 50 feet")
-        try require(catalog.dryMaximumDistanceFeet == 150, "dry maximum radius must be 150 feet")
+        try require(catalog.dryMinimumDistanceFeet == 500, "dry minimum radius must be 500 feet")
+        try require(catalog.dryMaximumDistanceFeet == 1000, "dry maximum radius must be 1000 feet")
         try require(
             catalog.groundOffsetMeters.isFinite && catalog.groundOffsetMeters == 0.05,
             "ground offset must be 0.05 meters"
@@ -127,7 +127,7 @@ nonisolated enum StoryAmbientGunfireCatalogValidator {
                 try require(asset.distanceRolloffFactor == 0, "distant rolloff must be 0 for \(asset.fileName)")
             } else {
                 try require(asset.assetClass == .dryGunfire, "invalid dry class for \(asset.fileName)")
-                try require(asset.sourceGainDB == 0, "dry gain must be 0 dB for \(asset.fileName)")
+                try require(asset.sourceGainDB == -12, "dry gain must be -12 dB for \(asset.fileName)")
                 try require(asset.distanceRolloffFactor == 1, "dry rolloff must be 1 for \(asset.fileName)")
             }
 

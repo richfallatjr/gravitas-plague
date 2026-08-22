@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "sourceFormat": "authored stereo MP3 48000 Hz",
+  "productionFormat": "mono WAV 48000 Hz pcm_s16le",
+  "assets": [
+    { "fileName": "helicopter-overhead-02.mp3" },
+    { "fileName": "helicopter-overhead-03.mp3" },
+    { "fileName": "jet-overhead-02.mp3" }
+  ]
+}

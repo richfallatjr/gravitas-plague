@@ -151,6 +151,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         StoryAmbientGunfireWorldBridge()
     private var storyAmbientGunfireLifecycle:
         StoryAmbientGunfireLifecycleController?
+    private let storyAmbientAircraftWorldBridge =
+        StoryAmbientAircraftWorldBridge()
+    private var storyAmbientAircraftLifecycle:
+        StoryAmbientAircraftLifecycleController?
     private var turingHighMemoryPreflightAdapter:
         StoryTuringHighMemoryPreflightAdapter?
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
@@ -190,6 +194,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             self.instructionHUD.clear()
             print("[TuringWallSlices] placement HUD cleared scanID=\(scanID)")
             self.storyAmbientGunfireLifecycle?.storyPropsDidCommit(
+                reason: "sliceLayout.\(scanID)"
+            )
+            self.storyAmbientAircraftLifecycle?.storyPropsDidCommit(
                 reason: "sliceLayout.\(scanID)"
             )
             self.onTuringStoryStagePlacementCommitted?("sliceLayout.\(scanID)")
@@ -401,16 +408,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 worldBridge: storyAmbientGunfireWorldBridge
             )
             storyAmbientGunfireLifecycle = lifecycle
-            storyTitleCardTransitionCoordinator
-                .onPresentationActivityChanged = { [weak self] active, reason in
-                    self?.storyAmbientGunfireLifecycle?.setTitleCardActive(
-                        active,
-                        reason: reason
-                    )
-                }
             print(
                 "[StoryAmbientGunfire] configured startBoundary=storyPropsCommitted " +
-                    "gapSeconds=5...15 dryFeet=50...150 dryGainDB=0"
+                    "gapSeconds=5...30 dryFeet=500...1000 dryGainDB=-12"
             )
         } catch {
             storyAmbientGunfireLifecycle = nil
@@ -419,6 +419,47 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                     "error=\(error.localizedDescription)"
             )
         }
+    }
+
+    private func configureStoryAmbientAircraft(sceneRoot: Entity) {
+        storyAmbientAircraftWorldBridge.bind(sceneRoot: sceneRoot)
+        do {
+            let catalog = try StoryAmbientAircraftCatalogStore().catalog
+            let scheduler = StoryAmbientAircraftScheduler(
+                catalog: catalog,
+                worldBridge: storyAmbientAircraftWorldBridge
+            )
+            storyAmbientAircraftLifecycle =
+                StoryAmbientAircraftLifecycleController(
+                    scheduler: scheduler,
+                    worldBridge: storyAmbientAircraftWorldBridge
+                )
+            print(
+                "[StoryAmbientAircraft] configured " +
+                    "startBoundary=storyPropsCommitted gapSeconds=10...30 " +
+                    "originHeightFeet=10...15 sourceGainDB=0"
+            )
+        } catch {
+            storyAmbientAircraftLifecycle = nil
+            print(
+                "[StoryAmbientAircraft] ERROR disabled " +
+                    "error=\(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func configureStoryAmbientPresentationCallbacks() {
+        storyTitleCardTransitionCoordinator
+            .onPresentationActivityChanged = { [weak self] active, reason in
+                self?.storyAmbientGunfireLifecycle?.setTitleCardActive(
+                    active,
+                    reason: reason
+                )
+                self?.storyAmbientAircraftLifecycle?.setTitleCardActive(
+                    active,
+                    reason: reason
+                )
+            }
     }
 
     func makeSceneRoot(
@@ -435,6 +476,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             on: root
         )
         configureStoryAmbientGunfire(sceneRoot: root)
+        configureStoryAmbientAircraft(sceneRoot: root)
+        configureStoryAmbientPresentationCallbacks()
 
         do {
             try CharacterAttributeStore.shared.loadStrict()
@@ -817,6 +860,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             },
             onFinalAngelDeathSequenceBegan: { [weak self] in
                 self?.storyAmbientGunfireLifecycle?
+                    .finalAngelDeathSequenceBegan(
+                        reason: "chapter03.mike.nonlethalDefeatThreshold"
+                    )
+                self?.storyAmbientAircraftLifecycle?
                     .finalAngelDeathSequenceBegan(
                         reason: "chapter03.mike.nonlethalDefeatThreshold"
                     )
@@ -1809,6 +1856,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         reason: String
     ) async {
         await storyAmbientGunfireLifecycle?.deactivateAndWait(
+            reason: "operationModeTeardown.\(reason)"
+        )
+        await storyAmbientAircraftLifecycle?.deactivateAndWait(
             reason: "operationModeTeardown.\(reason)"
         )
         turingHUDDelayedClearTask?.cancel()
@@ -3373,6 +3423,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         operationModeSwitchTask = nil
         storyAmbientGunfireLifecycle?.shutdown(reason: "immersiveShutdown")
         storyAmbientGunfireWorldBridge.unbind(reason: "immersiveShutdown")
+        storyAmbientAircraftLifecycle?.shutdown(reason: "immersiveShutdown")
+        storyAmbientAircraftWorldBridge.unbind(reason: "immersiveShutdown")
         storyTitleCardTransitionCoordinator.reset(reason: "immersiveShutdown")
         StoryModeActionCoordinator.shared.reset(reason: "immersiveShutdown")
         StoryInteractionPresentationCoordinator.shared.stop()
@@ -3466,6 +3518,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         onWallPosterUIActiveChanged?(false)
 
         storyAmbientGunfireLifecycle = nil
+        storyAmbientAircraftLifecycle = nil
         sceneRoot = nil
         headAnchor = nil
         jockRetargetController = nil

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "minimumGapSeconds": 10.0,
+  "maximumGapSeconds": 30.0,
+  "minimumHeightFeet": 10.0,
+  "maximumHeightFeet": 15.0,
+  "sourceGainDB": 0.0,
+  "distanceRolloffFactor": 0.0,
+  "maximumActiveVoices": 1,
+  "assets": [
+    { "id": "helicopter-overhead-02", "fileName": "helicopter-overhead-02.wav", "selectionWeight": 1.0 },
+    { "id": "helicopter-overhead-03", "fileName": "helicopter-overhead-03.wav", "selectionWeight": 1.0 },
+    { "id": "jet-overhead-02", "fileName": "jet-overhead-02.wav", "selectionWeight": 1.0 }
+  ]
+}

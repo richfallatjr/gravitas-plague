@@ -6,24 +6,27 @@ final class StoryAmbientGunfireTests: XCTestCase {
         let catalog = try StoryAmbientGunfireCatalogStore().catalog
 
         XCTAssertEqual(catalog.minimumGapSeconds, 5)
-        XCTAssertEqual(catalog.maximumGapSeconds, 15)
-        XCTAssertEqual(catalog.dryMinimumDistanceFeet, 50)
-        XCTAssertEqual(catalog.dryMaximumDistanceFeet, 150)
+        XCTAssertEqual(catalog.maximumGapSeconds, 30)
+        XCTAssertEqual(catalog.dryMinimumDistanceFeet, 500)
+        XCTAssertEqual(catalog.dryMaximumDistanceFeet, 1000)
         XCTAssertEqual(catalog.distantFixedDistanceFeet, 50)
         XCTAssertEqual(catalog.maximumActiveVoices, 1)
         XCTAssertEqual(catalog.assets.count, 26)
         XCTAssertTrue(
-            catalog.assets.allSatisfy { $0.sourceGainDB == 0 }
-        )
-        XCTAssertTrue(
             catalog.assets
                 .filter { $0.assetClass == .dryGunfire }
-                .allSatisfy { $0.distanceRolloffFactor == 1 }
+                .allSatisfy {
+                    $0.sourceGainDB == -12 &&
+                        $0.distanceRolloffFactor == 1
+                }
         )
         XCTAssertTrue(
             catalog.assets
                 .filter { $0.assetClass == .distantAuthored }
-                .allSatisfy { $0.distanceRolloffFactor == 0 }
+                .allSatisfy {
+                    $0.sourceGainDB == 0 &&
+                        $0.distanceRolloffFactor == 0
+                }
         )
     }
 
@@ -42,7 +45,7 @@ final class StoryAmbientGunfireTests: XCTestCase {
                 catalog: catalog,
                 unit: 1
             ),
-            15,
+            30,
             accuracy: 0.000_001
         )
         XCTAssertEqual(
@@ -51,7 +54,7 @@ final class StoryAmbientGunfireTests: XCTestCase {
                 catalog: catalog,
                 unit: 0
             ),
-            50,
+            500,
             accuracy: 0.000_001
         )
         XCTAssertEqual(
@@ -60,7 +63,7 @@ final class StoryAmbientGunfireTests: XCTestCase {
                 catalog: catalog,
                 unit: 1
             ),
-            150,
+            1000,
             accuracy: 0.000_001
         )
         XCTAssertEqual(
