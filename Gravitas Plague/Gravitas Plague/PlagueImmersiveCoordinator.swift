@@ -147,6 +147,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         StoryTitleCardTransitionCoordinator()
     private let cinematicWorldPresentationCoordinator =
         CinematicWorldPresentationCoordinator()
+    private let storyAmbientGunfireWorldBridge =
+        StoryAmbientGunfireWorldBridge()
+    private var storyAmbientGunfireLifecycle:
+        StoryAmbientGunfireLifecycleController?
     private var turingHighMemoryPreflightAdapter:
         StoryTuringHighMemoryPreflightAdapter?
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
@@ -185,6 +189,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             self.turingHUDDelayedClearTask = nil
             self.instructionHUD.clear()
             print("[TuringWallSlices] placement HUD cleared scanID=\(scanID)")
+            self.storyAmbientGunfireLifecycle?.storyPropsDidCommit(
+                reason: "sliceLayout.\(scanID)"
+            )
             self.onTuringStoryStagePlacementCommitted?("sliceLayout.\(scanID)")
             self.finishTuringDebugRescanIfNeeded(
                 scanID: scanID,
@@ -376,6 +383,44 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         chapter03Coordinator?.bind(blackout: blackout)
     }
 
+    private func configureStoryAmbientGunfire(sceneRoot: Entity) {
+        storyAmbientGunfireWorldBridge.bind(sceneRoot: sceneRoot)
+        do {
+            let catalog = try StoryAmbientGunfireCatalogStore().catalog
+            let snapshotProvider = StoryAmbientGunfireWorldSnapshotProvider(
+                spatialProvider: spatialProvider,
+                wallManager: roomSkinningCoordinator.wallManager
+            )
+            let scheduler = StoryAmbientGunfireScheduler(
+                catalog: catalog,
+                snapshotProvider: snapshotProvider,
+                worldBridge: storyAmbientGunfireWorldBridge
+            )
+            let lifecycle = StoryAmbientGunfireLifecycleController(
+                scheduler: scheduler,
+                worldBridge: storyAmbientGunfireWorldBridge
+            )
+            storyAmbientGunfireLifecycle = lifecycle
+            storyTitleCardTransitionCoordinator
+                .onPresentationActivityChanged = { [weak self] active, reason in
+                    self?.storyAmbientGunfireLifecycle?.setTitleCardActive(
+                        active,
+                        reason: reason
+                    )
+                }
+            print(
+                "[StoryAmbientGunfire] configured startBoundary=storyPropsCommitted " +
+                    "gapSeconds=5...15 dryFeet=50...150 dryGainDB=0"
+            )
+        } catch {
+            storyAmbientGunfireLifecycle = nil
+            print(
+                "[StoryAmbientGunfire] ERROR disabled " +
+                    "error=\(error.localizedDescription)"
+            )
+        }
+    }
+
     func makeSceneRoot(
         initialAtmosphere: PlagueForestAtmosphere,
         atmosphereRevision: Int
@@ -389,6 +434,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         PlagueNativeBloomInstaller.installStrictBloom(
             on: root
         )
+        configureStoryAmbientGunfire(sceneRoot: root)
 
         do {
             try CharacterAttributeStore.shared.loadStrict()
@@ -768,6 +814,12 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             onPlayerContactFeedback: { [weak self] amount in
                 self?.audioController.playRandomPlayerDamageHit()
                 self?.onPlayerDamaged?(amount)
+            },
+            onFinalAngelDeathSequenceBegan: { [weak self] in
+                self?.storyAmbientGunfireLifecycle?
+                    .finalAngelDeathSequenceBegan(
+                        reason: "chapter03.mike.nonlethalDefeatThreshold"
+                    )
             },
             onPlayerDeath: { [weak self] in
                 self?.handleChapter01PlayerDeath(source: .chapter03Mike)
@@ -1756,6 +1808,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     private func tearDownOperationModeRuntime(
         reason: String
     ) async {
+        await storyAmbientGunfireLifecycle?.deactivateAndWait(
+            reason: "operationModeTeardown.\(reason)"
+        )
         turingHUDDelayedClearTask?.cancel()
         turingHUDDelayedClearTask = nil
         instructionHUD.clear()
@@ -3316,6 +3371,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         operationModeSwitchGeneration += 1
         operationModeSwitchTask?.cancel()
         operationModeSwitchTask = nil
+        storyAmbientGunfireLifecycle?.shutdown(reason: "immersiveShutdown")
+        storyAmbientGunfireWorldBridge.unbind(reason: "immersiveShutdown")
         storyTitleCardTransitionCoordinator.reset(reason: "immersiveShutdown")
         StoryModeActionCoordinator.shared.reset(reason: "immersiveShutdown")
         StoryInteractionPresentationCoordinator.shared.stop()
@@ -3408,6 +3465,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         }
         onWallPosterUIActiveChanged?(false)
 
+        storyAmbientGunfireLifecycle = nil
         sceneRoot = nil
         headAnchor = nil
         jockRetargetController = nil

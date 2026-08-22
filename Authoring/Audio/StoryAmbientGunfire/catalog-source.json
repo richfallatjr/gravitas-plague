@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "sourceFormat": "authored stereo 48000 Hz",
+  "productionFormat": "mono 48000 Hz pcm_s16le",
+  "assets": [
+    { "fileName": "automatic-pistol-01.wav", "assetClass": "dryGunfire" },
+    { "fileName": "automatic-pistol-02.wav", "assetClass": "dryGunfire" },
+    { "fileName": "automatic-pistol-03.wav", "assetClass": "dryGunfire" },
+    { "fileName": "automatic-pistol-04.wav", "assetClass": "dryGunfire" },
+    { "fileName": "automatic-pistol-05.wav", "assetClass": "dryGunfire" },
+    { "fileName": "pistol-volley-01.wav", "assetClass": "dryGunfire" },
+    { "fileName": "rifle-1-01.wav", "assetClass": "dryGunfire" },
+    { "fileName": "rifle-1-02.wav", "assetClass": "dryGunfire" },
+    { "fileName": "rifle-1-03.wav", "assetClass": "dryGunfire" },
+    { "fileName": "rifle-1-04.wav", "assetClass": "dryGunfire" },
+    { "fileName": "rifle-1-05.wav", "assetClass": "dryGunfire" },
+    { "fileName": "rifle-3-01.wav", "assetClass": "dryGunfire" },
+    { "fileName": "rifle-3-02.wav", "assetClass": "dryGunfire" },
+    { "fileName": "semi-auto-rifle-01.wav", "assetClass": "dryGunfire" },
+    { "fileName": "semi-auto-rifle-02.wav", "assetClass": "dryGunfire" },
+    { "fileName": "semi-auto-rifle-03.wav", "assetClass": "dryGunfire" },
+    { "fileName": "shotgun-01.wav", "assetClass": "dryGunfire" },
+    { "fileName": "shotgun-02.wav", "assetClass": "dryGunfire" },
+    { "fileName": "shotgun-2-01.wav", "assetClass": "dryGunfire" },
+    { "fileName": "distant-01.wav", "assetClass": "distantAuthored" },
+    { "fileName": "distant-02.wav", "assetClass": "distantAuthored" },
+    { "fileName": "distant-03.wav", "assetClass": "distantAuthored" },
+    { "fileName": "distant-04.wav", "assetClass": "distantAuthored" },
+    { "fileName": "distant-05.wav", "assetClass": "distantAuthored" },
+    { "fileName": "distant-06.wav", "assetClass": "distantAuthored" },
+    { "fileName": "distant-07.wav", "assetClass": "distantAuthored" }
+  ]
+}

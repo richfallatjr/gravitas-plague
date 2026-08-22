@@ -1,5 +1,7 @@
 *.usdz
 *.wav
+!Authoring/Audio/StoryAmbientGunfire/Source/*.wav
+!Gravitas Plague/TuringResources/Turing/Audio/story-ambient-gunfire/*.wav
 .DS_Store
 *.xcuserstate
 **/xcuserdata/

@@ -45,6 +45,7 @@ enum StoryTitleCardTransitionState: Sendable, Equatable {
 final class StoryTitleCardTransitionCoordinator: ObservableObject {
     @Published private(set) var state: StoryTitleCardTransitionState = .idle
     @Published private(set) var lastError: String?
+    var onPresentationActivityChanged: ((Bool, String) -> Void)?
 
     private weak var world: (any StoryTitleCardTransitionWorld)?
     private weak var presenter: StoryTitleCardWorldPresenter?
@@ -74,6 +75,10 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
 
         activeRequestID = request.requestID
         lastError = nil
+        onPresentationActivityChanged?(
+            true,
+            "accepted.\(request.source.rawValue)"
+        )
         print(
             """
             [StoryTitleCard] request accepted
@@ -111,6 +116,7 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
         activeTask = nil
         activeRequestID = nil
         state = .idle
+        onPresentationActivityChanged?(false, "playerDeath")
         print("[StoryTitleCard] cancelled reason=playerDeath")
     }
 
@@ -129,6 +135,7 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
         activeRequestID = nil
         state = .idle
         lastError = nil
+        onPresentationActivityChanged?(false, "reset.\(reason)")
         print("[StoryTitleCard] reset reason=\(reason)")
     }
 
@@ -252,6 +259,10 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
             activeTask = nil
             activeRequestID = nil
             state = .idle
+            onPresentationActivityChanged?(
+                false,
+                "destinationOwnsFullBlack.\(request.source.rawValue)"
+            )
             await world.titleCardTransitionCompleted(
                 request.destination,
                 requestID: request.requestID
@@ -320,6 +331,10 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
         activeTask = nil
         activeRequestID = nil
         state = .idle
+        onPresentationActivityChanged?(
+            false,
+            "completed.\(request.source.rawValue)"
+        )
         await world.titleCardTransitionCompleted(
             request.destination,
             requestID: request.requestID
@@ -348,6 +363,10 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
         activeTask = nil
         activeRequestID = nil
         state = .idle
+        onPresentationActivityChanged?(
+            false,
+            "cancelled.\(request.source.rawValue)"
+        )
     }
 
     private func finishFailed(
@@ -384,6 +403,10 @@ final class StoryTitleCardTransitionCoordinator: ObservableObject {
         activeTask = nil
         activeRequestID = nil
         state = .idle
+        onPresentationActivityChanged?(
+            false,
+            "failed.\(request.source.rawValue)"
+        )
         print(
             "[StoryTitleCard] ERROR requestID=\(request.requestID.uuidString) " +
                 "error=\(error.localizedDescription)"

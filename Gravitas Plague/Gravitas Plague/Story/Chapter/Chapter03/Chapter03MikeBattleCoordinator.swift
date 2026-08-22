@@ -78,6 +78,7 @@ final class Chapter03MikeBattleCoordinator {
     private let onEnemyRemoved: @MainActor (UUID) -> Void
     private let playerTargetProvider: @MainActor () -> SIMD3<Float>?
     private let onPlayerContactFeedback: @MainActor (Int) -> Void
+    private let onFinalAngelDeathSequenceBegan: @MainActor () -> Void
     private let onPlayerDeath: @MainActor () -> Void
 
     private weak var completionSink: (any Chapter03MikeBattleCompletionSink)?
@@ -114,6 +115,7 @@ final class Chapter03MikeBattleCoordinator {
         onEnemyRemoved: @escaping @MainActor (UUID) -> Void,
         playerTargetProvider: @escaping @MainActor () -> SIMD3<Float>?,
         onPlayerContactFeedback: @escaping @MainActor (Int) -> Void,
+        onFinalAngelDeathSequenceBegan: @escaping @MainActor () -> Void,
         onPlayerDeath: @escaping @MainActor () -> Void
     ) {
         self.door = door
@@ -133,6 +135,7 @@ final class Chapter03MikeBattleCoordinator {
         self.onEnemyRemoved = onEnemyRemoved
         self.playerTargetProvider = playerTargetProvider
         self.onPlayerContactFeedback = onPlayerContactFeedback
+        self.onFinalAngelDeathSequenceBegan = onFinalAngelDeathSequenceBegan
         self.onPlayerDeath = onPlayerDeath
         self.cleanup = BattleRuntimeCleanupCoordinator(
             registry: registry,
@@ -373,6 +376,7 @@ final class Chapter03MikeBattleCoordinator {
               snapshot.remainingAcceptedDamagePoints == 0,
               !snapshot.isLethal,
               let surrenderCue else { return }
+        onFinalAngelDeathSequenceBegan()
         print(
             "[Chapter03MikeBattle] nonlethal threshold claimed accepted=\(snapshot.acceptedHitCount)/\(snapshot.acceptedHitCapacity) deathAnimationRequested=false"
         )
