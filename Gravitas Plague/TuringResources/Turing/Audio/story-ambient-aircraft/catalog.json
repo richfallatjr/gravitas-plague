@@ -1,15 +1,22 @@
 {
   "schemaVersion": 1,
-  "minimumGapSeconds": 10.0,
-  "maximumGapSeconds": 30.0,
+  "minimumGapSeconds": 5.0,
+  "maximumGapSeconds": 20.0,
   "minimumHeightFeet": 10.0,
   "maximumHeightFeet": 15.0,
   "sourceGainDB": 0.0,
   "distanceRolloffFactor": 0.0,
   "maximumActiveVoices": 1,
   "assets": [
+    { "id": "chinook-overhead-01", "fileName": "chinook-overhead-01.wav", "selectionWeight": 1.0 },
+    { "id": "chinook-overhead-02", "fileName": "chinook-overhead-02.wav", "selectionWeight": 1.0 },
+    { "id": "chinook-overhead-03", "fileName": "chinook-overhead-03.wav", "selectionWeight": 1.0 },
     { "id": "helicopter-overhead-02", "fileName": "helicopter-overhead-02.wav", "selectionWeight": 1.0 },
     { "id": "helicopter-overhead-03", "fileName": "helicopter-overhead-03.wav", "selectionWeight": 1.0 },
-    { "id": "jet-overhead-02", "fileName": "jet-overhead-02.wav", "selectionWeight": 1.0 }
+    { "id": "jet-overhead-01", "fileName": "jet-overhead-01.wav", "selectionWeight": 1.0 },
+    { "id": "jet-overhead-02", "fileName": "jet-overhead-02.wav", "selectionWeight": 1.0 },
+    { "id": "jet-overhead-03", "fileName": "jet-overhead-03.wav", "selectionWeight": 1.0 },
+    { "id": "jet-overhead-04", "fileName": "jet-overhead-04.wav", "selectionWeight": 1.0 },
+    { "id": "jet-overhead-05", "fileName": "jet-overhead-05.wav", "selectionWeight": 1.0 }
   ]
 }

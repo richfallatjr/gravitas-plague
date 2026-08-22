@@ -436,7 +436,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 )
             print(
                 "[StoryAmbientAircraft] configured " +
-                    "startBoundary=storyPropsCommitted gapSeconds=10...30 " +
+                    "startBoundary=storyPropsCommitted gapSeconds=5...20 " +
                     "originHeightFeet=10...15 sourceGainDB=0"
             )
         } catch {

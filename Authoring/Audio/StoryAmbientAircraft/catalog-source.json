@@ -3,8 +3,15 @@
   "sourceFormat": "authored stereo MP3 48000 Hz",
   "productionFormat": "mono WAV 48000 Hz pcm_s16le",
   "assets": [
+    { "fileName": "chinook-overhead-01.mp3" },
+    { "fileName": "chinook-overhead-02.mp3" },
+    { "fileName": "chinook-overhead-03.mp3" },
     { "fileName": "helicopter-overhead-02.mp3" },
     { "fileName": "helicopter-overhead-03.mp3" },
-    { "fileName": "jet-overhead-02.mp3" }
+    { "fileName": "jet-overhead-01.mp3" },
+    { "fileName": "jet-overhead-02.mp3" },
+    { "fileName": "jet-overhead-03.mp3" },
+    { "fileName": "jet-overhead-04.mp3" },
+    { "fileName": "jet-overhead-05.mp3" }
   ]
 }

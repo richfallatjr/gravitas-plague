@@ -51,9 +51,16 @@ nonisolated struct StoryAmbientAircraftCatalogStore: Sendable {
 
 nonisolated enum StoryAmbientAircraftCatalogValidator {
     private static let expectedFiles = Set([
+        "chinook-overhead-01.wav",
+        "chinook-overhead-02.wav",
+        "chinook-overhead-03.wav",
         "helicopter-overhead-02.wav",
         "helicopter-overhead-03.wav",
-        "jet-overhead-02.wav"
+        "jet-overhead-01.wav",
+        "jet-overhead-02.wav",
+        "jet-overhead-03.wav",
+        "jet-overhead-04.wav",
+        "jet-overhead-05.wav"
     ])
 
     static func validate(
@@ -61,16 +68,16 @@ nonisolated enum StoryAmbientAircraftCatalogValidator {
         bundle: Bundle = .main
     ) throws {
         try require(catalog.schemaVersion == 1, "schemaVersion must be 1")
-        try require(catalog.minimumGapSeconds == 10, "minimum gap must be 10 seconds")
-        try require(catalog.maximumGapSeconds == 30, "maximum gap must be 30 seconds")
+        try require(catalog.minimumGapSeconds == 5, "minimum gap must be 5 seconds")
+        try require(catalog.maximumGapSeconds == 20, "maximum gap must be 20 seconds")
         try require(catalog.minimumHeightFeet == 10, "minimum height must be 10 feet")
         try require(catalog.maximumHeightFeet == 15, "maximum height must be 15 feet")
         try require(catalog.sourceGainDB == 0, "source gain must be 0 dB")
         try require(catalog.distanceRolloffFactor == 0, "distance rolloff must be 0")
         try require(catalog.maximumActiveVoices == 1, "maximumActiveVoices must be 1")
-        try require(catalog.assets.count == 3, "catalog must contain exactly 3 assets")
+        try require(catalog.assets.count == 10, "catalog must contain exactly 10 assets")
         try require(Set(catalog.assets.map(\.fileName)) == expectedFiles, "aircraft filenames do not match")
-        try require(Set(catalog.assets.map(\.id)).count == 3, "aircraft IDs must be unique")
+        try require(Set(catalog.assets.map(\.id)).count == 10, "aircraft IDs must be unique")
 
         for asset in catalog.assets {
             try require(

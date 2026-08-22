@@ -5,8 +5,8 @@ final class StoryAmbientAircraftTests: XCTestCase {
     func testProductionCatalogUsesAuthoredOverheadPolicy() throws {
         let catalog = try StoryAmbientAircraftCatalogStore().catalog
 
-        XCTAssertEqual(catalog.minimumGapSeconds, 10)
-        XCTAssertEqual(catalog.maximumGapSeconds, 30)
+        XCTAssertEqual(catalog.minimumGapSeconds, 5)
+        XCTAssertEqual(catalog.maximumGapSeconds, 20)
         XCTAssertEqual(catalog.minimumHeightFeet, 10)
         XCTAssertEqual(catalog.maximumHeightFeet, 15)
         XCTAssertEqual(catalog.sourceGainDB, 0)
@@ -15,9 +15,16 @@ final class StoryAmbientAircraftTests: XCTestCase {
         XCTAssertEqual(
             Set(catalog.assets.map(\.fileName)),
             [
+                "chinook-overhead-01.wav",
+                "chinook-overhead-02.wav",
+                "chinook-overhead-03.wav",
                 "helicopter-overhead-02.wav",
                 "helicopter-overhead-03.wav",
-                "jet-overhead-02.wav"
+                "jet-overhead-01.wav",
+                "jet-overhead-02.wav",
+                "jet-overhead-03.wav",
+                "jet-overhead-04.wav",
+                "jet-overhead-05.wav"
             ]
         )
     }
@@ -30,14 +37,14 @@ final class StoryAmbientAircraftTests: XCTestCase {
                 catalog: catalog,
                 unit: 0
             ),
-            10
+            5
         )
         XCTAssertEqual(
             StoryAmbientAircraftSampler.gapSeconds(
                 catalog: catalog,
                 unit: 1
             ),
-            30,
+            20,
             accuracy: 0.000_001
         )
 

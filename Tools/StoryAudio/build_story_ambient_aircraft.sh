@@ -5,9 +5,16 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SOURCE="$ROOT/Authoring/Audio/StoryAmbientAircraft/Source"
 OUTPUT="$ROOT/Gravitas Plague/TuringResources/Turing/Audio/story-ambient-aircraft"
 FILES=(
+    chinook-overhead-01.mp3
+    chinook-overhead-02.mp3
+    chinook-overhead-03.mp3
     helicopter-overhead-02.mp3
     helicopter-overhead-03.mp3
+    jet-overhead-01.mp3
     jet-overhead-02.mp3
+    jet-overhead-03.mp3
+    jet-overhead-04.mp3
+    jet-overhead-05.mp3
 )
 
 for tool in ffmpeg ffprobe shasum; do
@@ -50,9 +57,9 @@ for input_name in "${FILES[@]}"; do
 done
 
 count="$(find "$OUTPUT" -maxdepth 1 -type f -name '*.wav' | wc -l | tr -d ' ')"
-test "$count" = "3" || {
-    echo "Expected exactly 3 production aircraft files, found $count" >&2
+test "$count" = "10" || {
+    echo "Expected exactly 10 production aircraft files, found $count" >&2
     exit 1
 }
 
-echo "Installed 3 production aircraft WAVs in $OUTPUT"
+echo "Installed 10 production aircraft WAVs in $OUTPUT"
