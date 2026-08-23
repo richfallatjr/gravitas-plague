@@ -42,6 +42,7 @@ nonisolated struct StoryAmbientGunfireLifecycleState: Sendable, Equatable {
 
 @MainActor
 final class StoryAmbientGunfireLifecycleController {
+    private let channel: StoryAmbientGroundChannel
     private let scheduler: StoryAmbientGunfireScheduler
     private let worldBridge: StoryAmbientGunfireWorldBridge
     private var state = StoryAmbientGunfireLifecycleState()
@@ -49,9 +50,11 @@ final class StoryAmbientGunfireLifecycleController {
     private var reconcileTask: Task<Void, Never>?
 
     init(
+        channel: StoryAmbientGroundChannel = .gunfire,
         scheduler: StoryAmbientGunfireScheduler,
         worldBridge: StoryAmbientGunfireWorldBridge
     ) {
+        self.channel = channel
         self.scheduler = scheduler
         self.worldBridge = worldBridge
     }
@@ -72,7 +75,7 @@ final class StoryAmbientGunfireLifecycleController {
         worldBridge.stopActive(reason: "terminalAngelSequence.\(reason)")
         reconcile(reason: "terminalAngelSequence.\(reason)")
         print(
-            "[StoryAmbientGunfire] terminal cutoff latched " +
+            "[\(channel.logName)] terminal cutoff latched " +
                 "reason=\(reason) resumes=false"
         )
     }

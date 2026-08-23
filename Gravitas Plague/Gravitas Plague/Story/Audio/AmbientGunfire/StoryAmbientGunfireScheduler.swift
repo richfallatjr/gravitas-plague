@@ -1,6 +1,7 @@
 import Foundation
 
 actor StoryAmbientGunfireScheduler {
+    private let channel: StoryAmbientGroundChannel
     private let catalog: StoryAmbientGunfireCatalog
     private let snapshotProvider: StoryAmbientGunfireWorldSnapshotProvider
     private let worldBridge: StoryAmbientGunfireWorldBridge
@@ -13,6 +14,7 @@ actor StoryAmbientGunfireScheduler {
     private var lastAssetID: String?
 
     init(
+        channel: StoryAmbientGroundChannel = .gunfire,
         catalog: StoryAmbientGunfireCatalog,
         snapshotProvider: StoryAmbientGunfireWorldSnapshotProvider,
         worldBridge: StoryAmbientGunfireWorldBridge,
@@ -20,6 +22,7 @@ actor StoryAmbientGunfireScheduler {
         random: any StoryAmbientGunfireRandomSource = SystemStoryAmbientGunfireRandomSource(),
         clock: any StoryAmbientGunfireClock = ContinuousStoryAmbientGunfireClock()
     ) {
+        self.channel = channel
         self.catalog = catalog
         self.snapshotProvider = snapshotProvider
         self.worldBridge = worldBridge
@@ -36,7 +39,7 @@ actor StoryAmbientGunfireScheduler {
             await self?.run(sessionID: sessionID)
         }
         print(
-            "[StoryAmbientGunfire] activated " +
+            "[\(channel.logName)] activated " +
                 "sessionID=\(sessionID.rawValue.uuidString) reason=\(reason)"
         )
     }
@@ -54,7 +57,7 @@ actor StoryAmbientGunfireScheduler {
         await worldBridge.stopActive(reason: reason)
         await task?.value
         print(
-            "[StoryAmbientGunfire] suspended " +
+            "[\(channel.logName)] suspended " +
                 "sessionID=\(sessionID?.rawValue.uuidString ?? "none") " +
                 "reason=\(reason)"
         )
@@ -75,7 +78,7 @@ actor StoryAmbientGunfireScheduler {
                 return
             } catch {
                 print(
-                    "[StoryAmbientGunfire] event failed " +
+                    "[\(channel.logName)] event failed " +
                         "sessionID=\(sessionID.rawValue.uuidString) " +
                         "error=\(error.localizedDescription) nextAction=freshGap"
                 )
@@ -104,8 +107,7 @@ actor StoryAmbientGunfireScheduler {
             groundOffsetMeters: catalog.groundOffsetMeters
         )
         let fileURL = try TuringResourceLoader.resourceURL(
-            resourcePath:
-                "Turing/Audio/story-ambient-gunfire/\(asset.fileName)"
+            resourcePath: "\(channel.resourceDirectory)/\(asset.fileName)"
         )
         let prepared = try await resourceLoader.load(
             fileURL: fileURL,
@@ -129,7 +131,8 @@ actor StoryAmbientGunfireScheduler {
             }
             StoryAmbientGunfireTelemetry.eventStarted(
                 request: request,
-                precedingGapSeconds: precedingGapSeconds
+                precedingGapSeconds: precedingGapSeconds,
+                channel: channel
             )
             try await worldBridge.playAndWait(
                 prepared: prepared,
@@ -137,7 +140,10 @@ actor StoryAmbientGunfireScheduler {
             )
             await resourceLoader.evictTransient(fileURL: fileURL)
             lastAssetID = asset.id
-            StoryAmbientGunfireTelemetry.eventCompleted(request: request)
+            StoryAmbientGunfireTelemetry.eventCompleted(
+                request: request,
+                channel: channel
+            )
         } catch {
             await worldBridge.stopActive(reason: "eventFailed")
             await resourceLoader.evictTransient(fileURL: fileURL)

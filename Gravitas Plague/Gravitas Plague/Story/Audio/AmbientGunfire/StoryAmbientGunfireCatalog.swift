@@ -1,6 +1,33 @@
 import Foundation
 import simd
 
+nonisolated enum StoryAmbientGroundChannel: String, Sendable, Equatable {
+    case gunfire
+    case county
+
+    var logName: String {
+        switch self {
+        case .gunfire:
+            return "StoryAmbientGunfire"
+        case .county:
+            return "StoryAmbientCounty"
+        }
+    }
+
+    var resourceDirectory: String {
+        "Turing/Audio/story-ambient-\(rawValue)"
+    }
+
+    var emitterPrefix: String {
+        logName
+    }
+}
+
+nonisolated enum StoryAmbientRandomSeed {
+    static let gunfire: UInt64 = 0x47_55_4E_46_49_52_45
+    static let county: UInt64 = 0x43_4F_55_4E_54_59
+}
+
 nonisolated enum StoryAmbientGunfireClass: String, Codable, Sendable, Hashable {
     case distantAuthored
     case dryGunfire
@@ -220,6 +247,24 @@ actor SystemStoryAmbientGunfireRandomSource: StoryAmbientGunfireRandomSource {
     }
 }
 
+actor SeededStoryAmbientRandomSource: StoryAmbientGunfireRandomSource {
+    private var state: UInt64
+
+    init(seed: UInt64) {
+        state = seed
+    }
+
+    func nextUnitInterval() -> Double {
+        // SplitMix64 gives each ambient layer a stable, independent stream.
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var value = state
+        value = (value ^ (value >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        value = (value ^ (value >> 27)) &* 0x94D0_49BB_1331_11EB
+        value ^= value >> 31
+        return Double(value >> 11) * 0x1.0p-53
+    }
+}
+
 nonisolated protocol StoryAmbientGunfireClock: Sendable {
     func sleep(seconds: Double) async throws
 }
@@ -279,11 +324,12 @@ nonisolated enum StoryAmbientGunfireSpatialSampler {
 nonisolated enum StoryAmbientGunfireTelemetry {
     static func eventStarted(
         request: StoryAmbientGunfirePlaybackRequest,
-        precedingGapSeconds: Double
+        precedingGapSeconds: Double,
+        channel: StoryAmbientGroundChannel = .gunfire
     ) {
         print(
             """
-            [StoryAmbientGunfire] event started
+            [\(channel.logName)] event started
               sessionID: \(request.sessionID.rawValue.uuidString)
               eventID: \(request.eventID.rawValue.uuidString)
               file: \(request.asset.fileName)
@@ -299,9 +345,12 @@ nonisolated enum StoryAmbientGunfireTelemetry {
         )
     }
 
-    static func eventCompleted(request: StoryAmbientGunfirePlaybackRequest) {
+    static func eventCompleted(
+        request: StoryAmbientGunfirePlaybackRequest,
+        channel: StoryAmbientGroundChannel = .gunfire
+    ) {
         print(
-            "[StoryAmbientGunfire] event completed " +
+            "[\(channel.logName)] event completed " +
                 "eventID=\(request.eventID.rawValue.uuidString) " +
                 "emitterRemoved=true transientResourceEvicted=true"
         )

@@ -151,6 +151,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         StoryAmbientGunfireWorldBridge()
     private var storyAmbientGunfireLifecycle:
         StoryAmbientGunfireLifecycleController?
+    private let storyAmbientCountyWorldBridge =
+        StoryAmbientGunfireWorldBridge(channel: .county)
+    private var storyAmbientCountyLifecycle:
+        StoryAmbientGunfireLifecycleController?
     private let storyAmbientAircraftWorldBridge =
         StoryAmbientAircraftWorldBridge()
     private var storyAmbientAircraftLifecycle:
@@ -194,6 +198,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             self.instructionHUD.clear()
             print("[TuringWallSlices] placement HUD cleared scanID=\(scanID)")
             self.storyAmbientGunfireLifecycle?.storyPropsDidCommit(
+                reason: "sliceLayout.\(scanID)"
+            )
+            self.storyAmbientCountyLifecycle?.storyPropsDidCommit(
                 reason: "sliceLayout.\(scanID)"
             )
             self.storyAmbientAircraftLifecycle?.storyPropsDidCommit(
@@ -401,7 +408,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             let scheduler = StoryAmbientGunfireScheduler(
                 catalog: catalog,
                 snapshotProvider: snapshotProvider,
-                worldBridge: storyAmbientGunfireWorldBridge
+                worldBridge: storyAmbientGunfireWorldBridge,
+                random: SeededStoryAmbientRandomSource(
+                    seed: StoryAmbientRandomSeed.gunfire
+                )
             )
             let lifecycle = StoryAmbientGunfireLifecycleController(
                 scheduler: scheduler,
@@ -410,12 +420,49 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             storyAmbientGunfireLifecycle = lifecycle
             print(
                 "[StoryAmbientGunfire] configured startBoundary=storyPropsCommitted " +
-                    "gapSeconds=5...30 dryFeet=500...1000 dryGainDB=-12"
+                    "gapSeconds=5...30 dryFeet=500...1000 dryGainDB=-12 " +
+                    "seed=\(StoryAmbientRandomSeed.gunfire)"
             )
         } catch {
             storyAmbientGunfireLifecycle = nil
             print(
                 "[StoryAmbientGunfire] ERROR disabled " +
+                    "error=\(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func configureStoryAmbientCounty(sceneRoot: Entity) {
+        storyAmbientCountyWorldBridge.bind(sceneRoot: sceneRoot)
+        do {
+            let catalog = try StoryAmbientCountyCatalogStore().catalog
+            let snapshotProvider = StoryAmbientGunfireWorldSnapshotProvider(
+                spatialProvider: spatialProvider,
+                wallManager: roomSkinningCoordinator.wallManager
+            )
+            let scheduler = StoryAmbientGunfireScheduler(
+                channel: .county,
+                catalog: catalog,
+                snapshotProvider: snapshotProvider,
+                worldBridge: storyAmbientCountyWorldBridge,
+                random: SeededStoryAmbientRandomSource(
+                    seed: StoryAmbientRandomSeed.county
+                )
+            )
+            storyAmbientCountyLifecycle = StoryAmbientGunfireLifecycleController(
+                channel: .county,
+                scheduler: scheduler,
+                worldBridge: storyAmbientCountyWorldBridge
+            )
+            print(
+                "[StoryAmbientCounty] configured " +
+                    "startBoundary=storyPropsCommitted gapSeconds=5...15 " +
+                    "distantFeet=50 sourceGainDB=0 seed=\(StoryAmbientRandomSeed.county)"
+            )
+        } catch {
+            storyAmbientCountyLifecycle = nil
+            print(
+                "[StoryAmbientCounty] ERROR disabled " +
                     "error=\(error.localizedDescription)"
             )
         }
@@ -455,6 +502,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                     active,
                     reason: reason
                 )
+                self?.storyAmbientCountyLifecycle?.setTitleCardActive(
+                    active,
+                    reason: reason
+                )
                 self?.storyAmbientAircraftLifecycle?.setTitleCardActive(
                     active,
                     reason: reason
@@ -476,6 +527,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             on: root
         )
         configureStoryAmbientGunfire(sceneRoot: root)
+        configureStoryAmbientCounty(sceneRoot: root)
         configureStoryAmbientAircraft(sceneRoot: root)
         configureStoryAmbientPresentationCallbacks()
 
@@ -860,6 +912,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             },
             onFinalAngelDeathSequenceBegan: { [weak self] in
                 self?.storyAmbientGunfireLifecycle?
+                    .finalAngelDeathSequenceBegan(
+                        reason: "chapter03.mike.nonlethalDefeatThreshold"
+                    )
+                self?.storyAmbientCountyLifecycle?
                     .finalAngelDeathSequenceBegan(
                         reason: "chapter03.mike.nonlethalDefeatThreshold"
                     )
@@ -1856,6 +1912,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         reason: String
     ) async {
         await storyAmbientGunfireLifecycle?.deactivateAndWait(
+            reason: "operationModeTeardown.\(reason)"
+        )
+        await storyAmbientCountyLifecycle?.deactivateAndWait(
             reason: "operationModeTeardown.\(reason)"
         )
         await storyAmbientAircraftLifecycle?.deactivateAndWait(
@@ -3423,6 +3482,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         operationModeSwitchTask = nil
         storyAmbientGunfireLifecycle?.shutdown(reason: "immersiveShutdown")
         storyAmbientGunfireWorldBridge.unbind(reason: "immersiveShutdown")
+        storyAmbientCountyLifecycle?.shutdown(reason: "immersiveShutdown")
+        storyAmbientCountyWorldBridge.unbind(reason: "immersiveShutdown")
         storyAmbientAircraftLifecycle?.shutdown(reason: "immersiveShutdown")
         storyAmbientAircraftWorldBridge.unbind(reason: "immersiveShutdown")
         storyTitleCardTransitionCoordinator.reset(reason: "immersiveShutdown")
@@ -3518,6 +3579,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         onWallPosterUIActiveChanged?(false)
 
         storyAmbientGunfireLifecycle = nil
+        storyAmbientCountyLifecycle = nil
         storyAmbientAircraftLifecycle = nil
         sceneRoot = nil
         headAnchor = nil

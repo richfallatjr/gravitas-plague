@@ -13,6 +13,11 @@ final class StoryAmbientGunfireWorldBridge {
 
     private weak var sceneRoot: Entity?
     private var active: Active?
+    private let channel: StoryAmbientGroundChannel
+
+    init(channel: StoryAmbientGroundChannel = .gunfire) {
+        self.channel = channel
+    }
 
     var activeVoiceCount: Int { active == nil ? 0 : 1 }
 
@@ -38,7 +43,7 @@ final class StoryAmbientGunfireWorldBridge {
         }
 
         let emitter = Entity()
-        emitter.name = "StoryAmbientGunfire_\(request.eventID.rawValue.uuidString)"
+        emitter.name = "\(channel.emitterPrefix)_\(request.eventID.rawValue.uuidString)"
         emitter.position = sceneRoot.convert(position: request.worldPosition, from: nil)
         emitter.components.set(
             SpatialAudioComponent(
@@ -122,7 +127,7 @@ final class StoryAmbientGunfireWorldBridge {
         self.active = nil
         active.continuation.resume(throwing: CancellationError())
         print(
-            "[StoryAmbientGunfire] active event stopped " +
+            "[\(channel.logName)] active event stopped " +
                 "eventID=\(eventID.rawValue.uuidString) reason=\(reason)"
         )
     }
