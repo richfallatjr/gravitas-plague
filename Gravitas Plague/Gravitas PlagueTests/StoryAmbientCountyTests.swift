@@ -10,8 +10,8 @@ final class StoryAmbientCountyTests: XCTestCase {
         XCTAssertEqual(catalog.distantFixedDistanceFeet, 50)
         XCTAssertEqual(catalog.maximumActiveVoices, 1)
         XCTAssertTrue(catalog.avoidImmediateRepeat)
-        XCTAssertEqual(catalog.assets.count, 34)
-        XCTAssertEqual(Set(catalog.assets.map(\.id)).count, 34)
+        XCTAssertEqual(catalog.assets.count, 26)
+        XCTAssertEqual(Set(catalog.assets.map(\.id)).count, 26)
         XCTAssertTrue(
             catalog.assets.allSatisfy {
                 $0.fileName.contains("county") &&
@@ -60,7 +60,7 @@ final class StoryAmbientCountyTests: XCTestCase {
             by: \.selectionWeight
         )
 
-        XCTAssertEqual(assetsByWeight[1]?.count, 16)
+        XCTAssertEqual(assetsByWeight[1]?.count, 8)
         XCTAssertEqual(assetsByWeight[5]?.count, 3)
         XCTAssertEqual(assetsByWeight[10]?.count, 15)
         XCTAssertEqual(Set(assetsByWeight.keys), Set([1, 5, 10]))

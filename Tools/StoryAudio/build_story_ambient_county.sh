@@ -20,10 +20,6 @@ files=(
   car-peel-02-county-1.mp3
   car-peel-03-county-1.mp3
   car-peel-04-county-1.mp3
-  car-start-01-county-1.mp3
-  car-start-02-county-1.mp3
-  car-start-03-county-1.mp3
-  car-start-04-county-1.mp3
   chainsaw-01-county-distance-1.mp3
   chainsaw-02-county-distance-1.mp3
   chainsaw-03-county-distance-1.mp3
@@ -35,10 +31,6 @@ files=(
   dog-02-county-10.mp3
   dog-03-county-10.mp3
   dog-04-county-10.mp3
-  pickup-01-county-1.mp3
-  pickup-02-county-1.mp3
-  pickup-03-county-1.mp3
-  pickup-04-county-1.mp3
   train-01-county-distant-10.mp3
   train-02-county-distant-10.mp3
   train-03-county-distant-10.mp3

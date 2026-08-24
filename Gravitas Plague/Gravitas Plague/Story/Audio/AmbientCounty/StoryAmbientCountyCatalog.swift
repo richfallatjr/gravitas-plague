@@ -26,10 +26,6 @@ nonisolated enum StoryAmbientCountyCatalogValidator {
         "car-peel-02-county-1.wav",
         "car-peel-03-county-1.wav",
         "car-peel-04-county-1.wav",
-        "car-start-01-county-1.wav",
-        "car-start-02-county-1.wav",
-        "car-start-03-county-1.wav",
-        "car-start-04-county-1.wav",
         "chainsaw-01-county-distance-1.wav",
         "chainsaw-02-county-distance-1.wav",
         "chainsaw-03-county-distance-1.wav",
@@ -41,10 +37,6 @@ nonisolated enum StoryAmbientCountyCatalogValidator {
         "dog-02-county-10.wav",
         "dog-03-county-10.wav",
         "dog-04-county-10.wav",
-        "pickup-01-county-1.wav",
-        "pickup-02-county-1.wav",
-        "pickup-03-county-1.wav",
-        "pickup-04-county-1.wav",
         "train-01-county-distant-10.wav",
         "train-02-county-distant-10.wav",
         "train-03-county-distant-10.wav",
@@ -67,7 +59,7 @@ nonisolated enum StoryAmbientCountyCatalogValidator {
         )
         try require(catalog.avoidImmediateRepeat, "immediate repeats must be disabled")
         try require(catalog.maximumActiveVoices == 1, "maximumActiveVoices must be 1")
-        try require(catalog.assets.count == expectedFiles.count, "catalog must contain exactly 34 assets")
+        try require(catalog.assets.count == expectedFiles.count, "catalog must contain exactly 26 assets")
         try require(Set(catalog.assets.map(\.id)).count == expectedFiles.count, "catalog asset IDs must be unique")
         try require(Set(catalog.assets.map(\.fileName)) == expectedFiles, "county filenames do not match")
 
