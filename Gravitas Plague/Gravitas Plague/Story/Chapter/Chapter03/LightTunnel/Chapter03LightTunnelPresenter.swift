@@ -75,9 +75,9 @@ final class Chapter03LightTunnelPresenter {
 
         let emitter = Entity()
         emitter.name = "Chapter03AngelLightAudioEmitter"
-        emitter.position = angel.root.position
+        emitter.position = .zero
         emitter.components.set(SpatialAudioComponent())
-        portalWorld.addChild(emitter)
+        angel.root.addChild(emitter)
 
         let aperture = try makeCircularPortalAperture(
             diameterMeters: definition.portalDiameterMeters,
@@ -166,6 +166,11 @@ final class Chapter03LightTunnelPresenter {
                     "distanceMeters=\(String(format: "%.3f", distance))"
             )
         }
+    }
+
+    func updateAngelFloatMotion(deltaTime: TimeInterval) {
+        guard runID != nil else { return }
+        angel?.updateFloatMotion(deltaTime: deltaTime)
     }
 
     func fadeOutAndRemove(runID: UUID) async throws {

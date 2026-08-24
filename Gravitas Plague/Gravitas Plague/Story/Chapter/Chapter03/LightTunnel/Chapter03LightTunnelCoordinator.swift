@@ -48,6 +48,10 @@ final class Chapter03LightTunnelCoordinator {
         self.blackout = blackout
     }
 
+    func update(deltaTime: TimeInterval) {
+        presenter.updateAngelFloatMotion(deltaTime: deltaTime)
+    }
+
     func start(_ request: Chapter03LightTunnelRequest) async throws {
         await cancel(reason: "replacement", releasePresentation: true)
         guard let blackout else {

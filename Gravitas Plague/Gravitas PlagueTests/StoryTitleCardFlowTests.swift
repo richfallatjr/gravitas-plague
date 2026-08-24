@@ -131,4 +131,22 @@ final class StoryTitleCardFlowTests: XCTestCase {
                 .stopsChapter02BattleMusicAfterFade
         )
     }
+
+    func testOnlyTerminalDestinationsReturnToOperationMenu() {
+        XCTAssertTrue(
+            StoryTitleCardDestination.endOfAvailableContent(
+                completedEpisode: .chapter03
+            ).returnsToOperationMenuAfterCompletion
+        )
+        XCTAssertFalse(
+            StoryTitleCardDestination.start(.chapter03)
+                .returnsToOperationMenuAfterCompletion
+        )
+        XCTAssertFalse(
+            StoryTitleCardDestination.advance(
+                from: .chapter02,
+                to: .chapter03
+            ).returnsToOperationMenuAfterCompletion
+        )
+    }
 }

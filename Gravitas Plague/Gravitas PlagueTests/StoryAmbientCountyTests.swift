@@ -10,11 +10,14 @@ final class StoryAmbientCountyTests: XCTestCase {
         XCTAssertEqual(catalog.distantFixedDistanceFeet, 50)
         XCTAssertEqual(catalog.maximumActiveVoices, 1)
         XCTAssertTrue(catalog.avoidImmediateRepeat)
-        XCTAssertEqual(catalog.assets.count, 31)
-        XCTAssertEqual(Set(catalog.assets.map(\.id)).count, 31)
+        XCTAssertEqual(catalog.assets.count, 34)
+        XCTAssertEqual(Set(catalog.assets.map(\.id)).count, 34)
         XCTAssertTrue(
             catalog.assets.allSatisfy {
                 $0.fileName.contains("county") &&
+                    StoryAmbientCountyFileNaming.selectionWeight(
+                        from: $0.fileName
+                    ) == Int($0.selectionWeight) &&
                     $0.assetClass == .distantAuthored &&
                     $0.sourceGainDB == 0 &&
                     $0.distanceRolloffFactor == 0
@@ -50,10 +53,82 @@ final class StoryAmbientCountyTests: XCTestCase {
         )
     }
 
+    func testCountyFilenameWeightsAreTheProductionSelectionWeights() throws {
+        let catalog = try StoryAmbientCountyCatalogStore().catalog
+        let assetsByWeight = Dictionary(
+            grouping: catalog.assets,
+            by: \.selectionWeight
+        )
+
+        XCTAssertEqual(assetsByWeight[1]?.count, 16)
+        XCTAssertEqual(assetsByWeight[5]?.count, 3)
+        XCTAssertEqual(assetsByWeight[10]?.count, 15)
+        XCTAssertEqual(Set(assetsByWeight.keys), Set([1, 5, 10]))
+    }
+
+    func testWeightedSelectorAllocatesSlotsFromFilenameWeights() throws {
+        let assets = try StoryAmbientCountyCatalogStore().catalog.assets
+        let totalWeight = Int(
+            assets.reduce(0) { $0 + $1.selectionWeight }
+        )
+        var selectionCounts = [String: Int]()
+
+        for slot in 0..<totalWeight {
+            let unit = (Double(slot) + 0.5) / Double(totalWeight)
+            guard let selected = StoryAmbientGunfireWeightedSelector.select(
+                from: assets,
+                unit: unit
+            ) else {
+                XCTFail("Weighted county selection unexpectedly returned nil")
+                return
+            }
+            selectionCounts[selected.id, default: 0] += 1
+        }
+
+        for asset in assets {
+            XCTAssertEqual(
+                selectionCounts[asset.id],
+                Int(asset.selectionWeight),
+                "Incorrect weighted slot count for \(asset.fileName)"
+            )
+        }
+    }
+
+    func testCountyWeightNamingRejectsOldAndOutOfRangeNames() {
+        XCTAssertNil(
+            StoryAmbientCountyFileNaming.selectionWeight(
+                from: "dog-01-county.wav"
+            )
+        )
+        XCTAssertNil(
+            StoryAmbientCountyFileNaming.selectionWeight(
+                from: "dog-01-county-11.wav"
+            )
+        )
+        XCTAssertEqual(
+            StoryAmbientCountyFileNaming.selectionWeight(
+                from: "dog-01-county-10.wav"
+            ),
+            10
+        )
+    }
+
     func testGunfireAndCountyUseDifferentRepeatableRandomStreams() async {
+        XCTAssertEqual(
+            Set([
+                StoryAmbientRandomSeed.gunfire,
+                StoryAmbientRandomSeed.county,
+                StoryAmbientRandomSeed.countySecondary
+            ]).count,
+            3
+        )
+        XCTAssertEqual(
+            StoryAmbientGroundChannel.county.resourceDirectory,
+            StoryAmbientGroundChannel.countySecondary.resourceDirectory
+        )
         XCTAssertNotEqual(
-            StoryAmbientRandomSeed.gunfire,
-            StoryAmbientRandomSeed.county
+            StoryAmbientGroundChannel.county.logName,
+            StoryAmbientGroundChannel.countySecondary.logName
         )
 
         let firstGunfire = SeededStoryAmbientRandomSource(
@@ -65,20 +140,33 @@ final class StoryAmbientCountyTests: XCTestCase {
         let county = SeededStoryAmbientRandomSource(
             seed: StoryAmbientRandomSeed.county
         )
+        let countySecondary = SeededStoryAmbientRandomSource(
+            seed: StoryAmbientRandomSeed.countySecondary
+        )
         var firstGunfireValues = [Double]()
         var secondGunfireValues = [Double]()
         var countyValues = [Double]()
+        var countySecondaryValues = [Double]()
 
         for _ in 0..<8 {
             firstGunfireValues.append(await firstGunfire.nextUnitInterval())
             secondGunfireValues.append(await secondGunfire.nextUnitInterval())
             countyValues.append(await county.nextUnitInterval())
+            countySecondaryValues.append(
+                await countySecondary.nextUnitInterval()
+            )
         }
 
         XCTAssertEqual(firstGunfireValues, secondGunfireValues)
         XCTAssertNotEqual(firstGunfireValues, countyValues)
+        XCTAssertNotEqual(firstGunfireValues, countySecondaryValues)
+        XCTAssertNotEqual(countyValues, countySecondaryValues)
         XCTAssertTrue(
-            (firstGunfireValues + countyValues).allSatisfy {
+            (
+                firstGunfireValues +
+                    countyValues +
+                    countySecondaryValues
+            ).allSatisfy {
                 $0 >= 0 && $0 < 1
             }
         )

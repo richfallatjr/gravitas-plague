@@ -263,6 +263,7 @@ final class Chapter03Coordinator:
         deltaTime: TimeInterval,
         playerTargetWorldPosition: SIMD3<Float>?
     ) {
+        lightTunnel.update(deltaTime: deltaTime)
         bikerBattle.update(
             deltaTime: deltaTime,
             playerTargetWorldPosition: playerTargetWorldPosition

@@ -616,6 +616,39 @@ final class PlagueDemoSession: ObservableObject {
         )
     }
 
+    func prepareForOperationMenuAfterStoryCompletion(
+        source: String
+    ) async {
+        resetRuntimeUIForFreshLaunch()
+        activeStoryStagePreparationGeneration = nil
+        latestCommand = nil
+        latestTuringDictationEvent = nil
+        forestImmersiveState = .closed
+        immersiveSpaceStatus = .closed
+        forestImmersiveStatus = "Mixed room scene closed."
+        roomSkinningStatus = "Room skinning idle."
+        resetPlayerDeathState()
+        TuringStoryStageCoordinator.shared.invalidate(
+            reason: "storyCompleted.\(source)"
+        )
+
+        do {
+            try await PlagueMainMenuMusicActor.shared.startIfNeeded(
+                reason: "storyCompleted.\(source)"
+            )
+        } catch {
+            print(
+                "[PlagueMenuMusic] ERROR story-completion restart failed: " +
+                    error.localizedDescription
+            )
+        }
+
+        print(
+            "[PlagueMenu] Story completed; operation menu restored " +
+                "source=\(source) nextSelectionFreshRoomScan=true"
+        )
+    }
+
     @MainActor
     func loadHordeLeaderboardStats() {
         lifetimeWavesCleared = UserDefaults.standard.integer(

@@ -22,17 +22,22 @@ final class Chapter03AngelPortalEntity {
     private let visual: Entity
     private let presentationVariant: PresentationVariant
     private let poseDriver: JockRuntimeDriver?
+    private let basePosition: SIMD3<Float>
+    private var floatMotion: Chapter03AngelFloatMotion
 
     private init(
         root: Entity,
         visual: Entity,
         presentationVariant: PresentationVariant,
-        poseDriver: JockRuntimeDriver?
+        poseDriver: JockRuntimeDriver?,
+        floatMotionSeed: UInt64
     ) {
         self.root = root
         self.visual = visual
         self.presentationVariant = presentationVariant
         self.poseDriver = poseDriver
+        basePosition = root.position
+        floatMotion = Chapter03AngelFloatMotion(seed: floatMotionSeed)
     }
 
     static func load(
@@ -101,7 +106,8 @@ final class Chapter03AngelPortalEntity {
             root: root,
             visual: visual,
             presentationVariant: .staticPosed,
-            poseDriver: nil
+            poseDriver: nil,
+            floatMotionSeed: UInt64.random(in: .min ... .max)
         )
     }
 
@@ -192,8 +198,14 @@ final class Chapter03AngelPortalEntity {
             root: root,
             visual: visual,
             presentationVariant: .animatedFloat,
-            poseDriver: poseDriver
+            poseDriver: poseDriver,
+            floatMotionSeed: UInt64.random(in: .min ... .max)
         )
+    }
+
+    func updateFloatMotion(deltaTime: TimeInterval) {
+        let offset = floatMotion.update(deltaTime: deltaTime)
+        root.position = basePosition + offset
     }
 
     func release(reason: String) {

@@ -1,9 +1,12 @@
 *.usdz
 *.wav
+!/*-county-*.wav
 !Authoring/Audio/StoryAmbientGunfire/Source/*.wav
 !Gravitas Plague/TuringResources/Turing/Audio/story-ambient-gunfire/*.wav
+!Gravitas Plague/TuringResources/Turing/Audio/story-ambient-county/*.wav
 !Gravitas Plague/TuringResources/Turing/Audio/story-ambient-aircraft/*.wav
 .DS_Store
+*.pkf
 *.xcuserstate
 **/xcuserdata/
 **/__pycache__/

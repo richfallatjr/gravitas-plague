@@ -4,6 +4,7 @@ import simd
 nonisolated enum StoryAmbientGroundChannel: String, Sendable, Equatable {
     case gunfire
     case county
+    case countySecondary
 
     var logName: String {
         switch self {
@@ -11,11 +12,18 @@ nonisolated enum StoryAmbientGroundChannel: String, Sendable, Equatable {
             return "StoryAmbientGunfire"
         case .county:
             return "StoryAmbientCounty"
+        case .countySecondary:
+            return "StoryAmbientCountySecondary"
         }
     }
 
     var resourceDirectory: String {
-        "Turing/Audio/story-ambient-\(rawValue)"
+        switch self {
+        case .gunfire:
+            return "Turing/Audio/story-ambient-gunfire"
+        case .county, .countySecondary:
+            return "Turing/Audio/story-ambient-county"
+        }
     }
 
     var emitterPrefix: String {
@@ -26,6 +34,7 @@ nonisolated enum StoryAmbientGroundChannel: String, Sendable, Equatable {
 nonisolated enum StoryAmbientRandomSeed {
     static let gunfire: UInt64 = 0x47_55_4E_46_49_52_45
     static let county: UInt64 = 0x43_4F_55_4E_54_59
+    static let countySecondary: UInt64 = 0x43_4F_55_4E_54_59_32
 }
 
 nonisolated enum StoryAmbientGunfireClass: String, Codable, Sendable, Hashable {
@@ -121,7 +130,7 @@ nonisolated enum StoryAmbientGunfireCatalogValidator {
     ) throws {
         try require(catalog.schemaVersion == 1, "schemaVersion must be 1")
         try require(catalog.minimumGapSeconds == 5, "minimum gap must be 5 seconds")
-        try require(catalog.maximumGapSeconds == 30, "maximum gap must be 30 seconds")
+        try require(catalog.maximumGapSeconds == 60, "maximum gap must be 60 seconds")
         try require(catalog.distantFixedDistanceFeet == 50, "distant radius must be 50 feet")
         try require(catalog.dryMinimumDistanceFeet == 500, "dry minimum radius must be 500 feet")
         try require(catalog.dryMaximumDistanceFeet == 1000, "dry maximum radius must be 1000 feet")
@@ -321,6 +330,36 @@ nonisolated enum StoryAmbientGunfireSpatialSampler {
     }
 }
 
+nonisolated enum StoryAmbientGunfireWeightedSelector {
+    static func select(
+        from candidates: [StoryAmbientGunfireAsset],
+        unit: Double
+    ) -> StoryAmbientGunfireAsset? {
+        guard !candidates.isEmpty else { return nil }
+        let totalWeight = candidates.reduce(0) {
+            $0 + $1.selectionWeight
+        }
+        guard totalWeight.isFinite, totalWeight > 0 else {
+            return candidates.first
+        }
+
+        let finiteUnit = unit.isFinite ? unit : 0
+        let boundedUnit = min(
+            max(finiteUnit, 0),
+            Double(1).nextDown
+        )
+        let target = boundedUnit * totalWeight
+        var cursor = 0.0
+        for asset in candidates {
+            cursor += asset.selectionWeight
+            if target < cursor {
+                return asset
+            }
+        }
+        return candidates.last
+    }
+}
+
 nonisolated enum StoryAmbientGunfireTelemetry {
     static func eventStarted(
         request: StoryAmbientGunfirePlaybackRequest,
@@ -334,6 +373,7 @@ nonisolated enum StoryAmbientGunfireTelemetry {
               eventID: \(request.eventID.rawValue.uuidString)
               file: \(request.asset.fileName)
               class: \(request.asset.assetClass.rawValue)
+              selectionWeight: \(request.asset.selectionWeight)
               sourceGainDB: \(request.asset.sourceGainDB)
               rolloffFactor: \(request.asset.distanceRolloffFactor)
               delaySeconds: \(String(format: "%.3f", precedingGapSeconds))

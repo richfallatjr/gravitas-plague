@@ -3,43 +3,46 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-SOURCE_DIR="$REPO_ROOT/Authoring/Audio/StoryAmbientCounty/Source"
+SOURCE_DIR="$REPO_ROOT"
 DESTINATION_DIR="$REPO_ROOT/Gravitas Plague/TuringResources/Turing/Audio/story-ambient-county"
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/story-county.XXXXXX")"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
 files=(
-  air-raid-01-county-distant.mp3
-  air-raid-02-county-distant.mp3
-  air-raid-03-county-distant.mp3
-  air-raid-04-county-distant.mp3
-  car-alarm-01-county.mp3
-  car-alarm-02-county.mp3
-  car-alarm-03-county.mp3
-  car-peel-01-county.mp3
-  car-peel-02-county.mp3
-  car-peel-03-county.mp3
-  car-peel-04-county.mp3
-  car-start-01-county.mp3
-  car-start-02-county.mp3
-  car-start-03-county.mp3
-  car-start-04-county.mp3
-  chainsaw-01-county-distance.mp3
-  chainsaw-02-county-distance.mp3
-  chainsaw-03-county-distance.mp3
-  chainsaw-04-county.mp3
-  dog-01-county.mp3
-  dog-02-county.mp3
-  dog-03-county.mp3
-  dog-04-county.mp3
-  pickup-01-county.mp3
-  pickup-02-county.mp3
-  pickup-03-county.mp3
-  pickup-04-county.mp3
-  train-01-county-distant.mp3
-  train-02-county-distant.mp3
-  train-03-county-distant.mp3
-  train-04-county-distant.mp3
+  air-raid-01-county-distant-10.mp3
+  air-raid-02-county-distant-10.mp3
+  air-raid-03-county-distant-10.mp3
+  air-raid-04-county-distant-10.mp3
+  car-alarm-01-county-5.mp3
+  car-alarm-02-county-5.mp3
+  car-alarm-03-county-5.mp3
+  car-peel-01-county-1.mp3
+  car-peel-02-county-1.mp3
+  car-peel-03-county-1.mp3
+  car-peel-04-county-1.mp3
+  car-start-01-county-1.mp3
+  car-start-02-county-1.mp3
+  car-start-03-county-1.mp3
+  car-start-04-county-1.mp3
+  chainsaw-01-county-distance-1.mp3
+  chainsaw-02-county-distance-1.mp3
+  chainsaw-03-county-distance-1.mp3
+  chainsaw-04-county-distance-1.mp3
+  clank-01-county-10.wav
+  clank-02-county-10.wav
+  clank-03-county-10.wav
+  dog-01-county-10.mp3
+  dog-02-county-10.mp3
+  dog-03-county-10.mp3
+  dog-04-county-10.mp3
+  pickup-01-county-1.mp3
+  pickup-02-county-1.mp3
+  pickup-03-county-1.mp3
+  pickup-04-county-1.mp3
+  train-01-county-distant-10.mp3
+  train-02-county-distant-10.mp3
+  train-03-county-distant-10.mp3
+  train-04-county-distant-10.mp3
 )
 
 for tool in ffmpeg ffprobe shasum; do
@@ -49,18 +52,24 @@ for tool in ffmpeg ffprobe shasum; do
   }
 done
 
-discovered_count="$(find "$SOURCE_DIR" -maxdepth 1 -type f -name '*.mp3' -print | wc -l | tr -d ' ')"
+discovered_count="$(find "$SOURCE_DIR" -maxdepth 1 -type f \( -name '*-county-*.mp3' -o -name '*-county-*.wav' \) -print | wc -l | tr -d ' ')"
 if [[ "$discovered_count" -ne "${#files[@]}" ]]; then
-  echo "Expected ${#files[@]} source MP3s, found $discovered_count." >&2
+  echo "Expected ${#files[@]} source MP3/WAV files, found $discovered_count." >&2
   exit 1
 fi
 
 for file in "${files[@]}"; do
   source="$SOURCE_DIR/$file"
-  output_name="${file%.mp3}.wav"
+  output_name="${file%.*}.wav"
   output="$TEMP_DIR/$output_name"
+  source_stem="${file%.*}"
+  selection_weight="${source_stem##*-}"
   [[ -f "$source" ]] || {
-    echo "Missing source MP3: $source" >&2
+    echo "Missing source audio: $source" >&2
+    exit 1
+  }
+  [[ "$selection_weight" =~ ^([1-9]|10)$ ]] || {
+    echo "Invalid filename weight in $file; expected a final 1-10 suffix." >&2
     exit 1
   }
 
@@ -88,9 +97,16 @@ for file in "${files[@]}"; do
 done
 
 mkdir -p "$DESTINATION_DIR"
+find "$DESTINATION_DIR" -maxdepth 1 -type f -name '*.wav' -delete
 for file in "${files[@]}"; do
-  output_name="${file%.mp3}.wav"
+  output_name="${file%.*}.wav"
   mv "$TEMP_DIR/$output_name" "$DESTINATION_DIR/$output_name"
 done
+
+installed_count="$(find "$DESTINATION_DIR" -maxdepth 1 -type f -name '*.wav' -print | wc -l | tr -d ' ')"
+if [[ "$installed_count" -ne "${#files[@]}" ]]; then
+  echo "Expected ${#files[@]} production WAVs, found $installed_count." >&2
+  exit 1
+fi
 
 echo "Installed ${#files[@]} production WAVs in $DESTINATION_DIR"

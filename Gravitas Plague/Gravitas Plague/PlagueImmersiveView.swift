@@ -445,6 +445,16 @@ struct PlagueImmersiveView: View {
             coordinator.onStoryEpisodePickerRequested = { source in
                 session.requestStoryEpisodePicker(source: source)
             }
+            coordinator.onOperationMenuRequested = { source in
+                Task { @MainActor in
+                    dismissWindow(id: PlagueWindowID.storyEpisodes)
+                    await dismissImmersiveSpace()
+                    await session.prepareForOperationMenuAfterStoryCompletion(
+                        source: source
+                    )
+                    openWindow(id: PlagueWindowID.control)
+                }
+            }
             coordinator.onPlayerDamaged = { amount in
                 let intensity = min(max(Double(amount) / 50.0, 0.35), 1.0)
                 session.triggerDamageTint(intensity: intensity)
@@ -518,6 +528,7 @@ struct PlagueImmersiveView: View {
             coordinator.onYouDiedWorldCardRequested = nil
             coordinator.onYouDiedWorldCardCleanupRequested = nil
             coordinator.onStoryEpisodePickerRequested = nil
+            coordinator.onOperationMenuRequested = nil
             storyTitleCardPresenter.removeAll(reason: "immersiveViewDisappeared")
 
             damageTintController.reset()

@@ -45,6 +45,13 @@ enum StoryTitleCardDestination: Sendable, Equatable {
             return false
         }
     }
+
+    var returnsToOperationMenuAfterCompletion: Bool {
+        if case .endOfAvailableContent = self {
+            return true
+        }
+        return false
+    }
 }
 
 enum StoryTitleCardMenuMusicPolicy: String, Sendable, Equatable {

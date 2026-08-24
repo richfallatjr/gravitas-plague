@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "minimumGapSeconds": 5.0,
-  "maximumGapSeconds": 30.0,
+  "maximumGapSeconds": 60.0,
   "distantFixedDistanceFeet": 50.0,
   "dryMinimumDistanceFeet": 500.0,
   "dryMaximumDistanceFeet": 1000.0,

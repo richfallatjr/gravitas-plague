@@ -161,13 +161,10 @@ actor StoryAmbientGunfireScheduler {
             candidates = catalog.assets
         }
 
-        let totalWeight = candidates.reduce(0) { $0 + $1.selectionWeight }
-        let target = await random.nextUnitInterval() * totalWeight
-        var cursor = 0.0
-        for asset in candidates {
-            cursor += asset.selectionWeight
-            if target < cursor { return asset }
-        }
-        return candidates[candidates.index(before: candidates.endIndex)]
+        let unit = await random.nextUnitInterval()
+        return StoryAmbientGunfireWeightedSelector.select(
+            from: candidates,
+            unit: unit
+        ) ?? candidates[candidates.index(before: candidates.endIndex)]
     }
 }
