@@ -130,7 +130,7 @@ nonisolated enum StoryAmbientGunfireCatalogValidator {
     ) throws {
         try require(catalog.schemaVersion == 1, "schemaVersion must be 1")
         try require(catalog.minimumGapSeconds == 5, "minimum gap must be 5 seconds")
-        try require(catalog.maximumGapSeconds == 60, "maximum gap must be 60 seconds")
+        try require(catalog.maximumGapSeconds == 45, "maximum gap must be 45 seconds")
         try require(catalog.distantFixedDistanceFeet == 50, "distant radius must be 50 feet")
         try require(catalog.dryMinimumDistanceFeet == 500, "dry minimum radius must be 500 feet")
         try require(catalog.dryMaximumDistanceFeet == 1000, "dry maximum radius must be 1000 feet")

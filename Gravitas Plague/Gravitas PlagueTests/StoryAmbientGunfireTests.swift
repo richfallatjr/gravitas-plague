@@ -6,7 +6,7 @@ final class StoryAmbientGunfireTests: XCTestCase {
         let catalog = try StoryAmbientGunfireCatalogStore().catalog
 
         XCTAssertEqual(catalog.minimumGapSeconds, 5)
-        XCTAssertEqual(catalog.maximumGapSeconds, 60)
+        XCTAssertEqual(catalog.maximumGapSeconds, 45)
         XCTAssertEqual(catalog.dryMinimumDistanceFeet, 500)
         XCTAssertEqual(catalog.dryMaximumDistanceFeet, 1000)
         XCTAssertEqual(catalog.distantFixedDistanceFeet, 50)
@@ -45,7 +45,7 @@ final class StoryAmbientGunfireTests: XCTestCase {
                 catalog: catalog,
                 unit: 1
             ),
-            60,
+            45,
             accuracy: 0.000_001
         )
         XCTAssertEqual(

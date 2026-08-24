@@ -428,7 +428,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             storyAmbientGunfireLifecycle = lifecycle
             print(
                 "[StoryAmbientGunfire] configured startBoundary=storyPropsCommitted " +
-                    "gapSeconds=5...60 dryFeet=500...1000 dryGainDB=-12 " +
+                    "gapSeconds=5...45 dryFeet=500...1000 dryGainDB=-12 " +
                     "seed=\(StoryAmbientRandomSeed.gunfire)"
             )
         } catch {
@@ -4192,6 +4192,13 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         )
     }
 
+    private func clearInstructionHUDForPlayerDeath() {
+        turingHUDDelayedClearTask?.cancel()
+        turingHUDDelayedClearTask = nil
+        instructionHUD.clear()
+        print("[PlagueHUD] instruction HUD suppressed for player death")
+    }
+
     private func showTemporaryInstructionHUD(
         _ text: String,
         clearAfterSeconds: Double,
@@ -6514,9 +6521,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         }
 
         onPlayerDeathStarted?()
-        showInstructionHUD(
-            "You died. The breach remains."
-        )
+        clearInstructionHUDForPlayerDeath()
 
         deathPresentationController?.playDeathBlackoutSequence { [weak self] in
             guard let self else { return }
@@ -6594,7 +6599,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             """
         )
 
-        showInstructionHUD("You died.")
+        clearInstructionHUDForPlayerDeath()
 
         deathPresentationController?.playDeathBlackoutSequence { [weak self] in
             guard let self else { return }
