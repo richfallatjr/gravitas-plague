@@ -30,13 +30,17 @@ nonisolated enum StoryAmbientCountyCatalogValidator {
         "chainsaw-02-county-distance-1.wav",
         "chainsaw-03-county-distance-1.wav",
         "chainsaw-04-county-distance-1.wav",
-        "clank-01-county-10.wav",
-        "clank-02-county-10.wav",
-        "clank-03-county-10.wav",
+        "clank-01-county-7.wav",
+        "clank-02-county-7.wav",
+        "clank-03-county-7.wav",
         "dog-01-county-10.wav",
         "dog-02-county-10.wav",
         "dog-03-county-10.wav",
         "dog-04-county-10.wav",
+        "thunder-01-county-10.mp3",
+        "thunder-02-county-10.mp3",
+        "thunder-03-county-10.mp3",
+        "thunder-04-county-10.mp3",
         "train-01-county-distant-10.wav",
         "train-02-county-distant-10.wav",
         "train-03-county-distant-10.wav",
@@ -59,7 +63,7 @@ nonisolated enum StoryAmbientCountyCatalogValidator {
         )
         try require(catalog.avoidImmediateRepeat, "immediate repeats must be disabled")
         try require(catalog.maximumActiveVoices == 1, "maximumActiveVoices must be 1")
-        try require(catalog.assets.count == expectedFiles.count, "catalog must contain exactly 26 assets")
+        try require(catalog.assets.count == expectedFiles.count, "catalog must contain exactly 30 assets")
         try require(Set(catalog.assets.map(\.id)).count == expectedFiles.count, "catalog asset IDs must be unique")
         try require(Set(catalog.assets.map(\.fileName)) == expectedFiles, "county filenames do not match")
 
@@ -98,7 +102,7 @@ nonisolated enum StoryAmbientCountyCatalogValidator {
 nonisolated enum StoryAmbientCountyFileNaming {
     static func selectionWeight(from fileName: String) -> Int? {
         let fileURL = URL(fileURLWithPath: fileName)
-        guard fileURL.pathExtension.lowercased() == "wav",
+        guard ["mp3", "wav"].contains(fileURL.pathExtension.lowercased()),
               let suffix = fileURL
                 .deletingPathExtension()
                 .lastPathComponent

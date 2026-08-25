@@ -22,7 +22,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         var voiceRoute: VoiceRoute = .walkieSpatial
         var outputProcessingPolicy = TuringQwenOutputProcessingPolicy.bigMike
         var generatedGainDB: Float = 0
-        var prerecordingGainDB: Float = -6
+        var prerecordingGainDB: Float = 0
         var fillerGainDB: Float = -6
         var stopSendingStaticBeforeGeneratedSegmentZero = false
         var prerecordingPrecedesGenerated = false

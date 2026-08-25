@@ -766,7 +766,7 @@ enum TuringFlowTestFixtures {
             ),
             audio: .init(
                 generatedGainDB: 0,
-                prerecordingGainDB: -6,
+                prerecordingGainDB: 0,
                 fillerGainDB: -6,
                 fillerDirectoryCandidates: [
                     "test-filler"

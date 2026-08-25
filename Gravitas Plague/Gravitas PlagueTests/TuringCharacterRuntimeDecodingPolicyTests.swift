@@ -33,6 +33,21 @@ final class TuringCharacterRuntimeDecodingPolicyTests:
         .codePredictor.mode,
       .greedy
     )
+    XCTAssertEqual(
+      bigMike.audio.generatedGainDB,
+      0,
+      accuracy: 0.0001
+    )
+    XCTAssertEqual(
+      bigMike.audio.prerecordingGainDB,
+      0,
+      accuracy: 0.0001
+    )
+    XCTAssertEqual(
+      bigMike.audio.fillerGainDB,
+      -6,
+      accuracy: 0.0001
+    )
 
     XCTAssertEqual(
       rich.qwen

@@ -13,6 +13,9 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
     XCTAssertEqual(policy.firstSegmentPrerollFillerCount, 1)
     XCTAssertTrue(policy.chainFillerFromPrerecordingToFirstGenerated)
     XCTAssertTrue(policy.completeCurrentFillerBeforeGeneratedSpeech)
+    XCTAssertEqual(policy.generatedGainDB, 0)
+    XCTAssertEqual(policy.prerecordingGainDB, 0)
+    XCTAssertEqual(policy.fillerGainDB, -6)
   }
 
   func testRichPRAndGeneratedSegmentsUseScriptPoint01CoordinatorInOrder()
