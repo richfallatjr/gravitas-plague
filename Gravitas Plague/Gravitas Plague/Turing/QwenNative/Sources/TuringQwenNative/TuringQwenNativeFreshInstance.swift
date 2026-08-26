@@ -20,6 +20,14 @@ public actor TuringQwenNativeFreshInstance {
     performanceMode:
       TuringQwenNativePerformanceMode
   ) async throws {
+    TuringQwenNativeDiagnostics.recordBreadcrumb(
+      "freshInstance.warmLoad.started",
+      instanceID: id.rawValue,
+      details: [
+        "voiceID": cloneProfile.voiceID,
+        "variantID": variantID
+      ]
+    )
     print(
       """
       [TuringQwenFresh2] instance warm load started
@@ -45,6 +53,15 @@ public actor TuringQwenNativeFreshInstance {
 
     residentResources = resident
     baseCloneEngine = engine
+
+    TuringQwenNativeDiagnostics.recordBreadcrumb(
+      "freshInstance.warmLoad.completed",
+      instanceID: id.rawValue,
+      details: [
+        "voiceID": cloneProfile.voiceID,
+        "variantID": variantID
+      ]
+    )
 
     print(
       """
@@ -132,6 +149,10 @@ public actor TuringQwenNativeFreshInstance {
   }
 
   public func unload() async {
+    TuringQwenNativeDiagnostics.recordBreadcrumb(
+      "freshInstance.unload.started",
+      instanceID: id.rawValue
+    )
     await baseCloneEngine?
       .releaseResidentState(
         reason:
@@ -148,5 +169,9 @@ public actor TuringQwenNativeFreshInstance {
           "freshInstance.\(id.rawValue).unload",
         shouldLogSnapshot: false
       )
+    TuringQwenNativeDiagnostics.recordBreadcrumb(
+      "freshInstance.unload.completed",
+      instanceID: id.rawValue
+    )
   }
 }

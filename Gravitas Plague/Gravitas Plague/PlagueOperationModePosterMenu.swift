@@ -176,6 +176,16 @@ struct PlagueOperationModePosterRoot: View {
                 )
             }
             .onChange(of: scenePhase) { _, newPhase in
+                TuringProductionDiagnostics.recordSignal(
+                    "controlWindowScenePhaseChanged",
+                    details: [
+                        "scenePhase": String(describing: newPhase)
+                    ]
+                )
+                TuringMemoryBudgetProbe.log(
+                    label: "controlWindowScenePhase.\(String(describing: newPhase))"
+                )
+
                 guard !session.isQuitting else {
                     return
                 }
@@ -587,6 +597,7 @@ struct SuppressedControlWindowAutoDismiss: View {
 
 struct PlagueRoomSkinningTopOrnament: View {
     @ObservedObject var session: PlagueDemoSession
+    @State private var diagnosticsExportURL: URL?
 
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
@@ -608,6 +619,18 @@ struct PlagueRoomSkinningTopOrnament: View {
                 .buttonStyle(.plain)
                 .help("Leaderboards")
                 .accessibilityLabel("Leaderboards")
+            }
+
+            if TuringProductionDiagnostics.shouldOfferExport,
+               let diagnosticsExportURL {
+                ShareLink(item: diagnosticsExportURL) {
+                    Image(systemName: "waveform.path.ecg")
+                        .font(.system(size: 23, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .help("Export Turing diagnostics")
+                .accessibilityLabel("Export Turing diagnostics")
             }
 
             Button {
@@ -695,6 +718,10 @@ struct PlagueRoomSkinningTopOrnament: View {
         .glassBackgroundEffect()
         .onAppear {
             print("[RoomSkinning] top ornament appeared")
+            if TuringProductionDiagnostics.shouldOfferExport {
+                diagnosticsExportURL = try? TuringProductionDiagnostics
+                    .makeExportFile()
+            }
             if !session.shouldShowStoryRoomSkinningControls {
                 print("[RoomSkinning] debug test door hidden outside story/debug mode")
             }

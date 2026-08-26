@@ -317,7 +317,12 @@ final class TuringLiveConversationSessionCoordinator:
                     }
                 }
             }
-            publishHUD(turn: turn, kind: .responsePlaybackStarted)
+            publishHUD(
+                turn: turn,
+                kind: .responsePlaybackStarted(
+                    question: turn.question ?? ""
+                )
+            )
             try? await arbiter.updateLiveConversationPresentation(
                 childToken: turn.childToken,
                 actions: [:],
@@ -1167,7 +1172,7 @@ final class TuringLiveConversationSessionCoordinator:
         case .failed(let message):
             publishHUD(turn: turn, kind: .failed(message))
         case .cancelled, .finalTranscript, .processingStarted,
-             .questionDisplayExpired, .responseAudioStarted,
+             .questionDisplayExpired, .responseAudioStarted(_),
              .responseSegmentZeroReady,
              .responseAudioFinished, .responseFailed:
             break

@@ -44,7 +44,7 @@ enum TuringDictationEvent: Sendable, Equatable {
     case finalTranscript(String)
     case processingStarted(finalTranscript: String)
     case questionDisplayExpired
-    case responseAudioStarted
+    case responseAudioStarted(question: String)
     case responseSegmentZeroReady(clearAfterSeconds: Double)
     case responseAudioFinished
     case responseFailed(String)
@@ -314,9 +314,11 @@ final class PlagueDemoSession: ObservableObject {
             guard isCurrentLiveHUDOwner(incoming) else { return }
             publishTuringDictationEvent(.questionDisplayExpired)
 
-        case .responsePlaybackStarted:
+        case .responsePlaybackStarted(let question):
             guard isCurrentLiveHUDOwner(incoming) else { return }
-            publishTuringDictationEvent(.responseAudioStarted)
+            publishTuringDictationEvent(
+                .responseAudioStarted(question: question)
+            )
 
         case .responsePlaybackFinished:
             guard isCurrentLiveHUDOwner(incoming) else { return }

@@ -1,11 +1,17 @@
 import Darwin
 import Foundation
+import TuringQwenNative
 
-struct TuringMemoryBudgetSnapshot: Sendable {
+struct TuringMemoryBudgetSnapshot: Codable, Sendable {
     let label: String
     let availableProcessMemoryBytes: UInt64
     let physicalFootprintBytes: UInt64
     let residentSizeBytes: UInt64
+    let mlxActiveMemoryBytes: Int
+    let mlxCacheMemoryBytes: Int
+    let mlxPeakMemoryBytes: Int
+    let mlxCacheLimitBytes: Int
+    let mlxMemoryLimitBytes: Int
     let activeQwenModelID: String?
     let quantization: String?
     let increasedMemoryEntitlementStatus: String
@@ -21,6 +27,18 @@ struct TuringMemoryBudgetSnapshot: Sendable {
     var residentSizeMB: UInt64 {
         residentSizeBytes / 1_048_576
     }
+
+    var mlxActiveMemoryMB: Int {
+        mlxActiveMemoryBytes / 1_048_576
+    }
+
+    var mlxCacheMemoryMB: Int {
+        mlxCacheMemoryBytes / 1_048_576
+    }
+
+    var mlxPeakMemoryMB: Int {
+        mlxPeakMemoryBytes / 1_048_576
+    }
 }
 
 enum TuringMemoryBudgetProbe {
@@ -30,7 +48,10 @@ enum TuringMemoryBudgetProbe {
     static func log(
         label: String,
         activeQwenModelID: String? = nil,
-        quantization: String? = nil
+        quantization: String? = nil,
+        runID: String? = nil,
+        segmentIndex: Int? = nil,
+        details: [String: String] = [:]
     ) -> TuringMemoryBudgetSnapshot {
         let snapshot = currentSnapshot(
             label: label,
@@ -44,10 +65,22 @@ enum TuringMemoryBudgetProbe {
           os_proc_available_memory_MB: \(snapshot.availableProcessMemoryMB)
           phys_footprint_MB: \(snapshot.physicalFootprintMB)
           resident_size_MB: \(snapshot.residentSizeMB)
+          mlx_active_MB: \(snapshot.mlxActiveMemoryMB)
+          mlx_cache_MB: \(snapshot.mlxCacheMemoryMB)
+          mlx_peak_MB: \(snapshot.mlxPeakMemoryMB)
+          mlx_cache_limit_MB: \(snapshot.mlxCacheLimitBytes / 1_048_576)
+          mlx_memory_limit_MB: \(snapshot.mlxMemoryLimitBytes / 1_048_576)
           activeQwenModelID: \(snapshot.activeQwenModelID ?? "none")
           quantization: \(snapshot.quantization ?? "none")
           increasedMemoryEntitlement: \(snapshot.increasedMemoryEntitlementStatus)
         """)
+
+        TuringProductionDiagnostics.recordMemory(
+            snapshot,
+            runID: runID,
+            segmentIndex: segmentIndex,
+            details: details
+        )
 
         return snapshot
     }
@@ -57,11 +90,17 @@ enum TuringMemoryBudgetProbe {
         activeQwenModelID: String? = nil,
         quantization: String? = nil
     ) -> TuringMemoryBudgetSnapshot {
-        TuringMemoryBudgetSnapshot(
+        let mlx = TuringQwenNativeDiagnostics.memorySnapshot()
+        return TuringMemoryBudgetSnapshot(
             label: label,
             availableProcessMemoryBytes: availableProcessMemory(),
             physicalFootprintBytes: physicalFootprint(),
             residentSizeBytes: residentSize(),
+            mlxActiveMemoryBytes: mlx.activeMemoryBytes,
+            mlxCacheMemoryBytes: mlx.cacheMemoryBytes,
+            mlxPeakMemoryBytes: mlx.peakMemoryBytes,
+            mlxCacheLimitBytes: mlx.cacheLimitBytes,
+            mlxMemoryLimitBytes: mlx.memoryLimitBytes,
             activeQwenModelID: activeQwenModelID,
             quantization: quantization,
             increasedMemoryEntitlementStatus: entitlementStatus

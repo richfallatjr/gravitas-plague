@@ -13,6 +13,7 @@ struct GravitasPlagueApp: App {
     @State private var immersionStyle: ImmersionStyle = .mixed
 
     init() {
+        TuringProductionDiagnostics.start()
         TuringMemoryBudgetProbe.log(label: "appLaunch")
     }
 

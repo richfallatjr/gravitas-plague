@@ -12,10 +12,18 @@ public struct TuringQwenNativeTrace: Sendable {
     }
 
     public func stageStarted(_ stage: TuringQwenNativeStage) {
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "stage.started.\(stage.rawValue)",
+            details: ["tracePrefix": prefix]
+        )
         print("\(prefix) stage started \(stage.rawValue)")
     }
 
     public func stageCompleted(_ stage: TuringQwenNativeStage) {
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "stage.completed.\(stage.rawValue)",
+            details: ["tracePrefix": prefix]
+        )
         print("\(prefix) stage completed \(stage.rawValue)")
     }
 

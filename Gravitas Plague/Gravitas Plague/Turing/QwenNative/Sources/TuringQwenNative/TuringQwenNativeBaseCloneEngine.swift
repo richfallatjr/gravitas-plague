@@ -317,9 +317,26 @@ public actor TuringQwenNativeBaseCloneEngine {
           instanceID: \(instanceID.rawValue)
           voiceID: \(prompt.cloneProfile.voiceID)
         """)
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "baseClone.render.started",
+            runID: runID,
+            instanceID: instanceID.rawValue,
+            segmentIndex: request.segmentIndex,
+            details: ["voiceID": prompt.cloneProfile.voiceID]
+        )
 
         do {
             let generated = try generateCodebookForDecode(prompt)
+            TuringQwenNativeDiagnostics.recordBreadcrumb(
+                "baseClone.codebooks.generated",
+                runID: runID,
+                instanceID: instanceID.rawValue,
+                segmentIndex: request.segmentIndex,
+                details: [
+                    "generatedRows": String(generated.generatedRows.count),
+                    "reachedEOS": String(generated.reachedEOS)
+                ]
+            )
             try prompt.generationQualityPolicy.validateBeforeDecode(
                 voiceID: prompt.cloneProfile.voiceID,
                 generatedRowCount: generated.generatedRows.count,
@@ -375,8 +392,25 @@ public actor TuringQwenNativeBaseCloneEngine {
               physFootprintMB: \(String(format: "%.1f", memory.physFootprintMB))
               residentSizeMB: \(String(format: "%.1f", memory.residentSizeMB))
             """)
+            TuringQwenNativeDiagnostics.recordBreadcrumb(
+                "baseClone.cpuCodebooks.materialized",
+                runID: runID,
+                instanceID: instanceID.rawValue,
+                segmentIndex: request.segmentIndex,
+                details: [
+                    "generatedRows": String(result.generatedRowCount),
+                    "referenceRows": String(result.referenceRowCount)
+                ]
+            )
             return result
         } catch {
+            TuringQwenNativeDiagnostics.recordBreadcrumb(
+                "baseClone.render.failed",
+                runID: runID,
+                instanceID: instanceID.rawValue,
+                segmentIndex: request.segmentIndex,
+                details: ["error": error.localizedDescription]
+            )
             print("""
             [TuringSegmentPipeline] render failed
               runID: \(runID)
@@ -455,6 +489,10 @@ public actor TuringQwenNativeBaseCloneEngine {
         }
 
         let promptStart = Date()
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "baseClone.promptAndWeights.started",
+            details: ["voiceID": prompt.cloneProfile.voiceID]
+        )
         try prompt.samplingPolicy.validate()
         var samplingContext = TuringQwenNativeSamplingContext(
             seed: prompt.samplingSeed
@@ -473,6 +511,13 @@ public actor TuringQwenNativeBaseCloneEngine {
             staticContext: staticPromptContext
         )
         let initialPromptSeconds = Date().timeIntervalSince(promptStart)
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "baseClone.promptAndWeights.completed",
+            details: [
+                "voiceID": prompt.cloneProfile.voiceID,
+                "sequenceLength": String(promptInputs.sequenceLength)
+            ]
+        )
 
         print("""
         [TuringQwenNativeBaseClone] artifacts loaded
@@ -525,6 +570,9 @@ public actor TuringQwenNativeBaseCloneEngine {
         """)
 
         let initialTalkerStart = Date()
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "baseClone.initialTalkerForward.started"
+        )
         let talkerOutput = try TuringQwenNativeTalkerForwardRunner.runFullForward(
             promptInputs: promptInputs,
             config: config,
@@ -534,6 +582,9 @@ public actor TuringQwenNativeBaseCloneEngine {
             performanceMode: prompt.performanceMode
         )
         let initialTalkerForwardSeconds = Date().timeIntervalSince(initialTalkerStart)
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "baseClone.initialTalkerForward.completed"
+        )
         let logits = TuringQwenNativeTalkerForwardRunner.codecHeadLogits(
             finalLastHiddenState: talkerOutput.finalLastHiddenState,
             codecHeadWeight: resident.talkerWeights.codecHeadWeight,
@@ -562,6 +613,10 @@ public actor TuringQwenNativeBaseCloneEngine {
           repetitionPenalty: \(prompt.samplingPolicy.talker.repetitionPenalty)
         """)
 
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "baseClone.dynamicCodebook.started",
+            details: ["maxNewRows": String(prompt.maxNewRows)]
+        )
         let dynamicCodebook = try generateDynamicCodebook(
             initialFirstCodecToken: firstCodecToken.tokenID,
             initialTalkerLastHiddenState: talkerOutput.finalLastHiddenState,
@@ -572,6 +627,13 @@ public actor TuringQwenNativeBaseCloneEngine {
             samplingPolicy: prompt.samplingPolicy,
             samplingContext: &samplingContext,
             resident: resident
+        )
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "baseClone.dynamicCodebook.completed",
+            details: [
+                "generatedRows": String(dynamicCodebook.rows.count),
+                "reachedEOS": String(dynamicCodebook.reachedEOS)
+            ]
         )
         guard dynamicCodebook.rows.isEmpty == false else {
             throw TuringQwenNativeError.invalidConfig(

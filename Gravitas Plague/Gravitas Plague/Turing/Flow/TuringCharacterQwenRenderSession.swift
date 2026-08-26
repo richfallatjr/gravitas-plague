@@ -109,13 +109,16 @@ actor TuringCharacterQwenRenderSession:
     func begin() async throws {
         guard started == false else { return }
 
+        logMemory("session.beforeHighMemoryPreflight")
         try await highMemoryPreflight.prepareForTuringHighMemoryRun(
             runID: runID
         )
+        logMemory("session.afterHighMemoryPreflight")
 
         let owner = "\(runtime.characterID).\(runID)"
         await arbiter.acquire(owner: owner)
         ownerID = owner
+        logMemory("session.afterOwnershipAcquired")
 
         do {
             guard let bundleRoot = Bundle.main.resourceURL else {
@@ -143,12 +146,14 @@ actor TuringCharacterQwenRenderSession:
                     .makeFresh2Pool()
             pool = freshPool
 
+            logMemory("session.beforeFresh2WarmLoad")
             try await freshPool.warmLoadExactlyRequestedInstances(
                 modelRoot: writableModel,
                 cloneProfile: loadedProfile,
                 variantID: loadedProfile.defaultVariantID,
                 performanceMode: .performance
             )
+            logMemory("session.afterFresh2WarmLoad")
 
             let selectedVariant = try loadedProfile.requireVariant(
                 loadedProfile.defaultVariantID
@@ -179,6 +184,7 @@ actor TuringCharacterQwenRenderSession:
             profile = loadedProfile
             stagedModel = writableModel
             started = true
+            logMemory("session.ready")
 
             print("""
             [TuringStagedSpeech] Fresh2 render session started
@@ -191,6 +197,10 @@ actor TuringCharacterQwenRenderSession:
               fallbackUsed: false
             """)
         } catch {
+            logMemory(
+                "session.beginFailed",
+                details: ["error": error.localizedDescription]
+            )
             await pool?.unloadAll(
                 reason: "turingFlow.\(runtime.characterID).beginFailed.\(runID)"
             )
@@ -229,6 +239,14 @@ actor TuringCharacterQwenRenderSession:
             expectedSegmentCount: stage.segments.count
         )
         let requests = makeRequests(stage, profile: profile)
+        let diagnosticsRunID = runID
+        let diagnosticsCharacterID = runtime.characterID
+        let diagnosticsVoiceID = runtime.voiceID
+
+        logMemory(
+            "stage.renderStarted.\(stage.stageID)",
+            details: ["segmentCount": String(stage.segments.count)]
+        )
 
         print("""
         [TuringStagedSpeech] stage render started
@@ -245,9 +263,31 @@ actor TuringCharacterQwenRenderSession:
             modelRoot: stagedModel,
             skipSegmentFailures: runtime.qwen.skipSegmentFailures,
             onSegmentStarted: { _, segmentIndex in
+                TuringMemoryBudgetProbe.log(
+                    label: "qwen.segment.renderStarted",
+                    activeQwenModelID: Self.diagnosticModelID,
+                    quantization: Self.diagnosticQuantization,
+                    runID: diagnosticsRunID,
+                    segmentIndex: segmentIndex,
+                    details: [
+                        "characterID": diagnosticsCharacterID,
+                        "voiceID": diagnosticsVoiceID
+                    ]
+                )
                 await onStarted(segmentIndex)
             },
             onSegmentDecoded: { result in
+                TuringMemoryBudgetProbe.log(
+                    label: "qwen.segment.audioMaterialized",
+                    activeQwenModelID: Self.diagnosticModelID,
+                    quantization: Self.diagnosticQuantization,
+                    runID: diagnosticsRunID,
+                    segmentIndex: result.segmentIndex,
+                    details: [
+                        "characterID": diagnosticsCharacterID,
+                        "voiceID": diagnosticsVoiceID
+                    ]
+                )
                 await state.recordSuccess(result.segmentIndex)
                 await onFinished(
                     result.segmentIndex,
@@ -260,6 +300,18 @@ actor TuringCharacterQwenRenderSession:
                 )
             },
             onSegmentSkipped: { skipped in
+                TuringMemoryBudgetProbe.log(
+                    label: "qwen.segment.skipped",
+                    activeQwenModelID: Self.diagnosticModelID,
+                    quantization: Self.diagnosticQuantization,
+                    runID: diagnosticsRunID,
+                    segmentIndex: skipped.segmentIndex,
+                    details: [
+                        "characterID": diagnosticsCharacterID,
+                        "voiceID": diagnosticsVoiceID,
+                        "error": skipped.errorDescription
+                    ]
+                )
                 await state.recordSkipped(
                     skipped.segmentIndex,
                     reason: skipped.errorDescription
@@ -273,6 +325,7 @@ actor TuringCharacterQwenRenderSession:
         nativeReport.log()
 
         let result = await state.snapshot()
+        logMemory("stage.renderCompleted.\(stage.stageID)")
         print("""
         [TuringStagedSpeech] stage render completed
           runID: \(runID)
@@ -303,6 +356,8 @@ actor TuringCharacterQwenRenderSession:
         let queue = TuringQwenOpenSegmentQueue()
         let state = TuringCharacterStreamingRenderState()
         let streamRunID = runID
+        let diagnosticsCharacterID = runtime.characterID
+        let diagnosticsVoiceID = runtime.voiceID
         let skipSegmentFailures = runtime.qwen.skipSegmentFailures
         streamingQueue = queue
         streamingState = state
@@ -316,9 +371,31 @@ actor TuringCharacterQwenRenderSession:
                     modelRoot: stagedModel,
                     skipSegmentFailures: skipSegmentFailures,
                     onSegmentStarted: { _, segmentIndex in
+                        TuringMemoryBudgetProbe.log(
+                            label: "qwen.segment.renderStarted",
+                            activeQwenModelID: Self.diagnosticModelID,
+                            quantization: Self.diagnosticQuantization,
+                            runID: streamRunID,
+                            segmentIndex: segmentIndex,
+                            details: [
+                                "characterID": diagnosticsCharacterID,
+                                "voiceID": diagnosticsVoiceID
+                            ]
+                        )
                         await onStarted(segmentIndex)
                     },
                     onSegmentDecoded: { result in
+                        TuringMemoryBudgetProbe.log(
+                            label: "qwen.segment.audioMaterialized",
+                            activeQwenModelID: Self.diagnosticModelID,
+                            quantization: Self.diagnosticQuantization,
+                            runID: streamRunID,
+                            segmentIndex: result.segmentIndex,
+                            details: [
+                                "characterID": diagnosticsCharacterID,
+                                "voiceID": diagnosticsVoiceID
+                            ]
+                        )
                         let audio = TuringComputeGapGeneratedAudio(
                             segmentIndex: result.segmentIndex,
                             samples: result.audio.samples,
@@ -329,6 +406,18 @@ actor TuringCharacterQwenRenderSession:
                         await state.recordPublished(result.segmentIndex)
                     },
                     onSegmentSkipped: { skipped in
+                        TuringMemoryBudgetProbe.log(
+                            label: "qwen.segment.skipped",
+                            activeQwenModelID: Self.diagnosticModelID,
+                            quantization: Self.diagnosticQuantization,
+                            runID: streamRunID,
+                            segmentIndex: skipped.segmentIndex,
+                            details: [
+                                "characterID": diagnosticsCharacterID,
+                                "voiceID": diagnosticsVoiceID,
+                                "error": skipped.errorDescription
+                            ]
+                        )
                         await onSkipped(
                             skipped.segmentIndex,
                             skipped.errorDescription
@@ -343,6 +432,17 @@ actor TuringCharacterQwenRenderSession:
                 await state.schedulerFinished()
                 return report
             } catch {
+                TuringMemoryBudgetProbe.log(
+                    label: "qwen.streamingSchedulerFailed",
+                    activeQwenModelID: Self.diagnosticModelID,
+                    quantization: Self.diagnosticQuantization,
+                    runID: streamRunID,
+                    details: [
+                        "characterID": diagnosticsCharacterID,
+                        "voiceID": diagnosticsVoiceID,
+                        "error": error.localizedDescription
+                    ]
+                )
                 await state.fail(reason: error.localizedDescription)
                 throw error
             }
@@ -443,6 +543,10 @@ actor TuringCharacterQwenRenderSession:
         }
         _ = try? await streamingTask?.value
         finished = true
+        logMemory(
+            "session.beforeUnload",
+            details: ["reason": reason]
+        )
         await pool?.unloadAll(
             reason: "turingFlow.\(runtime.characterID).\(reason).\(runID)"
         )
@@ -454,6 +558,10 @@ actor TuringCharacterQwenRenderSession:
         streamingTask = nil
         streamingState = nil
         await releaseOwner(reason: reason)
+        logMemory(
+            "session.afterUnload",
+            details: ["reason": reason]
+        )
     }
 
     func cancel(reason: String) async {
@@ -513,6 +621,29 @@ actor TuringCharacterQwenRenderSession:
           reason: \(reason)
         """)
     }
+
+    @discardableResult
+    private func logMemory(
+        _ label: String,
+        segmentIndex: Int? = nil,
+        details: [String: String] = [:]
+    ) -> TuringMemoryBudgetSnapshot {
+        var mergedDetails = details
+        mergedDetails["characterID"] = runtime.characterID
+        mergedDetails["voiceID"] = runtime.voiceID
+        return TuringMemoryBudgetProbe.log(
+            label: "qwen.\(label)",
+            activeQwenModelID: Self.diagnosticModelID,
+            quantization: Self.diagnosticQuantization,
+            runID: runID,
+            segmentIndex: segmentIndex,
+            details: mergedDetails
+        )
+    }
+
+    private static let diagnosticModelID =
+        "qwen3-tts-12hz-1.7b-base-4bit"
+    private static let diagnosticQuantization = "4bit"
 }
 
 private actor TuringCharacterStreamingRenderState {

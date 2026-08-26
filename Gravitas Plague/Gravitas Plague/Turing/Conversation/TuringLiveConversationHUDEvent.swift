@@ -6,7 +6,7 @@ nonisolated struct TuringLiveConversationHUDEvent: Sendable, Equatable {
         case partialTranscript(String)
         case questionSubmitted(String)
         case questionDisplayExpired
-        case responsePlaybackStarted
+        case responsePlaybackStarted(question: String)
         case responsePlaybackFinished
         case cancelled
         case failed(String)

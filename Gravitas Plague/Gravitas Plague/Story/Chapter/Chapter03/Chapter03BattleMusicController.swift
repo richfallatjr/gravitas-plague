@@ -14,6 +14,12 @@ struct Chapter03BattleMusicEpoch: Sendable, Hashable {
     let triggerEventID: UUID
 }
 
+struct Chapter03BattleMusicCrossfade: Sendable {
+    let outgoingEpoch: Chapter03BattleMusicEpoch?
+    let incomingEpoch: Chapter03BattleMusicEpoch
+    let durationSeconds: TimeInterval
+}
+
 @MainActor
 final class Chapter03BattleMusicController: NSObject, AVAudioPlayerDelegate {
     enum MusicError: LocalizedError {
@@ -99,10 +105,76 @@ final class Chapter03BattleMusicController: NSObject, AVAudioPlayerDelegate {
             triggerEventID: triggerEventID
         )
         players[epoch] = player
+        TuringProductionDiagnostics.recordSignal(
+            "chapter03BattleMusic.actualStart",
+            details: [
+                "battleInstanceID": battleInstanceID.uuidString,
+                "file": item.url.lastPathComponent,
+                "gainDB": String(item.gainDB),
+                "isPlaying": String(player.isPlaying),
+                "lane": lane.rawValue,
+                "playbackID": epoch.playbackID.uuidString,
+                "triggerEventID": triggerEventID.uuidString
+            ]
+        )
         print(
             "[Chapter03BattleMusic] actual start lane=\(lane.rawValue) battleInstanceID=\(battleInstanceID.uuidString) playbackID=\(epoch.playbackID.uuidString) triggerEventID=\(triggerEventID.uuidString) gainDB=\(item.gainDB)"
         )
         return epoch
+    }
+
+    func beginCrossfade(
+        from oldEpoch: Chapter03BattleMusicEpoch?,
+        to lane: Chapter03BattleMusicLane,
+        battleInstanceID: UUID,
+        triggerEventID: UUID,
+        durationSeconds: TimeInterval
+    ) throws -> Chapter03BattleMusicCrossfade {
+        let duration = max(0, durationSeconds)
+
+        // Start the incoming score synchronously at its authored gain. The
+        // surrender PR callback is the authored boundary, so it must return
+        // only after phase two has actually entered AVAudioPlayer playback.
+        // Phase one may fade away underneath it, but phase two is never
+        // deferred to a child task or faded up from digital silence.
+        let next = try start(
+            lane: lane,
+            battleInstanceID: battleInstanceID,
+            triggerEventID: triggerEventID
+        )
+        if let oldEpoch, let oldPlayer = players[oldEpoch] {
+            oldPlayer.setVolume(0, fadeDuration: duration)
+        }
+        print(
+            "[Chapter03BattleMusic] crossfade began synchronously " +
+                "to=\(lane.rawValue) duration=\(duration) " +
+                "incomingStartsAtAuthoredGain=true"
+        )
+        return Chapter03BattleMusicCrossfade(
+            outgoingEpoch: oldEpoch,
+            incomingEpoch: next,
+            durationSeconds: duration
+        )
+    }
+
+    func completeCrossfade(
+        _ transition: Chapter03BattleMusicCrossfade
+    ) async throws -> Chapter03BattleMusicEpoch {
+        if transition.durationSeconds > 0 {
+            try await Task.sleep(
+                for: .seconds(transition.durationSeconds)
+            )
+        }
+        if let oldEpoch = transition.outgoingEpoch {
+            stop(epoch: oldEpoch, reason: "crossfadeCompleted")
+        }
+        print(
+            "[Chapter03BattleMusic] crossfade completed " +
+                "to=\(transition.incomingEpoch.lane.rawValue) " +
+                "duration=\(transition.durationSeconds) " +
+                "activeHandles=\(players.count)"
+        )
+        return transition.incomingEpoch
     }
 
     func crossfade(
@@ -112,26 +184,14 @@ final class Chapter03BattleMusicController: NSObject, AVAudioPlayerDelegate {
         triggerEventID: UUID,
         durationSeconds: TimeInterval
     ) async throws -> Chapter03BattleMusicEpoch {
-        let duration = max(0, durationSeconds)
-        let next = try start(
-            lane: lane,
+        let transition = try beginCrossfade(
+            from: oldEpoch,
+            to: lane,
             battleInstanceID: battleInstanceID,
             triggerEventID: triggerEventID,
-            fadeInSeconds: duration
+            durationSeconds: durationSeconds
         )
-        if let oldEpoch, let oldPlayer = players[oldEpoch] {
-            oldPlayer.setVolume(0, fadeDuration: duration)
-        }
-        if duration > 0 {
-            try await Task.sleep(for: .seconds(duration))
-        }
-        if let oldEpoch {
-            stop(epoch: oldEpoch, reason: "crossfadeCompleted")
-        }
-        print(
-            "[Chapter03BattleMusic] crossfade completed to=\(lane.rawValue) duration=\(duration) activeHandles=\(players.count)"
-        )
-        return next
+        return try await completeCrossfade(transition)
     }
 
     func fadeOutAndStopAll(

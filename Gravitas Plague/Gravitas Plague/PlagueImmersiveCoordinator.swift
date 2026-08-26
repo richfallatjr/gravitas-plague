@@ -255,6 +255,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     private let enemyBodySeparationResolver = HordeEnemyBodySeparationResolver()
     private let instructionHUD = PlagueHeadTrackedInstructionHUD()
     private var turingHUDDelayedClearTask: Task<Void, Never>?
+    private let turingQuestionReminderDurationSeconds: TimeInterval = 7.0
     private let timingProfiler = TimingProfiler(label: "main_actor_shell")
     private let hordeSimulationEngine = HordeSimulationEngine()
     private let hordeEnemyBrainEngine = HordeEnemyBrainEngine()
@@ -1519,11 +1520,34 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 print("[TuringHUD] player dictation shown state=final")
             }
 
-        case .responseAudioStarted:
+        case .responseAudioStarted(let question):
             turingHUDDelayedClearTask?.cancel()
             turingHUDDelayedClearTask = nil
-            instructionHUD.clear()
-            print("[TuringHUD] player dictation cleared for qwenSpeech")
+            let trimmed = question.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            )
+            guard trimmed.isEmpty == false else {
+                instructionHUD.clear()
+                print(
+                    "[TuringHUD] player dictation reminder skipped " +
+                        "reason=emptyQuestion"
+                )
+                return
+            }
+            showTemporaryInstructionHUD(
+                trimmed,
+                clearAfterSeconds:
+                    turingQuestionReminderDurationSeconds,
+                reason: "conversationResponsePlaybackStarted"
+            )
+            print(
+                "[TuringHUD] player dictation reminder shown " +
+                    "for TTS playback durationSeconds=" +
+                    String(
+                        format: "%.2f",
+                        turingQuestionReminderDurationSeconds
+                    )
+            )
 
         case .questionDisplayExpired:
             turingHUDDelayedClearTask?.cancel()
@@ -1547,8 +1571,13 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 print("[TuringHUD] player dictation cleared after segment zero ready hold")
             }
 
-        case .responseAudioFinished,
-             .cancelled:
+        case .responseAudioFinished:
+            print(
+                "[TuringHUD] TTS playback finished; player dictation " +
+                    "reminder retains its seven-second hold"
+            )
+
+        case .cancelled:
             turingHUDDelayedClearTask?.cancel()
             turingHUDDelayedClearTask = nil
             instructionHUD.clear()

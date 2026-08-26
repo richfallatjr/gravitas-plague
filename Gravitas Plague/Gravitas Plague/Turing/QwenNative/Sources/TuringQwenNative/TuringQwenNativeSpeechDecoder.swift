@@ -382,6 +382,13 @@ enum TuringQwenNativeSpeechDecoder {
         // Decoder weights are loaded as Float32 for each stage. Leaving these
         // operations lazy retains the complete decoder graph until output eval,
         // which can cross the visionOS high-water mark beside a Fresh render.
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "speechDecoder.stage.started",
+            details: [
+                "stage": label,
+                "performanceMode": performanceMode.rawValue
+            ]
+        )
         eval(value)
         TuringQwenNativeMemoryControl.clearCache(
             label: label,

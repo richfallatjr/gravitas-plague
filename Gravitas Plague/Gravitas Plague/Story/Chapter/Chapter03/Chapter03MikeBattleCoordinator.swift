@@ -420,20 +420,40 @@ final class Chapter03MikeBattleCoordinator {
               surrenderPlaybackID == nil,
               let battleInstanceID else { return }
         surrenderPlaybackID = event.playbackID
-        crossfadeTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                self.phaseTwoEpoch = try await self.music.crossfade(
-                    from: self.phaseOneEpoch,
-                    to: .bigMikePhaseTwo,
-                    battleInstanceID: battleInstanceID,
-                    triggerEventID: event.playbackID,
-                    durationSeconds:
-                        self.definition?.surrenderMusicCrossfadeSeconds ?? 1.5
+        do {
+            let transition = try music.beginCrossfade(
+                from: phaseOneEpoch,
+                to: .bigMikePhaseTwo,
+                battleInstanceID: battleInstanceID,
+                triggerEventID: event.playbackID,
+                durationSeconds:
+                    definition?.surrenderMusicCrossfadeSeconds ?? 1.5
+            )
+            phaseTwoEpoch = transition.incomingEpoch
+            crossfadeTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    self.phaseTwoEpoch = try await self.music
+                        .completeCrossfade(transition)
+                } catch is CancellationError {
+                } catch {
+                    guard let chapterRunID = self.chapterRunID else {
+                        return
+                    }
+                    await self.fail(
+                        chapterRunID: chapterRunID,
+                        error: error
+                    )
+                }
+            }
+        } catch {
+            crossfadeTask = Task { @MainActor [weak self] in
+                guard let self,
+                      let chapterRunID = self.chapterRunID else { return }
+                await self.fail(
+                    chapterRunID: chapterRunID,
+                    error: error
                 )
-            } catch {
-                guard let chapterRunID = self.chapterRunID else { return }
-                await self.fail(chapterRunID: chapterRunID, error: error)
             }
         }
     }

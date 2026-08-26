@@ -26,12 +26,20 @@ actor TuringHighMemoryPreflightCoordinator:
     }
 
     func prepareForTuringHighMemoryRun(runID: String) async throws {
+        TuringMemoryBudgetProbe.log(
+            label: "qwen.preflight.requested",
+            runID: runID
+        )
         print("""
         [TuringHighMemoryPreflight] requested
           runID: \(runID)
           hasStorySceneAdapter: \(storyPreparer != nil)
         """)
         guard let storyPreparer else {
+            TuringMemoryBudgetProbe.log(
+                label: "qwen.preflight.completedWithoutStoryScene",
+                runID: runID
+            )
             print("""
             [TuringHighMemoryPreflight] completed
               runID: \(runID)
@@ -41,6 +49,10 @@ actor TuringHighMemoryPreflightCoordinator:
         }
 
         try await storyPreparer.prepareForTuringHighMemoryRun(
+            runID: runID
+        )
+        TuringMemoryBudgetProbe.log(
+            label: "qwen.preflight.storySceneReleased",
             runID: runID
         )
         print("""

@@ -51,6 +51,11 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
           tokenID: \(token.id.uuidString)
           concurrentDecoderLimit: 1
         """)
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "speechDecoder.run.started",
+            runID: runID,
+            details: ["tokenID": token.id.uuidString]
+        )
         return token
     }
 
@@ -97,6 +102,16 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
           waitedForOtherFreshWorker: false
           freshPathUsesLegacyDecodeGate: false
         """)
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "speechDecoder.segment.started",
+            runID: rendered.runID,
+            instanceID: rendered.instanceID.rawValue,
+            segmentIndex: rendered.segmentIndex,
+            details: [
+                "decodeID": String(decodeID),
+                "totalRows": String(rowsForDecode.count)
+            ]
+        )
 
         do {
             let fullAudio = try activeRun.session.decode(
@@ -144,6 +159,16 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
               segmentIndex: \(rendered.segmentIndex)
               decodeID: \(decodeID)
             """)
+            TuringQwenNativeDiagnostics.recordBreadcrumb(
+                "speechDecoder.segment.completed",
+                runID: rendered.runID,
+                instanceID: rendered.instanceID.rawValue,
+                segmentIndex: rendered.segmentIndex,
+                details: [
+                    "decodeID": String(decodeID),
+                    "samples": String(audio.samples.count)
+                ]
+            )
             return result
         } catch {
             TuringQwenNativeMemoryControl.clearCache(
@@ -158,6 +183,16 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
               decodeID: \(decodeID)
               error: \(error.localizedDescription)
             """)
+            TuringQwenNativeDiagnostics.recordBreadcrumb(
+                "speechDecoder.segment.failed",
+                runID: rendered.runID,
+                instanceID: rendered.instanceID.rawValue,
+                segmentIndex: rendered.segmentIndex,
+                details: [
+                    "decodeID": String(decodeID),
+                    "error": error.localizedDescription
+                ]
+            )
             throw error
         }
     }
