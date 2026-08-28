@@ -27,9 +27,8 @@ final class Chapter02WomanBattleCoordinator {
 
     private let sceneRoot: Entity
     private let door: any TuringStoryDoorBattleControlling
-    private let intro = ScriptedPortalEnemyIntroCoordinator(
-        clock: ProductionBattleClock()
-    )
+    private let portalExitCleanup: StoryBattlePortalExitCleanupController
+    private let intro: ScriptedPortalEnemyIntroCoordinator
     private let combat: any Battle01StoryCombatControlling =
         Battle01StoryCombatAdapter()
     private let registry = BattleEnemyRuntimeRegistry()
@@ -59,6 +58,7 @@ final class Chapter02WomanBattleCoordinator {
         sceneRoot: Entity,
         door: any TuringStoryDoorBattleControlling,
         richVocalChannel: any StoryRichVocalChannelControlling,
+        clock: any BattleClock = ProductionBattleClock(),
         onEnemyPrepared: @escaping @MainActor (
             UUID,
             JockRetargetTestController
@@ -69,6 +69,11 @@ final class Chapter02WomanBattleCoordinator {
     ) {
         self.sceneRoot = sceneRoot
         self.door = door
+        self.portalExitCleanup = StoryBattlePortalExitCleanupController(
+            door: door,
+            clock: clock
+        )
+        self.intro = ScriptedPortalEnemyIntroCoordinator(clock: clock)
         self.richPR = Chapter02PrerecordingPlayer(
             richVocalChannel: richVocalChannel
         )
@@ -157,7 +162,7 @@ final class Chapter02WomanBattleCoordinator {
         }
         if let instanceID {
             do {
-                try await door.closeForBattleAndUnloadPortal(
+                try await portalExitCleanup.closeAndUnloadNowIfNeeded(
                     ownerID: instanceID,
                     reason: reason
                 )
@@ -341,6 +346,12 @@ final class Chapter02WomanBattleCoordinator {
             state = .portalCrossing
             try await intro.performPortalCrossing()
             try Task.checkCancellation()
+            guard self.battleInstanceID == battleInstanceID else { return }
+
+            portalExitCleanup.scheduleAfterPortalExit(
+                ownerID: battleInstanceID,
+                reason: "chapter02Woman.womanExited"
+            )
 
             state = .combat
             try combat.activate(
@@ -413,7 +424,8 @@ final class Chapter02WomanBattleCoordinator {
                     .fadeToPostBattleLevel(
                         reason: "chapter02WomanBattle.geometryReleased"
                     )
-                try await self.door.closeForBattleAndUnloadPortal(
+                try await self.portalExitCleanup
+                    .closeAndUnloadNowIfNeeded(
                     ownerID: battleInstanceID,
                     reason: "chapter02WomanBattle.enemyReleased"
                 )

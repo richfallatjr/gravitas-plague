@@ -79,6 +79,49 @@ final class BattleRuntimeMemoryTeardownTests: XCTestCase {
         XCTAssertTrue(source.contains("rehydratePortalOnlyEntitiesIfNeeded"))
     }
 
+    func testEnemyPortalMirrorReleasesAtExitThreshold() throws {
+        let source = try appSource(
+            "Battle/Shared/StoryPortalEnemyRenderMirrorAdapter.swift"
+        )
+
+        XCTAssertTrue(source.contains("if depth >= exitThreshold"))
+        XCTAssertTrue(source.contains("cleanup(reason: \"Battle01.portalExit\")"))
+        XCTAssertTrue(source.contains("self.mirror = nil"))
+    }
+
+    func testEveryNonDroneBattleSchedulesPortalExitAutoClose() throws {
+        let policy = try appSource(
+            "Battle/Battle01/Battle01DoorAdapter.swift"
+        )
+        XCTAssertTrue(policy.contains("static let isEnabled ="))
+        XCTAssertTrue(
+            policy.contains("static let delaySeconds: TimeInterval = 5")
+        )
+
+        let battleSources = [
+            "Battle/Battle01/Battle01Coordinator.swift",
+            "Story/Chapter/Chapter01/DadFinalBattle/" +
+                "Chapter01DadFinalBattleCoordinator.swift",
+            "Story/Chapter/Chapter02/Chapter02WomanBattleCoordinator.swift",
+            "Story/Chapter/Chapter03/Chapter03BikerBattleCoordinator.swift",
+            "Story/Chapter/Chapter03/Chapter03MikeBattleCoordinator.swift"
+        ]
+        for path in battleSources {
+            let source = try appSource(path)
+            XCTAssertTrue(
+                source.contains("portalExitCleanup.scheduleAfterPortalExit("),
+                "Missing portal-exit cleanup in \(path)"
+            )
+        }
+
+        let drone = try appSource(
+            "Story/Chapter/Chapter01/Chapter01RobotEncounterCoordinator.swift"
+        )
+        XCTAssertFalse(
+            drone.contains("portalExitCleanup.scheduleAfterPortalExit(")
+        )
+    }
+
     func testAftermathOwnerHasNoBattleOrEnemyReference() throws {
         let source = try appSource(
             "Story/Audio/StoryAftermathMusicActor.swift"

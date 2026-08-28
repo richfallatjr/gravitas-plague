@@ -35,6 +35,7 @@ final class Battle01Coordinator {
     private let definitionStore = Battle01DefinitionStore()
     private let enemyFactory: Battle01EnemyFactory
     private let door: any TuringStoryDoorBattleControlling
+    private let portalExitCleanup: StoryBattlePortalExitCleanupController
     private let intro: ScriptedPortalEnemyIntroCoordinator
     private let combat: any Battle01StoryCombatControlling
     private let soundtrack: any Battle01SoundtrackControlling
@@ -106,6 +107,10 @@ final class Battle01Coordinator {
     ) {
         self.door = door
         self.clock = clock
+        self.portalExitCleanup = StoryBattlePortalExitCleanupController(
+            door: door,
+            clock: clock
+        )
         self.intro = ScriptedPortalEnemyIntroCoordinator(clock: clock)
         self.combat = Battle01StoryCombatAdapter()
         self.soundtrack = Battle01SoundtrackController()
@@ -428,11 +433,10 @@ final class Battle01Coordinator {
             try Task.checkCancellation()
             guard battleInstanceID == instanceID else { return }
 
-            print("""
-            [TuringDoorPortal] battle lease retained through combat
-              ownerID: \(instanceID.uuidString)
-              releaseBoundary: closeAnimationAndSFXCompletion
-            """)
+            portalExitCleanup.scheduleAfterPortalExit(
+                ownerID: instanceID,
+                reason: "battle01.grandmaExited"
+            )
 
             state = .combat
             try combat.activate(
@@ -620,8 +624,9 @@ final class Battle01Coordinator {
                         ("requiresSFXCompletion", "true")
                     ]
                 )
-                let doorCloseTask = Task { @MainActor [door = self.door] in
-                    try await door.closeForBattleAndUnloadPortal(
+                let doorCloseTask = Task {
+                    try await self.portalExitCleanup
+                        .closeAndUnloadNowIfNeeded(
                         ownerID: instanceID,
                         reason: "finalEnemyRuntimeReleased"
                     )
@@ -727,7 +732,7 @@ final class Battle01Coordinator {
     ) async {
         await StoryAftermathMusicActor.shared.stop(reason: "battleCancelled.\(reason)")
         do {
-            try await door.closeForBattleAndUnloadPortal(
+            try await portalExitCleanup.closeAndUnloadNowIfNeeded(
                 ownerID: instanceID,
                 reason: "cancel.\(reason)"
             )

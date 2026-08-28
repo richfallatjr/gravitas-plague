@@ -25,6 +25,7 @@ final class Chapter03BikerBattleCoordinator {
     private let enemyFactory: Chapter03BattleEnemyFactory
     private let door: any TuringStoryDoorBattleControlling
     private let arbiter: StoryInteractionArbiter
+    private let portalExitCleanup: StoryBattlePortalExitCleanupController
     private let intro: ScriptedPortalEnemyIntroCoordinator
     private let music: Chapter03BattleMusicController
     private let richQueue: StoryBattleRichPrerecordingQueue
@@ -69,6 +70,10 @@ final class Chapter03BikerBattleCoordinator {
             richVocalChannel: richVocalChannel
         )
         self.arbiter = arbiter
+        self.portalExitCleanup = StoryBattlePortalExitCleanupController(
+            door: door,
+            clock: clock
+        )
         self.intro = ScriptedPortalEnemyIntroCoordinator(clock: clock)
         self.enemyFactory = Chapter03BattleEnemyFactory(
             sceneRoot: sceneRoot,
@@ -223,6 +228,15 @@ final class Chapter03BikerBattleCoordinator {
                 )
             }
             try await intro.performPortalCrossing()
+            try Task.checkCancellation()
+            guard self.chapterRunID == chapterRunID,
+                  self.battleInstanceID == battleInstanceID else {
+                throw Chapter03Error.staleRun
+            }
+            portalExitCleanup.scheduleAfterPortalExit(
+                ownerID: battleInstanceID,
+                reason: "chapter03.biker.bikerExited"
+            )
             let combat = Chapter03BikerBattleCombatAdapter(
                 confirmedHitsToKill: definition.playerConfirmedHitsToKill
             )
@@ -302,7 +316,8 @@ final class Chapter03BikerBattleCoordinator {
                     self.onEnemyRemoved(enemyID)
                 }
                 self.prepared = nil
-                try await self.door.closeForBattleAndUnloadPortal(
+                try await self.portalExitCleanup
+                    .closeAndUnloadNowIfNeeded(
                     ownerID: battleInstanceID,
                     reason: "chapter03.biker.deathCleanup"
                 )
@@ -353,7 +368,10 @@ final class Chapter03BikerBattleCoordinator {
         if let enemyID = prepared?.enemyID { onEnemyRemoved(enemyID) }
         prepared = nil
         do {
-            try await door.closeForBattleAndUnloadPortal(ownerID: instanceID, reason: reason)
+            try await portalExitCleanup.closeAndUnloadNowIfNeeded(
+                ownerID: instanceID,
+                reason: reason
+            )
         } catch {
             door.releaseBattlePortal(ownerID: instanceID, reason: "\(reason).forced")
         }

@@ -11,6 +11,7 @@ final class Chapter01DadFinalBattleCoordinator {
     private let prerecordingStore = TuringPrerecordingStore()
     private let enemyFactory: Chapter01DadBattleEnemyFactory
     private let door: any TuringStoryDoorBattleControlling
+    private let portalExitCleanup: StoryBattlePortalExitCleanupController
     private let arbiter: StoryInteractionArbiter
     private let clock: any BattleClock
     private let intro: ScriptedPortalEnemyIntroCoordinator
@@ -59,6 +60,10 @@ final class Chapter01DadFinalBattleCoordinator {
         self.door = door
         self.arbiter = arbiter
         self.clock = clock
+        self.portalExitCleanup = StoryBattlePortalExitCleanupController(
+            door: door,
+            clock: clock
+        )
         self.richQueue = StoryBattleRichPrerecordingQueue(
             richVocalChannel: richVocalChannel
         )
@@ -336,6 +341,11 @@ final class Chapter01DadFinalBattleCoordinator {
             try Task.checkCancellation()
             guard self.battleInstanceID == battleInstanceID else { return }
 
+            portalExitCleanup.scheduleAfterPortalExit(
+                ownerID: battleInstanceID,
+                reason: "chapter01DadBattle.dadExited"
+            )
+
             let combat = Chapter01DadBattleCombatAdapter(
                 damageClock: damageClock,
                 damageEnableMediaTime:
@@ -415,8 +425,9 @@ final class Chapter01DadFinalBattleCoordinator {
 
         cleanupTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            let doorCloseTask = Task { @MainActor [door = self.door] in
-                try await door.closeForBattleAndUnloadPortal(
+            let doorCloseTask = Task {
+                try await self.portalExitCleanup
+                    .closeAndUnloadNowIfNeeded(
                     ownerID: battleInstanceID,
                     reason: "chapter01DadBattle.deathDialogueHold"
                 )
@@ -533,7 +544,7 @@ final class Chapter01DadFinalBattleCoordinator {
         prepared = nil
         if let enemyID { onEnemyRemoved(enemyID) }
         do {
-            try await door.closeForBattleAndUnloadPortal(
+            try await portalExitCleanup.closeAndUnloadNowIfNeeded(
                 ownerID: battleInstanceID,
                 reason: logReason
             )
