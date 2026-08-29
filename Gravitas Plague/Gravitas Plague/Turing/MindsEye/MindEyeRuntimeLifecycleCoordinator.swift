@@ -16,7 +16,7 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
     private var shutdownComplete = false
 
     var allowsNewPresentation: Bool {
-        applicationState == .active && memoryPressure != .critical && !shutdownComplete
+        applicationState == .active && !shutdownComplete
     }
 
     init(
@@ -72,12 +72,11 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
         switch newState {
         case .active:
             presentation.setResponsePortraitLoadDecision(
-                memoryPressure == .normal ? .allowLoad :
-                    (memoryPressure == .warning ? .reuseExistingOnly : .deny),
+                memoryPressure == .warning ? .reuseExistingOnly : .allowLoad,
                 reason: "applicationActive.\(reason)"
             )
             presentation.setLifecycleAllowsPresentation(
-                memoryPressure != .critical,
+                true,
                 reason: "applicationActive.\(reason)"
             )
             if previous == .inactive {
@@ -169,15 +168,10 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
         )
         #endif
         TuringMemoryBudgetProbe.log(label: "mindEye.qwenPreflight.before", runID: runID)
-        let effectivePolicy: MindEyeActiveHighMemoryRetentionPolicy
-        if memoryPressure == .critical,
-           policy != .retainActivePresentation {
-            effectivePolicy = .releaseAll
-        } else {
-            // An active authored PR is audible media, not an inactive cache.
-            // Its portrait remains animated until that PR's completion event.
-            effectivePolicy = policy
-        }
+        // An active authored PR is audible media, not an inactive cache. A
+        // system memory warning is diagnostic evidence for Turing; it must not
+        // convert this visual policy into a destructive release.
+        let effectivePolicy = policy
         let report = await presentation.prepareForTuringHighMemoryRun(
             runID: runID,
             policy: effectivePolicy,
@@ -249,8 +243,6 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
     private func handleMemoryPressure(_ level: MindEyeMemoryPressureLevel) async {
         guard !shutdownComplete, memoryPressure != level else { return }
         memoryPressure = level
-        await TuringGeneratedSpeechAnalysisCoordinator.shared
-            .handleMemoryPressure(level)
         lifecycleGeneration &+= 1
         switch level {
         case .normal:
@@ -272,21 +264,25 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
             await authoredFrameStore.evictInactive(reason: "memoryPressure.warning")
             TuringMemoryBudgetProbe.log(label: "mindEye.memory.warning.after")
         case .critical:
-            TuringMemoryBudgetProbe.log(label: "mindEye.memory.critical.before")
-            presentation.setLifecycleAllowsPresentation(false, reason: "memoryPressure.critical")
+            // Device evidence showed that tearing down the complete Mind's Eye
+            // stack reclaimed only ~61 MB while permanently suppressing the
+            // remaining response portrait and runtime lip sync. Preserve the
+            // visual and analyzer; optimization work belongs in Turing/MLX.
+            TuringMemoryBudgetProbe.log(
+                label: "mindEye.memory.critical.observed.noTeardown"
+            )
+            presentation.setLifecycleAllowsPresentation(
+                applicationState == .active,
+                reason: "memoryPressure.critical.noTeardown"
+            )
             presentation.setResponsePortraitLoadDecision(
-                .deny,
-                reason: "memoryPressure.critical"
+                applicationState == .active ? .allowLoad : .deny,
+                reason: "memoryPressure.critical.noTeardown"
             )
-            _ = await presentation.releaseAllPresentationState(
-                scope: .memoryCritical,
-                reason: "memoryPressure.critical",
-                keepEventSubscriptions: true
+            print(
+                "[MindEyeLifecycle] critical memory pressure observed " +
+                    "action=noTeardown target=TuringMLXOptimization"
             )
-            await assetMemory.forceEvictAll(reason: "memoryPressure.critical")
-            await authoredFrameStore.forceEvictAll(reason: "memoryPressure.critical")
-            clearRegistriesAfterTeardown(reason: "memoryPressure.critical")
-            TuringMemoryBudgetProbe.log(label: "mindEye.memory.critical.after")
         }
     }
 

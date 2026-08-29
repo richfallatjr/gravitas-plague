@@ -242,12 +242,14 @@ final class TuringStoryWalkieBundleController:
         }
 
         let presentationRoot = ensureMindEyePresentationRoot()
-        let sharedIconTopCenter = MindEyeRealityBoundsAdapter.iconTopCenter(
+        var sharedIconTopCenter = MindEyeRealityBoundsAdapter.iconTopCenter(
             of: anchors.walkieIconAnchor,
             relativeTo: presentationRoot,
             fallbackTopOffsetMeters:
                 Self.walkieIconFallbackTopOffsetMeters
         )
+        sharedIconTopCenter.y +=
+            MindEyeIconPlacementDefaults.shelfVisibleEdgeCorrectionMeters
         let shelfCenteringBounds = anchors.shelf.flatMap { shelf in
             MindEyeRealityBoundsAdapter.bounds(
                 of: shelf,

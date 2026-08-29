@@ -51,6 +51,12 @@ public struct TuringQwenNativeBaseClonePreflightReport: Sendable {
 }
 
 public actor TuringQwenNativeBaseCloneEngine {
+    private struct RenderDiagnosticContext {
+        let runID: String
+        let instanceID: String
+        let segmentIndex: Int
+    }
+
     private let modelRoot: URL
     private let trace: TuringQwenNativeTrace
     private let weightBackend: TuringQwenNativeWeightBackend
@@ -326,7 +332,14 @@ public actor TuringQwenNativeBaseCloneEngine {
         )
 
         do {
-            let generated = try generateCodebookForDecode(prompt)
+            let generated = try generateCodebookForDecode(
+                prompt,
+                diagnosticContext: RenderDiagnosticContext(
+                    runID: runID,
+                    instanceID: instanceID.rawValue,
+                    segmentIndex: request.segmentIndex
+                )
+            )
             TuringQwenNativeDiagnostics.recordBreadcrumb(
                 "baseClone.codebooks.generated",
                 runID: runID,
@@ -469,7 +482,8 @@ public actor TuringQwenNativeBaseCloneEngine {
     }
 
     private func generateCodebookForDecode(
-        _ prompt: TuringQwenNativeBaseClonePrompt
+        _ prompt: TuringQwenNativeBaseClonePrompt,
+        diagnosticContext: RenderDiagnosticContext? = nil
     ) throws -> GeneratedCodebookForDecode {
         defer {
             if sharedResidentResources == nil {
@@ -491,6 +505,9 @@ public actor TuringQwenNativeBaseCloneEngine {
         let promptStart = Date()
         TuringQwenNativeDiagnostics.recordBreadcrumb(
             "baseClone.promptAndWeights.started",
+            runID: diagnosticContext?.runID,
+            instanceID: diagnosticContext?.instanceID,
+            segmentIndex: diagnosticContext?.segmentIndex,
             details: ["voiceID": prompt.cloneProfile.voiceID]
         )
         try prompt.samplingPolicy.validate()
@@ -513,6 +530,9 @@ public actor TuringQwenNativeBaseCloneEngine {
         let initialPromptSeconds = Date().timeIntervalSince(promptStart)
         TuringQwenNativeDiagnostics.recordBreadcrumb(
             "baseClone.promptAndWeights.completed",
+            runID: diagnosticContext?.runID,
+            instanceID: diagnosticContext?.instanceID,
+            segmentIndex: diagnosticContext?.segmentIndex,
             details: [
                 "voiceID": prompt.cloneProfile.voiceID,
                 "sequenceLength": String(promptInputs.sequenceLength)
@@ -571,7 +591,10 @@ public actor TuringQwenNativeBaseCloneEngine {
 
         let initialTalkerStart = Date()
         TuringQwenNativeDiagnostics.recordBreadcrumb(
-            "baseClone.initialTalkerForward.started"
+            "baseClone.initialTalkerForward.started",
+            runID: diagnosticContext?.runID,
+            instanceID: diagnosticContext?.instanceID,
+            segmentIndex: diagnosticContext?.segmentIndex
         )
         let talkerOutput = try TuringQwenNativeTalkerForwardRunner.runFullForward(
             promptInputs: promptInputs,
@@ -583,7 +606,10 @@ public actor TuringQwenNativeBaseCloneEngine {
         )
         let initialTalkerForwardSeconds = Date().timeIntervalSince(initialTalkerStart)
         TuringQwenNativeDiagnostics.recordBreadcrumb(
-            "baseClone.initialTalkerForward.completed"
+            "baseClone.initialTalkerForward.completed",
+            runID: diagnosticContext?.runID,
+            instanceID: diagnosticContext?.instanceID,
+            segmentIndex: diagnosticContext?.segmentIndex
         )
         let logits = TuringQwenNativeTalkerForwardRunner.codecHeadLogits(
             finalLastHiddenState: talkerOutput.finalLastHiddenState,
@@ -615,6 +641,9 @@ public actor TuringQwenNativeBaseCloneEngine {
 
         TuringQwenNativeDiagnostics.recordBreadcrumb(
             "baseClone.dynamicCodebook.started",
+            runID: diagnosticContext?.runID,
+            instanceID: diagnosticContext?.instanceID,
+            segmentIndex: diagnosticContext?.segmentIndex,
             details: ["maxNewRows": String(prompt.maxNewRows)]
         )
         let dynamicCodebook = try generateDynamicCodebook(
@@ -626,10 +655,14 @@ public actor TuringQwenNativeBaseCloneEngine {
             performanceMode: prompt.performanceMode,
             samplingPolicy: prompt.samplingPolicy,
             samplingContext: &samplingContext,
-            resident: resident
+            resident: resident,
+            diagnosticContext: diagnosticContext
         )
         TuringQwenNativeDiagnostics.recordBreadcrumb(
             "baseClone.dynamicCodebook.completed",
+            runID: diagnosticContext?.runID,
+            instanceID: diagnosticContext?.instanceID,
+            segmentIndex: diagnosticContext?.segmentIndex,
             details: [
                 "generatedRows": String(dynamicCodebook.rows.count),
                 "reachedEOS": String(dynamicCodebook.reachedEOS)
@@ -873,7 +906,8 @@ public actor TuringQwenNativeBaseCloneEngine {
         performanceMode: TuringQwenNativePerformanceMode,
         samplingPolicy: TuringQwenNativeSamplingPolicy,
         samplingContext: inout TuringQwenNativeSamplingContext,
-        resident: TuringQwenNativeResidentResources
+        resident: TuringQwenNativeResidentResources,
+        diagnosticContext: RenderDiagnosticContext?
     ) throws -> DynamicCodebookResult {
         let targetRowCount = max(maxNewRows, 1)
         let generationStart = Date()
@@ -926,7 +960,9 @@ public actor TuringQwenNativeBaseCloneEngine {
             firstCodecToken: initialFirstCodecToken,
             tokenIDs: performanceMode.shouldLogFullTokenRows ? firstCodeGroup.tokenIDs : [],
             generationStart: generationStart,
-            performanceMode: performanceMode
+            performanceMode: performanceMode,
+            diagnosticContext: diagnosticContext,
+            talkerPosition: promptInputs.sequenceLength
         )
 
         if let stopReason = shouldStopAfterFirstCodecToken(
@@ -955,6 +991,21 @@ public actor TuringQwenNativeBaseCloneEngine {
 
         while generatedRows.count < targetRowCount {
             let rowIndex = generatedRows.count
+            if rowIndex % performanceMode.rowCheckpointStride == 0 {
+                TuringQwenNativeDiagnostics.recordBreadcrumb(
+                    "baseClone.dynamicCodebook.rowStarted",
+                    runID: diagnosticContext?.runID,
+                    instanceID: diagnosticContext?.instanceID,
+                    segmentIndex: diagnosticContext?.segmentIndex,
+                    details: [
+                        "rowIndex": String(rowIndex),
+                        "completedRows": String(generatedRows.count),
+                        "talkerPosition": String(
+                            promptInputs.sequenceLength + rowIndex
+                        )
+                    ]
+                )
+            }
             let nextInput = try nextTalkerInputEmbedding(
                 codeGroup: generatedRows[rowIndex - 1],
                 generationStep: rowIndex - 1,
@@ -983,7 +1034,9 @@ public actor TuringQwenNativeBaseCloneEngine {
                 firstCodecToken: nextStep.firstCodecToken,
                 tokenIDs: performanceMode.shouldLogFullTokenRows ? nextStep.codeGroup.tokenIDs : [],
                 generationStart: generationStart,
-                performanceMode: performanceMode
+                performanceMode: performanceMode,
+                diagnosticContext: diagnosticContext,
+                talkerPosition: nextStep.step
             )
 
             if let stopReason = shouldStopAfterFirstCodecToken(
@@ -1076,7 +1129,9 @@ public actor TuringQwenNativeBaseCloneEngine {
         firstCodecToken: Int,
         tokenIDs: [Int],
         generationStart: Date,
-        performanceMode: TuringQwenNativePerformanceMode
+        performanceMode: TuringQwenNativePerformanceMode,
+        diagnosticContext: RenderDiagnosticContext?,
+        talkerPosition: Int
     ) {
         if performanceMode.shouldLogFullTokenRows {
             print("""
@@ -1110,6 +1165,23 @@ public actor TuringQwenNativeBaseCloneEngine {
           projectedRealTimeFactor: \(String(format: "%.3f", realTimeFactor))
           fixtureRowsUsed: false
         """)
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "baseClone.dynamicCodebook.rowCompleted",
+            runID: diagnosticContext?.runID,
+            instanceID: diagnosticContext?.instanceID,
+            segmentIndex: diagnosticContext?.segmentIndex,
+            details: [
+                "rowIndex": String(rowIndex),
+                "completedRows": String(completedRows),
+                "talkerPosition": String(talkerPosition),
+                "firstCodecToken": String(firstCodecToken),
+                "elapsedSeconds": String(format: "%.3f", elapsed),
+                "averageSecondsPerRow": String(
+                    format: "%.3f",
+                    elapsed / Double(completedRows)
+                )
+            ]
+        )
     }
 
     private static func preflightModelRoot(_ root: URL) throws {

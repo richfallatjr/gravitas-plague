@@ -56,6 +56,81 @@ final class MindEyeAuthoredToGeneratedContinuityTests: XCTestCase {
         }
     }
 
+    func testUnseededLiveConversationStillCarriesUpcomingSpeakerIdentity() throws {
+        let source = try String(
+            contentsOf: repositoryRoot().appendingPathComponent(
+                "Gravitas Plague/Gravitas Plague/Turing/Flow/" +
+                    "TuringFlowConversationRunner.swift"
+            ),
+            encoding: .utf8
+        )
+        XCTAssertTrue(
+            source.contains(
+                "TuringConversationCharacterID(rawValue: runtime.characterID)"
+            )
+        )
+        XCTAssertTrue(source.contains("parent: request.immutableSeed.map"))
+        XCTAssertTrue(source.contains("speakerCharacterID: generatedSpeaker"))
+        XCTAssertFalse(
+            source.contains(
+                "let spokenPresentationContinuity = request.immutableSeed.map"
+            )
+        )
+    }
+
+    func testComputeIntervalKeepsOrPreparesExactUpcomingPortrait() throws {
+        let source = try String(
+            contentsOf: presentationCoordinatorURL(),
+            encoding: .utf8
+        )
+        for requirement in [
+            "beginUpcomingGeneratedIdle(",
+            "canReuseCurrentPortrait",
+            "motion=keepAlive blink=enabled mouth=rest",
+            "replaceWithUpcomingGenerated",
+            "upcomingSpeaker=",
+            "generatedComputePreview"
+        ] {
+            XCTAssertTrue(source.contains(requirement), requirement)
+        }
+    }
+
+    func testLegacyConversationRendererCarriesContinuityIntoQwenPreflight() throws {
+        let root = repositoryRoot()
+        let runner = try String(
+            contentsOf: root.appendingPathComponent(
+                "Gravitas Plague/Gravitas Plague/Turing/Flow/" +
+                    "TuringFlowConversationRunner.swift"
+            ),
+            encoding: .utf8
+        )
+        let renderer = try String(
+            contentsOf: root.appendingPathComponent(
+                "Gravitas Plague/Gravitas Plague/Turing/Flow/" +
+                    "TuringCharacterQwenRenderer.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(
+            runner.contains(
+                "spokenPresentationContinuity:\n                        " +
+                    "spokenPresentationContinuity"
+            )
+        )
+        XCTAssertTrue(
+            renderer.contains(
+                "private let spokenPresentationContinuity"
+            )
+        )
+        XCTAssertTrue(
+            renderer.contains(
+                "spokenPresentationContinuity:\n        " +
+                    "spokenPresentationContinuity"
+            )
+        )
+    }
+
     private func presentationCoordinatorURL() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

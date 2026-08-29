@@ -9,7 +9,7 @@ final class MindEyeMemoryPressureTests: XCTestCase {
         XCTAssertEqual(MindEyeMemoryPressureLevel.critical.rawValue, "critical")
     }
 
-    func testWarningRetainsActiveAndCriticalUsesDestructiveTeardown() throws {
+    func testWarningEvictsInactiveAndCriticalPreservesMindEye() throws {
         let source = try MindEyePhase10Source.read(
             "Gravitas Plague/Gravitas Plague/Turing/MindsEye/MindEyeRuntimeLifecycleCoordinator.swift"
         )
@@ -19,8 +19,16 @@ final class MindEyeMemoryPressureTests: XCTestCase {
         let criticalBody = String(source[critical.lowerBound...])
         XCTAssertTrue(warningBody.contains("releasePreparedAndEvictInactive"))
         XCTAssertFalse(warningBody.contains("releaseAllPresentationState"))
-        XCTAssertTrue(criticalBody.contains("scope: .memoryCritical"))
-        XCTAssertTrue(criticalBody.contains("forceEvictAll"))
-        XCTAssertTrue(criticalBody.contains("clearRegistriesAfterTeardown"))
+        XCTAssertTrue(criticalBody.contains("action=noTeardown"))
+        XCTAssertFalse(criticalBody.contains("scope: .memoryCritical"))
+        XCTAssertFalse(
+            criticalBody.contains("forceEvictAll(reason: \"memoryPressure.critical\")")
+        )
+        XCTAssertFalse(
+            criticalBody.contains(
+                "clearRegistriesAfterTeardown(reason: \"memoryPressure.critical\")"
+            )
+        )
+        XCTAssertFalse(criticalBody.contains("handleMemoryPressure(level)"))
     }
 }

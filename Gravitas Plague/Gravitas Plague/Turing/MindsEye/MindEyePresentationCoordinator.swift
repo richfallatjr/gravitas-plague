@@ -372,7 +372,10 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         var activeRetained = false
         var activeReleased = false
         var retainedRunID: String?
-        pendingGeneratedContinuity = nil
+        // The child identity is useful even when its authored parent metadata
+        // is absent. It tells us which portrait belongs on the device while
+        // the generated response is still computing.
+        pendingGeneratedContinuity = continuity
         if let active {
             let matches = active.identity.key.playbackRunID == runID
             let shouldRetain: Bool
@@ -413,7 +416,6 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
                 retainedRunID = active.identity.key.playbackRunID
                 if policy == .retainActivePresentation,
                    let continuity {
-                    pendingGeneratedContinuity = continuity
                     print(
                         "[MindEyePresentation] authored portrait retained " +
                             "for generated handoff authoredRun=" +
@@ -426,6 +428,11 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
                 await releaseDetached(resources, reason: "qwenPreflight.\(runID)")
                 activeReleased = true
             }
+        }
+        if pendingGeneratedContinuity == nil, let continuity {
+            // Generic detach clears all presentation state. This child still
+            // owns the compute interval, so restore its exact preview identity.
+            pendingGeneratedContinuity = continuity
         }
         _ = await assetMemory.evictInactive(reason: "qwenPreflight.\(runID)")
         await authoredFrameStore.evictInactive(reason: "qwenPreflight.\(runID)")
@@ -442,6 +449,22 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             await fillerFrameStore.forceEvictAll(reason: "qwenPreflight.fallback.\(runID)")
             afterAsset = await assetMemory.snapshot()
             afterTracks = await authoredFrameStore.snapshot()
+        }
+        if active == nil, let continuity {
+            beginUpcomingGeneratedIdle(
+                continuity,
+                reason: "qwenPreflight.noAudiblePortrait"
+            )
+        } else if let active, let continuity {
+            print(
+                "[MindEyePresentation] upcoming generated portrait staged " +
+                    "generatedRun=\(continuity.childPlaybackRunID) " +
+                    "upcomingSpeaker=\(continuity.speakerCharacterID.rawValue) " +
+                    "upcomingSurface=\(continuity.interactionSurface.rawValue) " +
+                    "activeSpeaker=\(active.identity.speakerCharacterID.rawValue) " +
+                    "activeMedia=\(active.identity.mediaIdentity) " +
+                    "transition=afterAudibleCompletion"
+            )
         }
         return MindEyeHighMemoryPreparationReport(
             runID: runID,
@@ -586,10 +609,10 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             if var active, active.identity.key == key {
                 active.isPaused = true
                 active.playbackClock = clock
-                active.visual.setFrameUpdatesPaused(
-                    true,
-                    reason: "spokenPlaybackPaused.\(reason)"
-                )
+                // Pausing spoken audio for a live-microphone turn freezes only
+                // the speech-driven mouth timeline. Keep-alive motion owns the
+                // blink scheduler, so globally suspending frame updates here
+                // would make the portrait look dead while the listener talks.
                 (active.visual as? any MindEyeAuthoredMouthControlling)?
                     .updateAuthoredMouthClock(
                         clock,
@@ -605,6 +628,12 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
                         reason: reason
                     )
                 self.active = active
+                print(
+                    "[MindEyePresentation] spoken animation paused " +
+                        "run=\(context.run.playbackRunID) " +
+                        "reason=\(reason) mouth=frozen " +
+                        "keepAlive=continues blink=continues"
+                )
             }
         case .resumed(let context, let instant, let clock, let reason):
             let key = MindEyePresentationKey(context: context)
@@ -615,10 +644,6 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             if var active, active.identity.key == key {
                 active.isPaused = false
                 active.playbackClock = clock
-                active.visual.setFrameUpdatesPaused(
-                    false,
-                    reason: "spokenPlaybackResumed.\(reason)"
-                )
                 (active.visual as? any MindEyeAuthoredMouthControlling)?
                     .updateAuthoredMouthClock(
                         clock,
@@ -634,6 +659,12 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
                         reason: reason
                     )
                 self.active = active
+                print(
+                    "[MindEyePresentation] spoken animation resumed " +
+                        "run=\(context.run.playbackRunID) " +
+                        "reason=\(reason) mouth=resumed " +
+                        "keepAlive=continues blink=continues"
+                )
             }
         case .authoredItemCompleted(let context, _):
             await spokenMediaEnded(
@@ -1338,11 +1369,14 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         key: MindEyePresentationKey,
         reason: String
     ) async -> Bool {
-        guard pendingGeneratedContinuity != nil,
+        guard let continuity = pendingGeneratedContinuity,
               var active,
               active.identity.key == key else {
             return false
         }
+        let canReuseCurrentPortrait =
+            active.identity.speakerCharacterID == continuity.speakerCharacterID &&
+            active.identity.interactionSurface == continuity.interactionSurface
         (active.visual as? any MindEyeAuthoredMouthControlling)?
             .stopAuthoredMouthPlayback(
                 reason: "awaitGeneratedContinuity.\(reason)",
@@ -1356,15 +1390,114 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             active.authoredTrackLease = nil
             active.authoredPRID = nil
         }
-        active.isPaused = false
-        self.active = active
+        if canReuseCurrentPortrait {
+            active.isPaused = false
+            self.active = active
+            print(
+                "[MindEyePresentation] authored portrait idling for generated " +
+                    "handoff authoredRun=\(key.playbackRunID) " +
+                    "generatedRun=\(continuity.childPlaybackRunID) " +
+                    "speaker=\(continuity.speakerCharacterID.rawValue) " +
+                    "motion=keepAlive blink=enabled mouth=rest cardRebuilt=false"
+            )
+            return true
+        }
+
         print(
-            "[MindEyePresentation] authored portrait idling for generated " +
-                "handoff authoredRun=\(key.playbackRunID) " +
-                "generatedRun=" +
-                "\(pendingGeneratedContinuity?.childPlaybackRunID ?? "none")"
+            "[MindEyePresentation] authored portrait handing device to upcoming speaker " +
+                "authoredRun=\(key.playbackRunID) " +
+                "generatedRun=\(continuity.childPlaybackRunID) " +
+                "outgoingSpeaker=\(active.identity.speakerCharacterID.rawValue) " +
+                "upcomingSpeaker=\(continuity.speakerCharacterID.rawValue) " +
+                "surface=\(continuity.interactionSurface.rawValue)"
+        )
+        if let resources = detachActiveImmediately(
+            reason: "replaceWithUpcomingGenerated.\(reason)"
+        ) {
+            await releaseDetached(
+                resources,
+                reason: "replaceWithUpcomingGenerated.\(reason)"
+            )
+        }
+        // detachActiveImmediately clears continuity as part of general teardown;
+        // restore this still-live child handoff before scheduling its portrait.
+        pendingGeneratedContinuity = continuity
+        beginUpcomingGeneratedIdle(
+            continuity,
+            reason: "authoredCompletion.\(reason)"
         )
         return true
+    }
+
+    private func beginUpcomingGeneratedIdle(
+        _ continuity: TuringSpokenPresentationContinuity,
+        reason: String
+    ) {
+        guard lifecycleAllowsPresentation,
+              applicationState == .active,
+              !physicalSuppressionActive,
+              pendingGeneratedContinuity?.continuityID == continuity.continuityID,
+              active == nil else {
+            return
+        }
+        let context = upcomingGeneratedPreviewContext(for: continuity)
+        desiredContext = context
+        desiredPlaybackClock = TuringPauseAwarePlaybackClock(
+            origin: context.clockOrigin
+        )
+        desiredIsPaused = false
+        _ = schedulePreparation(
+            characterID: continuity.speakerCharacterID,
+            reason: "upcomingGeneratedIdle.\(reason)"
+        )
+        print(
+            "[MindEyePresentation] upcoming generated idle requested " +
+                "run=\(continuity.childPlaybackRunID) " +
+                "speaker=\(continuity.speakerCharacterID.rawValue) " +
+                "surface=\(continuity.interactionSurface.rawValue) " +
+                "motion=keepAlive blink=enabled mouth=rest reason=\(reason)"
+        )
+    }
+
+    private func upcomingGeneratedPreviewContext(
+        for continuity: TuringSpokenPresentationContinuity
+    ) -> TuringSpokenPresentationContext {
+        let previewIdentity = TuringFlowIdentity(
+            flowInstanceID: continuity.childFlowInstanceID,
+            scriptPointID: "conversation.\(continuity.childFlowInstanceID.uuidString)",
+            characterID: continuity.speakerCharacterID.rawValue,
+            prerecordingID: "none",
+            voicePromptID: "generatedComputePreview",
+            interactionSurface: continuity.interactionSurface,
+            playbackRunID: continuity.childPlaybackRunID,
+            spokenPresentationContinuity: continuity
+        )
+        let handleID = continuity.continuityID
+        let route: TuringAudioRouteID
+        switch continuity.interactionSurface {
+        case .walkie:
+            route = .storyWalkie
+        case .dadFrame:
+            route = .richHeadTracked
+        case .crankRadio:
+            route = .rollingBenchRadio
+        case .hamReceiver:
+            route = .hamReceiver
+        }
+        return TuringSpokenPresentationContext(
+            run: .init(flowIdentity: previewIdentity),
+            playbackHandle: TuringAudioPlaybackHandle(
+                id: handleID,
+                requestID: handleID,
+                runID: continuity.childPlaybackRunID,
+                route: route
+            ),
+            speakerCharacterID: continuity.speakerCharacterID,
+            interactionSurface: continuity.interactionSurface,
+            source: .generated(segmentIndex: 0),
+            clockOrigin: .now,
+            generatedSpeechFrameTrack: nil
+        )
     }
 
     private func spokenMediaFailed(
@@ -1570,12 +1703,9 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
                     stage: "startKeepAlive"
                 )
             }
-            if desiredIsPaused {
-                prepared.visual.setFrameUpdatesPaused(
-                    true,
-                    reason: "attachedWhileSpokenPlaybackPaused"
-                )
-            }
+            // A visual that finishes preparing while its audio is paused must
+            // still idle and blink. The paused playback clock installed below
+            // keeps its mouth track stationary without suspending keep-alive.
             if pendingRevealRequest == nil {
                 await installMatchingPreparedAuthoredTrackIfAvailable(
                     reason: "visualAttached"

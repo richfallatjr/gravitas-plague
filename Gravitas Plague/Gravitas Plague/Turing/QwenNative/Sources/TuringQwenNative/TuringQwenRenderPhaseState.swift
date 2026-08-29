@@ -6,6 +6,13 @@ public struct TuringQwenRenderDecodeOverlapMetrics: Sendable, Equatable {
     public let crossSegmentRenderDecodeOverlapCount: Int
 }
 
+public struct TuringQwenDecodeAcquireObservation: Sendable, Equatable {
+    public let activeRenderCount: Int
+    public let sameSegmentRenderActive: Bool
+    public let crossSegmentRenderActive: Bool
+    public let activeRenderKeys: [String]
+}
+
 public actor TuringQwenRenderPhaseState {
     private struct ActiveRender: Hashable {
         let runID: String
@@ -75,7 +82,10 @@ public actor TuringQwenRenderPhaseState {
         """)
     }
 
-    public func decodeAcquired(runID: String, segmentIndex: Int) {
+    public func decodeAcquired(
+        runID: String,
+        segmentIndex: Int
+    ) -> TuringQwenDecodeAcquireObservation {
         let sameSegmentActive = activeRenders.contains {
             $0.runID == runID && $0.segmentIndex == segmentIndex
         }
@@ -88,6 +98,15 @@ public actor TuringQwenRenderPhaseState {
         if otherSegmentActive {
             crossSegmentRenderDecodeOverlapCount += 1
         }
+        let keys = activeRenders.map {
+            "\($0.runID).\($0.segmentIndex).\($0.instanceID.rawValue)"
+        }.sorted()
+        return TuringQwenDecodeAcquireObservation(
+            activeRenderCount: activeRenders.count,
+            sameSegmentRenderActive: sameSegmentActive,
+            crossSegmentRenderActive: otherSegmentActive,
+            activeRenderKeys: keys
+        )
     }
 
     public func snapshot() -> TuringQwenRenderDecodeOverlapMetrics {

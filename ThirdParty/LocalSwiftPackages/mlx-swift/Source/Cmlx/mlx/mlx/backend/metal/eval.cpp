@@ -18,8 +18,32 @@ void new_stream(Stream stream) {
 inline void check_error(MTL::CommandBuffer* cbuf) {
   if (cbuf->status() == MTL::CommandBufferStatusError) {
     std::ostringstream msg;
-    msg << "[METAL] Command buffer execution failed: "
-        << cbuf->error()->localizedDescription()->utf8String();
+    auto error = cbuf->error();
+    msg << "[METAL] Command buffer execution failed";
+    if (error && error->localizedDescription()) {
+      msg << ": " << error->localizedDescription()->utf8String();
+    }
+    msg << " status=" << static_cast<int>(cbuf->status());
+    if (error) {
+      if (error->domain()) {
+        msg << " errorDomain=" << error->domain()->utf8String();
+      }
+      msg << " errorCode=" << error->code();
+    }
+    if (auto label = cbuf->label(); label) {
+      msg << " label=" << label->utf8String();
+    }
+    const auto gpu_start = cbuf->GPUStartTime();
+    const auto gpu_end = cbuf->GPUEndTime();
+    const auto kernel_start = cbuf->kernelStartTime();
+    const auto kernel_end = cbuf->kernelEndTime();
+    msg << " gpuStart=" << gpu_start << " gpuEnd=" << gpu_end
+        << " gpuDuration="
+        << ((gpu_end >= gpu_start) ? gpu_end - gpu_start : 0.0)
+        << " kernelStart=" << kernel_start << " kernelEnd=" << kernel_end
+        << " kernelDuration="
+        << ((kernel_end >= kernel_start) ? kernel_end - kernel_start : 0.0)
+        << " retainedReferences=" << cbuf->retainedReferences();
     throw std::runtime_error(msg.str());
   }
 }

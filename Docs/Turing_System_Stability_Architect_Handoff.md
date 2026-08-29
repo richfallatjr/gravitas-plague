@@ -878,3 +878,367 @@ Optimization performed: none unless separately approved and measured
 Keep contradictions. If one crash is a Metal interactivity abort and another is
 jetsam, treat them as two failure classes rather than forcing both into one
 memory narrative.
+
+## 18. Device incident update 2: 2026-08-29, Broadcaster response
+
+The next supplied device trace reproduced the same terminal failure class during
+a Broadcaster conversation on the crank-radio surface:
+
+```text
+libc++abi: terminating due to uncaught exception of type std::runtime_error:
+[METAL] Command buffer execution failed: Impacting Interactivity
+(0000000e:kIOGPUCommandBufferCallbackErrorImpactingInteractivity)
+```
+
+This was not merely a character-art or Big Mike-specific failure. The run ID was
+`1D1A6762-CD39-4069-8097-3C9F1B7DE2D0`, the output voice was
+`broadcaster_base_clone_v1`, and the interaction surface was `crankRadio`.
+Generated segments 0 and 1 had materialized and played. Segment 1 completed at
+the audio layer while Qwen continued producing the next segment. The final
+successful generation checkpoints were:
+
+```text
+forwardOneStep position: 224
+dynamic codebook completed row: 39 (40 rows)
+next successful talker samples: token 1324, token 1886
+```
+
+The abort occurred before another complete dynamic-row checkpoint. Immediately
+before failure, speech-decoder stage logs for the overlapping work included
+`decoder.2`, and the process snapshots rose through approximately:
+
+```text
+phys_footprint_MB: 5504.6 peak in the final visible decoder-stage sequence
+mlx_active_MB:     3224.9
+mlx_cache_MB:      0.0
+```
+
+This trace again does not report jetsam or a Swift assertion. It strengthens the
+hypothesis that long/interleaved MLX Metal work can cross the platform's GPU
+interactivity boundary while generation, serialized decoder work, audio playback,
+and the Mind's Eye compositor coexist. It does not yet prove whether the failed
+buffer belonged to dynamic talker, code predictor, decoder, or a lazily merged
+combination. Preserve that uncertainty.
+
+### 18.1 New bounded instrumentation applied after incident 2
+
+No Qwen, model-quality, concurrency, cache, or command-buffer threshold
+optimization was applied. The following diagnostics were added only:
+
+- The durable Qwen breadcrumb now carries run ID, Fresh instance ID, and segment
+  index through prompt/weight preparation, initial talker forward, and dynamic
+  codebook generation.
+- At the configured row-checkpoint stride it writes a `rowStarted` breadcrumb
+  before the next lazy talker/code-predictor step and a `rowCompleted` breadcrumb
+  afterward. These records include row index, completed rows, talker position,
+  token ID, timing, MLX memory, and process footprint. Atomic replacement keeps
+  storage bounded to the last record.
+- The vendored MLX error text now adds Metal status, error domain/code, command-
+  buffer label when available, GPU and kernel start/end/duration, and retained-
+  reference state before preserving the existing failure behavior.
+
+The MLX completion callback still throws today; that remains an architect-level
+containment problem. The instrumentation intentionally does not swallow a failed
+buffer or continue using potentially invalid tensor results.
+
+### 18.2 Mind's Eye lifecycle finding discovered in the same trace
+
+The perceived difference between Big Mike and Broadcaster during TTS compute was
+timing, not a character-specific resource size issue. Both authored cards were
+explicitly stopped, detached, and disposed on `spokenItemCompleted`. Each was
+then rebuilt only after a filler/generated pre-audio reveal request. Big Mike's
+rebuild missed the reveal timeout and produced a visible blank interval;
+Broadcaster's shorter-looking gap made it appear as though it had stayed alive.
+
+The triggering metadata defect was also exact: unseeded live conversation runs
+created `spokenPresentationContinuity == nil`. High-memory preflight retained the
+still-audible authored portrait, but without the child speaker/run identity the
+presentation coordinator discarded it when authored audio completed.
+
+The stabilization change makes every recognized live conversation carry a child
+continuity identity even when no authored parent seed exists. During compute:
+
+- audible authored playback keeps its full authored mouth, blink, and motion
+  until its actual completion event;
+- if the upcoming generated speaker is the same character and surface, the card
+  stays attached and transitions to rest-mouth idle with motion and blinking;
+- if the upcoming speaker differs, the audible card is preserved until it ends,
+  then the device is handed to the exact upcoming speaker and that portrait is
+  prepared immediately;
+- if no authored card is audible, the upcoming portrait starts preparing at
+  Qwen preflight;
+- filler audio, when available, promotes the same resident portrait and installs
+  its authored filler mouth track; without filler, the portrait remains at rest
+  with continuous motion and blinking until generated audio begins.
+
+This is a visual lifecycle correction, not a Qwen optimization. Audio remains
+authoritative: a visual preparation failure continues audio-only, and the wrong
+speaker is never substituted while another character is audibly talking.
+
+## 19. Device incident update 3: 2026-08-29, Big Mike multi-segment response
+
+The next supplied device trace reproduced the same terminal Metal failure, but
+the added diagnostics moved the failure boundary out of the ambiguous dynamic-
+generation interval. The run was:
+
+```text
+runID:       84839EA8-4B74-4FA3-9A99-B1E5DC657DD9.legacy
+speaker:     big_mike
+voice:       big_mike_base_clone_v1
+surface:     walkie
+failed work: segment 5, Fresh instance fresh-1, serialized speech decode
+```
+
+Segment 5 completed autoregressive generation normally: it reached EOS after 47
+generated rows, released its render working set, and acquired decoder ownership
+with 71 total rows. The final completed speech-decoder stage was:
+
+```text
+speechDecoder.decoder.3.upsample
+physFootprintMB: 5194.7
+mlxActiveMB:     3151.5
+mlxCacheMB:      0.0
+```
+
+The process then aborted before logging completion of the next decoder stage:
+
+```text
+[METAL] Command buffer execution failed: Impacting Interactivity
+status=5
+errorDomain=MTLCommandBufferErrorDomain
+errorCode=1
+gpuDuration=0.091456
+kernelDuration=0.00746346
+retainedReferences=0
+```
+
+The next lazy operation is `speechDecoder.decoder.3.residual.2`; the existing
+pre-eval durable stage breadcrumb should identify it even though the console
+only contained completed stages in this build. Treat this as a strong boundary,
+not yet proof of the exact failing Metal encoder, because MLX can aggregate
+multiple primitives into a command buffer.
+
+### 19.1 Confirmed Turing overlap and memory-pressure sequence
+
+This trace contains a genuine system memory warning. While the serialized
+decoder was processing segment 3, Fresh instance `fresh-1` simultaneously began
+rendering segment 5. At the warning:
+
+```text
+phys_footprint_MB:          6583
+os_proc_available_memory_MB: 1608
+mlx_active_MB:              4171
+mlx_cache_MB:                283
+mlx_peak_MB:                4430
+```
+
+The current diagnostics incorrectly reported `activeQwenModelID: none` in that
+warning snapshot even though both Qwen render and decode work were active. Do
+not use that field to conclude Qwen was absent; repair the ownership telemetry
+as part of the architecture work.
+
+The emergency Mind's Eye teardown changed physical footprint only from about
+6583 MB to 6522 MB, approximately 61 MB. It then suppressed every subsequent
+filler/generated portrait start. The much larger drop occurred only when the
+segment 3 speech decoder released its working set. Owner direction is therefore
+explicit:
+
+```text
+Optimization target: Turing / Qwen / MLX pipeline
+Mind's Eye optimization target: no
+```
+
+The critical-pressure Mind's Eye teardown and runtime-lip-sync cancellation were
+removed. A memory warning remains observable, but it no longer destroys the
+portrait, clears its registries, unloads its lip-sync engine, or closes its
+presentation gate. This is a functionality correction backed by the measured
+61 MB delta, not an attempt to solve Turing memory pressure through the visual.
+
+### 19.2 Bounded Turing instrumentation applied after incident 3
+
+No Qwen concurrency, model, cache, command-buffer, or output-quality behavior was
+changed. Instrumentation now adds:
+
+- exact run ID, Fresh instance, segment index, and decoder ID to every speech-
+  decoder stage;
+- a `stage.started` console record before `eval`, including tensor shape, MLX
+  active/cache memory, and physical footprint;
+- a `stage.completed` durable breadcrumb and console record after successful
+  materialization, including elapsed stage time and post-stage memory;
+- decode-acquisition overlap evidence: active render count, same-segment versus
+  cross-segment overlap, and the exact active render run/segment/instance keys;
+- the overlap evidence in the atomic crash breadcrumb, so the last persisted
+  record remains useful even when the C++ completion callback aborts before
+  Swift can catch an error.
+
+The next device reproduction should answer two remaining questions directly:
+
+1. Does the failed buffer consistently begin in
+   `speechDecoder.decoder.3.residual.2`, or move with tensor length/stage shape?
+2. Does the failure require the earlier cross-segment render/decode overlap and
+   system memory warning, or can the serialized decoder fail without that peak?
+
+Those observations should drive the architect's first Turing-only A/B test:
+generation/decode exclusion with all audio, runtime lip sync, Mind's Eye, and
+world content otherwise unchanged.
+
+## 20. Device incident update 4: 2026-08-29, Cat Eye 81 response
+
+The next supplied device trace reproduced the same uncaught MLX/Metal terminal
+failure during the Cat Eye 81 ham-receiver conversation:
+
+```text
+runID:       EDDF7D09-43F2-4DA5-9DCD-BE46C02E30C8.legacy
+speaker:     cateye81
+voice:       cateye81_base_clone_v1
+surface:     hamReceiver
+failed work: segment 2 decode on fresh-0 while segment 3 rendered on fresh-1
+```
+
+Segment 2 completed generation normally with 73 rows, reached EOS, materialized
+its CPU codebooks, released its render working set, and then acquired the single
+serialized decoder. The acquisition telemetry proves that a different segment
+was still rendering:
+
+```text
+concurrentDecoderLimit:          1
+segmentRenderReleasedBeforeDecode: true
+activeRenderCountAtDecodeAcquire:  1
+sameSegmentRenderActive:           false
+crossSegmentRenderActive:          true
+activeRenderKeys:
+  EDDF7D09-43F2-4DA5-9DCD-BE46C02E30C8.legacy.3.fresh-1
+```
+
+The decoder advanced through quantizer decode, pre-convolution, all eight
+pre-transformer layers, both initial upsampling stages, decoder block 0, block
+1 upsampling, and block 1 residual 2. The terminal buffer error appeared while
+the instrumented current stage was:
+
+```text
+stage:      speechDecoder.decoder.1.residual.3
+shape:      1x3104x768
+decodeID:   2
+instanceID: fresh-0
+
+mlxActiveBeforeMB:    3205.3
+mlxCacheBeforeMB:       88.6
+physFootprintBeforeMB: 5373.5
+```
+
+The C++ completion callback reported:
+
+```text
+[METAL] Command buffer execution failed: Impacting Interactivity
+status=5
+errorDomain=MTLCommandBufferErrorDomain
+errorCode=1
+gpuDuration=0.154785
+kernelDuration=0.00103258
+retainedReferences=0
+```
+
+The Swift stage log subsequently printed materialization at approximately
+5427.0 MB physical footprint and 3293.8 MB MLX active memory before the uncaught
+`std::runtime_error` terminated the process. That ordering means the stage
+breadcrumb is a strong temporal boundary but is not proof that residual block 3
+alone owned the failed buffer; the completion failure can surface asynchronously
+and MLX may merge multiple lazy operations into one command buffer.
+
+### 20.1 What this reproduction resolves
+
+The failing decoder boundary is not fixed. Incident 3 ended after
+`decoder.3.upsample` and before a logged completion of
+`decoder.3.residual.2`; this incident reached only
+`decoder.1.residual.3` for a different tensor length. The exact stage therefore
+moves with workload and runtime state.
+
+Cross-segment GPU overlap remains the strongest common condition. In this run,
+segment 3 generation was actively selecting talker/codebook tokens and had
+reached the 56-row checkpoint while segment 2's serialized speech decoder was
+executing. Decoder serialization only excludes a second decoder; it does not
+exclude the other Fresh lane's autoregressive generation.
+
+The crash also occurred below the prior incident's approximately 6.58 GB
+warning peak. The final stage was around 5.43 GB physical footprint. This run
+did receive an earlier system memory warning around 5.04 GB physical footprint,
+3.25 GB MLX active memory, and 3.15 GB reported available process memory, but
+there was no terminal jetsam record and no critical Mind's Eye teardown. The
+result weakens a simple fixed-RAM-threshold explanation and strengthens the
+GPU-interactivity/command-buffer scheduling hypothesis. Memory pressure may
+still amplify the failure and must remain measured rather than dismissed.
+
+The same response successfully decoded segments 0 and 1 before segment 2 failed.
+At least one earlier decode also overlapped another Fresh render. Overlap is
+therefore not sufficient by itself; tensor length, accumulated GPU work,
+thermal/interactivity state, and command-buffer construction remain candidate
+modifiers.
+
+### 20.2 Required next action and test decision
+
+Do not request another identical uncontrolled reproduction before architecture
+work. The instrumentation has now answered the two questions left by incident 3:
+
+1. the failed decoder stage moves rather than consistently beginning at one
+   residual block;
+2. the terminal failure again occurs during confirmed cross-segment
+   generation/decode overlap, without requiring the prior 6.58 GB peak.
+
+The architect's first controlled Turing-only A/B should now be generation/decode
+GPU exclusion with all audio, runtime lip sync, Mind's Eye, world content,
+segment text, and voice settings unchanged. Compare that against the current
+overlapped Fresh2 pipeline using the same prompt and capture:
+
+- crash/no-crash and exact Metal completion status;
+- first-audio latency, segment gaps, and total response completion time;
+- per-stage command-buffer GPU duration;
+- physical footprint and MLX active/cache peaks;
+- generated audio identity/quality and segment ordering.
+
+This is a temporary diagnostic mode, not a recommendation to remove Rich's
+concurrent Fresh2 pipeline. The architect is not authorized by this handoff to
+replace the production design with a globally serialized renderer, remove a
+Fresh lane, disable segment streaming, or accept materially worse first-audio
+latency. Preserve both lane owners and all existing pipeline semantics. The A/B
+may gate only the conflicting MLX GPU submission window between generation and
+speech decode, ideally behind a qualification-only switch, so the crash
+hypothesis can be measured. If exclusion prevents the abort, use that evidence
+to design the narrowest low-level command-buffer, admission, or scheduling fix
+that retains useful concurrency; do not ship the diagnostic exclusion merely
+because it stops one crash.
+
+This recommendation is for the architect to design and measure. No Qwen
+optimization, lane-count change, generation/decode exclusion, or other
+concurrency behavior change was applied while recording this incident.
+
+### 20.3 Non-Turing observations retained from the same run
+
+The shelf placement correction is present in the trace: the wall Mind's Eye card
+moved from the earlier local Y of approximately `0.7315997` to `0.6553997`, an
+exact three-inch downward adjustment. The workbench card remained at its
+separate approved position.
+
+The trace also exposed a portrait-continuity plumbing defect. Cat Eye 81's
+authored portrait was stopped, detached, disposed, and its package released at
+`spokenItemCompleted` while generated segment 0 was not yet prepared. The card
+was rebuilt only at the generated pre-audio reveal. The exact upstream evidence
+was `continuityID: none`, `upcomingSpeaker: unknown`, and
+`upcomingSurface: unknown` at high-memory preflight.
+
+The live conversation runner already created the correct continuity token, but
+its legacy `TuringCharacterQwenRenderer` path constructed
+`TuringCharacterQwenRenderSession` without forwarding that token. The local
+stabilization fix carries the unchanged token through the legacy renderer into
+Qwen preflight. At authored completion, the existing coordinator path now stops
+only authored mouth playback, resets the mouth to rest, releases the authored
+frame track, and retains the same attached visual with keep-alive motion and
+blinking. Generated reveal/start then promotes that resident portrait without a
+card rebuild. This changes no Qwen lane, scheduler, overlap, generation, decode,
+or model behavior.
+
+The next device trace should show a UUID rather than `continuityID: none`, then
+`authored portrait idling for generated handoff ... cardRebuilt=false`, without
+`dynamic visual detached` or `dynamic visual disposed` at PR completion. This
+was a functional Mind's Eye lifecycle repair, not evidence that the tiny
+portrait package caused the Turing Metal abort and not permission to restore
+emergency visual teardown.

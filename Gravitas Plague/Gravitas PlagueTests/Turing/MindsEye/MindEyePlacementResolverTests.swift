@@ -78,6 +78,11 @@ final class MindEyePlacementResolverTests: XCTestCase {
             accuracy: 0.0001
         )
         XCTAssertEqual(
+            MindEyeIconPlacementDefaults.shelfVisibleEdgeCorrectionMeters,
+            -0.0762,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
             MindEyeIconPlacementDefaults.rollingBenchBottomEdgeClearanceMeters,
             0.0635,
             accuracy: 0.0001

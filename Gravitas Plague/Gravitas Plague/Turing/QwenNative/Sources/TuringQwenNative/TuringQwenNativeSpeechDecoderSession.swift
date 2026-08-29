@@ -20,13 +20,15 @@ final class TuringQwenNativeSpeechDecoderSession {
 
     func decode(
         rows: [[Int]],
-        performanceMode: TuringQwenNativePerformanceMode
+        performanceMode: TuringQwenNativePerformanceMode,
+        diagnosticContext: TuringQwenNativeSpeechDecoderDiagnosticContext? = nil
     ) throws -> TuringQwenNativeAudio {
         try TuringQwenNativeSpeechDecoder.decodeRows(
             rows,
             config: config,
             reader: reader,
-            performanceMode: performanceMode
+            performanceMode: performanceMode,
+            diagnosticContext: diagnosticContext
         )
     }
 }

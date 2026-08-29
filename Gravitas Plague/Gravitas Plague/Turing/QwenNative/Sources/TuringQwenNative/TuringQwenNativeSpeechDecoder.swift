@@ -86,6 +86,13 @@ struct TuringQwenNativeSpeechTokenizerConfig: Decodable, Sendable {
     }
 }
 
+struct TuringQwenNativeSpeechDecoderDiagnosticContext: Sendable {
+    let runID: String
+    let instanceID: String
+    let segmentIndex: Int
+    let decodeID: Int
+}
+
 enum TuringQwenNativeSpeechDecoder {
     static func decode(
         codebookRows: [[Int]],
@@ -112,7 +119,8 @@ enum TuringQwenNativeSpeechDecoder {
         _ codebookRows: [[Int]],
         config: TuringQwenNativeSpeechTokenizerConfig,
         reader: TuringQwenNativeSafetensorsReader,
-        performanceMode: TuringQwenNativePerformanceMode = .diagnostic
+        performanceMode: TuringQwenNativePerformanceMode = .diagnostic,
+        diagnosticContext: TuringQwenNativeSpeechDecoderDiagnosticContext? = nil
     ) throws -> TuringQwenNativeAudio {
 
         guard codebookRows.isEmpty == false else {
@@ -133,7 +141,8 @@ enum TuringQwenNativeSpeechDecoder {
         materializeDecoderStage(
             hidden,
             label: "speechDecoder.quantizerDecode",
-            performanceMode: performanceMode
+            performanceMode: performanceMode,
+            diagnosticContext: diagnosticContext
         )
 
         hidden = try causalConv1d(
@@ -146,19 +155,22 @@ enum TuringQwenNativeSpeechDecoder {
         materializeDecoderStage(
             hidden,
             label: "speechDecoder.preConv",
-            performanceMode: performanceMode
+            performanceMode: performanceMode,
+            diagnosticContext: diagnosticContext
         )
 
         hidden = try runPreTransformer(
             hidden,
             config: config.decoderConfig,
             reader: reader,
-            performanceMode: performanceMode
+            performanceMode: performanceMode,
+            diagnosticContext: diagnosticContext
         )
         materializeDecoderStage(
             hidden,
             label: "speechDecoder.preTransformer",
-            performanceMode: performanceMode
+            performanceMode: performanceMode,
+            diagnosticContext: diagnosticContext
         )
 
         for upsampleIndex in 0..<config.decoderConfig.upsamplingRatios.count {
@@ -180,7 +192,8 @@ enum TuringQwenNativeSpeechDecoder {
             materializeDecoderStage(
                 hidden,
                 label: "speechDecoder.upsample.\(upsampleIndex)",
-                performanceMode: performanceMode
+                performanceMode: performanceMode,
+                diagnosticContext: diagnosticContext
             )
         }
 
@@ -194,7 +207,8 @@ enum TuringQwenNativeSpeechDecoder {
         materializeDecoderStage(
             hidden,
             label: "speechDecoder.decoder.0",
-            performanceMode: performanceMode
+            performanceMode: performanceMode,
+            diagnosticContext: diagnosticContext
         )
 
         for blockIndex in 0..<config.decoderConfig.upsampleRates.count {
@@ -203,12 +217,14 @@ enum TuringQwenNativeSpeechDecoder {
                 blockIndex: blockIndex + 1,
                 upsampleRate: config.decoderConfig.upsampleRates[blockIndex],
                 reader: reader,
-                performanceMode: performanceMode
+                performanceMode: performanceMode,
+                diagnosticContext: diagnosticContext
             )
             materializeDecoderStage(
                 hidden,
                 label: "speechDecoder.decoder.\(blockIndex + 1)",
-                performanceMode: performanceMode
+                performanceMode: performanceMode,
+                diagnosticContext: diagnosticContext
             )
         }
 
@@ -329,7 +345,8 @@ enum TuringQwenNativeSpeechDecoder {
         _ input: MLXArray,
         config: TuringQwenNativeSpeechTokenizerConfig.DecoderConfig,
         reader: TuringQwenNativeSafetensorsReader,
-        performanceMode: TuringQwenNativePerformanceMode
+        performanceMode: TuringQwenNativePerformanceMode,
+        diagnosticContext: TuringQwenNativeSpeechDecoderDiagnosticContext?
     ) throws -> MLXArray {
         var hidden = linear(
             input,
@@ -351,7 +368,8 @@ enum TuringQwenNativeSpeechDecoder {
             materializeDecoderStage(
                 hidden,
                 label: "speechDecoder.preTransformer.layer.\(layerIndex)",
-                performanceMode: performanceMode
+                performanceMode: performanceMode,
+                diagnosticContext: diagnosticContext
             )
         }
 
@@ -377,18 +395,41 @@ enum TuringQwenNativeSpeechDecoder {
     private static func materializeDecoderStage(
         _ value: MLXArray,
         label: String,
-        performanceMode: TuringQwenNativePerformanceMode
+        performanceMode: TuringQwenNativePerformanceMode,
+        diagnosticContext: TuringQwenNativeSpeechDecoderDiagnosticContext?
     ) {
         // Decoder weights are loaded as Float32 for each stage. Leaving these
         // operations lazy retains the complete decoder graph until output eval,
         // which can cross the visionOS high-water mark beside a Fresh render.
+        let shape = value.shape.map(String.init).joined(separator: "x")
+        let startedAt = Date()
+        let mlxBefore = Memory.snapshot()
+        let processBefore = TuringQwenNativeProcessMemoryProbe.snapshot()
+        let bytesPerMegabyte = 1024.0 * 1024.0
         TuringQwenNativeDiagnostics.recordBreadcrumb(
             "speechDecoder.stage.started",
+            runID: diagnosticContext?.runID,
+            instanceID: diagnosticContext?.instanceID,
+            segmentIndex: diagnosticContext?.segmentIndex,
             details: [
                 "stage": label,
-                "performanceMode": performanceMode.rawValue
+                "performanceMode": performanceMode.rawValue,
+                "decodeID": diagnosticContext.map { String($0.decodeID) } ?? "none",
+                "shape": shape
             ]
         )
+        print("""
+        [TuringSegmentPipeline] decode stage started
+          runID: \(diagnosticContext?.runID ?? "none")
+          segmentIndex: \(diagnosticContext.map { String($0.segmentIndex) } ?? "none")
+          instanceID: \(diagnosticContext?.instanceID ?? "none")
+          decodeID: \(diagnosticContext.map { String($0.decodeID) } ?? "none")
+          stage: \(label)
+          shape: \(shape)
+          mlxActiveBeforeMB: \(String(format: "%.1f", Double(mlxBefore.activeMemory) / bytesPerMegabyte))
+          mlxCacheBeforeMB: \(String(format: "%.1f", Double(mlxBefore.cacheMemory) / bytesPerMegabyte))
+          physFootprintBeforeMB: \(String(format: "%.1f", processBefore.physFootprintMB))
+        """)
         eval(value)
         TuringQwenNativeMemoryControl.clearCache(
             label: label,
@@ -396,11 +437,30 @@ enum TuringQwenNativeSpeechDecoder {
         )
         let mlx = Memory.snapshot()
         let process = TuringQwenNativeProcessMemoryProbe.snapshot()
-        let bytesPerMegabyte = 1024.0 * 1024.0
+        let elapsedSeconds = Date().timeIntervalSince(startedAt)
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "speechDecoder.stage.completed",
+            runID: diagnosticContext?.runID,
+            instanceID: diagnosticContext?.instanceID,
+            segmentIndex: diagnosticContext?.segmentIndex,
+            details: [
+                "stage": label,
+                "performanceMode": performanceMode.rawValue,
+                "decodeID": diagnosticContext.map { String($0.decodeID) } ?? "none",
+                "shape": shape,
+                "elapsedSeconds": String(format: "%.6f", elapsedSeconds)
+            ]
+        )
         print("""
         [TuringSegmentPipeline] decode stage materialized
+          runID: \(diagnosticContext?.runID ?? "none")
+          segmentIndex: \(diagnosticContext.map { String($0.segmentIndex) } ?? "none")
+          instanceID: \(diagnosticContext?.instanceID ?? "none")
+          decodeID: \(diagnosticContext.map { String($0.decodeID) } ?? "none")
           stage: \(label)
+          shape: \(shape)
           performanceMode: \(performanceMode.rawValue)
+          elapsedSeconds: \(String(format: "%.6f", elapsedSeconds))
           mlxActiveMB: \(String(format: "%.1f", Double(mlx.activeMemory) / bytesPerMegabyte))
           mlxCacheMB: \(String(format: "%.1f", Double(mlx.cacheMemory) / bytesPerMegabyte))
           physFootprintMB: \(String(format: "%.1f", process.physFootprintMB))
@@ -556,7 +616,8 @@ enum TuringQwenNativeSpeechDecoder {
         blockIndex: Int,
         upsampleRate: Int,
         reader: TuringQwenNativeSafetensorsReader,
-        performanceMode: TuringQwenNativePerformanceMode
+        performanceMode: TuringQwenNativePerformanceMode,
+        diagnosticContext: TuringQwenNativeSpeechDecoderDiagnosticContext?
     ) throws -> MLXArray {
         var hidden = try snakeBeta(
             input,
@@ -576,7 +637,8 @@ enum TuringQwenNativeSpeechDecoder {
         materializeDecoderStage(
             hidden,
             label: "speechDecoder.decoder.\(blockIndex).upsample",
-            performanceMode: performanceMode
+            performanceMode: performanceMode,
+            diagnosticContext: diagnosticContext
         )
 
         for residualUnit in 2...4 {
@@ -589,7 +651,8 @@ enum TuringQwenNativeSpeechDecoder {
             materializeDecoderStage(
                 hidden,
                 label: "speechDecoder.decoder.\(blockIndex).residual.\(residualUnit)",
-                performanceMode: performanceMode
+                performanceMode: performanceMode,
+                diagnosticContext: diagnosticContext
             )
         }
 

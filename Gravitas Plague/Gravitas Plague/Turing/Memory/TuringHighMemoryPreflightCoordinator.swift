@@ -55,6 +55,9 @@ actor TuringHighMemoryPreflightCoordinator:
         print("""
         [TuringHighMemoryPreflight] requested
           runID: \(runID)
+          continuityID: \(continuity?.continuityID.uuidString ?? "none")
+          upcomingSpeaker: \(continuity?.speakerCharacterID.rawValue ?? "unknown")
+          upcomingSurface: \(continuity?.interactionSurface.rawValue ?? "unknown")
           hasStorySceneAdapter: \(storyPreparer != nil)
           hasMindEyeAdapter: \(mindEyePreparer != nil)
         """)

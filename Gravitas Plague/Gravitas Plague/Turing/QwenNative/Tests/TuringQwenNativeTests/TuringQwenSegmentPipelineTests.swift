@@ -83,9 +83,16 @@ struct TuringQwenSegmentPipelineTests {
         )
 
         try await ledger.requireReleased(release0)
-        await state.decodeAcquired(runID: "test-run", segmentIndex: 0)
+        let acquisition = await state.decodeAcquired(
+            runID: "test-run",
+            segmentIndex: 0
+        )
 
         let overlap = await state.snapshot()
+        #expect(acquisition.activeRenderCount == 1)
+        #expect(acquisition.sameSegmentRenderActive == false)
+        #expect(acquisition.crossSegmentRenderActive)
+        #expect(acquisition.activeRenderKeys == ["test-run.1.fresh-1"])
         #expect(overlap.peakActiveRenderCount == 2)
         #expect(overlap.sameSegmentRenderDecodeOverlapCount == 0)
         #expect(overlap.crossSegmentRenderDecodeOverlapCount == 1)

@@ -77,7 +77,7 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
             )
         }
         try await releaseLedger.requireReleased(rendered.releaseToken)
-        await renderPhaseState.decodeAcquired(
+        let overlap = await renderPhaseState.decodeAcquired(
             runID: rendered.runID,
             segmentIndex: rendered.segmentIndex
         )
@@ -101,6 +101,10 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
           segmentRenderReleasedBeforeDecode: true
           waitedForOtherFreshWorker: false
           freshPathUsesLegacyDecodeGate: false
+          activeRenderCountAtDecodeAcquire: \(overlap.activeRenderCount)
+          sameSegmentRenderActive: \(overlap.sameSegmentRenderActive)
+          crossSegmentRenderActive: \(overlap.crossSegmentRenderActive)
+          activeRenderKeys: \(overlap.activeRenderKeys)
         """)
         TuringQwenNativeDiagnostics.recordBreadcrumb(
             "speechDecoder.segment.started",
@@ -109,14 +113,24 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
             segmentIndex: rendered.segmentIndex,
             details: [
                 "decodeID": String(decodeID),
-                "totalRows": String(rowsForDecode.count)
+                "totalRows": String(rowsForDecode.count),
+                "activeRenderCountAtDecodeAcquire": String(overlap.activeRenderCount),
+                "sameSegmentRenderActive": String(overlap.sameSegmentRenderActive),
+                "crossSegmentRenderActive": String(overlap.crossSegmentRenderActive),
+                "activeRenderKeys": overlap.activeRenderKeys.joined(separator: ",")
             ]
         )
 
         do {
             let fullAudio = try activeRun.session.decode(
                 rows: rowsForDecode,
-                performanceMode: rendered.performanceMode
+                performanceMode: rendered.performanceMode,
+                diagnosticContext: TuringQwenNativeSpeechDecoderDiagnosticContext(
+                    runID: rendered.runID,
+                    instanceID: rendered.instanceID.rawValue,
+                    segmentIndex: rendered.segmentIndex,
+                    decodeID: decodeID
+                )
             )
             let trimmed = try TuringQwenNativeBaseCloneDecodeTrimmer
                 .trimReferencePrefix(

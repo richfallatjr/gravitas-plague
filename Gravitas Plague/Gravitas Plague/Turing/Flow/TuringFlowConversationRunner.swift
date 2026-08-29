@@ -274,20 +274,33 @@ enum TuringFlowConversationRunner {
                     )
 
             failureStage = "creatingGeneratedPlayback"
-            let spokenPresentationContinuity = request.immutableSeed.map { seed in
-                TuringSpokenPresentationContinuity(
-                    continuityID: UUID(),
-                    parent: .init(
-                        playbackRunID: seed.parentPlaybackRunID,
-                        flowInstanceID: seed.parentFlowInstanceID,
-                        mediaIdentity: "authored.\(seed.authoredMediaRole.rawValue).\(seed.authoredMediaItemID)"
-                    ),
-                    childPlaybackRunID: conversationRunID.uuidString,
-                    childFlowInstanceID: conversationRunID,
-                    speakerCharacterID: seed.targetContext.targetCharacterID,
-                    interactionSurface: request.interactionSurface
-                )
-            }
+            // Every live TTS response carries its upcoming speaker and surface,
+            // even when the interaction did not originate from an immutable
+            // authored seed. Mind's Eye needs that child identity during Qwen
+            // compute so it can keep or prepare the correct idle portrait
+            // before filler/generated audio is ready. The parent remains
+            // optional because debug and unseeded conversation entry points do
+            // not have an authored parent to identify.
+            let spokenPresentationContinuity =
+                TuringConversationCharacterID(rawValue: runtime.characterID)
+                    .map { generatedSpeaker in
+                        TuringSpokenPresentationContinuity(
+                            continuityID: UUID(),
+                            parent: request.immutableSeed.map { seed in
+                                .init(
+                                    playbackRunID: seed.parentPlaybackRunID,
+                                    flowInstanceID: seed.parentFlowInstanceID,
+                                    mediaIdentity:
+                                        "authored.\(seed.authoredMediaRole.rawValue)." +
+                                        seed.authoredMediaItemID
+                                )
+                            },
+                            childPlaybackRunID: conversationRunID.uuidString,
+                            childFlowInstanceID: conversationRunID,
+                            speakerCharacterID: generatedSpeaker,
+                            interactionSurface: request.interactionSurface
+                        )
+                    }
             let generatedOnly =
                 try await route
                     .makeGeneratedOnlyPlayback(
@@ -489,7 +502,9 @@ enum TuringFlowConversationRunner {
                 )
             let renderer =
                 TuringCharacterQwenRenderer(
-                    runtime: runtime
+                    runtime: runtime,
+                    spokenPresentationContinuity:
+                        spokenPresentationContinuity
                 )
 
             let report:

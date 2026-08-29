@@ -28,14 +28,37 @@ final class MindEyePresentationCoordinatorTests: XCTestCase {
         XCTAssertLessThan(stop.lowerBound, detach.lowerBound)
     }
 
-    func testPauseAndResumeRemainExactIdentityMatched() throws {
+    func testPauseAndResumeFreezeOnlySpeechAnimation() throws {
         let source = try coordinatorSource()
         XCTAssertGreaterThanOrEqual(
             source.components(separatedBy: "active.identity.key == key").count - 1,
             2
         )
-        XCTAssertTrue(source.contains("spokenPlaybackPaused"))
-        XCTAssertTrue(source.contains("spokenPlaybackResumed"))
+        XCTAssertTrue(source.contains("mouth=frozen"))
+        XCTAssertTrue(source.contains("mouth=resumed"))
+        XCTAssertTrue(source.contains("keepAlive=continues blink=continues"))
+
+        let pauseCase = try XCTUnwrap(source.range(of: "case .paused(let context"))
+        let resumeCase = try XCTUnwrap(
+            source.range(of: "case .resumed(let context", range: pauseCase.upperBound..<source.endIndex)
+        )
+        let pausedBlock = source[pauseCase.lowerBound..<resumeCase.lowerBound]
+        XCTAssertFalse(pausedBlock.contains("setFrameUpdatesPaused"))
+
+        let completedCase = try XCTUnwrap(
+            source.range(
+                of: "case .authoredItemCompleted",
+                range: resumeCase.upperBound..<source.endIndex
+            )
+        )
+        let resumedBlock = source[resumeCase.lowerBound..<completedCase.lowerBound]
+        XCTAssertFalse(resumedBlock.contains("setFrameUpdatesPaused"))
+    }
+
+    func testAttachWhileAudioPausedDoesNotSuspendKeepAliveOrBlinking() throws {
+        let source = try coordinatorSource()
+        XCTAssertFalse(source.contains("attachedWhileSpokenPlaybackPaused"))
+        XCTAssertTrue(source.contains("still idle and blink"))
     }
 
     private func coordinatorSource() throws -> String {
