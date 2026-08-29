@@ -169,9 +169,18 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
         )
         #endif
         TuringMemoryBudgetProbe.log(label: "mindEye.qwenPreflight.before", runID: runID)
+        let effectivePolicy: MindEyeActiveHighMemoryRetentionPolicy
+        if memoryPressure == .critical,
+           policy != .retainActivePresentation {
+            effectivePolicy = .releaseAll
+        } else {
+            // An active authored PR is audible media, not an inactive cache.
+            // Its portrait remains animated until that PR's completion event.
+            effectivePolicy = policy
+        }
         let report = await presentation.prepareForTuringHighMemoryRun(
             runID: runID,
-            policy: memoryPressure == .critical ? .releaseAll : policy,
+            policy: effectivePolicy,
             continuity: continuity
         )
         _ = await assetMemory.evictInactive(reason: "qwenPreflight.\(runID)")

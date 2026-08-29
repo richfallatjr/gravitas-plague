@@ -60,8 +60,10 @@ actor TuringHighMemoryPreflightCoordinator:
         """)
         let mindEyeReport = await mindEyePreparer?.prepareForTuringHighMemoryRun(
             runID: runID,
-            policy: continuity == nil ? .retainMatchingRunActive :
-                .retainActivePresentation,
+            // The generated run ID is different from the authored parent run.
+            // Preflight must preserve an authored PR whose playback lifecycle
+            // is still active even if continuity metadata is absent or stale.
+            policy: .retainActivePresentation,
             continuity: continuity
         )
         if let report = mindEyeReport {

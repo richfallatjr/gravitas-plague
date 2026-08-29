@@ -116,13 +116,17 @@ nonisolated struct TuringRuntimeLipSyncResourceLocator: @unchecked Sendable {
         }
 
         let enUSRoot = acoustic.deletingLastPathComponent()
-        let resourceHash = try TuringRuntimeLipSyncSHA256.tree(enUSRoot)
+        // The source lock and manifest cover the versioned model directory,
+        // including the `en-us` path component. Hashing `en-us` itself changes
+        // every relative path in the digest even though all bytes are present.
+        let modelRoot = enUSRoot.deletingLastPathComponent()
+        let resourceHash = try TuringRuntimeLipSyncSHA256.tree(modelRoot)
         guard resourceHash == manifest.resourceTreeSHA256 else {
             throw TuringRuntimeLipSyncFailure.resourceInvalid(
                 "PocketSphinx resource tree hash mismatch."
             )
         }
-        let bytes = try Self.regularFileBytes(in: enUSRoot)
+        let bytes = try Self.regularFileBytes(in: modelRoot)
         guard bytes == manifest.selectedResourceBytes,
               !FileManager.default.fileExists(
                 atPath: enUSRoot.appendingPathComponent("en-us.lm.bin").path

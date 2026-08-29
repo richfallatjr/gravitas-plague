@@ -380,11 +380,31 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             case .retainMatchingRunActive:
                 shouldRetain = matches
             case .retainActivePresentation:
-                shouldRetain = Self.matchesContinuityParent(
+                let exactParentMatch = Self.matchesContinuityParent(
                     active: active,
                     runID: runID,
                     continuity: continuity
                 )
+                // Qwen preflight must never tear down an authored portrait
+                // whose PR lifecycle is still active. The current speaker's
+                // authored mouth, blink, and motion systems continue until the
+                // authored audio completion event, even when incomplete or
+                // stale continuity metadata prevents the exact handoff match.
+                let activeAuthoredPlayback: Bool
+                if case .authored = active.source {
+                    activeAuthoredPlayback = true
+                } else {
+                    activeAuthoredPlayback = false
+                }
+                shouldRetain = exactParentMatch || activeAuthoredPlayback
+                if activeAuthoredPlayback && !exactParentMatch {
+                    print(
+                        "[MindEyePresentation] active authored playback retained " +
+                            "despite continuity metadata mismatch " +
+                            "authoredRun=\(active.identity.key.playbackRunID) " +
+                            "generatedRun=\(runID)"
+                    )
+                }
             case .releaseAll:
                 shouldRetain = false
             }
@@ -450,11 +470,34 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         guard let continuity,
               let parent = continuity.parent,
               continuity.childPlaybackRunID == runID else { return false }
-        return active.identity.key.playbackRunID == parent.playbackRunID &&
-            active.identity.flowInstanceID == parent.flowInstanceID &&
-            active.identity.mediaIdentity == parent.mediaIdentity &&
-            active.identity.speakerCharacterID == continuity.speakerCharacterID &&
+        let playbackRunMatches =
+            active.identity.key.playbackRunID == parent.playbackRunID
+        let flowMatches = active.identity.flowInstanceID == parent.flowInstanceID
+        let mediaMatches = active.identity.mediaIdentity == parent.mediaIdentity
+        let surfaceMatches =
             active.identity.interactionSurface == continuity.interactionSurface
+        let matches = playbackRunMatches &&
+            flowMatches &&
+            mediaMatches &&
+            surfaceMatches
+        if !matches {
+            print(
+                "[MindEyePresentation] authored continuity parent mismatch " +
+                    "activeRun=\(active.identity.key.playbackRunID) " +
+                    "parentRun=\(parent.playbackRunID) " +
+                    "activeFlow=\(active.identity.flowInstanceID.uuidString) " +
+                    "parentFlow=\(parent.flowInstanceID.uuidString) " +
+                    "activeMedia=\(active.identity.mediaIdentity) " +
+                    "parentMedia=\(parent.mediaIdentity) " +
+                    "activeSpeaker=\(active.identity.speakerCharacterID.rawValue) " +
+                    "childSpeaker=\(continuity.speakerCharacterID.rawValue) " +
+                    "playbackRunMatches=\(playbackRunMatches) " +
+                    "flowMatches=\(flowMatches) " +
+                    "mediaMatches=\(mediaMatches) " +
+                    "surfaceMatches=\(surfaceMatches)"
+            )
+        }
+        return matches
     }
 
     func shutdown(reason: String) async -> MindEyeTeardownReport {
