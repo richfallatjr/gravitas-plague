@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "indexVersion", "compilerVersion", "registrySHA256", "toolchainLockSHA256", "expectedUniqueClipCounts", "expectedWeightedTotals", "manifestSetSHA256", "entries", "summary"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "indexVersion": {"const": "mind-eye-filler-index/1"},
+    "compilerVersion": {"const": "mind-eye-filler-compiler/1.0.0"},
+    "registrySHA256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "toolchainLockSHA256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "expectedUniqueClipCounts": {"type": "object"},
+    "expectedWeightedTotals": {"type": "object"},
+    "manifestSetSHA256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "entries": {"type": "array", "minItems": 51, "maxItems": 51},
+    "summary": {"type": "object"}
+  }
+}

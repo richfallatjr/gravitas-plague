@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "trackVersion": "mind-eye-filler-track/1",
+  "compilerVersion": "mind-eye-filler-compiler/1.0.0",
+  "fillerID": "big_mike.filler.clear_03.001",
+  "speakerCharacterID": "big_mike",
+  "audioResourcePath": "Turing/Audio/big-mike-filler/big-mike-filler-clear-03_8.mp3",
+  "audioSHA256": "1ee4b7746e644ff02ab836b78464d2760e1025c91d7bdd558e12310dc3607016",
+  "descriptorSHA256": "e0d899dc136674ecd597cd53941480b059383a8ea522f766f09e80e61843b746",
+  "authoring": {
+    "mode": "manualTranscript",
+    "transcriptSHA256": "913a4cb91be20332f3559f8070255d7ac3e6228bb423f4441551d3f783e7d4f4",
+    "nonverbalProfile": null
+  },
+  "timeline": {
+    "sampleRate": 48000,
+    "sampleCount": 175411,
+    "durationSeconds": 3.654395833,
+    "framesPerSecond": 60,
+    "samplesPerNominalFrame": 800,
+    "frameCount": 220
+  },
+  "mouthLayerBits": {
+    "rest": 1,
+    "small": 2,
+    "wide": 4,
+    "round": 8,
+    "teeth": 16
+  },
+  "poseRuns": [
+    {
+      "startFrame": 0,
+      "endFrameExclusive": 46,
+      "pose": "rest",
+      "evidenceMask": 5
+    },
+    {
+      "startFrame": 46,
+      "endFrameExclusive": 50,
+      "pose": "small",
+      "evidenceMask": 13
+    },
+    {
+      "startFrame": 50,
+      "endFrameExclusive": 53,
+      "pose": "wide",
+      "evidenceMask": 29
+    },
+    {
+      "startFrame": 53,
+      "endFrameExclusive": 60,
+      "pose": "small",
+      "evidenceMask": 13
+    },
+    {
+      "startFrame": 60,
+      "endFrameExclusive": 220,
+      "pose": "rest",
+      "evidenceMask": 5
+    }
+  ],
+  "expandedFramesSHA256": "1952dbacf613dc03369c5dcc09077eaa612a44a964d66cd490c4af3773fb4af9",
+  "analysisProvenance": {
+    "toolchainLockSHA256": "c5c57d5328fe9de6aa14f2f3b522cdd226914efb3339bac9211a9d5002f42c68",
+    "compilerConfigSHA256": "06b0cb83412565c3fae1a1b29c28c1c6015c13ab9dfe7359317196a68f70a5e9",
+    "phonemePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "mfaRawOutputSHA256": "f5f557c71291a39590e8e249fb8ada0dc014e0143f3a8da5a84ac552e7aa6c3b",
+    "nonverbalConfigurationSHA256": null
+  },
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 206,
+      "small": 11,
+      "wide": 3
+    },
+    "speechFrameCount": 14,
+    "fallbackFrameCount": 0,
+    "manualOverrideFrameCount": 0,
+    "warningCodes": []
+  }
+}

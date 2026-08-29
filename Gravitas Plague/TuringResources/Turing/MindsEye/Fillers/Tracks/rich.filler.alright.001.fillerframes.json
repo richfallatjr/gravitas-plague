@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "trackVersion": "mind-eye-filler-track/1",
+  "compilerVersion": "mind-eye-filler-compiler/1.0.0",
+  "fillerID": "rich.filler.alright.001",
+  "speakerCharacterID": "rich",
+  "audioResourcePath": "Turing/Audio/rich-filler/rich-filler_alright_2.mp3",
+  "audioSHA256": "7c2e1a781fe13473a91381be3c0863460720fcacaf517e070b15a06aa955e4f7",
+  "descriptorSHA256": "624bbb0322f7c33041bfcbd91bf974c723b1d5474db007e44d30db419254e03c",
+  "authoring": {
+    "mode": "manualTranscript",
+    "transcriptSHA256": "b8a9dc73f1e1af5b1c0871e2b8695f56b83861190ed1c2dc90c32c65318dfa05",
+    "nonverbalProfile": null
+  },
+  "timeline": {
+    "sampleRate": 48000,
+    "sampleCount": 192000,
+    "durationSeconds": 4.0,
+    "framesPerSecond": 60,
+    "samplesPerNominalFrame": 800,
+    "frameCount": 240
+  },
+  "mouthLayerBits": {
+    "rest": 1,
+    "small": 2,
+    "wide": 4,
+    "round": 8,
+    "teeth": 16
+  },
+  "poseRuns": [
+    {
+      "startFrame": 0,
+      "endFrameExclusive": 93,
+      "pose": "rest",
+      "evidenceMask": 37
+    },
+    {
+      "startFrame": 93,
+      "endFrameExclusive": 98,
+      "pose": "round",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 98,
+      "endFrameExclusive": 114,
+      "pose": "small",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 114,
+      "endFrameExclusive": 127,
+      "pose": "wide",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 127,
+      "endFrameExclusive": 148,
+      "pose": "small",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 148,
+      "endFrameExclusive": 240,
+      "pose": "rest",
+      "evidenceMask": 5
+    }
+  ],
+  "expandedFramesSHA256": "fdbd74b0c768e6ec4d0908809f8409da12cb9796a5e7b4663e7eb08568c408f0",
+  "analysisProvenance": {
+    "toolchainLockSHA256": "c5c57d5328fe9de6aa14f2f3b522cdd226914efb3339bac9211a9d5002f42c68",
+    "compilerConfigSHA256": "06b0cb83412565c3fae1a1b29c28c1c6015c13ab9dfe7359317196a68f70a5e9",
+    "phonemePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "mfaRawOutputSHA256": "980bcf38e41ccbfcdc233740fce1acd27c7b60653f79fed8e2a3e84b672a2beb",
+    "nonverbalConfigurationSHA256": null
+  },
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 185,
+      "round": 5,
+      "small": 37,
+      "wide": 13
+    },
+    "speechFrameCount": 55,
+    "fallbackFrameCount": 0,
+    "manualOverrideFrameCount": 0,
+    "warningCodes": []
+  }
+}

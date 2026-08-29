@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "registryVersion", "expectedUniqueClipCounts", "expectedWeightedTotals", "clips"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "registryVersion": {"const": "mind-eye-filler-authoring/1"},
+    "expectedUniqueClipCounts": {"type": "object"},
+    "expectedWeightedTotals": {"type": "object"},
+    "clips": {"type": "array", "minItems": 51, "maxItems": 51}
+  }
+}

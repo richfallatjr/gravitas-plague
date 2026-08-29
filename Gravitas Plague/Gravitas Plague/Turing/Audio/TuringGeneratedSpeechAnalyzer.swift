@@ -308,7 +308,8 @@ nonisolated protocol TuringGeneratedSpeechAnalyzing: Sendable {
         processedAudio: [Float],
         sampleRate: Int,
         channelCount: Int,
-        deadline: ContinuousClock.Instant?
+        deadline: ContinuousClock.Instant?,
+        cancellationToken: TuringGeneratedSpeechAnalysisCancellationToken?
     ) throws -> TuringGeneratedSpeechVisualAnalysis
 }
 
@@ -323,13 +324,16 @@ nonisolated struct TuringGeneratedSpeechAnalyzer: TuringGeneratedSpeechAnalyzing
         processedAudio: [Float],
         sampleRate: Int,
         channelCount: Int,
-        deadline: ContinuousClock.Instant?
+        deadline: ContinuousClock.Instant?,
+        cancellationToken: TuringGeneratedSpeechAnalysisCancellationToken? = nil
     ) throws -> TuringGeneratedSpeechVisualAnalysis {
         let started = ContinuousClock.now
         guard sampleRate > 0 else { throw TuringGeneratedSpeechAnalysisError.invalidSampleRate }
         guard configuration.isValid else { throw TuringGeneratedSpeechAnalysisError.invalidTimeline }
         let cancellationCheck: @Sendable () throws -> Void = {
-            if Task.isCancelled { throw TuringGeneratedSpeechAnalysisError.cancelled }
+            if Task.isCancelled || cancellationToken?.isCancelled == true {
+                throw TuringGeneratedSpeechAnalysisError.cancelled
+            }
             if let deadline, ContinuousClock.now >= deadline {
                 throw TuringGeneratedSpeechAnalysisError.deadlineExceeded
             }

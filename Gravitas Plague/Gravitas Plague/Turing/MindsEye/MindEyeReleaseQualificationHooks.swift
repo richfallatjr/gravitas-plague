@@ -143,6 +143,7 @@ final class MindEyeReleaseQualificationHooks {
             let checkpoint: MindEyeQualificationCheckpoint
             switch context.source {
             case .authored: checkpoint = .authoredAudioStarted
+            case .filler: checkpoint = .authoredAudioStarted
             case .generated: checkpoint = .generatedAudioStarted
             }
             fireAndForget(
@@ -159,6 +160,7 @@ final class MindEyeReleaseQualificationHooks {
                 notes: ["latency measures audible clock origin to qualification observation"]
             )
         case .authoredItemCompleted(let context, _),
+             .fillerItemCompleted(let context, _, _),
              .generatedSegmentCompleted(let context, _),
              .cancelled(let context, _, _):
             audioOriginsByPlaybackRunID.removeValue(forKey: context.run.playbackRunID)
@@ -167,6 +169,8 @@ final class MindEyeReleaseQualificationHooks {
         case .failed(let run, _, _, _):
             audioOriginsByPlaybackRunID.removeValue(forKey: run.playbackRunID)
         case .paused, .resumed:
+            break
+        case .generatedTrackBecameAvailable:
             break
         }
     }

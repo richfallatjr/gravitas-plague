@@ -20,6 +20,36 @@
           "manifestResourcePath": "Turing/MindsEye/Vignettes/cateye81_bunker/manifest.json"
         }
       ]
+    },
+    {
+      "characterID": "rich",
+      "defaultVignetteID": "rich_current_room",
+      "vignettes": [
+        {
+          "vignetteID": "rich_current_room",
+          "manifestResourcePath": "Turing/MindsEye/Vignettes/rich_current_room/manifest.json"
+        }
+      ]
+    },
+    {
+      "characterID": "dad",
+      "defaultVignetteID": "dad_workshop",
+      "vignettes": [
+        {
+          "vignetteID": "dad_workshop",
+          "manifestResourcePath": "Turing/MindsEye/Vignettes/dad_workshop/manifest.json"
+        }
+      ]
+    },
+    {
+      "characterID": "broadcaster",
+      "defaultVignetteID": "broadcaster_radio_room",
+      "vignettes": [
+        {
+          "vignetteID": "broadcaster_radio_room",
+          "manifestResourcePath": "Turing/MindsEye/Vignettes/broadcaster_radio_room/manifest.json"
+        }
+      ]
     }
   ]
 }

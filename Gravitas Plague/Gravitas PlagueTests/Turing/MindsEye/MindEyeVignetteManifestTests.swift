@@ -24,6 +24,92 @@ final class MindEyeVignetteManifestTests: XCTestCase {
         XCTAssertEqual(manifest.layers.mouths.teeth, ["mouth-teeth-01.png"])
     }
 
+    func testShippedAdditionalCharacterManifestsDecodeAndValidate() throws {
+        let fixtures: [(
+            path: String,
+            vignetteID: String,
+            characterID: TuringConversationCharacterID,
+            expectedWideCount: Int,
+            expectedTeethCount: Int
+        )] = [
+            (
+                "rich_current_room",
+                "rich_current_room",
+                .rich,
+                2,
+                2
+            ),
+            (
+                "dad_workshop",
+                "dad_workshop",
+                .dad,
+                3,
+                1
+            ),
+            (
+                "broadcaster_radio_room",
+                "broadcaster_radio_room",
+                .broadcaster,
+                2,
+                1
+            )
+        ]
+
+        for fixture in fixtures {
+            let url = mindEyeProjectRoot().appendingPathComponent(
+                "Gravitas Plague/TuringResources/Turing/MindsEye/" +
+                    "Vignettes/\(fixture.path)/manifest.json"
+            )
+            let manifest = try JSONDecoder().decode(
+                MindEyeVignetteManifest.self,
+                from: Data(contentsOf: url)
+            )
+            let issues = MindEyeVignetteManifestValidator.issues(
+                manifest: manifest,
+                expectedVignetteID: fixture.vignetteID,
+                expectedCharacterID: fixture.characterID
+            )
+
+            XCTAssertTrue(issues.isEmpty, "\(fixture.vignetteID): \(issues)")
+            XCTAssertEqual(
+                manifest.layers.mouths.wide.count,
+                fixture.expectedWideCount
+            )
+            XCTAssertEqual(
+                manifest.layers.mouths.teeth.count,
+                fixture.expectedTeethCount
+            )
+        }
+    }
+
+    func testEveryShippedVignetteUsesTheSingleSharedFeatherMask() throws {
+        let vignetteIDs = [
+            "big_mike_current_room",
+            "cateye81_bunker",
+            "rich_current_room",
+            "dad_workshop",
+            "broadcaster_radio_room"
+        ]
+        let expectedMask = "Turing/MindsEye/Shared/feather-mask.png"
+
+        for vignetteID in vignetteIDs {
+            let url = mindEyeProjectRoot().appendingPathComponent(
+                "Gravitas Plague/TuringResources/Turing/MindsEye/" +
+                    "Vignettes/\(vignetteID)/manifest.json"
+            )
+            let manifest = try JSONDecoder().decode(
+                MindEyeVignetteManifest.self,
+                from: Data(contentsOf: url)
+            )
+
+            XCTAssertEqual(
+                manifest.layers.featherMask,
+                expectedMask,
+                "\(vignetteID) must use the shared feather mask."
+            )
+        }
+    }
+
     func testProductionShapeValidatesAndTeethIsRequired() {
         XCTAssertTrue(issues(for: makeMindEyeTestManifest()).isEmpty)
 

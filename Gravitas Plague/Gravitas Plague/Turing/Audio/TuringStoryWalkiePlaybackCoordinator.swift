@@ -2,6 +2,9 @@ import AVFoundation
 import Foundation
 
 actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
+    private static let mindEyeRevealTimeout: Duration = .seconds(2)
+    private static let mindEyeRevealLeadInBeat: Duration = .milliseconds(300)
+
     enum VoiceRoute: String, Sendable {
         case walkieSpatial
         case playerGlobal
@@ -81,14 +84,18 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             clip: GeneratedClip,
             requestID: UUID
         )
+        case startingFiller(
+            clip: TuringFillerClipDescriptor,
+            requestID: UUID
+        )
         case generated(
             clip: GeneratedClip,
             handle: TuringAudioPlaybackHandle,
             startedAt: Date
         )
         case filler(
+            clip: TuringFillerClipDescriptor,
             handle: TuringAudioPlaybackHandle,
-            fileURL: URL,
             startedAt: Date
         )
         case deadAir(id: UUID)
@@ -99,11 +106,12 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             case .prerecording(_, let handle, _, _),
                  .authoredBridge(_, let handle, _, _),
                  .generated(_, let handle, _),
-                 .filler(let handle, _, _):
+                 .filler(_, let handle, _):
                 return handle
             case .none, .startingPrerecording, .startingAuthored,
                  .orientingAuthored,
                  .startingGenerated,
+                 .startingFiller,
                  .deadAir, .cancelled:
                 return nil
             }
@@ -135,11 +143,19 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
     private var allComputeFinished = false
     private var activeItem: ActiveItem = .none
     private var firstPrerollRemaining = 0
-    private var lastFillerURL: URL?
+    private var lastFillerID: String?
     private var deadAirTask: Task<Void, Never>?
     private var endpointEventTask: Task<Void, Never>?
+    private var generatedAnalysisEventTask: Task<Void, Never>?
+    private var earlyGeneratedAnalysis: [
+        Int: (
+            identity: TuringGeneratedSpeechAnalysisIdentity,
+            analysis: TuringGeneratedSpeechVisualAnalysis,
+            timing: TuringGeneratedSpeechAnalysisTiming
+        )
+    ] = [:]
     private var waitContinuations: [CheckedContinuation<Void, Never>] = []
-    private var fillerFiles: [URL]
+    private var loadedFillerCatalog: TuringFillerCatalog?
     private var authoredOnlyRun = false
     private var authoredInputSealed = false
     private var authoredFailureReason: String?
@@ -178,7 +194,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         self.endpoint = endpoint
         self.spokenPresentationPublisher = spokenPresentationPublisher
         self.fileStore = TuringGeneratedPlaybackFileStore(rootURL: rootURL)
-        self.fillerFiles = []
+        self.loadedFillerCatalog = nil
     }
 
     @MainActor
@@ -254,6 +270,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         await runCancelled(reason: "beginNewRun")
 
         await startEndpointEventPumpIfNeeded()
+        await startGeneratedAnalysisEventPumpIfNeeded()
 
         self.runID = runID
         self.authoredOnlyRun = false
@@ -264,6 +281,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         self.completedGeneratedPlaybackCount = 0
         self.activeComputeSegments.removeAll(keepingCapacity: true)
         self.pendingGenerated.removeAll(keepingCapacity: true)
+        self.earlyGeneratedAnalysis.removeAll(keepingCapacity: true)
         self.pendingPrerecording = nil
         self.pendingAuthoredBridges.removeAll(keepingCapacity: true)
         self.acceptedAuthoredBridgeIDs.removeAll(keepingCapacity: true)
@@ -284,14 +302,21 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
 
         do {
             _ = try await fileStore.beginRun(runID)
-            fillerFiles = try await fillerCatalog.catalog(
-                characterID: policy.outputProcessingPolicy.voiceID,
-                directoryCandidates: policy.fillerDirectoryCandidates,
-                extensions: policy.fillerExtensions
-            ).weightedURLs
+            if let characterID = flowIdentity?.characterID {
+                loadedFillerCatalog = try await fillerCatalog.catalog(
+                    characterID: characterID,
+                    directoryCandidates: policy.fillerDirectoryCandidates,
+                    extensions: policy.fillerExtensions
+                )
+            } else {
+                loadedFillerCatalog = nil
+                print(
+                    "[TuringFiller] catalog unavailable because the run has no flow identity"
+                )
+            }
         } catch {
             print("[TuringAudioOffload] run preparation failed error=\(error.localizedDescription)")
-            fillerFiles = []
+            loadedFillerCatalog = nil
         }
 
         print("""
@@ -304,8 +329,8 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
           completionSource: \(completionSourceLogName)
           outputVoiceID: \(policy.outputProcessingPolicy.voiceID)
           qwenScheduler: fresh2
-          fillerClipCount: \(Set(fillerFiles).count)
-          weightedFillerEntryCount: \(fillerFiles.count)
+          fillerClipCount: \(loadedFillerCatalog?.uniqueClipCount ?? 0)
+          weightedFillerEntryCount: \(loadedFillerCatalog?.weightedEntryCount ?? 0)
           firstSegmentPrerollFillerCount: \(policy.firstSegmentPrerollFillerCount)
           chainFillerFromPrerecordingToFirstGenerated: \(policy.chainFillerFromPrerecordingToFirstGenerated)
           prerecordingPrecedesGenerated: \(policy.prerecordingPrecedesGenerated)
@@ -318,6 +343,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
     func beginAuthoredRun(identity: TuringFlowIdentity) async {
         await runCancelled(reason: "beginNewAuthoredRun")
         await startEndpointEventPumpIfNeeded()
+        await startGeneratedAnalysisEventPumpIfNeeded()
 
         flowIdentity = identity
         runID = identity.playbackRunID
@@ -327,6 +353,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         completedGeneratedPlaybackCount = 0
         activeComputeSegments.removeAll(keepingCapacity: false)
         pendingGenerated.removeAll(keepingCapacity: false)
+        earlyGeneratedAnalysis.removeAll(keepingCapacity: false)
         pendingPrerecording = nil
         pendingAuthoredBridges.removeAll(keepingCapacity: false)
         acceptedAuthoredBridgeIDs.removeAll(keepingCapacity: false)
@@ -338,7 +365,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         firstPrerollRemaining = 0
         deadAirTask?.cancel()
         deadAirTask = nil
-        fillerFiles = []
+        loadedFillerCatalog = nil
         authoredOnlyRun = true
         authoredInputSealed = false
         authoredFailureReason = nil
@@ -492,7 +519,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             handle = activeHandle
         case .none, .startingPrerecording, .startingAuthored,
              .orientingAuthored,
-             .startingGenerated, .filler, .deadAir:
+             .startingGenerated, .startingFiller, .filler, .deadAir:
             return TuringSpokenCoverPauseReceipt(
                 interruptionID: interruptionID,
                 playbackRunID: runID,
@@ -585,7 +612,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         case .authoredBridge(let clip, _, _, _):
             authoredItemID = clip.id
         case .none, .startingPrerecording, .startingAuthored,
-             .orientingAuthored, .startingGenerated, .generated,
+             .orientingAuthored, .startingGenerated, .startingFiller, .generated,
              .filler, .deadAir, .cancelled:
             authoredItemID = nil
         }
@@ -788,11 +815,21 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
                     "Missing playback run ID while publishing segment \(segmentIndex)."
                 )
             }
-            let clip = try await fileStore.write(
+            var clip = try await fileStore.write(
                 runID: runID,
                 segmentIndex: segmentIndex,
                 audio: processedAudio
             )
+            if let early = earlyGeneratedAnalysis.removeValue(forKey: segmentIndex),
+               early.identity.runID == runID,
+               early.identity.segmentIndex == segmentIndex,
+               clip.analysisIdentity == early.identity {
+                clip = clip.replacingVisualAnalysis(early.analysis)
+                print(
+                    "[TuringGeneratedSpeech] analysis merged before enqueue " +
+                        "segmentIndex=\(segmentIndex) ticket=\(early.identity.ticketID.uuidString)"
+                )
+            }
             pendingGenerated[segmentIndex] = clip
             if let flowIdentity {
                 TuringFlowLog.event(
@@ -999,6 +1036,124 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
                 await self?.handleEndpointEvent(event)
             }
         }
+    }
+
+    private func startGeneratedAnalysisEventPumpIfNeeded() async {
+        guard generatedAnalysisEventTask == nil else { return }
+        let stream = await fileStore.analysisEvents()
+        generatedAnalysisEventTask = Task { [weak self] in
+            for await event in stream {
+                guard !Task.isCancelled else { return }
+                await self?.handleGeneratedAnalysisEvent(event)
+            }
+        }
+    }
+
+    private func handleGeneratedAnalysisEvent(
+        _ event: TuringGeneratedSpeechAnalysisEvent
+    ) async {
+        switch event {
+        case .queued(let identity):
+            guard identity.runID == runID else { return }
+            print("[TuringGeneratedSpeech] ticket queued segment=\(identity.segmentIndex)")
+        case .started(let identity, let queueDelay):
+            guard identity.runID == runID else { return }
+            print(
+                "[TuringGeneratedSpeech] worker started segment=\(identity.segmentIndex) " +
+                    "queueDelayNanoseconds=\(queueDelay)"
+            )
+        case .ready(let identity, let analysis, let timing):
+            await installGeneratedAnalysis(
+                identity: identity,
+                analysis: analysis,
+                timing: timing
+            )
+        case .unavailable(let identity, let reason, let timing):
+            guard identity.runID == runID else { return }
+            print(
+                "[TuringGeneratedSpeech] analysis unavailable segment=\(identity.segmentIndex) " +
+                    "reason=\(reason.rawValue) queueNs=\(timing.queueDelayNanoseconds ?? 0) " +
+                    "computeNs=\(timing.computeNanoseconds ?? 0) audioContinues=true"
+            )
+        case .cancelled(let identity, let reason):
+            guard identity.runID == runID else { return }
+            print(
+                "[TuringGeneratedSpeech] analysis cancelled segment=\(identity.segmentIndex) " +
+                    "reason=\(reason)"
+            )
+        }
+    }
+
+    private func installGeneratedAnalysis(
+        identity: TuringGeneratedSpeechAnalysisIdentity,
+        analysis: TuringGeneratedSpeechVisualAnalysis,
+        timing: TuringGeneratedSpeechAnalysisTiming
+    ) async {
+        guard runActive,
+              identity.runID == runID,
+              !skippedSegments.contains(identity.segmentIndex),
+              identity.segmentIndex >= nextPlaybackSegmentIndex else {
+            print(
+                "[TuringGeneratedSpeech] stale analysis rejected " +
+                    "ticket=\(identity.ticketID.uuidString) segment=\(identity.segmentIndex)"
+            )
+            return
+        }
+        if let pending = pendingGenerated[identity.segmentIndex],
+           pending.analysisIdentity == identity {
+            pendingGenerated[identity.segmentIndex] =
+                pending.replacingVisualAnalysis(analysis)
+            print(
+                "[TuringGeneratedSpeech] ready while pending segment=\(identity.segmentIndex)"
+            )
+            return
+        }
+        if case .startingGenerated(let clip, let requestID) = activeItem,
+           clip.analysisIdentity == identity {
+            activeItem = .startingGenerated(
+                clip: clip.replacingVisualAnalysis(analysis),
+                requestID: requestID
+            )
+            print(
+                "[TuringGeneratedSpeech] ready while starting segment=\(identity.segmentIndex)"
+            )
+            return
+        }
+        if case .generated(let clip, let handle, let startedAt) = activeItem,
+           clip.analysisIdentity == identity,
+           let existing = spokenContextsByHandleID[handle.id],
+           case .generated(let segmentIndex) = existing.source,
+           segmentIndex == identity.segmentIndex {
+            let updatedClip = clip.replacingVisualAnalysis(analysis)
+            activeItem = .generated(clip: updatedClip, handle: handle, startedAt: startedAt)
+            let updatedContext = TuringSpokenPresentationContext(
+                run: existing.run,
+                playbackHandle: existing.playbackHandle,
+                speakerCharacterID: existing.speakerCharacterID,
+                interactionSurface: existing.interactionSurface,
+                source: existing.source,
+                clockOrigin: existing.clockOrigin,
+                generatedSpeechFrameTrack: analysis.frameTrack
+            )
+            spokenContextsByHandleID[handle.id] = updatedContext
+            await spokenPresentationPublisher.emit(
+                .generatedTrackBecameAvailable(
+                    context: updatedContext,
+                    ticketID: identity.ticketID,
+                    timing: timing
+                )
+            )
+            print(
+                "[TuringGeneratedSpeech] analysis attached late segment=\(identity.segmentIndex) " +
+                    "ticket=\(identity.ticketID.uuidString)"
+            )
+            return
+        }
+        earlyGeneratedAnalysis[identity.segmentIndex] = (identity, analysis, timing)
+        print(
+            "[TuringGeneratedSpeech] analysis ready before clip enqueue " +
+                "segment=\(identity.segmentIndex)"
+        )
     }
 
     private func handleEndpointEvent(
@@ -1249,6 +1404,45 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
                     handle: handle
                 )
             )
+
+        case .startingFiller(let clip, let requestID)
+            where requestID == handle.requestID:
+            activeItem = .filler(
+                clip: clip,
+                handle: handle,
+                startedAt: Date()
+            )
+            guard let flowIdentity,
+                  let expectedSpeaker = TuringConversationCharacterID(
+                    rawValue: flowIdentity.characterID
+                  ) else {
+                pendingSpokenSourcesByRequestID.removeValue(forKey: requestID)
+                break
+            }
+            switch TuringSpokenPresentationContextResolver.filler(
+                clip: clip,
+                expectedSpeaker: expectedSpeaker,
+                flowIdentity: flowIdentity,
+                playbackHandle: handle,
+                clockOrigin: clockOrigin
+            ) {
+            case .resolved(let context):
+                spokenContextsByHandleID[handle.id] = context
+                spokenClocksByHandleID[handle.id] =
+                    TuringPauseAwarePlaybackClock(origin: clockOrigin)
+                pendingSpokenSourcesByRequestID.removeValue(forKey: requestID)
+                await spokenPresentationPublisher.emit(.started(context: context))
+                print(
+                    "[TuringFiller] actual start clip=\(clip.identity.fillerID) " +
+                        "handle=\(handle.id.uuidString)"
+                )
+            case .suppressed(let reason):
+                pendingSpokenSourcesByRequestID.removeValue(forKey: requestID)
+                print(
+                    "[TuringFiller] visual context suppressed " +
+                        "clip=\(clip.identity.fillerID) reason=\(reason) audioContinues=true"
+                )
+            }
 
         default:
             break
@@ -1544,6 +1738,60 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         }
     }
 
+    private func performMindEyeRevealLeadIn(
+        speakerCharacterID: String?,
+        source: TuringSpokenPresentationSource,
+        generatedSpeechFrameTrack: TuringGeneratedSpeechFrameTrack?
+    ) async {
+        guard MindEyeQualificationFeatureControl.isMindEyeEnabled,
+              let flowIdentity,
+              flowIdentity.playbackRunID == runID,
+              let speakerCharacterID,
+              let speaker = TuringConversationCharacterID(
+                rawValue: speakerCharacterID
+              ) else {
+            return
+        }
+        let request = TuringSpokenPresentationRevealRequest(
+            id: UUID(),
+            run: .init(flowIdentity: flowIdentity),
+            speakerCharacterID: speaker,
+            interactionSurface: flowIdentity.interactionSurface,
+            source: source,
+            generatedSpeechFrameTrack: generatedSpeechFrameTrack
+        )
+        let outcome = await TuringSpokenPresentationRevealHub.shared
+            .requestReveal(
+                request,
+                timeout: Self.mindEyeRevealTimeout
+            )
+        guard runActive,
+              flowIdentity.playbackRunID == runID else {
+            return
+        }
+        switch outcome {
+        case .revealed:
+            print(
+                "[MindEyePresentation] pre-audio reveal ready " +
+                    "media=\(source.mediaIdentity) " +
+                    "leadInMilliseconds=300"
+            )
+            try? await Task.sleep(for: Self.mindEyeRevealLeadInBeat)
+        case .alreadyVisible:
+            print(
+                "[MindEyePresentation] pre-audio portrait already visible " +
+                    "media=\(source.mediaIdentity) leadInSkipped=true"
+            )
+        case .audioOnly:
+            break
+        case nil:
+            print(
+                "[MindEyePresentation] pre-audio reveal timed out " +
+                    "media=\(source.mediaIdentity) audioContinues=true"
+            )
+        }
+    }
+
     private func startPrerecording(
         _ clip: PrerecordingClip,
         reason: String
@@ -1575,6 +1823,23 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
               nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
               pendingGenerated: \(pendingGenerated.keys.sorted())
             """)
+            await performMindEyeRevealLeadIn(
+                speakerCharacterID: clip.item.speakerCharacterID,
+                source: .authored(
+                    prerecordingID: clip.id,
+                    role: clip.item.role
+                ),
+                generatedSpeechFrameTrack: nil
+            )
+            guard case .startingPrerecording(
+                let pending,
+                let pendingRequestID
+            ) = activeItem,
+                  pending.id == clip.id,
+                  pendingRequestID == requestID,
+                  runActive else {
+                return
+            }
             let handle = try await playOneShot(
                 requestID: requestID,
                 fileURL: clip.fileURL,
@@ -1683,6 +1948,23 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
               beforeGeneratedSegmentIndex: \(clip.beforeGeneratedSegmentIndex)
               nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
             """)
+            await performMindEyeRevealLeadIn(
+                speakerCharacterID: clip.item.speakerCharacterID,
+                source: .authored(
+                    prerecordingID: clip.id,
+                    role: clip.item.role
+                ),
+                generatedSpeechFrameTrack: nil
+            )
+            guard case .startingAuthored(
+                let pending,
+                let pendingRequestID
+            ) = activeItem,
+                  pending.id == clip.id,
+                  pendingRequestID == requestID,
+                  runActive else {
+                return
+            }
             let handle = try await playOneShot(
                 requestID: requestID,
                 fileURL: clip.fileURL,
@@ -1774,6 +2056,21 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
               nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
               pendingGenerated: \(pendingGenerated.keys.sorted())
             """)
+            await performMindEyeRevealLeadIn(
+                speakerCharacterID: flowIdentity?.characterID,
+                source: .generated(segmentIndex: clip.segmentIndex),
+                generatedSpeechFrameTrack:
+                    clip.generatedVisualAnalysis?.frameTrack
+            )
+            guard case .startingGenerated(
+                let pending,
+                let pendingRequestID
+            ) = activeItem,
+                  pending.segmentIndex == clip.segmentIndex,
+                  pendingRequestID == requestID,
+                  runActive else {
+                return
+            }
             let handle = try await playOneShot(
                 requestID: requestID,
                 fileURL: clip.fileURL,
@@ -1835,45 +2132,84 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
 
     private func startFiller(reason: String) async {
         guard activeItem == .none else { return }
-        guard let fillerURL = nextFillerURL() else {
+        guard let flowIdentity,
+              let clip = nextFillerClip() else {
             if policy.deadAirAfterFillerEnabled {
                 startDeadAir(reason: "missingFiller.\(reason)")
             }
             return
         }
+        guard let expectedSpeaker = TuringConversationCharacterID(
+            rawValue: flowIdentity.characterID
+        ), clip.identity.speakerCharacterID == expectedSpeaker else {
+            print(
+                "[TuringFiller] descriptor speaker mismatch " +
+                    "clip=\(clip.identity.fillerID) expected=\(flowIdentity.characterID) " +
+                    "actual=\(clip.identity.speakerCharacterID.rawValue)"
+            )
+            if policy.deadAirAfterFillerEnabled {
+                startDeadAir(reason: "fillerSpeakerMismatch")
+            }
+            return
+        }
+        let requestID = UUID()
+        let source = TuringSpokenPresentationSource.filler(clip: clip.identity)
+        activeItem = .startingFiller(clip: clip, requestID: requestID)
+        pendingSpokenSourcesByRequestID[requestID] = source
         do {
             print("""
             [TuringPlaybackTrace] filler playback request
               reason: \(reason)
-              clip: \(fillerURL.lastPathComponent)
+              clip: \(clip.identity.fillerID)
               nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
               pendingNextReady: \(pendingGenerated[nextPlaybackSegmentIndex] != nil)
             """)
+            await performMindEyeRevealLeadIn(
+                speakerCharacterID: expectedSpeaker.rawValue,
+                source: source,
+                generatedSpeechFrameTrack: nil
+            )
+            guard case .startingFiller(
+                let pendingClip,
+                let pendingRequestID
+            ) = activeItem,
+                  pendingClip.identity.fillerID == clip.identity.fillerID,
+                  pendingRequestID == requestID,
+                  runActive else { return }
             let handle = try await playOneShot(
-                fileURL: fillerURL,
+                requestID: requestID,
+                fileURL: clip.fileURL,
                 kind: .filler,
-                label: fillerURL.deletingPathExtension().lastPathComponent
+                label: clip.identity.fillerID
             )
-            lastFillerURL = fillerURL
-            activeItem = .filler(
-                handle: handle,
-                fileURL: fillerURL,
-                startedAt: Date()
-            )
+            lastFillerID = clip.identity.fillerID
             print("""
-            [TuringPlaybackRebuild] filler started
+            [TuringFiller] play returned
               reason: \(reason)
-              clip: \(fillerURL.lastPathComponent)
+              clip: \(clip.identity.fillerID)
               handleID: \(handle.id.uuidString)
               voiceRoute: \(policy.voiceRoute.rawValue)
               spatialEmitter: \(voiceEmitterLogName)
               completionSource: \(completionSourceLogName)
             """)
         } catch {
+            if case .startingFiller(
+                let pendingClip,
+                let pendingRequestID
+            ) = activeItem,
+               pendingClip.identity.fillerID == clip.identity.fillerID,
+               pendingRequestID == requestID {
+                activeItem = .none
+            }
+            await emitSpokenStartFailureIfNeeded(
+                requestID: requestID,
+                eventRunID: runID ?? "unknown",
+                message: error.localizedDescription
+            )
             print("""
             [TuringPlaybackRebuild] filler start failed
               reason: \(reason)
-              clip: \(fillerURL.lastPathComponent)
+              clip: \(clip.identity.fillerID)
               error: \(error.localizedDescription)
             """)
             if policy.deadAirAfterFillerEnabled {
@@ -2101,19 +2437,32 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             await reconcile(reason: "generatedCompleted")
 
         case .filler(
+            let clip,
             let activeHandle,
-            let fileURL,
             let startedAt
         )
             where activeHandle == handle:
             let elapsed = Date().timeIntervalSince(startedAt)
             activeItem = .none
+            pausedSpokenReceipts = pausedSpokenReceipts.filter {
+                $0.value.handle != handle
+            }
+            if let spoken = consumeSpokenTracking(handle: handle) {
+                await spokenPresentationPublisher.emit(
+                    .fillerItemCompleted(
+                        context: spoken.context,
+                        clock: spoken.clock,
+                        successfully: successfully
+                    )
+                )
+            }
             print("""
-            [TuringPlaybackRebuild] filler completed
+            [TuringFiller] complete
               handleID: \(handle.id.uuidString)
-              clip: \(fileURL.lastPathComponent)
+              clip: \(clip.identity.fillerID)
               elapsedSeconds: \(String(format: "%.3f", elapsed))
               pendingNextReady: \(pendingGenerated[nextPlaybackSegmentIndex] != nil)
+              responsePortraitRetained: true
             """)
             if isPrerecordingToInitialGeneratedBridgeWaiting {
                 if policy.deadAirAfterFillerEnabled {
@@ -2231,6 +2580,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         spokenContextsByHandleID.removeAll(keepingCapacity: false)
         spokenClocksByHandleID.removeAll(keepingCapacity: false)
         pendingSpokenSourcesByRequestID.removeAll(keepingCapacity: false)
+        earlyGeneratedAnalysis.removeAll(keepingCapacity: false)
         authoredOnlyRun = false
         authoredInputSealed = false
     }
@@ -2272,14 +2622,13 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         await lifecycleHub.yield(event)
     }
 
-    private func nextFillerURL() -> URL? {
-        guard fillerFiles.isEmpty == false else { return nil }
-        if policy.avoidImmediateFillerRepeat,
-           fillerFiles.count > 1 {
-            let candidates = fillerFiles.filter { $0 != lastFillerURL }
-            return candidates.randomElement()
-        }
-        return fillerFiles.randomElement()
+    private func nextFillerClip() -> TuringFillerClipDescriptor? {
+        guard let clips = loadedFillerCatalog?.clips, !clips.isEmpty else { return nil }
+        return TuringWeightedFillerSelector.select(
+            clips: clips,
+            avoiding: policy.avoidImmediateFillerRepeat ? lastFillerID : nil,
+            draw: UInt64.random(in: UInt64.min...UInt64.max)
+        )
     }
 
     private var activeItemLog: String {
@@ -2294,6 +2643,8 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             return "orientingAuthored.\(clip.id)"
         case .startingGenerated(let clip, let requestID):
             return "startingGenerated.\(clip.segmentIndex).\(requestID.uuidString)"
+        case .startingFiller(let clip, let requestID):
+            return "startingFiller.\(clip.identity.fillerID).\(requestID.uuidString)"
         case .generated(
             let clip,
             let handle,
@@ -2312,9 +2663,9 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         ):
             let elapsed = Date().timeIntervalSince(startedAt)
             return "authoredBridge.\(clip.id).before=\(clip.beforeGeneratedSegmentIndex).\(fileURL.lastPathComponent).\(handle.id.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
-        case .filler(let handle, let fileURL, let startedAt):
+        case .filler(let clip, let handle, let startedAt):
             let elapsed = Date().timeIntervalSince(startedAt)
-            return "filler.\(fileURL.lastPathComponent).\(handle.id.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
+            return "filler.\(clip.identity.fillerID).\(handle.id.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
         case .deadAir(let id):
             return "deadAir.\(id.uuidString)"
         case .cancelled:

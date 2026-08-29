@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "trackVersion": "mind-eye-filler-track/1",
+  "compilerVersion": "mind-eye-filler-compiler/1.0.0",
+  "fillerID": "rich.filler.look.001",
+  "speakerCharacterID": "rich",
+  "audioResourcePath": "Turing/Audio/rich-filler/rich-filler_look_4.mp3",
+  "audioSHA256": "9ef92d36f34fc48389e71de6082a88c7d12cf845dc748ffd93141f0482719e06",
+  "descriptorSHA256": "09950205452fbd1c28d8a8ac53690e3086bd73d613558ef44b7eeb5fe9222f87",
+  "authoring": {
+    "mode": "manualTranscript",
+    "transcriptSHA256": "3c01eba119e00d79c82b6f65d70bc5f1044d568618bf41377e6d1432023fc2b8",
+    "nonverbalProfile": null
+  },
+  "timeline": {
+    "sampleRate": 48000,
+    "sampleCount": 192000,
+    "durationSeconds": 4.0,
+    "framesPerSecond": 60,
+    "samplesPerNominalFrame": 800,
+    "frameCount": 240
+  },
+  "mouthLayerBits": {
+    "rest": 1,
+    "small": 2,
+    "wide": 4,
+    "round": 8,
+    "teeth": 16
+  },
+  "poseRuns": [
+    {
+      "startFrame": 0,
+      "endFrameExclusive": 110,
+      "pose": "rest",
+      "evidenceMask": 5
+    },
+    {
+      "startFrame": 110,
+      "endFrameExclusive": 115,
+      "pose": "small",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 115,
+      "endFrameExclusive": 124,
+      "pose": "round",
+      "evidenceMask": 19
+    },
+    {
+      "startFrame": 124,
+      "endFrameExclusive": 143,
+      "pose": "small",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 143,
+      "endFrameExclusive": 240,
+      "pose": "rest",
+      "evidenceMask": 5
+    }
+  ],
+  "expandedFramesSHA256": "7a887de874626695a7417403b93ee9dc1c3822f49d19977ab8aa794fe55f612e",
+  "analysisProvenance": {
+    "toolchainLockSHA256": "c5c57d5328fe9de6aa14f2f3b522cdd226914efb3339bac9211a9d5002f42c68",
+    "compilerConfigSHA256": "06b0cb83412565c3fae1a1b29c28c1c6015c13ab9dfe7359317196a68f70a5e9",
+    "phonemePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "mfaRawOutputSHA256": "540a377b0ac7149840f4cf2c9a0ae38c2ea9127737946f98b6e5cb51f9dd340c",
+    "nonverbalConfigurationSHA256": null
+  },
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 207,
+      "small": 24,
+      "round": 9
+    },
+    "speechFrameCount": 33,
+    "fallbackFrameCount": 0,
+    "manualOverrideFrameCount": 0,
+    "warningCodes": []
+  }
+}

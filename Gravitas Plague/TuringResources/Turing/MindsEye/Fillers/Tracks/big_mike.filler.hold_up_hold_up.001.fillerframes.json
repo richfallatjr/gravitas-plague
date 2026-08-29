@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "trackVersion": "mind-eye-filler-track/1",
+  "compilerVersion": "mind-eye-filler-compiler/1.0.0",
+  "fillerID": "big_mike.filler.hold_up_hold_up.001",
+  "speakerCharacterID": "big_mike",
+  "audioResourcePath": "Turing/Audio/big-mike-filler/big-mike-filler_hold-up-hold-up_1.mp3",
+  "audioSHA256": "8559521b23cd83261925fd633308e1c07ac27ef8c8840013da92bf50f22f9973",
+  "descriptorSHA256": "c6c25e5baf2be57117e8d537d03ee243b6f15e45a67ead8e30ce280ce9de8c7f",
+  "authoring": {
+    "mode": "manualTranscript",
+    "transcriptSHA256": "63903813255fbf351d30e5cfa805f95cde3da347c0450a3814db971e6f08c912",
+    "nonverbalProfile": null
+  },
+  "timeline": {
+    "sampleRate": 48000,
+    "sampleCount": 192000,
+    "durationSeconds": 4.0,
+    "framesPerSecond": 60,
+    "samplesPerNominalFrame": 800,
+    "frameCount": 240
+  },
+  "mouthLayerBits": {
+    "rest": 1,
+    "small": 2,
+    "wide": 4,
+    "round": 8,
+    "teeth": 16
+  },
+  "poseRuns": [
+    {
+      "startFrame": 0,
+      "endFrameExclusive": 84,
+      "pose": "rest",
+      "evidenceMask": 37
+    },
+    {
+      "startFrame": 84,
+      "endFrameExclusive": 99,
+      "pose": "small",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 99,
+      "endFrameExclusive": 102,
+      "pose": "round",
+      "evidenceMask": 19
+    },
+    {
+      "startFrame": 102,
+      "endFrameExclusive": 109,
+      "pose": "small",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 109,
+      "endFrameExclusive": 118,
+      "pose": "wide",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 118,
+      "endFrameExclusive": 125,
+      "pose": "small",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 125,
+      "endFrameExclusive": 134,
+      "pose": "round",
+      "evidenceMask": 19
+    },
+    {
+      "startFrame": 134,
+      "endFrameExclusive": 139,
+      "pose": "small",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 139,
+      "endFrameExclusive": 158,
+      "pose": "wide",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 158,
+      "endFrameExclusive": 160,
+      "pose": "small",
+      "evidenceMask": 13
+    },
+    {
+      "startFrame": 160,
+      "endFrameExclusive": 240,
+      "pose": "rest",
+      "evidenceMask": 5
+    }
+  ],
+  "expandedFramesSHA256": "33a73f5677c22eaad6f672640e3b820d12edb19744bc0a5675aeda3c0033d6b9",
+  "analysisProvenance": {
+    "toolchainLockSHA256": "c5c57d5328fe9de6aa14f2f3b522cdd226914efb3339bac9211a9d5002f42c68",
+    "compilerConfigSHA256": "06b0cb83412565c3fae1a1b29c28c1c6015c13ab9dfe7359317196a68f70a5e9",
+    "phonemePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "mfaRawOutputSHA256": "1b473bbebdf1157f6627ae388cb0977ed25d14c17f7cdc6badbaca0564b631d7",
+    "nonverbalConfigurationSHA256": null
+  },
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 164,
+      "small": 36,
+      "round": 12,
+      "wide": 28
+    },
+    "speechFrameCount": 76,
+    "fallbackFrameCount": 0,
+    "manualOverrideFrameCount": 0,
+    "warningCodes": []
+  }
+}

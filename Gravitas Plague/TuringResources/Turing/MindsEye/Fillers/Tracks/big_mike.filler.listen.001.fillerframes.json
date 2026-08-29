@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "trackVersion": "mind-eye-filler-track/1",
+  "compilerVersion": "mind-eye-filler-compiler/1.0.0",
+  "fillerID": "big_mike.filler.listen.001",
+  "speakerCharacterID": "big_mike",
+  "audioResourcePath": "Turing/Audio/big-mike-filler/big-mike-filler_listen_2.mp3",
+  "audioSHA256": "80eb957ece8ac4173deaf7bfa3f334b3a94c0da9f9d13a55dfe7f90d4bb622e9",
+  "descriptorSHA256": "78ca14733e81f022952070e2177152ccf2fe1173f8d1a7fe302fa06e49a25391",
+  "authoring": {
+    "mode": "manualTranscript",
+    "transcriptSHA256": "6f8860eb5103a16b917146f9cbf21aa00fe7d2291b1aad7f4fe83a6db71688cf",
+    "nonverbalProfile": null
+  },
+  "timeline": {
+    "sampleRate": 48000,
+    "sampleCount": 192000,
+    "durationSeconds": 4.0,
+    "framesPerSecond": 60,
+    "samplesPerNominalFrame": 800,
+    "frameCount": 240
+  },
+  "mouthLayerBits": {
+    "rest": 1,
+    "small": 2,
+    "wide": 4,
+    "round": 8,
+    "teeth": 16
+  },
+  "poseRuns": [
+    {
+      "startFrame": 0,
+      "endFrameExclusive": 114,
+      "pose": "rest",
+      "evidenceMask": 37
+    },
+    {
+      "startFrame": 114,
+      "endFrameExclusive": 119,
+      "pose": "small",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 119,
+      "endFrameExclusive": 126,
+      "pose": "wide",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 126,
+      "endFrameExclusive": 135,
+      "pose": "teeth",
+      "evidenceMask": 19
+    },
+    {
+      "startFrame": 135,
+      "endFrameExclusive": 142,
+      "pose": "wide",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 142,
+      "endFrameExclusive": 149,
+      "pose": "small",
+      "evidenceMask": 3
+    },
+    {
+      "startFrame": 149,
+      "endFrameExclusive": 240,
+      "pose": "rest",
+      "evidenceMask": 5
+    }
+  ],
+  "expandedFramesSHA256": "e57f3accbdcec0e7be21ac9c27645939cd653d2fbddb8091313f02d6dff731ee",
+  "analysisProvenance": {
+    "toolchainLockSHA256": "c5c57d5328fe9de6aa14f2f3b522cdd226914efb3339bac9211a9d5002f42c68",
+    "compilerConfigSHA256": "06b0cb83412565c3fae1a1b29c28c1c6015c13ab9dfe7359317196a68f70a5e9",
+    "phonemePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "mfaRawOutputSHA256": "f0749e5b06571a5480103eadfa2c9b62e45b52e00036ae17f841668cdb509df5",
+    "nonverbalConfigurationSHA256": null
+  },
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 205,
+      "small": 12,
+      "wide": 14,
+      "teeth": 9
+    },
+    "speechFrameCount": 35,
+    "fallbackFrameCount": 0,
+    "manualOverrideFrameCount": 0,
+    "warningCodes": []
+  }
+}

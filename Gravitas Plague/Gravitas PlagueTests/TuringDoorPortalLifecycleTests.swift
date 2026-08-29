@@ -154,6 +154,31 @@ final class TuringDoorPortalLifecycleTests: XCTestCase {
         XCTAssertLessThan(close.lowerBound, unload.lowerBound)
     }
 
+    func testFirewoodIsRequestedOnlyByManualDoorOpen() throws {
+        let source = try appSource(
+            "Turing/Props/TuringStoryDoorBundleController.swift"
+        )
+
+        XCTAssertEqual(
+            source.components(separatedBy: "includeFirewood: true").count - 1,
+            1
+        )
+        XCTAssertEqual(
+            source.components(separatedBy: "includeFirewood: false").count - 1,
+            2
+        )
+        XCTAssertTrue(
+            source.contains(
+                "releaseFirewood(reason: \"battleAcquire.\\(reason)\")"
+            )
+        )
+        XCTAssertTrue(
+            source.contains(
+                "await loadFirewoodForManualDoorOpen(reason: reason)"
+            )
+        )
+    }
+
     func testTuringPreflightRunsBeforeFreshPoolAcquisition() throws {
         let source = try appSource(
             "Turing/Flow/TuringCharacterQwenRenderSession.swift"

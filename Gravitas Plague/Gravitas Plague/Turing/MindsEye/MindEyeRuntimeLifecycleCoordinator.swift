@@ -44,6 +44,10 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
             allowsNewPresentation,
             reason: "lifecycleStart"
         )
+        presentation.setResponsePortraitLoadDecision(
+            .allowLoad,
+            reason: "lifecycleStart"
+        )
         memoryPressureTask = Task { @MainActor [weak self] in
             guard let self else { return }
             await memoryPressureSource.start()
@@ -67,6 +71,11 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
 
         switch newState {
         case .active:
+            presentation.setResponsePortraitLoadDecision(
+                memoryPressure == .normal ? .allowLoad :
+                    (memoryPressure == .warning ? .reuseExistingOnly : .deny),
+                reason: "applicationActive.\(reason)"
+            )
             presentation.setLifecycleAllowsPresentation(
                 memoryPressure != .critical,
                 reason: "applicationActive.\(reason)"
@@ -83,6 +92,10 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
                 false,
                 reason: "applicationInactive.\(reason)"
             )
+            presentation.setResponsePortraitLoadDecision(
+                .deny,
+                reason: "applicationInactive.\(reason)"
+            )
             await presentation.suspendForApplicationInactive(reason: reason)
             await presentation.releasePreparedAndEvictInactive(
                 reason: "applicationInactive.\(reason)"
@@ -92,6 +105,10 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
             TuringMemoryBudgetProbe.log(label: "mindEye.lifecycle.background.before")
             presentation.setLifecycleAllowsPresentation(
                 false,
+                reason: "applicationBackground.\(reason)"
+            )
+            presentation.setResponsePortraitLoadDecision(
+                .deny,
                 reason: "applicationBackground.\(reason)"
             )
             _ = await presentation.releaseAllPresentationState(
@@ -215,10 +232,18 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
         lifecycleGeneration &+= 1
         switch level {
         case .normal:
+            presentation.setResponsePortraitLoadDecision(
+                applicationState == .active ? .allowLoad : .deny,
+                reason: "memoryPressure.normal"
+            )
             if applicationState == .active {
                 presentation.setLifecycleAllowsPresentation(true, reason: "memoryPressure.normal")
             }
         case .warning:
+            presentation.setResponsePortraitLoadDecision(
+                applicationState == .active ? .reuseExistingOnly : .deny,
+                reason: "memoryPressure.warning"
+            )
             TuringMemoryBudgetProbe.log(label: "mindEye.memory.warning.before")
             await presentation.releasePreparedAndEvictInactive(reason: "memoryPressure.warning")
             _ = await assetMemory.evictInactive(reason: "memoryPressure.warning")
@@ -227,6 +252,10 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
         case .critical:
             TuringMemoryBudgetProbe.log(label: "mindEye.memory.critical.before")
             presentation.setLifecycleAllowsPresentation(false, reason: "memoryPressure.critical")
+            presentation.setResponsePortraitLoadDecision(
+                .deny,
+                reason: "memoryPressure.critical"
+            )
             _ = await presentation.releaseAllPresentationState(
                 scope: .memoryCritical,
                 reason: "memoryPressure.critical",

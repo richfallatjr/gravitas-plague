@@ -178,5 +178,19 @@ final class Battle01ContractTests: XCTestCase {
         XCTAssertNotNil(root.findEntity(named: "zombie_a2"))
         XCTAssertNotNil(root.findEntity(named: "zombie_a3"))
         XCTAssertNotNil(root.findEntity(named: "TuringStoryDoorPortalPlane"))
+        XCTAssertNil(
+            root.findEntity(named: "TuringStoryDoorPortalFirewood_Root"),
+            "Attack-mode door package must not contain the expensive wood pile."
+        )
+
+        let firewoodURL = try TuringResourceLoader.resourceURL(
+            resourcePath: "Turing/Props/turing_story_door_firewood_v1.usdz"
+        )
+        let firewoodRoot = try await Entity(contentsOf: firewoodURL)
+        XCTAssertNotNil(
+            firewoodRoot.findEntity(
+                named: "TuringStoryDoorPortalFirewood_Root"
+            )
+        )
     }
 }

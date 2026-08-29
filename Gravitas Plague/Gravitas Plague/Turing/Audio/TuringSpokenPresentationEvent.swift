@@ -24,14 +24,24 @@ nonisolated enum TuringSpokenPresentationSource:
         prerecordingID: String,
         role: TuringAuthoredMediaItem.Role
     )
+    case filler(clip: TuringFillerClipIdentity)
     case generated(segmentIndex: Int)
 
     var mediaIdentity: String {
         switch self {
         case .authored(let prerecordingID, let role):
             return "authored.\(role.rawValue).\(prerecordingID)"
+        case .filler(let clip):
+            return clip.stableMediaIdentity
         case .generated(let segmentIndex):
             return "generated.\(segmentIndex)"
+        }
+    }
+
+    var participatesInResponseContinuity: Bool {
+        switch self {
+        case .filler, .generated: true
+        case .authored: false
         }
     }
 }
@@ -103,9 +113,19 @@ nonisolated enum TuringSpokenPresentationEvent:
         context: TuringSpokenPresentationContext,
         clock: TuringPauseAwarePlaybackClock
     )
+    case fillerItemCompleted(
+        context: TuringSpokenPresentationContext,
+        clock: TuringPauseAwarePlaybackClock,
+        successfully: Bool
+    )
     case generatedSegmentCompleted(
         context: TuringSpokenPresentationContext,
         clock: TuringPauseAwarePlaybackClock
+    )
+    case generatedTrackBecameAvailable(
+        context: TuringSpokenPresentationContext,
+        ticketID: UUID,
+        timing: TuringGeneratedSpeechAnalysisTiming
     )
     case responseCompleted(run: TuringSpokenPresentationRunIdentity)
     case cancelled(
@@ -207,6 +227,35 @@ nonisolated enum TuringSpokenPresentationContextResolver {
                 source: .generated(segmentIndex: segmentIndex),
                 clockOrigin: clockOrigin,
                 generatedSpeechFrameTrack: preparedClip.generatedVisualAnalysis?.frameTrack
+            )
+        )
+    }
+
+    static func filler(
+        clip: TuringFillerClipDescriptor,
+        expectedSpeaker: TuringConversationCharacterID,
+        flowIdentity: TuringFlowIdentity,
+        playbackHandle: TuringAudioPlaybackHandle,
+        clockOrigin: ContinuousClock.Instant
+    ) -> TuringSpokenPresentationContextResolution {
+        guard playbackHandle.runID == flowIdentity.playbackRunID else {
+            return .suppressed(reason: "runIdentityMismatch")
+        }
+        guard clip.identity.speakerCharacterID == expectedSpeaker else {
+            return .suppressed(
+                reason: "fillerSpeakerMismatch.expected=\(expectedSpeaker.rawValue)." +
+                    "descriptor=\(clip.identity.speakerCharacterID.rawValue)"
+            )
+        }
+        return .resolved(
+            TuringSpokenPresentationContext(
+                run: .init(flowIdentity: flowIdentity),
+                playbackHandle: playbackHandle,
+                speakerCharacterID: expectedSpeaker,
+                interactionSurface: flowIdentity.interactionSurface,
+                source: .filler(clip: clip.identity),
+                clockOrigin: clockOrigin,
+                generatedSpeechFrameTrack: nil
             )
         )
     }

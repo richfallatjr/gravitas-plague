@@ -108,9 +108,12 @@ final class TuringStoryDoorBundleController:
 
     private static let portalOnlyEntityNames = [
         "TuringStoryDoorPortalSlab_Root",
-        "TuringStoryDoorPortalFence_Root",
-        "TuringStoryDoorPortalFirewood_Root"
+        "TuringStoryDoorPortalFence_Root"
     ]
+    private static let firewoodEntityName =
+        "TuringStoryDoorPortalFirewood_Root"
+    private static let firewoodResourceName =
+        "turing_story_door_firewood_v1"
 
     let root = Entity()
     private let portalWorldRoot = Entity()
@@ -153,6 +156,8 @@ final class TuringStoryDoorBundleController:
     private var portalRequiredByDoorState = false
     private var portalWorldLoaded = false
     private var portalLoadTask: Task<Void, Error>?
+    private var firewoodPackageRoot: Entity?
+    private var firewoodLoadTask: Task<Void, Error>?
     private var portalOpenRequestTask: Task<Void, Never>?
     private var portalTransitionTask: Task<Void, Never>?
     private let iconController = TuringStoryDoorIconController()
@@ -437,6 +442,7 @@ final class TuringStoryDoorBundleController:
     var battlePortalFullExteriorResident: Bool {
         portalWorldLoaded ||
             portalWorldRoot.children.isEmpty == false ||
+            firewoodPackageRoot != nil ||
             (anchors?.portalOnlyEntities.contains { $0.source != nil } ?? false)
     }
 
@@ -649,6 +655,7 @@ final class TuringStoryDoorBundleController:
         portalOpenRequestTask?.cancel()
         portalOpenRequestTask = nil
         battlePortalOwnerIDs = [ownerID]
+        releaseFirewood(reason: "battleAcquire.\(reason)")
         let lease = portalLifecycle.acquireForBattle(
             battleInstanceID: ownerID,
             fullExteriorLoaded: portalWorldLoaded,
@@ -657,7 +664,10 @@ final class TuringStoryDoorBundleController:
         portalRequiredByDoorState = battleDoorState != .closed
         updateInteractionPresentation()
         do {
-            try await ensurePortalWorldLoaded(reason: "battleAcquire.\(reason)")
+            try await ensurePortalWorldLoaded(
+                reason: "battleAcquire.\(reason)",
+                includeFirewood: false
+            )
             if battleDoorState == .closed {
                 portalLifecycle.markClosedReady(lease: lease)
                 await StoryInteractionArbiter.shared.updateDoorState(
@@ -735,7 +745,10 @@ final class TuringStoryDoorBundleController:
               lease.owner == .battle(ownerID) else {
             throw BundleError.noPlacement
         }
-        try await ensurePortalWorldLoaded(reason: "Battle01.\(reason).doorOpen")
+        try await ensurePortalWorldLoaded(
+            reason: "Battle01.\(reason).doorOpen",
+            includeFirewood: false
+        )
         portalLifecycle.markClosedReady(lease: lease)
         portalLifecycle.markOpening(lease: lease)
         await StoryInteractionArbiter.shared.updateDoorState(
@@ -876,6 +889,9 @@ final class TuringStoryDoorBundleController:
         portalTransitionTask = nil
         portalLoadTask?.cancel()
         portalLoadTask = nil
+        firewoodLoadTask?.cancel()
+        firewoodLoadTask = nil
+        firewoodPackageRoot = nil
         portalWorldLoaded = false
         iconController.remove()
         occupancyRegistry?.unregister(id: occupancyID)
@@ -1555,6 +1571,9 @@ final class TuringStoryDoorBundleController:
                 return
             }
             if let anchors {
+                let shouldRetainFirewood =
+                    firewoodPackageRoot != nil && attackModeOwnsDoor == false
+                firewoodPackageRoot?.removeFromParent()
                 for record in anchors.portalOnlyEntities {
                     record.source?.removeFromParent()
                 }
@@ -1564,6 +1583,13 @@ final class TuringStoryDoorBundleController:
                     portalWorldRoot.addChild(child)
                 }
                 installPortalOnlyEntities(anchors: anchors)
+                if shouldRetainFirewood {
+                    installFirewoodPackageIfLoaded(
+                        reason: "atmosphereReload"
+                    )
+                } else {
+                    releaseFirewood(reason: "atmosphereReload.attackMode")
+                }
                 setEnabledRecursively(anchors.portalPlane, isEnabled: true)
             }
             portalWorldLoaded = true
@@ -1628,7 +1654,10 @@ final class TuringStoryDoorBundleController:
                   requestID: \(requestID.uuidString)
                   doorState: \(self.battleDoorState.rawValue)
                 """)
-                try await self.ensurePortalWorldLoaded(reason: "doorOpen.\(reason)")
+                try await self.ensurePortalWorldLoaded(
+                    reason: "doorOpen.\(reason)",
+                    includeFirewood: true
+                )
                 try Task.checkCancellation()
                 guard self.portalRequiredByDoorState,
                       self.portalLifecycle.activeLease == lease,
@@ -1853,12 +1882,22 @@ final class TuringStoryDoorBundleController:
         assertDoorPortalInvariant(context: "closeAndUnload.\(reason)")
     }
 
-    private func ensurePortalWorldLoaded(reason: String) async throws {
+    private func ensurePortalWorldLoaded(
+        reason: String,
+        includeFirewood: Bool
+    ) async throws {
+        let shouldLoadFirewood = includeFirewood && attackModeOwnsDoor == false
+        if shouldLoadFirewood == false {
+            releaseFirewood(reason: "excluded.\(reason)")
+        }
         if portalWorldLoaded {
             guard isFullExteriorLoaded else {
                 throw TuringRuntimeError.invalidConfig(
                     "Door exterior reported loaded without its portal IBL."
                 )
+            }
+            if shouldLoadFirewood {
+                await loadFirewoodForManualDoorOpen(reason: reason)
             }
             return
         }
@@ -1866,6 +1905,9 @@ final class TuringStoryDoorBundleController:
             try await portalLoadTask.value
             guard portalWorldLoaded else {
                 throw BundleError.noPlacement
+            }
+            if shouldLoadFirewood {
+                await loadFirewoodForManualDoorOpen(reason: reason)
             }
             return
         }
@@ -1909,6 +1951,9 @@ final class TuringStoryDoorBundleController:
         do {
             try await task.value
             portalLoadTask = nil
+            if shouldLoadFirewood {
+                await loadFirewoodForManualDoorOpen(reason: reason)
+            }
         } catch {
             portalLoadTask = nil
             if portalDemandActive == false {
@@ -1916,6 +1961,122 @@ final class TuringStoryDoorBundleController:
             }
             throw error
         }
+    }
+
+    private var attackModeOwnsDoor: Bool {
+        if battlePortalOwnerIDs.isEmpty == false {
+            return true
+        }
+        if case .battle = latestInteractionSnapshot.exclusiveOwner {
+            return true
+        }
+        return false
+    }
+
+    private func loadFirewoodForManualDoorOpen(reason: String) async {
+        guard attackModeOwnsDoor == false,
+              portalDemandActive else {
+            releaseFirewood(reason: "manualLoadRejected.\(reason)")
+            print(
+                "[TuringDoorFirewood] load skipped attackMode=true reason=\(reason)"
+            )
+            return
+        }
+
+        if firewoodPackageRoot != nil {
+            installFirewoodPackageIfLoaded(reason: reason)
+            return
+        }
+
+        let task: Task<Void, Error>
+        if let firewoodLoadTask {
+            task = firewoodLoadTask
+        } else {
+            guard let url = firewoodURL() else {
+                print(
+                    "[TuringDoorFirewood] ERROR missing lazy resource " +
+                        "file=\(Self.firewoodResourceName).usdz reason=\(reason)"
+                )
+                return
+            }
+            task = Task { @MainActor [weak self] in
+                guard let self else { throw CancellationError() }
+                let packageRoot = try await Entity(contentsOf: url)
+                try Task.checkCancellation()
+                guard self.attackModeOwnsDoor == false,
+                      self.portalDemandActive else {
+                    throw CancellationError()
+                }
+                guard packageRoot.turingDoorFindEntity(
+                    named: Self.firewoodEntityName
+                ) != nil else {
+                    throw BundleError.missingRequiredEntity(
+                        Self.firewoodEntityName
+                    )
+                }
+                packageRoot.name = "TuringStoryDoorFirewoodPackage_Root"
+                packageRoot.scale = SIMD3<Float>(
+                    repeating: TuringStoryDoorBundleTuning.assetImportScale
+                )
+                self.firewoodPackageRoot = packageRoot
+                self.installFirewoodPackageIfLoaded(reason: reason)
+                print(
+                    "[TuringDoorFirewood] lazy package loaded " +
+                        "file=\(url.lastPathComponent) reason=\(reason)"
+                )
+            }
+            firewoodLoadTask = task
+        }
+
+        do {
+            try await task.value
+        } catch is CancellationError {
+            print(
+                "[TuringDoorFirewood] lazy load cancelled reason=\(reason)"
+            )
+        } catch {
+            print(
+                "[TuringDoorFirewood] ERROR lazy load failed " +
+                    "reason=\(reason) error=\(error.localizedDescription)"
+            )
+        }
+        firewoodLoadTask = nil
+    }
+
+    private func installFirewoodPackageIfLoaded(reason: String) {
+        guard let firewoodPackageRoot,
+              attackModeOwnsDoor == false else {
+            return
+        }
+        firewoodPackageRoot.removeFromParent()
+        removePortalIBLReceiversRecursively(from: firewoodPackageRoot)
+        portalWorldRoot.addChild(firewoodPackageRoot)
+        setEnabledRecursively(firewoodPackageRoot, isEnabled: true)
+        let receiverCount: Int
+        if let portalIBLEntity = firstPortalIBLEntity(in: portalWorldRoot) {
+            receiverCount = attachPortalIBLReceiversRecursively(
+                under: firewoodPackageRoot,
+                iblEntity: portalIBLEntity
+            )
+        } else {
+            receiverCount = 0
+        }
+        print(
+            "[TuringDoorFirewood] installed manualOpenOnly=true " +
+                "portalIBLReceiverCount=\(receiverCount) reason=\(reason)"
+        )
+    }
+
+    private func releaseFirewood(reason: String) {
+        firewoodLoadTask?.cancel()
+        firewoodLoadTask = nil
+        guard let firewoodPackageRoot else { return }
+        removePortalIBLReceiversRecursively(from: firewoodPackageRoot)
+        firewoodPackageRoot.removeFromParent()
+        self.firewoodPackageRoot = nil
+        print(
+            "[TuringDoorFirewood] released reason=\(reason)"
+        )
     }
 
     private var portalDemandActive: Bool {
@@ -1991,6 +2152,7 @@ final class TuringStoryDoorBundleController:
                 record.source = nil
             }
         }
+        releaseFirewood(reason: reason)
         let removedChildCount = portalWorldRoot.children.count
         PortalHDRIDomeRuntimeDiagnostics.logRemoval(
             from: portalWorldRoot,
@@ -2136,6 +2298,17 @@ final class TuringStoryDoorBundleController:
             subdirectory: "Turing/Props"
         ) ?? Bundle.main.url(
             forResource: "turing_story_door_bundle_v1",
+            withExtension: "usdz"
+        )
+    }
+
+    private func firewoodURL() -> URL? {
+        Bundle.main.url(
+            forResource: Self.firewoodResourceName,
+            withExtension: "usdz",
+            subdirectory: "Turing/Props"
+        ) ?? Bundle.main.url(
+            forResource: Self.firewoodResourceName,
             withExtension: "usdz"
         )
     }

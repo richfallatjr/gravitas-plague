@@ -2,6 +2,12 @@ import AVFoundation
 import Foundation
 
 actor TuringGeneratedPlaybackFileStore {
+    nonisolated enum GeneratedVisualAnalysisState: Sendable, Equatable {
+        case ready(TuringGeneratedSpeechVisualAnalysis)
+        case pending(TuringGeneratedSpeechAnalysisTicket)
+        case unavailable(TuringGeneratedSpeechAnalysisUnavailableReason)
+    }
+
     struct PreparedClip: Sendable, Equatable {
         let runID: String
         let segmentIndex: Int
@@ -9,9 +15,42 @@ actor TuringGeneratedPlaybackFileStore {
         let frameCount: AVAudioFramePosition
         let sampleRate: Double
         let channelCount: AVAudioChannelCount
-        let generatedVisualAnalysis: TuringGeneratedSpeechVisualAnalysis?
-        let generatedVisualAnalysisStatus: TuringGeneratedSpeechAnalysisUnavailableReason?
-        let generatedVisualAnalysisNanoseconds: UInt64?
+        let analysisIdentity: TuringGeneratedSpeechAnalysisIdentity?
+        let generatedVisualAnalysisState: GeneratedVisualAnalysisState
+
+        var generatedVisualAnalysis: TuringGeneratedSpeechVisualAnalysis? {
+            guard case .ready(let value) = generatedVisualAnalysisState else { return nil }
+            return value
+        }
+
+        var generatedAnalysisTicket: TuringGeneratedSpeechAnalysisTicket? {
+            guard case .pending(let value) = generatedVisualAnalysisState else { return nil }
+            return value
+        }
+
+        var generatedVisualAnalysisStatus: TuringGeneratedSpeechAnalysisUnavailableReason? {
+            guard case .unavailable(let value) = generatedVisualAnalysisState else { return nil }
+            return value
+        }
+
+        var generatedVisualAnalysisNanoseconds: UInt64? {
+            generatedVisualAnalysis?.envelope.diagnostics.analysisNanoseconds
+        }
+
+        func replacingVisualAnalysis(
+            _ analysis: TuringGeneratedSpeechVisualAnalysis
+        ) -> PreparedClip {
+            PreparedClip(
+                runID: runID,
+                segmentIndex: segmentIndex,
+                fileURL: fileURL,
+                frameCount: frameCount,
+                sampleRate: sampleRate,
+                channelCount: channelCount,
+                analysisIdentity: analysisIdentity,
+                generatedVisualAnalysisState: .ready(analysis)
+            )
+        }
 
         static func == (lhs: Self, rhs: Self) -> Bool {
             lhs.runID == rhs.runID &&
@@ -20,8 +59,8 @@ actor TuringGeneratedPlaybackFileStore {
                 lhs.frameCount == rhs.frameCount &&
                 lhs.sampleRate == rhs.sampleRate &&
                 lhs.channelCount == rhs.channelCount &&
-                lhs.generatedVisualAnalysisStatus == rhs.generatedVisualAnalysisStatus &&
-                lhs.generatedVisualAnalysisNanoseconds == rhs.generatedVisualAnalysisNanoseconds &&
+                lhs.analysisIdentity == rhs.analysisIdentity &&
+                lhs.generatedVisualAnalysisState == rhs.generatedVisualAnalysisState &&
                 Self.trackIdentity(lhs.generatedVisualAnalysis?.frameTrack) ==
                     Self.trackIdentity(rhs.generatedVisualAnalysis?.frameTrack)
         }
@@ -36,19 +75,15 @@ actor TuringGeneratedPlaybackFileStore {
     }
 
     private let rootURL: URL
-    private let generatedSpeechAnalysisWorker: TuringSerialGeneratedSpeechAnalysisWorker
-    private let generatedSpeechAnalysisBudget: TuringGeneratedSpeechAnalysisBudget
+    private let generatedSpeechAnalysisCoordinator: TuringGeneratedSpeechAnalysisCoordinator
     private var directoriesByRunID: [String: URL] = [:]
 
     init(
         rootURL: URL,
-        generatedSpeechAnalysisWorker: TuringSerialGeneratedSpeechAnalysisWorker =
-            TuringSerialGeneratedSpeechAnalysisWorker(),
-        generatedSpeechAnalysisBudget: TuringGeneratedSpeechAnalysisBudget = .production
+        generatedSpeechAnalysisCoordinator: TuringGeneratedSpeechAnalysisCoordinator = .shared
     ) {
         self.rootURL = rootURL
-        self.generatedSpeechAnalysisWorker = generatedSpeechAnalysisWorker
-        self.generatedSpeechAnalysisBudget = generatedSpeechAnalysisBudget
+        self.generatedSpeechAnalysisCoordinator = generatedSpeechAnalysisCoordinator
     }
 
     func beginRun(_ runID: String) throws -> URL {
@@ -114,34 +149,39 @@ actor TuringGeneratedPlaybackFileStore {
         buffer.frameLength = AVAudioFrameCount(totalFrames)
 
         let sampleRate = Int(audio.sampleRate.rounded())
-        let analysisTask: Task<TuringGeneratedSpeechAnalysisResult, Never>?
+        let analysisSubmission: TuringGeneratedSpeechAnalysisSubmission
         if MindEyeQualificationFeatureControl.isMindEyeEnabled {
-            let analysisStarted = ContinuousClock.now
-            let analysisDeadline = analysisStarted.advanced(
-                by: generatedSpeechAnalysisBudget.hardBudget
+            analysisSubmission = await generatedSpeechAnalysisCoordinator.submit(
+                runID: runID,
+                segmentIndex: segmentIndex,
+                samples: audio.samples,
+                sampleRate: sampleRate,
+                channelCount: channelCountInt
             )
-            let worker = generatedSpeechAnalysisWorker
-            analysisTask = Task.detached(priority: .userInitiated) {
-                await worker.analyze(
-                    processedAudio: audio.samples,
-                    sampleRate: sampleRate,
-                    channelCount: channelCountInt,
-                    deadline: analysisDeadline
-                )
-            }
             print(
                 "[TuringGeneratedSpeech] analysisStart segmentIndex=\(segmentIndex) " +
                     "processedAudioSamples=\(audio.samples.count) sampleRate=\(sampleRate) " +
                     "channelCount=\(channelCountInt)"
             )
         } else {
-            analysisTask = nil
+            analysisSubmission = .rejected(.cancelled)
             print(
                 "[TuringGeneratedSpeech] analysisSkipped segmentIndex=\(segmentIndex) " +
                     "reason=qualificationControlDisabled audioContinues=true"
             )
         }
-        defer { analysisTask?.cancel() }
+        var wavSucceeded = false
+        defer {
+            if !wavSucceeded,
+               case .accepted(let ticket) = analysisSubmission {
+                Task { [generatedSpeechAnalysisCoordinator] in
+                    await generatedSpeechAnalysisCoordinator.cancel(
+                        identity: ticket.identity,
+                        reason: "generatedWAVWriteFailed"
+                    )
+                }
+            }
+        }
         for frame in 0..<totalFrames {
             for channel in 0..<channelCountInt {
                 let value = audio.samples[frame * channelCountInt + channel]
@@ -188,54 +228,28 @@ actor TuringGeneratedPlaybackFileStore {
         }
         #endif
 
-        let fileReady = ContinuousClock.now
-        let analysisResult: TuringGeneratedSpeechAnalysisResult
-        if let analysisTask {
-            analysisResult = await TuringGeneratedSpeechAnalysisRace.resolve(
-                task: analysisTask,
-                grace: generatedSpeechAnalysisBudget.postFileWriteGrace
-            )
-        } else {
-            analysisResult = .unavailable(reason: .cancelled)
-        }
-        let addedWaitNanoseconds = Self.nanoseconds(fileReady.duration(to: ContinuousClock.now))
-        let visualAnalysis: TuringGeneratedSpeechVisualAnalysis?
-        let unavailableReason: TuringGeneratedSpeechAnalysisUnavailableReason?
-        let analysisNanoseconds: UInt64?
-        switch analysisResult {
-        case .ready(let value):
-            visualAnalysis = value
-            unavailableReason = nil
-            analysisNanoseconds = value.envelope.diagnostics.analysisNanoseconds
-            print(
-                "[TuringGeneratedSpeech] analysisComplete segmentIndex=\(segmentIndex) " +
-                    "analysisNanoseconds=\(analysisNanoseconds ?? 0) " +
-                    "addedWaitNanoseconds=\(addedWaitNanoseconds) " +
-                    "frames=\(value.frameTrack.frameCount) runs=\(value.frameTrack.poseRuns.count)"
-            )
-            #if GR_MIND_EYE_QUALIFICATION
-            Task { @MainActor in
-                MindEyeReleaseQualificationHooks.shared.fireAndForget(
-                    .generatedAnalysisReady,
-                    playbackRunID: runID,
-                    mediaIdentity: "generated:\(segmentIndex)",
-                    timing: MindEyeReleaseTimingSnapshot(
-                        generatedAnalysisMilliseconds: Double(analysisNanoseconds ?? 0) / 1_000_000
-                    )
-                )
+        let analysisState: GeneratedVisualAnalysisState
+        let analysisIdentity: TuringGeneratedSpeechAnalysisIdentity?
+        switch analysisSubmission {
+        case .accepted(let ticket):
+            analysisIdentity = ticket.identity
+            if let result = ticket.resultBox.resultIfReady() {
+                switch result {
+                case .ready(let analysis): analysisState = .ready(analysis)
+                case .unavailable(let reason): analysisState = .unavailable(reason)
+                }
+            } else {
+                analysisState = .pending(ticket)
             }
-            #endif
-        case .unavailable(let reason):
-            analysisTask?.cancel()
-            visualAnalysis = nil
-            unavailableReason = reason
-            analysisNanoseconds = nil
-            print(
-                "[TuringGeneratedSpeech] analysisUnavailable segmentIndex=\(segmentIndex) " +
-                    "status=\(reason.rawValue) addedWaitNanoseconds=\(addedWaitNanoseconds) " +
-                    "audioContinues=true"
-            )
+        case .rejected(let reason):
+            analysisIdentity = nil
+            analysisState = .unavailable(reason)
         }
+        print(
+            "[TuringGeneratedSpeech] WAV ready segmentIndex=\(segmentIndex) " +
+                "addedAnalysisWaitNanoseconds=0"
+        )
+        wavSucceeded = true
         return PreparedClip(
             runID: runID,
             segmentIndex: segmentIndex,
@@ -243,14 +257,23 @@ actor TuringGeneratedPlaybackFileStore {
             frameCount: validation.length,
             sampleRate: validation.fileFormat.sampleRate,
             channelCount: validation.fileFormat.channelCount,
-            generatedVisualAnalysis: visualAnalysis,
-            generatedVisualAnalysisStatus: unavailableReason,
-            generatedVisualAnalysisNanoseconds: analysisNanoseconds
+            analysisIdentity: analysisIdentity,
+            generatedVisualAnalysisState: analysisState
         )
     }
 
-    func delete(_ clip: PreparedClip, reason: String) {
+    func analysisEvents() async -> AsyncStream<TuringGeneratedSpeechAnalysisEvent> {
+        await generatedSpeechAnalysisCoordinator.events()
+    }
+
+    func delete(_ clip: PreparedClip, reason: String) async {
         TuringAudioOffloadSignposts.assertNotMainThread("deleteGeneratedWAV")
+        if let ticket = clip.generatedAnalysisTicket {
+            await generatedSpeechAnalysisCoordinator.cancel(
+                identity: ticket.identity,
+                reason: reason
+            )
+        }
         try? FileManager.default.removeItem(at: clip.fileURL)
         print("""
         [TuringAudioOffload] generated file deleted
@@ -276,8 +299,12 @@ actor TuringGeneratedPlaybackFileStore {
         """)
     }
 
-    func endRun(_ runID: String, reason: String) {
+    func endRun(_ runID: String, reason: String) async {
         TuringAudioOffloadSignposts.assertNotMainThread("endRun")
+        await generatedSpeechAnalysisCoordinator.cancelRun(
+            runID: runID,
+            reason: reason
+        )
         guard let directory = directoriesByRunID.removeValue(forKey: runID) else {
             return
         }

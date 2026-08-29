@@ -456,7 +456,7 @@ final class TuringStoryPlaybackPhase1LifecycleTests: XCTestCase {
         )
     }
 
-    func testFillerStartFailureDoesNotEnterSpokenPresentationStream()
+    func testFillerStartFailurePublishesFailureButNeverFalseStart()
         async throws {
         let origin = ContinuousClock.now
         let endpoint = TuringPhase1TimestampEndpoint(origin: origin)
@@ -501,7 +501,14 @@ final class TuringStoryPlaybackPhase1LifecycleTests: XCTestCase {
         await settle()
 
         let events = await publisher.snapshot()
-        XCTAssertTrue(events.isEmpty)
+        XCTAssertEqual(events.filter {
+            if case .failed = $0 { return true }
+            return false
+        }.count, 1)
+        XCTAssertFalse(events.contains {
+            if case .started = $0 { return true }
+            return false
+        })
         await coordinator.runCancelled(reason: "test complete")
     }
 

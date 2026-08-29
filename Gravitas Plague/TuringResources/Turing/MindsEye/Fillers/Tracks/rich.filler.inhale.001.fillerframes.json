@@ -1,0 +1,292 @@
+{
+  "schemaVersion": 1,
+  "trackVersion": "mind-eye-filler-track/1",
+  "compilerVersion": "mind-eye-filler-compiler/1.0.0",
+  "fillerID": "rich.filler.inhale.001",
+  "speakerCharacterID": "rich",
+  "audioResourcePath": "Turing/Audio/rich-filler/rich-filler_inhale_8.mp3",
+  "audioSHA256": "541f82d7c761d8ccc06dcb2fde6fd3ee02a3947347cedb52932e5d89eb540003",
+  "descriptorSHA256": "b9d780dde8673f13c279ff69658f1a9a6edddd026933ae793acbda7cefd2f8a1",
+  "authoring": {
+    "mode": "nonverbal",
+    "transcriptSHA256": null,
+    "nonverbalProfile": "inhale"
+  },
+  "timeline": {
+    "sampleRate": 48000,
+    "sampleCount": 192000,
+    "durationSeconds": 4.0,
+    "framesPerSecond": 60,
+    "samplesPerNominalFrame": 800,
+    "frameCount": 240
+  },
+  "mouthLayerBits": {
+    "rest": 1,
+    "small": 2,
+    "wide": 4,
+    "round": 8,
+    "teeth": 16
+  },
+  "poseRuns": [
+    {
+      "startFrame": 0,
+      "endFrameExclusive": 2,
+      "pose": "teeth",
+      "evidenceMask": 63
+    },
+    {
+      "startFrame": 2,
+      "endFrameExclusive": 5,
+      "pose": "small",
+      "evidenceMask": 51
+    },
+    {
+      "startFrame": 5,
+      "endFrameExclusive": 6,
+      "pose": "teeth",
+      "evidenceMask": 47
+    },
+    {
+      "startFrame": 6,
+      "endFrameExclusive": 7,
+      "pose": "rest",
+      "evidenceMask": 0
+    },
+    {
+      "startFrame": 7,
+      "endFrameExclusive": 11,
+      "pose": "teeth",
+      "evidenceMask": 63
+    },
+    {
+      "startFrame": 11,
+      "endFrameExclusive": 14,
+      "pose": "wide",
+      "evidenceMask": 51
+    },
+    {
+      "startFrame": 14,
+      "endFrameExclusive": 48,
+      "pose": "teeth",
+      "evidenceMask": 63
+    },
+    {
+      "startFrame": 48,
+      "endFrameExclusive": 49,
+      "pose": "rest",
+      "evidenceMask": 0
+    },
+    {
+      "startFrame": 49,
+      "endFrameExclusive": 51,
+      "pose": "teeth",
+      "evidenceMask": 63
+    },
+    {
+      "startFrame": 51,
+      "endFrameExclusive": 54,
+      "pose": "wide",
+      "evidenceMask": 51
+    },
+    {
+      "startFrame": 54,
+      "endFrameExclusive": 58,
+      "pose": "small",
+      "evidenceMask": 63
+    },
+    {
+      "startFrame": 58,
+      "endFrameExclusive": 62,
+      "pose": "teeth",
+      "evidenceMask": 47
+    },
+    {
+      "startFrame": 62,
+      "endFrameExclusive": 68,
+      "pose": "small",
+      "evidenceMask": 63
+    },
+    {
+      "startFrame": 68,
+      "endFrameExclusive": 71,
+      "pose": "wide",
+      "evidenceMask": 51
+    },
+    {
+      "startFrame": 71,
+      "endFrameExclusive": 92,
+      "pose": "rest",
+      "evidenceMask": 0
+    },
+    {
+      "startFrame": 92,
+      "endFrameExclusive": 94,
+      "pose": "teeth",
+      "evidenceMask": 63
+    },
+    {
+      "startFrame": 94,
+      "endFrameExclusive": 96,
+      "pose": "wide",
+      "evidenceMask": 47
+    },
+    {
+      "startFrame": 96,
+      "endFrameExclusive": 100,
+      "pose": "rest",
+      "evidenceMask": 0
+    },
+    {
+      "startFrame": 100,
+      "endFrameExclusive": 104,
+      "pose": "small",
+      "evidenceMask": 51
+    },
+    {
+      "startFrame": 104,
+      "endFrameExclusive": 107,
+      "pose": "wide",
+      "evidenceMask": 51
+    },
+    {
+      "startFrame": 107,
+      "endFrameExclusive": 114,
+      "pose": "small",
+      "evidenceMask": 51
+    },
+    {
+      "startFrame": 114,
+      "endFrameExclusive": 129,
+      "pose": "wide",
+      "evidenceMask": 51
+    },
+    {
+      "startFrame": 129,
+      "endFrameExclusive": 136,
+      "pose": "small",
+      "evidenceMask": 51
+    },
+    {
+      "startFrame": 136,
+      "endFrameExclusive": 185,
+      "pose": "rest",
+      "evidenceMask": 0
+    },
+    {
+      "startFrame": 185,
+      "endFrameExclusive": 187,
+      "pose": "teeth",
+      "evidenceMask": 63
+    },
+    {
+      "startFrame": 187,
+      "endFrameExclusive": 189,
+      "pose": "small",
+      "evidenceMask": 51
+    },
+    {
+      "startFrame": 189,
+      "endFrameExclusive": 192,
+      "pose": "wide",
+      "evidenceMask": 63
+    },
+    {
+      "startFrame": 192,
+      "endFrameExclusive": 194,
+      "pose": "teeth",
+      "evidenceMask": 47
+    },
+    {
+      "startFrame": 194,
+      "endFrameExclusive": 199,
+      "pose": "small",
+      "evidenceMask": 51
+    },
+    {
+      "startFrame": 199,
+      "endFrameExclusive": 200,
+      "pose": "teeth",
+      "evidenceMask": 47
+    },
+    {
+      "startFrame": 200,
+      "endFrameExclusive": 210,
+      "pose": "rest",
+      "evidenceMask": 0
+    },
+    {
+      "startFrame": 210,
+      "endFrameExclusive": 213,
+      "pose": "teeth",
+      "evidenceMask": 63
+    },
+    {
+      "startFrame": 213,
+      "endFrameExclusive": 215,
+      "pose": "small",
+      "evidenceMask": 51
+    },
+    {
+      "startFrame": 215,
+      "endFrameExclusive": 216,
+      "pose": "teeth",
+      "evidenceMask": 47
+    },
+    {
+      "startFrame": 216,
+      "endFrameExclusive": 219,
+      "pose": "rest",
+      "evidenceMask": 0
+    },
+    {
+      "startFrame": 219,
+      "endFrameExclusive": 226,
+      "pose": "small",
+      "evidenceMask": 63
+    },
+    {
+      "startFrame": 226,
+      "endFrameExclusive": 228,
+      "pose": "teeth",
+      "evidenceMask": 47
+    },
+    {
+      "startFrame": 228,
+      "endFrameExclusive": 231,
+      "pose": "small",
+      "evidenceMask": 51
+    },
+    {
+      "startFrame": 231,
+      "endFrameExclusive": 233,
+      "pose": "teeth",
+      "evidenceMask": 47
+    },
+    {
+      "startFrame": 233,
+      "endFrameExclusive": 240,
+      "pose": "rest",
+      "evidenceMask": 0
+    }
+  ],
+  "expandedFramesSHA256": "7e4e35c4928dbf18ebd40e3c7fa73f8c3e49eb80e49abc9937193b4e7edc1f03",
+  "analysisProvenance": {
+    "toolchainLockSHA256": "c5c57d5328fe9de6aa14f2f3b522cdd226914efb3339bac9211a9d5002f42c68",
+    "compilerConfigSHA256": "06b0cb83412565c3fae1a1b29c28c1c6015c13ab9dfe7359317196a68f70a5e9",
+    "phonemePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "mfaRawOutputSHA256": null,
+    "nonverbalConfigurationSHA256": "e74813e844a816001a953e82942669e360b029138d312f5b09ad54f4fa41a401"
+  },
+  "summary": {
+    "poseFrameCounts": {
+      "teeth": 62,
+      "small": 50,
+      "rest": 96,
+      "wide": 32
+    },
+    "speechFrameCount": 144,
+    "fallbackFrameCount": 0,
+    "manualOverrideFrameCount": 0,
+    "warningCodes": []
+  }
+}

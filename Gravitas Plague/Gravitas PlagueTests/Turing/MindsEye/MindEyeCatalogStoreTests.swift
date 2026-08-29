@@ -4,7 +4,7 @@ import XCTest
 @testable import Gravitas_Plague
 
 final class MindEyeCatalogStoreTests: XCTestCase {
-    func testShippedCatalogResolvesBigMikeAndCatEye81() async {
+    func testShippedCatalogResolvesEveryAvailablePortrait() async {
         let resources = mindEyeProjectRoot()
             .appendingPathComponent("Gravitas Plague/TuringResources", isDirectory: true)
         let store = MindEyeCatalogStore(
@@ -14,10 +14,22 @@ final class MindEyeCatalogStoreTests: XCTestCase {
 
         let mike = await store.defaultVignette(for: .bigMike)
         let catEye = await store.defaultVignette(for: .catEye81)
+        let rich = await store.defaultVignette(for: .rich)
+        let dad = await store.defaultVignette(for: .dad)
+        let broadcaster = await store.defaultVignette(for: .broadcaster)
 
         XCTAssertEqual(mike?.vignetteID, "big_mike_current_room")
         XCTAssertEqual(catEye?.vignetteID, "cateye81_bunker")
         XCTAssertEqual(catEye?.characterID, .catEye81)
+        XCTAssertEqual(rich?.vignetteID, "rich_current_room")
+        XCTAssertEqual(rich?.characterID, .rich)
+        XCTAssertEqual(dad?.vignetteID, "dad_workshop")
+        XCTAssertEqual(dad?.characterID, .dad)
+        XCTAssertEqual(
+            broadcaster?.vignetteID,
+            "broadcaster_radio_room"
+        )
+        XCTAssertEqual(broadcaster?.characterID, .broadcaster)
     }
 
     func testValidBigMikeResolutionAndNoRichFallback() async throws {

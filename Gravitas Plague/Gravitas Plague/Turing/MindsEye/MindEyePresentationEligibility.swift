@@ -60,7 +60,7 @@ nonisolated struct MindEyeDefaultPresentationEligibility:
                     reason: "nonPortraitAuthoredRole.\(role.rawValue)"
                 )
             }
-        case .generated:
+        case .filler, .generated:
             return .eligible
         }
     }

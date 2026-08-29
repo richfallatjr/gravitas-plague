@@ -110,6 +110,10 @@ final class TuringSpokenPresentationContextResolverTests: XCTestCase {
         let identity = makeIdentity(character: .bigMike)
         let result = TuringSpokenPresentationContextResolver.generated(
             segmentIndex: 0,
+            preparedClip: makePreparedClip(
+                runID: identity.playbackRunID,
+                segmentIndex: 0
+            ),
             flowIdentity: identity,
             playbackHandle: makeHandle(runID: "stale.run"),
             clockOrigin: ContinuousClock.now
@@ -126,6 +130,10 @@ final class TuringSpokenPresentationContextResolverTests: XCTestCase {
         let identity = makeIdentity(character: speaker)
         let result = TuringSpokenPresentationContextResolver.generated(
             segmentIndex: 3,
+            preparedClip: makePreparedClip(
+                runID: identity.playbackRunID,
+                segmentIndex: 3
+            ),
             flowIdentity: identity,
             playbackHandle: makeHandle(runID: identity.playbackRunID),
             clockOrigin: ContinuousClock.now
@@ -134,7 +142,10 @@ final class TuringSpokenPresentationContextResolverTests: XCTestCase {
             return XCTFail("Expected generated context for \(speaker.rawValue).")
         }
         XCTAssertEqual(context.speakerCharacterID, speaker)
-        XCTAssertEqual(context.source, .generated(segmentIndex: 3))
+        XCTAssertEqual(
+            context.source,
+            TuringSpokenPresentationSource.generated(segmentIndex: 3)
+        )
     }
 
     private func assertAuthoredSuppressed(
@@ -176,6 +187,22 @@ final class TuringSpokenPresentationContextResolverTests: XCTestCase {
             requestID: UUID(),
             runID: runID,
             route: route
+        )
+    }
+
+    private func makePreparedClip(
+        runID: String,
+        segmentIndex: Int
+    ) -> TuringGeneratedPlaybackFileStore.PreparedClip {
+        TuringGeneratedPlaybackFileStore.PreparedClip(
+            runID: runID,
+            segmentIndex: segmentIndex,
+            fileURL: URL(fileURLWithPath: "/tmp/test-generated-\(segmentIndex).wav"),
+            frameCount: 4_800,
+            sampleRate: 48_000,
+            channelCount: 1,
+            analysisIdentity: nil,
+            generatedVisualAnalysisState: .unavailable(.analysisFailed)
         )
     }
 

@@ -30,6 +30,7 @@ nonisolated struct MindEyePresentationIdentity:
     let flowInstanceID: UUID
     let scriptPointID: String
     let mediaIdentity: String
+    let responseMotionSeedIdentity: String?
     let speakerCharacterID: TuringConversationCharacterID
     let interactionSurface: StoryInteractionSurfaceID
 
@@ -38,6 +39,15 @@ nonisolated struct MindEyePresentationIdentity:
         flowInstanceID = context.run.flowInstanceID
         scriptPointID = context.run.scriptPointID
         mediaIdentity = context.source.mediaIdentity
+        responseMotionSeedIdentity = context.source.participatesInResponseContinuity
+            ? [
+                "response",
+                context.run.playbackRunID,
+                context.run.flowInstanceID.uuidString.lowercased(),
+                context.speakerCharacterID.rawValue,
+                context.interactionSurface.rawValue
+            ].joined(separator: ".")
+            : nil
         speakerCharacterID = context.speakerCharacterID
         interactionSurface = context.interactionSurface
     }
@@ -52,7 +62,7 @@ nonisolated extension MindEyePresentationIdentity {
             speakerCharacterID: speakerCharacterID.rawValue,
             playbackRunID: key.playbackRunID,
             flowInstanceID: flowInstanceID,
-            sourceIdentity: mediaIdentity
+            sourceIdentity: responseMotionSeedIdentity ?? mediaIdentity
         )
     }
 }
