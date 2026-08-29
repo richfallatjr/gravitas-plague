@@ -84,8 +84,8 @@
     "doubleBlinkGapMaxSeconds": 1.0
   },
   "placement": {
-    "cardWidthMeters": 0.56,
-    "cardHeightMeters": 0.315,
+    "cardWidthMeters": 0.84,
+    "cardHeightMeters": 0.4725,
     "verticalLiftMeters": 0.10,
     "forwardOffsetMeters": 0.0381,
     "shelfClearanceMeters": 0.0127

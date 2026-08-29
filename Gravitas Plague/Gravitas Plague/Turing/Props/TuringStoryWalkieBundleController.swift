@@ -248,6 +248,12 @@ final class TuringStoryWalkieBundleController:
             fallbackTopOffsetMeters:
                 Self.walkieIconFallbackTopOffsetMeters
         )
+        let shelfCenteringBounds = anchors.shelf.flatMap { shelf in
+            MindEyeRealityBoundsAdapter.bounds(
+                of: shelf,
+                relativeTo: presentationRoot
+            )
+        }
 
         return MindEyePlacementTarget(
             providerID: mindEyePlacementProviderID,
@@ -256,13 +262,13 @@ final class TuringStoryWalkieBundleController:
             geometry: MindEyePlacementGeometry(
                 providerID: mindEyePlacementProviderID,
                 revision: mindEyePlacementRevision,
-                centeringBounds: nil,
+                centeringBounds: shelfCenteringBounds,
                 obstructionBounds: nil,
                 fallbackCenter: sharedIconTopCenter,
                 iconRelativePlacement: MindEyeIconRelativePlacement(
                     iconTopCenter: sharedIconTopCenter,
                     bottomEdgeClearanceMeters:
-                        MindEyeIconPlacementDefaults.bottomEdgeClearanceMeters,
+                        MindEyeIconPlacementDefaults.shelfBottomEdgeClearanceMeters,
                     forwardOffsetMeters:
                         MindEyeIconPlacementDefaults.walkieForwardOffsetMeters
                 )

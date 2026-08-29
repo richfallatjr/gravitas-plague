@@ -104,7 +104,8 @@ actor TuringGeneratedPlaybackFileStore {
     func write(
         runID: String,
         segmentIndex: Int,
-        audio: TuringComputeGapGeneratedAudio
+        audio: TuringComputeGapGeneratedAudio,
+        speakerCharacterID: TuringConversationCharacterID = .bigMike
     ) async throws -> PreparedClip {
         TuringAudioOffloadSignposts.assertNotMainThread("writeGeneratedWAV")
         TuringAudioOffloadSignposts.offMain(
@@ -156,7 +157,9 @@ actor TuringGeneratedPlaybackFileStore {
                 segmentIndex: segmentIndex,
                 samples: audio.samples,
                 sampleRate: sampleRate,
-                channelCount: channelCountInt
+                channelCount: channelCountInt,
+                speakerCharacterID: speakerCharacterID,
+                sourceText: audio.sourceText
             )
             print(
                 "[TuringGeneratedSpeech] analysisStart segmentIndex=\(segmentIndex) " +

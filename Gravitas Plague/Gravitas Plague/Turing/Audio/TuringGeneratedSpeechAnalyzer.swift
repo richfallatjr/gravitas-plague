@@ -1,5 +1,8 @@
 import Foundation
 
+typealias TuringGeneratedSpeechCompatibilityAnalyzer =
+    TuringGeneratedSpeechAnalyzer
+
 nonisolated enum TuringGeneratedSpeechAnalysisError: Error, Sendable, Equatable {
     case invalidSampleRate
     case invalidChannelCount

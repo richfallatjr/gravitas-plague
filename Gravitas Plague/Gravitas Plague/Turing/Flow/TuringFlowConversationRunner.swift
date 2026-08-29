@@ -274,6 +274,20 @@ enum TuringFlowConversationRunner {
                     )
 
             failureStage = "creatingGeneratedPlayback"
+            let spokenPresentationContinuity = request.immutableSeed.map { seed in
+                TuringSpokenPresentationContinuity(
+                    continuityID: UUID(),
+                    parent: .init(
+                        playbackRunID: seed.parentPlaybackRunID,
+                        flowInstanceID: seed.parentFlowInstanceID,
+                        mediaIdentity: "authored.\(seed.authoredMediaRole.rawValue).\(seed.authoredMediaItemID)"
+                    ),
+                    childPlaybackRunID: conversationRunID.uuidString,
+                    childFlowInstanceID: conversationRunID,
+                    speakerCharacterID: seed.targetContext.targetCharacterID,
+                    interactionSurface: request.interactionSurface
+                )
+            }
             let generatedOnly =
                 try await route
                     .makeGeneratedOnlyPlayback(
@@ -281,7 +295,9 @@ enum TuringFlowConversationRunner {
                         conversationRunID:
                             conversationRunID,
                         interactionSurface:
-                            request.interactionSurface
+                            request.interactionSurface,
+                        spokenPresentationContinuity:
+                            spokenPresentationContinuity
                     )
             let playback =
                 generatedOnly.playback

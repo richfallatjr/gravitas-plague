@@ -37,7 +37,8 @@ actor TuringStagedSpeechRunCoordinator {
     ) async throws -> TuringStagedSpeechRunReport {
         let session = rendererFactory.makeStreamingSession(
             runtime: character,
-            runID: identity.playbackRunID
+            runID: identity.playbackRunID,
+            continuity: identity.spokenPresentationContinuity
         )
         let state = TuringStagedSpeechRunState()
         var terminalError: Error?

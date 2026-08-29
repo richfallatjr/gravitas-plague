@@ -341,6 +341,10 @@ final class TuringRollingBenchBundleController:
             fallbackTopOffsetMeters:
                 Self.crankRadioIconFallbackTopOffsetMeters
         )
+        let benchCenteringBounds = MindEyeRealityBoundsAdapter.bounds(
+            of: anchors.cartRoot,
+            relativeTo: presentationRoot
+        )
 
         return MindEyePlacementTarget(
             providerID: mindEyePlacementProviderID,
@@ -349,13 +353,13 @@ final class TuringRollingBenchBundleController:
             geometry: MindEyePlacementGeometry(
                 providerID: mindEyePlacementProviderID,
                 revision: mindEyePlacementRevision,
-                centeringBounds: nil,
+                centeringBounds: benchCenteringBounds,
                 obstructionBounds: nil,
                 fallbackCenter: sharedIconTopCenter,
                 iconRelativePlacement: MindEyeIconRelativePlacement(
                     iconTopCenter: sharedIconTopCenter,
                     bottomEdgeClearanceMeters:
-                        MindEyeIconPlacementDefaults.bottomEdgeClearanceMeters,
+                        MindEyeIconPlacementDefaults.rollingBenchBottomEdgeClearanceMeters,
                     forwardOffsetMeters:
                         MindEyeIconPlacementDefaults.rollingBenchForwardOffsetMeters
                 )

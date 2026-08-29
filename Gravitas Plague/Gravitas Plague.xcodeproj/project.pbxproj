@@ -47,6 +47,7 @@
 		8E1A10782FCD000100000001 /* ../angel_posed_01.usdz in Resources */ = {isa = PBXBuildFile; fileRef = 8E1A10792FCD000100000001 /* ../angel_posed_01.usdz */; };
 		8E2B20032FCE000100000001 /* Turing in Resources */ = {isa = PBXBuildFile; fileRef = 8E2B20042FCE000100000001 /* Turing */; };
 		8E3C30102FCF100100000001 /* TuringQwenNative in Frameworks */ = {isa = PBXBuildFile; productRef = 8E3C30122FCF100100000001 /* TuringQwenNative */; };
+		8E4D40012FD0000100000001 /* PocketSphinx.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E4D40022FD0000100000001 /* PocketSphinx.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -118,6 +119,7 @@
 		8E1A10772FCD000100000001 /* ../heaven-sunrise.exr */ = {isa = PBXFileReference; lastKnownFileType = file; path = "../heaven-sunrise.exr"; sourceTree = SOURCE_ROOT; };
 		8E1A10792FCD000100000001 /* ../angel_posed_01.usdz */ = {isa = PBXFileReference; lastKnownFileType = file; path = ../angel_posed_01.usdz; sourceTree = SOURCE_ROOT; };
 		8E2B20042FCE000100000001 /* Turing */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Turing; path = TuringResources/Turing; sourceTree = SOURCE_ROOT; };
+		8E4D40022FD0000100000001 /* PocketSphinx.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = PocketSphinx.xcframework; path = ThirdParty/TuringPocketSphinx/PocketSphinx.xcframework; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -228,6 +230,7 @@
 				8E1A100A2FCD000100000001 /* RealityKit.framework in Frameworks */,
 				8E1A104E2FCD000100000001 /* GameKit.framework in Frameworks */,
 				8E3C30102FCF100100000001 /* TuringQwenNative in Frameworks */,
+				8E4D40012FD0000100000001 /* PocketSphinx.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -276,6 +279,7 @@
 				8E1A10072FCD000100000001 /* ARKit.framework */,
 				8E1A10082FCD000100000001 /* RealityKit.framework */,
 				8E1A104F2FCD000100000001 /* GameKit.framework */,
+				8E4D40022FD0000100000001 /* PocketSphinx.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

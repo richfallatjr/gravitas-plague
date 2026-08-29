@@ -61,6 +61,19 @@ struct TuringCharacterQwenRenderSessionFactory:
             highMemoryPreflight: highMemoryPreflight
         )
     }
+
+    func makeStreamingSession(
+        runtime: TuringCharacterRuntimeDefinition,
+        runID: String,
+        continuity: TuringSpokenPresentationContinuity?
+    ) -> any TuringCharacterStreamingRenderSession {
+        TuringCharacterQwenRenderSession(
+            runtime: runtime,
+            runID: runID,
+            highMemoryPreflight: highMemoryPreflight,
+            spokenPresentationContinuity: continuity
+        )
+    }
 }
 
 actor TuringCharacterQwenRenderSession:
@@ -73,6 +86,7 @@ actor TuringCharacterQwenRenderSession:
     private let arbiter: TuringQwenCharacterPoolArbiter
     private let highMemoryPreflight:
         any TuringHighMemoryScenePreparing
+    private let spokenPresentationContinuity: TuringSpokenPresentationContinuity?
 
     private var pool: TuringQwenNativeFreshInstancePool?
     private var scheduler: TuringQwenNativeFreshInstanceScheduler?
@@ -97,13 +111,15 @@ actor TuringCharacterQwenRenderSession:
             TuringBaseCloneRuntimeResources(),
         arbiter: TuringQwenCharacterPoolArbiter = .shared,
         highMemoryPreflight: any TuringHighMemoryScenePreparing =
-            TuringHighMemoryPreflightCoordinator.shared
+            TuringHighMemoryPreflightCoordinator.shared,
+        spokenPresentationContinuity: TuringSpokenPresentationContinuity? = nil
     ) {
         self.runtime = runtime
         self.runID = runID
         self.resources = resources
         self.arbiter = arbiter
         self.highMemoryPreflight = highMemoryPreflight
+        self.spokenPresentationContinuity = spokenPresentationContinuity
     }
 
     func begin() async throws {
@@ -111,7 +127,8 @@ actor TuringCharacterQwenRenderSession:
 
         logMemory("session.beforeHighMemoryPreflight")
         try await highMemoryPreflight.prepareForTuringHighMemoryRun(
-            runID: runID
+            runID: runID,
+            continuity: spokenPresentationContinuity
         )
         logMemory("session.afterHighMemoryPreflight")
 
@@ -236,7 +253,9 @@ actor TuringCharacterQwenRenderSession:
         }
 
         let state = TuringCharacterStageRenderState(
-            expectedSegmentCount: stage.segments.count
+            expectedSegmentCount: stage.segments.count,
+            segmentRange: stage.globalRange,
+            sourceTexts: stage.segments.map(\.text)
         )
         let requests = makeRequests(stage, profile: profile)
         let diagnosticsRunID = runID
@@ -297,16 +316,25 @@ actor TuringCharacterQwenRenderSession:
                     )
                 }
                 #endif
-                await state.recordSuccess(result.segmentIndex)
+                guard let exactSourceText = await state.sourceText(
+                    for: result.segmentIndex
+                ) else {
+                    let reason = "Missing exact source text for decoded segment index."
+                    await state.recordSkipped(result.segmentIndex, reason: reason)
+                    await onSkipped(result.segmentIndex, reason)
+                    return
+                }
                 await onFinished(
                     result.segmentIndex,
                     TuringComputeGapGeneratedAudio(
                         segmentIndex: result.segmentIndex,
                         samples: result.audio.samples,
                         sampleRate: Double(result.audio.sampleRate),
-                        channelCount: 1
+                        channelCount: 1,
+                        sourceText: exactSourceText
                     )
                 )
+                await state.recordSuccess(result.segmentIndex)
             },
             onSegmentSkipped: { skipped in
                 TuringMemoryBudgetProbe.log(
@@ -414,11 +442,15 @@ actor TuringCharacterQwenRenderSession:
                             )
                         }
                         #endif
+                        let sourceText = try await state.requireSourceText(
+                            for: result.segmentIndex
+                        )
                         let audio = TuringComputeGapGeneratedAudio(
                             segmentIndex: result.segmentIndex,
                             samples: result.audio.samples,
                             sampleRate: Double(result.audio.sampleRate),
-                            channelCount: 1
+                            channelCount: 1,
+                            sourceText: sourceText
                         )
                         try await onFinished(result.segmentIndex, audio)
                         await state.recordPublished(result.segmentIndex)
@@ -492,7 +524,10 @@ actor TuringCharacterQwenRenderSession:
         }
 
         let requests = makeRequests(stage, profile: profile)
-        try await streamingState.register(stage.globalRange)
+        try await streamingState.register(
+            stage.globalRange,
+            sourceTexts: stage.segments.map(\.text)
+        )
         do {
             try await streamingQueue.append(requests)
         } catch {
@@ -608,9 +643,6 @@ actor TuringCharacterQwenRenderSession:
               qwenInputTextSHA256: \(TuringFlowHash.sha256(segment.text))
               textUTF16: \(segment.text.utf16.count)
               samplingSeed: \(samplingSeed)
-              BEGIN_TEXT
-            \(segment.text)
-              END_TEXT
             """)
 
             return TuringQwenNativeBaseCloneSegmentRequest(
@@ -666,6 +698,7 @@ actor TuringCharacterQwenRenderSession:
 
 private actor TuringCharacterStreamingRenderState {
     private var registeredIndices = Set<Int>()
+    private var sourceTextBySegmentIndex: [Int: String] = [:]
     private var publishedIndices = Set<Int>()
     private var skippedReasons: [Int: String] = [:]
     private var expectedSegmentCount: Int?
@@ -675,18 +708,37 @@ private actor TuringCharacterStreamingRenderState {
         (throughExclusiveIndex: Int, continuation: CheckedContinuation<Void, Error>)
     ] = []
 
-    func register(_ range: Range<Int>) throws {
-        for index in range {
+    func register(
+        _ range: Range<Int>,
+        sourceTexts: [String]
+    ) throws {
+        guard range.count == sourceTexts.count else {
+            throw TuringRuntimeError.invalidConfig(
+                "Streaming speech text count does not match its segment range."
+            )
+        }
+        for (index, sourceText) in zip(range, sourceTexts) {
             guard registeredIndices.insert(index).inserted else {
                 throw TuringRuntimeError.invalidConfig(
                     "Duplicate streaming segment index \(index)."
                 )
             }
+            sourceTextBySegmentIndex[index] = sourceText
         }
+    }
+
+    func requireSourceText(for segmentIndex: Int) throws -> String {
+        guard let value = sourceTextBySegmentIndex[segmentIndex] else {
+            throw TuringRuntimeError.invalidConfig(
+                "Missing exact source text for decoded segment \(segmentIndex)."
+            )
+        }
+        return value
     }
 
     func recordPublished(_ index: Int) {
         publishedIndices.insert(index)
+        sourceTextBySegmentIndex.removeValue(forKey: index)
         skippedReasons.removeValue(forKey: index)
         reconcileWaiters()
     }
@@ -786,20 +838,34 @@ private actor TuringCharacterStreamingRenderState {
 
 private actor TuringCharacterStageRenderState {
     private let expectedSegmentCount: Int
+    private var sourceTextBySegmentIndex: [Int: String]
     private var successful = Set<Int>()
     private var skipped: [Int: String] = [:]
 
-    init(expectedSegmentCount: Int) {
+    init(
+        expectedSegmentCount: Int,
+        segmentRange: Range<Int>,
+        sourceTexts: [String]
+    ) {
         self.expectedSegmentCount = expectedSegmentCount
+        sourceTextBySegmentIndex = Dictionary(
+            uniqueKeysWithValues: zip(segmentRange, sourceTexts)
+        )
+    }
+
+    func sourceText(for index: Int) -> String? {
+        sourceTextBySegmentIndex[index]
     }
 
     func recordSuccess(_ index: Int) {
         successful.insert(index)
+        sourceTextBySegmentIndex.removeValue(forKey: index)
         skipped.removeValue(forKey: index)
     }
 
     func recordSkipped(_ index: Int, reason: String) {
         guard successful.contains(index) == false else { return }
+        sourceTextBySegmentIndex.removeValue(forKey: index)
         skipped[index] = reason
     }
 

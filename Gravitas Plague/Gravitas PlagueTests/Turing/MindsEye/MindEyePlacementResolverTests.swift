@@ -19,7 +19,7 @@ final class MindEyePlacementResolverTests: XCTestCase {
         )
         XCTAssertTrue(placement.verticalClampApplied)
         XCTAssertTrue(placement.forwardClampApplied)
-        XCTAssertEqual(placement.localPosition.y, 0.6702, accuracy: 0.0001)
+        XCTAssertEqual(placement.localPosition.y, 0.74895, accuracy: 0.0001)
         XCTAssertEqual(placement.localPosition.z, 0.4127, accuracy: 0.0001)
     }
 
@@ -44,15 +44,41 @@ final class MindEyePlacementResolverTests: XCTestCase {
             tuning: .phaseThreeDefault
         ).get()
 
-        assertEqual(placement.localPosition, [1, 2.221, 3.1016])
+        assertEqual(placement.localPosition, [1, 2.29975, 3.1016])
         XCTAssertFalse(placement.usedFallbackCenter)
         XCTAssertFalse(placement.verticalClampApplied)
         XCTAssertFalse(placement.forwardClampApplied)
     }
 
-    func testRequestedIconOffsetsUseRangeMidpoints() {
+    func testIconRelativePlacementCentersHorizontallyOnProvidedBounds() throws {
+        let placement = try MindEyePlacementResolver.resolve(
+            geometry: geometry(
+                centering: bounds(
+                    min: [7, -4, -2],
+                    max: [9, 6, 2]
+                ),
+                iconRelativePlacement: MindEyeIconRelativePlacement(
+                    iconTopCenter: [1, 2, 3],
+                    bottomEdgeClearanceMeters: 0.0508,
+                    forwardOffsetMeters: 0.0381
+                )
+            ),
+            tuning: .phaseThreeDefault
+        ).get()
+
+        // Shelf bounds own X. The icon still owns bottom-edge Y and depth Z.
+        assertEqual(placement.localPosition, [8, 2.28705, 3.0381])
+        XCTAssertFalse(placement.usedFallbackCenter)
+    }
+
+    func testRequestedIconOffsetsPreserveIndependentShelfAndBenchHeights() {
         XCTAssertEqual(
-            MindEyeIconPlacementDefaults.bottomEdgeClearanceMeters,
+            MindEyeIconPlacementDefaults.shelfBottomEdgeClearanceMeters,
+            0.0508,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            MindEyeIconPlacementDefaults.rollingBenchBottomEdgeClearanceMeters,
             0.0635,
             accuracy: 0.0001
         )
@@ -112,10 +138,35 @@ final class MindEyePlacementResolverTests: XCTestCase {
 
     func testDefaultValuesAreLocked() {
         let tuning = MindEyePlacementTuning.phaseThreeDefault
-        XCTAssertEqual(tuning.cardWidthMeters, 0.56, accuracy: 0.0001)
-        XCTAssertEqual(tuning.cardHeightMeters, 0.315, accuracy: 0.0001)
+        XCTAssertEqual(tuning.cardWidthMeters, 0.84, accuracy: 0.0001)
+        XCTAssertEqual(tuning.cardHeightMeters, 0.4725, accuracy: 0.0001)
         XCTAssertEqual(tuning.verticalLiftMeters, 0.10, accuracy: 0.0001)
         XCTAssertEqual(tuning.forwardOffsetMeters, 0.0381, accuracy: 0.0001)
+    }
+
+    func testLargerIconRelativeCardKeepsItsBottomEdgeAnchored() throws {
+        let iconTopY: Float = 0.8
+        let clearance = MindEyeIconPlacementDefaults
+            .rollingBenchBottomEdgeClearanceMeters
+        let tuning = MindEyePlacementTuning.phaseThreeDefault
+        let placement = try MindEyePlacementResolver.resolve(
+            geometry: geometry(
+                iconRelativePlacement: MindEyeIconRelativePlacement(
+                    iconTopCenter: [0, iconTopY, 0],
+                    bottomEdgeClearanceMeters: clearance,
+                    forwardOffsetMeters: 0.1016
+                )
+            ),
+            tuning: tuning
+        ).get()
+
+        let resolvedBottomEdge = placement.localPosition.y -
+            tuning.cardHeightMeters * 0.5
+        XCTAssertEqual(
+            resolvedBottomEdge,
+            iconTopY + clearance,
+            accuracy: 0.0001
+        )
     }
 
     private func resolve(

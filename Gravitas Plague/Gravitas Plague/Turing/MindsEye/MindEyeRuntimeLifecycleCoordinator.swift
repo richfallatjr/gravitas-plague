@@ -103,6 +103,9 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
             TuringMemoryBudgetProbe.log(label: "mindEye.lifecycle.inactive.after")
         case .background:
             TuringMemoryBudgetProbe.log(label: "mindEye.lifecycle.background.before")
+            await TuringGeneratedSpeechAnalysisCoordinator.shared.cancelAll(
+                reason: "applicationBackground.\(reason)"
+            )
             presentation.setLifecycleAllowsPresentation(
                 false,
                 reason: "applicationBackground.\(reason)"
@@ -134,6 +137,9 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
             )
         }
         lifecycleGeneration &+= 1
+        await TuringGeneratedSpeechAnalysisCoordinator.shared.cancelAll(
+            reason: "\(scope.rawValue).\(reason)"
+        )
         presentation.setLifecycleAllowsPresentation(false, reason: "\(scope.rawValue).\(reason)")
         let report = await presentation.releaseAllPresentationState(
             scope: scope,
@@ -153,7 +159,8 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
 
     func prepareForTuringHighMemoryRun(
         runID: String,
-        policy: MindEyeActiveHighMemoryRetentionPolicy = .retainMatchingRunActive
+        policy: MindEyeActiveHighMemoryRetentionPolicy = .retainMatchingRunActive,
+        continuity: TuringSpokenPresentationContinuity? = nil
     ) async -> MindEyeHighMemoryPreparationReport {
         #if GR_MIND_EYE_QUALIFICATION
         MindEyeReleaseQualificationHooks.shared.fireAndForget(
@@ -164,7 +171,8 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
         TuringMemoryBudgetProbe.log(label: "mindEye.qwenPreflight.before", runID: runID)
         let report = await presentation.prepareForTuringHighMemoryRun(
             runID: runID,
-            policy: memoryPressure == .critical ? .releaseAll : policy
+            policy: memoryPressure == .critical ? .releaseAll : policy,
+            continuity: continuity
         )
         _ = await assetMemory.evictInactive(reason: "qwenPreflight.\(runID)")
         await authoredFrameStore.evictInactive(reason: "qwenPreflight.\(runID)")
@@ -213,6 +221,9 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
         memoryPressureTask?.cancel()
         memoryPressureTask = nil
         await memoryPressureSource.stop()
+        await TuringGeneratedSpeechAnalysisCoordinator.shared.cancelAll(
+            reason: "immersiveShutdown.\(reason)"
+        )
         presentation.setLifecycleAllowsPresentation(false, reason: "immersiveShutdown.\(reason)")
         let report = await presentation.shutdown(reason: reason)
         await assetMemory.forceEvictAll(reason: "immersiveShutdown.\(reason)")
@@ -229,6 +240,8 @@ final class MindEyeRuntimeLifecycleCoordinator: MindEyeHighMemoryPreparing {
     private func handleMemoryPressure(_ level: MindEyeMemoryPressureLevel) async {
         guard !shutdownComplete, memoryPressure != level else { return }
         memoryPressure = level
+        await TuringGeneratedSpeechAnalysisCoordinator.shared
+            .handleMemoryPressure(level)
         lifecycleGeneration &+= 1
         switch level {
         case .normal:

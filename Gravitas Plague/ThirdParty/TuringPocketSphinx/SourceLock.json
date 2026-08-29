@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "component": "TuringPocketSphinx",
+  "pocketSphinx": {
+    "repository": "cmusphinx/pocketsphinx",
+    "tag": "v5.1.1",
+    "commit": "511126b492dcb267cf30d49d631946d7b61a9530"
+  },
+  "selectedResources": {
+    "acousticModelSourceBytes": 6609581,
+    "dictionarySourceBytes": 3275645,
+    "phoneLanguageModelSourceBytes": 857195,
+    "totalSourceBytes": 10742421
+  },
+  "excludedResources": [
+    "model/en-us/en-us.lm.bin"
+  ],
+  "build": {
+    "sharedLibraries": false,
+    "buildTesting": false,
+    "fixedPoint": false,
+    "threadLocalRNG": true,
+    "devicePlatform": "xros-arm64",
+    "simulatorPlatform": "xrsimulator-arm64"
+  },
+  "artifacts": {
+    "deviceLibrarySHA256": "594f11586e0efef08de69caae6053bf0c19b82bdcaefb80181bc67e79c3efa1f",
+    "simulatorLibrarySHA256": "02ab2685e049a37346f2ef7c798059d620d0285b9481c5c543c6e12123635d2f",
+    "xcframeworkSHA256": "1baf5dee5964f4e98f293e82740d3bbf8e9f0675c72de95a6ac5eda5ff209b8e",
+    "resourceTreeSHA256": "e2ca8da1fecfd4a676fbd3d68537c705688b669b30ddaa1cb78dd1850e4fe12d"
+  }
+}

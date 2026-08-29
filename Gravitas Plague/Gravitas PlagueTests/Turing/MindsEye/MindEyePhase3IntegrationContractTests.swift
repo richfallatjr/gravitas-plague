@@ -31,14 +31,30 @@ final class MindEyePhase3IntegrationContractTests: XCTestCase {
         assertInvalidationPrecedesRemoval(in: rolling)
     }
 
-    func testWallSurfacesShareWalkieIconPlacement() throws {
+    func testWallSurfacesShareShelfCenteredWalkieHeightAndDepth() throws {
         let wall = try source(
             "Turing/Props/TuringStoryWalkieBundleController.swift"
         )
         XCTAssertTrue(wall.contains("let sharedIconTopCenter"))
         XCTAssertTrue(wall.contains("of: anchors.walkieIconAnchor"))
+        XCTAssertTrue(wall.contains("let shelfCenteringBounds"))
+        XCTAssertTrue(wall.contains("of: shelf"))
+        XCTAssertTrue(wall.contains("centeringBounds: shelfCenteringBounds"))
         XCTAssertTrue(wall.contains("fallbackCenter: sharedIconTopCenter"))
         XCTAssertFalse(wall.contains("of: anchors.dadFrameIconAnchor"))
+    }
+
+    func testRollingSurfacesShareBenchCenteredCrankHeightAndDepth() throws {
+        let rolling = try source(
+            "Turing/Props/TuringRollingBenchBundleController.swift"
+        )
+        XCTAssertTrue(rolling.contains("let sharedIconTopCenter"))
+        XCTAssertTrue(rolling.contains("of: anchors.crankRadioIconAnchor"))
+        XCTAssertTrue(rolling.contains("let benchCenteringBounds"))
+        XCTAssertTrue(rolling.contains("of: anchors.cartRoot"))
+        XCTAssertTrue(rolling.contains("centeringBounds: benchCenteringBounds"))
+        XCTAssertTrue(rolling.contains("fallbackCenter: sharedIconTopCenter"))
+        XCTAssertFalse(rolling.contains("of: anchors.hamReceiverIconAnchor"))
     }
 
     private func assertInvalidationPrecedesRemoval(

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "engineID": "pocketsphinx-forced-align",
+  "engineVersion": "5.1.1",
+  "engineCommit": "511126b492dcb267cf30d49d631946d7b61a9530",
+  "alignmentSampleRate": 16000,
+  "alignmentFrameRate": 100,
+  "acousticModelResourcePath": "Turing/RuntimeLipSync/pocketsphinx-5.1.1/en-us/acoustic",
+  "dictionaryResourcePath": "Turing/RuntimeLipSync/pocketsphinx-5.1.1/en-us/cmudict-en-us.dict",
+  "allPhoneLanguageModelResourcePath": "Turing/RuntimeLipSync/pocketsphinx-5.1.1/en-us/en-us-phone.lm.bin",
+  "pronunciationOverridesResourcePath": "Turing/RuntimeLipSync/pronunciations.json",
+  "resourceTreeSHA256": "e2ca8da1fecfd4a676fbd3d68537c705688b669b30ddaa1cb78dd1850e4fe12d",
+  "selectedResourceBytes": 10742421
+}

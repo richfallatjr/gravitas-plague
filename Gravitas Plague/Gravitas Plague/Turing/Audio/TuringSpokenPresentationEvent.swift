@@ -8,11 +8,13 @@ nonisolated struct TuringSpokenPresentationRunIdentity:
     let playbackRunID: String
     let flowInstanceID: UUID
     let scriptPointID: String
+    let continuity: TuringSpokenPresentationContinuity?
 
     init(flowIdentity: TuringFlowIdentity) {
         playbackRunID = flowIdentity.playbackRunID
         flowInstanceID = flowIdentity.flowInstanceID
         scriptPointID = flowIdentity.scriptPointID
+        continuity = flowIdentity.spokenPresentationContinuity
     }
 }
 

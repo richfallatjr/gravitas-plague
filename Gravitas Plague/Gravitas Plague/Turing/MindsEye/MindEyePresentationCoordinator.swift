@@ -68,6 +68,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
     private var prepared: PreparedVisual?
     private var preparedAuthoredTrack: PreparedAuthoredTrack?
     private var active: ActivePresentation?
+    private var pendingGeneratedContinuity: TuringSpokenPresentationContinuity?
     private var authoredTrackGeneration: UInt64 = 0
     private var loggedFailureKeys = Set<String>()
     private var hasStarted = false
@@ -309,6 +310,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         desiredPlaybackClock = nil
         desiredIsPaused = false
         pendingRevealRequest = nil
+        pendingGeneratedContinuity = nil
         preparationTask?.cancel()
         preparationTask = nil
         preparingCharacterID = nil
@@ -350,7 +352,8 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
 
     func prepareForTuringHighMemoryRun(
         runID: String,
-        policy: MindEyeActiveHighMemoryRetentionPolicy
+        policy: MindEyeActiveHighMemoryRetentionPolicy,
+        continuity: TuringSpokenPresentationContinuity?
     ) async -> MindEyeHighMemoryPreparationReport {
         let beforeAsset = await assetMemory.snapshot()
         let beforeTracks = await authoredFrameStore.snapshot()
@@ -369,11 +372,36 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         var activeRetained = false
         var activeReleased = false
         var retainedRunID: String?
+        pendingGeneratedContinuity = nil
         if let active {
             let matches = active.identity.key.playbackRunID == runID
-            if policy == .retainMatchingRunActive && matches {
+            let shouldRetain: Bool
+            switch policy {
+            case .retainMatchingRunActive:
+                shouldRetain = matches
+            case .retainActivePresentation:
+                shouldRetain = Self.matchesContinuityParent(
+                    active: active,
+                    runID: runID,
+                    continuity: continuity
+                )
+            case .releaseAll:
+                shouldRetain = false
+            }
+            if shouldRetain {
                 activeRetained = true
                 retainedRunID = active.identity.key.playbackRunID
+                if policy == .retainActivePresentation,
+                   let continuity {
+                    pendingGeneratedContinuity = continuity
+                    print(
+                        "[MindEyePresentation] authored portrait retained " +
+                            "for generated handoff authoredRun=" +
+                            "\(active.identity.key.playbackRunID) " +
+                            "generatedRun=\(runID) " +
+                            "continuity=\(continuity.continuityID.uuidString)"
+                    )
+                }
             } else if let resources = detachActiveImmediately(reason: "qwenPreflight.\(runID)") {
                 await releaseDetached(resources, reason: "qwenPreflight.\(runID)")
                 activeReleased = true
@@ -412,6 +440,21 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             authoredRegistryEntriesAfter: MindEyeAuthoredFramePlaybackRegistry.shared.entryCount,
             generatedRegistryEntriesAfter: MindEyeGeneratedFramePlaybackRegistry.shared.entryCount
         )
+    }
+
+    private static func matchesContinuityParent(
+        active: ActivePresentation,
+        runID: String,
+        continuity: TuringSpokenPresentationContinuity?
+    ) -> Bool {
+        guard let continuity,
+              let parent = continuity.parent,
+              continuity.childPlaybackRunID == runID else { return false }
+        return active.identity.key.playbackRunID == parent.playbackRunID &&
+            active.identity.flowInstanceID == parent.flowInstanceID &&
+            active.identity.mediaIdentity == parent.mediaIdentity &&
+            active.identity.speakerCharacterID == continuity.speakerCharacterID &&
+            active.identity.interactionSurface == continuity.interactionSurface
     }
 
     func shutdown(reason: String) async -> MindEyeTeardownReport {
@@ -615,6 +658,11 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             await promotePreAudioReveal(to: context)
             return
         }
+        if applicationState == .active,
+           canPromoteGeneratedContinuity(to: context) {
+            await promoteGeneratedContinuity(to: context)
+            return
+        }
         if pendingRevealRequest?.key == Self.revealKey(for: context) {
             pendingRevealRequest = nil
         }
@@ -686,6 +734,55 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         return active.responseKey == requested &&
             active.identity.speakerCharacterID == context.speakerCharacterID &&
             active.identity.interactionSurface == context.interactionSurface
+    }
+
+    private func canPromoteGeneratedContinuity(
+        to context: TuringSpokenPresentationContext
+    ) -> Bool {
+        guard context.source.participatesInResponseContinuity,
+              let continuity = pendingGeneratedContinuity,
+              let active else {
+            return false
+        }
+        return continuity.childPlaybackRunID ==
+                context.run.playbackRunID &&
+            continuity.childFlowInstanceID == context.run.flowInstanceID &&
+            context.run.continuity?.continuityID == continuity.continuityID &&
+            continuity.speakerCharacterID == context.speakerCharacterID &&
+            continuity.interactionSurface == context.interactionSurface &&
+            active.identity.speakerCharacterID ==
+                context.speakerCharacterID &&
+            active.identity.interactionSurface == context.interactionSurface
+    }
+
+    private func promoteGeneratedContinuity(
+        to context: TuringSpokenPresentationContext
+    ) async {
+        guard var active,
+              canPromoteGeneratedContinuity(to: context) else {
+            return
+        }
+        pendingGeneratedContinuity = nil
+        (active.visual as? any MindEyeAuthoredMouthControlling)?
+            .stopAuthoredMouthPlayback(
+                reason: "promoteGeneratedContinuity",
+                resetToRest: true
+            )
+        if let lease = active.authoredTrackLease {
+            await authoredFrameStore.release(
+                lease,
+                reason: "promoteGeneratedContinuity"
+            )
+            active.authoredTrackLease = nil
+            active.authoredPRID = nil
+            self.active = active
+        }
+        await reuseActiveResponsePortrait(for: context)
+        print(
+            "[MindEyePresentation] authored portrait promoted to generated " +
+                "run=\(context.run.playbackRunID) " +
+                "media=\(context.source.mediaIdentity) cardRebuilt=false"
+        )
     }
 
     private func canPromotePreAudioReveal(
@@ -862,6 +959,19 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             return
         }
         active.playbackClock = desiredPlaybackClock ?? active.playbackClock
+        if let track = context.generatedSpeechFrameTrack {
+            let duration = Duration.seconds(
+                Double(track.sampleCount) / Double(track.sampleRate)
+            )
+            let elapsed = active.playbackClock.elapsed(at: .now)
+            if duration - elapsed < .milliseconds(350) {
+                print(
+                    "[MindEyeGenerated] late track discarded reason=lateTooCloseToEnd " +
+                        "ticket=\(ticketID.uuidString) segment=\(incomingSegment)"
+                )
+                return
+            }
+        }
         self.active = active
         startGeneratedMouthIfAvailable(
             context: context,
@@ -1119,6 +1229,14 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             await releasePreparedAuthoredTrack(reason: reason)
         }
         if activeMatches,
+           reason == "spokenItemCompleted",
+           await settleAuthoredPortraitForGeneratedContinuity(
+                key: key,
+                reason: reason
+           ) {
+            return
+        }
+        if activeMatches,
            let resources = detachActiveImmediately(reason: reason) {
             await releaseDetached(resources, reason: reason)
         }
@@ -1128,11 +1246,13 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         run: TuringSpokenPresentationRunIdentity,
         reason: String
     ) async {
+        let continuityMatches = pendingGeneratedContinuity?
+            .continuityID == run.continuity?.continuityID
         let desiredMatches = desiredContext?.run.playbackRunID == run.playbackRunID &&
             desiredContext?.run.flowInstanceID == run.flowInstanceID
         let activeMatches = active?.identity.key.playbackRunID == run.playbackRunID &&
             active?.identity.flowInstanceID == run.flowInstanceID
-        guard desiredMatches || activeMatches else { return }
+        guard desiredMatches || activeMatches || continuityMatches else { return }
         if pendingRevealRequest?.run.playbackRunID == run.playbackRunID,
            pendingRevealRequest?.run.flowInstanceID == run.flowInstanceID {
             pendingRevealRequest = nil
@@ -1153,9 +1273,55 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             await releasePreparedAuthoredTrack(reason: reason)
         }
         if activeMatches,
+           pendingGeneratedContinuity != nil,
+           !continuityMatches,
+           let activeKey = active?.identity.key,
+           await settleAuthoredPortraitForGeneratedContinuity(
+                key: activeKey,
+                reason: reason
+           ) {
+            return
+        }
+        if continuityMatches {
+            pendingGeneratedContinuity = nil
+        }
+        if (activeMatches || continuityMatches),
            let resources = detachActiveImmediately(reason: reason) {
             await releaseDetached(resources, reason: reason)
         }
+    }
+
+    private func settleAuthoredPortraitForGeneratedContinuity(
+        key: MindEyePresentationKey,
+        reason: String
+    ) async -> Bool {
+        guard pendingGeneratedContinuity != nil,
+              var active,
+              active.identity.key == key else {
+            return false
+        }
+        (active.visual as? any MindEyeAuthoredMouthControlling)?
+            .stopAuthoredMouthPlayback(
+                reason: "awaitGeneratedContinuity.\(reason)",
+                resetToRest: true
+            )
+        if let lease = active.authoredTrackLease {
+            await authoredFrameStore.release(
+                lease,
+                reason: "awaitGeneratedContinuity.\(reason)"
+            )
+            active.authoredTrackLease = nil
+            active.authoredPRID = nil
+        }
+        active.isPaused = false
+        self.active = active
+        print(
+            "[MindEyePresentation] authored portrait idling for generated " +
+                "handoff authoredRun=\(key.playbackRunID) " +
+                "generatedRun=" +
+                "\(pendingGeneratedContinuity?.childPlaybackRunID ?? "none")"
+        )
+        return true
     }
 
     private func spokenMediaFailed(
@@ -1196,7 +1362,9 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         let activeMatches = active?.identity.key.playbackRunID == run.playbackRunID &&
             active?.identity.flowInstanceID == run.flowInstanceID &&
             (sourceIdentity == nil || active?.identity.mediaIdentity == sourceIdentity)
-        guard desiredMatches || activeMatches else { return }
+        let continuityMatches = pendingGeneratedContinuity?
+            .continuityID == run.continuity?.continuityID
+        guard desiredMatches || activeMatches || continuityMatches else { return }
         print("[MindEyePresentation] spoken source failed run=\(run.playbackRunID) message=\(message)")
         await responseEnded(
             run: run,
@@ -1594,6 +1762,14 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             return
         }
 
+        if canPromoteGeneratedContinuity(to: previewContext) {
+            await promoteGeneratedContinuity(to: previewContext)
+            pendingRevealRequest = request
+            await scheduleFillerTrackPrewarm(for: request)
+            await resolveReveal(request, outcome: .alreadyVisible)
+            return
+        }
+
         if let active,
            portraitMatches(active.identity, request: request) {
             pendingRevealRequest = request
@@ -1904,6 +2080,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
 
     private func detachActiveImmediately(reason: String) -> DetachedMindEyeResources? {
         guard let active else { return nil }
+        pendingGeneratedContinuity = nil
         (active.visual as? any MindEyeAuthoredMouthControlling)?
             .stopAuthoredMouthPlayback(reason: reason, resetToRest: false)
         (active.visual as? any MindEyeGeneratedMouthControlling)?

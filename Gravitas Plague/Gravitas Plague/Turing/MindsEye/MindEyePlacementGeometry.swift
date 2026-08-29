@@ -46,8 +46,10 @@ nonisolated struct MindEyeIconRelativePlacement: Sendable, Equatable {
 }
 
 nonisolated enum MindEyeIconPlacementDefaults {
-    /// Midpoint of the requested 2–3 inch vertical range.
-    static let bottomEdgeClearanceMeters: Float = 0.0635
+    /// Keep wall-shelf cards two inches above the shared action icon.
+    static let shelfBottomEdgeClearanceMeters: Float = 0.0508
+    /// Preserve the approved rolling-bench bottom-edge height (2.5 inches).
+    static let rollingBenchBottomEdgeClearanceMeters: Float = 0.0635
     /// Midpoint of the requested 1–2 inch walkie depth range.
     static let walkieForwardOffsetMeters: Float = 0.0381
     /// Midpoint of the requested 3–5 inch rolling-bench depth range.
@@ -65,8 +67,8 @@ nonisolated struct MindEyeResolvedPlacement: Sendable, Equatable {
 
 nonisolated extension MindEyePlacementTuning {
     static let phaseThreeDefault = MindEyePlacementTuning(
-        cardWidthMeters: 0.56,
-        cardHeightMeters: 0.315,
+        cardWidthMeters: 0.84,
+        cardHeightMeters: 0.4725,
         verticalLiftMeters: 0.10,
         forwardOffsetMeters: 0.0381,
         shelfClearanceMeters: 0.0127

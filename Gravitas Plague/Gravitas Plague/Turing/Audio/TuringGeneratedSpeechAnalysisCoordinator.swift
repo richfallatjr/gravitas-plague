@@ -6,13 +6,17 @@ nonisolated enum TuringGeneratedSpeechAnalysisSubmission: Sendable {
 }
 
 actor TuringGeneratedSpeechAnalysisCoordinator {
-    static let shared = TuringGeneratedSpeechAnalysisCoordinator()
+    static let shared = TuringRuntimeLipSyncProductionDependencies
+        .makeAnalysisCoordinator()
 
     private struct Job: Sendable {
         let ticket: TuringGeneratedSpeechAnalysisTicket
         let samples: [Float]
         let sampleRate: Int
         let channelCount: Int
+        let speakerCharacterID: TuringConversationCharacterID
+        let allowPrimaryGenerator: Bool
+        let sourceText: String?
         let queuedAt: ContinuousClock.Instant
         let cancellation: TuringGeneratedSpeechAnalysisCancellationToken
 
@@ -26,13 +30,19 @@ actor TuringGeneratedSpeechAnalysisCoordinator {
     private var running: Job?
     private var runningTask: Task<Void, Never>?
     private var retainedPCMBytes = 0
+    private var memoryPressure: MindEyeMemoryPressureLevel = .normal
 
     init(
-        worker: TuringSerialGeneratedSpeechAnalysisWorker = .init(),
+        primaryGenerator: any TuringRuntimeLipSyncManifestGenerating,
+        compatibilityAnalyzer: any TuringGeneratedSpeechAnalyzing =
+            TuringGeneratedSpeechAnalyzer(),
         policy: TuringGeneratedSpeechAnalysisPolicy = .production,
         eventHub: TuringGeneratedSpeechAnalysisEventHub = .shared
     ) {
-        self.worker = worker
+        self.worker = TuringSerialGeneratedSpeechAnalysisWorker(
+            primaryGenerator: primaryGenerator,
+            analyzer: compatibilityAnalyzer
+        )
         self.policy = policy
         self.eventHub = eventHub
     }
@@ -46,11 +56,16 @@ actor TuringGeneratedSpeechAnalysisCoordinator {
         segmentIndex: Int,
         samples: [Float],
         sampleRate: Int,
-        channelCount: Int
+        channelCount: Int,
+        speakerCharacterID: TuringConversationCharacterID = .bigMike,
+        sourceText: String? = nil
     ) async -> TuringGeneratedSpeechAnalysisSubmission {
         guard !samples.isEmpty, sampleRate > 0, channelCount > 0,
               samples.count % channelCount == 0 else {
             return .rejected(.invalidInput)
+        }
+        guard memoryPressure != .critical else {
+            return .rejected(.retainedPCMBudgetExceeded)
         }
         guard queued.count < policy.maximumQueuedJobCount else {
             return .rejected(.queueCapacityExceeded)
@@ -73,6 +88,9 @@ actor TuringGeneratedSpeechAnalysisCoordinator {
             samples: samples,
             sampleRate: sampleRate,
             channelCount: channelCount,
+            speakerCharacterID: speakerCharacterID,
+            allowPrimaryGenerator: memoryPressure == .normal,
+            sourceText: sourceText,
             queuedAt: .now,
             cancellation: TuringGeneratedSpeechAnalysisCancellationToken()
         )
@@ -112,6 +130,24 @@ actor TuringGeneratedSpeechAnalysisCoordinator {
         if let identity = running?.ticket.identity, identity.runID == runID {
             await cancel(identity: identity, reason: reason)
         }
+        worker.unloadPrimaryGenerator(reason: reason)
+    }
+
+    func cancelAll(reason: String) async {
+        let identities = queued.map { $0.ticket.identity }
+        for identity in identities {
+            await cancel(identity: identity, reason: reason)
+        }
+        if let identity = running?.ticket.identity {
+            await cancel(identity: identity, reason: reason)
+        }
+        worker.unloadPrimaryGenerator(reason: reason)
+    }
+
+    func handleMemoryPressure(_ level: MindEyeMemoryPressureLevel) async {
+        memoryPressure = level
+        guard level == .critical else { return }
+        await cancelAll(reason: "memoryPressure.critical")
     }
 
     private func launchNextIfNeeded() {
@@ -126,6 +162,10 @@ actor TuringGeneratedSpeechAnalysisCoordinator {
                 processedAudio: job.samples,
                 sampleRate: job.sampleRate,
                 channelCount: job.channelCount,
+                identity: job.ticket.identity,
+                speakerCharacterID: job.speakerCharacterID,
+                allowPrimaryGenerator: job.allowPrimaryGenerator,
+                sourceText: job.sourceText,
                 queuedAt: job.queuedAt,
                 policy: policy,
                 cancellation: job.cancellation,

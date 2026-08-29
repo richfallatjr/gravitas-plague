@@ -815,10 +815,19 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
                     "Missing playback run ID while publishing segment \(segmentIndex)."
                 )
             }
+            guard let flowIdentity,
+                  let speakerCharacterID = TuringConversationCharacterID(
+                    rawValue: flowIdentity.characterID
+                  ) else {
+                throw TuringRuntimeError.invalidConfig(
+                    "Missing generated speaker identity for segment \(segmentIndex)."
+                )
+            }
             var clip = try await fileStore.write(
                 runID: runID,
                 segmentIndex: segmentIndex,
-                audio: processedAudio
+                audio: processedAudio,
+                speakerCharacterID: speakerCharacterID
             )
             if let early = earlyGeneratedAnalysis.removeValue(forKey: segmentIndex),
                early.identity.runID == runID,
@@ -831,16 +840,14 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
                 )
             }
             pendingGenerated[segmentIndex] = clip
-            if let flowIdentity {
-                TuringFlowLog.event(
-                    "generated segment published",
-                    identity: flowIdentity,
-                    fields: [
-                        ("segmentIndex", String(segmentIndex)),
-                        ("file", clip.fileURL.lastPathComponent)
-                    ]
-                )
-            }
+            TuringFlowLog.event(
+                "generated segment published",
+                identity: flowIdentity,
+                fields: [
+                    ("segmentIndex", String(segmentIndex)),
+                    ("file", clip.fileURL.lastPathComponent)
+                ]
+            )
             print("""
             [TuringPlaybackRebuild] generated wav written
               segmentIndex: \(segmentIndex)

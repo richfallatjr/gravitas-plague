@@ -1,6 +1,13 @@
 import Foundation
 
-nonisolated enum TuringGeneratedMouthPose: UInt8, Sendable, Equatable, Hashable, CaseIterable {
+nonisolated enum TuringGeneratedMouthPose:
+    UInt8,
+    Codable,
+    Sendable,
+    Equatable,
+    Hashable,
+    CaseIterable
+{
     case rest = 1
     case small = 2
     case wide = 4
@@ -8,7 +15,12 @@ nonisolated enum TuringGeneratedMouthPose: UInt8, Sendable, Equatable, Hashable,
     case teeth = 16
 }
 
-nonisolated struct TuringGeneratedMouthPoseRun: Sendable, Equatable, Hashable {
+nonisolated struct TuringGeneratedMouthPoseRun:
+    Codable,
+    Sendable,
+    Equatable,
+    Hashable
+{
     let startFrame: Int
     let endFrameExclusive: Int
     let pose: TuringGeneratedMouthPose
@@ -112,4 +124,21 @@ nonisolated struct TuringGeneratedSpeechFrameTrack: Sendable, Equatable {
 nonisolated struct TuringGeneratedSpeechVisualAnalysis: Sendable, Equatable {
     let envelope: TuringSpeechAmplitudeEnvelope
     let frameTrack: TuringGeneratedSpeechFrameTrack
+    let quality: TuringRuntimeLipSyncQuality
+    let generatorID: String
+    let sourcePCM_SHA256: String?
+
+    init(
+        envelope: TuringSpeechAmplitudeEnvelope,
+        frameTrack: TuringGeneratedSpeechFrameTrack,
+        quality: TuringRuntimeLipSyncQuality = .compatibilityDSP,
+        generatorID: String = "compatibility-dsp",
+        sourcePCM_SHA256: String? = nil
+    ) {
+        self.envelope = envelope
+        self.frameTrack = frameTrack
+        self.quality = quality
+        self.generatorID = generatorID
+        self.sourcePCM_SHA256 = sourcePCM_SHA256
+    }
 }

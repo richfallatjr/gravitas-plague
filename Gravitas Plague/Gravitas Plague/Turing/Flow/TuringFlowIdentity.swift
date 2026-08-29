@@ -9,6 +9,7 @@ nonisolated struct TuringFlowIdentity: Sendable, Hashable {
     let voicePromptID: String
     let playbackRunID: String
     let interactionSurface: StoryInteractionSurfaceID
+    let spokenPresentationContinuity: TuringSpokenPresentationContinuity?
 
     init(
         flowInstanceID: UUID = UUID(),
@@ -17,7 +18,8 @@ nonisolated struct TuringFlowIdentity: Sendable, Hashable {
         prerecordingID: String,
         voicePromptID: String,
         interactionSurface: StoryInteractionSurfaceID = .walkie,
-        playbackRunID: String? = nil
+        playbackRunID: String? = nil,
+        spokenPresentationContinuity: TuringSpokenPresentationContinuity? = nil
     ) {
         self.flowInstanceID = flowInstanceID
         self.scriptPointID = scriptPointID
@@ -25,6 +27,7 @@ nonisolated struct TuringFlowIdentity: Sendable, Hashable {
         self.prerecordingID = prerecordingID
         self.voicePromptID = voicePromptID
         self.interactionSurface = interactionSurface
+        self.spokenPresentationContinuity = spokenPresentationContinuity
         self.playbackRunID =
             playbackRunID ??
             "\(scriptPointID).\(flowInstanceID.uuidString)"

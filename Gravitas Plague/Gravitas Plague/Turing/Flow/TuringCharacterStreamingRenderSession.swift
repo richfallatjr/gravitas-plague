@@ -23,4 +23,20 @@ protocol TuringCharacterStreamingRenderSessionMaking: Sendable {
         runtime: TuringCharacterRuntimeDefinition,
         runID: String
     ) -> any TuringCharacterStreamingRenderSession
+
+    func makeStreamingSession(
+        runtime: TuringCharacterRuntimeDefinition,
+        runID: String,
+        continuity: TuringSpokenPresentationContinuity?
+    ) -> any TuringCharacterStreamingRenderSession
+}
+
+extension TuringCharacterStreamingRenderSessionMaking {
+    func makeStreamingSession(
+        runtime: TuringCharacterRuntimeDefinition,
+        runID: String,
+        continuity: TuringSpokenPresentationContinuity?
+    ) -> any TuringCharacterStreamingRenderSession {
+        makeStreamingSession(runtime: runtime, runID: runID)
+    }
 }

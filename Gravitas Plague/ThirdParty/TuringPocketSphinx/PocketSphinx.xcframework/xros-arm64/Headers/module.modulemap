@@ -1,0 +1,4 @@
+module TuringPocketSphinx {
+    header "TuringPocketSphinxBridge.h"
+    export *
+}

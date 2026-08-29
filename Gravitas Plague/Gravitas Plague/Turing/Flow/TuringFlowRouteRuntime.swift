@@ -79,7 +79,8 @@ extension TuringFlowRouteRuntime {
     func makeGeneratedOnlyPlayback(
         character: TuringCharacterRuntimeDefinition,
         conversationRunID: UUID,
-        interactionSurface: StoryInteractionSurfaceID = .walkie
+        interactionSurface: StoryInteractionSurfaceID = .walkie,
+        spokenPresentationContinuity: TuringSpokenPresentationContinuity? = nil
     ) throws -> (
         playback: any TuringFlowPlaybackControlling,
         identity: TuringFlowIdentity,
@@ -127,7 +128,8 @@ extension TuringFlowRouteRuntime {
             interactionSurface:
                 interactionSurface,
             playbackRunID:
-                conversationRunID.uuidString
+                conversationRunID.uuidString,
+            spokenPresentationContinuity: spokenPresentationContinuity
         )
 
         return (

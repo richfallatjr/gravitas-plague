@@ -38,6 +38,16 @@ actor TuringHighMemoryPreflightCoordinator:
     }
 
     func prepareForTuringHighMemoryRun(runID: String) async throws {
+        try await prepareForTuringHighMemoryRun(
+            runID: runID,
+            continuity: nil
+        )
+    }
+
+    func prepareForTuringHighMemoryRun(
+        runID: String,
+        continuity: TuringSpokenPresentationContinuity?
+    ) async throws {
         TuringMemoryBudgetProbe.log(
             label: "qwen.preflight.requested",
             runID: runID
@@ -50,7 +60,9 @@ actor TuringHighMemoryPreflightCoordinator:
         """)
         let mindEyeReport = await mindEyePreparer?.prepareForTuringHighMemoryRun(
             runID: runID,
-            policy: .retainMatchingRunActive
+            policy: continuity == nil ? .retainMatchingRunActive :
+                .retainActivePresentation,
+            continuity: continuity
         )
         if let report = mindEyeReport {
             print("""

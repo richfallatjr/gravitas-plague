@@ -65,7 +65,8 @@ nonisolated enum TuringQwenOutputPostProcessor {
             segmentIndex: segmentIndex,
             samples: processedSamples,
             sampleRate: sampleRate,
-            channelCount: channelCount
+            channelCount: channelCount,
+            sourceText: audio.sourceText
         )
     }
 
@@ -141,7 +142,8 @@ nonisolated enum TuringQwenOutputPostProcessor {
             segmentIndex: segmentIndex,
             samples: processedSamples,
             sampleRate: sampleRate,
-            channelCount: channelCount
+            channelCount: channelCount,
+            sourceText: audio.sourceText
         )
     }
 

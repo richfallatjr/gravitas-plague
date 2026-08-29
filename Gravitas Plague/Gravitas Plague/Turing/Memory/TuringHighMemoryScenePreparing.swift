@@ -2,10 +2,23 @@ import Foundation
 
 protocol TuringHighMemoryScenePreparing: AnyObject, Sendable {
     func prepareForTuringHighMemoryRun(runID: String) async throws
+    func prepareForTuringHighMemoryRun(
+        runID: String,
+        continuity: TuringSpokenPresentationContinuity?
+    ) async throws
     func acquireAutomaticTuringInteractionLease(
         runID: String,
         source: String
     ) async throws -> StoryInteractionLease
+}
+
+extension TuringHighMemoryScenePreparing {
+    func prepareForTuringHighMemoryRun(
+        runID: String,
+        continuity: TuringSpokenPresentationContinuity?
+    ) async throws {
+        try await prepareForTuringHighMemoryRun(runID: runID)
+    }
 }
 
 @MainActor

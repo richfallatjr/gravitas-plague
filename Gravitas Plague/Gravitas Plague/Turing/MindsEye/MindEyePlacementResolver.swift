@@ -17,8 +17,13 @@ nonisolated enum MindEyePlacementResolver {
             guard validates(icon) else {
                 return .failure(failure("Mind's Eye icon-relative placement is nonfinite or invalid."))
             }
+            // A prop's bounds may own horizontal composition while the shared
+            // action icon continues to own bottom-edge height and viewing depth.
+            // Providers without centering bounds retain the original icon X.
+            let horizontalCenterX = usableBounds?.center.x ??
+                icon.iconTopCenter.x
             resolvedCenter = SIMD3<Float>(
-                icon.iconTopCenter.x,
+                horizontalCenterX,
                 icon.iconTopCenter.y +
                     icon.bottomEdgeClearanceMeters +
                     tuning.cardHeightMeters * 0.5,

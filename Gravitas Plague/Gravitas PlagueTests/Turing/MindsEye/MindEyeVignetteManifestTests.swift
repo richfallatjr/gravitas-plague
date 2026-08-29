@@ -110,6 +110,31 @@ final class MindEyeVignetteManifestTests: XCTestCase {
         }
     }
 
+    func testEveryShippedVignetteUsesTheEnlargedCardSize() throws {
+        let vignetteIDs = [
+            "big_mike_current_room",
+            "cateye81_bunker",
+            "rich_current_room",
+            "dad_workshop",
+            "broadcaster_radio_room"
+        ]
+
+        for vignetteID in vignetteIDs {
+            let url = mindEyeProjectRoot().appendingPathComponent(
+                "Gravitas Plague/TuringResources/Turing/MindsEye/" +
+                    "Vignettes/\(vignetteID)/manifest.json"
+            )
+            let manifest = try JSONDecoder().decode(
+                MindEyeVignetteManifest.self,
+                from: Data(contentsOf: url)
+            )
+            let placement = try XCTUnwrap(manifest.placement)
+
+            XCTAssertEqual(placement.cardWidthMeters, 0.84, accuracy: 0.0001)
+            XCTAssertEqual(placement.cardHeightMeters, 0.4725, accuracy: 0.0001)
+        }
+    }
+
     func testProductionShapeValidatesAndTeethIsRequired() {
         XCTAssertTrue(issues(for: makeMindEyeTestManifest()).isEmpty)
 
@@ -277,8 +302,8 @@ func makeMindEyeTestManifest(
             doubleBlinkGapMaxSeconds: 1
         ),
         placement: .init(
-            cardWidthMeters: 0.56,
-            cardHeightMeters: 0.315,
+            cardWidthMeters: 0.84,
+            cardHeightMeters: 0.4725,
             verticalLiftMeters: 0.10,
             forwardOffsetMeters: 0.0381,
             shelfClearanceMeters: 0.0127
