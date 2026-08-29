@@ -77,6 +77,9 @@ final class TuringRollingBenchBundleController:
     private var audioResourcesPrepared = false
     private var interactionInstalled = false
 
+    private static let crankRadioIconFallbackTopOffsetMeters: Float =
+        WallStickerStyle.stickerSizeMeters * 0.5
+
     var mindEyePlacementProviderID: String { "turing.rollingBench" }
 
     var mindEyeSupportedSurfaces: Set<StoryInteractionSurfaceID> {
@@ -332,35 +335,12 @@ final class TuringRollingBenchBundleController:
         }
 
         let presentationRoot = ensureMindEyePresentationRoot()
-        let deviceRoot: Entity
-        switch surface {
-        case .crankRadio:
-            deviceRoot = anchors.crankRadioRoot
-        case .hamReceiver:
-            deviceRoot = anchors.hamReceiverRoot
-        case .walkie, .dadFrame:
-            return nil
-        }
-
-        let deviceBounds = MindEyeRealityBoundsAdapter.bounds(
-            of: deviceRoot,
-            relativeTo: presentationRoot
+        let sharedIconTopCenter = MindEyeRealityBoundsAdapter.iconTopCenter(
+            of: anchors.crankRadioIconAnchor,
+            relativeTo: presentationRoot,
+            fallbackTopOffsetMeters:
+                Self.crankRadioIconFallbackTopOffsetMeters
         )
-        let cartBounds = MindEyeRealityBoundsAdapter.bounds(
-            of: anchors.cartRoot,
-            relativeTo: presentationRoot
-        )
-        let obstructionBounds: MindEyeLocalBounds?
-        switch (cartBounds, deviceBounds) {
-        case let (.some(cart), .some(device)):
-            obstructionBounds = cart.union(device)
-        case let (.some(cart), .none):
-            obstructionBounds = cart
-        case let (.none, .some(device)):
-            obstructionBounds = device
-        case (.none, .none):
-            obstructionBounds = nil
-        }
 
         return MindEyePlacementTarget(
             providerID: mindEyePlacementProviderID,
@@ -369,9 +349,16 @@ final class TuringRollingBenchBundleController:
             geometry: MindEyePlacementGeometry(
                 providerID: mindEyePlacementProviderID,
                 revision: mindEyePlacementRevision,
-                centeringBounds: deviceBounds,
-                obstructionBounds: obstructionBounds,
-                fallbackCenter: deviceRoot.position(relativeTo: presentationRoot)
+                centeringBounds: nil,
+                obstructionBounds: nil,
+                fallbackCenter: sharedIconTopCenter,
+                iconRelativePlacement: MindEyeIconRelativePlacement(
+                    iconTopCenter: sharedIconTopCenter,
+                    bottomEdgeClearanceMeters:
+                        MindEyeIconPlacementDefaults.bottomEdgeClearanceMeters,
+                    forwardOffsetMeters:
+                        MindEyeIconPlacementDefaults.rollingBenchForwardOffsetMeters
+                )
             )
         )
     }

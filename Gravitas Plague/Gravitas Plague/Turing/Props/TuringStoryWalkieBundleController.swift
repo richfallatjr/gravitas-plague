@@ -58,6 +58,9 @@ final class TuringStoryWalkieBundleController:
     private(set) var placement: TuringStoryWallBundlePlacement?
     private(set) var isPlaced = false
 
+    private static let walkieIconFallbackTopOffsetMeters: Float =
+        0.0508 + WallStickerStyle.stickerSizeMeters * 0.25
+
     var walkieAudioEmitter: Entity? { anchors?.walkieAudioEmitter }
     var walkieIconAnchor: Entity? { anchors?.walkieIconAnchor }
     var walkieRoot: Entity? { anchors?.walkieRoot }
@@ -233,29 +236,18 @@ final class TuringStoryWalkieBundleController:
         guard mindEyeSupportedSurfaces.contains(surface),
               isPlaced,
               root.isEnabled,
-              let loadedBundleRoot,
+              loadedBundleRoot != nil,
               let anchors else {
             return nil
         }
 
         let presentationRoot = ensureMindEyePresentationRoot()
-        let aggregateBounds = MindEyeRealityBoundsAdapter.bounds(
-            of: loadedBundleRoot,
-            relativeTo: presentationRoot
+        let sharedIconTopCenter = MindEyeRealityBoundsAdapter.iconTopCenter(
+            of: anchors.walkieIconAnchor,
+            relativeTo: presentationRoot,
+            fallbackTopOffsetMeters:
+                Self.walkieIconFallbackTopOffsetMeters
         )
-        let shelfBounds = anchors.shelf.flatMap {
-            MindEyeRealityBoundsAdapter.bounds(of: $0, relativeTo: presentationRoot)
-        }
-
-        let sourceRoot: Entity
-        switch surface {
-        case .walkie:
-            sourceRoot = anchors.walkieRoot
-        case .dadFrame:
-            sourceRoot = anchors.dadFrameRoot
-        case .crankRadio, .hamReceiver:
-            return nil
-        }
 
         return MindEyePlacementTarget(
             providerID: mindEyePlacementProviderID,
@@ -264,9 +256,16 @@ final class TuringStoryWalkieBundleController:
             geometry: MindEyePlacementGeometry(
                 providerID: mindEyePlacementProviderID,
                 revision: mindEyePlacementRevision,
-                centeringBounds: aggregateBounds,
-                obstructionBounds: shelfBounds,
-                fallbackCenter: sourceRoot.position(relativeTo: presentationRoot)
+                centeringBounds: nil,
+                obstructionBounds: nil,
+                fallbackCenter: sharedIconTopCenter,
+                iconRelativePlacement: MindEyeIconRelativePlacement(
+                    iconTopCenter: sharedIconTopCenter,
+                    bottomEdgeClearanceMeters:
+                        MindEyeIconPlacementDefaults.bottomEdgeClearanceMeters,
+                    forwardOffsetMeters:
+                        MindEyeIconPlacementDefaults.walkieForwardOffsetMeters
+                )
             )
         )
     }

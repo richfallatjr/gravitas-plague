@@ -33,6 +33,25 @@ nonisolated struct MindEyePlacementGeometry: Sendable, Equatable {
     let centeringBounds: MindEyeLocalBounds?
     let obstructionBounds: MindEyeLocalBounds?
     let fallbackCenter: SIMD3<Float>
+    let iconRelativePlacement: MindEyeIconRelativePlacement?
+}
+
+nonisolated struct MindEyeIconRelativePlacement: Sendable, Equatable {
+    /// The center of the icon's top edge in presentation-root coordinates.
+    let iconTopCenter: SIMD3<Float>
+    /// Clear space from the icon's top edge to the card's bottom edge.
+    let bottomEdgeClearanceMeters: Float
+    /// Positive Z moves the card outward from the prop and toward the viewer.
+    let forwardOffsetMeters: Float
+}
+
+nonisolated enum MindEyeIconPlacementDefaults {
+    /// Midpoint of the requested 2–3 inch vertical range.
+    static let bottomEdgeClearanceMeters: Float = 0.0635
+    /// Midpoint of the requested 1–2 inch walkie depth range.
+    static let walkieForwardOffsetMeters: Float = 0.0381
+    /// Midpoint of the requested 3–5 inch rolling-bench depth range.
+    static let rollingBenchForwardOffsetMeters: Float = 0.1016
 }
 
 nonisolated struct MindEyeResolvedPlacement: Sendable, Equatable {

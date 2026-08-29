@@ -32,6 +32,42 @@ final class MindEyePlacementResolverTests: XCTestCase {
         assertEqual(placement.localPosition, [2, 3.1, 4.0381])
     }
 
+    func testIconRelativePlacementUsesBottomEdgeClearanceAndOwnDepth() throws {
+        let placement = try MindEyePlacementResolver.resolve(
+            geometry: geometry(
+                iconRelativePlacement: MindEyeIconRelativePlacement(
+                    iconTopCenter: [1, 2, 3],
+                    bottomEdgeClearanceMeters: 0.0635,
+                    forwardOffsetMeters: 0.1016
+                )
+            ),
+            tuning: .phaseThreeDefault
+        ).get()
+
+        assertEqual(placement.localPosition, [1, 2.221, 3.1016])
+        XCTAssertFalse(placement.usedFallbackCenter)
+        XCTAssertFalse(placement.verticalClampApplied)
+        XCTAssertFalse(placement.forwardClampApplied)
+    }
+
+    func testRequestedIconOffsetsUseRangeMidpoints() {
+        XCTAssertEqual(
+            MindEyeIconPlacementDefaults.bottomEdgeClearanceMeters,
+            0.0635,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            MindEyeIconPlacementDefaults.walkieForwardOffsetMeters,
+            0.0381,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            MindEyeIconPlacementDefaults.rollingBenchForwardOffsetMeters,
+            0.1016,
+            accuracy: 0.0001
+        )
+    }
+
     func testInvalidBoundsAndFallbackFail() {
         let result = MindEyePlacementResolver.resolve(
             geometry: geometry(
@@ -100,14 +136,16 @@ final class MindEyePlacementResolverTests: XCTestCase {
     private func geometry(
         centering: MindEyeLocalBounds? = nil,
         obstruction: MindEyeLocalBounds? = nil,
-        fallback: SIMD3<Float> = .zero
+        fallback: SIMD3<Float> = .zero,
+        iconRelativePlacement: MindEyeIconRelativePlacement? = nil
     ) -> MindEyePlacementGeometry {
         MindEyePlacementGeometry(
             providerID: "test",
             revision: 7,
             centeringBounds: centering,
             obstructionBounds: obstruction,
-            fallbackCenter: fallback
+            fallbackCenter: fallback,
+            iconRelativePlacement: iconRelativePlacement
         )
     }
 

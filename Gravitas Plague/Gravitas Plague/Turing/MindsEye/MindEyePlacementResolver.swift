@@ -11,16 +11,34 @@ nonisolated enum MindEyePlacementResolver {
         }
 
         let usableBounds = geometry.centeringBounds.flatMap { $0.isUsable ? $0 : nil }
-        let center = usableBounds?.center ?? geometry.fallbackCenter
-        guard MindEyeFiniteVector.validates(center) else {
-            return .failure(failure("Mind's Eye placement has no finite center."))
+        let resolvedCenter: SIMD3<Float>
+        let usedFallbackCenter: Bool
+        if let icon = geometry.iconRelativePlacement {
+            guard validates(icon) else {
+                return .failure(failure("Mind's Eye icon-relative placement is nonfinite or invalid."))
+            }
+            resolvedCenter = SIMD3<Float>(
+                icon.iconTopCenter.x,
+                icon.iconTopCenter.y +
+                    icon.bottomEdgeClearanceMeters +
+                    tuning.cardHeightMeters * 0.5,
+                icon.iconTopCenter.z + icon.forwardOffsetMeters
+            )
+            usedFallbackCenter = false
+        } else {
+            let center = usableBounds?.center ?? geometry.fallbackCenter
+            guard MindEyeFiniteVector.validates(center) else {
+                return .failure(failure("Mind's Eye placement has no finite center."))
+            }
+            resolvedCenter = SIMD3<Float>(
+                center.x,
+                center.y + tuning.verticalLiftMeters,
+                center.z + tuning.forwardOffsetMeters
+            )
+            usedFallbackCenter = usableBounds == nil
         }
 
-        var resolved = SIMD3<Float>(
-            center.x,
-            center.y + tuning.verticalLiftMeters,
-            center.z + tuning.forwardOffsetMeters
-        )
+        var resolved = resolvedCenter
         var verticalClampApplied = false
         var forwardClampApplied = false
 
@@ -50,7 +68,7 @@ nonisolated enum MindEyePlacementResolver {
                 providerID: geometry.providerID,
                 providerRevision: geometry.revision,
                 localPosition: resolved,
-                usedFallbackCenter: usableBounds == nil,
+                usedFallbackCenter: usedFallbackCenter,
                 verticalClampApplied: verticalClampApplied,
                 forwardClampApplied: forwardClampApplied
             )
@@ -68,6 +86,16 @@ nonisolated enum MindEyePlacementResolver {
             tuning.cardWidthMeters > 0 &&
             tuning.cardHeightMeters > 0 &&
             tuning.shelfClearanceMeters >= 0
+    }
+
+    private static func validates(
+        _ placement: MindEyeIconRelativePlacement
+    ) -> Bool {
+        MindEyeFiniteVector.validates(placement.iconTopCenter) &&
+            placement.bottomEdgeClearanceMeters.isFinite &&
+            placement.bottomEdgeClearanceMeters >= 0 &&
+            placement.forwardOffsetMeters.isFinite &&
+            placement.forwardOffsetMeters >= 0
     }
 
     private static func failure(_ message: String) -> MindEyeFailure {

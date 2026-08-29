@@ -106,4 +106,21 @@ enum MindEyeRealityBoundsAdapter {
         let value = MindEyeLocalBounds(min: bounds.min, max: bounds.max)
         return value.isUsable ? value : nil
     }
+
+    static func iconTopCenter(
+        of iconAnchor: Entity,
+        relativeTo reference: Entity,
+        fallbackTopOffsetMeters: Float
+    ) -> SIMD3<Float> {
+        if let bounds = bounds(of: iconAnchor, relativeTo: reference) {
+            return SIMD3<Float>(
+                bounds.center.x,
+                bounds.max.y,
+                bounds.center.z
+            )
+        }
+        var fallback = iconAnchor.position(relativeTo: reference)
+        fallback.y += fallbackTopOffsetMeters
+        return fallback
+    }
 }

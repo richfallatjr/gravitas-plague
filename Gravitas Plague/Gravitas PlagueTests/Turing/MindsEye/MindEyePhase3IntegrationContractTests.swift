@@ -31,6 +31,16 @@ final class MindEyePhase3IntegrationContractTests: XCTestCase {
         assertInvalidationPrecedesRemoval(in: rolling)
     }
 
+    func testWallSurfacesShareWalkieIconPlacement() throws {
+        let wall = try source(
+            "Turing/Props/TuringStoryWalkieBundleController.swift"
+        )
+        XCTAssertTrue(wall.contains("let sharedIconTopCenter"))
+        XCTAssertTrue(wall.contains("of: anchors.walkieIconAnchor"))
+        XCTAssertTrue(wall.contains("fallbackCenter: sharedIconTopCenter"))
+        XCTAssertFalse(wall.contains("of: anchors.dadFrameIconAnchor"))
+    }
+
     private func assertInvalidationPrecedesRemoval(
         in source: String,
         file: StaticString = #filePath,
