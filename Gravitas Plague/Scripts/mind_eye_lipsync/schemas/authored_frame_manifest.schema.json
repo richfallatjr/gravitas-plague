@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gravitas-plague.invalid/schemas/mind-eye-authored-frame-manifest-v1.json",
+  "title": "Mind's Eye authored frame manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "compilerVersion", "prID", "speakerCharacterID", "interactionSurface", "descriptorResourcePath", "descriptorSHA256", "audioResourcePath", "audioSHA256", "transcriptSHA256", "timeline", "mouthLayerBits", "requiredPoseFamilies", "analysisProvenance", "framesSHA256", "frames", "summary"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "compilerVersion": {"const": "mind-eye-authored-frame-compiler/1.0.3"},
+    "prID": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+    "speakerCharacterID": {"enum": ["big_mike", "rich", "broadcaster", "cateye81", "dad"]},
+    "interactionSurface": {"enum": ["walkie", "dadFrame", "crankRadio", "hamReceiver"]},
+    "descriptorResourcePath": {"type": "string", "pattern": "^Turing/Prerecordings/[A-Za-z0-9._-]+\\.json$"},
+    "descriptorSHA256": {"$ref": "#/$defs/sha256"},
+    "audioResourcePath": {"type": "string", "pattern": "^Turing/Audio/prerecordings/[^/]+\\.mp3$"},
+    "audioSHA256": {"$ref": "#/$defs/sha256"},
+    "transcriptSHA256": {"$ref": "#/$defs/sha256"},
+    "timeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sampleRate", "sampleCount", "durationSeconds", "framesPerSecond", "samplesPerNominalFrame", "frameCount"],
+      "properties": {
+        "sampleRate": {"const": 48000},
+        "sampleCount": {"type": "integer", "minimum": 1},
+        "durationSeconds": {"type": "number", "exclusiveMinimum": 0},
+        "framesPerSecond": {"const": 60},
+        "samplesPerNominalFrame": {"const": 800},
+        "frameCount": {"type": "integer", "minimum": 1}
+      }
+    },
+    "mouthLayerBits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rest", "small", "wide", "round", "teeth"],
+      "properties": {
+        "rest": {"const": 1}, "small": {"const": 2}, "wide": {"const": 4}, "round": {"const": 8}, "teeth": {"const": 16}
+      }
+    },
+    "requiredPoseFamilies": {"const": ["rest", "small", "wide", "round", "teeth"]},
+    "analysisProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["toolchainLockSHA256", "compilerConfigSHA256", "phonemePoseMapSHA256", "pronunciationOverridesSHA256", "manualOverrideSHA256", "mfa", "vad"],
+      "properties": {
+        "toolchainLockSHA256": {"$ref": "#/$defs/sha256"},
+        "compilerConfigSHA256": {"$ref": "#/$defs/sha256"},
+        "phonemePoseMapSHA256": {"$ref": "#/$defs/sha256"},
+        "pronunciationOverridesSHA256": {"$ref": "#/$defs/sha256"},
+        "manualOverrideSHA256": {"anyOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "mfa": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version", "acousticModel", "acousticModelVersion", "dictionary", "dictionaryVersion", "g2pModel", "g2pModelVersion", "retryUsed", "rawOutputSHA256"],
+          "properties": {
+            "version": {"const": "3.3.9"},
+            "acousticModel": {"const": "english_us_arpa"},
+            "acousticModelVersion": {"const": "3.0.0"},
+            "dictionary": {"const": "english_us_arpa"},
+            "dictionaryVersion": {"const": "3.0.0"},
+            "g2pModel": {"const": "english_us_arpa"},
+            "g2pModelVersion": {"const": "2.0.0a"},
+            "retryUsed": {"type": "boolean"},
+            "rawOutputSHA256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "vad": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version", "backend", "modelSHA256", "configurationSHA256"],
+          "properties": {
+            "name": {"const": "silero-vad"},
+            "version": {"const": "6.2.1"},
+            "backend": {"const": "onnx"},
+            "modelSHA256": {"$ref": "#/$defs/sha256"},
+            "configurationSHA256": {"$ref": "#/$defs/sha256"}
+          }
+        }
+      }
+    },
+    "framesSHA256": {"$ref": "#/$defs/sha256"},
+    "frames": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/frame"}},
+    "summary": {"$ref": "#/$defs/summary"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "frame": {
+      "type": "object", "additionalProperties": false,
+      "required": ["frameIndex", "sampleStart", "sampleEnd", "pose", "layerMask", "speechActive", "phone", "evidenceMask"],
+      "properties": {
+        "frameIndex": {"type": "integer", "minimum": 0},
+        "sampleStart": {"type": "integer", "minimum": 0},
+        "sampleEnd": {"type": "integer", "minimum": 1},
+        "pose": {"enum": ["rest", "small", "wide", "round", "teeth"]},
+        "layerMask": {"enum": [1, 2, 4, 8, 16]},
+        "speechActive": {"type": "boolean"},
+        "phone": {"type": "string", "maxLength": 65535},
+        "evidenceMask": {"type": "integer", "minimum": 0, "maximum": 65535}
+      }
+    },
+    "poseCounts": {
+      "type": "object", "additionalProperties": false,
+      "required": ["rest", "small", "wide", "round", "teeth"],
+      "properties": {"rest": {"type": "integer", "minimum": 0}, "small": {"type": "integer", "minimum": 0}, "wide": {"type": "integer", "minimum": 0}, "round": {"type": "integer", "minimum": 0}, "teeth": {"type": "integer", "minimum": 0}}
+    },
+    "summary": {
+      "type": "object", "additionalProperties": false,
+      "required": ["poseFrameCounts", "speechFrameCount", "silenceFrameCount", "fallbackFrameCount", "manualOverrideFrameCount", "alignedWordCount", "transcriptTokenCount", "oovWords", "g2pWords", "warnings"],
+      "properties": {
+        "poseFrameCounts": {"$ref": "#/$defs/poseCounts"},
+        "speechFrameCount": {"type": "integer", "minimum": 0},
+        "silenceFrameCount": {"type": "integer", "minimum": 0},
+        "fallbackFrameCount": {"type": "integer", "minimum": 0},
+        "manualOverrideFrameCount": {"type": "integer", "minimum": 0},
+        "alignedWordCount": {"type": "integer", "minimum": 0},
+        "transcriptTokenCount": {"type": "integer", "minimum": 1},
+        "oovWords": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "g2pWords": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "warnings": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    }
+  }
+}

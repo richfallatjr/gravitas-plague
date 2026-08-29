@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gravitas-plague.invalid/schemas/mind-eye-manual-override-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "prID", "operations"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "prID": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["startFrame", "endFrameExclusive", "pose", "reason"],
+        "properties": {
+          "startFrame": {"type": "integer", "minimum": 0},
+          "endFrameExclusive": {"type": "integer", "minimum": 1},
+          "pose": {"enum": ["rest", "small", "wide", "round", "teeth"]},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}

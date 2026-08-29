@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gravitas-plague.invalid/mind-eye/qualification-summary.schema.json",
+  "type": "object",
+  "required": ["schemaVersion", "reportVersion", "decision", "hardFailures", "blockers", "evidence"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "reportVersion": {"const": "mind-eye-final-qualification/1"},
+    "decision": {"enum": ["PASS", "BLOCKED", "FAIL"]},
+    "hardFailures": {"type": "array", "items": {"type": "string"}},
+    "blockers": {"type": "array", "items": {"type": "string"}},
+    "manualReviewNotes": {"type": "array", "items": {"type": "string"}},
+    "evidence": {"type": "array"}
+  },
+  "additionalProperties": false
+}

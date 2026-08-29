@@ -288,6 +288,15 @@ actor TuringCharacterQwenRenderSession:
                         "voiceID": diagnosticsVoiceID
                     ]
                 )
+                #if GR_MIND_EYE_QUALIFICATION
+                Task { @MainActor in
+                    MindEyeReleaseQualificationHooks.shared.fireAndForget(
+                        .qwenGenerationPeak,
+                        playbackRunID: diagnosticsRunID,
+                        mediaIdentity: "generated:\(result.segmentIndex)"
+                    )
+                }
+                #endif
                 await state.recordSuccess(result.segmentIndex)
                 await onFinished(
                     result.segmentIndex,
@@ -396,6 +405,15 @@ actor TuringCharacterQwenRenderSession:
                                 "voiceID": diagnosticsVoiceID
                             ]
                         )
+                        #if GR_MIND_EYE_QUALIFICATION
+                        Task { @MainActor in
+                            MindEyeReleaseQualificationHooks.shared.fireAndForget(
+                                .qwenGenerationPeak,
+                                playbackRunID: streamRunID,
+                                mediaIdentity: "generated:\(result.segmentIndex)"
+                            )
+                        }
+                        #endif
                         let audio = TuringComputeGapGeneratedAudio(
                             segmentIndex: result.segmentIndex,
                             samples: result.audio.samples,

@@ -17,6 +17,7 @@ final class Chapter03Coordinator:
     private let definitionStore: Chapter03LightTunnelDefinitionStore
     private let lightTunnel: Chapter03LightTunnelCoordinator
     private let richVocalChannel: any StoryRichVocalChannelControlling
+    private let mindEyePhysicalPresence: MindEyePhysicalCharacterPresenceHub
     private let layoutFingerprintProvider:
         () throws -> TuringStoryEstablishedLayoutFingerprint
     private weak var blackout: ImmersiveBlackoutController?
@@ -34,6 +35,7 @@ final class Chapter03Coordinator:
         Chapter03LightTunnelResolvedDefinition?
     private var pendingHeavenBridgeDeathVocalToken:
         StoryPlayerDeathVocalToken?
+    private var physicalMikePresenceLease: MindEyePhysicalCharacterPresenceLease?
 
     var onEndCardRequested: ((
         StoryTitleCardTransitionRequest,
@@ -54,7 +56,8 @@ final class Chapter03Coordinator:
         progress: Chapter03ProgressStore = .shared,
         definitionStore: Chapter03LightTunnelDefinitionStore = .init(),
         episodeFlow: TuringEpisodeFlowController = .shared,
-        arbiter: StoryInteractionArbiter = .shared
+        arbiter: StoryInteractionArbiter = .shared,
+        mindEyePhysicalPresence: MindEyePhysicalCharacterPresenceHub = .shared
     ) {
         self.bikerBattle = bikerBattle
         self.surfaces = surfaces
@@ -67,6 +70,7 @@ final class Chapter03Coordinator:
         self.definitionStore = definitionStore
         self.episodeFlow = episodeFlow
         self.arbiter = arbiter
+        self.mindEyePhysicalPresence = mindEyePhysicalPresence
         lightTunnel.onCompleted = { [weak self] event in
             await self?.lightTunnelCompleted(event)
         }
@@ -202,13 +206,25 @@ final class Chapter03Coordinator:
             battleLease = transferred
             activeBattleInstanceID = instanceID
             state = .preparingMike(requestID)
-            try await mikeBattle.prepareAndStart(
+            try await acquirePhysicalMikePresence(
                 chapterRunID: requestID,
                 battleInstanceID: instanceID,
-                battleLease: transferred,
-                completionSink: self,
-                startImmediately: false
+                reason: "chapter03.mikeBattle.continuePrepare"
             )
+            do {
+                try await mikeBattle.prepareAndStart(
+                    chapterRunID: requestID,
+                    battleInstanceID: instanceID,
+                    battleLease: transferred,
+                    completionSink: self,
+                    startImmediately: false
+                )
+            } catch {
+                await releasePhysicalMikePresence(
+                    reason: "chapter03.mikeBattle.continuePrepareFailed"
+                )
+                throw error
+            }
             pendingActivationCheckpoint = .mikeBattlePending
             return .transferredByDestination
 
@@ -320,12 +336,24 @@ final class Chapter03Coordinator:
             activeBattleInstanceID = instanceID
             battleLease = lease
             state = .preparingMike(chapterRunID)
-            try await mikeBattle.prepareAndStart(
+            try await acquirePhysicalMikePresence(
                 chapterRunID: chapterRunID,
                 battleInstanceID: instanceID,
-                battleLease: lease,
-                completionSink: self
+                reason: "chapter03.mikeBattle.prepare"
             )
+            do {
+                try await mikeBattle.prepareAndStart(
+                    chapterRunID: chapterRunID,
+                    battleInstanceID: instanceID,
+                    battleLease: lease,
+                    completionSink: self
+                )
+            } catch {
+                await releasePhysicalMikePresence(
+                    reason: "chapter03.mikeBattle.prepareFailed"
+                )
+                throw error
+            }
             state = .mikeBattle(chapterRunID)
             return .interactionLeaseTransferred
 
@@ -383,6 +411,7 @@ final class Chapter03Coordinator:
             )
         }
         try await arbiter.requireCurrent(event.storyTransitionLease)
+        await releasePhysicalMikePresence(reason: "chapter03.mikeBattle.released")
         _ = try await progress.commit(
             .heavenTransitionPending,
             sourceEventID: event.eventID
@@ -409,10 +438,12 @@ final class Chapter03Coordinator:
     }
 
     func chapter03MikeBattleFailed(chapterRunID: UUID, error: Error) async {
+        await releasePhysicalMikePresence(reason: "chapter03.mikeBattle.failed")
         await fail(runID: chapterRunID, error: error)
     }
 
     func markEndCardRouteCommitted(sourceEventID: UUID) async throws {
+        await releasePhysicalMikePresence(reason: "chapter03.endCardRouteCommitted")
         _ = try await progress.commit(.complete, sourceEventID: sourceEventID)
         state = .complete
         chapterRunID = nil
@@ -425,6 +456,7 @@ final class Chapter03Coordinator:
         await episodeFlow.cancelActiveSequence(reason: reason)
         await bikerBattle.cancel(reason: reason)
         await mikeBattle.cancel(reason: reason)
+        await releasePhysicalMikePresence(reason: "chapter03.cancel.\(reason)")
         await lightTunnel.cancel(reason: reason)
         stopPendingHeavenBridgeDeathVocal(reason: "chapterCancel.\(reason)")
         if let titleTransitionLease {
@@ -556,6 +588,7 @@ final class Chapter03Coordinator:
 
     private func fail(runID: UUID, error: Error) async {
         guard chapterRunID == runID else { return }
+        await releasePhysicalMikePresence(reason: "chapter03.failure")
         stopPendingHeavenBridgeDeathVocal(
             reason: "chapterFailure.\(error.localizedDescription)"
         )
@@ -573,6 +606,32 @@ final class Chapter03Coordinator:
         guard let titleTransitionLease else { return }
         self.titleTransitionLease = nil
         await arbiter.release(titleTransitionLease, reason: reason)
+    }
+
+    private func acquirePhysicalMikePresence(
+        chapterRunID: UUID,
+        battleInstanceID: UUID,
+        reason: String
+    ) async throws {
+        await releasePhysicalMikePresence(reason: "replacePhysicalMikePresence")
+        let sourceID = [
+            "chapter03",
+            "mikeBattle",
+            chapterRunID.uuidString.lowercased(),
+            battleInstanceID.uuidString.lowercased()
+        ].joined(separator: ".")
+        physicalMikePresenceLease = try await mindEyePhysicalPresence.acquire(
+            characterID: .bigMike,
+            scope: .allPresentations,
+            sourceID: sourceID,
+            reason: reason
+        )
+    }
+
+    private func releasePhysicalMikePresence(reason: String) async {
+        guard let lease = physicalMikePresenceLease else { return }
+        physicalMikePresenceLease = nil
+        await mindEyePhysicalPresence.release(lease, reason: reason)
     }
 
     private func stopPendingHeavenBridgeDeathVocal(reason: String) {

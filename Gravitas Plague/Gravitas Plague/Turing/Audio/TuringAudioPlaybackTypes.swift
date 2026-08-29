@@ -63,10 +63,26 @@ nonisolated struct TuringAudioPlaybackHandle: Hashable, Sendable {
     let route: TuringAudioRouteID
 }
 
+nonisolated struct TuringAudioPlaybackStart: Sendable, Equatable {
+    let handle: TuringAudioPlaybackHandle
+    let clockOrigin: ContinuousClock.Instant
+}
+
 nonisolated enum TuringAudioPlaybackEvent: Sendable, Equatable {
-    case started(TuringAudioPlaybackHandle)
-    case paused(TuringAudioPlaybackHandle, reason: String)
-    case resumed(TuringAudioPlaybackHandle, reason: String)
+    case started(
+        handle: TuringAudioPlaybackHandle,
+        clockOrigin: ContinuousClock.Instant
+    )
+    case paused(
+        handle: TuringAudioPlaybackHandle,
+        instant: ContinuousClock.Instant,
+        reason: String
+    )
+    case resumed(
+        handle: TuringAudioPlaybackHandle,
+        instant: ContinuousClock.Instant,
+        reason: String
+    )
     case completed(TuringAudioPlaybackHandle, successfully: Bool)
     case failed(requestID: UUID, runID: String, message: String)
     case cancelled(TuringAudioPlaybackHandle, reason: String)

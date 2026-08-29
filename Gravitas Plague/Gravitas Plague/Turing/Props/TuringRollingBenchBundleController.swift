@@ -5,7 +5,8 @@ import simd
 @MainActor
 final class TuringRollingBenchBundleController:
     TuringStoryAdjustablePlacementController,
-    TuringStoryAdjustmentFrontEdgeProviding {
+    TuringStoryAdjustmentFrontEdgeProviding,
+    MindEyePlacementProviding {
     enum BundleError: LocalizedError {
         case missingUSDZ(String)
         case missingRequiredEntity(String)
@@ -60,6 +61,10 @@ final class TuringRollingBenchBundleController:
     private weak var occupancyRegistry: WallPropOccupancyRegistry?
     private let occupancyID = UUID()
     private var loadedBundleRoot: Entity?
+    private weak var mindEyePlacementAvailabilitySink:
+        (any MindEyePlacementAvailabilitySink)?
+    private var mindEyePresentationRoot: Entity?
+    private var mindEyePlacementRevision: UInt64 = 0
     private var loadedVisualMinY: Float = 0
     private var loadedVisualMaxY: Float = TuringRollingBenchTuning.expectedHeightMeters
     private var loadedVisualWidth: Float = TuringRollingBenchTuning.preferredReservationWidthMeters
@@ -71,6 +76,12 @@ final class TuringRollingBenchBundleController:
     private var preparationTask: Task<Void, Error>?
     private var audioResourcesPrepared = false
     private var interactionInstalled = false
+
+    var mindEyePlacementProviderID: String { "turing.rollingBench" }
+
+    var mindEyeSupportedSurfaces: Set<StoryInteractionSurfaceID> {
+        [.crankRadio, .hamReceiver]
+    }
 
     init() {
         let tuningLoops =
@@ -250,9 +261,11 @@ final class TuringRollingBenchBundleController:
               hamReceiverAudioEmitter: \(anchors.hamReceiverAudioEmitter.name)
             """
         )
+        notifyMindEyePlacementAvailable(reason: "commitPlannedPlacement")
     }
 
     func reset(reason: String) {
+        invalidateMindEyePlacement(reason: "rollingBenchReset.\(reason)")
         preparationTask?.cancel()
         preparationTask = nil
         crankRadioInteractionController
@@ -280,6 +293,7 @@ final class TuringRollingBenchBundleController:
             reason: reason
         )
         root.children.removeAll()
+        mindEyePresentationRoot = nil
         loadedBundleRoot = nil
         anchors = nil
         audioResourcesPrepared = false
@@ -290,6 +304,123 @@ final class TuringRollingBenchBundleController:
         loadedVisualMinZ = -TuringRollingBenchTuning.frontageDepthMeters * 0.5
         loadedVisualMaxZ = TuringRollingBenchTuning.frontageDepthMeters * 0.5
         print("[TuringRollingBench] unloaded reason=\(reason)")
+    }
+
+    func setMindEyePlacementAvailabilitySink(
+        _ sink: (any MindEyePlacementAvailabilitySink)?
+    ) {
+        mindEyePlacementAvailabilitySink = sink
+        if isPlaced,
+           root.isEnabled,
+           anchors != nil {
+            sink?.mindEyePlacementProviderDidBecomeAvailable(
+                providerID: mindEyePlacementProviderID,
+                surfaces: mindEyeSupportedSurfaces,
+                revision: mindEyePlacementRevision
+            )
+        }
+    }
+
+    func mindEyePlacementTarget(
+        for surface: StoryInteractionSurfaceID
+    ) -> MindEyePlacementTarget? {
+        guard mindEyeSupportedSurfaces.contains(surface),
+              isPlaced,
+              root.isEnabled,
+              let anchors else {
+            return nil
+        }
+
+        let presentationRoot = ensureMindEyePresentationRoot()
+        let deviceRoot: Entity
+        switch surface {
+        case .crankRadio:
+            deviceRoot = anchors.crankRadioRoot
+        case .hamReceiver:
+            deviceRoot = anchors.hamReceiverRoot
+        case .walkie, .dadFrame:
+            return nil
+        }
+
+        let deviceBounds = MindEyeRealityBoundsAdapter.bounds(
+            of: deviceRoot,
+            relativeTo: presentationRoot
+        )
+        let cartBounds = MindEyeRealityBoundsAdapter.bounds(
+            of: anchors.cartRoot,
+            relativeTo: presentationRoot
+        )
+        let obstructionBounds: MindEyeLocalBounds?
+        switch (cartBounds, deviceBounds) {
+        case let (.some(cart), .some(device)):
+            obstructionBounds = cart.union(device)
+        case let (.some(cart), .none):
+            obstructionBounds = cart
+        case let (.none, .some(device)):
+            obstructionBounds = device
+        case (.none, .none):
+            obstructionBounds = nil
+        }
+
+        return MindEyePlacementTarget(
+            providerID: mindEyePlacementProviderID,
+            revision: mindEyePlacementRevision,
+            parent: presentationRoot,
+            geometry: MindEyePlacementGeometry(
+                providerID: mindEyePlacementProviderID,
+                revision: mindEyePlacementRevision,
+                centeringBounds: deviceBounds,
+                obstructionBounds: obstructionBounds,
+                fallbackCenter: deviceRoot.position(relativeTo: presentationRoot)
+            )
+        )
+    }
+
+    private func ensureMindEyePresentationRoot() -> Entity {
+        if let mindEyePresentationRoot,
+           mindEyePresentationRoot.parent === root {
+            return mindEyePresentationRoot
+        }
+        let runtimeScale = TuringRollingBenchTuning.runtimeScale
+        let safeScale = max(runtimeScale, 0.0001)
+        let value = Entity()
+        value.name = "MindEyeRollingBenchPresentationRoot"
+        value.position = .zero
+        value.orientation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
+        value.scale = SIMD3<Float>(repeating: 1 / safeScale)
+        root.addChild(value)
+        mindEyePresentationRoot = value
+        return value
+    }
+
+    private func notifyMindEyePlacementAvailable(reason: String) {
+        mindEyePlacementRevision &+= 1
+        _ = ensureMindEyePresentationRoot()
+        mindEyePlacementAvailabilitySink?
+            .mindEyePlacementProviderDidBecomeAvailable(
+                providerID: mindEyePlacementProviderID,
+                surfaces: mindEyeSupportedSurfaces,
+                revision: mindEyePlacementRevision
+            )
+        print(
+            "[MindEyePlacement] rolling provider available " +
+                "revision=\(mindEyePlacementRevision) reason=\(reason)"
+        )
+    }
+
+    private func invalidateMindEyePlacement(reason: String) {
+        mindEyePlacementRevision &+= 1
+        mindEyePlacementAvailabilitySink?
+            .mindEyePlacementProviderDidInvalidate(
+                providerID: mindEyePlacementProviderID,
+                surfaces: mindEyeSupportedSurfaces,
+                revision: mindEyePlacementRevision,
+                reason: reason
+            )
+        print(
+            "[MindEyePlacement] rolling provider invalidated " +
+                "revision=\(mindEyePlacementRevision) reason=\(reason)"
+        )
     }
 
     private func prepareOnce() async throws {
@@ -775,6 +906,7 @@ final class TuringRollingBenchBundleController:
         )
         committedAdjustmentTransform = slot.worldTransform
         committedAdjustmentSlot = slot
+        notifyMindEyePlacementAvailable(reason: "commitAdjustedPlacement")
     }
 
     func cancelPlacementPreview() {

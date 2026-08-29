@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "characterID": "big_mike",
+      "defaultVignetteID": "big_mike_current_room",
+      "vignettes": [
+        {
+          "vignetteID": "big_mike_current_room",
+          "manifestResourcePath": "Turing/MindsEye/Vignettes/big_mike_current_room/manifest.json"
+        }
+      ]
+    },
+    {
+      "characterID": "cateye81",
+      "defaultVignetteID": "cateye81_bunker",
+      "vignettes": [
+        {
+          "vignetteID": "cateye81_bunker",
+          "manifestResourcePath": "Turing/MindsEye/Vignettes/cateye81_bunker/manifest.json"
+        }
+      ]
+    }
+  ]
+}

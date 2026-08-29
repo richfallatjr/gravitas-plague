@@ -1,0 +1,10 @@
+name: gravitas-mind-eye-mfa
+channels:
+  - conda-forge
+channel_priority: strict
+dependencies:
+  - python=3.11
+  - montreal-forced-aligner=3.3.9
+  - kalpy=0.9.*
+  - ffmpeg>=6,<8
+  - pip

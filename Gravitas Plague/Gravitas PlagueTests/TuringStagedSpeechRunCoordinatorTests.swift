@@ -87,8 +87,13 @@ final class TuringStagedSpeechRunCoordinatorTests: XCTestCase {
             expectedSegmentCount: nil
         )
         await playback.enqueuePrerecording(
-            id: prerecording.prerecordingID,
-            fileURL: URL(fileURLWithPath: "/tmp/test-pr.wav")
+            TuringAuthoredMediaItem(
+                scriptPointID: descriptor.scriptPointID,
+                id: prerecording.prerecordingID,
+                role: .primaryPrerecording,
+                fileURL: URL(fileURLWithPath: "/tmp/test-pr.wav"),
+                speakerCharacterID: character.characterID
+            )
         )
 
         let inputStore = TuringConversationInputStore()
@@ -129,8 +134,13 @@ final class TuringStagedSpeechRunCoordinatorTests: XCTestCase {
             prerecording: prerecording,
             authoredBridges: [
                 "test.pr2": TuringAuthoredSpeechBridge(
-                    prerecordingID: "test.pr2",
-                    fileURL: URL(fileURLWithPath: "/tmp/test-pr2.wav"),
+                    mediaItem: TuringAuthoredMediaItem(
+                        scriptPointID: descriptor.scriptPointID,
+                        id: "test.pr2",
+                        role: .authoredBridge,
+                        fileURL: URL(fileURLWithPath: "/tmp/test-pr2.wav"),
+                        speakerCharacterID: character.characterID
+                    ),
                     conversationTranscript: "Second authored bridge transcript."
                 )
             ],

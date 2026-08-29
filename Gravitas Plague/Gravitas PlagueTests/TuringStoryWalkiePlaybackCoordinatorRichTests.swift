@@ -47,8 +47,10 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
       fileURLWithPath: "/tmp/pr-rich-script-point-02.mp3"
     )
     await coordinator.enqueuePrerecording(
-      id: "prologue.walkie.rich.scriptPoint02.001",
-      fileURL: prerecordingURL
+      authoredItem(
+        id: "prologue.walkie.rich.scriptPoint02.001",
+        fileURL: prerecordingURL
+      )
     )
 
     var startedKinds = await fakePlayer.startedKinds()
@@ -123,8 +125,10 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
       expectedSegmentCount: nil
     )
     await coordinator.enqueuePrerecording(
-      id: "prologue.walkie.rich.scriptPoint02.001",
-      fileURL: URL(fileURLWithPath: "/tmp/pr-rich-script-point-02.mp3")
+      authoredItem(
+        id: "prologue.walkie.rich.scriptPoint02.001",
+        fileURL: URL(fileURLWithPath: "/tmp/pr-rich-script-point-02.mp3")
+      )
     )
 
     await fakePlayer.completeActive()
@@ -187,8 +191,10 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
       expectedSegmentCount: nil
     )
     await coordinator.enqueuePrerecording(
-      id: "prologue.walkie.rich.scriptPoint02.001",
-      fileURL: URL(fileURLWithPath: "/tmp/pr-rich-script-point-02.mp3")
+      authoredItem(
+        id: "prologue.walkie.rich.scriptPoint02.001",
+        fileURL: URL(fileURLWithPath: "/tmp/pr-rich-script-point-02.mp3")
+      )
     )
     await coordinator.setExpectedGeneratedSegmentCount(2)
     await coordinator.qwenComputeStarted(segmentIndex: 0)
@@ -241,8 +247,10 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
       expectedSegmentCount: nil
     )
     await coordinator.enqueuePrerecording(
-      id: "prologue.walkie.bigMike.scriptPoint03.001",
-      fileURL: URL(fileURLWithPath: "/tmp/pr-big-mike-script-point-03.mp3")
+      authoredItem(
+        id: "prologue.walkie.bigMike.scriptPoint03.001",
+        fileURL: URL(fileURLWithPath: "/tmp/pr-big-mike-script-point-03.mp3")
+      )
     )
     await coordinator.setExpectedGeneratedSegmentCount(3)
     await coordinator.qwenComputeFailed(
@@ -285,8 +293,10 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
       expectedSegmentCount: nil
     )
     await coordinator.enqueuePrerecording(
-      id: "test.sharedPlayback.pr",
-      fileURL: URL(fileURLWithPath: "/tmp/shared-playback-pr.mp3")
+      authoredItem(
+        id: "test.sharedPlayback.pr",
+        fileURL: URL(fileURLWithPath: "/tmp/shared-playback-pr.mp3")
+      )
     )
 
     for index in 0...10 {
@@ -373,12 +383,17 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
       expectedSegmentCount: nil
     )
     await coordinator.enqueuePrerecording(
-      id: "test.scriptPoint05.pr1",
-      fileURL: URL(fileURLWithPath: "/tmp/test-script05-pr1.mp3")
+      authoredItem(
+        id: "test.scriptPoint05.pr1",
+        fileURL: URL(fileURLWithPath: "/tmp/test-script05-pr1.mp3")
+      )
     )
     await coordinator.enqueueAuthoredBridge(
-      id: "test.scriptPoint05.pr2",
-      fileURL: URL(fileURLWithPath: "/tmp/test-script05-pr2.mp3"),
+      authoredItem(
+        id: "test.scriptPoint05.pr2",
+        fileURL: URL(fileURLWithPath: "/tmp/test-script05-pr2.mp3"),
+        role: .authoredBridge
+      ),
       beforeGeneratedSegmentIndex: 1
     )
     await coordinator.qwenComputeStarted(segmentIndex: 0)
@@ -427,6 +442,20 @@ final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
       samples: samples,
       sampleRate: 24_000,
       channelCount: 1
+    )
+  }
+
+  private func authoredItem(
+    id: String,
+    fileURL: URL,
+    role: TuringAuthoredMediaItem.Role = .primaryPrerecording
+  ) -> TuringAuthoredMediaItem {
+    TuringAuthoredMediaItem(
+      scriptPointID: "test.rich.playback",
+      id: id,
+      role: role,
+      fileURL: fileURL,
+      speakerCharacterID: TuringConversationCharacterID.rich.rawValue
     )
   }
 

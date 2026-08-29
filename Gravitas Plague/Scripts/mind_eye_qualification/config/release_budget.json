@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "budgetVersion": "mind-eye-release-budget/1",
+  "memory": {
+    "maximumActiveIncrementMiB": 192.0,
+    "maximumQwenOverlapIncrementVersusQwenControlMiB": 192.0,
+    "maximumPostDismissResidualMiB": 64.0,
+    "maximumSecondRunResidualGrowthMiB": 24.0,
+    "maximumTenCycleResidualGrowthMiB": 32.0,
+    "releaseObservationSeconds": [0.0, 2.0, 5.0, 15.0, 30.0]
+  },
+  "latency": {
+    "maximumActualAudioStartP95RegressionMilliseconds": 10.0,
+    "maximumLateJoinVisualWorkOnAudioCriticalPathMilliseconds": 0.0
+  },
+  "cpu": {
+    "maximumMindEyeSystemP95Milliseconds": 0.5,
+    "maximumMainThreadP95RegressionMilliseconds": 1.0,
+    "maximumCompositorEncodeP95Milliseconds": 1.0
+  },
+  "gpu": {
+    "maximumCompositorGPUFractionOfFrameInterval": 0.35,
+    "maximumRoutineCropClampRate": 0.001
+  },
+  "stability": {
+    "maximumUnexpectedMemoryWarningsReleaseRun": 0,
+    "maximumCriticalMemoryEventsReleaseRun": 0,
+    "maximumCrashes": 0,
+    "maximumJetsamTerminations": 0,
+    "maximumOrphanEntities": 0,
+    "maximumRegistryEntriesAfterTeardown": 0,
+    "maximumLeasesAfterTeardown": 0
+  },
+  "bundle": {
+    "maximumDuplicateMindEyeResourceCopies": 0,
+    "maximumAuthoringArtifactsInApp": 0,
+    "maximumUnexpectedMindEyeAudioCopies": 0
+  }
+}

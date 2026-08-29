@@ -514,8 +514,7 @@ final class StubFlowPlayback:
     }
 
     func enqueuePrerecording(
-        id: String,
-        fileURL: URL
+        _ item: TuringAuthoredMediaItem
     ) async {
         await recorder.record(
             "pr.enqueued"
@@ -530,16 +529,15 @@ final class StubFlowPlayback:
     }
 
     func enqueueAuthoredBridge(
-        id: String,
-        fileURL: URL,
+        _ item: TuringAuthoredMediaItem,
         beforeGeneratedSegmentIndex: Int
     ) async {
         pendingAuthoredBridges[
             beforeGeneratedSegmentIndex,
             default: []
-        ].append(id)
+        ].append(item.id)
         await recorder.record(
-            "bridge.\(id).enqueued.before.\(beforeGeneratedSegmentIndex)"
+            "bridge.\(item.id).enqueued.before.\(beforeGeneratedSegmentIndex)"
         )
         await reconcile()
     }

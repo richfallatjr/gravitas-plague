@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gravitas-plague.invalid/mind-eye/qualification-report.schema.json",
+  "type": "object",
+  "required": ["schemaVersion", "reportVersion", "run", "events", "generatedAtUTC"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "reportVersion": {"const": "mind-eye-release-qualification/1"},
+    "run": {"type": "object"},
+    "events": {"type": "array"},
+    "generatedAtUTC": {"type": "null"}
+  },
+  "additionalProperties": false
+}

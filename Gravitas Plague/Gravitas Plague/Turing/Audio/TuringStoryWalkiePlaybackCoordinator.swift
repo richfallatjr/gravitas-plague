@@ -39,9 +39,11 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
     private typealias GeneratedClip =
         TuringGeneratedPlaybackFileStore.PreparedClip
 
-    private struct PrerecordingClip {
-        let id: String
-        let fileURL: URL
+    private struct PrerecordingClip: Equatable {
+        let item: TuringAuthoredMediaItem
+
+        var id: String { item.id }
+        var fileURL: URL { item.fileURL }
     }
 
     private struct AuthoredBridgeClip: Equatable {
@@ -54,13 +56,17 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
 
     private enum ActiveItem: Equatable {
         case none
+        case startingPrerecording(
+            clip: PrerecordingClip,
+            requestID: UUID
+        )
         case startingAuthored(
             clip: AuthoredBridgeClip,
             requestID: UUID
         )
         case orientingAuthored(clip: AuthoredBridgeClip)
         case prerecording(
-            id: String,
+            clip: PrerecordingClip,
             handle: TuringAudioPlaybackHandle,
             fileURL: URL,
             startedAt: Date
@@ -72,14 +78,12 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             startedAt: Date
         )
         case startingGenerated(
-            segmentIndex: Int,
-            requestID: UUID,
-            fileURL: URL
+            clip: GeneratedClip,
+            requestID: UUID
         )
         case generated(
-            segmentIndex: Int,
+            clip: GeneratedClip,
             handle: TuringAudioPlaybackHandle,
-            fileURL: URL,
             startedAt: Date
         )
         case filler(
@@ -94,10 +98,11 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             switch self {
             case .prerecording(_, let handle, _, _),
                  .authoredBridge(_, let handle, _, _),
-                 .generated(_, let handle, _, _),
+                 .generated(_, let handle, _),
                  .filler(let handle, _, _):
                 return handle
-            case .none, .startingAuthored, .orientingAuthored,
+            case .none, .startingPrerecording, .startingAuthored,
+                 .orientingAuthored,
                  .startingGenerated,
                  .deadAir, .cancelled:
                 return nil
@@ -107,6 +112,8 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
 
     private let policy: Policy
     private let endpoint: any TuringAudioPlaybackEndpoint
+    private let spokenPresentationPublisher:
+        any TuringSpokenPresentationEventPublishing
     private let fileStore: TuringGeneratedPlaybackFileStore
     private let fillerCatalog = TuringFillerCatalogActor()
     private var runActive = false
@@ -147,15 +154,29 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         [UUID: TuringSpokenCoverPauseReceipt] = [:]
     private var generatedPlaybackConfiguration:
         TuringGeneratedPlaybackConfiguration = .routeDefault
+    private var spokenContextsByHandleID:
+        [UUID: TuringSpokenPresentationContext] = [:]
+    private var spokenClocksByHandleID:
+        [UUID: TuringPauseAwarePlaybackClock] = [:]
+    private var pendingSpokenSourcesByRequestID:
+        [UUID: TuringSpokenPresentationSource] = [:]
+    private var terminalSpokenRequestIDs = Set<UUID>()
+    private var generatedSpeechStartedInRun = false
+    private var responseCompletionPublished = false
+    private var publishedAuthoredPreparationKeys = Set<String>()
 
     init(
         policy: Policy = Policy(),
         rootURL: URL = FileManager.default.temporaryDirectory
             .appendingPathComponent("TuringStoryWalkiePlayback", isDirectory: true),
-        endpoint: any TuringAudioPlaybackEndpoint
+        endpoint: any TuringAudioPlaybackEndpoint,
+        spokenPresentationPublisher:
+            any TuringSpokenPresentationEventPublishing =
+                TuringSpokenPresentationHub.shared
     ) {
         self.policy = policy
         self.endpoint = endpoint
+        self.spokenPresentationPublisher = spokenPresentationPublisher
         self.fileStore = TuringGeneratedPlaybackFileStore(rootURL: rootURL)
         self.fillerFiles = []
     }
@@ -258,6 +279,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         self.runActive = true
         self.authoredProgressionHolds.removeAll(keepingCapacity: false)
         self.pausedSpokenReceipts.removeAll(keepingCapacity: false)
+        resetSpokenPresentationTracking()
         resumeCurrentItemBoundaryWaiters()
 
         do {
@@ -322,6 +344,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         authoredFailureReason = nil
         authoredProgressionHolds.removeAll(keepingCapacity: false)
         pausedSpokenReceipts.removeAll(keepingCapacity: false)
+        resetSpokenPresentationTracking()
         resumeCurrentItemBoundaryWaiters()
         runActive = true
 
@@ -351,6 +374,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
                 beforeGeneratedSegmentIndex: 0
             )
         )
+        publishAuthoredPreparationHint(item)
         print("[StoryPlayMode] authored media queued id=\(item.id) role=\(item.role.rawValue) file=\(item.fileURL.lastPathComponent)")
         await reconcile(reason: "authoredMediaQueued")
     }
@@ -444,6 +468,15 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         let handle: TuringAudioPlaybackHandle
         let authoredItemID: String?
         switch activeItem {
+        case .prerecording(let clip, let activeHandle, _, _):
+            guard clip.item.liveConversationCatalogEntry != nil else {
+                throw TuringRuntimeError.invalidConfig(
+                    "The current primary authored item is not conversation eligible."
+                )
+            }
+            itemIdentity = clip.id
+            authoredItemID = clip.id
+            handle = activeHandle
         case .authoredBridge(let clip, let activeHandle, _, _):
             guard clip.item.liveConversationCatalogEntry != nil else {
                 throw TuringRuntimeError.invalidConfig(
@@ -453,11 +486,12 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             itemIdentity = clip.id
             authoredItemID = clip.id
             handle = activeHandle
-        case .generated(let segmentIndex, let activeHandle, _, _):
-            itemIdentity = "generated.\(segmentIndex)"
+        case .generated(let clip, let activeHandle, _):
+            itemIdentity = "generated.\(clip.segmentIndex)"
             authoredItemID = nil
             handle = activeHandle
-        case .none, .startingAuthored, .orientingAuthored,
+        case .none, .startingPrerecording, .startingAuthored,
+             .orientingAuthored,
              .startingGenerated, .filler, .deadAir:
             return TuringSpokenCoverPauseReceipt(
                 interruptionID: interruptionID,
@@ -469,10 +503,6 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         case .cancelled:
             throw TuringRuntimeError.invalidConfig(
                 "The spoken cover playback run was cancelled."
-            )
-        case .prerecording:
-            throw TuringRuntimeError.invalidConfig(
-                "There is no active spoken media to pause."
             )
         }
 
@@ -502,6 +532,17 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             }
             pausedSpokenReceipts.removeValue(forKey: interruptionID)
             throw error
+        }
+
+        guard activeItem.handle == handle else {
+            pausedSpokenReceipts.removeValue(forKey: interruptionID)
+            return TuringSpokenCoverPauseReceipt(
+                interruptionID: interruptionID,
+                playbackRunID: runID,
+                itemIdentity: itemIdentity,
+                handle: nil,
+                result: .completedBeforePause
+            )
         }
 
         if let authoredItemID {
@@ -537,15 +578,27 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         guard activeItem.handle == handle else {
             return
         }
+        let authoredItemID: String?
+        switch activeItem {
+        case .prerecording(let clip, _, _, _):
+            authoredItemID = clip.id
+        case .authoredBridge(let clip, _, _, _):
+            authoredItemID = clip.id
+        case .none, .startingPrerecording, .startingAuthored,
+             .orientingAuthored, .startingGenerated, .generated,
+             .filler, .deadAir, .cancelled:
+            authoredItemID = nil
+        }
         try await endpoint.resume(
             handle,
             reason: "liveConversation.\(receipt.interruptionID.uuidString)"
         )
-        if case .authoredBridge(let clip, _, _, _) = activeItem {
+        if activeItem.handle == handle,
+           let authoredItemID {
             await emitLifecycleEvent(
                 .authoredMediaResumed(
                     runID: handle.runID,
-                    itemID: clip.id,
+                    itemID: authoredItemID,
                     handle: handle,
                     interruptionID: receipt.interruptionID
                 )
@@ -586,8 +639,17 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         """)
     }
 
-    func enqueuePrerecording(id: String, fileURL: URL) async {
+    func enqueuePrerecording(
+        _ item: TuringAuthoredMediaItem
+    ) async {
         guard runActive else { return }
+        guard item.role == .primaryPrerecording else {
+            print(
+                "[TuringSpokenPresentation] primary enqueue rejected " +
+                    "itemID=\(item.id) role=\(item.role.rawValue)"
+            )
+            return
+        }
         guard acceptedPrerecordingID == nil else {
             if let flowIdentity {
                 TuringFlowLog.event(
@@ -595,76 +657,76 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
                     identity: flowIdentity,
                     fields: [
                         ("acceptedPrerecordingID", acceptedPrerecordingID ?? "none"),
-                        ("rejectedPrerecordingID", id)
+                        ("rejectedPrerecordingID", item.id)
                     ]
                 )
             }
             return
         }
-        acceptedPrerecordingID = id
+        acceptedPrerecordingID = item.id
         prerecordingExpected = false
-        pendingPrerecording = PrerecordingClip(
-            id: id,
-            fileURL: fileURL
-        )
+        pendingPrerecording = PrerecordingClip(item: item)
+        publishAuthoredPreparationHint(item)
         print("""
         [TuringPlaybackRebuild] prerecording queued
-          id: \(id)
-          file: \(fileURL.lastPathComponent)
+          id: \(item.id)
+          file: \(item.fileURL.lastPathComponent)
           playsBeforeGenerated: true
         """)
         if let flowIdentity {
             TuringFlowLog.event(
                 "prerecording enqueued",
                 identity: flowIdentity,
-                fields: [("file", fileURL.lastPathComponent)]
+                fields: [("file", item.fileURL.lastPathComponent)]
             )
         }
         await reconcile(reason: "prerecordingQueued")
     }
 
     func enqueueAuthoredBridge(
-        id: String,
-        fileURL: URL,
+        _ item: TuringAuthoredMediaItem,
         beforeGeneratedSegmentIndex: Int
     ) async {
         guard runActive else { return }
+        guard item.role == .authoredBridge else {
+            print(
+                "[TuringSpokenPresentation] authored bridge enqueue rejected " +
+                    "itemID=\(item.id) role=\(item.role.rawValue)"
+            )
+            return
+        }
         guard beforeGeneratedSegmentIndex >= nextPlaybackSegmentIndex else {
             print("""
             [TuringStagedSpeech] authored bridge rejected
-              id: \(id)
+              id: \(item.id)
               beforeGeneratedSegmentIndex: \(beforeGeneratedSegmentIndex)
               nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
               reason: playbackBoundaryAlreadyPassed
             """)
             return
         }
-        guard acceptedAuthoredBridgeIDs.insert(id).inserted else {
+        guard acceptedAuthoredBridgeIDs.insert(item.id).inserted else {
             print("""
             [TuringStagedSpeech] duplicate authored bridge ignored
-              id: \(id)
+              id: \(item.id)
               beforeGeneratedSegmentIndex: \(beforeGeneratedSegmentIndex)
             """)
             return
         }
 
         let clip = AuthoredBridgeClip(
-            item: TuringAuthoredMediaItem(
-                scriptPointID: flowIdentity?.scriptPointID ?? "unknown",
-                id: id,
-                role: .authoredBridge,
-                fileURL: fileURL
-            ),
+            item: item,
             beforeGeneratedSegmentIndex: beforeGeneratedSegmentIndex
         )
         pendingAuthoredBridges[
             beforeGeneratedSegmentIndex,
             default: []
         ].append(clip)
+        publishAuthoredPreparationHint(item)
         print("""
         [TuringStagedSpeech] authored bridge queued
-          id: \(id)
-          file: \(fileURL.lastPathComponent)
+          id: \(item.id)
+          file: \(item.fileURL.lastPathComponent)
           beforeGeneratedSegmentIndex: \(beforeGeneratedSegmentIndex)
           nextPlaybackSegmentIndex: \(nextPlaybackSegmentIndex)
         """)
@@ -818,8 +880,8 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
 
         expectedSegmentCount = max(0, count)
         let activeGeneratedIndex: Int?
-        if case .generated(let segmentIndex, _, _, _) = activeItem {
-            activeGeneratedIndex = segmentIndex
+        if case .generated(let clip, _, _) = activeItem {
+            activeGeneratedIndex = clip.segmentIndex
         } else {
             activeGeneratedIndex = nil
         }
@@ -879,11 +941,24 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
           pendingGenerated: \(pendingGenerated.keys.sorted())
           activeComputeSegments: \(activeComputeSegments.sorted())
         """)
+        let activeHandle = activeItem.handle
+        if let activeHandle,
+           let spoken = consumeSpokenTracking(handle: activeHandle) {
+            await spokenPresentationPublisher.emit(
+                .cancelled(
+                    context: spoken.context,
+                    clock: spoken.clock,
+                    reason: reason
+                )
+            )
+        }
         runActive = false
         activeItem = .cancelled
         deadAirTask?.cancel()
         deadAirTask = nil
-        await cancelActivePlayback(reason: reason)
+        if let activeHandle {
+            await endpoint.stop(activeHandle, reason: reason)
+        }
         await endExternalGeneratedGap(
             reason: "runCancelled.\(reason)"
         )
@@ -899,6 +974,9 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         activeComputeSegments.removeAll(keepingCapacity: false)
         authoredProgressionHolds.removeAll(keepingCapacity: false)
         pausedSpokenReceipts.removeAll(keepingCapacity: false)
+        spokenContextsByHandleID.removeAll(keepingCapacity: false)
+        spokenClocksByHandleID.removeAll(keepingCapacity: false)
+        pendingSpokenSourcesByRequestID.removeAll(keepingCapacity: false)
         resumeCurrentItemBoundaryWaiters()
         authoredOnlyRun = false
         authoredInputSealed = false
@@ -927,15 +1005,28 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         _ event: TuringAudioPlaybackEvent
     ) async {
         switch event {
-        case .started(let handle):
-            await playbackStarted(handle)
-        case .paused(let handle, let reason):
-            print("[TuringAudioOffload] endpoint playback paused handleID=\(handle.id.uuidString) reason=\(reason)")
-        case .resumed(let handle, let reason):
-            print("[TuringAudioOffload] endpoint playback resumed handleID=\(handle.id.uuidString) reason=\(reason)")
+        case .started(let handle, let clockOrigin):
+            await playbackStarted(handle, clockOrigin: clockOrigin)
+        case .paused(let handle, let instant, let reason):
+            await spokenPlaybackPaused(
+                handle: handle,
+                instant: instant,
+                reason: reason
+            )
+        case .resumed(let handle, let instant, let reason):
+            await spokenPlaybackResumed(
+                handle: handle,
+                instant: instant,
+                reason: reason
+            )
         case .completed(let handle, let successfully):
             await playbackCompleted(handle: handle, successfully: successfully)
         case .failed(let requestID, let eventRunID, let message):
+            await emitSpokenStartFailureIfNeeded(
+                requestID: requestID,
+                eventRunID: eventRunID,
+                message: message
+            )
             print("""
             [TuringAudioOffload] endpoint request failed
               requestID: \(requestID.uuidString)
@@ -1087,10 +1178,33 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
     }
 
     private func playbackStarted(
-        _ handle: TuringAudioPlaybackHandle
+        _ handle: TuringAudioPlaybackHandle,
+        clockOrigin: ContinuousClock.Instant
     ) async {
         guard handle.runID == runID else { return }
         switch activeItem {
+        case .startingPrerecording(let clip, let requestID)
+            where requestID == handle.requestID:
+            activeItem = .prerecording(
+                clip: clip,
+                handle: handle,
+                fileURL: clip.fileURL,
+                startedAt: Date()
+            )
+            pendingSpokenSourcesByRequestID.removeValue(forKey: requestID)
+            await registerAuthoredSpokenStart(
+                item: clip.item,
+                handle: handle,
+                clockOrigin: clockOrigin
+            )
+            await emitLifecycleEvent(
+                .authoredMediaStarted(
+                    runID: handle.runID,
+                    item: clip.item,
+                    handle: handle
+                )
+            )
+
         case .startingAuthored(let clip, let requestID)
             where requestID == handle.requestID:
             activeItem = .authoredBridge(
@@ -1098,6 +1212,12 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
                 handle: handle,
                 fileURL: clip.fileURL,
                 startedAt: Date()
+            )
+            pendingSpokenSourcesByRequestID.removeValue(forKey: requestID)
+            await registerAuthoredSpokenStart(
+                item: clip.item,
+                handle: handle,
+                clockOrigin: clockOrigin
             )
             await emitLifecycleEvent(
                 .authoredMediaStarted(
@@ -1108,24 +1228,229 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             )
             print("[TuringPlaybackLifecycle] authored actual start id=\(clip.id) handleID=\(handle.id.uuidString)")
 
-        case .startingGenerated(let segmentIndex, let requestID, let fileURL)
+        case .startingGenerated(let clip, let requestID)
             where requestID == handle.requestID:
             activeItem = .generated(
-                segmentIndex: segmentIndex,
+                clip: clip,
                 handle: handle,
-                fileURL: fileURL,
                 startedAt: Date()
+            )
+            pendingSpokenSourcesByRequestID.removeValue(forKey: requestID)
+            generatedSpeechStartedInRun = true
+            await registerGeneratedSpokenStart(
+                clip: clip,
+                handle: handle,
+                clockOrigin: clockOrigin
             )
             await emitLifecycleEvent(
                 .generatedSegmentStarted(
                     runID: handle.runID,
-                    segmentIndex: segmentIndex,
+                    segmentIndex: clip.segmentIndex,
                     handle: handle
                 )
             )
 
         default:
             break
+        }
+    }
+
+    private func registerAuthoredSpokenStart(
+        item: TuringAuthoredMediaItem,
+        handle: TuringAudioPlaybackHandle,
+        clockOrigin: ContinuousClock.Instant
+    ) async {
+        guard let flowIdentity else {
+            print(
+                "[TuringSpokenPresentation] authored start suppressed " +
+                    "itemID=\(item.id) reason=missingFlowIdentity"
+            )
+            return
+        }
+
+        switch TuringSpokenPresentationContextResolver.authored(
+            item: item,
+            flowIdentity: flowIdentity,
+            playbackHandle: handle,
+            clockOrigin: clockOrigin
+        ) {
+        case .resolved(let context):
+            spokenContextsByHandleID[handle.id] = context
+            spokenClocksByHandleID[handle.id] =
+                TuringPauseAwarePlaybackClock(origin: clockOrigin)
+            await spokenPresentationPublisher.emit(.started(context: context))
+
+        case .suppressed(let reason):
+            print("""
+            [TuringSpokenPresentation] authored start suppressed
+              itemID: \(item.id)
+              speaker: \(item.speakerCharacterID)
+              surface: \(flowIdentity.interactionSurface.rawValue)
+              handleID: \(handle.id.uuidString)
+              reason: \(reason)
+              audioContinues: true
+            """)
+        }
+    }
+
+    private func registerGeneratedSpokenStart(
+        clip: GeneratedClip,
+        handle: TuringAudioPlaybackHandle,
+        clockOrigin: ContinuousClock.Instant
+    ) async {
+        guard let flowIdentity else {
+            print(
+                "[TuringSpokenPresentation] generated start suppressed " +
+                    "segmentIndex=\(clip.segmentIndex) reason=missingFlowIdentity"
+            )
+            return
+        }
+
+        switch TuringSpokenPresentationContextResolver.generated(
+            segmentIndex: clip.segmentIndex,
+            preparedClip: clip,
+            flowIdentity: flowIdentity,
+            playbackHandle: handle,
+            clockOrigin: clockOrigin
+        ) {
+        case .resolved(let context):
+            spokenContextsByHandleID[handle.id] = context
+            spokenClocksByHandleID[handle.id] =
+                TuringPauseAwarePlaybackClock(origin: clockOrigin)
+            await spokenPresentationPublisher.emit(.started(context: context))
+
+        case .suppressed(let reason):
+            print("""
+            [TuringSpokenPresentation] generated start suppressed
+              segmentIndex: \(clip.segmentIndex)
+              characterID: \(flowIdentity.characterID)
+              surface: \(flowIdentity.interactionSurface.rawValue)
+              handleID: \(handle.id.uuidString)
+              reason: \(reason)
+              audioContinues: true
+            """)
+        }
+    }
+
+    private func spokenPlaybackPaused(
+        handle: TuringAudioPlaybackHandle,
+        instant: ContinuousClock.Instant,
+        reason: String
+    ) async {
+        guard handle.runID == runID,
+              activeItem.handle == handle,
+              let context = spokenContextsByHandleID[handle.id],
+              var clock = spokenClocksByHandleID[handle.id] else {
+            return
+        }
+        clock.pause(at: instant)
+        spokenClocksByHandleID[handle.id] = clock
+        await spokenPresentationPublisher.emit(
+            .paused(
+                context: context,
+                instant: instant,
+                clock: clock,
+                reason: reason
+            )
+        )
+    }
+
+    private func spokenPlaybackResumed(
+        handle: TuringAudioPlaybackHandle,
+        instant: ContinuousClock.Instant,
+        reason: String
+    ) async {
+        guard handle.runID == runID,
+              activeItem.handle == handle,
+              let context = spokenContextsByHandleID[handle.id],
+              var clock = spokenClocksByHandleID[handle.id] else {
+            return
+        }
+        clock.resume(at: instant)
+        spokenClocksByHandleID[handle.id] = clock
+        await spokenPresentationPublisher.emit(
+            .resumed(
+                context: context,
+                instant: instant,
+                clock: clock,
+                reason: reason
+            )
+        )
+    }
+
+    private func emitSpokenStartFailureIfNeeded(
+        requestID: UUID,
+        eventRunID: String,
+        message: String
+    ) async {
+        guard eventRunID == runID,
+              terminalSpokenRequestIDs.insert(requestID).inserted,
+              let flowIdentity,
+              flowIdentity.playbackRunID == eventRunID else {
+            return
+        }
+        let source = pendingSpokenSourcesByRequestID.removeValue(
+            forKey: requestID
+        )
+        guard source != nil else { return }
+        await spokenPresentationPublisher.emit(
+            .failed(
+                run: .init(flowIdentity: flowIdentity),
+                source: source,
+                requestID: requestID,
+                message: message
+            )
+        )
+    }
+
+    private func consumeSpokenTracking(
+        handle: TuringAudioPlaybackHandle
+    ) -> (
+        context: TuringSpokenPresentationContext,
+        clock: TuringPauseAwarePlaybackClock
+    )? {
+        guard let context = spokenContextsByHandleID.removeValue(
+            forKey: handle.id
+        ),
+        let clock = spokenClocksByHandleID.removeValue(
+            forKey: handle.id
+        ) else {
+            spokenContextsByHandleID.removeValue(forKey: handle.id)
+            spokenClocksByHandleID.removeValue(forKey: handle.id)
+            return nil
+        }
+        return (context, clock)
+    }
+
+    private func resetSpokenPresentationTracking() {
+        spokenContextsByHandleID.removeAll(keepingCapacity: false)
+        spokenClocksByHandleID.removeAll(keepingCapacity: false)
+        pendingSpokenSourcesByRequestID.removeAll(keepingCapacity: false)
+        terminalSpokenRequestIDs.removeAll(keepingCapacity: false)
+        generatedSpeechStartedInRun = false
+        responseCompletionPublished = false
+        publishedAuthoredPreparationKeys.removeAll(keepingCapacity: false)
+    }
+
+    private func publishAuthoredPreparationHint(
+        _ item: TuringAuthoredMediaItem
+    ) {
+        guard let flowIdentity,
+              let speaker = TuringConversationCharacterID(
+                rawValue: item.speakerCharacterID
+              ) else { return }
+        let hint = TuringAuthoredPresentationPreparationHint(
+            run: .init(flowIdentity: flowIdentity),
+            prerecordingID: item.id,
+            role: item.role,
+            speakerCharacterID: speaker,
+            interactionSurface: flowIdentity.interactionSurface
+        )
+        guard publishedAuthoredPreparationKeys.insert(hint.key).inserted else {
+            return
+        }
+        Task {
+            await TuringAuthoredPresentationPreparationHub.shared.publish(hint)
         }
     }
 
@@ -1227,6 +1552,16 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             pendingPrerecording = clip
             return
         }
+
+        let requestID = UUID()
+        activeItem = .startingPrerecording(
+            clip: clip,
+            requestID: requestID
+        )
+        pendingSpokenSourcesByRequestID[requestID] = .authored(
+            prerecordingID: clip.id,
+            role: clip.item.role
+        )
         do {
             await endExternalGeneratedGap(
                 reason:
@@ -1241,19 +1576,18 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
               pendingGenerated: \(pendingGenerated.keys.sorted())
             """)
             let handle = try await playOneShot(
+                requestID: requestID,
                 fileURL: clip.fileURL,
                 kind: .prerecording,
                 label: clip.id
             )
-            activeItem = .prerecording(
-                id: clip.id,
-                handle: handle,
-                fileURL: clip.fileURL,
-                startedAt: Date()
-            )
+            guard handle.runID == runID else {
+                await endpoint.stop(handle, reason: "stalePrimaryStartReturn")
+                return
+            }
             if let flowIdentity {
                 TuringFlowLog.event(
-                    "prerecording playback started",
+                    "prerecording playback request returned",
                     identity: flowIdentity,
                     fields: [
                         ("prerecordingPlaybackHandleID", handle.id.uuidString),
@@ -1273,6 +1607,19 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
               completionGate: coordinatorActiveHandleMatch
             """)
         } catch {
+            if case .startingPrerecording(
+                let pending,
+                let pendingRequestID
+            ) = activeItem,
+               pending.id == clip.id,
+               pendingRequestID == requestID {
+                activeItem = .none
+            }
+            await emitSpokenStartFailureIfNeeded(
+                requestID: requestID,
+                eventRunID: runID ?? "unknown",
+                message: error.localizedDescription
+            )
             print("""
             [TuringPlaybackRebuild] prerecording playback failed
               id: \(clip.id)
@@ -1324,6 +1671,10 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
                 clip: clip,
                 requestID: requestID
             )
+            pendingSpokenSourcesByRequestID[requestID] = .authored(
+                prerecordingID: clip.id,
+                role: clip.item.role
+            )
             print("""
             [TuringPlaybackTrace] authored bridge playback request
               id: \(clip.id)
@@ -1348,9 +1699,24 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
               completionSource: \(completionSourceLogName)
             """)
         } catch {
+            let failedRequestID: UUID?
             if case .startingAuthored(let pending, _) = activeItem,
                pending.id == clip.id {
+                if case .startingAuthored(_, let requestID) = activeItem {
+                    failedRequestID = requestID
+                } else {
+                    failedRequestID = nil
+                }
                 activeItem = .none
+            } else {
+                failedRequestID = nil
+            }
+            if let failedRequestID {
+                await emitSpokenStartFailureIfNeeded(
+                    requestID: failedRequestID,
+                    eventRunID: runID ?? "unknown",
+                    message: error.localizedDescription
+                )
             }
             print("""
             [TuringStagedSpeech] authored bridge playback failed
@@ -1372,9 +1738,11 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         do {
             let requestID = UUID()
             activeItem = .startingGenerated(
-                segmentIndex: clip.segmentIndex,
-                requestID: requestID,
-                fileURL: clip.fileURL
+                clip: clip,
+                requestID: requestID
+            )
+            pendingSpokenSourcesByRequestID[requestID] = .generated(
+                segmentIndex: clip.segmentIndex
             )
             await endExternalGeneratedGap(
                 reason:
@@ -1435,9 +1803,24 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
               completionGate: coordinatorActiveHandleMatch
             """)
         } catch {
-            if case .startingGenerated(let index, _, _) = activeItem,
-               index == clip.segmentIndex {
+            let failedRequestID: UUID?
+            if case .startingGenerated(let pendingClip, _) = activeItem,
+               pendingClip.segmentIndex == clip.segmentIndex {
+                if case .startingGenerated(_, let requestID) = activeItem {
+                    failedRequestID = requestID
+                } else {
+                    failedRequestID = nil
+                }
                 activeItem = .none
+            } else {
+                failedRequestID = nil
+            }
+            if let failedRequestID {
+                await emitSpokenStartFailureIfNeeded(
+                    requestID: failedRequestID,
+                    eventRunID: runID ?? "unknown",
+                    message: error.localizedDescription
+                )
             }
             skippedSegments.insert(clip.segmentIndex)
             await fileStore.delete(clip, reason: "generatedStartFailed")
@@ -1558,7 +1941,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
 
         switch activeItem {
         case .prerecording(
-            let id,
+            let clip,
             let activeHandle,
             let fileURL,
             let startedAt
@@ -1566,6 +1949,25 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             where activeHandle == handle:
             prerecordingHasPlayed = true
             activeItem = .none
+            pausedSpokenReceipts = pausedSpokenReceipts.filter {
+                $0.value.handle != handle
+            }
+            resumeCurrentItemBoundaryWaiters()
+            if let spoken = consumeSpokenTracking(handle: handle) {
+                await spokenPresentationPublisher.emit(
+                    .authoredItemCompleted(
+                        context: spoken.context,
+                        clock: spoken.clock
+                    )
+                )
+            }
+            await emitLifecycleEvent(
+                .authoredMediaCompleted(
+                    runID: handle.runID,
+                    itemID: clip.id,
+                    handle: handle
+                )
+            )
             if let flowIdentity {
                 TuringFlowLog.event(
                     "prerecording playback completed",
@@ -1578,7 +1980,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             }
             print("""
             [TuringPlaybackRebuild] prerecording playback completed
-              id: \(id)
+              id: \(clip.id)
               handleID: \(handle.id.uuidString)
               file: \(fileURL.lastPathComponent)
               elapsedSeconds: \(String(format: "%.3f", Date().timeIntervalSince(startedAt)))
@@ -1600,6 +2002,14 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
                 $0.value.handle != handle
             }
             resumeCurrentItemBoundaryWaiters()
+            if let spoken = consumeSpokenTracking(handle: handle) {
+                await spokenPresentationPublisher.emit(
+                    .authoredItemCompleted(
+                        context: spoken.context,
+                        clock: spoken.clock
+                    )
+                )
+            }
             await emitLifecycleEvent(
                 .authoredMediaCompleted(
                     runID: handle.runID,
@@ -1620,12 +2030,13 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             await reconcile(reason: "authoredBridgeCompleted")
 
         case .generated(
-            let segmentIndex,
+            let clip,
             let activeHandle,
-            let fileURL,
             let startedAt
         )
             where activeHandle == handle:
+            let segmentIndex = clip.segmentIndex
+            let fileURL = clip.fileURL
             let elapsed = Date().timeIntervalSince(startedAt)
             print("""
             [TuringPlaybackTrace] generated completion accepted
@@ -1641,6 +2052,21 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
                 $0.value.handle != handle
             }
             resumeCurrentItemBoundaryWaiters()
+            if let spoken = consumeSpokenTracking(handle: handle) {
+                await spokenPresentationPublisher.emit(
+                    .generatedSegmentCompleted(
+                        context: spoken.context,
+                        clock: spoken.clock
+                    )
+                )
+            }
+            await emitLifecycleEvent(
+                .generatedSegmentCompleted(
+                    runID: handle.runID,
+                    segmentIndex: segmentIndex,
+                    handle: handle
+                )
+            )
             if let flowIdentity {
                 TuringFlowLog.event(
                     "generated playback completed",
@@ -1662,12 +2088,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             if let spatial = endpoint as? TuringSpatialAudioEndpoint {
                 await spatial.evictTransient(fileURL: fileURL)
             }
-            await fileStore.delete(
-                fileURL: fileURL,
-                runID: handle.runID,
-                segmentIndex: segmentIndex,
-                reason: "generatedPlaybackCompleted"
-            )
+            await fileStore.delete(clip, reason: "generatedPlaybackCompleted")
             if let expectedSegmentCount,
                segmentIndex + 1 >= expectedSegmentCount {
                 await emitLifecycleEvent(
@@ -1756,8 +2177,8 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         if let maximum = skippedSegments.max() {
             count = max(count, maximum + 1)
         }
-        if case .generated(let segmentIndex, _, _, _) = activeItem {
-            count = max(count, segmentIndex + 1)
+        if case .generated(let clip, _, _) = activeItem {
+            count = max(count, clip.segmentIndex + 1)
         }
         return count
     }
@@ -1786,6 +2207,17 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         await endExternalGeneratedGap(
             reason: "runFinished.\(reason)"
         )
+        if authoredOnlyRun == false,
+           generatedSpeechStartedInRun,
+           responseCompletionPublished == false,
+           let flowIdentity {
+            responseCompletionPublished = true
+            await spokenPresentationPublisher.emit(
+                .responseCompleted(
+                    run: .init(flowIdentity: flowIdentity)
+                )
+            )
+        }
         runActive = false
         if let runID, authoredOnlyRun == false {
             await fileStore.endRun(runID, reason: "finish.\(reason)")
@@ -1796,6 +2228,9 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
           reason: \(reason)
         """)
         resumeWaiters()
+        spokenContextsByHandleID.removeAll(keepingCapacity: false)
+        spokenClocksByHandleID.removeAll(keepingCapacity: false)
+        pendingSpokenSourcesByRequestID.removeAll(keepingCapacity: false)
         authoredOnlyRun = false
         authoredInputSealed = false
     }
@@ -1851,23 +2286,24 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         switch activeItem {
         case .none:
             return "none"
+        case .startingPrerecording(let clip, let requestID):
+            return "startingPrerecording.\(clip.id).\(requestID.uuidString)"
         case .startingAuthored(let clip, let requestID):
             return "startingAuthored.\(clip.id).\(requestID.uuidString)"
         case .orientingAuthored(let clip):
             return "orientingAuthored.\(clip.id)"
-        case .startingGenerated(let segmentIndex, let requestID, _):
-            return "startingGenerated.\(segmentIndex).\(requestID.uuidString)"
+        case .startingGenerated(let clip, let requestID):
+            return "startingGenerated.\(clip.segmentIndex).\(requestID.uuidString)"
         case .generated(
-            let segmentIndex,
+            let clip,
             let handle,
-            _,
             let startedAt
         ):
             let elapsed = Date().timeIntervalSince(startedAt)
-            return "generated.\(segmentIndex).\(handle.id.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
-        case .prerecording(let id, let handle, let fileURL, let startedAt):
+            return "generated.\(clip.segmentIndex).\(handle.id.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
+        case .prerecording(let clip, let handle, let fileURL, let startedAt):
             let elapsed = Date().timeIntervalSince(startedAt)
-            return "prerecording.\(id).\(fileURL.lastPathComponent).\(handle.id.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
+            return "prerecording.\(clip.id).\(fileURL.lastPathComponent).\(handle.id.uuidString).elapsed=\(Self.formatSeconds(elapsed))"
         case .authoredBridge(
             let clip,
             let handle,

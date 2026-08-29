@@ -1,0 +1,3 @@
+# Reviewed MFA pronunciation overrides only.
+# Format: WORD  ARPA_PHONE ARPA_PHONE ...
+# Keep entries uppercase, sorted, and limited to the configured ARPA inventory.

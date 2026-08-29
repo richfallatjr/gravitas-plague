@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "python": "3.11",
+  "mfa": "3.3.9",
+  "kalpyConstraint": "0.9.*",
+  "models": {
+    "acoustic": {"name":"english_us_arpa", "version":"3.0.0"},
+    "dictionary": {"name":"english_us_arpa", "version":"3.0.0"},
+    "g2p": {"name":"english_us_arpa", "version":"2.0.0a"}
+  },
+  "vad": {
+    "package":"silero-vad", "version":"6.2.1", "backend":"onnx",
+    "opset":16, "sampleRate":16000, "windowSamples":512
+  },
+  "onnxruntime": "1.29.0",
+  "timelineSampleRate": 48000,
+  "visualFramesPerSecond": 60
+}

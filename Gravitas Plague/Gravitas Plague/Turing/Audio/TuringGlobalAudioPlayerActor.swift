@@ -73,6 +73,7 @@ actor TuringGlobalAudioPlayerActor: TuringAudioPlaybackEndpoint {
                 "Global audio endpoint failed to start \(request.label)."
             )
         }
+        let clockOrigin = ContinuousClock.now
         let handle = TuringAudioPlaybackHandle(
             id: UUID(),
             requestID: request.requestID,
@@ -84,7 +85,12 @@ actor TuringGlobalAudioPlayerActor: TuringAudioPlaybackEndpoint {
             player: player,
             playerID: ObjectIdentifier(player)
         )
-        await eventHub.yield(.started(handle))
+        await eventHub.yield(
+            .started(
+                handle: handle,
+                clockOrigin: clockOrigin
+            )
+        )
         return handle
     }
 
@@ -109,7 +115,14 @@ actor TuringGlobalAudioPlayerActor: TuringAudioPlaybackEndpoint {
             )
         }
         active.player.pause()
-        await eventHub.yield(.paused(handle, reason: reason))
+        let instant = ContinuousClock.now
+        await eventHub.yield(
+            .paused(
+                handle: handle,
+                instant: instant,
+                reason: reason
+            )
+        )
     }
 
     func resume(
@@ -123,7 +136,14 @@ actor TuringGlobalAudioPlayerActor: TuringAudioPlaybackEndpoint {
                 "Global playback failed to resume."
             )
         }
-        await eventHub.yield(.resumed(handle, reason: reason))
+        let instant = ContinuousClock.now
+        await eventHub.yield(
+            .resumed(
+                handle: handle,
+                instant: instant,
+                reason: reason
+            )
+        )
     }
 
     fileprivate func finished(

@@ -1,0 +1,131 @@
+import XCTest
+import simd
+
+@testable import Gravitas_Plague
+
+final class MindEyePlacementResolverTests: XCTestCase {
+    func testDefaultPlacementUsesBoundsCenterLiftAndFrontOffset() throws {
+        let placement = try resolve(
+            centering: bounds(min: [-1, 0, -0.2], max: [1, 2, 0.2])
+        )
+        assertEqual(placement.localPosition, [0, 1.10, 0.0381])
+        XCTAssertFalse(placement.usedFallbackCenter)
+    }
+
+    func testShelfClampsCanApplyTogether() throws {
+        let placement = try resolve(
+            centering: bounds(min: [-0.5, 0, -0.2], max: [0.5, 0.2, 0.2]),
+            obstruction: bounds(min: [-1, 0, -0.1], max: [1, 0.5, 0.4])
+        )
+        XCTAssertTrue(placement.verticalClampApplied)
+        XCTAssertTrue(placement.forwardClampApplied)
+        XCTAssertEqual(placement.localPosition.y, 0.6702, accuracy: 0.0001)
+        XCTAssertEqual(placement.localPosition.z, 0.4127, accuracy: 0.0001)
+    }
+
+    func testInvalidBoundsUseFallbackCenter() throws {
+        let placement = try resolve(
+            centering: bounds(min: [1, 1, 1], max: [0, 0, 0]),
+            fallback: [2, 3, 4]
+        )
+        XCTAssertTrue(placement.usedFallbackCenter)
+        assertEqual(placement.localPosition, [2, 3.1, 4.0381])
+    }
+
+    func testInvalidBoundsAndFallbackFail() {
+        let result = MindEyePlacementResolver.resolve(
+            geometry: geometry(
+                centering: nil,
+                fallback: [.nan, 0, 0]
+            ),
+            tuning: .phaseThreeDefault
+        )
+        guard case .failure(let failure) = result else {
+            return XCTFail("Expected invalid placement failure")
+        }
+        XCTAssertEqual(failure.code, .placementInvalid)
+    }
+
+    func testNonfiniteTuningAndNonpositiveCardDimensionsFail() {
+        for tuning in [
+            MindEyePlacementTuning(
+                cardWidthMeters: .nan,
+                cardHeightMeters: 0.315,
+                verticalLiftMeters: 0.10,
+                forwardOffsetMeters: 0.0381,
+                shelfClearanceMeters: 0.0127
+            ),
+            MindEyePlacementTuning(
+                cardWidthMeters: 0,
+                cardHeightMeters: 0.315,
+                verticalLiftMeters: 0.10,
+                forwardOffsetMeters: 0.0381,
+                shelfClearanceMeters: 0.0127
+            )
+        ] {
+            guard case .failure(let failure) = MindEyePlacementResolver.resolve(
+                geometry: geometry(),
+                tuning: tuning
+            ) else {
+                XCTFail("Expected invalid tuning failure")
+                continue
+            }
+            XCTAssertEqual(failure.code, .placementInvalid)
+        }
+    }
+
+    func testDefaultValuesAreLocked() {
+        let tuning = MindEyePlacementTuning.phaseThreeDefault
+        XCTAssertEqual(tuning.cardWidthMeters, 0.56, accuracy: 0.0001)
+        XCTAssertEqual(tuning.cardHeightMeters, 0.315, accuracy: 0.0001)
+        XCTAssertEqual(tuning.verticalLiftMeters, 0.10, accuracy: 0.0001)
+        XCTAssertEqual(tuning.forwardOffsetMeters, 0.0381, accuracy: 0.0001)
+    }
+
+    private func resolve(
+        centering: MindEyeLocalBounds?,
+        obstruction: MindEyeLocalBounds? = nil,
+        fallback: SIMD3<Float> = .zero
+    ) throws -> MindEyeResolvedPlacement {
+        try MindEyePlacementResolver.resolve(
+            geometry: geometry(
+                centering: centering,
+                obstruction: obstruction,
+                fallback: fallback
+            ),
+            tuning: .phaseThreeDefault
+        ).get()
+    }
+
+    private func geometry(
+        centering: MindEyeLocalBounds? = nil,
+        obstruction: MindEyeLocalBounds? = nil,
+        fallback: SIMD3<Float> = .zero
+    ) -> MindEyePlacementGeometry {
+        MindEyePlacementGeometry(
+            providerID: "test",
+            revision: 7,
+            centeringBounds: centering,
+            obstructionBounds: obstruction,
+            fallbackCenter: fallback
+        )
+    }
+
+    private func bounds(
+        min: SIMD3<Float>,
+        max: SIMD3<Float>
+    ) -> MindEyeLocalBounds {
+        MindEyeLocalBounds(min: min, max: max)
+    }
+
+    private func assertEqual(
+        _ value: SIMD3<Float>,
+        _ expected: SIMD3<Float>,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(value.x, expected.x, accuracy: 0.0001, file: file, line: line)
+        XCTAssertEqual(value.y, expected.y, accuracy: 0.0001, file: file, line: line)
+        XCTAssertEqual(value.z, expected.z, accuracy: 0.0001, file: file, line: line)
+    }
+}

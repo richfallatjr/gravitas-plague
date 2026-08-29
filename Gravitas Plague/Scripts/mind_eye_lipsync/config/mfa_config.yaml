@@ -1,0 +1,4 @@
+beam: 100
+retry_beam: 400
+uses_speaker_adaptation: false
+cleanup_textgrids: false

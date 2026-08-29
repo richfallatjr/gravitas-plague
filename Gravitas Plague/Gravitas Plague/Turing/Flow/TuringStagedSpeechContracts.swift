@@ -53,9 +53,11 @@ struct TuringSpeechStageExecutionResult: Sendable {
 }
 
 struct TuringAuthoredSpeechBridge: Sendable, Equatable {
-    let prerecordingID: String
-    let fileURL: URL
+    let mediaItem: TuringAuthoredMediaItem
     let conversationTranscript: String?
+
+    var prerecordingID: String { mediaItem.id }
+    var fileURL: URL { mediaItem.fileURL }
 }
 
 protocol TuringSpeechStageExecuting: Sendable {

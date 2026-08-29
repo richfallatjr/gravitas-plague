@@ -160,7 +160,9 @@ private actor CrankRadioTuningTestEndpoint:
             runID: request.runID,
             route: request.route
         )
-        await eventHub.yield(.started(handle))
+        await eventHub.yield(
+            .started(handle: handle, clockOrigin: ContinuousClock.now)
+        )
         return handle
     }
 

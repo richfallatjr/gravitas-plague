@@ -38,8 +38,8 @@ final class TuringRealityKitAudioSceneBridge {
     func start(
         prepared: TuringPreparedRealityAudioResource,
         request: TuringAudioPlaybackRequest
-    ) throws -> TuringAudioPlaybackHandle {
-        let startedAt = ContinuousClock.now
+    ) throws -> TuringAudioPlaybackStart {
+        let operationStartedAt = ContinuousClock.now
         guard let emitter, emitter.parent != nil else {
             throw TuringRuntimeError.invalidConfig(
                 "Missing installed emitter for \(request.route.rawValue)."
@@ -58,6 +58,7 @@ final class TuringRealityKitAudioSceneBridge {
             route: request.route
         )
         let controller = child.playAudio(prepared.resource)
+        let clockOrigin = ContinuousClock.now
         controller.gain = Double(request.gainDB)
         activeByID[handle.id] = Active(
             handle: handle,
@@ -71,9 +72,12 @@ final class TuringRealityKitAudioSceneBridge {
         }
         TuringAudioOffloadSignposts.sceneBridgeDuration(
             operation: "start",
-            startedAt: startedAt
+            startedAt: operationStartedAt
         )
-        return handle
+        return TuringAudioPlaybackStart(
+            handle: handle,
+            clockOrigin: clockOrigin
+        )
     }
 
     func stop(_ handle: TuringAudioPlaybackHandle) {
@@ -86,7 +90,9 @@ final class TuringRealityKitAudioSceneBridge {
         active.entity.removeFromParent()
     }
 
-    func pause(_ handle: TuringAudioPlaybackHandle) throws {
+    func pause(
+        _ handle: TuringAudioPlaybackHandle
+    ) throws -> ContinuousClock.Instant {
         guard let active = activeByID[handle.id],
               active.handle == handle else {
             throw TuringRuntimeError.invalidConfig(
@@ -94,9 +100,12 @@ final class TuringRealityKitAudioSceneBridge {
             )
         }
         active.controller.pause()
+        return ContinuousClock.now
     }
 
-    func resume(_ handle: TuringAudioPlaybackHandle) throws {
+    func resume(
+        _ handle: TuringAudioPlaybackHandle
+    ) throws -> ContinuousClock.Instant {
         guard let active = activeByID[handle.id],
               active.handle == handle else {
             throw TuringRuntimeError.invalidConfig(
@@ -104,6 +113,7 @@ final class TuringRealityKitAudioSceneBridge {
             )
         }
         active.controller.play()
+        return ContinuousClock.now
     }
 
     func stopAll(reason: String) {

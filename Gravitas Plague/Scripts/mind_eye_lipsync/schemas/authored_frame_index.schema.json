@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gravitas-plague.local/schemas/mind-eye-authored-frame-index-1.json",
+  "title": "Mind's Eye Authored Frame Index",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "setVersion", "compilerVersion", "expectedManifestCount", "manifestSetSHA256", "registrySHA256", "toolchainLockSHA256", "compilerConfigSHA256", "phonemePoseMapSHA256", "pronunciationOverridesSHA256", "entries", "summary"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "setVersion": {"const": "mind-eye-authored-frame-set/1"},
+    "compilerVersion": {"type": "string", "minLength": 1},
+    "expectedManifestCount": {"const": 37},
+    "manifestSetSHA256": {"$ref": "#/$defs/sha256"},
+    "registrySHA256": {"$ref": "#/$defs/sha256"},
+    "toolchainLockSHA256": {"$ref": "#/$defs/sha256"},
+    "compilerConfigSHA256": {"$ref": "#/$defs/sha256"},
+    "phonemePoseMapSHA256": {"$ref": "#/$defs/sha256"},
+    "pronunciationOverridesSHA256": {"$ref": "#/$defs/sha256"},
+    "entries": {
+      "type": "array",
+      "minItems": 37,
+      "maxItems": 37,
+      "items": {"$ref": "#/$defs/entry"}
+    },
+    "summary": {"$ref": "#/$defs/summary"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "poseCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rest", "small", "wide", "round", "teeth"],
+      "properties": {
+        "rest": {"type": "integer", "minimum": 0},
+        "small": {"type": "integer", "minimum": 0},
+        "wide": {"type": "integer", "minimum": 0},
+        "round": {"type": "integer", "minimum": 0},
+        "teeth": {"type": "integer", "minimum": 0}
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prID", "speakerCharacterID", "interactionSurface", "manifestResourcePath", "manifestSHA256", "descriptorSHA256", "audioSHA256", "transcriptSHA256", "sampleCount", "frameCount", "durationSeconds", "poseFrameCounts", "speechFrameCount", "fallbackFrameCount", "manualOverrideFrameCount", "warningCount"],
+      "properties": {
+        "prID": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+        "speakerCharacterID": {"enum": ["big_mike", "rich", "broadcaster", "cateye81", "dad"]},
+        "interactionSurface": {"enum": ["walkie", "dadFrame", "crankRadio", "hamReceiver"]},
+        "manifestResourcePath": {"type": "string", "pattern": "^Turing/MindsEye/AudioFrames/[A-Za-z0-9._-]+\\.mouthframes\\.json$"},
+        "manifestSHA256": {"$ref": "#/$defs/sha256"},
+        "descriptorSHA256": {"$ref": "#/$defs/sha256"},
+        "audioSHA256": {"$ref": "#/$defs/sha256"},
+        "transcriptSHA256": {"$ref": "#/$defs/sha256"},
+        "sampleCount": {"type": "integer", "minimum": 1},
+        "frameCount": {"type": "integer", "minimum": 1},
+        "durationSeconds": {"type": "number", "exclusiveMinimum": 0},
+        "poseFrameCounts": {"$ref": "#/$defs/poseCounts"},
+        "speechFrameCount": {"type": "integer", "minimum": 0},
+        "fallbackFrameCount": {"type": "integer", "minimum": 0},
+        "manualOverrideFrameCount": {"type": "integer", "minimum": 0},
+        "warningCount": {"type": "integer", "minimum": 0}
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifestCount", "speakerManifestCounts", "surfaceManifestCounts", "totalSampleCount", "totalFrameCount", "totalDurationSeconds", "aggregatePoseFrameCounts", "totalSpeechFrameCount", "totalFallbackFrameCount", "totalManualOverrideFrameCount", "totalWarningCount", "manifestBytes"],
+      "properties": {
+        "manifestCount": {"const": 37},
+        "speakerManifestCounts": {"type": "object", "additionalProperties": false, "required": ["big_mike", "rich", "broadcaster", "cateye81", "dad"], "properties": {"big_mike":{"const":10},"rich":{"const":15},"broadcaster":{"const":5},"cateye81":{"const":5},"dad":{"const":2}}},
+        "surfaceManifestCounts": {"type": "object", "additionalProperties": false, "required": ["walkie", "dadFrame", "crankRadio", "hamReceiver"], "properties": {"walkie":{"type":"integer","minimum":0},"dadFrame":{"type":"integer","minimum":0},"crankRadio":{"type":"integer","minimum":0},"hamReceiver":{"type":"integer","minimum":0}}},
+        "totalSampleCount": {"type": "integer", "minimum": 1},
+        "totalFrameCount": {"type": "integer", "minimum": 1},
+        "totalDurationSeconds": {"type": "number", "exclusiveMinimum": 0},
+        "aggregatePoseFrameCounts": {"$ref": "#/$defs/poseCounts"},
+        "totalSpeechFrameCount": {"type": "integer", "minimum": 0},
+        "totalFallbackFrameCount": {"type": "integer", "minimum": 0},
+        "totalManualOverrideFrameCount": {"type": "integer", "minimum": 0},
+        "totalWarningCount": {"type": "integer", "minimum": 0},
+        "manifestBytes": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

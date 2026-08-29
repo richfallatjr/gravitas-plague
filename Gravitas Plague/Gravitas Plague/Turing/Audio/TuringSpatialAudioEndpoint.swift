@@ -25,12 +25,17 @@ actor TuringSpatialAudioEndpoint: TuringTransientAudioPlaybackEndpoint {
                 shouldLoop: request.shouldLoop,
                 cachePolicy: request.cachePolicy
             )
-            let handle = try await sceneBridge.start(
+            let start = try await sceneBridge.start(
                 prepared: prepared,
                 request: request
             )
-            await eventHub.yield(.started(handle))
-            return handle
+            await eventHub.yield(
+                .started(
+                    handle: start.handle,
+                    clockOrigin: start.clockOrigin
+                )
+            )
+            return start.handle
         } catch {
             await eventHub.yield(
                 .failed(
@@ -55,16 +60,28 @@ actor TuringSpatialAudioEndpoint: TuringTransientAudioPlaybackEndpoint {
         _ handle: TuringAudioPlaybackHandle,
         reason: String
     ) async throws {
-        try await sceneBridge.pause(handle)
-        await eventHub.yield(.paused(handle, reason: reason))
+        let instant = try await sceneBridge.pause(handle)
+        await eventHub.yield(
+            .paused(
+                handle: handle,
+                instant: instant,
+                reason: reason
+            )
+        )
     }
 
     func resume(
         _ handle: TuringAudioPlaybackHandle,
         reason: String
     ) async throws {
-        try await sceneBridge.resume(handle)
-        await eventHub.yield(.resumed(handle, reason: reason))
+        let instant = try await sceneBridge.resume(handle)
+        await eventHub.yield(
+            .resumed(
+                handle: handle,
+                instant: instant,
+                reason: reason
+            )
+        )
     }
 
     func stopAll(reason: String) async {

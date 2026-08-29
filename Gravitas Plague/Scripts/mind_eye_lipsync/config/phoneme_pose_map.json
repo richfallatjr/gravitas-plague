@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "phoneSet": "ARPA",
+  "stripStressDigits": true,
+  "silenceLabels": ["", "<eps>", "sil", "sp", "silence"],
+  "unknownSpeechLabels": ["spn"],
+  "directMap": {
+    "M":"small", "B":"small", "P":"small", "K":"small", "G":"small",
+    "T":"small", "D":"small", "N":"small", "NG":"small", "L":"small",
+    "R":"small", "Y":"small", "HH":"small",
+    "AA":"wide", "AE":"wide", "AH":"wide", "EH":"wide", "ER":"wide",
+    "IH":"wide", "IY":"wide", "AY":"wide", "EY":"wide",
+    "W":"round", "AO":"round", "OW":"round", "UH":"round", "UW":"round",
+    "F":"teeth", "V":"teeth", "S":"teeth", "Z":"teeth", "SH":"teeth",
+    "ZH":"teeth", "CH":"teeth", "JH":"teeth", "TH":"teeth", "DH":"teeth"
+  },
+  "compoundMap": {
+    "AW": [{"pose":"wide", "fraction":0.55}, {"pose":"round", "fraction":0.45}],
+    "OY": [{"pose":"round", "fraction":0.55}, {"pose":"wide", "fraction":0.45}]
+  },
+  "unknownAlignedSpeechFallback": "wide",
+  "unknownSilenceFallback": "rest",
+  "anticipationFrames": {"rest":0, "small":0, "wide":0, "round":1, "teeth":1},
+  "minimumHoldFrames": {"rest":1, "small":2, "wide":3, "round":3, "teeth":2}
+}

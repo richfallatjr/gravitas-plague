@@ -103,7 +103,8 @@ actor TuringFlowEngine {
             TuringVoicePromptTriggerDescriptor?
         let character:
             TuringCharacterRuntimeDefinition
-        let prerecordingURL: URL
+        let primaryAuthoredMediaItem: TuringAuthoredMediaItem
+        let authoredMediaResolver: TuringAuthoredMediaPlanResolver
 
         do {
             descriptor =
@@ -130,9 +131,15 @@ actor TuringFlowEngine {
                         descriptor.transmission
                             .prerecordingID
                 )
-            prerecordingURL =
-                try prerecordingStore.audioURL(
-                    for: prerecording
+            authoredMediaResolver =
+                try TuringAuthoredMediaPlanResolver(
+                    prerecordingStore: prerecordingStore
+                )
+            primaryAuthoredMediaItem =
+                try authoredMediaResolver.resolveItem(
+                    descriptor: descriptor,
+                    prerecordingID: prerecording.prerecordingID,
+                    role: .primaryPrerecording
                 )
             if executionMode == .interactive,
                let voicePromptID =
@@ -290,7 +297,10 @@ actor TuringFlowEngine {
                     descriptor: descriptor,
                     pipeline: pipeline,
                     prerecording: prerecording,
-                    prerecordingURL: prerecordingURL,
+                    primaryAuthoredMediaItem:
+                        primaryAuthoredMediaItem,
+                    authoredMediaResolver:
+                        authoredMediaResolver,
                     character: character,
                     identity: identity,
                     route: resolvedRoute
@@ -551,13 +561,7 @@ actor TuringFlowEngine {
                         identity: identity
                     )
                 await createdPlayback
-                    .enqueuePrerecording(
-                        id:
-                            prerecording
-                                .prerecordingID,
-                        fileURL:
-                            prerecordingURL
-                    )
+                    .enqueuePrerecording(primaryAuthoredMediaItem)
                 completionTask =
                     Task {
                         await createdPlayback
@@ -759,13 +763,7 @@ actor TuringFlowEngine {
                     throw error
                 }
                 await createdPlayback
-                    .enqueuePrerecording(
-                        id:
-                            prerecording
-                                .prerecordingID,
-                        fileURL:
-                            prerecordingURL
-                    )
+                    .enqueuePrerecording(primaryAuthoredMediaItem)
                 completionTask =
                     Task {
                         await createdPlayback
@@ -1241,7 +1239,8 @@ actor TuringFlowEngine {
         descriptor: TuringFlowDescriptor,
         pipeline: TuringFlowGenerationPipelineDescriptor,
         prerecording: TuringPrerecordingDescriptor,
-        prerecordingURL: URL,
+        primaryAuthoredMediaItem: TuringAuthoredMediaItem,
+        authoredMediaResolver: TuringAuthoredMediaPlanResolver,
         character: TuringCharacterRuntimeDefinition,
         identity: TuringFlowIdentity,
         route: any TuringFlowRouteRuntime
@@ -1252,7 +1251,9 @@ actor TuringFlowEngine {
         do {
             let authoredBridges = try resolveAuthoredBridges(
                 pipeline: pipeline,
-                character: character
+                character: character,
+                descriptor: descriptor,
+                authoredMediaResolver: authoredMediaResolver
             )
             let createdPlayback = try await route.makePlayback(
                 descriptor: descriptor,
@@ -1324,8 +1325,7 @@ actor TuringFlowEngine {
                 )
             }
             await createdPlayback.enqueuePrerecording(
-                id: prerecording.prerecordingID,
-                fileURL: prerecordingURL
+                primaryAuthoredMediaItem
             )
 
             let report = try await task.value
@@ -1481,7 +1481,9 @@ actor TuringFlowEngine {
 
     private func resolveAuthoredBridges(
         pipeline: TuringFlowGenerationPipelineDescriptor,
-        character: TuringCharacterRuntimeDefinition
+        character: TuringCharacterRuntimeDefinition,
+        descriptor: TuringFlowDescriptor,
+        authoredMediaResolver: TuringAuthoredMediaPlanResolver
     ) throws -> [String: TuringAuthoredSpeechBridge] {
         var resolved: [String: TuringAuthoredSpeechBridge] = [:]
 
@@ -1494,25 +1496,29 @@ actor TuringFlowEngine {
                 continue
             }
 
-            let descriptor = try prerecordingStore.descriptor(
+            let bridgeDescriptor = try prerecordingStore.descriptor(
                 id: prerecordingID
             )
-            guard descriptor.speaker == character.characterID,
-                  descriptor.voiceID == character.voiceID else {
+            guard bridgeDescriptor.speaker == character.characterID,
+                  bridgeDescriptor.voiceID == character.voiceID else {
                 throw TuringRuntimeError.invalidConfig(
                     "Authored bridge \(prerecordingID) does not match character \(character.characterID)."
                 )
             }
-            resolved[prerecordingID] = TuringAuthoredSpeechBridge(
+            let mediaItem = try authoredMediaResolver.resolveItem(
+                descriptor: descriptor,
                 prerecordingID: prerecordingID,
-                fileURL: try prerecordingStore.audioURL(for: descriptor),
+                role: .authoredBridge
+            )
+            resolved[prerecordingID] = TuringAuthoredSpeechBridge(
+                mediaItem: mediaItem,
                 conversationTranscript:
-                    descriptor.transcriptMode == .none ||
-                    descriptor.transcript.trimmingCharacters(
+                    bridgeDescriptor.transcriptMode == .none ||
+                    bridgeDescriptor.transcript.trimmingCharacters(
                         in: .whitespacesAndNewlines
                     ).isEmpty
                         ? nil
-                        : descriptor.transcript
+                        : bridgeDescriptor.transcript
             )
         }
 

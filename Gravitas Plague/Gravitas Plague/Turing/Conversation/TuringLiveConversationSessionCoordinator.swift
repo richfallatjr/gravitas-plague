@@ -387,6 +387,7 @@ final class TuringLiveConversationSessionCoordinator:
         case .authoredMediaPaused,
              .authoredMediaResumed,
              .generatedSegmentStarted,
+             .generatedSegmentCompleted,
              .generatedPlaybackCompleted:
             break
         }

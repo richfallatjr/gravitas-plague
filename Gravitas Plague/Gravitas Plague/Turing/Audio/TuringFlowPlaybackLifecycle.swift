@@ -28,6 +28,11 @@ nonisolated enum TuringFlowPlaybackLifecycleEvent: Sendable, Equatable {
         segmentIndex: Int,
         handle: TuringAudioPlaybackHandle
     )
+    case generatedSegmentCompleted(
+        runID: String,
+        segmentIndex: Int,
+        handle: TuringAudioPlaybackHandle
+    )
     case generatedPlaybackCompleted(
         runID: String,
         finalSegmentIndex: Int
@@ -41,6 +46,7 @@ nonisolated enum TuringFlowPlaybackLifecycleEvent: Sendable, Equatable {
              .authoredMediaResumed(let runID, _, _, _),
              .authoredMediaCompleted(let runID, _, _),
              .generatedSegmentStarted(let runID, _, _),
+             .generatedSegmentCompleted(let runID, _, _),
              .generatedPlaybackCompleted(let runID, _),
              .failed(let runID, _):
             return runID

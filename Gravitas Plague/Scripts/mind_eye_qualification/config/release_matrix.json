@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "matrixVersion": "mind-eye-release-matrix/1",
+  "requiredRuns": [
+    {"scenario":"controlStoryScene","configuration":"releaseNoDebugger","featureMode":"disabledControl","minimumRepetitions":3},
+    {"scenario":"authoredBigMikeAllTen","configuration":"releaseNoDebugger","featureMode":"enabled","minimumRepetitions":1},
+    {"scenario":"generatedPromptVoice","configuration":"releaseNoDebugger","featureMode":"enabled","minimumRepetitions":3},
+    {"scenario":"generatedConversationVoice","configuration":"releaseNoDebugger","featureMode":"enabled","minimumRepetitions":3},
+    {"scenario":"qwenControlNoMindEye","configuration":"releaseNoDebugger","featureMode":"disabledControl","minimumRepetitions":3},
+    {"scenario":"qwenOverlapWithMindEye","configuration":"releaseNoDebugger","featureMode":"enabled","minimumRepetitions":3},
+    {"scenario":"authoredSecondRun","configuration":"releaseNoDebugger","featureMode":"enabled","minimumRepetitions":3},
+    {"scenario":"tenCycleStress","configuration":"releaseNoDebugger","featureMode":"enabled","minimumRepetitions":1},
+    {"scenario":"videoCaptureOverhead","configuration":"releaseWithCapture","featureMode":"enabled","minimumRepetitions":1},
+    {"scenario":"xcodeDebugOverhead","configuration":"debugWithXcode","featureMode":"enabled","minimumRepetitions":1},
+    {"scenario":"testFlightEquivalent","configuration":"testFlight","featureMode":"enabled","minimumRepetitions":1}
+  ]
+}

@@ -2,11 +2,12 @@ import Darwin
 import Foundation
 import TuringQwenNative
 
-struct TuringMemoryBudgetSnapshot: Codable, Sendable {
+nonisolated struct TuringMemoryBudgetSnapshot: Codable, Sendable, Equatable {
     let label: String
     let availableProcessMemoryBytes: UInt64
     let physicalFootprintBytes: UInt64
     let residentSizeBytes: UInt64
+    let peakPhysicalFootprintBytes: UInt64?
     let mlxActiveMemoryBytes: Int
     let mlxCacheMemoryBytes: Int
     let mlxPeakMemoryBytes: Int
@@ -85,6 +86,12 @@ enum TuringMemoryBudgetProbe {
         return snapshot
     }
 
+    static func snapshot(
+        label: String = "mindEye.qualification"
+    ) -> TuringMemoryBudgetSnapshot {
+        currentSnapshot(label: label)
+    }
+
     static func currentSnapshot(
         label: String,
         activeQwenModelID: String? = nil,
@@ -96,6 +103,7 @@ enum TuringMemoryBudgetProbe {
             availableProcessMemoryBytes: availableProcessMemory(),
             physicalFootprintBytes: physicalFootprint(),
             residentSizeBytes: residentSize(),
+            peakPhysicalFootprintBytes: peakPhysicalFootprint(),
             mlxActiveMemoryBytes: mlx.activeMemoryBytes,
             mlxCacheMemoryBytes: mlx.cacheMemoryBytes,
             mlxPeakMemoryBytes: mlx.peakMemoryBytes,
@@ -141,6 +149,27 @@ enum TuringMemoryBudgetProbe {
         }
 
         return UInt64(info.phys_footprint)
+    }
+
+    private static func peakPhysicalFootprint() -> UInt64? {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_vm_info_data_t>.size /
+            MemoryLayout<natural_t>.size
+        )
+        let result = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(
+                    mach_task_self_,
+                    task_flavor_t(TASK_VM_INFO),
+                    $0,
+                    &count
+                )
+            }
+        }
+        guard result == KERN_SUCCESS,
+              info.ledger_phys_footprint_peak >= 0 else { return nil }
+        return UInt64(info.ledger_phys_footprint_peak)
     }
 
     private static func residentSize() -> UInt64 {

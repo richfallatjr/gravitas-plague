@@ -1,7 +1,7 @@
 import Foundation
 
 nonisolated struct TuringAuthoredMediaItem: Sendable, Equatable {
-    enum Role: String, Sendable, Equatable {
+    enum Role: String, Sendable, Equatable, Hashable {
         case openingCue
         case primaryPrerecording
         case authoredBridge
@@ -18,6 +18,7 @@ nonisolated struct TuringAuthoredMediaItem: Sendable, Equatable {
     let id: String
     let role: Role
     let fileURL: URL
+    let speakerCharacterID: String
     let liveConversationCatalogEntry:
         TuringLiveConversationCatalog.Entry?
     let orientationMode: OrientationMode
@@ -27,6 +28,7 @@ nonisolated struct TuringAuthoredMediaItem: Sendable, Equatable {
         id: String,
         role: Role,
         fileURL: URL,
+        speakerCharacterID: String,
         liveConversationCatalogEntry:
             TuringLiveConversationCatalog.Entry? = nil,
         orientationMode: OrientationMode = .none
@@ -35,6 +37,7 @@ nonisolated struct TuringAuthoredMediaItem: Sendable, Equatable {
         self.id = id
         self.role = role
         self.fileURL = fileURL
+        self.speakerCharacterID = speakerCharacterID
         self.liveConversationCatalogEntry = liveConversationCatalogEntry
         self.orientationMode = orientationMode
     }
@@ -90,38 +93,10 @@ struct TuringAuthoredMediaPlanResolver: Sendable {
         var seen = Set<String>()
         let items = try ids.compactMap { id, role -> TuringAuthoredMediaItem? in
             guard id != "none", seen.insert(id).inserted else { return nil }
-            let recording = try prerecordingStore.descriptor(id: id)
-            let orientationMode: TuringAuthoredMediaItem.OrientationMode
-            switch role {
-            case .primaryPrerecording
-                where TuringPrerecordingOrientationEligibility.permits(
-                    descriptor: descriptor,
-                    role: role
-                ):
-                orientationMode = .runnerOwnedPrimary
-            case .authoredBridge
-                where TuringPrerecordingOrientationEligibility.permits(
-                    descriptor: descriptor,
-                    role: role
-                ):
-                orientationMode = .playbackOwnedBridge
-            case .primaryPrerecording, .authoredBridge,
-                 .openingCue, .closingBumper:
-                orientationMode = .none
-            }
-            return TuringAuthoredMediaItem(
-                scriptPointID: descriptor.scriptPointID,
-                id: id,
-                role: role,
-                fileURL: try prerecordingStore.audioURL(for: recording),
-                liveConversationCatalogEntry:
-                    (role == .primaryPrerecording || role == .authoredBridge)
-                    ? liveConversationCatalog?.entry(
-                        scriptPointID: descriptor.scriptPointID,
-                        authoredPrerecordingID: id
-                    )
-                    : nil,
-                orientationMode: orientationMode
+            return try resolveItem(
+                descriptor: descriptor,
+                prerecordingID: id,
+                role: role
             )
         }
         guard items.isEmpty == false else {
@@ -132,6 +107,50 @@ struct TuringAuthoredMediaPlanResolver: Sendable {
         return TuringAuthoredMediaPlan(
             scriptPointID: descriptor.scriptPointID,
             items: items
+        )
+    }
+
+    func resolveItem(
+        descriptor: TuringFlowDescriptor,
+        prerecordingID: String,
+        role: TuringAuthoredMediaItem.Role
+    ) throws -> TuringAuthoredMediaItem {
+        let recording = try prerecordingStore.descriptor(id: prerecordingID)
+        let orientationMode: TuringAuthoredMediaItem.OrientationMode
+        switch role {
+        case .primaryPrerecording
+            where TuringPrerecordingOrientationEligibility.permits(
+                descriptor: descriptor,
+                role: role
+            ):
+            orientationMode = .runnerOwnedPrimary
+        case .authoredBridge
+            where TuringPrerecordingOrientationEligibility.permits(
+                descriptor: descriptor,
+                role: role
+            ):
+            orientationMode = .playbackOwnedBridge
+        case .primaryPrerecording, .authoredBridge,
+             .openingCue, .closingBumper:
+            orientationMode = .none
+        }
+        let catalogEntry: TuringLiveConversationCatalog.Entry?
+        if role == .primaryPrerecording || role == .authoredBridge {
+            catalogEntry = liveConversationCatalog?.entry(
+                scriptPointID: descriptor.scriptPointID,
+                authoredPrerecordingID: prerecordingID
+            )
+        } else {
+            catalogEntry = nil
+        }
+        return TuringAuthoredMediaItem(
+            scriptPointID: descriptor.scriptPointID,
+            id: prerecordingID,
+            role: role,
+            fileURL: try prerecordingStore.audioURL(for: recording),
+            speakerCharacterID: recording.speaker,
+            liveConversationCatalogEntry: catalogEntry,
+            orientationMode: orientationMode
         )
     }
 }

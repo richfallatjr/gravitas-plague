@@ -11,6 +11,7 @@ struct PlagueImmersiveView: View {
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var coordinator = PlagueImmersiveCoordinator()
     @StateObject private var damageTintController = DamageSurroundingsTintController()
     @StateObject private var deathPresentationController = DeathPresentationController()
@@ -517,6 +518,12 @@ struct PlagueImmersiveView: View {
                 session.submitHordeScoresOnSessionEnd()
             }
         }
+        .onChange(of: scenePhase, initial: true) { _, newValue in
+            let state = MindEyeApplicationLifecycleState(scenePhase: newValue)
+            Task { @MainActor in
+                await coordinator.mindEyeApplicationStateChanged(state)
+            }
+        }
         .onChange(of: session.damageTintEventID) { _, _ in
             damageTintController.trigger(
                 intensity: session.damageTintIntensity
@@ -533,7 +540,9 @@ struct PlagueImmersiveView: View {
 
             damageTintController.reset()
             deathPresentationController.reset()
-            coordinator.shutdown()
+            Task { @MainActor in
+                await coordinator.shutdown()
+            }
             session.setWallPosterUIInactiveIfAllowed()
             session.forestImmersiveDidClose()
             Task {

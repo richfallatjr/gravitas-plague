@@ -9,13 +9,46 @@ actor TuringGeneratedPlaybackFileStore {
         let frameCount: AVAudioFramePosition
         let sampleRate: Double
         let channelCount: AVAudioChannelCount
+        let generatedVisualAnalysis: TuringGeneratedSpeechVisualAnalysis?
+        let generatedVisualAnalysisStatus: TuringGeneratedSpeechAnalysisUnavailableReason?
+        let generatedVisualAnalysisNanoseconds: UInt64?
+
+        static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.runID == rhs.runID &&
+                lhs.segmentIndex == rhs.segmentIndex &&
+                lhs.fileURL == rhs.fileURL &&
+                lhs.frameCount == rhs.frameCount &&
+                lhs.sampleRate == rhs.sampleRate &&
+                lhs.channelCount == rhs.channelCount &&
+                lhs.generatedVisualAnalysisStatus == rhs.generatedVisualAnalysisStatus &&
+                lhs.generatedVisualAnalysisNanoseconds == rhs.generatedVisualAnalysisNanoseconds &&
+                Self.trackIdentity(lhs.generatedVisualAnalysis?.frameTrack) ==
+                    Self.trackIdentity(rhs.generatedVisualAnalysis?.frameTrack)
+        }
+
+        private static func trackIdentity(
+            _ track: TuringGeneratedSpeechFrameTrack?
+        ) -> [Int]? {
+            track.map {
+                [$0.sampleRate, $0.sampleCount, $0.frameCount, $0.poseRuns.count]
+            }
+        }
     }
 
     private let rootURL: URL
+    private let generatedSpeechAnalysisWorker: TuringSerialGeneratedSpeechAnalysisWorker
+    private let generatedSpeechAnalysisBudget: TuringGeneratedSpeechAnalysisBudget
     private var directoriesByRunID: [String: URL] = [:]
 
-    init(rootURL: URL) {
+    init(
+        rootURL: URL,
+        generatedSpeechAnalysisWorker: TuringSerialGeneratedSpeechAnalysisWorker =
+            TuringSerialGeneratedSpeechAnalysisWorker(),
+        generatedSpeechAnalysisBudget: TuringGeneratedSpeechAnalysisBudget = .production
+    ) {
         self.rootURL = rootURL
+        self.generatedSpeechAnalysisWorker = generatedSpeechAnalysisWorker
+        self.generatedSpeechAnalysisBudget = generatedSpeechAnalysisBudget
     }
 
     func beginRun(_ runID: String) throws -> URL {
@@ -37,7 +70,7 @@ actor TuringGeneratedPlaybackFileStore {
         runID: String,
         segmentIndex: Int,
         audio: TuringComputeGapGeneratedAudio
-    ) throws -> PreparedClip {
+    ) async throws -> PreparedClip {
         TuringAudioOffloadSignposts.assertNotMainThread("writeGeneratedWAV")
         TuringAudioOffloadSignposts.offMain(
             "writeGeneratedWAV",
@@ -79,6 +112,36 @@ actor TuringGeneratedPlaybackFileStore {
             )
         }
         buffer.frameLength = AVAudioFrameCount(totalFrames)
+
+        let sampleRate = Int(audio.sampleRate.rounded())
+        let analysisTask: Task<TuringGeneratedSpeechAnalysisResult, Never>?
+        if MindEyeQualificationFeatureControl.isMindEyeEnabled {
+            let analysisStarted = ContinuousClock.now
+            let analysisDeadline = analysisStarted.advanced(
+                by: generatedSpeechAnalysisBudget.hardBudget
+            )
+            let worker = generatedSpeechAnalysisWorker
+            analysisTask = Task.detached(priority: .userInitiated) {
+                await worker.analyze(
+                    processedAudio: audio.samples,
+                    sampleRate: sampleRate,
+                    channelCount: channelCountInt,
+                    deadline: analysisDeadline
+                )
+            }
+            print(
+                "[TuringGeneratedSpeech] analysisStart segmentIndex=\(segmentIndex) " +
+                    "processedAudioSamples=\(audio.samples.count) sampleRate=\(sampleRate) " +
+                    "channelCount=\(channelCountInt)"
+            )
+        } else {
+            analysisTask = nil
+            print(
+                "[TuringGeneratedSpeech] analysisSkipped segmentIndex=\(segmentIndex) " +
+                    "reason=qualificationControlDisabled audioContinues=true"
+            )
+        }
+        defer { analysisTask?.cancel() }
         for frame in 0..<totalFrames {
             for channel in 0..<channelCountInt {
                 let value = audio.samples[frame * channelCountInt + channel]
@@ -114,13 +177,75 @@ actor TuringGeneratedPlaybackFileStore {
                 "Generated WAV validation failed for segment \(segmentIndex)."
             )
         }
+
+        #if GR_MIND_EYE_QUALIFICATION
+        Task { @MainActor in
+            MindEyeReleaseQualificationHooks.shared.fireAndForget(
+                .generatedPCMReady,
+                playbackRunID: runID,
+                mediaIdentity: "generated:\(segmentIndex)"
+            )
+        }
+        #endif
+
+        let fileReady = ContinuousClock.now
+        let analysisResult: TuringGeneratedSpeechAnalysisResult
+        if let analysisTask {
+            analysisResult = await TuringGeneratedSpeechAnalysisRace.resolve(
+                task: analysisTask,
+                grace: generatedSpeechAnalysisBudget.postFileWriteGrace
+            )
+        } else {
+            analysisResult = .unavailable(reason: .cancelled)
+        }
+        let addedWaitNanoseconds = Self.nanoseconds(fileReady.duration(to: ContinuousClock.now))
+        let visualAnalysis: TuringGeneratedSpeechVisualAnalysis?
+        let unavailableReason: TuringGeneratedSpeechAnalysisUnavailableReason?
+        let analysisNanoseconds: UInt64?
+        switch analysisResult {
+        case .ready(let value):
+            visualAnalysis = value
+            unavailableReason = nil
+            analysisNanoseconds = value.envelope.diagnostics.analysisNanoseconds
+            print(
+                "[TuringGeneratedSpeech] analysisComplete segmentIndex=\(segmentIndex) " +
+                    "analysisNanoseconds=\(analysisNanoseconds ?? 0) " +
+                    "addedWaitNanoseconds=\(addedWaitNanoseconds) " +
+                    "frames=\(value.frameTrack.frameCount) runs=\(value.frameTrack.poseRuns.count)"
+            )
+            #if GR_MIND_EYE_QUALIFICATION
+            Task { @MainActor in
+                MindEyeReleaseQualificationHooks.shared.fireAndForget(
+                    .generatedAnalysisReady,
+                    playbackRunID: runID,
+                    mediaIdentity: "generated:\(segmentIndex)",
+                    timing: MindEyeReleaseTimingSnapshot(
+                        generatedAnalysisMilliseconds: Double(analysisNanoseconds ?? 0) / 1_000_000
+                    )
+                )
+            }
+            #endif
+        case .unavailable(let reason):
+            analysisTask?.cancel()
+            visualAnalysis = nil
+            unavailableReason = reason
+            analysisNanoseconds = nil
+            print(
+                "[TuringGeneratedSpeech] analysisUnavailable segmentIndex=\(segmentIndex) " +
+                    "status=\(reason.rawValue) addedWaitNanoseconds=\(addedWaitNanoseconds) " +
+                    "audioContinues=true"
+            )
+        }
         return PreparedClip(
             runID: runID,
             segmentIndex: segmentIndex,
             fileURL: finalURL,
             frameCount: validation.length,
             sampleRate: validation.fileFormat.sampleRate,
-            channelCount: validation.fileFormat.channelCount
+            channelCount: validation.fileFormat.channelCount,
+            generatedVisualAnalysis: visualAnalysis,
+            generatedVisualAnalysisStatus: unavailableReason,
+            generatedVisualAnalysisNanoseconds: analysisNanoseconds
         )
     }
 
@@ -162,5 +287,16 @@ actor TuringGeneratedPlaybackFileStore {
           runID: \(runID)
           reason: \(reason)
         """)
+    }
+
+    private static func nanoseconds(_ duration: Duration) -> UInt64 {
+        let components = duration.components
+        guard components.seconds >= 0 else { return 0 }
+        let seconds = UInt64(components.seconds)
+        let nanos = UInt64(max(0, components.attoseconds) / 1_000_000_000)
+        let product = seconds.multipliedReportingOverflow(by: 1_000_000_000)
+        guard !product.overflow else { return UInt64.max }
+        let sum = product.partialValue.addingReportingOverflow(nanos)
+        return sum.overflow ? UInt64.max : sum.partialValue
     }
 }

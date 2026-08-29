@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "vignetteID": "big_mike_current_room",
+  "characterID": "big_mike",
+  "sourceSize": {
+    "width": 2304,
+    "height": 1296
+  },
+  "viewportSize": {
+    "width": 1920,
+    "height": 1080
+  },
+  "viewportRect": {
+    "origin": {
+      "x": 192,
+      "y": 108
+    },
+    "size": {
+      "width": 1920,
+      "height": 1080
+    }
+  },
+  "layers": {
+    "background": "background.png",
+    "characterBase": "character-base.png",
+    "featherMask": "Turing/MindsEye/Shared/feather-mask.png",
+    "eyes": {
+      "open": [
+        "eyes-open-01.png"
+      ],
+      "closed": [
+        "eyes-closed-01.png"
+      ]
+    },
+    "mouths": {
+      "rest": [
+        "mouth-rest-01.png",
+        "mouth-rest-02.png"
+      ],
+      "small": [
+        "mouth-small-01.png"
+      ],
+      "wide": [
+        "mouth-wide-01.png"
+      ],
+      "round": [
+        "mouth-round-01.png"
+      ],
+      "teeth": [
+        "mouth-teeth-01.png"
+      ]
+    }
+  },
+  "depth": {
+    "cameraToCharacterMeters": 0.75,
+    "cameraToBackgroundMeters": 3.0
+  },
+  "motion": {
+    "sharedDriftMaxPixels": {
+      "x": 36.0,
+      "y": 20.0
+    },
+    "sharedRollMaxDegrees": 0.55,
+    "sharedScaleMax": 1.018,
+    "characterParallaxMaxPixels": {
+      "x": 18.0,
+      "y": 10.0
+    },
+    "backgroundCounterMotion": 0.28,
+    "gripCorrectionMaxPixels": {
+      "x": 24.0,
+      "y": 14.0
+    },
+    "gripCorrectionMaxDegrees": 0.25
+  },
+  "blink": {
+    "ordinaryIntervalMinSeconds": 2.0,
+    "ordinaryIntervalMaxSeconds": 5.0,
+    "closedFrameMin": 5,
+    "closedFrameMax": 8,
+    "doubleBlinkProbability": 0.08,
+    "doubleBlinkGapMinSeconds": 0.5,
+    "doubleBlinkGapMaxSeconds": 1.0
+  },
+  "placement": {
+    "cardWidthMeters": 0.56,
+    "cardHeightMeters": 0.315,
+    "verticalLiftMeters": 0.10,
+    "forwardOffsetMeters": 0.0381,
+    "shelfClearanceMeters": 0.0127
+  }
+}

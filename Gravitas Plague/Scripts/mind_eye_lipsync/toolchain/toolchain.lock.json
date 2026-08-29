@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "toolchainConfigSHA256": "af83a476245490797e51ecd837c4babb574ddbcd8262ca3c86e493bb89d617ad",
+  "pythonVersion": "3.11.16",
+  "mfaVersion": "3.3.9",
+  "kalpyVersion": "0.9.0",
+  "ffmpegVersion": "7.1.1",
+  "ffprobeVersion": "7.1.1",
+  "sileroVADVersion": "6.2.1",
+  "sileroPackageSHA256": "46690d2f9fb7c3170ef3bbc67774c9d2c7b103a0f2db0ce2cc8115d513f8b96f",
+  "sileroModelSHA256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+  "onnxruntimeVersion": "1.29.0",
+  "torchVersion": "2.9.1",
+  "torchaudioVersion": "2.9.1",
+  "numpyVersion": "2.4.6",
+  "models": {
+    "acoustic": {
+      "name": "english_us_arpa",
+      "version": "3.0.0",
+      "resolvedPathKind": "mfa-pretrained-cache",
+      "sha256": "d35ce271ded357d833d2f4b8d1041dc3748b9538567ba13f2c697f4e4126711b"
+    },
+    "dictionary": {
+      "name": "english_us_arpa",
+      "version": "3.0.0",
+      "resolvedPathKind": "mfa-pretrained-cache",
+      "sha256": "e8c6c7b036ae2b7c78d2768b8dc6b1f9359175b842956d00b48c53c9c332e6b0"
+    },
+    "g2p": {
+      "name": "english_us_arpa",
+      "version": "2.0.0a",
+      "resolvedPathKind": "mfa-pretrained-cache",
+      "sha256": "0ef6a3b288dc0a91a267f98bf556a45bbfeae198e578398e92ac603a61ad46e5"
+    }
+  },
+  "mfaEnvironmentLockSHA256": "8c5fbd76c06254ca63fb33dcc15997557169e82eb8f77bd1976a0e716ed8f144",
+  "pythonRequirementsLockSHA256": "3f5fa1ca6124bdab223d4b05800efa0b4d39da4cd7d5feaf803fc804d01334c0"
+}

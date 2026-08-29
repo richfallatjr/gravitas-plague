@@ -46,7 +46,7 @@ final class Chapter02PrerecordingPlayer {
         activeHandle = handle
         for await event in events {
             switch event {
-            case .started(let returned) where returned == handle:
+            case .started(let returned, _) where returned == handle:
                 if let battleInstanceID,
                    activeBattleSpeechToken == nil,
                    let richVocalChannel {

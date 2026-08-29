@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "compilerVersion": "mind-eye-authored-frame-compiler/1.0.3",
+  "timeline": {"sampleRate": 48000, "framesPerSecond": 60, "channels": 1, "sampleFormat": "s16le"},
+  "analysisAudio": {"sampleRate": 16000, "channels": 1, "sampleFormat": "s16le"},
+  "vad": {
+    "threshold": 0.5,
+    "negativeThreshold": 0.35,
+    "minSpeechDurationMs": 64,
+    "minSilenceDurationMs": 96,
+    "speechPadMs": 32,
+    "windowSamples": 512,
+    "maximumSpeechDurationSeconds": 600
+  },
+  "alignment": {
+    "outputFormat": "json",
+    "numJobs": 1,
+    "singleSpeaker": true,
+    "cleanTemporaryDirectory": true,
+    "beam": 100,
+    "retryBeam": 400,
+    "phoneBoundaryToleranceMs": 20
+  },
+  "adjudication": {
+    "frameSpeechOverlapThreshold": 0.25,
+    "alignedPhoneOutsideSpeechWarningMs": 250,
+    "alignedPhoneOutsideSpeechFailureMs": 750,
+    "vadSpeechWithoutPhoneWarningMs": 200,
+    "vadSpeechWithoutPhoneFailureMs": 1000,
+    "maximumUnknownPhoneRatio": 0.05,
+    "maximumSPNRatio": 0.05,
+    "minimumAlignedWordRatio": 0.95,
+    "maximumPhoneDurationSeconds": 1.2,
+    "maximumWordDurationSeconds": 3.5
+  },
+  "coarticulation": {
+    "boundaryContiguityMs": 34,
+    "silenceBarrierFrames": 2,
+    "singleFrameRepairEnabled": true
+  },
+  "deterministicJSON": {
+    "ensureASCII": false,
+    "indent": 2,
+    "trailingNewline": true,
+    "floatDecimalPlaces": 9
+  }
+}

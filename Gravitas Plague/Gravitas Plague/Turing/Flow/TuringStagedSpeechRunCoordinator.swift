@@ -124,8 +124,7 @@ actor TuringStagedSpeechRunCoordinator {
                                 if batch.isFinalBatchForStage,
                                    let bridge = stageAuthoredBridge {
                                     await playback.enqueueAuthoredBridge(
-                                        id: bridge.prerecordingID,
-                                        fileURL: bridge.fileURL,
+                                        bridge.mediaItem,
                                         beforeGeneratedSegmentIndex:
                                             committed.globalRange.upperBound
                                     )

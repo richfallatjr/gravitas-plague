@@ -103,6 +103,7 @@ struct TuringConversationMicrophoneRehydrator: Sendable {
                 id: moment.authoredPrerecordingID,
                 role: role,
                 fileURL: try prerecordingStore.audioURL(for: recording),
+                speakerCharacterID: recording.speaker,
                 liveConversationCatalogEntry: moment,
                 orientationMode: .none
             )

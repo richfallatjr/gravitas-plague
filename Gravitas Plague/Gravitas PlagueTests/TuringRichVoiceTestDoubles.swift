@@ -43,7 +43,9 @@ actor FakeRichGlobalClipPlayer: TuringAudioPlaybackEndpoint {
         gainDB: request.gainDB
       )
     )
-    await eventHub.yield(.started(handle))
+    await eventHub.yield(
+      .started(handle: handle, clockOrigin: ContinuousClock.now)
+    )
     return handle
   }
 

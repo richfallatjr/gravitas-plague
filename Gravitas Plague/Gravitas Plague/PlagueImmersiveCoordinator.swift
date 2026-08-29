@@ -126,6 +126,12 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     private let turingWindowBundleController = TuringStoryWindowBundleController()
     private let turingDoorBundleController = TuringStoryDoorBundleController()
     private let turingRollingBenchBundleController = TuringRollingBenchBundleController()
+    private lazy var mindEyePresentationCoordinator =
+        MindEyePresentationCoordinator.makeDefault()
+    private lazy var mindEyeRuntimeLifecycle =
+        MindEyeRuntimeLifecycleCoordinator(
+            presentation: mindEyePresentationCoordinator
+        )
     private var battle01Coordinator: Battle01Coordinator?
     private var chapter01RobotEncounterCoordinator:
         Chapter01RobotEncounterCoordinator?
@@ -189,6 +195,16 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             self.turingStoryPlacementAdjustmentCoordinator.activate(
                 seed: adjustmentSeed
             )
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard MindEyeQualificationFeatureControl.isMindEyeEnabled else {
+                    return
+                }
+                await self.mindEyePresentationCoordinator.arm(
+                    characterID: .bigMike,
+                    reason: "storyLayoutCommitted.\(scanID)"
+                )
+            }
             self.configureTuringWalkieAudioAndInteraction(
                 reason: "sliceLayout.\(scanID)",
                 attempt: 1
@@ -562,6 +578,26 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
         let root = AnchorEntity(world: SIMD3<Float>(0, 0, 0))
         root.name = "GravitasPlague_PhaseOne_SceneRoot"
+        #if GR_MIND_EYE_QUALIFICATION
+        if MindEyeQualificationFeatureControl.isMindEyeEnabled {
+            await MindEyeReleaseQualificationHooks.shared.install(
+                snapshotProvider: { @MainActor [weak self] in
+                    guard let self else {
+                        return MindEyeReleaseResourceSnapshot.empty()
+                    }
+                    return await self.mindEyePresentationCoordinator
+                        .releaseResourceSnapshot()
+                }
+            )
+        } else {
+            await MindEyeReleaseQualificationHooks.shared.install(
+                snapshotProvider: { @MainActor in
+                    MindEyeReleaseResourceSnapshot.empty()
+                }
+            )
+        }
+        MindEyeReleaseQualificationHooks.shared.fireAndForget(.immersiveEntered)
+        #endif
         PlagueNativeBloomInstaller.installStrictBloom(
             on: root
         )
@@ -622,6 +658,16 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             wallManager: roomSkinningCoordinator.wallManager,
             occupancyRegistry: wallPropOccupancyRegistry
         )
+        if MindEyeQualificationFeatureControl.isMindEyeEnabled {
+            mindEyePresentationCoordinator.bindPlacementProviders([
+                turingWalkieBundleController,
+                turingRollingBenchBundleController
+            ])
+            mindEyeRuntimeLifecycle.start()
+            await TuringHighMemoryPreflightCoordinator.shared.installMindEye(
+                mindEyeRuntimeLifecycle
+            )
+        }
         StoryInteractionPresentationCoordinator.shared.register(
             turingStoryWalkieInteractionController
         )
@@ -1050,6 +1096,10 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         validateDeathPresentationAssets()
 
         drainPendingCommands()
+
+        #if GR_MIND_EYE_QUALIFICATION
+        MindEyeReleaseQualificationHooks.shared.fireAndForget(.storySystemsReady)
+        #endif
 
         return root
     }
@@ -1700,7 +1750,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             roomSkinningCoordinator.cancelRoomSkinning()
 
         case .startStoryEpisode(let episodeID):
-            startStoryEpisode(episodeID)
+            Task { @MainActor [weak self] in
+                await self?.startStoryEpisode(episodeID)
+            }
 
         case .continueStoryEpisode(let episodeID):
             continueStoryEpisode(episodeID)
@@ -1768,7 +1820,13 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
     private func startStoryEpisode(
         _ episodeID: TuringEpisodeID
-    ) {
+    ) async {
+        if MindEyeQualificationFeatureControl.isMindEyeEnabled {
+            _ = await mindEyeRuntimeLifecycle.resetForStoryBoundary(
+                scope: .chapterReset,
+                reason: "newStoryEpisode.\(episodeID.rawValue)"
+            )
+        }
         battle01Coordinator?.cancel(
             reason: "newStoryEpisode.\(episodeID.rawValue)"
         )
@@ -1982,6 +2040,20 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     private func tearDownOperationModeRuntime(
         reason: String
     ) async {
+        TuringMemoryBudgetProbe.log(label: "mindEye.operationTeardown.before")
+        if MindEyeQualificationFeatureControl.isMindEyeEnabled {
+            _ = await mindEyeRuntimeLifecycle.resetForStoryBoundary(
+                scope: .operationMode,
+                reason: reason
+            )
+            await MindEyeAssetMemoryManager.shared.forceEvictAll(
+                reason: "operationMode.\(reason)"
+            )
+            await MindEyeAuthoredFrameTrackStore.shared.forceEvictAll(
+                reason: "operationMode.\(reason)"
+            )
+        }
+        TuringMemoryBudgetProbe.log(label: "mindEye.operationTeardown.after")
         await storyAmbientGunfireLifecycle?.deactivateAndWait(
             reason: "operationModeTeardown.\(reason)"
         )
@@ -2077,6 +2149,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             "[PlagueModeSwitch] teardown completed " +
                 "reason=\(reason) storyRemoved=true hordeRemoved=true"
         )
+        #if GR_MIND_EYE_QUALIFICATION
+        MindEyeReleaseQualificationHooks.shared.fireAndForget(.operationModeTornDown)
+        #endif
     }
 
     private func continueStoryEpisode(
@@ -2098,6 +2173,12 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
         Task { @MainActor [weak self] in
             guard let self else { return }
+            if MindEyeQualificationFeatureControl.isMindEyeEnabled {
+                _ = await self.mindEyeRuntimeLifecycle.resetForStoryBoundary(
+                    scope: .chapterReset,
+                    reason: "continueStoryEpisode.\(episodeID.rawValue)"
+                )
+            }
             do {
                 if episodeID == .chapter02 {
                     guard let chapter02Coordinator = self.chapter02Coordinator,
@@ -2699,6 +2780,12 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
     func quiesceStoryRuntime(teleportID: UUID) async throws {
         let reason = "storyTeleport.\(teleportID.uuidString)"
+        if MindEyeQualificationFeatureControl.isMindEyeEnabled {
+            _ = await mindEyeRuntimeLifecycle.resetForStoryBoundary(
+                scope: .storyTeleport,
+                reason: reason
+            )
+        }
         await turingStoryWalkieInteractionController.quiesceForStoryTeleport(reason: reason)
         await TuringEpisodeFlowController.shared.quiesceForStoryTeleport(reason: reason)
         battle01Coordinator?.cancel(reason: reason)
@@ -3550,7 +3637,11 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         }
     }
 
-    func shutdown() {
+    func shutdown() async {
+        if MindEyeQualificationFeatureControl.isMindEyeEnabled {
+            _ = await mindEyeRuntimeLifecycle.shutdown(reason: "immersiveShutdown")
+            await TuringHighMemoryPreflightCoordinator.shared.clearMindEye()
+        }
         operationModeSwitchGeneration += 1
         operationModeSwitchTask?.cancel()
         operationModeSwitchTask = nil
@@ -3669,6 +3760,20 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         lastTickDate = nil
         handledCommandIDs.removeAll()
         pendingCommands.removeAll()
+        #if GR_MIND_EYE_QUALIFICATION
+        await MindEyeReleaseQualificationHooks.shared.finishAfterShutdown()
+        #endif
+    }
+
+    func mindEyeApplicationStateChanged(
+        _ state: MindEyeApplicationLifecycleState
+    ) async {
+        if MindEyeQualificationFeatureControl.isMindEyeEnabled {
+            await mindEyeRuntimeLifecycle.applicationStateChanged(
+                to: state,
+                reason: "immersiveScenePhase"
+            )
+        }
     }
 
     private func prepareForUserQuitOrClose() {

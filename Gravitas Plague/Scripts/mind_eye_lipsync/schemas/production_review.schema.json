@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gravitas-plague.local/schemas/mind-eye-production-review-1.json",
+  "title": "Mind's Eye Production Review Ledger",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "manifestSetSHA256", "decisions"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "manifestSetSHA256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["prID", "manifestSHA256", "status", "notes"],
+        "properties": {
+          "prID": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+          "manifestSHA256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "status": {"enum": ["unreviewed", "approved", "needsCompilerFix", "needsOverrideReview"]},
+          "notes": {"type": "string"}
+        }
+      }
+    }
+  }
+}

@@ -7,7 +7,8 @@ import UIKit
 @MainActor
 final class TuringStoryWalkieBundleController:
     ObservableObject,
-    TuringStoryAdjustablePlacementController {
+    TuringStoryAdjustablePlacementController,
+    MindEyePlacementProviding {
     enum BundleError: LocalizedError {
         case missingUSDZ(String)
         case missingRequiredEntity(String)
@@ -43,6 +44,10 @@ final class TuringStoryWalkieBundleController:
     private(set) var root = Entity()
     private var loadedBundleRoot: Entity?
     private(set) var anchors: Anchors?
+    private weak var mindEyePlacementAvailabilitySink:
+        (any MindEyePlacementAvailabilitySink)?
+    private var mindEyePresentationRoot: Entity?
+    private var mindEyePlacementRevision: UInt64 = 0
 
     private weak var wallManager: WallPlaneManager?
     private weak var occupancyRegistry: WallPropOccupancyRegistry?
@@ -59,6 +64,12 @@ final class TuringStoryWalkieBundleController:
     var dadFrameAudioEmitter: Entity? { anchors?.dadFrameAudioEmitter }
     var dadFrameIconAnchor: Entity? { anchors?.dadFrameIconAnchor }
     var dadFrameRoot: Entity? { anchors?.dadFrameRoot }
+
+    var mindEyePlacementProviderID: String { "turing.wallBundle" }
+
+    var mindEyeSupportedSurfaces: Set<StoryInteractionSurfaceID> {
+        [.walkie, .dadFrame]
+    }
 
     init() {
         root.name = "TuringStoryWalkieBundle_WorldRoot"
@@ -108,6 +119,7 @@ final class TuringStoryWalkieBundleController:
         )
         resolvedAnchors.walkieAudioEmitter.components.set(SpatialAudioComponent())
         resolvedAnchors.dadFrameAudioEmitter.components.set(SpatialAudioComponent())
+        notifyMindEyePlacementAvailable(reason: "commitPlannedPlacement")
     }
 
     func placeOnBestWallIfNeeded(
@@ -152,6 +164,7 @@ final class TuringStoryWalkieBundleController:
             registerOccupancy(placement: selectedPlacement)
             resolvedAnchors.walkieAudioEmitter.components.set(SpatialAudioComponent())
             resolvedAnchors.dadFrameAudioEmitter.components.set(SpatialAudioComponent())
+            notifyMindEyePlacementAvailable(reason: "placeOnBestWallIfNeeded")
 
             print("""
             [TuringWalkieBundle] placement committed
@@ -180,8 +193,10 @@ final class TuringStoryWalkieBundleController:
     }
 
     func reset(reason: String) {
+        invalidateMindEyePlacement(reason: "wallBundleReset.\(reason)")
         occupancyRegistry?.unregister(id: occupancyID)
         root.children.removeAll()
+        mindEyePresentationRoot = nil
         root.isEnabled = false
         loadedBundleRoot = nil
         anchors = nil
@@ -194,6 +209,111 @@ final class TuringStoryWalkieBundleController:
         [TuringWalkieBundle] reset
           reason: \(reason)
         """)
+    }
+
+    func setMindEyePlacementAvailabilitySink(
+        _ sink: (any MindEyePlacementAvailabilitySink)?
+    ) {
+        mindEyePlacementAvailabilitySink = sink
+        if isPlaced,
+           root.isEnabled,
+           loadedBundleRoot != nil,
+           anchors != nil {
+            sink?.mindEyePlacementProviderDidBecomeAvailable(
+                providerID: mindEyePlacementProviderID,
+                surfaces: mindEyeSupportedSurfaces,
+                revision: mindEyePlacementRevision
+            )
+        }
+    }
+
+    func mindEyePlacementTarget(
+        for surface: StoryInteractionSurfaceID
+    ) -> MindEyePlacementTarget? {
+        guard mindEyeSupportedSurfaces.contains(surface),
+              isPlaced,
+              root.isEnabled,
+              let loadedBundleRoot,
+              let anchors else {
+            return nil
+        }
+
+        let presentationRoot = ensureMindEyePresentationRoot()
+        let aggregateBounds = MindEyeRealityBoundsAdapter.bounds(
+            of: loadedBundleRoot,
+            relativeTo: presentationRoot
+        )
+        let shelfBounds = anchors.shelf.flatMap {
+            MindEyeRealityBoundsAdapter.bounds(of: $0, relativeTo: presentationRoot)
+        }
+
+        let sourceRoot: Entity
+        switch surface {
+        case .walkie:
+            sourceRoot = anchors.walkieRoot
+        case .dadFrame:
+            sourceRoot = anchors.dadFrameRoot
+        case .crankRadio, .hamReceiver:
+            return nil
+        }
+
+        return MindEyePlacementTarget(
+            providerID: mindEyePlacementProviderID,
+            revision: mindEyePlacementRevision,
+            parent: presentationRoot,
+            geometry: MindEyePlacementGeometry(
+                providerID: mindEyePlacementProviderID,
+                revision: mindEyePlacementRevision,
+                centeringBounds: aggregateBounds,
+                obstructionBounds: shelfBounds,
+                fallbackCenter: sourceRoot.position(relativeTo: presentationRoot)
+            )
+        )
+    }
+
+    private func ensureMindEyePresentationRoot() -> Entity {
+        if let mindEyePresentationRoot,
+           mindEyePresentationRoot.parent === root {
+            return mindEyePresentationRoot
+        }
+        let value = Entity()
+        value.name = "MindEyeWallBundlePresentationRoot"
+        value.position = .zero
+        value.orientation = simd_quatf(angle: 0, axis: SIMD3<Float>(0, 1, 0))
+        value.scale = .one
+        root.addChild(value)
+        mindEyePresentationRoot = value
+        return value
+    }
+
+    private func notifyMindEyePlacementAvailable(reason: String) {
+        mindEyePlacementRevision &+= 1
+        _ = ensureMindEyePresentationRoot()
+        mindEyePlacementAvailabilitySink?
+            .mindEyePlacementProviderDidBecomeAvailable(
+                providerID: mindEyePlacementProviderID,
+                surfaces: mindEyeSupportedSurfaces,
+                revision: mindEyePlacementRevision
+            )
+        print(
+            "[MindEyePlacement] wall provider available " +
+                "revision=\(mindEyePlacementRevision) reason=\(reason)"
+        )
+    }
+
+    private func invalidateMindEyePlacement(reason: String) {
+        mindEyePlacementRevision &+= 1
+        mindEyePlacementAvailabilitySink?
+            .mindEyePlacementProviderDidInvalidate(
+                providerID: mindEyePlacementProviderID,
+                surfaces: mindEyeSupportedSurfaces,
+                revision: mindEyePlacementRevision,
+                reason: reason
+            )
+        print(
+            "[MindEyePlacement] wall provider invalidated " +
+                "revision=\(mindEyePlacementRevision) reason=\(reason)"
+        )
     }
 
     private func loadBundleIfNeeded() async throws -> Entity {
@@ -926,6 +1046,7 @@ final class TuringStoryWalkieBundleController:
         )
         committedAdjustmentTransform = slot.worldTransform
         committedAdjustmentSlot = slot
+        notifyMindEyePlacementAvailable(reason: "commitAdjustedPlacement")
     }
 
     func cancelPlacementPreview() {

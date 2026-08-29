@@ -43,13 +43,9 @@ private final class TuringParallelPerfGapAudioBridge: @unchecked Sendable {
     }
 
     func enqueuePrerecording(
-        id: String,
-        fileURL: URL
+        _ item: TuringAuthoredMediaItem
     ) async {
-        await coordinator.enqueuePrerecording(
-            id: id,
-            fileURL: fileURL
-        )
+        await coordinator.enqueuePrerecording(item)
     }
 
     func qwenComputeStarted(
@@ -483,8 +479,14 @@ enum TuringNativeQwenHelloWorldCanary {
                 expectedSegmentCount: nil
             )
             await playback.enqueuePrerecording(
-                id: prerecordingID,
-                fileURL: prerecordingAudioURL
+                TuringAuthoredMediaItem(
+                    scriptPointID: seedKey,
+                    id: prerecordingID,
+                    role: .primaryPrerecording,
+                    fileURL: prerecordingAudioURL,
+                    speakerCharacterID:
+                        TuringConversationCharacterID.bigMike.rawValue
+                )
             )
 
             print("""

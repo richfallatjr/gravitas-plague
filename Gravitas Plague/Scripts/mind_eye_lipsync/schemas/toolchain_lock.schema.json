@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gravitas-plague.invalid/schemas/mind-eye-toolchain-lock-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "toolchainConfigSHA256", "pythonVersion", "mfaVersion", "kalpyVersion", "ffmpegVersion", "ffprobeVersion", "sileroVADVersion", "sileroPackageSHA256", "sileroModelSHA256", "onnxruntimeVersion", "torchVersion", "torchaudioVersion", "numpyVersion", "models", "mfaEnvironmentLockSHA256", "pythonRequirementsLockSHA256"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "toolchainConfigSHA256": {"$ref": "#/$defs/sha256"},
+    "pythonVersion": {"type": "string", "pattern": "^3\\.11\\.[0-9]+$"},
+    "mfaVersion": {"const": "3.3.9"},
+    "kalpyVersion": {"type": "string", "pattern": "^0\\.9\\."},
+    "ffmpegVersion": {"type": "string", "minLength": 1},
+    "ffprobeVersion": {"type": "string", "minLength": 1},
+    "sileroVADVersion": {"const": "6.2.1"},
+    "sileroPackageSHA256": {"$ref": "#/$defs/sha256"},
+    "sileroModelSHA256": {"$ref": "#/$defs/sha256"},
+    "onnxruntimeVersion": {"const": "1.29.0"},
+    "torchVersion": {"const": "2.9.1"},
+    "torchaudioVersion": {"const": "2.9.1"},
+    "numpyVersion": {"type": "string", "pattern": "^2\\."},
+    "models": {
+      "type": "object", "additionalProperties": false,
+      "required": ["acoustic", "dictionary", "g2p"],
+      "properties": {
+        "acoustic": {"$ref": "#/$defs/model"},
+        "dictionary": {"$ref": "#/$defs/model"},
+        "g2p": {"$ref": "#/$defs/model"}
+      }
+    },
+    "mfaEnvironmentLockSHA256": {"$ref": "#/$defs/sha256"},
+    "pythonRequirementsLockSHA256": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "model": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "version", "resolvedPathKind", "sha256"],
+      "properties": {
+        "name": {"const": "english_us_arpa"},
+        "version": {"type": "string", "enum": ["3.0.0", "2.0.0a"]},
+        "resolvedPathKind": {"const": "mfa-pretrained-cache"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}
