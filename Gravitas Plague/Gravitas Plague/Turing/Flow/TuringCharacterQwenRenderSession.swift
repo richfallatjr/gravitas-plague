@@ -141,12 +141,25 @@ actor TuringCharacterQwenRenderSession:
         let resolvedGPUAdmissionConfiguration = try
             gpuAdmissionConfiguration ?? .current()
         let gpuAdmissionPolicy = try resolvedGPUAdmissionConfiguration.policy()
+        let mlxCommandBufferConfiguration = try
+            TuringMLXCommandBufferExperimentConfiguration.current()
+
+        TuringQwenActiveModelTelemetry.register(
+            runID: runID,
+            modelID: Self.diagnosticModelID,
+            quantization: Self.diagnosticQuantization
+        )
 
         logMemory("session.beforeHighMemoryPreflight")
-        try await highMemoryPreflight.prepareForTuringHighMemoryRun(
-            runID: runID,
-            continuity: spokenPresentationContinuity
-        )
+        do {
+            try await highMemoryPreflight.prepareForTuringHighMemoryRun(
+                runID: runID,
+                continuity: spokenPresentationContinuity
+            )
+        } catch {
+            TuringQwenActiveModelTelemetry.unregister(runID: runID)
+            throw error
+        }
         logMemory("session.afterHighMemoryPreflight")
 
         let owner = "\(runtime.characterID).\(runID)"
@@ -187,6 +200,8 @@ actor TuringCharacterQwenRenderSession:
                 variantID: loadedProfile.defaultVariantID,
                 performanceMode: .performance
             )
+            _ = try mlxCommandBufferConfiguration
+                .verifyResolvedDeviceConfiguration()
             logMemory("session.afterFresh2WarmLoad")
 
             let selectedVariant = try loadedProfile.requireVariant(
@@ -216,7 +231,8 @@ actor TuringCharacterQwenRenderSession:
                 TuringQwenNativeGenerationSchedulerFactory
                     .makeFresh2Scheduler(
                         instancePool: freshPool,
-                        gpuAdmissionPolicy: gpuAdmissionPolicy
+                        gpuAdmissionPolicy: gpuAdmissionPolicy,
+                        commandBufferProfile: mlxCommandBufferConfiguration.profile
                     )
             profile = loadedProfile
             stagedModel = writableModel
@@ -232,6 +248,8 @@ actor TuringCharacterQwenRenderSession:
               actualInstanceCount: 2
               sharedWeights: false
               gpuAdmissionMode: \(resolvedGPUAdmissionConfiguration.mode.rawValue)
+              mlxCommandBufferProfile: \(mlxCommandBufferConfiguration.profile.rawValue)
+              mlxTargetedBoundary: \(mlxCommandBufferConfiguration.targetedBoundary.rawValue)
               fallbackUsed: false
             """)
         } catch {
@@ -244,6 +262,7 @@ actor TuringCharacterQwenRenderSession:
             )
             pool = nil
             await releaseOwner(reason: "beginFailed")
+            TuringQwenActiveModelTelemetry.unregister(runID: runID)
             throw error
         }
     }
@@ -297,12 +316,20 @@ actor TuringCharacterQwenRenderSession:
           freshInstanceCount: 2
         """)
 
-        let nativeReport = try await scheduler.runSegments(
-            requests,
-            runID: "\(runID).\(stage.stageID)",
-            modelRoot: stagedModel,
-            skipSegmentFailures: runtime.qwen.skipSegmentFailures,
-            onSegmentStarted: { _, segmentIndex in
+        let stageRunID = "\(runID).\(stage.stageID)"
+        let failureProfile = try
+            TuringMLXCommandBufferExperimentConfiguration.current().profile
+        let failureAdmissionMode = try (
+            gpuAdmissionConfiguration ?? .current()
+        ).mode
+        let nativeReport: TuringQwenNativeFreshInstanceRunReport
+        do {
+            nativeReport = try await scheduler.runSegments(
+                requests,
+                runID: stageRunID,
+                modelRoot: stagedModel,
+                skipSegmentFailures: runtime.qwen.skipSegmentFailures,
+                onSegmentStarted: { _, segmentIndex in
                 TuringMemoryBudgetProbe.log(
                     label: "qwen.segment.renderStarted",
                     activeQwenModelID: Self.diagnosticModelID,
@@ -315,8 +342,8 @@ actor TuringCharacterQwenRenderSession:
                     ]
                 )
                 await onStarted(segmentIndex)
-            },
-            onSegmentDecoded: { result in
+                },
+                onSegmentDecoded: { result in
                 TuringMemoryBudgetProbe.log(
                     label: "qwen.segment.audioMaterialized",
                     activeQwenModelID: Self.diagnosticModelID,
@@ -356,8 +383,8 @@ actor TuringCharacterQwenRenderSession:
                     )
                 )
                 await state.recordSuccess(result.segmentIndex)
-            },
-            onSegmentSkipped: { skipped in
+                },
+                onSegmentSkipped: { skipped in
                 TuringMemoryBudgetProbe.log(
                     label: "qwen.segment.skipped",
                     activeQwenModelID: Self.diagnosticModelID,
@@ -378,9 +405,24 @@ actor TuringCharacterQwenRenderSession:
                     skipped.segmentIndex,
                     skipped.errorDescription
                 )
-            }
-        )
+                }
+            )
+        } catch {
+            await TuringMLXCommandBufferDiagnosticsExporter.export(
+                runID: stageRunID,
+                profile: failureProfile,
+                admissionMode: failureAdmissionMode,
+                runMetrics: nil
+            )
+            throw error
+        }
         nativeReport.log()
+        await TuringMLXCommandBufferDiagnosticsExporter.export(
+            runID: stageRunID,
+            profile: nativeReport.commandBufferMetrics.profile,
+            admissionMode: nativeReport.commandBufferMetrics.admissionMode,
+            runMetrics: nativeReport.commandBufferMetrics
+        )
 
         let result = await state.snapshot()
         logMemory("stage.renderCompleted.\(stage.stageID)")
@@ -417,6 +459,10 @@ actor TuringCharacterQwenRenderSession:
         let diagnosticsCharacterID = runtime.characterID
         let diagnosticsVoiceID = runtime.voiceID
         let skipSegmentFailures = runtime.qwen.skipSegmentFailures
+        let commandBufferProfile = try
+            TuringMLXCommandBufferExperimentConfiguration.current().profile
+        let admissionMode = try
+            TuringQwenGPUAdmissionExperimentConfiguration.current().mode
         streamingQueue = queue
         streamingState = state
         streamingInputSealed = false
@@ -500,9 +546,21 @@ actor TuringCharacterQwenRenderSession:
                     }
                 )
                 report.log()
+                await TuringMLXCommandBufferDiagnosticsExporter.export(
+                    runID: streamRunID,
+                    profile: report.commandBufferMetrics.profile,
+                    admissionMode: report.commandBufferMetrics.admissionMode,
+                    runMetrics: report.commandBufferMetrics
+                )
                 await state.schedulerFinished()
                 return report
             } catch {
+                await TuringMLXCommandBufferDiagnosticsExporter.export(
+                    runID: streamRunID,
+                    profile: commandBufferProfile,
+                    admissionMode: admissionMode,
+                    runMetrics: nil
+                )
                 TuringMemoryBudgetProbe.log(
                     label: "qwen.streamingSchedulerFailed",
                     activeQwenModelID: Self.diagnosticModelID,
@@ -632,6 +690,7 @@ actor TuringCharacterQwenRenderSession:
         streamingTask = nil
         streamingState = nil
         await releaseOwner(reason: reason)
+        TuringQwenActiveModelTelemetry.unregister(runID: runID)
         logMemory(
             "session.afterUnload",
             details: ["reason": reason]

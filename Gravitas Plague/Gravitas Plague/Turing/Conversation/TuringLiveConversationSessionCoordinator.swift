@@ -247,6 +247,11 @@ final class TuringLiveConversationSessionCoordinator:
         let run = TuringSpokenPresentationRunIdentity(
             flowIdentity: attachment.identity
         )
+        let microphoneContext = await stagePrerecordingPreFillerMicrophones(
+            item: item,
+            catalogEntry: catalogEntry,
+            attachment: attachment
+        )
 
         // The PR-orientation interval is the first audible filler for an
         // authored point. Stage the same portrait that the PR will promote so
@@ -286,8 +291,110 @@ final class TuringLiveConversationSessionCoordinator:
                 "surface=\(catalogEntry.interactionSurface.rawValue) " +
                 "outcome=\(String(describing: outcome)) " +
                 "motion=keepAlive blink=active mouth=rest " +
-                "microphoneActivation=actualAuthoredMediaStart"
+                "microphoneContext=\(microphoneContext) " +
+                "currentPromptActivation=actualAuthoredMediaStart"
         )
+    }
+
+    private func stagePrerecordingPreFillerMicrophones(
+        item: TuringAuthoredMediaItem,
+        catalogEntry: TuringLiveConversationCatalog.Entry,
+        attachment: Attachment
+    ) async -> String {
+        var liveSession: TuringLiveConversationSession
+        if let session {
+            liveSession = session
+        } else {
+            liveSession = TuringLiveConversationSession(
+                sessionID: UUID(),
+                generation: generation,
+                parentFlowSequenceID: attachment.parentSequenceID,
+                parentFlowInstanceID: attachment.identity.flowInstanceID,
+                parentPlaybackRunID: attachment.identity.playbackRunID,
+                parentLease: attachment.parentLease,
+                authoredPlayback: attachment.playback,
+                progressionHold: nil,
+                activeTurnID: nil
+            )
+            session = liveSession
+        }
+
+        let stablePolicy = await arbiter.currentStableInteractionPolicy()
+        let retainedSeeds = await arbiter.currentLatchedConversationSeedSnapshot(
+            allowedSurfaces: stablePolicy.allowedTuringSurfaces
+        )
+        let context = TuringPrerecordingPreFillerMicrophonePolicy.context(
+            retainedSeeds: retainedSeeds,
+            upcomingSurface: catalogEntry.interactionSurface
+        )
+
+        do {
+            switch context {
+            case .previousConversationVoice(let seedID):
+                let previousSeed = retainedSeeds.seedsBySurface[
+                    catalogEntry.interactionSurface
+                ]
+                presentedSeedIDs = retainedSeeds.seedsBySurface.mapValues(\.seedID)
+                try await arbiter.installLiveConversationAvailability(
+                    parentLease: liveSession.parentLease,
+                    sessionID: liveSession.sessionID,
+                    generation: liveSession.generation,
+                    eligibleSeeds: retainedSeeds,
+                    authoredActivitySurface: nil,
+                    reason: "prerecordingPreFiller.previousConversationVoice.\(item.id)"
+                )
+                print(
+                    "[TuringLiveConversation] pre-PR microphones staged " +
+                        "itemID=\(item.id) " +
+                        "surface=\(catalogEntry.interactionSurface.rawValue) " +
+                        "context=previousConversationVoice " +
+                        "seedID=\(seedID.uuidString) " +
+                        "selectedMomentID=" +
+                        "\(previousSeed?.targetContext.selectedMomentID ?? "missing") " +
+                        "voicePromptID=\(previousSeed?.voicePromptID ?? "missing")"
+                )
+                return "previousConversationVoice"
+
+            case .currentPromptVoiceFallback:
+                let activation = try await
+                    TuringConversationMicrophoneActivationCoordinator.shared
+                        .authoredMediaStarted(
+                            entry: catalogEntry,
+                            item: item,
+                            descriptor: attachment.descriptor,
+                            parentSequenceID: attachment.parentSequenceID,
+                            identity: attachment.identity,
+                            expectedMicrophoneGeneration:
+                                attachment.microphoneGeneration,
+                            parentLease: liveSession.parentLease,
+                            liveSessionID: liveSession.sessionID,
+                            livePresentationGeneration: liveSession.generation,
+                            activationPhase: "preFillerCurrentPromptFallback"
+                        )
+                currentAuthoredItemID = item.id
+                currentAuthoredSeed = activation.seed
+                presentedSeedIDs = activation.eligibleSeeds.seedsBySurface
+                    .mapValues(\.seedID)
+                print(
+                    "[TuringLiveConversation] pre-PR microphones staged " +
+                        "itemID=\(item.id) " +
+                        "surface=\(catalogEntry.interactionSurface.rawValue) " +
+                        "context=currentPromptVoiceFallback " +
+                        "seedID=\(activation.seed.seedID.uuidString) " +
+                        "selectedMomentID=" +
+                        "\(activation.seed.targetContext.selectedMomentID) " +
+                        "voicePromptID=\(activation.seed.voicePromptID)"
+                )
+                return "currentPromptVoiceFallback"
+            }
+        } catch {
+            print(
+                "[TuringLiveConversation] pre-PR microphone staging failed " +
+                    "itemID=\(item.id) " +
+                    "error=\(error.localizedDescription)"
+            )
+            return "unavailable"
+        }
     }
 
     func microphoneHoldEnded(
@@ -469,7 +576,8 @@ final class TuringLiveConversationSessionCoordinator:
                 session = heldSession
                 print(
                     "[TuringLiveConversation] pre-filler seed promoted to authored media " +
-                        "itemID=\(item.id) seedID=\(seed.seedID.uuidString)"
+                        "itemID=\(item.id) seedID=\(seed.seedID.uuidString) " +
+                        "microphoneContext=currentPromptVoice"
                 )
                 return
             }
@@ -1074,18 +1182,6 @@ final class TuringLiveConversationSessionCoordinator:
         guard let entry = item.liveConversationCatalogEntry else {
             return
         }
-        let seed = try await TuringConversationMicrophoneActivationCoordinator
-            .shared.authoredMediaStarted(
-            entry: entry,
-            item: item,
-            descriptor: attachment.descriptor,
-            parentSequenceID: attachment.parentSequenceID,
-            identity: attachment.identity,
-            expectedMicrophoneGeneration: attachment.microphoneGeneration
-        )
-        currentAuthoredItemID = item.id
-        currentAuthoredSeed = seed
-
         var liveSession: TuringLiveConversationSession
         if let session {
             liveSession = session
@@ -1109,24 +1205,27 @@ final class TuringLiveConversationSessionCoordinator:
             )
         }
         session = liveSession
-
-        let stablePolicy = await arbiter.currentStableInteractionPolicy()
-        let snapshot = await arbiter.currentLatchedConversationSeedSnapshot(
-            allowedSurfaces: stablePolicy.allowedTuringSurfaces
-        )
-        presentedSeedIDs = snapshot.seedsBySurface.mapValues(\.seedID)
-        try await arbiter.installLiveConversationAvailability(
-            parentLease: liveSession.parentLease,
-            sessionID: liveSession.sessionID,
-            generation: liveSession.generation,
-            eligibleSeeds: snapshot,
-            authoredActivitySurface: seed.interactionSurface,
-            reason: "\(reason).\(item.id)"
-        )
+        let activation = try await TuringConversationMicrophoneActivationCoordinator
+            .shared.authoredMediaStarted(
+                entry: entry,
+                item: item,
+                descriptor: attachment.descriptor,
+                parentSequenceID: attachment.parentSequenceID,
+                identity: attachment.identity,
+                expectedMicrophoneGeneration: attachment.microphoneGeneration,
+                parentLease: liveSession.parentLease,
+                liveSessionID: liveSession.sessionID,
+                livePresentationGeneration: liveSession.generation,
+                activationPhase: "actualPRStart"
+            )
+        currentAuthoredItemID = item.id
+        currentAuthoredSeed = activation.seed
+        presentedSeedIDs = activation.eligibleSeeds.seedsBySurface
+            .mapValues(\.seedID)
         print(
             "[TuringLiveConversation] seed installed " +
-                "itemID=\(item.id) seedID=\(seed.seedID.uuidString) " +
-                "phase=\(reason)"
+                "itemID=\(item.id) seedID=\(activation.seed.seedID.uuidString) " +
+                "phase=\(reason) microphoneContext=currentPromptVoice"
         )
     }
 

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {"id": "deviceDefault", "operations": null, "megabytes": null},
+    {"id": "operations32Megabytes40", "operations": 32, "megabytes": 40},
+    {"id": "operations40Megabytes32", "operations": 40, "megabytes": 32},
+    {"id": "operations32Megabytes32", "operations": 32, "megabytes": 32},
+    {"id": "operations24Megabytes24", "operations": 24, "megabytes": 24},
+    {"id": "operations16Megabytes16", "operations": 16, "megabytes": 16}
+  ]
+}

@@ -233,6 +233,83 @@ preventing the specific competing GPU interval. Also determine whether MLX can
 surface this command-buffer failure as a recoverable Swift error; the current
 uncaught `std::runtime_error` guarantees `SIGABRT` once Metal rejects the work.
 
+The next on-device build was prepared for that A/B by adding the compile-time
+condition `GR_TURING_DECODE_EXCLUSIVE` to both Debug and Release. This selects
+`decodeExclusive`; it does not remove Fresh2, reduce the two generation permits,
+or serialize the two generation lanes with each other. It only makes generation
+and speech decode mutually exclusive, with a waiting decoder taking priority.
+The run must print `gpuAdmissionMode: decodeExclusive` before its result can be
+accepted as the candidate half of the A/B.
+
+### 2026-08-29 decode-exclusive candidate: same Metal execution abort
+
+The on-device candidate run supplied after the current-overlap run conclusively
+engaged `gpuAdmissionMode: decodeExclusive`. It preserved both independent
+Fresh2 instances and reached a peak of two simultaneous generation leases. It
+reported no admission invariant violations and no generation/decode overlap.
+
+The first two live Big Mike turns completed all five generated segments:
+
+```text
+turn 1: 40.652 s wall clock, 10.640 s generated audio,
+        5112.3 MB sampled peak physical footprint
+turn 2: 68.383 s wall clock, 20.400 s generated audio,
+        5200.6 MB sampled peak physical footprint
+```
+
+For both completed turns:
+
+```text
+peakRenderConcurrency: 2
+peakDecodeConcurrency: 1
+sameSegmentRenderDecodeOverlapCount: 0
+crossSegmentRenderDecodeOverlapCount: 0
+gpuAdmissionPeakGenerationLeases: 2
+gpuAdmissionInvariantViolationCount: 0
+```
+
+The third live Big Mike turn failed with the same explicit error class as the
+baseline:
+
+```text
+libc++abi: terminating due to uncaught exception of type std::runtime_error:
+[METAL] Command buffer execution failed: Impacting Interactivity
+(0000000e:kIOGPUCommandBufferCallbackErrorImpactingInteractivity)
+status=5 errorDomain=MTLCommandBufferErrorDomain errorCode=1
+```
+
+The final chronology removes generation/decode overlap as a sufficient
+explanation:
+
+1. Both Fresh2 generation workers concurrently rendered segments 0 and 1.
+2. Both render working sets and admission leases were released.
+3. Segment 0 decoded, materialized, and began playback successfully.
+4. Segment 1 acquired the sole decoder with `activeRenderCountAtDecodeAcquire:
+   0`, `sameSegmentRenderActive: false`, and `crossSegmentRenderActive: false`.
+5. Lane 0 became eligible for segment 2, but the log never reached render-phase
+   admission or `fullGenerate` for segment 2; it remained blocked by the active
+   decoder as designed.
+6. Segment 1 reached the large decoder upsampling/residual path. The last
+   completed boundary was `speechDecoder.decoder.2.residual.2` at shape
+   `1x29440x384`. It then entered `speechDecoder.decoder.2.residual.3` and the
+   process aborted before that stage materialized.
+
+Near the failing stage, the process reported approximately 5.39 GB physical
+footprint and 3.17 GB MLX active memory. The last explicit available-memory
+sample was about 3.07 GB. There is no jetsam signature in this console output.
+The device had changed to `thermalStateChanged.3` earlier in this third render,
+which must be retained as an important test condition and possible GPU-budget
+amplifier, but it does not change the failure classification.
+
+Phase 1 disposition: broad generation/decode exclusion is diagnostically useful
+but is not a stable shipping solution. Per the Phase 1 interpretation table, the
+next architect phase must focus on low-level MLX command-buffer failure
+containment and decoder command-buffer/stage slicing. Do not respond to this
+result by deleting Fresh2, reducing generation permits, or globally serializing
+the two generation lanes. The candidate proved the two generation lanes can
+remain concurrent; the remaining repeated failure is within the single speech
+decoder under the visionOS interactive GPU budget.
+
 There are intentional `precondition` calls in the Turing flow, interaction,
 audio, rendered-codebook, and release-ledger paths. They are another reason not to
 label every `SIGABRT` as OOM.
@@ -1292,3 +1369,73 @@ The next device trace should show a UUID rather than `continuityID: none`, then
 was a functional Mind's Eye lifecycle repair, not evidence that the tiny
 portrait package caused the Turing Metal abort and not permission to restore
 emergency visual teardown.
+
+## 21. Phase 2 containment candidate prepared 2026-08-29
+
+Phase 1 is formally closed as a completed diagnostic experiment. Its
+`decodeExclusive` candidate reproduced the same Metal failure and was rejected
+as a shipping fix. Production/default admission is restored to
+`currentOverlap`; the control remains available only for qualification. The
+two warmed Fresh instances, two worker lanes, and two generation permits remain
+unchanged.
+
+The local Phase 2 candidate now modifies the vendored MLX Metal backend at the
+failure source. The old completion callback no longer throws a C++ exception.
+Every MLX command buffer instead receives a fixed-size diagnostic owner and a
+nonthrowing completion handler. A failed completion:
+
+1. copies its Metal status, error domain/code/description, GPU/kernel times,
+   buffer thresholds, operation/byte estimates, primitive identity, bounded
+   Qwen context, MLX memory, process footprint, available memory, and app/Mind's
+   Eye Metal-in-flight counts;
+2. appends one record to a fixed 64-record ring and aggregate histogram;
+3. atomically writes `mlx-metal-last-failure.json`;
+4. poisons the MLX device for the remainder of the launch; and
+5. returns normally from the callback.
+
+The next controlled `mlx_eval`/synchronization boundary raises the typed
+`[TURING_MLX_METAL_FAILURE]` through MLX's C error boundary and Swift
+`withError`, not from the asynchronous callback. Qwen maps the exact record to
+`TuringQwenNativeMetalFailure`, immediately cancels the open segment queue,
+Phase 1 admission waiters, and serialized decoder, trips a no-reset production
+circuit breaker, unwinds both lanes, unloads both Fresh owners, and refuses any
+same-launch Qwen restart. Audio already transferred to playback is not stopped;
+failed or poison-dependent codebooks, PCM, WAV, and lip-sync work are not
+published.
+
+The Qwen context distinguishes warm load, initial talker, each dynamic row,
+dynamic code predictor, CPU codebook materialization, and every existing exact
+speech-decoder stage. It includes run, source instance, segment, lane when
+applicable, decode ID, row range, and talker-position range. No text or token
+payload is retained. Slow buffers at or above 50 ms and failures receive bounded
+events; normal buffers remain only in the 64-record ring and aggregate.
+
+Startup now configures MLX before any device access. The qualification matrix
+supports `deviceDefault`, the crossed `32 ops / 40 MB` and `40 ops / 32 MB`
+profiles, and balanced `32/32`, `24/24`, and `16/16` profiles. Production exposes
+no arbitrary runtime tuning. No nondefault profile or targeted boundary has
+been promoted: the first device run must remain `currentOverlap +
+deviceDefault` so the new ring identifies whether the failure is an aggregate
+buffer or one indivisible primitive.
+
+Host verification completed:
+
+- vendored MLX target builds;
+- Qwen-native package builds;
+- fixed-ring wrap, monotonic sequence, synthetic failure/poison, and external
+  Metal-in-flight tests pass;
+- typed circuit-breaker, MLX error-boundary, profile, and targeted-boundary
+  tests pass;
+- all 13 focused Phase 1 admission tests remain passing;
+- host analyzer, profile comparator, and fail-closed Phase 2 source audit tests
+  pass.
+
+The current host has no Xcode installation, so an xrsimulator app build and
+Vision Pro run are not claimed. Device qualification remains required. On the
+first failure, collect both the normal Turing diagnostic export and
+`Application Support/TuringDiagnostics/mlx-metal-last-failure.json`. Do not run
+another same-launch Qwen request after the circuit breaker trips; relaunch, then
+use `Scripts/turing/analyze_mlx_command_buffers.py` on the per-run JSON. Only
+after `deviceDefault` evidence identifies aggregate pressure should the six
+profile calibration matrix run. Only after a repeating slow single primitive is
+identified may one exact primitive-level split be designed.

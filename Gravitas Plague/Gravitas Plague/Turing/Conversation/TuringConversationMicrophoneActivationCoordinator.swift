@@ -1,5 +1,33 @@
 import Foundation
 
+nonisolated enum TuringPrerecordingPreFillerMicrophoneContext:
+    Sendable,
+    Equatable
+{
+    case previousConversationVoice(seedID: UUID)
+    case currentPromptVoiceFallback
+}
+
+nonisolated enum TuringPrerecordingPreFillerMicrophonePolicy {
+    static func context(
+        retainedSeeds: TuringLiveConversationSeedRegistrySnapshot,
+        upcomingSurface: StoryInteractionSurfaceID
+    ) -> TuringPrerecordingPreFillerMicrophoneContext {
+        guard let retained = retainedSeeds.seedsBySurface[upcomingSurface] else {
+            return .currentPromptVoiceFallback
+        }
+        return .previousConversationVoice(seedID: retained.seedID)
+    }
+}
+
+nonisolated struct TuringConversationMicrophoneActivationResult:
+    Sendable,
+    Equatable
+{
+    let seed: TuringLiveConversationSeed
+    let eligibleSeeds: TuringLiveConversationSeedRegistrySnapshot
+}
+
 actor TuringConversationMicrophoneActivationCoordinator {
     static let shared = TuringConversationMicrophoneActivationCoordinator()
 
@@ -11,8 +39,12 @@ actor TuringConversationMicrophoneActivationCoordinator {
         descriptor: TuringFlowDescriptor,
         parentSequenceID: UUID,
         identity: TuringFlowIdentity,
-        expectedMicrophoneGeneration: UInt64
-    ) async throws -> TuringLiveConversationSeed {
+        expectedMicrophoneGeneration: UInt64,
+        parentLease: StoryInteractionLease,
+        liveSessionID: UUID,
+        livePresentationGeneration: UInt64,
+        activationPhase: String
+    ) async throws -> TuringConversationMicrophoneActivationResult {
         let seed = try TuringLiveConversationSeedResolver().resolve(
             entry: entry,
             item: item,
@@ -31,13 +63,18 @@ actor TuringConversationMicrophoneActivationCoordinator {
             targetCharacterID: seed.targetContext.targetCharacterID,
             seed: seed
         )
-        try await arbiter.latchConversationMicrophone(
+        let eligibleSeeds = try await arbiter.activateConversationMicrophone(
             slot: slot,
             expectedGeneration: expectedMicrophoneGeneration,
-            reason: "actualPRStart.\(entry.momentID)"
+            parentLease: parentLease,
+            sessionID: liveSessionID,
+            presentationGeneration: livePresentationGeneration,
+            authoredActivitySurface: seed.interactionSurface,
+            reason: "\(activationPhase).\(entry.momentID)"
         )
         print(
             "[TuringLiveConversation] microphone activated " +
+                "phase=\(activationPhase) " +
                 "episodeID=\(seed.episodeID.rawValue) " +
                 "segmentID=\(seed.segmentID) " +
                 "momentID=\(seed.sourceMomentID) " +
@@ -45,8 +82,13 @@ actor TuringConversationMicrophoneActivationCoordinator {
                 "speaker=\(seed.immediateDeviceContext.speakerCharacterID.rawValue) " +
                 "target=\(seed.targetContext.targetCharacterID.rawValue) " +
                 "contextPosition=\(seed.targetContext.selectionPosition.rawValue) " +
+                "selectedMomentID=\(seed.targetContext.selectedMomentID) " +
+                "voicePromptID=\(seed.voicePromptID) " +
                 "generation=\(seed.microphoneGeneration)"
         )
-        return seed
+        return TuringConversationMicrophoneActivationResult(
+            seed: seed,
+            eligibleSeeds: eligibleSeeds
+        )
     }
 }

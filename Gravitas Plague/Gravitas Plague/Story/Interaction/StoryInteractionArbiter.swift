@@ -75,20 +75,61 @@ actor StoryInteractionArbiter {
         expectedGeneration: UInt64,
         reason: String
     ) async throws {
-        guard expectedGeneration == microphoneGeneration,
-              slot.generation == microphoneGeneration,
-              slot.episodeID == microphoneEpisodeID else {
-            throw StoryInteractionClaimError.staleLease
-        }
-        if let microphoneSegmentID {
-            guard slot.segmentID == microphoneSegmentID else {
-                throw StoryInteractionClaimError.staleLease
-            }
-        } else {
-            microphoneSegmentID = slot.segmentID
-        }
+        try validateConversationMicrophoneSlot(
+            slot,
+            expectedGeneration: expectedGeneration
+        )
         latchedMicrophoneSlots[slot.surface] = slot
         await publish(reason: "microphones.latched.\(reason)")
+    }
+
+    /// Replaces the latched seed and the visible microphone presentation in a
+    /// single actor transaction. This is the authored-audio boundary between
+    /// a pre-PR ConversationVoice context and the current PromptVoice context;
+    /// publishing the latch and presentation separately would expose a brief
+    /// stale-seed race to a microphone press.
+    func activateConversationMicrophone(
+        slot: TuringLatchedMicrophoneSlot,
+        expectedGeneration: UInt64,
+        parentLease: StoryInteractionLease,
+        sessionID: UUID,
+        presentationGeneration: UInt64,
+        authoredActivitySurface: StoryInteractionSurfaceID?,
+        reason: String
+    ) async throws -> TuringLiveConversationSeedRegistrySnapshot {
+        try requireLiveConversationParent(parentLease)
+        try validateConversationMicrophoneSlot(
+            slot,
+            expectedGeneration: expectedGeneration
+        )
+
+        latchedMicrophoneSlots[slot.surface] = slot
+        let eligibleSeeds = currentLatchedConversationSeedSnapshot(
+            allowedSurfaces: stableInteractionPolicy.allowedTuringSurfaces
+        )
+        let seedIDs = eligibleSeeds.seedsBySurface.mapValues(\.seedID)
+        let actions = Dictionary(
+            uniqueKeysWithValues: seedIDs.keys.map {
+                ($0, StoryTuringActionPresentation.microphone)
+            }
+        )
+        var activities:
+            [StoryInteractionSurfaceID: StoryTuringActivityPresentation] = [:]
+        if let authoredActivitySurface,
+           actions[authoredActivitySurface] == nil {
+            activities[authoredActivitySurface] = .authoredPlaying
+        }
+        liveConversationPresentation = LiveConversationPresentation(
+            parentLeaseID: parentLease.id,
+            sessionID: sessionID,
+            generation: presentationGeneration,
+            seedIDsBySurface: seedIDs,
+            actions: actions,
+            activities: activities,
+            activeChild: nil
+        )
+        await publish(reason: "microphones.activated.\(reason)")
+        return eligibleSeeds
     }
 
     func replaceConversationMicrophonesForContinue(
@@ -627,6 +668,24 @@ actor StoryInteractionArbiter {
         guard exclusiveLease == lease,
               case .turingFlow = lease.owner else {
             throw StoryInteractionClaimError.staleLease
+        }
+    }
+
+    private func validateConversationMicrophoneSlot(
+        _ slot: TuringLatchedMicrophoneSlot,
+        expectedGeneration: UInt64
+    ) throws {
+        guard expectedGeneration == microphoneGeneration,
+              slot.generation == microphoneGeneration,
+              slot.episodeID == microphoneEpisodeID else {
+            throw StoryInteractionClaimError.staleLease
+        }
+        if let microphoneSegmentID {
+            guard slot.segmentID == microphoneSegmentID else {
+                throw StoryInteractionClaimError.staleLease
+            }
+        } else {
+            microphoneSegmentID = slot.segmentID
         }
     }
 

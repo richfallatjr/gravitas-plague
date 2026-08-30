@@ -57,7 +57,16 @@ final class MindEyePreAudioRevealContractTests: XCTestCase {
         XCTAssertTrue(remainder.contains("source: source"))
         XCTAssertTrue(remainder.contains("motion=keepAlive blink=active mouth=rest"))
         XCTAssertTrue(
-            remainder.contains("microphoneActivation=actualAuthoredMediaStart")
+            remainder.contains("microphoneContext=\\(microphoneContext)")
+        )
+        XCTAssertTrue(
+            remainder.contains("currentPromptActivation=actualAuthoredMediaStart")
+        )
+        XCTAssertTrue(
+            remainder.contains("context=previousConversationVoice")
+        )
+        XCTAssertTrue(
+            remainder.contains("context=currentPromptVoiceFallback")
         )
     }
 

@@ -290,6 +290,7 @@ enum TuringQwenNativeTalkerForwardRunner {
         segmentCache: TuringQwenNativeSegmentRuntimeCache? = nil,
         performanceMode: TuringQwenNativePerformanceMode = .diagnostic,
         samplingPolicy: TuringQwenNativeSamplingPolicy,
+        codePredictorContext: TuringMetalExecutionContext? = nil,
         samplingContext: inout TuringQwenNativeSamplingContext
     ) throws -> TuringQwenNativeGeneratedStepOutput {
         let stepStart = Date()
@@ -374,18 +375,32 @@ enum TuringQwenNativeTalkerForwardRunner {
             samplingContext: &samplingContext
         ).tokenID
         let codePredictorStart = Date()
-        let codeGroup = try TuringQwenNativeCodePredictor.generateCodeGroup(
-            firstCodecToken: firstCodecToken,
-            talkerLastHiddenState: finalLastHiddenState,
-            config: config,
-            weightsStore: weightsStore,
-            expectedFixtureRowIndex: nil,
-            resolvedWeights: codePredictorWeights,
-            segmentCache: segmentCache,
-            performanceMode: performanceMode,
-            samplingConfiguration: samplingPolicy.codePredictor,
-            samplingContext: &samplingContext
-        )
+        if let codePredictorContext {
+            TuringMetalDiagnostics.pushContext(codePredictorContext)
+        }
+        let codeGroup: TuringQwenNativeFirstCodeGroup
+        do {
+            codeGroup = try TuringQwenNativeCodePredictor.generateCodeGroup(
+                firstCodecToken: firstCodecToken,
+                talkerLastHiddenState: finalLastHiddenState,
+                config: config,
+                weightsStore: weightsStore,
+                expectedFixtureRowIndex: nil,
+                resolvedWeights: codePredictorWeights,
+                segmentCache: segmentCache,
+                performanceMode: performanceMode,
+                samplingConfiguration: samplingPolicy.codePredictor,
+                samplingContext: &samplingContext
+            )
+        } catch {
+            if codePredictorContext != nil {
+                TuringMetalDiagnostics.popContext()
+            }
+            throw error
+        }
+        if codePredictorContext != nil {
+            TuringMetalDiagnostics.popContext()
+        }
         let codePredictorSeconds = Date().timeIntervalSince(codePredictorStart)
         let nextPosition = previousState.position + 1
         let nextState = TuringQwenNativeTalkerGenerationState(

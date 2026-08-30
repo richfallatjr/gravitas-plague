@@ -55,6 +55,7 @@ public actor TuringQwenNativeBaseCloneEngine {
         let runID: String
         let instanceID: String
         let segmentIndex: Int
+        let laneIndex: Int?
     }
 
     private let modelRoot: URL
@@ -278,14 +279,27 @@ public actor TuringQwenNativeBaseCloneEngine {
     func materializeRenderedSegmentAndRelease(
         request: TuringQwenNativeBaseCloneSegmentRequest,
         runID: String,
-        instanceID: TuringQwenNativeFreshInstanceID
+        instanceID: TuringQwenNativeFreshInstanceID,
+        laneIndex: Int? = nil
     ) throws -> TuringQwenRenderedCodebookMaterialization {
         do {
-            let payload = try renderCPUCodebooks(
-                request: request,
-                runID: runID,
-                instanceID: instanceID
-            )
+            let payload = try TuringQwenNativeMLXErrorBoundary.run(
+                context: TuringQwenNativeMLXExecutionContext(
+                    runID: runID,
+                    instanceID: instanceID,
+                    segmentIndex: request.segmentIndex,
+                    laneIndex: laneIndex,
+                    phase: .other,
+                    stage: "baseClone.render"
+                )
+            ) {
+                try renderCPUCodebooks(
+                    request: request,
+                    runID: runID,
+                    instanceID: instanceID,
+                    laneIndex: laneIndex
+                )
+            }
             releaseRequestWorkingSet(
                 runID: runID,
                 segmentIndex: request.segmentIndex,
@@ -305,7 +319,8 @@ public actor TuringQwenNativeBaseCloneEngine {
     private func renderCPUCodebooks(
         request: TuringQwenNativeBaseCloneSegmentRequest,
         runID: String,
-        instanceID: TuringQwenNativeFreshInstanceID
+        instanceID: TuringQwenNativeFreshInstanceID,
+        laneIndex: Int?
     ) throws -> TuringQwenRenderedCodebookMaterialization {
         try autoreleasepool {
         let prompt = makePrompt(from: request)
@@ -337,7 +352,8 @@ public actor TuringQwenNativeBaseCloneEngine {
                 diagnosticContext: RenderDiagnosticContext(
                     runID: runID,
                     instanceID: instanceID.rawValue,
-                    segmentIndex: request.segmentIndex
+                    segmentIndex: request.segmentIndex,
+                    laneIndex: laneIndex
                 )
             )
             TuringQwenNativeDiagnostics.recordBreadcrumb(
@@ -596,14 +612,26 @@ public actor TuringQwenNativeBaseCloneEngine {
             instanceID: diagnosticContext?.instanceID,
             segmentIndex: diagnosticContext?.segmentIndex
         )
-        let talkerOutput = try TuringQwenNativeTalkerForwardRunner.runFullForward(
-            promptInputs: promptInputs,
-            config: config,
-            weightsStore: resident.weightsStore,
-            maxNewRows: prompt.maxNewRows,
-            resolvedWeights: resident.talkerWeights,
-            performanceMode: prompt.performanceMode
+        installMLXContext(
+            diagnosticContext: diagnosticContext,
+            phase: .initialTalker,
+            stage: "baseClone.initialTalkerForward"
         )
+        let talkerOutput: TuringQwenNativeTalkerForwardOutput
+        do {
+            talkerOutput = try TuringQwenNativeTalkerForwardRunner.runFullForward(
+                promptInputs: promptInputs,
+                config: config,
+                weightsStore: resident.weightsStore,
+                maxNewRows: prompt.maxNewRows,
+                resolvedWeights: resident.talkerWeights,
+                performanceMode: prompt.performanceMode
+            )
+        } catch {
+            TuringMetalDiagnostics.popContext()
+            throw error
+        }
+        TuringMetalDiagnostics.popContext()
         let initialTalkerForwardSeconds = Date().timeIntervalSince(initialTalkerStart)
         TuringQwenNativeDiagnostics.recordBreadcrumb(
             "baseClone.initialTalkerForward.completed",
@@ -617,7 +645,13 @@ public actor TuringQwenNativeBaseCloneEngine {
             performanceMode: prompt.performanceMode
         )
         if prompt.samplingPolicy.talker.mode == .greedy {
-            eval(logits)
+            try runMLXOperation(
+                diagnosticContext: diagnosticContext,
+                phase: .initialTalker,
+                stage: "baseClone.initialCodecLogits"
+            ) {
+                eval(logits)
+            }
         }
         let firstCodecToken = try TuringQwenNativeCodecSampler.selectFirstCodecToken(
             logits: logits,
@@ -942,18 +976,31 @@ public actor TuringQwenNativeBaseCloneEngine {
         """)
 
         let firstCodeGroupStart = Date()
-        let firstCodeGroup = try TuringQwenNativeCodePredictor.generateCodeGroup(
-            firstCodecToken: initialFirstCodecToken,
-            talkerLastHiddenState: initialTalkerLastHiddenState,
-            config: config,
-            weightsStore: resident.weightsStore,
-            expectedFixtureRowIndex: nil,
-            resolvedWeights: resident.codePredictorWeights,
-            segmentCache: segmentCache,
-            performanceMode: performanceMode,
-            samplingConfiguration: samplingPolicy.codePredictor,
-            samplingContext: &samplingContext
+        installMLXContext(
+            diagnosticContext: diagnosticContext,
+            phase: .codePredictor,
+            stage: "baseClone.codePredictor.initial",
+            rowRange: 0..<1
         )
+        let firstCodeGroup: TuringQwenNativeFirstCodeGroup
+        do {
+            firstCodeGroup = try TuringQwenNativeCodePredictor.generateCodeGroup(
+                firstCodecToken: initialFirstCodecToken,
+                talkerLastHiddenState: initialTalkerLastHiddenState,
+                config: config,
+                weightsStore: resident.weightsStore,
+                expectedFixtureRowIndex: nil,
+                resolvedWeights: resident.codePredictorWeights,
+                segmentCache: segmentCache,
+                performanceMode: performanceMode,
+                samplingConfiguration: samplingPolicy.codePredictor,
+                samplingContext: &samplingContext
+            )
+        } catch {
+            TuringMetalDiagnostics.popContext()
+            throw error
+        }
+        TuringMetalDiagnostics.popContext()
         codePredictorTotalSeconds += Date().timeIntervalSince(firstCodeGroupStart)
         logGeneratedRow(
             rowIndex: 0,
@@ -1014,18 +1061,43 @@ public actor TuringQwenNativeBaseCloneEngine {
                 segmentCache: segmentCache,
                 performanceMode: performanceMode
             )
-            let nextStep = try TuringQwenNativeTalkerForwardRunner.forwardOneStep(
-                inputEmbedding: nextInput,
-                previousState: generationState,
-                config: config,
-                weightsStore: resident.weightsStore,
-                resolvedWeights: resident.talkerWeights,
-                codePredictorWeights: resident.codePredictorWeights,
-                segmentCache: segmentCache,
-                performanceMode: performanceMode,
-                samplingPolicy: samplingPolicy,
-                samplingContext: &samplingContext
+            installMLXContext(
+                diagnosticContext: diagnosticContext,
+                phase: .dynamicTalker,
+                stage: "baseClone.dynamicRow",
+                rowRange: rowIndex..<(rowIndex + 1),
+                talkerPositionRange: (promptInputs.sequenceLength + rowIndex)..<(promptInputs.sequenceLength + rowIndex + 1)
             )
+            let nextStep: TuringQwenNativeGeneratedStepOutput
+            do {
+                nextStep = try TuringQwenNativeTalkerForwardRunner.forwardOneStep(
+                    inputEmbedding: nextInput,
+                    previousState: generationState,
+                    config: config,
+                    weightsStore: resident.weightsStore,
+                    resolvedWeights: resident.talkerWeights,
+                    codePredictorWeights: resident.codePredictorWeights,
+                    segmentCache: segmentCache,
+                    performanceMode: performanceMode,
+                    samplingPolicy: samplingPolicy,
+                    codePredictorContext: TuringQwenNativeMLXExecutionContext(
+                        runID: diagnosticContext?.runID ?? "standaloneBaseClone",
+                        instanceID: diagnosticContext.flatMap {
+                            TuringQwenNativeFreshInstanceID(rawValue: $0.instanceID)
+                        },
+                        segmentIndex: diagnosticContext?.segmentIndex,
+                        laneIndex: diagnosticContext?.laneIndex,
+                        phase: .codePredictor,
+                        stage: "baseClone.codePredictor.dynamic",
+                        rowRange: rowIndex..<(rowIndex + 1)
+                    ).metalContext,
+                    samplingContext: &samplingContext
+                )
+            } catch {
+                TuringMetalDiagnostics.popContext()
+                throw error
+            }
+            TuringMetalDiagnostics.popContext()
             talkerOneStepTotalSeconds += nextStep.talkerStepSeconds
             codePredictorTotalSeconds += nextStep.codePredictorSeconds
             generationState = nextStep.state
@@ -1122,6 +1194,53 @@ public actor TuringQwenNativeBaseCloneEngine {
             eval(input)
         }
         return input
+    }
+
+    private func runMLXOperation<R>(
+        diagnosticContext: RenderDiagnosticContext?,
+        phase: TuringQwenNativeMLXPhase,
+        stage: String,
+        rowRange: Range<Int>? = nil,
+        talkerPositionRange: Range<Int>? = nil,
+        operation: () throws -> R
+    ) throws -> R {
+        try TuringQwenNativeMLXErrorBoundary.run(
+            context: TuringQwenNativeMLXExecutionContext(
+                runID: diagnosticContext?.runID ?? "standaloneBaseClone",
+                instanceID: diagnosticContext.flatMap {
+                    TuringQwenNativeFreshInstanceID(rawValue: $0.instanceID)
+                },
+                segmentIndex: diagnosticContext?.segmentIndex,
+                laneIndex: diagnosticContext?.laneIndex,
+                phase: phase,
+                stage: stage,
+                rowRange: rowRange,
+                talkerPositionRange: talkerPositionRange
+            ),
+            operation: operation
+        )
+    }
+
+    private func installMLXContext(
+        diagnosticContext: RenderDiagnosticContext?,
+        phase: TuringQwenNativeMLXPhase,
+        stage: String,
+        rowRange: Range<Int>? = nil,
+        talkerPositionRange: Range<Int>? = nil
+    ) {
+        let context = TuringQwenNativeMLXExecutionContext(
+            runID: diagnosticContext?.runID ?? "standaloneBaseClone",
+            instanceID: diagnosticContext.flatMap {
+                TuringQwenNativeFreshInstanceID(rawValue: $0.instanceID)
+            },
+            segmentIndex: diagnosticContext?.segmentIndex,
+            laneIndex: diagnosticContext?.laneIndex,
+            phase: phase,
+            stage: stage,
+            rowRange: rowRange,
+            talkerPositionRange: talkerPositionRange
+        )
+        TuringMetalDiagnostics.pushContext(context.metalContext)
     }
 
     private func logGeneratedRow(

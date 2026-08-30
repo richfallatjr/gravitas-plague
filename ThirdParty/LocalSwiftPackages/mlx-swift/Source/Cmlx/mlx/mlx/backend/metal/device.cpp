@@ -10,7 +10,10 @@
 #include "mlx/backend/common/utils.h"
 #include "mlx/backend/metal/device.h"
 #include "mlx/backend/metal/metal.h"
+#include "mlx/backend/metal/turing_command_buffer_diagnostics.h"
+#include "mlx/backend/metal/turing_metal_failure.h"
 #include "mlx/backend/metal/utils.h"
+#include "mlx/primitives.h"
 #include "mlx/utils.h"
 
 namespace mlx::core::metal {
@@ -320,6 +323,7 @@ void CommandEncoder::barrier() {
 }
 
 Device::Device() {
+  turing::diagnostics().mark_device_initializing();
   auto pool = new_scoped_memory_pool();
   device_ = load_device();
   default_library_ = load_default_library(device_);
@@ -361,6 +365,8 @@ Device::Device() {
   }
   max_ops_per_buffer_ = env::max_ops_per_buffer(max_ops_per_buffer_);
   max_mb_per_buffer_ = env::max_mb_per_buffer(max_mb_per_buffer_);
+  turing::diagnostics().publish_configuration(
+      arch_.c_str(), arch_gen_, max_ops_per_buffer_, max_mb_per_buffer_);
 }
 
 Device::~Device() {
@@ -400,6 +406,7 @@ bool Device::command_buffer_needs_commit(int index) {
 }
 
 MTL::CommandBuffer* Device::get_command_buffer(int index) {
+  turing::throw_if_turing_metal_failed();
   auto& stream = get_stream_(index);
   if (stream.buffer == nullptr) {
     stream.buffer = stream.queue->commandBufferWithUnretainedReferences();
@@ -409,17 +416,43 @@ MTL::CommandBuffer* Device::get_command_buffer(int index) {
     }
     // Increment ref count so the buffer is not garbage collected
     stream.buffer->retain();
+    stream.turing_buffer_state = turing::diagnostics().make_build_state(
+        index,
+        stream.queue,
+        max_ops_per_buffer_,
+        max_mb_per_buffer_);
   }
   return stream.buffer;
 }
 
 void Device::commit_command_buffer(int index) {
   auto& stream = get_stream_(index);
+  auto diagnostic_state = stream.turing_buffer_state;
+  turing::diagnostics().prepare_submission(
+      diagnostic_state,
+      stream.buffer,
+      static_cast<uint32_t>(stream.buffer_ops),
+      static_cast<uint64_t>(stream.buffer_sizes));
+  stream.buffer->addCompletedHandler(
+      [diagnostic_state](MTL::CommandBuffer* command_buffer) noexcept {
+        turing::diagnostics().complete_noexcept(
+            diagnostic_state, command_buffer);
+      });
   stream.buffer->commit();
   stream.buffer->release();
   stream.buffer = nullptr;
   stream.buffer_ops = 0;
   stream.buffer_sizes = 0;
+  stream.turing_buffer_state.reset();
+}
+
+void Device::turing_record_primitive(
+    int index,
+    const mlx::core::Primitive& primitive) {
+  auto& stream = get_stream_(index);
+  turing::diagnostics().record_primitive(
+      stream.turing_buffer_state,
+      primitive.name());
 }
 
 void Device::add_temporary(array arr, int index) {

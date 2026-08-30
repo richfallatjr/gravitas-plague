@@ -20,6 +20,7 @@ public actor TuringQwenNativeFreshInstance {
     performanceMode:
       TuringQwenNativePerformanceMode
   ) async throws {
+    try await TuringQwenNativeMetalCircuitBreaker.shared.requireHealthy()
     TuringQwenNativeDiagnostics.recordBreadcrumb(
       "freshInstance.warmLoad.started",
       instanceID: id.rawValue,
@@ -36,20 +37,27 @@ public actor TuringQwenNativeFreshInstance {
         sharedWeightStore: false
       """)
 
-    let resident =
-      try TuringQwenNativeResidentResources(
+    let warmContext = TuringQwenNativeMLXExecutionContext(
+      runID: "warmLoad.\(variantID)",
+      instanceID: id,
+      phase: .warmLoad,
+      stage: "freshInstance.resourcesAndEngine"
+    )
+    let (resident, engine) = try TuringQwenNativeMLXErrorBoundary.run(
+      context: warmContext
+    ) {
+      let resident = try TuringQwenNativeResidentResources(
         modelRoot: modelRoot
       )
-    let engine =
-      try TuringQwenNativeBaseCloneEngine(
+      let engine = try TuringQwenNativeBaseCloneEngine(
         modelRoot: modelRoot,
         residentResources: resident,
-        trace:
-          .stdout(
-            prefix:
-              "[TuringQwenFresh2.\(id.rawValue)]"
-          )
+        trace: .stdout(
+          prefix: "[TuringQwenFresh2.\(id.rawValue)]"
+        )
       )
+      return (resident, engine)
+    }
 
     residentResources = resident
     baseCloneEngine = engine
@@ -81,6 +89,7 @@ public actor TuringQwenNativeFreshInstance {
     _ request:
       TuringQwenNativeBaseCloneSegmentRequest,
     runID: String,
+    laneIndex: Int? = nil,
     releaseLedger:
       TuringQwenRenderReleaseLedger
   ) async throws -> TuringQwenRenderedCodebookSegment {
@@ -95,12 +104,23 @@ public actor TuringQwenNativeFreshInstance {
         )
     }
 
-    let materialized = try await engine
-      .materializeRenderedSegmentAndRelease(
+    let materialized = try await TuringQwenNativeMLXErrorBoundary.run(
+      context: TuringQwenNativeMLXExecutionContext(
+        runID: runID,
+        instanceID: id,
+        segmentIndex: request.segmentIndex,
+        laneIndex: laneIndex,
+        phase: .dynamicTalker,
+        stage: "baseClone.renderAndMaterialize"
+      )
+    ) {
+      try await engine.materializeRenderedSegmentAndRelease(
         request: request,
         runID: runID,
-        instanceID: id
+        instanceID: id,
+        laneIndex: laneIndex
       )
+    }
 
     let releaseToken =
       TuringQwenRenderReleaseToken(

@@ -4,6 +4,7 @@
 
 #include <Metal/Metal.hpp>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -13,7 +14,15 @@
 #include "mlx/array.h"
 #include "mlx/device.h"
 
+namespace mlx::core {
+class Primitive;
+}
+
 namespace mlx::core::metal {
+
+namespace turing {
+struct CommandBufferBuildState;
+}
 
 using MTLFCList =
     std::vector<std::tuple<const void*, MTL::DataType, NS::UInteger>>;
@@ -138,6 +147,7 @@ struct DeviceStream {
   MTL::CommandBuffer* buffer{nullptr};
   int buffer_ops{0};
   size_t buffer_sizes{0};
+  std::shared_ptr<turing::CommandBufferBuildState> turing_buffer_state;
 
   // The command encoder, fence, and temporaries are updated between command
   // encoders
@@ -165,6 +175,14 @@ class MLX_API Device {
     return arch_gen_;
   }
 
+  int get_max_ops_per_buffer() const noexcept {
+    return max_ops_per_buffer_;
+  }
+
+  int get_max_mb_per_buffer() const noexcept {
+    return max_mb_per_buffer_;
+  }
+
   void new_queue(int index);
 
   MTL::CommandQueue* get_queue(Stream stream);
@@ -172,6 +190,7 @@ class MLX_API Device {
   MTL::CommandBuffer* get_command_buffer(int index);
   bool command_buffer_needs_commit(int index);
   void commit_command_buffer(int index);
+  void turing_record_primitive(int index, const mlx::core::Primitive& primitive);
   CommandEncoder& get_command_encoder(int index);
   void end_encoding(int index);
 

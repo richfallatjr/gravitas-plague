@@ -138,7 +138,7 @@ enum TuringQwenNativeSpeechDecoder {
             config: config.decoderConfig,
             reader: reader
         )
-        materializeDecoderStage(
+        try materializeDecoderStage(
             hidden,
             label: "speechDecoder.quantizerDecode",
             performanceMode: performanceMode,
@@ -152,7 +152,7 @@ enum TuringQwenNativeSpeechDecoder {
             kernelSize: 3,
             reader: reader
         )
-        materializeDecoderStage(
+        try materializeDecoderStage(
             hidden,
             label: "speechDecoder.preConv",
             performanceMode: performanceMode,
@@ -166,7 +166,7 @@ enum TuringQwenNativeSpeechDecoder {
             performanceMode: performanceMode,
             diagnosticContext: diagnosticContext
         )
-        materializeDecoderStage(
+        try materializeDecoderStage(
             hidden,
             label: "speechDecoder.preTransformer",
             performanceMode: performanceMode,
@@ -189,7 +189,7 @@ enum TuringQwenNativeSpeechDecoder {
                 prefix: "decoder.upsample.\(upsampleIndex).1",
                 reader: reader
             )
-            materializeDecoderStage(
+            try materializeDecoderStage(
                 hidden,
                 label: "speechDecoder.upsample.\(upsampleIndex)",
                 performanceMode: performanceMode,
@@ -204,7 +204,7 @@ enum TuringQwenNativeSpeechDecoder {
             kernelSize: 7,
             reader: reader
         )
-        materializeDecoderStage(
+        try materializeDecoderStage(
             hidden,
             label: "speechDecoder.decoder.0",
             performanceMode: performanceMode,
@@ -220,7 +220,7 @@ enum TuringQwenNativeSpeechDecoder {
                 performanceMode: performanceMode,
                 diagnosticContext: diagnosticContext
             )
-            materializeDecoderStage(
+            try materializeDecoderStage(
                 hidden,
                 label: "speechDecoder.decoder.\(blockIndex + 1)",
                 performanceMode: performanceMode,
@@ -242,7 +242,12 @@ enum TuringQwenNativeSpeechDecoder {
             reader: reader
         )
         let clipped = clip(hidden, min: -1.0, max: 1.0)
-        eval(clipped)
+        try runDecoderMLXOperation(
+            label: "speechDecoder.output",
+            diagnosticContext: diagnosticContext
+        ) {
+            eval(clipped)
+        }
         TuringQwenNativeMemoryControl.clearCache(
             label: "speechDecoder.output",
             shouldLogSnapshot: performanceMode.shouldLogMemorySnapshots
@@ -365,7 +370,7 @@ enum TuringQwenNativeSpeechDecoder {
                 config: config,
                 reader: reader
             )
-            materializeDecoderStage(
+            try materializeDecoderStage(
                 hidden,
                 label: "speechDecoder.preTransformer.layer.\(layerIndex)",
                 performanceMode: performanceMode,
@@ -397,7 +402,7 @@ enum TuringQwenNativeSpeechDecoder {
         label: String,
         performanceMode: TuringQwenNativePerformanceMode,
         diagnosticContext: TuringQwenNativeSpeechDecoderDiagnosticContext?
-    ) {
+    ) throws {
         // Decoder weights are loaded as Float32 for each stage. Leaving these
         // operations lazy retains the complete decoder graph until output eval,
         // which can cross the visionOS high-water mark beside a Fresh render.
@@ -430,7 +435,12 @@ enum TuringQwenNativeSpeechDecoder {
           mlxCacheBeforeMB: \(String(format: "%.1f", Double(mlxBefore.cacheMemory) / bytesPerMegabyte))
           physFootprintBeforeMB: \(String(format: "%.1f", processBefore.physFootprintMB))
         """)
-        eval(value)
+        try runDecoderMLXOperation(
+            label: label,
+            diagnosticContext: diagnosticContext
+        ) {
+            eval(value)
+        }
         TuringQwenNativeMemoryControl.clearCache(
             label: label,
             shouldLogSnapshot: performanceMode.shouldLogMemorySnapshots
@@ -465,6 +475,26 @@ enum TuringQwenNativeSpeechDecoder {
           mlxCacheMB: \(String(format: "%.1f", Double(mlx.cacheMemory) / bytesPerMegabyte))
           physFootprintMB: \(String(format: "%.1f", process.physFootprintMB))
         """)
+    }
+
+    private static func runDecoderMLXOperation<R>(
+        label: String,
+        diagnosticContext: TuringQwenNativeSpeechDecoderDiagnosticContext?,
+        operation: () throws -> R
+    ) throws -> R {
+        try TuringQwenNativeMLXErrorBoundary.run(
+            context: TuringQwenNativeMLXExecutionContext(
+                runID: diagnosticContext?.runID ?? "standaloneSpeechDecode",
+                instanceID: diagnosticContext.flatMap {
+                    TuringQwenNativeFreshInstanceID(rawValue: $0.instanceID)
+                },
+                segmentIndex: diagnosticContext?.segmentIndex,
+                decodeID: diagnosticContext?.decodeID,
+                phase: .speechDecoder,
+                stage: label
+            ),
+            operation: operation
+        )
     }
 
     private static func runTransformerLayer(
@@ -634,7 +664,7 @@ enum TuringQwenNativeSpeechDecoder {
             rightCrop: upsampleRate,
             reader: reader
         )
-        materializeDecoderStage(
+        try materializeDecoderStage(
             hidden,
             label: "speechDecoder.decoder.\(blockIndex).upsample",
             performanceMode: performanceMode,
@@ -648,7 +678,7 @@ enum TuringQwenNativeSpeechDecoder {
                 dilation: [1, 3, 9][residualUnit - 2],
                 reader: reader
             )
-            materializeDecoderStage(
+            try materializeDecoderStage(
                 hidden,
                 label: "speechDecoder.decoder.\(blockIndex).residual.\(residualUnit)",
                 performanceMode: performanceMode,

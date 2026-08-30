@@ -7,6 +7,14 @@ public struct TuringQwenNativeFreshInstanceID: Sendable, Hashable, CustomStringC
         self.index = index
     }
 
+    public init?(rawValue: String) {
+        guard rawValue.hasPrefix("fresh-"),
+              let index = Int(rawValue.dropFirst("fresh-".count)) else {
+            return nil
+        }
+        self.index = index
+    }
+
     public var rawValue: String {
         "fresh-\(index)"
     }

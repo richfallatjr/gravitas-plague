@@ -44,6 +44,7 @@ import PackageDescription
         "mlx/mlx/backend/metal/ternary.cpp",
         "mlx/mlx/backend/metal/unary.cpp",
         "mlx/mlx/backend/metal/utils.cpp",
+        "mlx/mlx/backend/metal/turing_command_buffer_diagnostics.cpp",
         "mlx/mlx/backend/metal/kernels",  // Exclude kernels directory
         "mlx/mlx/backend/metal/jit",  // Exclude jit directory
 
@@ -52,6 +53,7 @@ import PackageDescription
         "mlx/mlx/backend/cpu/gemms/bnns.cpp",  // macOS Accelerate version
         "mlx-conditional",
         "mlx-c/mlx/c/metal.cpp",
+        "mlx-c/mlx/c/turing_metal_diagnostics.cpp",
 
         "mlx-c/mlx/c/fast.cpp",  // Exclude on Linux - calls metal_kernel unconditionally
     ]
@@ -70,6 +72,7 @@ import PackageDescription
         "MLXArray+Metal.swift",
         "MLXFast.swift",
         "MLXFastKernel.swift",
+        "TuringMetalDiagnostics.swift",
     ]
 #else
     let platformExcludes: [String] = [
@@ -210,6 +213,7 @@ let cmlx = Target.target(
         .headerSearchPath("json/single_include/nlohmann"),
         .headerSearchPath("fmt/include"),
         .define("MLX_VERSION", to: "\"0.31.1\""),
+        .define("MLX_TURING_TESTING", .when(configuration: .debug)),
     ],
     linkerSettings: linkerSettings
 )

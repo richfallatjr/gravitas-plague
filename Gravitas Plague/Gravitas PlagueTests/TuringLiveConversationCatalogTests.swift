@@ -363,6 +363,106 @@ final class TuringLiveConversationCatalogTests: XCTestCase {
         )
     }
 
+    func testPreFillerUsesPreviousConversationVoiceOnUpcomingSurface() {
+        let previous = makeSeed(
+            parentSequenceID: UUID(),
+            parentFlowInstanceID: UUID(),
+            retention: .untilExplicitInvalidation
+        )
+        let retained = TuringLiveConversationSeedRegistrySnapshot(
+            seedsBySurface: [.walkie: previous]
+        )
+
+        XCTAssertEqual(
+            TuringPrerecordingPreFillerMicrophonePolicy.context(
+                retainedSeeds: retained,
+                upcomingSurface: .walkie
+            ),
+            .previousConversationVoice(seedID: previous.seedID)
+        )
+    }
+
+    func testPreFillerFallsBackToCurrentPromptVoiceWithoutPriorSurfaceSeed() {
+        let priorOnAnotherSurface = makeSeed(
+            parentSequenceID: UUID(),
+            parentFlowInstanceID: UUID(),
+            retention: .untilExplicitInvalidation,
+            interactionSurface: .dadFrame
+        )
+        let retained = TuringLiveConversationSeedRegistrySnapshot(
+            seedsBySurface: [.dadFrame: priorOnAnotherSurface]
+        )
+
+        XCTAssertEqual(
+            TuringPrerecordingPreFillerMicrophonePolicy.context(
+                retainedSeeds: retained,
+                upcomingSurface: .walkie
+            ),
+            .currentPromptVoiceFallback
+        )
+    }
+
+    func testActualPRStartAtomicallyReplacesPreFillerMicrophoneSeed() async throws {
+        let arbiter = StoryInteractionArbiter()
+        let microphoneGeneration = await arbiter.beginConversationChapter(
+            episodeID: .prologue,
+            segmentID: "test.segment",
+            reason: "test.preFiller"
+        )
+        let parentLease = try await arbiter.claimAutomaticTuring(
+            runID: "test.preFiller",
+            source: "test"
+        )
+        let sessionID = UUID()
+        let previous = makeSeed(
+            parentSequenceID: UUID(),
+            parentFlowInstanceID: UUID(),
+            retention: .untilExplicitInvalidation
+        ).withMicrophoneGeneration(microphoneGeneration)
+        try await arbiter.latchConversationMicrophone(
+            slot: makeSlot(previous),
+            expectedGeneration: microphoneGeneration,
+            reason: "test.previousConversationVoice"
+        )
+        try await arbiter.installLiveConversationAvailability(
+            parentLease: parentLease,
+            sessionID: sessionID,
+            generation: 1,
+            eligibleSeeds: TuringLiveConversationSeedRegistrySnapshot(
+                seedsBySurface: [.walkie: previous]
+            ),
+            authoredActivitySurface: nil,
+            reason: "test.preFiller"
+        )
+
+        let current = makeSeed(
+            parentSequenceID: UUID(),
+            parentFlowInstanceID: UUID(),
+            retention: .untilExplicitInvalidation
+        ).withMicrophoneGeneration(microphoneGeneration)
+        let activated = try await arbiter.activateConversationMicrophone(
+            slot: makeSlot(current),
+            expectedGeneration: microphoneGeneration,
+            parentLease: parentLease,
+            sessionID: sessionID,
+            presentationGeneration: 1,
+            authoredActivitySurface: .walkie,
+            reason: "test.actualPRStart"
+        )
+
+        let latched = await arbiter.currentLatchedConversationSlots()
+        let presentation = await arbiter.currentSnapshot()
+        XCTAssertEqual(activated.seedsBySurface[.walkie]?.seedID, current.seedID)
+        XCTAssertEqual(
+            latched[.walkie]?.seed.seedID,
+            current.seedID
+        )
+        XCTAssertEqual(
+            presentation.walkiePresentation,
+            .microphone
+        )
+    }
+
     private func makeSeed(
         parentSequenceID: UUID,
         parentFlowInstanceID: UUID,

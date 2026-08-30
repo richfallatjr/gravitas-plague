@@ -19,6 +19,7 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
     public let sameSegmentRenderDecodeOverlapCount: Int
     public let crossSegmentRenderDecodeOverlapCount: Int
     public let gpuAdmission: TuringQwenNativeGPUAdmissionSnapshot
+    public let commandBufferMetrics: TuringQwenNativeCommandBufferRunMetrics
     public let endPhysFootprintMB: Double
     public let endResidentSizeMB: Double
     public let fallbackUsed: Bool
@@ -40,6 +41,7 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
         sameSegmentRenderDecodeOverlapCount: Int,
         crossSegmentRenderDecodeOverlapCount: Int,
         gpuAdmission: TuringQwenNativeGPUAdmissionSnapshot,
+        commandBufferMetrics: TuringQwenNativeCommandBufferRunMetrics,
         fallbackUsed: Bool
     ) {
         self.requestedInstanceCount = requestedInstanceCount
@@ -61,6 +63,7 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
         self.sameSegmentRenderDecodeOverlapCount = sameSegmentRenderDecodeOverlapCount
         self.crossSegmentRenderDecodeOverlapCount = crossSegmentRenderDecodeOverlapCount
         self.gpuAdmission = gpuAdmission
+        self.commandBufferMetrics = commandBufferMetrics
         let endMemory = TuringQwenNativeProcessMemoryProbe.snapshot()
         self.endPhysFootprintMB = endMemory.physFootprintMB
         self.endResidentSizeMB = endMemory.residentSizeMB
@@ -93,6 +96,12 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
           gpuAdmissionMaxGenerationWaitNanoseconds: \(gpuAdmission.maximumGenerationWaitNanoseconds)
           gpuAdmissionMaxDecodeWaitNanoseconds: \(gpuAdmission.maximumDecodeWaitNanoseconds)
           gpuAdmissionInvariantViolationCount: \(gpuAdmission.invariantViolationCount)
+          mlxCommandBuffersSubmitted: \(commandBufferMetrics.submittedCount)
+          mlxCommandBuffersCompleted: \(commandBufferMetrics.completedCount)
+          mlxCommandBufferFailures: \(commandBufferMetrics.failureCount)
+          mlxCommandBufferMaximumGPUSeconds: \(String(format: "%.6f", commandBufferMetrics.maximumGPUSeconds))
+          mlxCommandBufferMaximumKernelSeconds: \(String(format: "%.6f", commandBufferMetrics.maximumKernelSeconds))
+          mlxCommandBufferMixedContextCount: \(commandBufferMetrics.mixedContextCount)
           endPhysFootprintMB: \(String(format: "%.1f", endPhysFootprintMB))
           endResidentSizeMB: \(String(format: "%.1f", endResidentSizeMB))
           fallbackUsed: \(fallbackUsed)

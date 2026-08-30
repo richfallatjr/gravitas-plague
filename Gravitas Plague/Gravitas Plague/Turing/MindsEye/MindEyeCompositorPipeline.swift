@@ -1,4 +1,5 @@
 import Foundation
+import MLX
 import Metal
 import RealityKit
 
@@ -157,6 +158,16 @@ enum MindEyeCompositeEncoder {
         encoder.endEncoding()
         let cpuNanoseconds = DispatchTime.now().uptimeNanoseconds - encodeStart
 
+        TuringMetalDiagnostics.setExternalInFlightCounts(
+            appMetal: 1,
+            mindEyeCompositor: 1
+        )
+        defer {
+            TuringMetalDiagnostics.setExternalInFlightCounts(
+                appMetal: 0,
+                mindEyeCompositor: 0
+            )
+        }
         let completed = await withCheckedContinuation {
             (continuation: CheckedContinuation<Bool, Never>) in
             commandBuffer.addCompletedHandler { completedBuffer in

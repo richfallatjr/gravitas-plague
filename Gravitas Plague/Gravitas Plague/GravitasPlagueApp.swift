@@ -1,4 +1,5 @@
 import SwiftUI
+import TuringQwenNative
 
 enum PlagueWindowID {
     static let control = "plague-control"
@@ -13,6 +14,13 @@ struct GravitasPlagueApp: App {
     @State private var immersionStyle: ImmersionStyle = .mixed
 
     init() {
+        do {
+            try TuringMLXCommandBufferStartup.configure()
+        } catch {
+            preconditionFailure(
+                "Turing MLX command-buffer startup configuration failed: \(error.localizedDescription)"
+            )
+        }
         MindEyeRuntimeRegistration.registerOnce()
         TuringProductionDiagnostics.start()
         TuringMemoryBudgetProbe.log(label: "appLaunch")

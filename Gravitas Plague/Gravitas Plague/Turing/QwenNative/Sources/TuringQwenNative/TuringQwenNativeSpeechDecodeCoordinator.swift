@@ -33,7 +33,8 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
         self.gpuAdmission = gpuAdmission
     }
 
-    public func beginRun(runID: String, modelRoot: URL) throws -> RunToken {
+    public func beginRun(runID: String, modelRoot: URL) async throws -> RunToken {
+        try await TuringQwenNativeMetalCircuitBreaker.shared.requireHealthy()
         guard activeRun == nil else {
             throw TuringQwenNativeError.invalidConfig(
                 "Speech decoder already owns an active run."

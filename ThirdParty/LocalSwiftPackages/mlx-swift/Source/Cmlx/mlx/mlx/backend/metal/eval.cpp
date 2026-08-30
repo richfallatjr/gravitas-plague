@@ -3,6 +3,7 @@
 
 #include "mlx/backend/gpu/eval.h"
 #include "mlx/backend/metal/device.h"
+#include "mlx/backend/metal/turing_metal_failure.h"
 #include "mlx/backend/metal/utils.h"
 #include "mlx/primitives.h"
 #include "mlx/scheduler.h"
@@ -15,40 +16,8 @@ void new_stream(Stream stream) {
   }
 }
 
-inline void check_error(MTL::CommandBuffer* cbuf) {
-  if (cbuf->status() == MTL::CommandBufferStatusError) {
-    std::ostringstream msg;
-    auto error = cbuf->error();
-    msg << "[METAL] Command buffer execution failed";
-    if (error && error->localizedDescription()) {
-      msg << ": " << error->localizedDescription()->utf8String();
-    }
-    msg << " status=" << static_cast<int>(cbuf->status());
-    if (error) {
-      if (error->domain()) {
-        msg << " errorDomain=" << error->domain()->utf8String();
-      }
-      msg << " errorCode=" << error->code();
-    }
-    if (auto label = cbuf->label(); label) {
-      msg << " label=" << label->utf8String();
-    }
-    const auto gpu_start = cbuf->GPUStartTime();
-    const auto gpu_end = cbuf->GPUEndTime();
-    const auto kernel_start = cbuf->kernelStartTime();
-    const auto kernel_end = cbuf->kernelEndTime();
-    msg << " gpuStart=" << gpu_start << " gpuEnd=" << gpu_end
-        << " gpuDuration="
-        << ((gpu_end >= gpu_start) ? gpu_end - gpu_start : 0.0)
-        << " kernelStart=" << kernel_start << " kernelEnd=" << kernel_end
-        << " kernelDuration="
-        << ((kernel_end >= kernel_start) ? kernel_end - kernel_start : 0.0)
-        << " retainedReferences=" << cbuf->retainedReferences();
-    throw std::runtime_error(msg.str());
-  }
-}
-
 void eval(array& arr) {
+  metal::turing::throw_if_turing_metal_failed();
   auto pool = metal::new_scoped_memory_pool();
   auto s = arr.primitive().stream();
   auto& d = metal::device(s.device);
@@ -64,6 +33,7 @@ void eval(array& arr) {
     }
 
     debug_set_primitive_buffer_label(command_buffer, arr.primitive());
+    d.turing_record_primitive(s.index, arr.primitive());
     arr.primitive().eval_gpu(arr.inputs(), outputs);
   }
   std::unordered_set<std::shared_ptr<array::Data>> buffers;
@@ -82,17 +52,17 @@ void eval(array& arr) {
     d.end_encoding(s.index);
     scheduler::notify_new_task(s);
     command_buffer->addCompletedHandler(
-        [s, buffers = std::move(buffers)](MTL::CommandBuffer* cbuf) {
-          scheduler::notify_task_completion(s);
-          check_error(cbuf);
+        [s, buffers = std::move(buffers)](MTL::CommandBuffer*) noexcept {
+          try {
+            scheduler::notify_task_completion(s);
+          } catch (...) {
+          }
         });
     d.commit_command_buffer(s.index);
     d.get_command_buffer(s.index);
   } else {
     command_buffer->addCompletedHandler(
-        [buffers = std::move(buffers)](MTL::CommandBuffer* cbuf) {
-          check_error(cbuf);
-        });
+        [buffers = std::move(buffers)](MTL::CommandBuffer*) noexcept {});
   }
 }
 
@@ -101,7 +71,6 @@ void finalize(Stream s) {
   auto& d = metal::device(s.device);
   auto cb = d.get_command_buffer(s.index);
   d.end_encoding(s.index);
-  cb->addCompletedHandler([](MTL::CommandBuffer* cbuf) { check_error(cbuf); });
   d.commit_command_buffer(s.index);
   d.get_command_buffer(s.index);
 }
@@ -114,8 +83,8 @@ void synchronize(Stream s) {
   d.end_encoding(s.index);
   d.commit_command_buffer(s.index);
   cb->waitUntilCompleted();
-  check_error(cb);
   cb->release();
+  metal::turing::throw_if_turing_metal_failed();
 }
 
 } // namespace mlx::core::gpu

@@ -98,6 +98,7 @@ enum TuringMemoryBudgetProbe {
         quantization: String? = nil
     ) -> TuringMemoryBudgetSnapshot {
         let mlx = TuringQwenNativeDiagnostics.memorySnapshot()
+        let registeredQwen = TuringQwenActiveModelTelemetry.snapshot()
         return TuringMemoryBudgetSnapshot(
             label: label,
             availableProcessMemoryBytes: availableProcessMemory(),
@@ -109,8 +110,8 @@ enum TuringMemoryBudgetProbe {
             mlxPeakMemoryBytes: mlx.peakMemoryBytes,
             mlxCacheLimitBytes: mlx.cacheLimitBytes,
             mlxMemoryLimitBytes: mlx.memoryLimitBytes,
-            activeQwenModelID: activeQwenModelID,
-            quantization: quantization,
+            activeQwenModelID: activeQwenModelID ?? registeredQwen?.modelID,
+            quantization: quantization ?? registeredQwen?.quantization,
             increasedMemoryEntitlementStatus: entitlementStatus
         )
     }

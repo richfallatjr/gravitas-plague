@@ -27,6 +27,7 @@ public actor TuringQwenNativeFreshInstancePool {
         variantID: String,
         performanceMode: TuringQwenNativePerformanceMode
     ) async throws {
+        try await TuringQwenNativeMetalCircuitBreaker.shared.requireHealthy()
         print("""
         [TuringQwenFresh2] pool warm load started
           requestedInstanceCount: \(requestedInstanceCount)
@@ -65,6 +66,9 @@ public actor TuringQwenNativeFreshInstancePool {
                 loaded.append(instance)
             }
         } catch {
+            if let metalFailure = error as? TuringQwenNativeMetalFailure {
+                await TuringQwenNativeMetalCircuitBreaker.shared.trip(metalFailure)
+            }
             for instance in loaded {
                 await instance.unload()
             }

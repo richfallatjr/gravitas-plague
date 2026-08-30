@@ -18,11 +18,13 @@ public enum TuringQwenNativeGenerationSchedulerFactory {
 
     public static func makeFresh2Scheduler(
         instancePool: TuringQwenNativeFreshInstancePool,
-        gpuAdmissionPolicy: TuringQwenNativeGPUAdmissionPolicy
+        gpuAdmissionPolicy: TuringQwenNativeGPUAdmissionPolicy,
+        commandBufferProfile: TuringQwenNativeCommandBufferProfile = .deviceDefault
     ) -> TuringQwenNativeFreshInstanceScheduler {
         TuringQwenNativeFreshInstanceScheduler(
             instancePool: instancePool,
-            admissionPolicy: gpuAdmissionPolicy
+            admissionPolicy: gpuAdmissionPolicy,
+            commandBufferProfile: commandBufferProfile
         )
     }
 

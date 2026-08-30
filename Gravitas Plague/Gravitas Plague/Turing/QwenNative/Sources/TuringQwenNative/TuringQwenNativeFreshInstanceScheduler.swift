@@ -24,13 +24,16 @@ public struct TuringQwenNativeFreshSegmentSkip: Sendable {
 public actor TuringQwenNativeFreshInstanceScheduler {
     private let instancePool: TuringQwenNativeFreshInstancePool
     private let admissionPolicy: TuringQwenNativeGPUAdmissionPolicy
+    private let commandBufferProfile: TuringQwenNativeCommandBufferProfile
 
     public init(
         instancePool: TuringQwenNativeFreshInstancePool,
-        admissionPolicy: TuringQwenNativeGPUAdmissionPolicy
+        admissionPolicy: TuringQwenNativeGPUAdmissionPolicy,
+        commandBufferProfile: TuringQwenNativeCommandBufferProfile = .deviceDefault
     ) {
         self.instancePool = instancePool
         self.admissionPolicy = admissionPolicy
+        self.commandBufferProfile = commandBufferProfile
     }
 
     public func runSegments(
@@ -79,6 +82,8 @@ public actor TuringQwenNativeFreshInstanceScheduler {
         ) async -> Void = { _ in }
     ) async throws -> TuringQwenNativeFreshInstanceRunReport {
 
+        try await TuringQwenNativeMetalCircuitBreaker.shared.requireHealthy()
+
         let instances = try await instancePool.warmedInstancesExactlyRequestedCount()
         let requested = await instancePool.requestedInstanceCount
         let actual = instances.count
@@ -89,6 +94,15 @@ public actor TuringQwenNativeFreshInstanceScheduler {
         }
 
         let runStart = Date()
+        let commandBufferCapture = TuringQwenNativeCommandBufferRunCapture()
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "mlx.commandBuffer.run.begin",
+            runID: runID,
+            details: [
+                "profile": commandBufferProfile.rawValue,
+                "admissionMode": admissionPolicy.mode.rawValue
+            ]
+        )
         let renderPhaseState = TuringQwenRenderPhaseState()
         try await renderPhaseState.beginRun(runID: runID)
         let releaseLedger = TuringQwenRenderReleaseLedger()
@@ -180,6 +194,19 @@ public actor TuringQwenNativeFreshInstanceScheduler {
             _ = try? await gpuAdmission.finishRun(
                 reason: "schedulerFailed"
             )
+            if let metalFailure = error as? TuringQwenNativeMetalFailure {
+                await TuringQwenNativeMetalCircuitBreaker.shared.trip(metalFailure)
+                TuringQwenNativeDiagnostics.recordBreadcrumb(
+                    "qwen.metalCircuitBreaker.tripped",
+                    runID: runID,
+                    details: [
+                        "commandBufferID": String(metalFailure.record.record.commandBufferID),
+                        "phase": metalFailure.record.record.lastContext.phase ?? "none",
+                        "stage": metalFailure.record.record.lastContext.stage ?? "none"
+                    ]
+                )
+                await instancePool.unloadAll(reason: "mlxMetalFailure")
+            }
             throw error
         }
 
@@ -187,6 +214,11 @@ public actor TuringQwenNativeFreshInstanceScheduler {
         let metrics = await metricsCollector.snapshot()
         let overlap = await renderPhaseState.snapshot()
         let submittedCount = await queue.submittedCount()
+        let commandBufferMetrics = commandBufferCapture.finish(
+            profile: commandBufferProfile,
+            admissionMode: admissionPolicy.mode
+        )
+        commandBufferMetrics.recordBoundedDiagnostics(runID: runID)
         return TuringQwenNativeFreshInstanceRunReport(
             requestedInstanceCount: requested,
             actualInstanceCount: actual,
@@ -204,6 +236,7 @@ public actor TuringQwenNativeFreshInstanceScheduler {
             sameSegmentRenderDecodeOverlapCount: overlap.sameSegmentRenderDecodeOverlapCount,
             crossSegmentRenderDecodeOverlapCount: overlap.crossSegmentRenderDecodeOverlapCount,
             gpuAdmission: admissionSnapshot,
+            commandBufferMetrics: commandBufferMetrics,
             fallbackUsed: false
         )
     }
@@ -264,6 +297,16 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                     }
                 )
             } catch {
+                if let metalFailure = error as? TuringQwenNativeMetalFailure {
+                    await cancelForMetalFailure(
+                        metalFailure,
+                        queue: queue,
+                        gpuAdmission: gpuAdmission,
+                        decodeCoordinator: decodeCoordinator,
+                        decodeToken: decodeToken
+                    )
+                    throw error
+                }
                 await metricsCollector.sampleMemory(
                     label: "render.failed.\(request.segmentIndex)"
                 )
@@ -340,6 +383,16 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                   nextRequestEligible: true
                 """)
             } catch {
+                if let metalFailure = error as? TuringQwenNativeMetalFailure {
+                    await cancelForMetalFailure(
+                        metalFailure,
+                        queue: queue,
+                        gpuAdmission: gpuAdmission,
+                        decodeCoordinator: decodeCoordinator,
+                        decodeToken: decodeToken
+                    )
+                    throw error
+                }
                 if skipSegmentFailures || isSkippableEOSBeforeGeneratedAudio(error) {
                     await onSegmentSkipped(
                         TuringQwenNativeFreshSegmentSkip(
@@ -353,6 +406,45 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                 throw error
             }
         }
+    }
+
+    private static func cancelForMetalFailure(
+        _ failure: TuringQwenNativeMetalFailure,
+        queue: TuringQwenOpenSegmentQueue,
+        gpuAdmission: TuringQwenNativeGPUAdmissionController,
+        decodeCoordinator: TuringQwenNativeSpeechDecodeCoordinator,
+        decodeToken: TuringQwenNativeSpeechDecodeCoordinator.RunToken
+    ) async {
+        await TuringQwenNativeMetalCircuitBreaker.shared.trip(failure)
+        await queue.cancel(reason: "mlxMetalFailure")
+        await gpuAdmission.cancelAll(reason: "mlxMetalFailure")
+        await decodeCoordinator.cancelRun(
+            decodeToken,
+            reason: "mlxMetalFailure"
+        )
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "mlx.commandBuffer.failed",
+            runID: decodeToken.runID,
+            instanceID: failure.record.record.lastContext.instanceID,
+            segmentIndex: failure.record.record.lastContext.segmentIndex,
+            details: [
+                "commandBufferID": String(failure.record.record.commandBufferID),
+                "gpuSeconds": String(format: "%.9f", failure.record.record.GPUSeconds),
+                "kernelSeconds": String(format: "%.9f", failure.record.record.kernelSeconds),
+                "phase": failure.record.record.lastContext.phase ?? "none",
+                "stage": failure.record.record.lastContext.stage ?? "none"
+            ]
+        )
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "qwen.run.cancelledForMetalFailure",
+            runID: decodeToken.runID,
+            segmentIndex: failure.record.record.lastContext.segmentIndex,
+            details: [
+                "commandBufferID": String(failure.record.record.commandBufferID),
+                "phase": failure.record.record.lastContext.phase ?? "none",
+                "stage": failure.record.record.lastContext.stage ?? "none"
+            ]
+        )
     }
 
     private static func renderWithAdmission(
@@ -387,6 +479,7 @@ public actor TuringQwenNativeFreshInstanceScheduler {
             let rendered = try await instance.renderCodebookAndRelease(
                 request,
                 runID: runID,
+                laneIndex: laneIndex,
                 releaseLedger: releaseLedger
             )
             await renderPhaseState.renderReleased(

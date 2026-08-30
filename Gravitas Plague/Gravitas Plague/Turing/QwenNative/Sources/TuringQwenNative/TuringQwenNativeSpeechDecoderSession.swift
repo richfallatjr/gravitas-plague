@@ -23,12 +23,25 @@ final class TuringQwenNativeSpeechDecoderSession {
         performanceMode: TuringQwenNativePerformanceMode,
         diagnosticContext: TuringQwenNativeSpeechDecoderDiagnosticContext? = nil
     ) throws -> TuringQwenNativeAudio {
-        try TuringQwenNativeSpeechDecoder.decodeRows(
-            rows,
-            config: config,
-            reader: reader,
-            performanceMode: performanceMode,
-            diagnosticContext: diagnosticContext
-        )
+        try TuringQwenNativeMLXErrorBoundary.run(
+            context: TuringQwenNativeMLXExecutionContext(
+                runID: diagnosticContext?.runID ?? "standaloneSpeechDecode",
+                instanceID: diagnosticContext.flatMap {
+                    TuringQwenNativeFreshInstanceID(rawValue: $0.instanceID)
+                },
+                segmentIndex: diagnosticContext?.segmentIndex,
+                decodeID: diagnosticContext?.decodeID,
+                phase: .speechDecoder,
+                stage: "speechDecoder.session"
+            )
+        ) {
+            try TuringQwenNativeSpeechDecoder.decodeRows(
+                rows,
+                config: config,
+                reader: reader,
+                performanceMode: performanceMode,
+                diagnosticContext: diagnosticContext
+            )
+        }
     }
 }
