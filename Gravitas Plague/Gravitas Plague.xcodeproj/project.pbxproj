@@ -344,6 +344,7 @@
 			buildConfigurationList = 2D78FE512FCCF44B0063708B /* Build configuration list for PBXNativeTarget "Gravitas Plague" */;
 			buildPhases = (
 				8E1A10522FCD000100000001 /* Validate Character Audio Routing */,
+				8E1A10532FCD000100000001 /* Validate Chapter 3 Angel Visemes */,
 				2D78FE2C2FCCF44A0063708B /* Sources */,
 				2D78FE2D2FCCF44A0063708B /* Frameworks */,
 				2D78FE2E2FCCF44A0063708B /* Resources */,
@@ -543,6 +544,30 @@
 			shellPath = /bin/bash;
 			shellScript = "\"${SRCROOT}/../Scripts/validate_character_audio_routing.sh\"\n";
 		};
+		8E1A10532FCD000100000001 /* Validate Chapter 3 Angel Visemes */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${SRCROOT}/TuringResources/Turing/Cinematics/Chapter03/pr_angel_01.json",
+				"${SRCROOT}/TuringResources/Turing/Audio/chapter03/pr-angel-01.mp3",
+				"${SRCROOT}/TuringResources/Turing/Cinematics/Chapter03/Cues/chapter03.cinematic.angel.lightTunnel.001.visemes.json",
+				"${SRCROOT}/Scripts/validate_chapter03_angel_visemes.sh",
+				"${SRCROOT}/Scripts/validate_chapter03_angel_visemes.py",
+			);
+			name = "Validate Chapter 3 Angel Visemes";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "\"${SRCROOT}/Scripts/validate_chapter03_angel_visemes.sh\"\n";
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -738,6 +763,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "GravitasDiscover.Gravitas-Plague";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "GR_TURING_MLX_PROFILE_OPS40_MB32 $(inherited)";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;

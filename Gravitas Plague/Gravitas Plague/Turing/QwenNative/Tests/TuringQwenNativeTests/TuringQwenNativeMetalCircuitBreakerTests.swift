@@ -5,8 +5,13 @@ import Testing
 
 struct TuringQwenNativeMetalCircuitBreakerTests {
     @Test
-    func firstMetalFailureTripsUntilRelaunch() async throws {
-        let breaker = TuringQwenNativeMetalCircuitBreaker()
+    func firstMetalFailureIsRecordedAndAdmissionCloses() async throws {
+        let recovery = TuringQwenNativeRecoveryCoordinator(
+            policy: .production
+        )
+        let breaker = TuringQwenNativeMetalCircuitBreaker(
+            recovery: recovery
+        )
         try await breaker.requireHealthy()
         let failure = TuringQwenNativeMetalFailure(
             record: .testing(commandBufferID: 17)
@@ -17,13 +22,16 @@ struct TuringQwenNativeMetalCircuitBreakerTests {
         ))
 
         let state = await breaker.snapshot()
-        guard case .failedUntilRelaunch(let retained) = state else {
+        guard case .recovering(let retained) = state else {
             Issue.record("Circuit breaker did not retain its failure.")
             return
         }
-        #expect(retained.record.record.commandBufferID == 17)
-        await #expect(throws: TuringQwenNativeMetalFailure.self) {
+        #expect(retained.record.record.commandBufferID == failure.record.record.commandBufferID)
+        do {
             try await breaker.requireHealthy()
+            Issue.record("Recovery admission remained open after failure.")
+        } catch {
+            #expect(error is TuringQwenNativeRecoveryUnavailableError)
         }
     }
 }

@@ -4,10 +4,16 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
     public struct RunToken: Hashable, Sendable {
         public let id: UUID
         public let runID: String
+        public let generation: TuringQwenNativeRecoveryGeneration
 
-        public init(id: UUID, runID: String) {
+        public init(
+            id: UUID,
+            runID: String,
+            generation: TuringQwenNativeRecoveryGeneration = .initial
+        ) {
             self.id = id
             self.runID = runID
+            self.generation = generation
         }
     }
 
@@ -19,28 +25,44 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
 
     private var activeRun: ActiveRun?
     private var nextDecodeID = 0
+    private var activeDecodeID: Int?
+    private var activeStageCount = 0
     private let releaseLedger: TuringQwenRenderReleaseLedger
     private let renderPhaseState: TuringQwenRenderPhaseState
     private let gpuAdmission: TuringQwenNativeGPUAdmissionController
+    private let residencySnapshotsByInstanceID:
+        [String: TuringQwenNativeFreshInstanceResidencySnapshot]
 
     public init(
         releaseLedger: TuringQwenRenderReleaseLedger,
         renderPhaseState: TuringQwenRenderPhaseState,
-        gpuAdmission: TuringQwenNativeGPUAdmissionController
+        gpuAdmission: TuringQwenNativeGPUAdmissionController,
+        residencySnapshots: [TuringQwenNativeFreshInstanceResidencySnapshot] = []
     ) {
         self.releaseLedger = releaseLedger
         self.renderPhaseState = renderPhaseState
         self.gpuAdmission = gpuAdmission
+        self.residencySnapshotsByInstanceID = Dictionary(
+            uniqueKeysWithValues: residencySnapshots.map { ($0.instanceID, $0) }
+        )
     }
 
-    public func beginRun(runID: String, modelRoot: URL) async throws -> RunToken {
+    public func beginRun(
+        runID: String,
+        modelRoot: URL,
+        generation: TuringQwenNativeRecoveryGeneration = .initial
+    ) async throws -> RunToken {
         try await TuringQwenNativeMetalCircuitBreaker.shared.requireHealthy()
         guard activeRun == nil else {
             throw TuringQwenNativeError.invalidConfig(
                 "Speech decoder already owns an active run."
             )
         }
-        let token = RunToken(id: UUID(), runID: runID)
+        let token = RunToken(
+            id: UUID(),
+            runID: runID,
+            generation: generation
+        )
         activeRun = ActiveRun(
             token: token,
             session: try TuringQwenNativeSpeechDecoderSession(
@@ -97,6 +119,8 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
             runID: rendered.runID,
             segmentIndex: rendered.segmentIndex
         )
+        activeDecodeID = decodeID
+        activeStageCount = 1
         let rowsForDecode = rendered.rowsForDecode
 
         let admissionAtAcquire = await gpuAdmission.snapshot()
@@ -143,6 +167,7 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
         )
 
         do {
+            let residency = residencySnapshotsByInstanceID[rendered.instanceID.rawValue]
             let fullAudio = try activeRun.session.decode(
                 rows: rowsForDecode,
                 performanceMode: rendered.performanceMode,
@@ -150,7 +175,10 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
                     runID: rendered.runID,
                     instanceID: rendered.instanceID.rawValue,
                     segmentIndex: rendered.segmentIndex,
-                    decodeID: decodeID
+                    decodeID: decodeID,
+                    residencyOwnerID: residency?.ownerID?.uuidString,
+                    weightStoreID: residency?.weightStoreID.uuidString,
+                    laneMutableStateID: residency?.laneMutableStateIdentity.mutableStateID.uuidString
                 )
             )
             let trimmed = try TuringQwenNativeBaseCloneDecodeTrimmer
@@ -175,7 +203,8 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
                 voiceID: rendered.voiceID,
                 audio: audio,
                 renderMetrics: rendered.renderMetrics,
-                decodeSeconds: Date().timeIntervalSince(startedAt)
+                decodeSeconds: Date().timeIntervalSince(startedAt),
+                recoveryGeneration: rendered.recoveryGeneration
             )
             print("""
             [TuringSegmentPipeline] decode completed
@@ -204,12 +233,16 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
                     "samples": String(audio.samples.count)
                 ]
             )
+            activeDecodeID = nil
+            activeStageCount = 0
             await gpuAdmission.release(
                 decodeLease,
                 reason: "decodeCompleted"
             )
             return result
         } catch {
+            activeDecodeID = nil
+            activeStageCount = 0
             await gpuAdmission.release(
                 decodeLease,
                 reason: "decodeFailed"
@@ -264,5 +297,26 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
           runID: \(token.runID)
           tokenID: \(token.id.uuidString)
         """)
+    }
+
+    public func cancelAndReleaseForRecovery(
+        token: RunToken,
+        failure: TuringQwenNativeMetalFailure
+    ) -> TuringQwenNativeDecoderReleaseReceipt {
+        cancelRun(
+            token,
+            reason: "metalRecovery.commandBuffer.\(failure.record.record.commandBufferID)"
+        )
+        if activeDecodeID == nil && activeStageCount == 0 {
+            activeRun = nil
+        }
+        return .init(
+            runID: token.runID,
+            tokenID: token.id,
+            generation: token.generation,
+            sessionReleased: activeRun == nil,
+            activeDecodeCount: activeDecodeID == nil ? 0 : 1,
+            activeStageCount: activeStageCount
+        )
     }
 }

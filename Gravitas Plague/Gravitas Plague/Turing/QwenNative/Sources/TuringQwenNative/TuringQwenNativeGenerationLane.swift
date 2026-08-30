@@ -82,6 +82,11 @@ public struct TuringQwenNativeGeneratedAudio:
   }
 }
 
+@available(
+  *,
+  deprecated,
+  message: "Production Turing uses Fresh2 with explicit residency ownership."
+)
 public actor TuringQwenNativeGenerationLane {
   public let laneID: Int
   public let stream: TuringQwenNativeLaneStream
@@ -105,7 +110,7 @@ public actor TuringQwenNativeGenerationLane {
       try TuringQwenNativeBaseCloneEngine(
         modelRoot:
           residentResources.modelRoot,
-        residentResources:
+        ownedResidentResources:
           residentResources,
         trace:
           .stdout(

@@ -1,24 +1,5 @@
 import Foundation
-
-nonisolated enum TuringPrerecordingPreFillerMicrophoneContext:
-    Sendable,
-    Equatable
-{
-    case previousConversationVoice(seedID: UUID)
-    case currentPromptVoiceFallback
-}
-
-nonisolated enum TuringPrerecordingPreFillerMicrophonePolicy {
-    static func context(
-        retainedSeeds: TuringLiveConversationSeedRegistrySnapshot,
-        upcomingSurface: StoryInteractionSurfaceID
-    ) -> TuringPrerecordingPreFillerMicrophoneContext {
-        guard let retained = retainedSeeds.seedsBySurface[upcomingSurface] else {
-            return .currentPromptVoiceFallback
-        }
-        return .previousConversationVoice(seedID: retained.seedID)
-    }
-}
+import TuringQwenNative
 
 nonisolated struct TuringConversationMicrophoneActivationResult:
     Sendable,
@@ -45,6 +26,7 @@ actor TuringConversationMicrophoneActivationCoordinator {
         livePresentationGeneration: UInt64,
         activationPhase: String
     ) async throws -> TuringConversationMicrophoneActivationResult {
+        try await TuringQwenNativeRecoveryCoordinator.shared.requireReady()
         let seed = try TuringLiveConversationSeedResolver().resolve(
             entry: entry,
             item: item,

@@ -9,7 +9,7 @@
     "conversationKey": "chapter03.dialogue.big_mike.rich.scavenger",
     "outputRoute": "walkieSpatial",
     "interactionSurface": "walkie",
-    "computeStart": "foundationBeforePrerecording",
+    "computeStart": "beforePrerecording",
     "fillerMode": "continuousFromPrerecordingToGenerated",
     "commSFX": { "openBeforePrerecording": false, "sendAfterGenerated": false, "sendingLeadInAfterGeneratedSeconds": null },
     "fixedLeadInSeconds": null,

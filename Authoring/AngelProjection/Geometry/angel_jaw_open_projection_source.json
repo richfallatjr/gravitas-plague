@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "sourceAsset": "angel_posed_01.usdz",
+  "targetAsset": "angel_posed_mouth_open_blend_01_v0001.usdz",
+  "blendShapeName": "jawOpenProjection",
+  "skelRootPrimPath": "/root/Root/mesh1",
+  "meshBindings": [
+    {
+      "basePrimPath": "/root/Root/mesh1/mesh1",
+      "targetPrimPath": "/root/angel_posed_mouth_open_blend/mesh1/mesh1",
+      "allowPointChanges": true,
+      "allowNormalChanges": true
+    }
+  ],
+  "cameraFramingControl": {
+    "primPath": "/root/face_proxy/Cube_001",
+    "rightLocalAxis": "x",
+    "forwardLocalAxis": "y",
+    "upLocalAxis": "z",
+    "verticalFieldOfViewDegrees": 30.0,
+    "nearMeters": 0.02,
+    "farMeters": 20.0,
+    "framingPadding": 1.12
+  },
+  "projectionMaskPackagePath": "textures/projection-mask.png",
+  "projectionMaskConvention": "whiteProjectsBlackSuppresses",
+  "unchangedMeshPolicy": "requireTopologyAndTransformIdentity",
+  "maximumDisplacementAsHeadBoundsFraction": 0.2,
+  "sparseOffsetEpsilonMeters": 0.000001
+}

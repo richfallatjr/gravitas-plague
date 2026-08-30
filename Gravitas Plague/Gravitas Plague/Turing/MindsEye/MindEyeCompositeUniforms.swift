@@ -7,26 +7,41 @@ nonisolated struct MindEyeCompositeUniforms: Sendable, Equatable {
     var backgroundTransform: SIMD4<Float>
     var characterTransform: SIMD4<Float>
 
-    static func make(frame: MindEyeCompositeFrameState) -> MindEyeCompositeUniforms {
-        MindEyeCompositeUniforms(
-            dimensions: SIMD4<UInt32>(2_304, 1_296, 1_920, 1_080),
+    static func make(
+        frame: MindEyeCompositeFrameState,
+        canvasProfile: MindEyeCompositorCanvasProfile = .landscapePortraitCard
+    ) -> MindEyeCompositeUniforms {
+        let source = canvasProfile.sourceDimensions
+        let output = canvasProfile.outputDimensions
+        let crop = canvasProfile.cropOrigin
+        let backgroundTransform = canvasProfile.permitsInternalMotion
+            ? frame.backgroundTransform
+            : .identity
+        let characterTransform = canvasProfile.permitsInternalMotion
+            ? frame.characterTransform
+            : .identity
+        return MindEyeCompositeUniforms(
+            dimensions: SIMD4<UInt32>(
+                UInt32(source.x), UInt32(source.y),
+                UInt32(output.x), UInt32(output.y)
+            ),
             cropAndFlags: SIMD4<UInt32>(
-                192,
-                108,
+                UInt32(crop.x),
+                UInt32(crop.y),
                 frame.maskMode.rawValue,
                 0
             ),
             backgroundTransform: SIMD4<Float>(
-                frame.backgroundTransform.translationPixels.x,
-                frame.backgroundTransform.translationPixels.y,
-                frame.backgroundTransform.rollRadians,
-                frame.backgroundTransform.scale
+                backgroundTransform.translationPixels.x,
+                backgroundTransform.translationPixels.y,
+                backgroundTransform.rollRadians,
+                backgroundTransform.scale
             ),
             characterTransform: SIMD4<Float>(
-                frame.characterTransform.translationPixels.x,
-                frame.characterTransform.translationPixels.y,
-                frame.characterTransform.rollRadians,
-                frame.characterTransform.scale
+                characterTransform.translationPixels.x,
+                characterTransform.translationPixels.y,
+                characterTransform.rollRadians,
+                characterTransform.scale
             )
         )
     }

@@ -1,15 +1,23 @@
 import Foundation
 import RealityKit
 
+nonisolated struct StorySpatialPrerecordingPlaybackStart: Sendable, Equatable {
+    let runID: UUID
+    let playbackID: UUID
+    let clockOrigin: ContinuousClock.Instant
+}
+
 @MainActor
 final class StorySpatialPrerecordingPlayer {
     private var controller: AudioPlaybackController?
     private var preparedResource: AudioFileResource?
     private weak var emitter: Entity?
     private var activeRunID: UUID?
+    private var activePlaybackID: UUID?
+    private var clockOrigin: ContinuousClock.Instant?
     private var gainDB: Float = 0
 
-    var onCompleted: ((UUID, Bool) -> Void)?
+    var onCompleted: ((UUID, UUID, Bool) -> Void)?
 
     func prepare(
         runID: UUID,
@@ -40,7 +48,7 @@ final class StorySpatialPrerecordingPlayer {
         )
     }
 
-    func play(runID: UUID) throws {
+    func play(runID: UUID) throws -> StorySpatialPrerecordingPlaybackStart {
         guard activeRunID == runID,
               controller == nil,
               let preparedResource,
@@ -50,17 +58,26 @@ final class StorySpatialPrerecordingPlayer {
                 "prepared cinematic recording is unavailable"
             )
         }
+        let playbackID = UUID()
         let controller = emitter.playAudio(preparedResource)
+        let clockOrigin = ContinuousClock.now
         controller.gain = Double(gainDB)
         self.controller = controller
+        activePlaybackID = playbackID
+        self.clockOrigin = clockOrigin
         controller.completionHandler = { [weak self] in
             Task { @MainActor in
-                self?.complete(runID: runID)
+                self?.complete(runID: runID, playbackID: playbackID)
             }
         }
         print(
             "[StoryCinematicPR] actual playback started " +
-                "runID=\(runID.uuidString) gainDB=\(gainDB)"
+                "runID=\(runID.uuidString) playbackID=\(playbackID.uuidString) gainDB=\(gainDB)"
+        )
+        return StorySpatialPrerecordingPlaybackStart(
+            runID: runID,
+            playbackID: playbackID,
+            clockOrigin: clockOrigin
         )
     }
 
@@ -71,6 +88,8 @@ final class StorySpatialPrerecordingPlayer {
         preparedResource = nil
         emitter = nil
         activeRunID = nil
+        activePlaybackID = nil
+        clockOrigin = nil
         print("[StoryCinematicPR] stopped reason=\(reason)")
     }
 
@@ -78,14 +97,18 @@ final class StorySpatialPrerecordingPlayer {
         controller == nil ? 0 : 1
     }
 
-    private func complete(runID: UUID) {
-        guard activeRunID == runID, let controller else { return }
+    private func complete(runID: UUID, playbackID: UUID) {
+        guard activeRunID == runID,
+              activePlaybackID == playbackID,
+              let controller else { return }
         controller.completionHandler = nil
         self.controller = nil
+        activePlaybackID = nil
+        clockOrigin = nil
         print(
             "[StoryCinematicPR] actual playback completed " +
-                "runID=\(runID.uuidString)"
+                "runID=\(runID.uuidString) playbackID=\(playbackID.uuidString)"
         )
-        onCompleted?(runID, true)
+        onCompleted?(runID, playbackID, true)
     }
 }

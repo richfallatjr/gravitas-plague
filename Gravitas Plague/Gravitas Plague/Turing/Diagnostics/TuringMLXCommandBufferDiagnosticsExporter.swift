@@ -28,6 +28,11 @@ enum TuringMLXCommandBufferDiagnosticsExporter {
         let configuration: ConfigurationRecord?
         let aggregate: TuringMetalCommandBufferAggregate
         let runMetrics: TuringQwenNativeCommandBufferRunMetrics?
+        let residencyMode: TuringQwenNativeResidencyMode?
+        let residencyOwnership: TuringQwenNativeResidencyOwnershipReport?
+        let residencyMemory: TuringQwenNativeResidencyRunMetrics?
+        let residencyMemorySamples: [TuringQwenNativeResidencyMemorySample]
+        let aggregateRealTimeFactor: Double?
         let recentRecords: [TuringMetalCommandBufferRecord]
         let lastFailure: TuringMetalCommandBufferFailure?
     }
@@ -36,7 +41,8 @@ enum TuringMLXCommandBufferDiagnosticsExporter {
         runID: String,
         profile: TuringQwenNativeCommandBufferProfile,
         admissionMode: TuringQwenNativeGPUAdmissionMode,
-        runMetrics: TuringQwenNativeCommandBufferRunMetrics?
+        runMetrics: TuringQwenNativeCommandBufferRunMetrics?,
+        freshRunReport: TuringQwenNativeFreshInstanceRunReport? = nil
     ) async {
         let configuration = try? TuringMetalDiagnostics.configuration()
         let payload = Export(
@@ -48,6 +54,11 @@ enum TuringMLXCommandBufferDiagnosticsExporter {
             configuration: configuration.map(ConfigurationRecord.init),
             aggregate: TuringMetalDiagnostics.aggregate(),
             runMetrics: runMetrics,
+            residencyMode: freshRunReport?.residencyOwnership.mode,
+            residencyOwnership: freshRunReport?.residencyOwnership,
+            residencyMemory: freshRunReport?.residencyMemory,
+            residencyMemorySamples: freshRunReport?.residencyMemory.boundedSamples ?? [],
+            aggregateRealTimeFactor: freshRunReport?.aggregateRealTimeFactor,
             recentRecords: TuringMetalDiagnostics.recentRecords(),
             lastFailure: TuringMetalDiagnostics.lastFailure()
         )

@@ -548,8 +548,9 @@ extension TuringStoryWalkieInteractionController:
             iconController.apply(.hidden)
             return
         }
-        let activity = snapshot.turingSurfacePresentations[.walkie]?.activity
-            ?? .hidden
+        let surfacePresentation =
+            snapshot.turingSurfacePresentations[.walkie] ?? .hidden
+        let activity = surfacePresentation.activity
 
         switch snapshot.walkiePresentation {
         case .hidden:
@@ -557,7 +558,24 @@ extension TuringStoryWalkieInteractionController:
         case .play:
             iconController.apply(.play, activity: activity)
         case .microphone:
-            iconController.apply(.microphone, activity: activity)
+            iconController.apply(
+                .microphone,
+                activity: activity,
+                microphoneCTAEmphasis:
+                    surfacePresentation.microphoneCTAEmphasis
+            )
+        case .microphoneRecovering:
+            iconController.apply(
+                .microphoneRecovering,
+                activity: activity,
+                microphoneCTAEmphasis: .desaturated
+            )
+        case .microphoneUnavailable:
+            iconController.apply(
+                .microphoneUnavailable,
+                activity: activity,
+                microphoneCTAEmphasis: .desaturated
+            )
         }
 
         print("""

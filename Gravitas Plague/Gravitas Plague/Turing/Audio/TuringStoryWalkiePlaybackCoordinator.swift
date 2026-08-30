@@ -222,6 +222,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
 
     static var bigMikeTuringFlowPolicy: Policy {
         var policy = Policy()
+        policy.firstSegmentPrerollFillerCount = 0
         policy.chainFillerFromPrerecordingToFirstGenerated = true
         return policy
     }
@@ -231,6 +232,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
         var policy = Policy()
         policy.voiceRoute = .playerHeadTracked
         policy.outputProcessingPolicy = .rich
+        policy.firstSegmentPrerollFillerCount = 0
         policy.chainFillerFromPrerecordingToFirstGenerated = true
         policy.generatedGainDB = -5
         policy.prerecordingGainDB = -5
@@ -439,6 +441,22 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             throw TuringRuntimeError.invalidConfig(
                 "Authored progression hold requires an active authored run."
             )
+        }
+        // Pre-PR availability and microphone selection can both request the
+        // same session hold while MainActor work is re-entering around this
+        // playback actor. The hold is session ownership, not call ownership:
+        // issuing a second token strands the first token and permanently keeps
+        // the authored parent flow busy after the TTS response completes.
+        if let existing = authoredProgressionHolds.values.first(where: {
+            $0.liveSessionID == liveSessionID &&
+                $0.playbackRunID == runID
+        }) {
+            print(
+                "[TuringLiveConversation] progression hold coalesced " +
+                    "token=\(existing.id.uuidString) runID=\(runID) " +
+                    "reason=\(reason)"
+            )
+            return existing
         }
         let token = TuringAuthoredProgressionHoldToken(
             id: UUID(),
@@ -958,8 +976,22 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
     }
 
     func waitUntilPlaybackFinished() async {
-        if isFinished {
+        // `isFinished` only means that every generated segment has reached a
+        // terminal compute/playback state. A live-conversation child may reach
+        // that state while its authored PR cover is still audible. Do not let
+        // the runner interpret that as actual playback completion: doing so
+        // allows child-route cleanup to stop the parent's current media.
+        guard runActive else {
             return
+        }
+
+        if isFinished {
+            _ = await finishRunIfTerminal(
+                reason: "waitUntilPlaybackFinished"
+            )
+            if runActive == false {
+                return
+            }
         }
 
         await withCheckedContinuation { continuation in
@@ -1283,8 +1315,7 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             return
         }
 
-        if isFinished {
-            await finishRun(reason: "allDone")
+        if await finishRunIfTerminal(reason: reason) {
             return
         }
 
@@ -1334,9 +1365,43 @@ actor TuringStoryWalkiePlaybackCoordinator: TuringSpokenCoverControlling {
             return
         }
 
-        if isFinished {
-            await finishRun(reason: "allDone")
+        _ = await finishRunIfTerminal(reason: reason)
+    }
+
+    /// A live-conversation response is not allowed to become terminal before
+    /// its spoken cover does. The start gate therefore owns both generated
+    /// audio start and generated-run completion. Without this second barrier,
+    /// an all-skipped or zero-playable-segment TTS result can finish its route
+    /// while the authored PR is still audible, allowing child-route teardown
+    /// to cut the parent media short.
+    private func finishRunIfTerminal(reason: String) async -> Bool {
+        guard isFinished else { return false }
+
+        if authoredOnlyRun == false,
+           let gate = generatedPlaybackConfiguration.startGate {
+            switch await gate.currentState() {
+            case .closed:
+                print("""
+                [TuringLiveConversation] generated terminal held behind spoken cover
+                  runID: \(runID ?? "none")
+                  reason: \(reason)
+                  allComputeFinished: \(allComputeFinished)
+                  completedGeneratedSegmentCount: \(completedGeneratedPlaybackCount)
+                  authoredPlaybackCutoffPrevented: true
+                """)
+                return true
+            case .cancelled(let message):
+                await runCancelled(
+                    reason: "generatedGateCancelled.\(message)"
+                )
+                return true
+            case .open:
+                break
+            }
         }
+
+        await finishRun(reason: "allDone")
+        return true
     }
 
     private func playbackStarted(

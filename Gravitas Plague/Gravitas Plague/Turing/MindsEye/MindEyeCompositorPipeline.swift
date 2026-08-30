@@ -86,7 +86,8 @@ enum MindEyeCompositeEncoder {
         frame requestedFrame: MindEyeCompositeFrameState,
         surface: MindEyeDynamicOutputSurface,
         resources: MindEyeCompositorMetalResources,
-        awaitCompletion: Bool
+        awaitCompletion: Bool,
+        canvasProfile: MindEyeCompositorCanvasProfile = .landscapePortraitCard
     ) async -> Result<MindEyeCompositeFrameReceipt, MindEyeFailure> {
         if let failure = MindEyeCompositeFrameStateValidator.validateBasic(requestedFrame) {
             return .failure(failure)
@@ -118,8 +119,8 @@ enum MindEyeCompositeEncoder {
         }
         guard validatesFormats(layers: layers),
               surface.lowLevelTexture.descriptor.pixelFormat == .bgra8Unorm_srgb,
-              surface.lowLevelTexture.descriptor.width == 1_920,
-              surface.lowLevelTexture.descriptor.height == 1_080 else {
+              surface.lowLevelTexture.descriptor.width == Int(canvasProfile.outputDimensions.x),
+              surface.lowLevelTexture.descriptor.height == Int(canvasProfile.outputDimensions.y) else {
             return .failure(failure(package, "Composite texture formats are invalid."))
         }
 
@@ -140,7 +141,10 @@ enum MindEyeCompositeEncoder {
         encoder.setTexture(layers.selectedMouth, index: 3)
         encoder.setTexture(layers.featherMask, index: 4)
         encoder.setTexture(output, index: 5)
-        var uniforms = MindEyeCompositeUniforms.make(frame: frame)
+        var uniforms = MindEyeCompositeUniforms.make(
+            frame: frame,
+            canvasProfile: canvasProfile
+        )
         encoder.setBytes(
             &uniforms,
             length: MemoryLayout<MindEyeCompositeUniforms>.stride,
@@ -152,7 +156,11 @@ enum MindEyeCompositeEncoder {
             resources.computePipeline.maxTotalThreadsPerThreadgroup / width
         )
         encoder.dispatchThreads(
-            MTLSize(width: 1_920, height: 1_080, depth: 1),
+            MTLSize(
+                width: Int(canvasProfile.outputDimensions.x),
+                height: Int(canvasProfile.outputDimensions.y),
+                depth: 1
+            ),
             threadsPerThreadgroup: MTLSize(width: width, height: height, depth: 1)
         )
         encoder.endEncoding()

@@ -647,7 +647,11 @@ final class TuringStoryHamReceiverInteractionController:
             activity: ready
                 ? snapshot.turingSurfacePresentations[.hamReceiver]?.activity
                     ?? .hidden
-                : .hidden
+                : .hidden,
+            microphoneCTAEmphasis: ready
+                ? snapshot.turingSurfacePresentations[.hamReceiver]?
+                    .microphoneCTAEmphasis ?? .saturated
+                : .saturated
         )
     }
 

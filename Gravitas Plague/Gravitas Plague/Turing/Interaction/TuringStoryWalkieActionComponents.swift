@@ -26,6 +26,8 @@ enum TuringStoryWalkiePresentation: Equatable {
     case hidden
     case play
     case microphone
+    case microphoneRecovering
+    case microphoneUnavailable
 
     init(gate: TuringFlowInteractionGateController.State) {
         switch gate {

@@ -479,7 +479,11 @@ final class TuringStoryDadFrameInteractionController:
             activity: ready
                 ? snapshot.turingSurfacePresentations[.dadFrame]?.activity
                     ?? .hidden
-                : .hidden
+                : .hidden,
+            microphoneCTAEmphasis: ready
+                ? snapshot.turingSurfacePresentations[.dadFrame]?
+                    .microphoneCTAEmphasis ?? .saturated
+                : .saturated
         )
         if snapshot.dadFramePresentation != .hidden ||
             appliedPresentation != .hidden {

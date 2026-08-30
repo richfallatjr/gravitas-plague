@@ -9,6 +9,7 @@ nonisolated struct Chapter03LightTunnelDefinition: Codable, Sendable, Equatable 
     let music: Chapter03LightTunnelMusicDefinition
     let visual: Chapter03LightTunnelVisualDefinition
     let angelPrerecording: Chapter03AngelPrerecordingDefinition?
+    let heavenPortalEmbers: Chapter03HeavenPortalEmberDefinition
     let completion: Chapter03LightTunnelCompletionDefinition
 
     nonisolated func validate() throws {
@@ -27,6 +28,7 @@ nonisolated struct Chapter03LightTunnelDefinition: Codable, Sendable, Equatable 
             throw Chapter03Error.definitionInvalid("completion contract mismatch")
         }
         try angelPrerecording?.validate()
+        try heavenPortalEmbers.validate()
     }
 }
 

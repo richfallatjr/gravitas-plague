@@ -396,16 +396,24 @@ final class HordePortalManager {
             SIMD3<Float>(
                 $0.x,
                 $0.y,
-                0.018
+                PortalFXDefaults.perimeterSurfaceOffsetMeters
             )
         }
 
         let transitionFX = PortalTransitionFXController(
             perimeterLocalPoints: perimeterPoints,
-            portalNormalLocal: SIMD3<Float>(0, 0, 1)
+            portalNormalLocal: SIMD3<Float>(0, 0, 1),
+            configuration: .hordePortal
         )
 
-        transitionFX.build()
+        do {
+            try transitionFX.build()
+        } catch {
+            print(
+                "[HordePortal] ERROR failed to build transition FX: \(error)"
+            )
+            return nil
+        }
         root.addChild(transitionFX.rootEntity)
         transitionFXByPortalID[portalID] = transitionFX
 

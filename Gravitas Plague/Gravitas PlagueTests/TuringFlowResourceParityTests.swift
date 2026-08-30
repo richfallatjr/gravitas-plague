@@ -103,14 +103,7 @@ final class TuringFlowResourceParityTests:
                 .outputRoute,
             .walkieSpatial
         )
-        XCTAssertEqual(
-            try XCTUnwrap(
-                point03.transmission
-                    .fixedLeadInSeconds
-            ),
-            10,
-            accuracy: 0.0001
-        )
+        XCTAssertNil(point03.transmission.fixedLeadInSeconds)
         XCTAssertEqual(
             point03.progression
                 .interactionGateAfterCompletion,
@@ -145,11 +138,7 @@ final class TuringFlowResourceParityTests:
             point05.transmission.computeStart,
             .beforePrerecording
         )
-        XCTAssertEqual(
-            try XCTUnwrap(point05.transmission.fixedLeadInSeconds),
-            10,
-            accuracy: 0.0001
-        )
+        XCTAssertNil(point05.transmission.fixedLeadInSeconds)
     }
 
     func testScriptPoint05UsesDebugHeadlineThenStandardPRPromptVoice()
@@ -302,6 +291,31 @@ final class TuringFlowResourceParityTests:
         XCTAssertFalse(rendered.contains("Big Mike (big_mike)"))
         XCTAssertFalse(rendered.contains("Voice: big_mike_base_clone_v1"))
         XCTAssertFalse(rendered.contains("{{"))
+    }
+
+    func testEveryBigMikePRPlaysWhileGenerationContinues() throws {
+        let store = TuringFlowDescriptorStore()
+        for id in [
+            "prologue.scriptPoint03",
+            "prologue.scriptPoint05",
+            "chapter01.walkie.bigMike.script07",
+            "chapter01.walkie.bigMike.script09",
+            "chapter02.walkie.bigMike.script01",
+            "chapter02.walkie.bigMike.script03",
+            "chapter03.walkie.bigMike.scavengerReport.001",
+            "chapter03.walkie.bigMike.fading.003"
+        ] {
+            let descriptor = try store.require(id)
+            XCTAssertEqual(
+                descriptor.transmission.computeStart,
+                .beforePrerecording,
+                id
+            )
+            XCTAssertNil(
+                descriptor.transmission.fixedLeadInSeconds,
+                id
+            )
+        }
     }
 
     func testCharacterRegistryLoadsBigMikeAndRich()

@@ -45,6 +45,7 @@ import PackageDescription
         "mlx/mlx/backend/metal/unary.cpp",
         "mlx/mlx/backend/metal/utils.cpp",
         "mlx/mlx/backend/metal/turing_command_buffer_diagnostics.cpp",
+        "mlx/mlx/backend/metal/turing_metal_recovery.cpp",
         "mlx/mlx/backend/metal/kernels",  // Exclude kernels directory
         "mlx/mlx/backend/metal/jit",  // Exclude jit directory
 
@@ -54,6 +55,7 @@ import PackageDescription
         "mlx-conditional",
         "mlx-c/mlx/c/metal.cpp",
         "mlx-c/mlx/c/turing_metal_diagnostics.cpp",
+        "mlx-c/mlx/c/turing_metal_recovery.cpp",
 
         "mlx-c/mlx/c/fast.cpp",  // Exclude on Linux - calls metal_kernel unconditionally
     ]
@@ -73,6 +75,7 @@ import PackageDescription
         "MLXFast.swift",
         "MLXFastKernel.swift",
         "TuringMetalDiagnostics.swift",
+        "TuringMetalRecovery.swift",
     ]
 #else
     let platformExcludes: [String] = [

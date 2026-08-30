@@ -1,16 +1,12 @@
 import Foundation
-import ImageIO
 import RealityKit
 import simd
 
 @MainActor
 final class Chapter03LightTunnelPresenter {
-    private struct HeavenResources {
-        let texture: TextureResource
-        let environment: EnvironmentResource
-    }
-
     private let cinematicWorld: CinematicWorldPresentationCoordinator
+    private let sceneFactory = Chapter03LightTunnelSceneFactory()
+    private var sceneBundle: Chapter03LightTunnelSceneBundle?
     private var runID: UUID?
     private var root: Entity?
     private var portalTravelRoot: Entity?
@@ -19,6 +15,9 @@ final class Chapter03LightTunnelPresenter {
     private var portalDome: ModelEntity?
     private var portalIBLEntity: Entity?
     private var angel: Chapter03AngelPortalEntity?
+    private var heavenPortalEmbers: Chapter03HeavenPortalEmberController?
+    private var angelVisemeTrack: Chapter03AngelVisemeTrack?
+    private var angelPerformance: Chapter03AngelPerformanceCoordinator?
     private(set) var angelAudioEmitter: Entity?
     private var lastLoggedDistanceBucket: Int?
 
@@ -29,74 +28,55 @@ final class Chapter03LightTunnelPresenter {
     func prepare(
         runID: UUID,
         originFromDevice: simd_float4x4,
-        definition: Chapter03LightTunnelVisualDefinition
+        definition: Chapter03LightTunnelVisualDefinition,
+        angelVisemeTrack: Chapter03AngelVisemeTrack?
     ) async throws {
         remove(runID: self.runID, reason: "replacement")
 
-        let resources = try loadHeavenResources()
-        let angel = try await Chapter03AngelPortalEntity.load(
-            insideOffsetMeters: definition.angelInsideOffsetMeters,
-            rootYOffsetMeters: definition.angelRootYOffsetMeters
+        let bundle = try await sceneFactory.make(
+            runID: runID,
+            definition: definition,
+            originFromDevice: originFromDevice,
+            mode: .runtimePortal
         )
         let worldAnchor = try cinematicWorld.claimChapter03LightTunnel(
             runID: runID
         )
 
-        let root = Entity()
-        root.name = "Chapter03LightTunnelRoot"
-        root.setTransformMatrix(originFromDevice, relativeTo: nil)
-
-        let portalTravelRoot = Entity()
-        portalTravelRoot.name = "Chapter03CircularPortalTravelRoot"
-        portalTravelRoot.position = SIMD3<Float>(
-            0,
-            0,
-            -definition.startDistanceMeters
-        )
-
-        let portalWorld = Entity()
-        portalWorld.name = "Chapter03HeavenPortalWorld"
-        portalWorld.components.set(WorldComponent())
-        PlagueNativeBloomInstaller.installStrictBloom(on: portalWorld)
-
-        let portalDome = makeInsideFacingDome(
-            resources: resources,
-            definition: definition
-        )
-        portalWorld.addChild(portalDome)
-
-        let iblEntity = makeIBLEntity(environment: resources.environment)
-        portalWorld.addChild(iblEntity)
-        attachIBLReceiverRecursively(
-            to: angel.root,
-            iblEntity: iblEntity
-        )
-        portalWorld.addChild(angel.root)
-
         let emitter = Entity()
         emitter.name = "Chapter03AngelLightAudioEmitter"
         emitter.position = .zero
         emitter.components.set(SpatialAudioComponent())
-        angel.root.addChild(emitter)
-
-        let aperture = try makeCircularPortalAperture(
-            diameterMeters: definition.portalDiameterMeters,
-            targetWorld: portalWorld
-        )
-
-        portalTravelRoot.addChild(portalWorld)
-        portalTravelRoot.addChild(aperture)
-        root.addChild(portalTravelRoot)
-        worldAnchor.addChild(root)
+        bundle.angel.root.addChild(emitter)
+        var preparedHeavenEmbers: Chapter03HeavenPortalEmberController?
+        do {
+            let controller = try Chapter03HeavenPortalEmberController(
+                perimeterLocalPoints: bundle.portalGeometry.boundaryPoints
+            )
+            bundle.portalTravelRoot.addChild(controller.rootEntity)
+            preparedHeavenEmbers = controller
+        } catch {
+            // The visual accent may never delay or stop the authored chapter.
+            Chapter03HeavenPortalEmberDiagnostics.cueUnavailable(error)
+        }
+        worldAnchor.addChild(bundle.root)
 
         self.runID = runID
-        self.root = root
-        self.portalTravelRoot = portalTravelRoot
-        self.portalWorld = portalWorld
-        self.portalAperture = aperture
-        self.portalDome = portalDome
-        portalIBLEntity = iblEntity
-        self.angel = angel
+        sceneBundle = bundle
+        root = bundle.root
+        portalTravelRoot = bundle.portalTravelRoot
+        portalWorld = bundle.portalWorld
+        portalAperture = bundle.runtimePortalAperture
+        portalDome = bundle.portalDome
+        portalIBLEntity = bundle.iblEntity
+        angel = bundle.angel
+        heavenPortalEmbers = preparedHeavenEmbers
+        self.angelVisemeTrack = angelVisemeTrack
+        angelPerformance = Chapter03AngelPerformanceCoordinator()
+        // The current facial-projection increment has authoring/capture
+        // contracts but no production material/texture owner yet. Holding this
+        // unavailable prevents exposing the projection-only jaw geometry.
+        bundle.angel.setProjectionReadiness(.unavailable)
         angelAudioEmitter = emitter
         lastLoggedDistanceBucket = nil
 
@@ -168,9 +148,42 @@ final class Chapter03LightTunnelPresenter {
         }
     }
 
-    func updateAngelFloatMotion(deltaTime: TimeInterval) {
+    func updateFrame(deltaTime: TimeInterval) {
         guard runID != nil else { return }
         angel?.updateFloatMotion(deltaTime: deltaTime)
+        angelPerformance?.update(deltaTime: deltaTime)
+        heavenPortalEmbers?.update(deltaTime: deltaTime)
+    }
+
+    func updateAngelFloatMotion(deltaTime: TimeInterval) {
+        updateFrame(deltaTime: deltaTime)
+    }
+
+    func beginAngelPrerecordingEmberPerformance(
+        runID: UUID,
+        start: StorySpatialPrerecordingPlaybackStart
+    ) throws {
+        guard self.runID == runID, start.runID == runID else {
+            throw Chapter03Error.staleRun
+        }
+        angelPerformance?.begin(
+            start: start,
+            track: angelVisemeTrack,
+            projection: nil,
+            blendShape: angel?.blendShapeController,
+            embers: heavenPortalEmbers
+        )
+    }
+
+    func endAngelPrerecordingEmberPerformance(
+        runID: UUID,
+        playbackID: UUID?
+    ) {
+        guard self.runID == runID else { return }
+        angelPerformance?.end(
+            runID: runID,
+            playbackID: playbackID
+        )
     }
 
     func fadeOutAndRemove(runID: UUID) async throws {
@@ -182,14 +195,16 @@ final class Chapter03LightTunnelPresenter {
         guard let current = self.runID,
               runID == nil || runID == current else { return }
 
-        angel?.release(reason: reason)
+        angelPerformance?.teardown(reason: reason)
+        angelPerformance = nil
+        heavenPortalEmbers?.teardown(reason: reason)
+        heavenPortalEmbers = nil
+        angelVisemeTrack = nil
+        sceneBundle?.release(reason: reason)
+        sceneBundle = nil
         angel = nil
-        root?.removeFromParent()
         root = nil
         portalTravelRoot = nil
-        if let portalWorld {
-            PlagueNativeBloomInstaller.removeBloom(from: portalWorld)
-        }
         portalWorld = nil
         portalAperture = nil
         portalDome = nil
@@ -211,118 +226,6 @@ final class Chapter03LightTunnelPresenter {
 
     var rootEntityCount: Int { root == nil ? 0 : 1 }
     var angelResourceCount: Int { angel == nil ? 0 : 1 }
-
-    private func loadHeavenResources() throws -> HeavenResources {
-        guard let url = Bundle.main.url(
-            forResource: "heaven-sunrise",
-            withExtension: "exr"
-        ) else {
-            throw Chapter03Error.heavenResourceMissing("heaven-sunrise.exr")
-        }
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-            throw Chapter03Error.heavenResourceInvalid("heaven-sunrise.exr")
-        }
-
-        let texture = try TextureResource(
-            image: image,
-            withName: "chapter03_heaven_sunrise_visible",
-            options: .init(semantic: .color)
-        )
-        let environment = try EnvironmentResource(
-            equirectangular: image,
-            options: .init(
-                samplingQuality: .fast,
-                specularCubeDimension: nil,
-                compression: .default
-            )
-        )
-        print(
-            "[Chapter03LightTunnel] heaven EXR loaded " +
-                "file=\(url.lastPathComponent) width=\(image.width) height=\(image.height)"
-        )
-        return HeavenResources(texture: texture, environment: environment)
-    }
-
-    private func makeCircularPortalAperture(
-        diameterMeters: Float,
-        targetWorld: Entity
-    ) throws -> ModelEntity {
-        let segments = 128
-        let radius = diameterMeters * 0.5
-        var positions = [SIMD3<Float>(0, 0, 0)]
-        positions.reserveCapacity(segments + 1)
-        for index in 0..<segments {
-            let angle = 2 * Float.pi * Float(index) / Float(segments)
-            positions.append(
-                SIMD3<Float>(radius * cos(angle), radius * sin(angle), 0)
-            )
-        }
-
-        var indices: [UInt32] = []
-        indices.reserveCapacity(segments * 3)
-        for index in 0..<segments {
-            let next = (index + 1) % segments
-            indices.append(contentsOf: [
-                0,
-                UInt32(index + 1),
-                UInt32(next + 1)
-            ])
-        }
-
-        var descriptor = MeshDescriptor(name: "Chapter03CircularPortalDisc")
-        descriptor.positions = MeshBuffers.Positions(positions)
-        descriptor.primitives = .triangles(indices)
-        let mesh = try MeshResource.generate(from: [descriptor])
-        let aperture = ModelEntity(
-            mesh: mesh,
-            materials: [PortalMaterial()]
-        )
-        aperture.name = "Chapter03CircularPortalAperture"
-        aperture.components.set(
-            PortalComponent(
-                target: targetWorld,
-                clippingMode: .plane(.positiveZ),
-                crossingMode: .plane(.positiveZ)
-            )
-        )
-        return aperture
-    }
-
-    private func makeInsideFacingDome(
-        resources: HeavenResources,
-        definition: Chapter03LightTunnelVisualDefinition
-    ) -> ModelEntity {
-        var material = UnlitMaterial(texture: resources.texture)
-        material.faceCulling = .front
-        let dome = ModelEntity(
-            mesh: .generateSphere(radius: definition.domeRadiusMeters),
-            materials: [material]
-        )
-        dome.name = "Chapter03HeavenSunriseDome"
-        dome.position.z = definition.domeCenterOffsetZMeters
-        dome.scale = SIMD3<Float>(repeating: 1)
-        return dome
-    }
-
-    private func makeIBLEntity(environment: EnvironmentResource) -> Entity {
-        let entity = Entity()
-        entity.name = "Chapter03HeavenIBL"
-        var ibl = ImageBasedLightComponent(source: .single(environment))
-        ibl.intensityExponent = 0.5
-        entity.components.set(ibl)
-        return entity
-    }
-
-    private func attachIBLReceiverRecursively(
-        to entity: Entity,
-        iblEntity: Entity
-    ) {
-        entity.components.set(
-            ImageBasedLightReceiverComponent(imageBasedLight: iblEntity)
-        )
-        for child in entity.children {
-            attachIBLReceiverRecursively(to: child, iblEntity: iblEntity)
-        }
-    }
+    var heavenEmberRootCount: Int { heavenPortalEmbers == nil ? 0 : 1 }
+    var activeHeavenEmberCount: Int { heavenPortalEmbers?.activeEmberCount ?? 0 }
 }

@@ -8,6 +8,7 @@ public struct TuringQwenDecodedSegment: Sendable {
     public let audio: TuringQwenNativeAudio
     public let renderMetrics: TuringQwenRenderPhaseMetrics
     public let decodeSeconds: TimeInterval
+    public let recoveryGeneration: TuringQwenNativeRecoveryGeneration
 
     public init(
         runID: String,
@@ -16,7 +17,8 @@ public struct TuringQwenDecodedSegment: Sendable {
         voiceID: String,
         audio: TuringQwenNativeAudio,
         renderMetrics: TuringQwenRenderPhaseMetrics,
-        decodeSeconds: TimeInterval
+        decodeSeconds: TimeInterval,
+        recoveryGeneration: TuringQwenNativeRecoveryGeneration = .initial
     ) {
         self.runID = runID
         self.instanceID = instanceID
@@ -25,5 +27,6 @@ public struct TuringQwenDecodedSegment: Sendable {
         self.audio = audio
         self.renderMetrics = renderMetrics
         self.decodeSeconds = decodeSeconds
+        self.recoveryGeneration = recoveryGeneration
     }
 }

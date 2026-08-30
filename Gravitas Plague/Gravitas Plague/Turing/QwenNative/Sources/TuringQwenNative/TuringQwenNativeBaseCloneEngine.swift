@@ -50,7 +50,44 @@ public struct TuringQwenNativeBaseClonePreflightReport: Sendable {
     }
 }
 
+public struct TuringQwenNativeLaneReleaseReport: Sendable, Equatable {
+    public let staticPromptContextCountBefore: Int
+    public let staticPromptContextCountAfter: Int
+    public let activeRequestCountAfter: Int
+    public let talkerKVCacheCountAfter: Int
+    public let codePredictorKVCacheCountAfter: Int
+    public let samplerStateCountAfter: Int
+}
+
 public actor TuringQwenNativeBaseCloneEngine {
+    private enum ResidencyBinding {
+        case independent(resources: TuringQwenNativeResidentResources)
+        case shared(lease: TuringQwenNativeSharedResidencyLease)
+
+        var resources: TuringQwenNativeResidentResources {
+            switch self {
+            case .independent(let resources):
+                return resources
+            case .shared(let lease):
+                return lease.snapshot.modelResources
+            }
+        }
+
+        var sharedConditioning: TuringQwenNativeSharedCloneConditioning? {
+            switch self {
+            case .independent:
+                return nil
+            case .shared(let lease):
+                return lease.snapshot.cloneConditioning
+            }
+        }
+
+        var isShared: Bool {
+            if case .shared = self { return true }
+            return false
+        }
+    }
+
     private struct RenderDiagnosticContext {
         let runID: String
         let instanceID: String
@@ -58,49 +95,104 @@ public actor TuringQwenNativeBaseCloneEngine {
         let laneIndex: Int?
     }
 
+    public nonisolated let engineID: UUID
+    public nonisolated let laneMutableStateIdentity:
+        TuringQwenNativeLaneMutableStateIdentity
+
     private let modelRoot: URL
     private let trace: TuringQwenNativeTrace
-    private let weightBackend: TuringQwenNativeWeightBackend
+    private let residency: ResidencyBinding
     private let config: TuringQwenNativeConfig
-    private let sharedResidentResources: TuringQwenNativeResidentResources?
-    private var residentWeights: TuringQwenNativeResidentResources?
     private var staticPromptContexts: [StaticPromptContextKey: TuringQwenNativeBaseCloneStaticPromptContext] = [:]
 
+    private var residencyOwnerIDForDiagnostics: String? {
+        if case .shared(let lease) = residency {
+            return lease.snapshot.identity.ownerID.uuidString
+        }
+        return nil
+    }
+
+    private var weightStoreIDForDiagnostics: String {
+        residency.resources.weightsStore.identity.uuidString
+    }
+
+    private var laneMutableStateIDForDiagnostics: String {
+        laneMutableStateIdentity.mutableStateID.uuidString
+    }
+
+    @available(
+        *,
+        deprecated,
+        message: "Production Fresh2 must receive an explicit residency binding."
+    )
     public init(
         modelRoot: URL,
         weightBackend: TuringQwenNativeWeightBackend = .baseCloneRuntime,
         trace: TuringQwenNativeTrace = .stdout(prefix: "[TuringQwenNativeBaseClone]")
     ) throws {
+        let resources = try TuringQwenNativeResidentResources(
+            modelRoot: modelRoot,
+            weightBackend: weightBackend
+        )
+        let generatedEngineID = UUID()
+        engineID = generatedEngineID
+        laneMutableStateIdentity = Self.makeMutableStateIdentity(
+            laneInstanceID: "legacy-explicit-owner",
+            engineID: generatedEngineID
+        )
         self.modelRoot = modelRoot
         self.trace = trace
-        self.weightBackend = weightBackend
-        self.sharedResidentResources = nil
-
-        try Self.preflightModelRoot(modelRoot)
-        let loadedConfig = try TuringQwenNativeConfig.load(from: modelRoot)
-        try loadedConfig.validateBaseCloneRuntime()
-        self.config = loadedConfig
-        try TuringQwenNativeQuantizedLinear(
-            tensorPrefix: "model",
-            backend: weightBackend.kind,
-            groupSize: loadedConfig.quantization?.groupSize ?? 64,
-            bits: loadedConfig.quantization?.bits ?? 4
-        )
-        .preflightOnly()
+        residency = .independent(resources: resources)
+        config = resources.config
     }
 
     public init(
         modelRoot: URL,
-        residentResources: TuringQwenNativeResidentResources,
+        ownedResidentResources: TuringQwenNativeResidentResources,
+        laneInstanceID: TuringQwenNativeFreshInstanceID? = nil,
         trace: TuringQwenNativeTrace = .stdout(prefix: "[TuringQwenNativeBaseClone]")
     ) throws {
+        guard modelRoot.standardizedFileURL ==
+                ownedResidentResources.modelRoot.standardizedFileURL else {
+            throw TuringQwenNativeError.invalidConfig(
+                "Independent residency model-root mismatch."
+            )
+        }
+        let generatedEngineID = UUID()
+        engineID = generatedEngineID
+        laneMutableStateIdentity = Self.makeMutableStateIdentity(
+            laneInstanceID: laneInstanceID?.rawValue ?? "independent-unassigned",
+            engineID: generatedEngineID
+        )
         self.modelRoot = modelRoot
         self.trace = trace
-        self.weightBackend = .baseCloneRuntime
-        self.sharedResidentResources = residentResources
+        residency = .independent(resources: ownedResidentResources)
+        config = ownedResidentResources.config
+    }
 
-        try Self.preflightModelRoot(modelRoot)
-        self.config = residentResources.config
+    public init(
+        sharedResidencyLease: TuringQwenNativeSharedResidencyLease,
+        trace: TuringQwenNativeTrace = .stdout(prefix: "[TuringQwenNativeBaseClone]")
+    ) throws {
+        let resources = sharedResidencyLease.snapshot.modelResources
+        guard sharedResidencyLease.ownerToken.ownerID ==
+                sharedResidencyLease.snapshot.identity.ownerID,
+              sharedResidencyLease.ownerToken.generation ==
+                sharedResidencyLease.snapshot.identity.generation else {
+            throw TuringQwenNativeError.invalidConfig(
+                "Shared residency lease identity does not match its snapshot."
+            )
+        }
+        let generatedEngineID = UUID()
+        engineID = generatedEngineID
+        laneMutableStateIdentity = Self.makeMutableStateIdentity(
+            laneInstanceID: sharedResidencyLease.laneInstanceID.rawValue,
+            engineID: generatedEngineID
+        )
+        modelRoot = resources.modelRoot
+        self.trace = trace
+        residency = .shared(lease: sharedResidencyLease)
+        config = resources.config
     }
 
     @available(
@@ -290,7 +382,10 @@ public actor TuringQwenNativeBaseCloneEngine {
                     segmentIndex: request.segmentIndex,
                     laneIndex: laneIndex,
                     phase: .other,
-                    stage: "baseClone.render"
+                    stage: "baseClone.render",
+                    residencyOwnerID: residencyOwnerIDForDiagnostics,
+                    weightStoreID: weightStoreIDForDiagnostics,
+                    laneMutableStateID: laneMutableStateIDForDiagnostics
                 )
             ) {
                 try renderCPUCodebooks(
@@ -467,7 +562,8 @@ public actor TuringQwenNativeBaseCloneEngine {
           runID: \(runID)
           segmentIndex: \(segmentIndex)
           reason: \(reason)
-          residentModelRetained: \(sharedResidentResources != nil)
+          residentModelRetained: true
+          sharedImmutableResidency: \(residency.isShared)
           physFootprintMB: \(String(format: "%.1f", memory.physFootprintMB))
           residentSizeMB: \(String(format: "%.1f", memory.residentSizeMB))
         """)
@@ -502,9 +598,6 @@ public actor TuringQwenNativeBaseCloneEngine {
         diagnosticContext: RenderDiagnosticContext? = nil
     ) throws -> GeneratedCodebookForDecode {
         defer {
-            if sharedResidentResources == nil {
-                residentWeights = nil
-            }
             TuringQwenNativeMemoryControl.clearCache(
                 label: "baseClone.afterCodebookBeforeDecode",
                 shouldLogSnapshot: prompt.performanceMode.shouldLogMemorySnapshots
@@ -513,7 +606,7 @@ public actor TuringQwenNativeBaseCloneEngine {
                 print("""
                 [TuringQwenNativeBaseClone] render temporaries scoped for release
                   reason: codebookRowsReady
-                  residentWeights: \(sharedResidentResources == nil ? "false" : "sharedWeightsRetained")
+                  residentWeights: retainedByExplicitResidencyBinding
                 """)
             }
         }
@@ -759,7 +852,7 @@ public actor TuringQwenNativeBaseCloneEngine {
         reason: String,
         logMemorySnapshot: Bool = true
     ) {
-        residentWeights = nil
+        staticPromptContexts.removeAll(keepingCapacity: false)
         TuringQwenNativeMemoryControl.clearCache(
             label: "baseClone.releaseResidentState.\(reason)",
             shouldLogSnapshot: logMemorySnapshot
@@ -773,11 +866,40 @@ public actor TuringQwenNativeBaseCloneEngine {
         }
     }
 
+    public func mutableStateIdentity() -> TuringQwenNativeLaneMutableStateIdentity {
+        laneMutableStateIdentity
+    }
+
+    @discardableResult
+    public func releaseLaneState(reason: String) -> TuringQwenNativeLaneReleaseReport {
+        let before = staticPromptContexts.count
+        staticPromptContexts.removeAll(keepingCapacity: false)
+        let report = TuringQwenNativeLaneReleaseReport(
+            staticPromptContextCountBefore: before,
+            staticPromptContextCountAfter: staticPromptContexts.count,
+            activeRequestCountAfter: 0,
+            talkerKVCacheCountAfter: 0,
+            codePredictorKVCacheCountAfter: 0,
+            samplerStateCountAfter: 0
+        )
+        TuringQwenNativeDiagnostics.recordResidencyEvent(
+            "qwen.residency.lane.mutableState.released",
+            instanceID: laneMutableStateIdentity.laneInstanceID,
+            details: [
+                "engineID": engineID.uuidString,
+                "mutableStateID": laneMutableStateIdentity.mutableStateID.uuidString,
+                "reason": reason,
+                "staticPromptContextsBefore": String(before),
+                "staticPromptContextsAfter": String(report.staticPromptContextCountAfter)
+            ]
+        )
+        return report
+    }
+
     private func prepareBaseClonePrompt(
         _ prompt: TuringQwenNativeBaseClonePrompt
     ) throws -> PreparedBaseClone {
-        let conditioning = try TuringQwenNativeBaseCloneConditioningBuilder()
-            .load(profile: prompt.cloneProfile)
+        let conditioning = try resolveConditioning(for: prompt.cloneProfile)
         let tokenizer = try TuringQwenNativeTokenizer(modelRoot: modelRoot)
         let preparedPrompt = try TuringQwenNativeBaseCloneInputBuilder.build(
             request: TuringQwenNativeBaseClonePromptRequest(
@@ -864,26 +986,38 @@ public actor TuringQwenNativeBaseCloneEngine {
     }
 
     private func loadResidentWeights() throws -> TuringQwenNativeResidentResources {
-        if let sharedResidentResources {
-            return sharedResidentResources
+        residency.resources
+    }
+
+    private func resolveConditioning(
+        for profile: TuringQwenNativeCloneProfile
+    ) throws -> TuringQwenNativeBaseCloneConditioning {
+        if let shared = residency.sharedConditioning {
+            guard shared.voiceID == profile.voiceID,
+                  shared.variantID == profile.defaultVariantID else {
+                throw TuringQwenNativeError.invalidConfig(
+                    "Request voice/variant does not match shared residency."
+                )
+            }
+            return shared.conditioning
         }
+        return try TuringQwenNativeBaseCloneConditioningBuilder()
+            .load(profile: profile)
+    }
 
-        if let residentWeights {
-            return residentWeights
-        }
-
-        let loaded = try TuringQwenNativeResidentResources(modelRoot: modelRoot)
-        residentWeights = loaded
-
-        print("""
-        [TuringQwenNativeBaseClone] resident 4-bit weights loaded
-          tensorCount: resident
-          talkerLayerCount: \(config.talkerConfig.numHiddenLayers)
-          codePredictorLayerCount: \(loaded.codePredictorWeights.config.numHiddenLayers)
-          runtimePerStepWeightLookup: false
-        """)
-
-        return loaded
+    private static func makeMutableStateIdentity(
+        laneInstanceID: String,
+        engineID: UUID
+    ) -> TuringQwenNativeLaneMutableStateIdentity {
+        TuringQwenNativeLaneMutableStateIdentity(
+            laneInstanceID: laneInstanceID,
+            engineID: engineID,
+            mutableStateID: UUID(),
+            staticPromptCacheID: UUID(),
+            talkerKVCacheOwnerID: UUID(),
+            codePredictorKVCacheOwnerID: UUID(),
+            samplerStateOwnerID: UUID()
+        )
     }
 
     private func cachedStaticPromptContext(
@@ -1037,6 +1171,11 @@ public actor TuringQwenNativeBaseCloneEngine {
         generatedRows.append(firstCodeGroup)
 
         while generatedRows.count < targetRowCount {
+            // A sibling Fresh lane can surface a process-global MLX Metal
+            // failure. Honor the scheduler's cancellation before submitting
+            // another row so the failed run can unwind to app-level playback
+            // recovery instead of continuing generation behind endless filler.
+            try Task.checkCancellation()
             let rowIndex = generatedRows.count
             if rowIndex % performanceMode.rowCheckpointStride == 0 {
                 TuringQwenNativeDiagnostics.recordBreadcrumb(
@@ -1089,6 +1228,9 @@ public actor TuringQwenNativeBaseCloneEngine {
                         laneIndex: diagnosticContext?.laneIndex,
                         phase: .codePredictor,
                         stage: "baseClone.codePredictor.dynamic",
+                        residencyOwnerID: residencyOwnerIDForDiagnostics,
+                        weightStoreID: weightStoreIDForDiagnostics,
+                        laneMutableStateID: laneMutableStateIDForDiagnostics,
                         rowRange: rowIndex..<(rowIndex + 1)
                     ).metalContext,
                     samplingContext: &samplingContext
@@ -1214,6 +1356,9 @@ public actor TuringQwenNativeBaseCloneEngine {
                 laneIndex: diagnosticContext?.laneIndex,
                 phase: phase,
                 stage: stage,
+                residencyOwnerID: residencyOwnerIDForDiagnostics,
+                weightStoreID: weightStoreIDForDiagnostics,
+                laneMutableStateID: laneMutableStateIDForDiagnostics,
                 rowRange: rowRange,
                 talkerPositionRange: talkerPositionRange
             ),
@@ -1237,6 +1382,9 @@ public actor TuringQwenNativeBaseCloneEngine {
             laneIndex: diagnosticContext?.laneIndex,
             phase: phase,
             stage: stage,
+            residencyOwnerID: residencyOwnerIDForDiagnostics,
+            weightStoreID: weightStoreIDForDiagnostics,
+            laneMutableStateID: laneMutableStateIDForDiagnostics,
             rowRange: rowRange,
             talkerPositionRange: talkerPositionRange
         )

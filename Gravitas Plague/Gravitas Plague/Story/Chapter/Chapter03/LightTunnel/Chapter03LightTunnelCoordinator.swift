@@ -17,6 +17,7 @@ final class Chapter03LightTunnelCoordinator {
     private var musicActuallyCompleted = false
     private var angelPrerecordingStarted = false
     private var angelPrerecordingActuallyCompleted = false
+    private var activeAngelPlaybackID: UUID?
     private var isFinishing = false
 
     var onCompleted: ((Chapter03LightTunnelCompletedEvent) async -> Void)?
@@ -34,10 +35,11 @@ final class Chapter03LightTunnelCoordinator {
         self.angelPrerecording = angelPrerecording
         self.cinematicWorld = cinematicWorld
         self.deviceTransformProvider = deviceTransformProvider
-        angelPrerecording.onCompleted = { [weak self] runID, succeeded in
+        angelPrerecording.onCompleted = { [weak self] runID, playbackID, succeeded in
             Task { @MainActor in
                 await self?.angelPrerecordingCompleted(
                     runID: runID,
+                    playbackID: playbackID,
                     succeeded: succeeded
                 )
             }
@@ -49,7 +51,7 @@ final class Chapter03LightTunnelCoordinator {
     }
 
     func update(deltaTime: TimeInterval) {
-        presenter.updateAngelFloatMotion(deltaTime: deltaTime)
+        presenter.updateFrame(deltaTime: deltaTime)
     }
 
     func start(_ request: Chapter03LightTunnelRequest) async throws {
@@ -74,7 +76,8 @@ final class Chapter03LightTunnelCoordinator {
             try await presenter.prepare(
                 runID: request.chapterRunID,
                 originFromDevice: originFromDevice,
-                definition: definition.visual
+                definition: definition.visual,
+                angelVisemeTrack: request.resolvedDefinition.angelVisemeTrack
             )
             if let resolvedAngel = request.resolvedDefinition.angelPrerecording {
                 guard let emitter = presenter.angelAudioEmitter else {
@@ -99,6 +102,7 @@ final class Chapter03LightTunnelCoordinator {
             musicActuallyCompleted = false
             angelPrerecordingStarted = false
             angelPrerecordingActuallyCompleted = false
+            activeAngelPlaybackID = nil
             isFinishing = false
             state = .portalApproaching(request.chapterRunID)
             eventTask = Task { @MainActor [weak self] in
@@ -141,6 +145,11 @@ final class Chapter03LightTunnelCoordinator {
         }
         activeRequest = nil
         isFinishing = false
+        presenter.endAngelPrerecordingEmberPerformance(
+            runID: request.chapterRunID,
+            playbackID: activeAngelPlaybackID
+        )
+        activeAngelPlaybackID = nil
         angelPrerecording.stop(reason: reason)
         await music.stop(runID: request.chapterRunID, reason: reason)
         if releasePresentation {
@@ -227,8 +236,18 @@ final class Chapter03LightTunnelCoordinator {
             rampSeconds: resolved.definition.duckAttackSeconds,
             runID: request.chapterRunID
         )
-        try angelPrerecording.play(runID: request.chapterRunID)
+        let start = try angelPrerecording.play(runID: request.chapterRunID)
         angelPrerecordingStarted = true
+        activeAngelPlaybackID = start.playbackID
+        do {
+            try presenter.beginAngelPrerecordingEmberPerformance(
+                runID: request.chapterRunID,
+                start: start
+            )
+        } catch {
+            // Playback has already started. Visual synchronization is nonfatal.
+            Chapter03HeavenPortalEmberDiagnostics.cueUnavailable(error)
+        }
         print(
             """
             [Chapter03AngelPR] portal-arrival playback triggered
@@ -242,10 +261,17 @@ final class Chapter03LightTunnelCoordinator {
 
     private func angelPrerecordingCompleted(
         runID: UUID,
+        playbackID: UUID,
         succeeded: Bool
     ) async {
         guard let request = activeRequest,
               request.chapterRunID == runID else { return }
+        guard activeAngelPlaybackID == playbackID else { return }
+        presenter.endAngelPrerecordingEmberPerformance(
+            runID: runID,
+            playbackID: playbackID
+        )
+        activeAngelPlaybackID = nil
         guard succeeded else {
             await fail(
                 Chapter03Error.angelPrerecordingInvalid(

@@ -3,7 +3,7 @@
 ## Final status
 
 - Decision: BLOCKED
-- Selected shipping candidate: none; first device candidate is `currentOverlap + deviceDefault`
+- Selected shipping candidate: none; `currentOverlap + operations40Megabytes32` also failed on device, and the next optimization candidate must be selected by the architect
 - Candidate disposition:
   - diagnostic only pending Vision Pro calibration and pressure qualification
 - Starting commit: `8955d6fa9bfc1a914aac6ee48db227e484cdcd01`
@@ -72,25 +72,25 @@
 
 ## Startup profile
 
-- Requested profile: `deviceDefault` for first candidate
+- Requested profile: both `deviceDefault` and `operations40Megabytes32` have completed one instrumented Vision Pro launch; Debug device builds remain on `operations40Megabytes32` until the architect selects the next optimization phase
 - Device initialized before configuration: startup guard fails closed if true
-- Resolved architecture: BLOCKED pending Vision Pro run
-- Resolved max operations: BLOCKED pending Vision Pro run
-- Resolved max MB: BLOCKED pending Vision Pro run
-- Requested/resolved match: enforced after Fresh warm load; device result pending
+- Resolved architecture: `applegpu_g14g`, generation 14
+- Resolved max operations: 40 for both measured profiles
+- Resolved max MB: 40 for `deviceDefault`; 32 for `operations40Megabytes32`
+- Requested/resolved match: PASS for both measured Vision Pro runs
 - Qualification-only controls: six typed buffer profiles and four targeted-boundary values
 - Production profile: `deviceDefault`; no arbitrary runtime/user-default tuning
 
 ## Profile calibration
 
 ### deviceDefault
-- Runs: 0 with Phase 2 instrumentation
-- Metal failures: not measured
+- Runs: 4 instrumented Qwen sessions in one Vision Pro launch; 3 completed and the fourth failed after publishing segments 0 and 1
+- Metal failures: 1 (`MTLCommandBufferErrorDomain`, code 1, status 5)
 - P50/P95/P99/max GPU duration: not measured
 - First-audio P50/P95: not measured
 - Total-response P50/P95: not measured
-- Peak physical footprint: not measured
-- Peak MLX active/cache: not measured
+- Peak physical footprint: 5,557.0 MB in the last completed run; 5,525.0 MB immediately before the failed decoder stage
+- Peak MLX active/cache: 3,652 MB peak in the last completed run; failed session reported 3,363 MB MLX peak and 3,103 MB active after failure containment
 - Output parity: not measured
 
 ### operations32Megabytes40
@@ -104,13 +104,13 @@
 - Output parity: not measured
 
 ### operations40Megabytes32
-- Runs: 0
-- Metal failures: not measured
+- Runs: 18 instrumented Qwen attempts across three Vision Pro launches; 15 completed, two failed after publishing earlier segments, and one capture ended while its final attempt was still generating its first two segments. Three additional same-launch conversation requests were rejected before Qwen warm load by the tripped circuit breaker.
+- Metal failures: 2 (`MTLCommandBufferErrorDomain`, code 1, status 5); both were `dynamicTalker / baseClone.dynamicRow` buffers with 41 operations and low referenced-input byte estimates
 - P50/P95/P99/max GPU duration: not measured
 - First-audio P50/P95: not measured
-- Total-response P50/P95: not measured
-- Peak physical footprint: not measured
-- Peak MLX active/cache: not measured
+- Total-response P50/P95: not measured; the final incomplete attempt had already degraded to projected per-lane real-time factors of 6.408 and 6.839 at row 8
+- Peak physical footprint: at least 5,989.9 MB during the earlier failed run; the later failure recovered to 1,884 MB physical footprint with approximately 6,307 MB OS-available memory
+- Peak MLX active/cache: 3,818 MB reported before the earlier failure; the later failure reported a 3,268 MB MLX peak and returned active/cache memory to 0 MB after unload
 - Output parity: not measured
 
 ### operations32Megabytes32
@@ -148,13 +148,13 @@
 - Aggregate-buffer correlation: BLOCKED pending first device export
 - Single-primitive long buffers: BLOCKED pending first device export
 - Mixed-context buffers: BLOCKED pending first device export
-- Slowest phase: unknown
-- Slowest stage: unknown
-- Slowest primitive: unknown
+- Slowest phase: successful-session maximum was 88.069 ms; the failed buffer itself completed as a 19.051 ms Metal error, so duration alone did not predict it
+- Slowest stage: the first failure was `speechDecoder.decoder.3.residual.4`, shape `1x37120x192`; the second was `dynamicTalker / baseClone.dynamicRow`
+- Slowest primitive: the first failed aggregate contained 16 operations, first `Exp`, last `Multiply`; the second contained 41 operations, first `AsType`, last `Negative`
 - Shape: available in existing Qwen stage log, not invented here
 - Operation count: unknown
 - Byte estimate: unknown
-- Why aggregate split was or was not sufficient: not yet measurable
+- Why aggregate split was or was not sufficient: lowering only the byte threshold from 40 MB to 32 MB did not contain the failure. Under the crossed profile, buffer 183666 failed with 41 operations and only 2,945,792 referenced-input bytes. No further profile or targeted primitive change is selected here; that optimization decision remains with the architect.
 
 ## Targeted fix
 
@@ -176,14 +176,14 @@
 - Callback returned: PASS in bounded synthetic completion test
 - Failure epoch: PASS; increments once
 - Ring record: PASS; exactly one synthetic failure record
-- Scheduler completion: source contract PASS; actual failed Metal completion BLOCKED on device
+- Scheduler completion: the crossed-profile device run exposed a lane-order unwind defect; host code now observes the first completed/failed lane through a throwing task group and immediately cancels its sibling; device proof pending
 - Synchronous Swift error: boundary unit behavior PASS; end-to-end poisoned Metal call BLOCKED on device
 - Queue cancellation: implemented; full fake-scheduler integration BLOCKED
 - Decoder cancellation: implemented; full fake-scheduler integration BLOCKED
-- Lane unwind: structured tasks and cancellation implemented; device proof BLOCKED
+- Lane unwind: first-error task-group cancellation plus a dynamic-row cancellation checkpoint implemented; focused host test PASS and Vision Pro failure-path proof PASS
 - Invalid output publication count: guarded by fatal typed path; device proof BLOCKED
-- Already-published audio result: playback owner is not stopped; device proof BLOCKED
-- New-run circuit-breaker result: isolated actor test PASS
+- Already-published audio result: FAIL on the later device failure; generated segment 3 was actively audible at 3.779 seconds when `conversationFailed.qwen` cancelled its handle and detached Mind's Eye
+- New-run circuit-breaker result: PASS by the current fail-closed contract; three later requests were rejected before warm load and repeated the original failure. Product recovery remains FAIL because microphones stayed enabled while Qwen was known to be unavailable until relaunch.
 - Final ownership counts: Phase 1 controller tests PASS; failed-device run BLOCKED
 
 ## Pressure qualification
@@ -202,8 +202,8 @@
 
 - Crashes: not measured for Phase 2
 - Uncaught C++ exceptions: callback throw removed; device proof pending
-- Metal command-buffer errors: not measured
-- Hangs: not measured
+- Metal command-buffer errors: one typed device error under each measured profile (`deviceDefault` and `operations40Megabytes32`); there was no SIGABRT in either supplied log
+- Hangs: one `operations40Megabytes32` run entered an infinite filler/dead-air cycle because lane 1 surfaced the process-global failure while the scheduler awaited lane 0 first. The first-error task-group fix is now proven on Vision Pro: a later Metal failure cancelled the sibling lane, finished decoder teardown, unloaded the pool, and returned story interaction without looping. A separate launch had no filler loop or Metal failure, but its fifth Qwen attempt was still in progress when capture ended and had degraded to approximately 6.4–6.8 projected real-time factor; classify that report as an incomplete severe-latency/stall trace, not a proven terminal loop.
 - Audio underruns: not measured
 - Segment ordering: implementation preserves existing ordering; device proof pending
 - First-audio regression: not measured
@@ -232,7 +232,7 @@
 
 - C++ diagnostics tests: bounded ring/synthetic completion exercised through public C/Swift test seam
 - Swift MLX wrapper tests: ring wrap, monotonic sequence, poison/failure record, external in-flight counts pass
-- Qwen-native focused tests: Phase 2 profile, policy, boundary, and circuit-breaker tests pass
+- Qwen-native focused tests: Phase 2 profile, policy, boundary, circuit-breaker, and first-lane-failure cancellation tests pass
 - Phase 1 regression tests: 13/13 pass
 - App integration tests: source added; not run because Xcode is unavailable on this host
 - Host analysis tests: 3/3 pass

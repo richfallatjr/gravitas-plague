@@ -1,0 +1,60 @@
+{
+  "authoringFramingControl": {
+    "centerSubjectMeters": [
+      -0.0196926798671484,
+      1.6981061697006226,
+      -0.010549830272793393
+    ],
+    "controlPrimPath": "/root/face_proxy/Cube_001",
+    "forwardAxisSubject": [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    "halfExtentsMeters": [
+      0.10000000149011612,
+      0.10000000149011612,
+      0.10000000149011612
+    ],
+    "rightAxisSubject": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "schemaVersion": 1,
+    "sourceAsset": "angel_posed_mouth_open_blend_01_v0001.usdz",
+    "sourceAssetSHA256": "830d005f31b13a106598b4f0ae241bfedf451cc113d679cffbcdb14addeef28f",
+    "upAxisSubject": [
+      0.0,
+      1.0,
+      2.2551404851656373e-16
+    ]
+  },
+  "framingEntityPath": "Chapter03PortalAngelRoot/Chapter03StaticPosedAngelVisual/root/Root/mesh1/mesh1",
+  "materials": [
+    {
+      "entityPath": "Chapter03PortalAngelRoot/Chapter03StaticPosedAngelVisual/root/Root/mesh1/mesh1",
+      "expectedMaterialNames": [
+        "PhysicallyBasedMaterial"
+      ],
+      "materialIndices": [
+        0
+      ]
+    }
+  ],
+  "profileID": "angel_head_v1",
+  "requiredTargetMaterialCount": 1,
+  "schemaVersion": 1,
+  "subjectForwardAxis": [
+    0.0,
+    0.0,
+    -1.0
+  ],
+  "subjectRootEntityName": "Chapter03PortalAngelRoot",
+  "targetEntityPath": "Chapter03PortalAngelRoot/Chapter03StaticPosedAngelVisual/root/Root/mesh1/mesh1",
+  "targetLocalOffsetMeters": [
+    0.0,
+    0.0,
+    0.0
+  ]
+}

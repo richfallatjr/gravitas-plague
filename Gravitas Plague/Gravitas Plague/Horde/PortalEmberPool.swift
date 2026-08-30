@@ -53,27 +53,23 @@ private struct PortalEmberCompletedSimulation {
     let output: PortalEmberFrameOutput
 }
 
-private struct PortalEmberMaterialCounts: Sendable {
-    let birth: Int
-    let hot: Int
-    let red: Int
-    let dark: Int
-}
-
 private actor PortalFXStepper {
     private var states: [PortalEmberParticleState]
     private var nextIndex: Int = 0
     private let materialCounts: PortalEmberMaterialCounts
+    private let materialSelectionMode: PortalEmberMaterialSelectionMode
 
     init(
         capacity: Int,
-        materialCounts: PortalEmberMaterialCounts
+        materialCounts: PortalEmberMaterialCounts,
+        materialSelectionMode: PortalEmberMaterialSelectionMode
     ) {
         self.states = Array(
             repeating: PortalEmberParticleState(),
             count: capacity
         )
         self.materialCounts = materialCounts
+        self.materialSelectionMode = materialSelectionMode
     }
 
     func reset() {
@@ -114,6 +110,13 @@ private actor PortalFXStepper {
         let index = nextIndex
         nextIndex = (nextIndex + 1) % states.count
 
+        var materialGenerator = SystemRandomNumberGenerator()
+        let materialIndices = PortalEmberMaterialIndexPlanner.choose(
+            mode: materialSelectionMode,
+            counts: materialCounts,
+            using: &materialGenerator
+        )
+
         states[index] = PortalEmberParticleState(
             active: true,
             age: 0,
@@ -131,19 +134,13 @@ private actor PortalFXStepper {
             endSize: Float.random(
                 in: PortalFXDefaults.emberEndSizeMetersMin...PortalFXDefaults.emberEndSizeMetersMax
             ),
-            birthMaterialIndex: Int.random(
-                in: 0..<max(materialCounts.birth, 1)
-            ),
-            hotMaterialIndex: Int.random(
-                in: 0..<max(materialCounts.hot, 1)
-            ),
-            redMaterialIndex: Int.random(
-                in: 0..<max(materialCounts.red, 1)
-            ),
-            darkMaterialIndex: Int.random(
-                in: 0..<max(materialCounts.dark, 1)
-            ),
-            spinRadiansPerSecond: Float.random(in: -4.0...4.0)
+            birthMaterialIndex: materialIndices.birth,
+            hotMaterialIndex: materialIndices.hot,
+            redMaterialIndex: materialIndices.late,
+            darkMaterialIndex: materialIndices.dark,
+            spinRadiansPerSecond: Float.random(
+                in: PortalFXDefaults.emberSpinRadiansPerSecondMin...PortalFXDefaults.emberSpinRadiansPerSecondMax
+            )
         )
     }
 }
@@ -190,7 +187,8 @@ private enum PortalEmberSimulationStepper {
             }
 
             nextStates[index].velocity += nextStates[index].sideAcceleration * deltaTime
-            nextStates[index].velocity.y += 0.18 * deltaTime
+            nextStates[index].velocity.y +=
+                PortalFXDefaults.emberUpwardAccelerationMetersPerSecond2 * deltaTime
             nextStates[index].position += nextStates[index].velocity * deltaTime
 
             let spin = nextStates[index].spinRadiansPerSecond * deltaTime
@@ -243,11 +241,11 @@ private enum PortalEmberSimulationStepper {
         normalizedAge t: Float
     ) -> (phase: PortalEmberMaterialPhase, index: Int) {
         switch t {
-        case ..<0.18:
+        case ..<PortalFXDefaults.emberBirthPhaseEnd:
             return (.birth, ember.birthMaterialIndex)
-        case ..<0.50:
+        case ..<PortalFXDefaults.emberHotPhaseEnd:
             return (.hot, ember.hotMaterialIndex)
-        case ..<0.84:
+        case ..<PortalFXDefaults.emberLatePhaseEnd:
             return (.red, ember.redMaterialIndex)
         default:
             return (.dark, ember.darkMaterialIndex)
@@ -263,6 +261,7 @@ private struct PortalEmber {
 @MainActor
 final class PortalEmberPool {
     private let root: Entity
+    private let palette: PortalEmberMaterialPalette
     private var embers: [PortalEmber] = []
     private let simulationEngine: PortalFXStepper
     private var simulationTask: Task<Void, Never>?
@@ -279,19 +278,21 @@ final class PortalEmberPool {
 
     init(
         root: Entity,
-        maxActive: Int
-    ) {
+        maxActive: Int,
+        palette: PortalEmberMaterialPalette
+    ) throws {
+        guard maxActive > 0 else {
+            throw PortalFXError.invalidPoolCapacity(maxActive)
+        }
+        try palette.validate()
         self.root = root
+        self.palette = palette
 
         let resources = PortalFXSharedResources.shared
         self.simulationEngine = PortalFXStepper(
             capacity: maxActive,
-            materialCounts: PortalEmberMaterialCounts(
-                birth: resources.emberBirthMaterials.count,
-                hot: resources.emberHotMaterials.count,
-                red: resources.emberRedMaterials.count,
-                dark: resources.emberDarkMaterials.count
-            )
+            materialCounts: palette.materialCounts,
+            materialSelectionMode: palette.selectionMode
         )
 
         embers.reserveCapacity(maxActive)
@@ -299,7 +300,7 @@ final class PortalEmberPool {
         for index in 0..<maxActive {
             let entity = ModelEntity(
                 mesh: resources.emberMesh,
-                materials: [resources.emberDarkMaterials[0]]
+                materials: [palette.darkMaterials[0]]
             )
 
             entity.name = "PortalEmber_\(index)"
@@ -452,8 +453,6 @@ final class PortalEmberPool {
     private func apply(
         _ output: PortalEmberFrameOutput
     ) {
-        let resources = PortalFXSharedResources.shared
-
         for update in output.updates {
             guard embers.indices.contains(update.index) else {
                 continue
@@ -474,7 +473,6 @@ final class PortalEmberPool {
             )
             entity.model?.materials = [
                 material(
-                    resources: resources,
                     phase: update.materialPhase,
                     index: update.materialIndex
                 )
@@ -507,29 +505,28 @@ final class PortalEmberPool {
     }
 
     private func material(
-        resources: PortalFXSharedResources,
         phase: PortalEmberMaterialPhase,
         index: Int
     ) -> RealityKit.Material {
         switch phase {
         case .birth:
             return material(
-                in: resources.emberBirthMaterials,
+                in: palette.birthMaterials,
                 at: index
             )
         case .hot:
             return material(
-                in: resources.emberHotMaterials,
+                in: palette.hotMaterials,
                 at: index
             )
         case .red:
             return material(
-                in: resources.emberRedMaterials,
+                in: palette.lateMaterials,
                 at: index
             )
         case .dark:
             return material(
-                in: resources.emberDarkMaterials,
+                in: palette.darkMaterials,
                 at: index
             )
         }

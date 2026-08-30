@@ -117,7 +117,8 @@ final class TuringStoryCrankRadioIconController {
     func apply(
         _ presentation:
             StoryCrankRadioPresentation,
-        activity: StoryTuringActivityPresentation = .hidden
+        activity: StoryTuringActivityPresentation = .hidden,
+        microphoneCTAEmphasis: StoryMicrophoneCTAEmphasis = .saturated
     ) {
         guard let iconEntity,
               let physicalHitTarget else {
@@ -159,6 +160,7 @@ final class TuringStoryCrankRadioIconController {
         case .microphone:
             updateIcon(
                 symbolName: "mic.circle",
+                microphoneCTAEmphasis: microphoneCTAEmphasis,
                 on: iconEntity
             )
             iconEntity.components.set(
@@ -169,6 +171,14 @@ final class TuringStoryCrankRadioIconController {
             )
             iconEntity.isEnabled = true
             physicalHitTarget.isEnabled = true
+        case .microphoneRecovering, .microphoneUnavailable:
+            updateIcon(
+                symbolName: "mic.circle",
+                microphoneCTAEmphasis: .desaturated,
+                on: iconEntity
+            )
+            iconEntity.isEnabled = true
+            physicalHitTarget.isEnabled = false
         }
     }
 
@@ -232,6 +242,7 @@ final class TuringStoryCrankRadioIconController {
 
     private func updateIcon(
         symbolName: String,
+        microphoneCTAEmphasis: StoryMicrophoneCTAEmphasis = .saturated,
         on icon: ModelEntity
     ) {
         guard var model =
@@ -239,22 +250,30 @@ final class TuringStoryCrankRadioIconController {
             return
         }
         model.materials = [
-            material(symbolName: symbolName)
+            material(
+                symbolName: symbolName,
+                microphoneCTAEmphasis: microphoneCTAEmphasis
+            )
         ]
         icon.components.set(model)
     }
 
     private func material(
-        symbolName: String
+        symbolName: String,
+        microphoneCTAEmphasis: StoryMicrophoneCTAEmphasis = .saturated
     ) -> UnlitMaterial {
+        let cacheKey = "\(symbolName).\(microphoneCTAEmphasis.rawValue)"
         if let cached =
-            cachedMaterials[symbolName] {
+            cachedMaterials[cacheKey] {
             return cached
         }
         let material = (try? TuringStoryActionIconVisualStyle.material(
-            symbolName: symbolName
+            symbolName: symbolName,
+            microphoneCTAEmphasis: microphoneCTAEmphasis
         )) ?? fallbackMaterial()
-        cachedMaterials[symbolName] = material
+        if microphoneCTAEmphasis.isEndpoint {
+            cachedMaterials[cacheKey] = material
+        }
         return material
     }
 

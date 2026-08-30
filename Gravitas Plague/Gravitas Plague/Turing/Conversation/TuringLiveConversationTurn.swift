@@ -31,7 +31,7 @@ final class TuringLiveConversationTurn {
     let seed: TuringLiveConversationSeed
     let computeToken: TuringLiveConversationComputeAdmission.Token
     let childToken: StoryLiveConversationChildToken
-    let coverReceipt: TuringSpokenCoverPauseReceipt
+    var coverReceipt: TuringSpokenCoverPauseReceipt
     let coverPlayback: any TuringSpokenCoverControlling
     let playbackGate: TuringConversationPlaybackStartGate
     let dictation: TuringDictationCoordinator

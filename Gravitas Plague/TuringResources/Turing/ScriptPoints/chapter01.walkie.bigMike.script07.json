@@ -11,14 +11,14 @@
     "characterID": "big_mike",
     "conversationKey": "dialogue.big_mike.rich",
     "outputRoute": "walkieSpatial",
-    "computeStart": "foundationBeforePrerecording",
+    "computeStart": "beforePrerecording",
     "fillerMode": "continuousFromPrerecordingToGenerated",
     "commSFX": {
       "openBeforePrerecording": false,
       "sendAfterGenerated": false,
       "sendingLeadInAfterGeneratedSeconds": null
     },
-    "fixedLeadInSeconds": 10,
+    "fixedLeadInSeconds": null,
     "generationPipeline": null,
     "interactionSurface": "walkie",
     "backgroundMusic": null

@@ -30,6 +30,7 @@ private struct PortalEmissionPlanInput: Sendable {
     let portalNormalLocal: SIMD3<Float>
     let apertureCenter: SIMD3<Float>
     let deltaTime: Float
+    let birthRateMultiplier: Float
 }
 
 private struct PortalEmissionCompletedPlan {
@@ -59,6 +60,7 @@ final class PortalTransitionFXController {
 
     private var perimeterLocalPoints: [SIMD3<Float>]
     private let portalNormalLocal: SIMD3<Float>
+    private let configuration: PortalTransitionFXConfiguration
 
     private var segments: [PortalFXSegment] = []
 
@@ -73,16 +75,37 @@ final class PortalTransitionFXController {
     private var emissionRevision = 0
 
     private var enabled: Bool = true
+    private var birthRateMultiplier: Float
+    private(set) var totalSpawnedCount: UInt64 = 0
 
     var activeEmberCount: Int {
         emberPool?.activeCount ?? 0
     }
 
+    var totalSpawnedEmberCount: UInt64 {
+        totalSpawnedCount
+    }
+
+    var maximumEmberCount: Int {
+        configuration.maximumPoolCapacity
+    }
+
+    var currentBirthRateMultiplier: Float {
+        birthRateMultiplier
+    }
+
+    var effectiveBirthRatePerSecond: Float {
+        PortalFXDefaults.emberBirthRatePerDoor * birthRateMultiplier
+    }
+
     init(
         perimeterLocalPoints: [SIMD3<Float>],
-        portalNormalLocal: SIMD3<Float> = SIMD3<Float>(0, 0, 1)
+        portalNormalLocal: SIMD3<Float> = SIMD3<Float>(0, 0, 1),
+        configuration: PortalTransitionFXConfiguration = .hordePortal
     ) {
         self.perimeterLocalPoints = perimeterLocalPoints
+        self.configuration = configuration
+        birthRateMultiplier = configuration.initialBirthRateMultiplier
         self.portalNormalLocal = portalFXNormalizeSafe(
             portalNormalLocal,
             fallback: SIMD3<Float>(0, 0, 1)
@@ -96,7 +119,11 @@ final class PortalTransitionFXController {
         rootEntity.addChild(emberRoot)
     }
 
-    func build() {
+    func build() throws {
+        try configuration.validate()
+        guard perimeterLocalPoints.count >= 3 else {
+            throw PortalFXError.invalidPerimeterPointCount(perimeterLocalPoints.count)
+        }
         teardownGeometryOnly()
 
         if tubeRoot.parent == nil {
@@ -111,20 +138,20 @@ final class PortalTransitionFXController {
             points: perimeterLocalPoints
         )
 
-        buildTube()
-        buildJoints()
+        if configuration.borderRendering == .tubeAndJoints {
+            buildTube()
+            buildJoints()
+        }
 
-        let maxActive = Int(
-            ceil(
-                PortalFXDefaults.emberBirthRatePerDoor *
-                PortalFXDefaults.emberLifeSecondsMax *
-                PortalFXDefaults.emberMaxActiveMultiplier
-            )
+        let maxActive = configuration.maximumPoolCapacity
+        let palette = PortalFXSharedResources.shared.emberPalette(
+            for: configuration.paletteID
         )
 
-        emberPool = PortalEmberPool(
+        emberPool = try PortalEmberPool(
             root: emberRoot,
-            maxActive: maxActive
+            maxActive: maxActive,
+            palette: palette
         )
 
         PlagueNativeBloomInstaller.installOnEntity(
@@ -187,6 +214,9 @@ final class PortalTransitionFXController {
               tubeEmissiveIntensity: \(PortalFXDefaults.tubeEmissiveIntensity)
               emberRatePerDoor: \(PortalFXDefaults.emberBirthRatePerDoor)
               densityReductionFrom1000: \(1000.0 / PortalFXDefaults.emberBirthRatePerDoor)x
+              configuration: \(configuration.identifier)
+              palette: \(configuration.paletteID.rawValue)
+              borderRendering: \(configuration.borderRendering)
               emberSpeedRange: \(PortalFXDefaults.emberSpeedMetersPerSecondMin)-\(PortalFXDefaults.emberSpeedMetersPerSecondMax)
               emberLifeRange: \(PortalFXDefaults.emberLifeSecondsMin)-\(PortalFXDefaults.emberLifeSecondsMax)
               emberDirection: wall_parallel
@@ -253,11 +283,26 @@ final class PortalTransitionFXController {
         )
     }
 
+    /// Changes only future births. The planner's fractional accumulator and all
+    /// already-live embers retain their state.
+    func setBirthRateMultiplier(
+        _ requestedMultiplier: Float
+    ) {
+        guard requestedMultiplier.isFinite else {
+            birthRateMultiplier = configuration.initialBirthRateMultiplier
+            return
+        }
+        birthRateMultiplier = min(
+            max(requestedMultiplier, configuration.initialBirthRateMultiplier),
+            configuration.maximumBirthRateMultiplier
+        )
+    }
+
     func updatePerimeter(
         _ points: [SIMD3<Float>]
-    ) {
+    ) throws {
         perimeterLocalPoints = points
-        build()
+        try build()
     }
 
     func teardown() {
@@ -480,7 +525,8 @@ private extension PortalTransitionFXController {
             segments: segments,
             portalNormalLocal: portalNormalLocal,
             apertureCenter: apertureCenter(),
-            deltaTime: deltaTime
+            deltaTime: deltaTime,
+            birthRateMultiplier: birthRateMultiplier
         )
         let revision = emissionRevision
         let planner = emissionPlanner
@@ -545,6 +591,7 @@ private extension PortalTransitionFXController {
     func applyEmission(
         _ output: PortalEmissionFrameOutput
     ) {
+        totalSpawnedCount &+= UInt64(output.spawnSamples.count)
         emberPool?.enqueueSpawns(
             output.spawnSamples
         )
@@ -584,7 +631,10 @@ private enum PortalEmissionPlanner {
             )
         }
 
-        emissionAccumulator += PortalFXDefaults.emberBirthRatePerDoor * input.deltaTime
+        emissionAccumulator +=
+            PortalFXDefaults.emberBirthRatePerDoor *
+            input.birthRateMultiplier *
+            input.deltaTime
 
         let emitCount = Int(emissionAccumulator)
 
@@ -666,7 +716,9 @@ private enum PortalEmissionPlanner {
 
         let upwardJitter = SIMD3<Float>(
             0,
-            Float.random(in: 0.00...0.18),
+            Float.random(
+                in: PortalFXDefaults.emberSpawnUpwardJitterMin...PortalFXDefaults.emberSpawnUpwardJitterMax
+            ),
             0
         )
 
@@ -751,7 +803,9 @@ private enum PortalEmissionPlanner {
             in: PortalFXDefaults.emberLifeSecondsMin...PortalFXDefaults.emberLifeSecondsMax
         )
 
-        let surfaceOffset = portalNormalLocal * Float.random(in: 0.00...0.012)
+        let surfaceOffset = portalNormalLocal * Float.random(
+            in: PortalFXDefaults.emberSurfaceOffsetMetersMin...PortalFXDefaults.emberSurfaceOffsetMetersMax
+        )
 
         return PortalFXSpawnSample(
             position: base + surfaceOffset,

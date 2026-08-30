@@ -61,6 +61,28 @@ final class MindEyePresentationCoordinatorTests: XCTestCase {
         XCTAssertTrue(source.contains("still idle and blink"))
     }
 
+    func testPreAudioRevealCannotReplaceAnAudiblePresentation() throws {
+        let source = try coordinatorSource()
+        let handler = try XCTUnwrap(
+            source.range(of: "private func handleRevealRequest(")
+        )
+        let suffix = String(source[handler.lowerBound...])
+        let audibleGuard = try XCTUnwrap(
+            suffix.range(of: "if let active, active.isAudible")
+        )
+        let continuityPromotion = try XCTUnwrap(
+            suffix.range(of: "if canPromoteGeneratedContinuity")
+        )
+        let replacement = try XCTUnwrap(
+            suffix.range(of: "preAudioRevealReplacement")
+        )
+        XCTAssertLessThan(audibleGuard.lowerBound, continuityPromotion.lowerBound)
+        XCTAssertLessThan(audibleGuard.lowerBound, replacement.lowerBound)
+        XCTAssertTrue(suffix.contains("audible owner retained"))
+        XCTAssertTrue(suffix.contains("deviceSelectionContinues=true computeContinues=true"))
+        XCTAssertTrue(suffix.contains("await resolveReveal(request, outcome: .audioOnly)"))
+    }
+
     private func coordinatorSource() throws -> String {
         try String(
             contentsOf: mindEyeProjectRoot().appendingPathComponent(

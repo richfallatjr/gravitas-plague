@@ -35,7 +35,12 @@ final class Chapter01RobotEncounterTests: XCTestCase {
             )
             XCTAssertEqual(
                 mike.transmission.fixedLeadInSeconds,
-                10,
+                nil,
+                mike.scriptPointID
+            )
+            XCTAssertEqual(
+                mike.transmission.computeStart,
+                .beforePrerecording,
                 mike.scriptPointID
             )
         }

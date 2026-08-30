@@ -4,6 +4,7 @@
 #include "mlx/backend/gpu/eval.h"
 #include "mlx/backend/metal/device.h"
 #include "mlx/backend/metal/turing_metal_failure.h"
+#include "mlx/backend/metal/turing_metal_recovery.h"
 #include "mlx/backend/metal/utils.h"
 #include "mlx/primitives.h"
 #include "mlx/scheduler.h"
@@ -17,6 +18,9 @@ void new_stream(Stream stream) {
 }
 
 void eval(array& arr) {
+  auto execution = metal::turing::RecoveryController::shared()
+                       .acquire_execution(
+                           metal::turing::ExecutionKind::evaluation);
   metal::turing::throw_if_turing_metal_failed();
   auto pool = metal::new_scoped_memory_pool();
   auto s = arr.primitive().stream();
@@ -67,6 +71,9 @@ void eval(array& arr) {
 }
 
 void finalize(Stream s) {
+  auto execution = metal::turing::RecoveryController::shared()
+                       .acquire_execution(
+                           metal::turing::ExecutionKind::synchronization);
   auto pool = metal::new_scoped_memory_pool();
   auto& d = metal::device(s.device);
   auto cb = d.get_command_buffer(s.index);
@@ -76,6 +83,9 @@ void finalize(Stream s) {
 }
 
 void synchronize(Stream s) {
+  auto execution = metal::turing::RecoveryController::shared()
+                       .acquire_execution(
+                           metal::turing::ExecutionKind::synchronization);
   auto pool = metal::new_scoped_memory_pool();
   auto& d = metal::device(s.device);
   auto cb = d.get_command_buffer(s.index);

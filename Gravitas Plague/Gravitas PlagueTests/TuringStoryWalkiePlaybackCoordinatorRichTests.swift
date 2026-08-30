@@ -5,17 +5,53 @@ import XCTest
 
 @MainActor
 final class TuringStoryWalkiePlaybackCoordinatorRichTests: XCTestCase {
-  func testBigMikeTuringFlowRequiresFillerBetweenPRAndGeneratedTTS() {
-    let policy = TuringStoryWalkiePlaybackCoordinator
-      .bigMikeTuringFlowPolicy
+  func testBigMikeAndRichLiveTTSDoNotForceInitialFiller() {
+    for (characterID, route): (String, TuringVoiceOutputContext) in [
+      (TuringBigMikeVoiceIdentity.characterID, .walkieSpatial),
+      (TuringRichVoiceIdentity.characterID, .walkieOutgoingGlobal),
+      (TuringRichVoiceIdentity.characterID, .roomGlobal),
+    ] {
+      let character = TuringFlowTestFixtures.character(
+        id: characterID,
+        voiceID: "\(characterID)_test_voice",
+        outputRoute: route
+      )
+      let descriptor = TuringFlowDescriptor(
+        schemaVersion: 2,
+        scriptPointID: "conversation.test.\(characterID).\(route.rawValue)",
+        trigger: .init(kind: .manualDebug, delaySeconds: 0),
+        transmission: .init(
+          prerecordingID: "none",
+          voicePromptID: "conversationPrompt",
+          characterID: characterID,
+          conversationKey: "conversation",
+          outputRoute: route,
+          computeStart: .afterPriorPoint,
+          fillerMode: .onePrerollThenComputeGap,
+          commSFX: .init(
+            openBeforePrerecording: false,
+            sendAfterGenerated: false,
+            sendingLeadInAfterGeneratedSeconds: nil
+          ),
+          fixedLeadInSeconds: nil,
+          generationPipeline: nil
+        ),
+        progression: .init(
+          nextScriptPointID: nil,
+          automaticAdvance: false,
+          interactionGateAfterCompletion: .microphone
+        )
+      )
+      let policy = TuringFlowPlaybackPolicyBuilder.make(
+        descriptor: descriptor,
+        character: character,
+        voiceRoute: route == .walkieSpatial ? .walkieSpatial : .playerHeadTracked
+      )
 
-    XCTAssertEqual(policy.voiceRoute.rawValue, "walkieSpatial")
-    XCTAssertEqual(policy.firstSegmentPrerollFillerCount, 1)
-    XCTAssertTrue(policy.chainFillerFromPrerecordingToFirstGenerated)
-    XCTAssertTrue(policy.completeCurrentFillerBeforeGeneratedSpeech)
-    XCTAssertEqual(policy.generatedGainDB, 0)
-    XCTAssertEqual(policy.prerecordingGainDB, 0)
-    XCTAssertEqual(policy.fillerGainDB, -6)
+      XCTAssertEqual(policy.firstSegmentPrerollFillerCount, 0)
+      XCTAssertFalse(policy.chainFillerFromPrerecordingToFirstGenerated)
+      XCTAssertTrue(policy.chainFillerWhileComputeWithoutSpeech)
+    }
   }
 
   func testRichPRAndGeneratedSegmentsUseScriptPoint01CoordinatorInOrder()

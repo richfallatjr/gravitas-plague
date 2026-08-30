@@ -149,6 +149,64 @@ final class Chapter03AngelEmissionApplierTests: XCTestCase {
         XCTAssertEqual(pbrMaterial(from: outside)?.emissiveIntensity, 3.0)
     }
 
+    func testProjectionGetsExclusiveGlowAndFallbackEmissionReturns() throws {
+        let texture = try makeTexture(name: "angel-emission-ownership-test")
+        let modelEntity = makeModelEntity(
+            material: makeEmissiveMaterial(
+                texture: texture,
+                normalTexture: nil,
+                intensity: 4
+            )
+        )
+        let root = Entity()
+        root.addChild(modelEntity)
+        _ = try Chapter03AngelEmissionApplier.apply(
+            to: root,
+            assetName: "synthetic-angel.usdz"
+        )
+        let controller = try Chapter03AngelEmissionFallbackController(root: root)
+
+        controller.setProjectionOwnsEmission(true, reason: "test.ready")
+        let suppressed = try XCTUnwrap(pbrMaterial(from: modelEntity))
+        XCTAssertEqual(suppressed.emissiveIntensity, 0)
+        XCTAssertTrue(suppressed.emissiveColor.texture?.resource === texture)
+
+        controller.setProjectionOwnsEmission(false, reason: "test.failure")
+        let fallback = try XCTUnwrap(pbrMaterial(from: modelEntity))
+        XCTAssertEqual(fallback.emissiveIntensity, 1)
+        XCTAssertTrue(fallback.emissiveColor.texture?.resource === texture)
+        XCTAssertEqual(controller.transitionCount, 2)
+    }
+
+    func testFallbackReclaimsMaterialSlotAfterProjectionFailure() throws {
+        let texture = try makeTexture(name: "angel-emission-reclaim-test")
+        let modelEntity = makeModelEntity(
+            material: makeEmissiveMaterial(
+                texture: texture,
+                normalTexture: nil,
+                intensity: 0
+            )
+        )
+        let root = Entity()
+        root.addChild(modelEntity)
+        _ = try Chapter03AngelEmissionApplier.apply(
+            to: root,
+            assetName: "synthetic-angel.usdz"
+        )
+        let controller = try Chapter03AngelEmissionFallbackController(root: root)
+
+        var replacement = UnlitMaterial()
+        replacement.color = .init(tint: .green)
+        var model = try XCTUnwrap(modelEntity.components[ModelComponent.self])
+        model.materials[0] = replacement
+        modelEntity.components.set(model)
+
+        controller.restoreFallback(reason: "test.partialProjectionFailure")
+        let fallback = try XCTUnwrap(pbrMaterial(from: modelEntity))
+        XCTAssertEqual(fallback.emissiveIntensity, 1)
+        XCTAssertTrue(fallback.emissiveColor.texture?.resource === texture)
+    }
+
     private func makeEmissiveMaterial(
         texture: TextureResource,
         normalTexture: TextureResource?,

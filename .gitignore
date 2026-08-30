@@ -32,6 +32,7 @@
 !hellscape_01.exr
 Tools/Turing/.venv/
 Tools/TuringVoicePackager/.venv-qwenclone/
+.tools/angel-projection-blendshape/
 .venv-qwen-authoring/
 .venv-hf-qwen-base4bit/
 .venv-hf/

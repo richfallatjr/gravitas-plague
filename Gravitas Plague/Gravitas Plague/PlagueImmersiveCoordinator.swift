@@ -4,6 +4,7 @@ import QuartzCore
 import RealityKit
 import simd
 import UIKit
+import TuringQwenNative
 
 @MainActor
 final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTeleportWorld {
@@ -3638,6 +3639,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
     }
 
     func shutdown() async {
+        await TuringQwenNativeRecoveryCoordinator.shared.shutdown()
         if MindEyeQualificationFeatureControl.isMindEyeEnabled {
             _ = await mindEyeRuntimeLifecycle.shutdown(reason: "immersiveShutdown")
             await TuringHighMemoryPreflightCoordinator.shared.clearMindEye()

@@ -11,6 +11,8 @@ nonisolated enum StoryTuringActionPresentation: String, Sendable, Equatable {
     case hidden
     case play
     case microphone
+    case microphoneRecovering
+    case microphoneUnavailable
 }
 
 nonisolated enum StoryTuringActivityPresentation: String, Sendable, Equatable {
@@ -20,9 +22,43 @@ nonisolated enum StoryTuringActivityPresentation: String, Sendable, Equatable {
     case conversationPlaying
 }
 
+nonisolated struct StoryMicrophoneCTAEmphasis:
+    Sendable,
+    Equatable,
+    Hashable
+{
+    let saturation: Float
+
+    init(saturation: Float) {
+        self.saturation = min(1, max(0, saturation))
+    }
+
+    static let saturated = StoryMicrophoneCTAEmphasis(saturation: 1)
+    static let desaturated = StoryMicrophoneCTAEmphasis(saturation: 0)
+
+    var isEndpoint: Bool {
+        saturation == 0 || saturation == 1
+    }
+
+    var rawValue: String {
+        "saturation_\(Int((saturation * 1_000).rounded()))"
+    }
+}
+
 nonisolated struct StoryTuringSurfacePresentation: Sendable, Equatable {
     let action: StoryTuringActionPresentation
     let activity: StoryTuringActivityPresentation
+    let microphoneCTAEmphasis: StoryMicrophoneCTAEmphasis
+
+    init(
+        action: StoryTuringActionPresentation,
+        activity: StoryTuringActivityPresentation,
+        microphoneCTAEmphasis: StoryMicrophoneCTAEmphasis = .saturated
+    ) {
+        self.action = action
+        self.activity = activity
+        self.microphoneCTAEmphasis = microphoneCTAEmphasis
+    }
 
     static let hidden = StoryTuringSurfacePresentation(
         action: .hidden,
@@ -154,6 +190,8 @@ enum StoryWalkiePresentation: String, Sendable, Equatable {
     case hidden
     case play
     case microphone
+    case microphoneRecovering
+    case microphoneUnavailable
 }
 
 enum StoryDoorPresentation: String, Sendable, Equatable {
@@ -166,18 +204,24 @@ enum StoryDadFramePresentation: String, Sendable, Equatable {
     case hidden
     case play
     case microphone
+    case microphoneRecovering
+    case microphoneUnavailable
 }
 
 enum StoryCrankRadioPresentation: String, Sendable, Equatable {
     case hidden
     case play
     case microphone
+    case microphoneRecovering
+    case microphoneUnavailable
 }
 
 enum StoryHamReceiverPresentation: String, Sendable, Equatable {
     case hidden
     case play
     case microphone
+    case microphoneRecovering
+    case microphoneUnavailable
 }
 
 enum StoryInteractionExclusiveOwner: Sendable, Hashable {

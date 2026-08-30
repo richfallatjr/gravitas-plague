@@ -199,7 +199,7 @@ final class Chapter02ContractTests: XCTestCase {
             mike.transmission.fixedLeadInSeconds,
             prologueMike.transmission.fixedLeadInSeconds
         )
-        XCTAssertEqual(mike.transmission.fixedLeadInSeconds, 10)
+        XCTAssertNil(mike.transmission.fixedLeadInSeconds)
     }
 
     func testWindowAndBattleRecognitionCuesArePrerecordedOnly() throws {

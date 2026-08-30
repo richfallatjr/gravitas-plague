@@ -117,6 +117,17 @@ struct TuringStoryEpisodePickerView: View {
                         action: { chooseEpisode(episode) }
                     )
                 }
+
+#if DEBUG
+                Button("Angel sequence") {
+                    startAngelSequence()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(activeRequest)
+                .accessibilityHint(
+                    "Developer shortcut to the Chapter 3 Angel sequence."
+                )
+#endif
             }
             .frame(width: contentWidth)
             .padding(.vertical, max(5, 8 * plateScale))
@@ -209,4 +220,30 @@ struct TuringStoryEpisodePickerView: View {
             dismissWindow(id: PlagueWindowID.storyEpisodes)
         }
     }
+
+#if DEBUG
+    private func startAngelSequence() {
+        guard !activeRequest else { return }
+        activeRequest = true
+
+        let snapshot = Chapter03ProgressSnapshot(
+            schemaVersion: Chapter03ProgressSnapshot.currentSchemaVersion,
+            contentRevision: Chapter03ProgressSnapshot.currentContentRevision,
+            checkpoint: .heavenTransitionPending,
+            revision: 0,
+            sourceEventIDs: [],
+            committedAt: Date()
+        )
+        let request = StoryTitleCardTransitionRequest(
+            requestID: UUID(),
+            source: .episodePickerContinue,
+            descriptor: StoryTitleCardCatalog.chapter03LightTunnelTest,
+            destination: .continueFrom(.chapter03(snapshot)),
+            menuMusicPolicy: .playThroughCard
+        )
+
+        session.requestStoryTitleCardTransition(request)
+        dismissWindow(id: PlagueWindowID.storyEpisodes)
+    }
+#endif
 }

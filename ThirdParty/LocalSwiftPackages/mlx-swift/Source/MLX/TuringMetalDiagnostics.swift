@@ -17,6 +17,9 @@ public struct TuringMetalExecutionContext: Sendable, Equatable {
     public let decodeID: Int?
     public let phase: String
     public let stage: String?
+    public let residencyOwnerID: String?
+    public let weightStoreID: String?
+    public let laneMutableStateID: String?
     public let rowRange: Range<Int>?
     public let talkerPositionRange: Range<Int>?
     public let appMetalInFlightCount: Int
@@ -30,6 +33,9 @@ public struct TuringMetalExecutionContext: Sendable, Equatable {
         decodeID: Int? = nil,
         phase: String,
         stage: String? = nil,
+        residencyOwnerID: String? = nil,
+        weightStoreID: String? = nil,
+        laneMutableStateID: String? = nil,
         rowRange: Range<Int>? = nil,
         talkerPositionRange: Range<Int>? = nil,
         appMetalInFlightCount: Int = 0,
@@ -42,6 +48,9 @@ public struct TuringMetalExecutionContext: Sendable, Equatable {
         self.decodeID = decodeID
         self.phase = phase
         self.stage = stage
+        self.residencyOwnerID = residencyOwnerID
+        self.weightStoreID = weightStoreID
+        self.laneMutableStateID = laneMutableStateID
         self.rowRange = rowRange
         self.talkerPositionRange = talkerPositionRange
         self.appMetalInFlightCount = appMetalInFlightCount
@@ -57,6 +66,9 @@ public struct TuringMetalCommandBufferContext: Sendable, Equatable, Codable {
     public let decodeID: Int?
     public let phase: String?
     public let stage: String?
+    public let residencyOwnerID: String?
+    public let weightStoreID: String?
+    public let laneMutableStateID: String?
     public let rowStartInclusive: Int?
     public let rowEndExclusive: Int?
     public let talkerPositionStart: Int?
@@ -147,6 +159,9 @@ public struct TuringMetalCommandBufferFailure:
             decodeID: 0,
             phase: phase,
             stage: stage,
+            residencyOwnerID: nil,
+            weightStoreID: nil,
+            laneMutableStateID: nil,
             rowStartInclusive: nil,
             rowEndExclusive: nil,
             talkerPositionStart: nil,
@@ -424,6 +439,9 @@ public enum TuringMetalDiagnostics {
         let instanceID = string(from: value.instance_id)
         let phase = string(from: value.phase)
         let stage = string(from: value.stage)
+        let residencyOwnerID = string(from: value.residency_owner_id)
+        let weightStoreID = string(from: value.weight_store_id)
+        let laneMutableStateID = string(from: value.lane_mutable_state_id)
         return .init(
             runID: runID.isEmpty ? nil : runID,
             instanceID: instanceID.isEmpty ? nil : instanceID,
@@ -432,6 +450,9 @@ public enum TuringMetalDiagnostics {
             decodeID: optional(value.decode_id),
             phase: phase.isEmpty ? nil : phase,
             stage: stage.isEmpty ? nil : stage,
+            residencyOwnerID: residencyOwnerID.isEmpty ? nil : residencyOwnerID,
+            weightStoreID: weightStoreID.isEmpty ? nil : weightStoreID,
+            laneMutableStateID: laneMutableStateID.isEmpty ? nil : laneMutableStateID,
             rowStartInclusive: optional(value.row_start_inclusive),
             rowEndExclusive: optional(value.row_end_exclusive),
             talkerPositionStart: optional(value.talker_position_start),
@@ -461,6 +482,9 @@ private extension TuringMetalExecutionContext {
         copy(instanceID ?? "", into: &value.instance_id)
         copy(phase, into: &value.phase)
         copy(stage ?? "", into: &value.stage)
+        copy(residencyOwnerID ?? "", into: &value.residency_owner_id)
+        copy(weightStoreID ?? "", into: &value.weight_store_id)
+        copy(laneMutableStateID ?? "", into: &value.lane_mutable_state_id)
         value.segment_index = Int32(segmentIndex ?? -1)
         value.lane_index = Int32(laneIndex ?? -1)
         value.decode_id = Int32(decodeID ?? -1)

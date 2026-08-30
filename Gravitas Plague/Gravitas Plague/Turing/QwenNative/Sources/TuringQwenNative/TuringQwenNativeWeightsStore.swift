@@ -1,18 +1,27 @@
 import Foundation
 import MLX
 
-struct TuringQwenNativeWeightsStore: @unchecked Sendable {
+final class TuringQwenNativeWeightsStore: @unchecked Sendable {
+    let identity = UUID()
     private let arraysByKey: [String: MLXArray]
+    let tensorCount: Int
 
     init(modelRoot: URL) throws {
-        self.arraysByKey = try MLX.loadArrays(
+        let loaded = try MLX.loadArrays(
             url: modelRoot.appendingPathComponent("model.safetensors"),
             stream: .cpu
         )
+        guard loaded.isEmpty == false else {
+            throw TuringQwenNativeError.invalidSafetensors(
+                "model.safetensors contains no arrays."
+            )
+        }
+        arraysByKey = loaded
+        tensorCount = loaded.count
 
         print("""
         [TuringQwenNative] resident weights loaded
-          tensorCount: \(arraysByKey.count)
+          tensorCount: \(tensorCount)
           source: MLX.loadArrays
           runtimePerStepFileIO: false
         """)
@@ -30,7 +39,7 @@ struct TuringQwenNativeWeightsStore: @unchecked Sendable {
         arraysByKey[key]
     }
 
-    func requireRows(
+    func makeLaneLocalRows(
         _ key: String,
         rows: [Int]
     ) throws -> MLXArray {

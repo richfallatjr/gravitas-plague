@@ -18,7 +18,7 @@
       "sendAfterGenerated": false,
       "sendingLeadInAfterGeneratedSeconds": null
     },
-    "fixedLeadInSeconds": 10,
+    "fixedLeadInSeconds": null,
     "generationPipeline": {
       "schemaVersion": 1,
       "radioBridgeMode": "bigMikeStaticAndFiller",

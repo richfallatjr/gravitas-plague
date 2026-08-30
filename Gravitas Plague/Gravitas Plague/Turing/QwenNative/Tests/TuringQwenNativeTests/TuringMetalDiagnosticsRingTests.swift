@@ -33,6 +33,22 @@ struct TuringMetalDiagnosticsRingTests {
     }
 
     @Test
+    func failureEvidenceCannotBeAcknowledgedThroughOrdinarySwiftDiagnostics() {
+        TuringMetalDiagnostics.resetForTesting()
+        defer { TuringMetalDiagnostics.resetForTesting() }
+        TuringMetalDiagnostics.injectFailureOnNextCompletionForTesting(
+            errorCode: 1
+        )
+        TuringMetalDiagnostics.recordSyntheticCompletionForTesting()
+
+        #expect(TuringMetalDiagnostics.failureEpoch == 1)
+        #expect(TuringMetalDiagnostics.isPoisoned)
+        #expect(TuringMetalDiagnostics.lastFailure() != nil)
+        #expect(TuringMetalDiagnostics.aggregate().failureCount == 1)
+        #expect(TuringMetalDiagnostics.recentRecords().filter(\.isFailure).count == 1)
+    }
+
+    @Test
     func externalMetalCountsAreCopiedWithoutRetainingAProvider() {
         TuringMetalDiagnostics.resetForTesting()
         defer { TuringMetalDiagnostics.resetForTesting() }

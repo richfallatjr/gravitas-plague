@@ -130,14 +130,16 @@ struct Fence {
 };
 
 struct DeviceStream {
-  DeviceStream(MTL::CommandQueue* queue) : queue(queue) {};
+  DeviceStream(MTL::CommandQueue* queue, uint64_t recovery_generation)
+      : queue(queue), recovery_generation(recovery_generation) {};
+  DeviceStream(const DeviceStream&) = delete;
+  DeviceStream& operator=(const DeviceStream&) = delete;
   ~DeviceStream() {
-    queue->release();
-    if (buffer != nullptr) {
-      buffer->release();
-    }
+    dispose();
   };
+  void dispose() noexcept;
   MTL::CommandQueue* queue;
+  uint64_t recovery_generation{0};
   // A map of prior command encoder outputs to their corresponding fence
   std::unordered_map<const void*, std::shared_ptr<Fence>> outputs;
   // Used to allow thread-safe access to the outputs map
@@ -158,6 +160,11 @@ struct DeviceStream {
 
 class MLX_API Device {
  public:
+  struct TuringRecoveryResetResult {
+    uint64_t disposed_stream_count{0};
+    uint64_t recreated_queue_count{0};
+  };
+
   Device();
   Device(const Device&) = delete;
   Device& operator=(const Device&) = delete;
@@ -225,11 +232,12 @@ class MLX_API Device {
   void add_temporaries(std::vector<array> arrays, int index);
 
   void set_residency_set(const MTL::ResidencySet* residency_set);
+  TuringRecoveryResetResult reset_streams_for_turing_recovery(
+      uint64_t candidate_generation);
+  MTL::CommandQueue* turing_recovery_probe_queue();
 
  private:
-  DeviceStream& get_stream_(int index) {
-    return stream_map_.find(index)->second;
-  }
+  DeviceStream& get_stream_(int index);
   MTL::Library* get_library_cache_(const std::string& name);
 
   MTL::Library* get_library_(const std::string& name);
@@ -263,6 +271,7 @@ class MLX_API Device {
       const std::vector<MTL::Function*>& linked_functions = {});
 
   MTL::Device* device_;
+  std::mutex stream_map_mtx_;
   std::unordered_map<int32_t, DeviceStream> stream_map_;
 
   std::shared_mutex kernel_mtx_;

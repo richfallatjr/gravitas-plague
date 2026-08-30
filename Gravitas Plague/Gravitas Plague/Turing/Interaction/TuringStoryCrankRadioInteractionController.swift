@@ -656,7 +656,11 @@ final class TuringStoryCrankRadioInteractionController:
             activity: ready
                 ? snapshot.turingSurfacePresentations[.crankRadio]?.activity
                     ?? .hidden
-                : .hidden
+                : .hidden,
+            microphoneCTAEmphasis: ready
+                ? snapshot.turingSurfacePresentations[.crankRadio]?
+                    .microphoneCTAEmphasis ?? .saturated
+                : .saturated
         )
     }
 

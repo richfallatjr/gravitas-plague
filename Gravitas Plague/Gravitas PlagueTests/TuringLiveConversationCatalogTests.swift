@@ -363,46 +363,7 @@ final class TuringLiveConversationCatalogTests: XCTestCase {
         )
     }
 
-    func testPreFillerUsesPreviousConversationVoiceOnUpcomingSurface() {
-        let previous = makeSeed(
-            parentSequenceID: UUID(),
-            parentFlowInstanceID: UUID(),
-            retention: .untilExplicitInvalidation
-        )
-        let retained = TuringLiveConversationSeedRegistrySnapshot(
-            seedsBySurface: [.walkie: previous]
-        )
-
-        XCTAssertEqual(
-            TuringPrerecordingPreFillerMicrophonePolicy.context(
-                retainedSeeds: retained,
-                upcomingSurface: .walkie
-            ),
-            .previousConversationVoice(seedID: previous.seedID)
-        )
-    }
-
-    func testPreFillerFallsBackToCurrentPromptVoiceWithoutPriorSurfaceSeed() {
-        let priorOnAnotherSurface = makeSeed(
-            parentSequenceID: UUID(),
-            parentFlowInstanceID: UUID(),
-            retention: .untilExplicitInvalidation,
-            interactionSurface: .dadFrame
-        )
-        let retained = TuringLiveConversationSeedRegistrySnapshot(
-            seedsBySurface: [.dadFrame: priorOnAnotherSurface]
-        )
-
-        XCTAssertEqual(
-            TuringPrerecordingPreFillerMicrophonePolicy.context(
-                retainedSeeds: retained,
-                upcomingSurface: .walkie
-            ),
-            .currentPromptVoiceFallback
-        )
-    }
-
-    func testActualPRStartAtomicallyReplacesPreFillerMicrophoneSeed() async throws {
+    func testUpcomingPromptAtomicallyReplacesRetainedMicrophoneSeed() async throws {
         let arbiter = StoryInteractionArbiter()
         let microphoneGeneration = await arbiter.beginConversationChapter(
             episodeID: .prologue,
@@ -460,6 +421,26 @@ final class TuringLiveConversationCatalogTests: XCTestCase {
         XCTAssertEqual(
             presentation.walkiePresentation,
             .microphone
+        )
+        XCTAssertEqual(
+            presentation.turingSurfacePresentations[.walkie]?
+                .microphoneCTAEmphasis,
+            .saturated
+        )
+
+        try await arbiter.setLiveConversationMicrophoneCTAEmphasis(
+            .desaturated,
+            surface: .walkie,
+            parentLease: parentLease,
+            sessionID: sessionID,
+            generation: 1,
+            reason: "test.bufferExpired"
+        )
+        let desaturatedPresentation = await arbiter.currentSnapshot()
+        XCTAssertEqual(
+            desaturatedPresentation.turingSurfacePresentations[.walkie]?
+                .microphoneCTAEmphasis,
+            .desaturated
         )
     }
 

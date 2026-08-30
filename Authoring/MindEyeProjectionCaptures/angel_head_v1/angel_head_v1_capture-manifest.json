@@ -1,0 +1,128 @@
+{
+  "SDKBuild" : "Version 27.0 (Build 24M5348a)",
+  "animationAdvancedFrames" : 0,
+  "appBuildConfiguration" : "Debug+GR_MIND_EYE_PROJECTION_AUTHORING",
+  "beautyPixelFormat" : "bgra8Unorm_srgb",
+  "cameraID" : "angel_head_v1.camera",
+  "cameraSHA256" : "0f0c8382a94ee2ae2409b6420023be937addbfc4eee9c49ef71360e0111c9092",
+  "captureID" : "angel_head_v1",
+  "captureState" : "frameZero",
+  "heavenEXRSHA256" : "9893b6c5b29c0bf74306cc0c4ee0f6726f1b3a50ca787ff567b36a0f04e9265e",
+  "maskBoundingBoxPixels" : [
+    61,
+    61,
+    1576,
+    1576
+  ],
+  "maskCenterErrorPixels" : [
+    -15,
+    -15
+  ],
+  "maskCoverageFraction" : 0.6441531501843278,
+  "maskPixelFormat" : "bgra8Unorm",
+  "mediaTimeSeconds" : 0,
+  "outputs" : [
+    {
+      "SHA256" : "5d1aac0df61f5afea73244b4a15b679a5d45470523ad4ad010a83ae61d9dc08c",
+      "alphaMode" : "opaque",
+      "bitsPerChannel" : 8,
+      "byteCount" : 3664885,
+      "colorSpace" : "sRGB",
+      "filename" : "angel_head_v1_scene-beauty.png",
+      "height" : 1728,
+      "role" : "sceneBeauty",
+      "width" : 1728
+    },
+    {
+      "SHA256" : "32a873f2f276b9d3a5396a0838cd62b1dca67720c279ad42ea0908f53316ad70",
+      "alphaMode" : "opaque",
+      "bitsPerChannel" : 8,
+      "byteCount" : 2782593,
+      "colorSpace" : "sRGB",
+      "filename" : "angel_head_v1_face-beauty.png",
+      "height" : 1728,
+      "role" : "faceBeauty",
+      "width" : 1728
+    },
+    {
+      "SHA256" : "5c34df03c09725eb521ef056db5e5c117b29cdb233f99faf8b05816f8a1f095e",
+      "alphaMode" : "opaque",
+      "bitsPerChannel" : 8,
+      "byteCount" : 88835,
+      "colorSpace" : "linearRGB",
+      "filename" : "angel_head_v1_projection-mask-aov.png",
+      "height" : 1728,
+      "role" : "projectionMaskAOV",
+      "width" : 1728
+    },
+    {
+      "SHA256" : "03816c69ed05eba098d87f0e388c982be8c09ff7c19fae8d81ed65fa17718a71",
+      "alphaMode" : "none",
+      "bitsPerChannel" : 16,
+      "byteCount" : 292708,
+      "colorSpace" : "linearGray",
+      "filename" : "angel_head_v1_projection-mask-linear16.png",
+      "height" : 1728,
+      "role" : "projectionMaskLinear16",
+      "width" : 1728
+    },
+    {
+      "SHA256" : "978e37c2ec26b5ce62ce5733f7d1befb3da3f79e79981298787c04608d760f4a",
+      "alphaMode" : "none",
+      "bitsPerChannel" : 8,
+      "byteCount" : 119286,
+      "colorSpace" : "gray",
+      "filename" : "angel_head_v1_projection-mask-preview.png",
+      "height" : 1728,
+      "role" : "projectionMaskPreview",
+      "width" : 1728
+    },
+    {
+      "SHA256" : "6d42c601569cda5e56315187a31c346e3baa3affb5833de489cc82bded5ae994",
+      "alphaMode" : "opaque",
+      "bitsPerChannel" : 8,
+      "byteCount" : 2803013,
+      "colorSpace" : "sRGB",
+      "filename" : "angel_head_v1_alignment-guide.png",
+      "height" : 1728,
+      "role" : "alignmentGuide",
+      "width" : 1728
+    },
+    {
+      "SHA256" : "0f0c8382a94ee2ae2409b6420023be937addbfc4eee9c49ef71360e0111c9092",
+      "alphaMode" : "none",
+      "bitsPerChannel" : 8,
+      "byteCount" : 1577,
+      "colorSpace" : "UTF-8",
+      "filename" : "angel_head_v1_camera.json",
+      "height" : 0,
+      "role" : "camera",
+      "width" : 0
+    },
+    {
+      "SHA256" : "ce9fde81adcdf37bcf7a615fab400c47fbb1284f8d98692ef395b38c383ed2aa",
+      "alphaMode" : "none",
+      "bitsPerChannel" : 8,
+      "byteCount" : 2539,
+      "colorSpace" : "UTF-8",
+      "filename" : "angel_head_v1_scene-hierarchy.txt",
+      "height" : 0,
+      "role" : "hierarchy",
+      "width" : 0
+    }
+  ],
+  "profileID" : "angel_head_v1",
+  "profileSHA256" : "5d3dcce167588b72a45b9e4fb0d3d30cdc30421f19bb15ac4870180ca0c0c65f",
+  "repositoryCommit" : "3f85a367683704eb91b8c747ddc3f58ae24011e6",
+  "sceneDefinitionSHA256" : "7d36333a80df7916bd11a207ddb3fbc72d8bc2f834044e9430f7957e0462a41d",
+  "schemaVersion" : 1,
+  "simulatorDevice" : "RealityDevice14,1",
+  "simulatorRuntime" : "27.0",
+  "sourceHeight" : 1728,
+  "sourceWidth" : 1728,
+  "subjectAssetSHA256" : "c274c2a294cf32b4d3dca036d36e854e07bf12a6279a1177d88e5a6148bbaa0f",
+  "targetSHA256" : "0afb7e088d35f8994be87d0ab725e6eb56b17ef9bdde725336c4e0db7639337d",
+  "viewportHeight" : 1440,
+  "viewportWidth" : 1440,
+  "worktreeWasDirty" : true
+}

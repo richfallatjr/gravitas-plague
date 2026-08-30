@@ -36,12 +36,31 @@ actor TuringAuthoredFlowRunner {
                 identity: identity,
                 playback: playback
             )
+            let preFillerPreparationTask: Task<Void, Never>?
             if let firstEligibleItem = mediaPlan.items.first(
                 where: { $0.liveConversationCatalogEntry != nil }
             ) {
-                await liveConversationCoordinator
-                    .prepareForPrerecordingPreFiller(firstEligibleItem)
+                // Portrait preparation and installation of the upcoming,
+                // selectable PromptVoice microphone are speculative. They
+                // must never sit on the authored playback path: the PR, route
+                // lead-in, and orientation proceed while this task works.
+                preFillerPreparationTask = Task { @MainActor in
+                    await liveConversationCoordinator
+                        .prepareForPrerecordingPreFiller(firstEligibleItem)
+                }
+                print(
+                    "[TuringLiveConversation] pre-PR preparation launched " +
+                        "itemID=\(firstEligibleItem.id) " +
+                        "authoredPlaybackBlocked=false"
+                )
+                // Give the already-enqueued MainActor job a scheduling turn
+                // before orientation audio begins. This does not wait for
+                // package loading, reveal completion, or microphone setup.
+                await Task.yield()
+            } else {
+                preFillerPreparationTask = nil
             }
+            defer { preFillerPreparationTask?.cancel() }
             await route.runFixedLeadInIfNeeded(
                 descriptor: descriptor,
                 identity: identity

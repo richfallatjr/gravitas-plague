@@ -90,6 +90,23 @@ public actor TuringQwenNativeGPUAdmissionController {
         )
     }
 
+    public func cancelForRecovery(
+        generation: TuringQwenNativeRecoveryGeneration,
+        failure: TuringQwenNativeMetalFailure
+    ) -> TuringQwenNativeAdmissionReleaseReceipt {
+        cancelAll(
+            reason: "metalRecovery.commandBuffer.\(failure.record.record.commandBufferID)"
+        )
+        let final = snapshot()
+        return .init(
+            generation: generation,
+            activeGenerationLeases: final.activeGenerationLeaseCount,
+            activeDecodeLeases: final.activeDecodeLeaseCount,
+            generationWaiters: final.queuedGenerationCount,
+            decoderWaiters: final.queuedDecodeCount
+        )
+    }
+
     public func finishRun(
         reason: String
     ) throws -> TuringQwenNativeGPUAdmissionSnapshot {

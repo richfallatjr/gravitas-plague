@@ -92,7 +92,7 @@ final class Chapter01FourChancesTests: XCTestCase {
         XCTAssertEqual(first.snapshot.revision, duplicate.snapshot.revision)
     }
 
-    func testAllFiveDescriptorsUseFoundationBeforePrerecording() throws {
+    func testPRBeginsWhileBigMikeGenerationContinues() throws {
         let ids = [
             "chapter01.dadFrame.rich.fourChances.001",
             "chapter01.walkie.rich.script08",
@@ -100,7 +100,7 @@ final class Chapter01FourChancesTests: XCTestCase {
             "chapter01.hamReceiver.rich.script04",
             "chapter01.hamReceiver.cateye81.script05"
         ]
-        for id in ids {
+        for id in ids where id != "chapter01.walkie.bigMike.script09" {
             let descriptor = try TuringFlowDescriptorStore().require(id)
             XCTAssertEqual(
                 descriptor.transmission.computeStart,
@@ -108,6 +108,11 @@ final class Chapter01FourChancesTests: XCTestCase {
                 id
             )
         }
+        let mike = try TuringFlowDescriptorStore().require(
+            "chapter01.walkie.bigMike.script09"
+        )
+        XCTAssertEqual(mike.transmission.computeStart, .beforePrerecording)
+        XCTAssertNil(mike.transmission.fixedLeadInSeconds)
     }
 
     func testChapterConversationKeysAreIsolatedFromPrologue() {

@@ -219,7 +219,21 @@ enum TuringFlowPlaybackPolicyBuilder {
 
         switch descriptor.transmission.fillerMode {
         case .onePrerollThenComputeGap:
-            policy.firstSegmentPrerollFillerCount = 1
+            // Big Mike and Rich live-conversation responses must begin with
+            // generated segment zero as soon as the spoken-cover gate opens.
+            // Their former mandatory one-clip preroll added latency after TTS
+            // was already ready and depended on an unreliable filler lip-sync
+            // presentation. Preserve filler between later generated segments.
+            let isGeneratedOnlyConversation =
+                descriptor.transmission.prerecordingID == "none" &&
+                descriptor.scriptPointID.hasPrefix("conversation.")
+            if isGeneratedOnlyConversation &&
+                (character.characterID == TuringBigMikeVoiceIdentity.characterID ||
+                    character.characterID == TuringRichVoiceIdentity.characterID) {
+                policy.firstSegmentPrerollFillerCount = 0
+            } else {
+                policy.firstSegmentPrerollFillerCount = 1
+            }
             policy.chainFillerFromPrerecordingToFirstGenerated = false
             policy.chainFillerWhileComputeWithoutSpeech = true
 

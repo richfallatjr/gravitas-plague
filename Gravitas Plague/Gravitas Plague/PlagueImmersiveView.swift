@@ -4,6 +4,7 @@ import Foundation
 import RealityKit
 import SwiftUI
 import UIKit
+import TuringQwenNative
 import simd
 
 struct PlagueImmersiveView: View {
@@ -522,6 +523,10 @@ struct PlagueImmersiveView: View {
             let state = MindEyeApplicationLifecycleState(scenePhase: newValue)
             Task { @MainActor in
                 await coordinator.mindEyeApplicationStateChanged(state)
+                if newValue != .active {
+                    await TuringQwenNativeRecoveryCoordinator.shared
+                        .applicationDidEnterBackground()
+                }
             }
         }
         .onChange(of: session.damageTintEventID) { _, _ in

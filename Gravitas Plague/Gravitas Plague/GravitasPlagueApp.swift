@@ -12,8 +12,29 @@ enum PlagueWindowID {
 struct GravitasPlagueApp: App {
     @StateObject private var demoSession = PlagueDemoSession()
     @State private var immersionStyle: ImmersionStyle = .mixed
+#if DEBUG || GR_MIND_EYE_PROJECTION_AUTHORING
+    private let projectionAuthoringConfiguration:
+        MindEyeProjectionAuthoringLaunchConfiguration?
+    private let isUnitTestLaunch: Bool
+#endif
 
     init() {
+#if DEBUG || GR_MIND_EYE_PROJECTION_AUTHORING
+        isUnitTestLaunch =
+            ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        do {
+            projectionAuthoringConfiguration = try
+                MindEyeProjectionAuthoringLaunchConfiguration.current()
+        } catch {
+            preconditionFailure(
+                "Mind's Eye projection authoring launch configuration failed: " +
+                    error.localizedDescription
+            )
+        }
+        if projectionAuthoringConfiguration != nil || isUnitTestLaunch {
+            return
+        }
+#endif
         do {
             try TuringMLXCommandBufferStartup.configure()
         } catch {
@@ -28,11 +49,27 @@ struct GravitasPlagueApp: App {
 
     var body: some Scene {
         WindowGroup(id: PlagueWindowID.control) {
+#if DEBUG || GR_MIND_EYE_PROJECTION_AUTHORING
+            if isUnitTestLaunch {
+                Color.clear
+            } else if let projectionAuthoringConfiguration {
+                MindEyeProjectionAuthoringRootView(
+                    configuration: projectionAuthoringConfiguration
+                )
+            } else {
+                PlagueDemoView(session: demoSession)
+                    .frame(
+                        width: OperationModePosterLayout.swiftUIWindowWidth,
+                        height: OperationModePosterLayout.swiftUIWindowHeight
+                    )
+            }
+#else
             PlagueDemoView(session: demoSession)
                 .frame(
                     width: OperationModePosterLayout.swiftUIWindowWidth,
                     height: OperationModePosterLayout.swiftUIWindowHeight
                 )
+#endif
         }
         .defaultSize(
             width: OperationModePosterLayout.swiftUIWindowWidth,

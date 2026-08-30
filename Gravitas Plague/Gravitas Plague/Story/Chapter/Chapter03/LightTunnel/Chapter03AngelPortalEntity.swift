@@ -19,23 +19,30 @@ final class Chapter03AngelPortalEntity {
 
     let root: Entity
 
-    private let visual: Entity
+    let visualRoot: Entity
     private let presentationVariant: PresentationVariant
     private let poseDriver: JockRuntimeDriver?
+    private let emissionFallbackController:
+        Chapter03AngelEmissionFallbackController?
     private let basePosition: SIMD3<Float>
     private var floatMotion: Chapter03AngelFloatMotion
+    private(set) var blendShapeController: Chapter03AngelBlendShapeController?
 
     private init(
         root: Entity,
         visual: Entity,
         presentationVariant: PresentationVariant,
         poseDriver: JockRuntimeDriver?,
+        emissionFallbackController: Chapter03AngelEmissionFallbackController?,
+        blendShapeController: Chapter03AngelBlendShapeController?,
         floatMotionSeed: UInt64
     ) {
         self.root = root
-        self.visual = visual
+        visualRoot = visual
         self.presentationVariant = presentationVariant
         self.poseDriver = poseDriver
+        self.emissionFallbackController = emissionFallbackController
+        self.blendShapeController = blendShapeController
         basePosition = root.position
         floatMotion = Chapter03AngelFloatMotion(seed: floatMotionSeed)
     }
@@ -76,6 +83,8 @@ final class Chapter03AngelPortalEntity {
             to: visual,
             assetName: assetURL.lastPathComponent
         )
+        let emissionFallbackController = try
+            Chapter03AngelEmissionFallbackController(root: visual)
         visual.name = "Chapter03StaticPosedAngelVisual"
         stripInteraction(from: visual)
         visual.scale = SIMD3<Float>(repeating: 1)
@@ -85,6 +94,10 @@ final class Chapter03AngelPortalEntity {
             visual: visual,
             insideOffsetMeters: insideOffsetMeters,
             rootYOffsetMeters: rootYOffsetMeters
+        )
+        let blendShapeController = await makeBlendShapeController(
+            visual: visual,
+            assetURL: assetURL
         )
 
         print(
@@ -107,6 +120,8 @@ final class Chapter03AngelPortalEntity {
             visual: visual,
             presentationVariant: .staticPosed,
             poseDriver: nil,
+            emissionFallbackController: emissionFallbackController,
+            blendShapeController: blendShapeController,
             floatMotionSeed: UInt64.random(in: .min ... .max)
         )
     }
@@ -199,6 +214,8 @@ final class Chapter03AngelPortalEntity {
             visual: visual,
             presentationVariant: .animatedFloat,
             poseDriver: poseDriver,
+            emissionFallbackController: nil,
+            blendShapeController: nil,
             floatMotionSeed: UInt64.random(in: .min ... .max)
         )
     }
@@ -208,7 +225,33 @@ final class Chapter03AngelPortalEntity {
         root.position = basePosition + offset
     }
 
+    func setProjectionReadiness(_ readiness: Chapter03AngelProjectionReadiness) {
+        let resolved = Chapter03AngelProjectionReadiness(
+            cameraReady: readiness.cameraReady,
+            materialReady: readiness.materialReady,
+            textureReady: readiness.textureReady,
+            maskReady: readiness.maskReady,
+            blendShapeReady: readiness.blendShapeReady &&
+                blendShapeController != nil
+        )
+        emissionFallbackController?.setProjectionOwnsEmission(
+            resolved.isVisualProjectionReady,
+            reason: resolved.isVisualProjectionReady
+                ? "projectionReady"
+                : "projectionUnavailable"
+        )
+        blendShapeController?.setProjectionReadiness(resolved)
+    }
+
     func release(reason: String) {
+        emissionFallbackController?.restoreFallback(
+            reason: "chapter03Angel.\(reason)"
+        )
+        blendShapeController?.reset(
+            immediately: true,
+            reason: "chapter03Angel.\(reason)"
+        )
+        blendShapeController = nil
         let preparedClipCount = poseDriver?.releasePreparedRuntime(
             reason: "chapter03Angel.\(reason)"
         ) ?? 0
@@ -218,6 +261,35 @@ final class Chapter03AngelPortalEntity {
                 "variant=\(presentationVariant.rawValue) " +
                 "reason=\(reason) preparedClipCount=\(preparedClipCount)"
         )
+    }
+
+    private static func makeBlendShapeController(
+        visual: Entity,
+        assetURL: URL
+    ) async -> Chapter03AngelBlendShapeController? {
+        do {
+            let descriptorURL = try TuringResourceLoader.resourceURL(
+                resourcePath: Chapter03AngelBlendShapeDescriptorStore.resourcePath
+            )
+            let descriptor = try await Chapter03AngelBlendShapeDescriptorStore()
+                .loadProduction(
+                    descriptorURL: descriptorURL,
+                    assetURL: assetURL
+                )
+            let bindings = try Chapter03AngelBlendShapeResolver().resolve(
+                in: visual,
+                targetName: descriptor.blendShapeName
+            )
+            return try Chapter03AngelBlendShapeController(
+                descriptor: descriptor,
+                bindings: bindings
+            )
+        } catch {
+            // The owner-authored target may not have been packaged yet. The
+            // original weight-zero Angel is the required nonfatal fallback.
+            Chapter03AngelBlendShapeDiagnostics.fallbackToBase(error: error)
+            return nil
+        }
     }
 
     private static func makePortalRoot(

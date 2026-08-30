@@ -15,7 +15,12 @@ REQUIRED = {
         "complete_noexcept", "kCommandBufferRingCapacity", "poisoned_"
     ],
     "Gravitas Plague/Gravitas Plague/Turing/QwenNative/Sources/TuringQwenNative/TuringQwenNativeFreshInstanceScheduler.swift": [
-        "lane0", "lane1", "qwen.run.cancelledForMetalFailure", "unloadAll"
+        "requested == 2, actual == 2", "runLaneOperations",
+        "withThrowingTaskGroup", "group.cancelAll()",
+        "qwen.run.cancelledForMetalFailure", "unloadAll"
+    ],
+    "Gravitas Plague/Gravitas Plague/Turing/QwenNative/Sources/TuringQwenNative/TuringQwenNativeBaseCloneEngine.swift": [
+        "try Task.checkCancellation()"
     ],
     "Gravitas Plague/Gravitas Plague/Turing/QwenNative/Sources/TuringQwenNative/TuringQwenNativeGPUAdmissionPolicy.swift": [
         "maximumConcurrentGenerationLeases: Int = 2", "case currentOverlap"

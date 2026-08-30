@@ -98,4 +98,8 @@ public actor TuringQwenOpenSegmentQueue {
     public func submittedCount() -> Int {
         submittedIndices.count
     }
+
+    public func recoveryCancellationIsComplete() -> Bool {
+        cancellationReason != nil && requests.isEmpty && waiters.isEmpty
+    }
 }

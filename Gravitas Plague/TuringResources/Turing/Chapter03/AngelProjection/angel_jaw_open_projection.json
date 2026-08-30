@@ -1,0 +1,28 @@
+{
+  "allowedWeightRange": [
+    0.0,
+    1.0
+  ],
+  "assetExtension": "usdz",
+  "assetResourceName": "angel_posed_01",
+  "assetSHA256": "c274c2a294cf32b4d3dca036d36e854e07bf12a6279a1177d88e5a6148bbaa0f",
+  "blendShapeName": "jawOpenProjection",
+  "descriptorID": "chapter03.angel.jawOpenProjection.v1",
+  "fallbackWeight": 0.0,
+  "poseWeights": {
+    "rest": 0.0,
+    "round": 0.5,
+    "small": 0.33,
+    "teeth": 0.0,
+    "wide": 1.0
+  },
+  "requiresProjectionReady": true,
+  "response": {
+    "assignmentEpsilon": 0.0005,
+    "closingHalfLifeSeconds": 0.05,
+    "crossingHalfLifeSeconds": 0.035,
+    "maximumDeltaTimeSeconds": 0.05,
+    "openingHalfLifeSeconds": 0.03
+  },
+  "schemaVersion": 1
+}

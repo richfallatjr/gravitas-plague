@@ -91,6 +91,9 @@ struct TuringQwenNativeSpeechDecoderDiagnosticContext: Sendable {
     let instanceID: String
     let segmentIndex: Int
     let decodeID: Int
+    let residencyOwnerID: String?
+    let weightStoreID: String?
+    let laneMutableStateID: String?
 }
 
 enum TuringQwenNativeSpeechDecoder {
@@ -491,7 +494,10 @@ enum TuringQwenNativeSpeechDecoder {
                 segmentIndex: diagnosticContext?.segmentIndex,
                 decodeID: diagnosticContext?.decodeID,
                 phase: .speechDecoder,
-                stage: label
+                stage: label,
+                residencyOwnerID: diagnosticContext?.residencyOwnerID,
+                weightStoreID: diagnosticContext?.weightStoreID,
+                laneMutableStateID: diagnosticContext?.laneMutableStateID
             ),
             operation: operation
         )

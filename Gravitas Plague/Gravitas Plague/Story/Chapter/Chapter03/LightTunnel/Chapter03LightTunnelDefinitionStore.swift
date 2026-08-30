@@ -6,6 +6,7 @@ nonisolated struct Chapter03LightTunnelResolvedDefinition: Sendable {
     let musicURL: URL
     let musicDurationSeconds: Double
     let angelPrerecording: Chapter03ResolvedAngelPrerecording?
+    let angelVisemeTrack: Chapter03AngelVisemeTrack?
 }
 
 nonisolated struct Chapter03ResolvedAngelPrerecording: Sendable {
@@ -72,11 +73,17 @@ nonisolated struct Chapter03LightTunnelDefinitionStore {
                 definition.visual.approachDurationSeconds,
             bundle: bundle
         )
+        let angelVisemeTrack = await Chapter03AngelVisemeTrackStore().loadOptional(
+            definition: definition.heavenPortalEmbers,
+            angelPrerecording: resolvedAngel,
+            bundle: bundle
+        )
         return Chapter03LightTunnelResolvedDefinition(
             definition: definition,
             musicURL: musicURL,
             musicDurationSeconds: duration,
-            angelPrerecording: resolvedAngel
+            angelPrerecording: resolvedAngel,
+            angelVisemeTrack: angelVisemeTrack
         )
     }
 

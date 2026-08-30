@@ -1,53 +1,10 @@
 import Foundation
 
-public final class TuringQwenNativeResidentResources: @unchecked Sendable {
-    public let modelID: String
-    public let quantization: String
-    public let modelRoot: URL
-    let config: TuringQwenNativeConfig
-    let weightsStore: TuringQwenNativeWeightsStore
-    let talkerWeights: TuringQwenNativeTalkerResolvedWeights
-    let codePredictorWeights: TuringQwenNativeCodePredictorResolvedWeights
-
-    public init(
-        modelRoot: URL,
-        weightBackend: TuringQwenNativeWeightBackend = .baseCloneRuntime
-    ) throws {
-        self.modelRoot = modelRoot
-        let loadedConfig = try TuringQwenNativeConfig.load(from: modelRoot)
-        try loadedConfig.validateBaseCloneRuntime()
-        try TuringQwenNativeQuantizedLinear(
-            tensorPrefix: "model",
-            backend: weightBackend.kind,
-            groupSize: loadedConfig.quantization?.groupSize ?? 64,
-            bits: loadedConfig.quantization?.bits ?? 4
-        )
-        .preflightOnly()
-        let loadedWeights = try TuringQwenNativeWeightsStore(modelRoot: modelRoot)
-        self.config = loadedConfig
-        self.weightsStore = loadedWeights
-        self.talkerWeights = try TuringQwenNativeTalkerResolvedWeights(
-            config: loadedConfig,
-            weightsStore: loadedWeights
-        )
-        self.codePredictorWeights = try TuringQwenNativeCodePredictorResolvedWeights(
-            config: loadedConfig,
-            weightsStore: loadedWeights
-        )
-        self.modelID = "qwen3-tts-12hz-1.7b-base-4bit"
-        self.quantization = "\(loadedConfig.quantization?.bits ?? 0)bit"
-
-        print("""
-        [TuringQwenNativeResidentResources] loaded
-          modelID: \(modelID)
-          quantization: \(quantization)
-          weightsStore: instanceOwned
-          owner: callerScoped
-          sharedWeights: callerDefined
-        """)
-    }
-}
-
+@available(
+    *,
+    deprecated,
+    message: "Production Turing uses Fresh2 with explicit residency ownership."
+)
 public actor TuringQwenNativeParallelLanePool {
     public let laneCountRequested: Int
     public private(set) var laneCountActive: Int

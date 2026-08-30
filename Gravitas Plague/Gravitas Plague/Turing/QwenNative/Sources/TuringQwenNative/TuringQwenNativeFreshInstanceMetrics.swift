@@ -1,7 +1,7 @@
 import Foundation
 import MLX
 
-public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
+public struct TuringQwenNativeFreshInstanceRunReport: Sendable, Codable {
     public let requestedInstanceCount: Int
     public let actualInstanceCount: Int
     public let totalSegments: Int
@@ -23,6 +23,8 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
     public let endPhysFootprintMB: Double
     public let endResidentSizeMB: Double
     public let fallbackUsed: Bool
+    public let residencyOwnership: TuringQwenNativeResidencyOwnershipReport
+    public let residencyMemory: TuringQwenNativeResidencyRunMetrics
 
     public init(
         requestedInstanceCount: Int,
@@ -42,6 +44,8 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
         crossSegmentRenderDecodeOverlapCount: Int,
         gpuAdmission: TuringQwenNativeGPUAdmissionSnapshot,
         commandBufferMetrics: TuringQwenNativeCommandBufferRunMetrics,
+        residencyOwnership: TuringQwenNativeResidencyOwnershipReport,
+        residencyMemory: TuringQwenNativeResidencyRunMetrics,
         fallbackUsed: Bool
     ) {
         self.requestedInstanceCount = requestedInstanceCount
@@ -64,6 +68,8 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
         self.crossSegmentRenderDecodeOverlapCount = crossSegmentRenderDecodeOverlapCount
         self.gpuAdmission = gpuAdmission
         self.commandBufferMetrics = commandBufferMetrics
+        self.residencyOwnership = residencyOwnership
+        self.residencyMemory = residencyMemory
         let endMemory = TuringQwenNativeProcessMemoryProbe.snapshot()
         self.endPhysFootprintMB = endMemory.physFootprintMB
         self.endResidentSizeMB = endMemory.residentSizeMB
@@ -105,6 +111,12 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
           endPhysFootprintMB: \(String(format: "%.1f", endPhysFootprintMB))
           endResidentSizeMB: \(String(format: "%.1f", endResidentSizeMB))
           fallbackUsed: \(fallbackUsed)
+          residencyMode: \(residencyOwnership.mode.rawValue)
+          uniqueResidentResources: \(residencyOwnership.uniqueResidentResourceCount)
+          uniqueWeightStores: \(residencyOwnership.uniqueWeightStoreCount)
+          uniqueCloneConditionings: \(residencyOwnership.uniqueCloneConditioningCount)
+          laneEngineCount: \(residencyOwnership.laneEngineCount)
+          ownerLoadSeconds: \(String(format: "%.3f", residencyMemory.ownerLoadSeconds))
         """)
     }
 }

@@ -19,6 +19,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         let visual: any MindEyePresentationVisual
         let providerID: String
         let providerRevision: UInt64
+        var isAudible: Bool
         var isPaused: Bool
         var playbackClock: TuringPauseAwarePlaybackClock
         var authoredTrackLease: MindEyeAuthoredFrameTrackLease?
@@ -62,6 +63,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
     private var desiredContext: TuringSpokenPresentationContext?
     private var desiredPlaybackClock: TuringPauseAwarePlaybackClock?
     private var desiredIsPaused = false
+    private var desiredIsAudible = false
     private var pendingRevealRequest: TuringSpokenPresentationRevealRequest?
     private var fillerTrackPreparationTask: Task<Void, Never>?
     private var responsePortraitLoadDecision: MindEyeResponsePortraitLoadDecision = .allowLoad
@@ -309,6 +311,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         desiredContext = nil
         desiredPlaybackClock = nil
         desiredIsPaused = false
+        desiredIsAudible = false
         pendingRevealRequest = nil
         pendingGeneratedContinuity = nil
         preparationTask?.cancel()
@@ -754,6 +757,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         desiredContext = nil
         desiredPlaybackClock = nil
         desiredIsPaused = false
+        desiredIsAudible = false
         if let resources = detachActiveImmediately(
             reason: "replacement.\(identity.mediaIdentity)"
         ) {
@@ -773,6 +777,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             let clock = TuringPauseAwarePlaybackClock(origin: context.clockOrigin)
             desiredPlaybackClock = clock
             desiredIsPaused = false
+            desiredIsAudible = true
             if case .authored(let prerecordingID, _) = context.source {
                 guard applicationState == .active else { break }
                 scheduleAuthoredTrackAcquisition(
@@ -892,12 +897,14 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         active.identity = identity
         active.source = context.source
         active.responseKey = context.responsePresentationKey
+        active.isAudible = true
         active.isPaused = false
         active.playbackClock = clock
         self.active = active
         desiredContext = context
         desiredPlaybackClock = clock
         desiredIsPaused = false
+        desiredIsAudible = true
         pendingRevealRequest = nil
 
         switch context.source {
@@ -945,12 +952,14 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         active.identity = identity
         active.source = context.source
         active.responseKey = context.responsePresentationKey
+        active.isAudible = true
         active.isPaused = false
         active.playbackClock = clock
         self.active = active
         desiredContext = context
         desiredPlaybackClock = clock
         desiredIsPaused = false
+        desiredIsAudible = true
         switch context.source {
         case .generated:
             fillerTrackPreparationTask?.cancel()
@@ -994,9 +1003,11 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             desiredContext = nil
             desiredPlaybackClock = nil
             desiredIsPaused = false
+            desiredIsAudible = false
         }
         if var active, active.identity.key == key {
             active.playbackClock = clock
+            active.isAudible = false
             (active.visual as? any MindEyeGeneratedMouthControlling)?
                 .stopGeneratedMouthPlayback(
                     reason: "generatedSegmentCompleted",
@@ -1070,6 +1081,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             desiredContext = nil
             desiredPlaybackClock = nil
             desiredIsPaused = false
+            desiredIsAudible = false
         }
         guard var active,
               active.identity.key == key,
@@ -1081,6 +1093,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         }
         (active.visual as? any MindEyeAuthoredMouthControlling)?
             .stopAuthoredMouthPlayback(reason: reason, resetToRest: true)
+        active.isAudible = false
         if let lease = active.fillerTrackLease {
             await fillerFrameStore.release(lease, reason: reason)
             active.fillerTrackLease = nil
@@ -1297,6 +1310,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             desiredContext = nil
             desiredPlaybackClock = nil
             desiredIsPaused = false
+            desiredIsAudible = false
             authoredTrackGeneration &+= 1
             authoredTrackTask?.cancel()
             authoredTrackTask = nil
@@ -1341,6 +1355,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             desiredContext = nil
             desiredPlaybackClock = nil
             desiredIsPaused = false
+            desiredIsAudible = false
             authoredTrackGeneration &+= 1
             authoredTrackTask?.cancel()
             authoredTrackTask = nil
@@ -1391,6 +1406,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             active.authoredPRID = nil
         }
         if canReuseCurrentPortrait {
+            active.isAudible = false
             active.isPaused = false
             self.active = active
             print(
@@ -1446,6 +1462,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             origin: context.clockOrigin
         )
         desiredIsPaused = false
+        desiredIsAudible = false
         _ = schedulePreparation(
             characterID: continuity.speakerCharacterID,
             reason: "upcomingGeneratedIdle.\(reason)"
@@ -1511,10 +1528,12 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
                 desiredContext = nil
                 desiredPlaybackClock = nil
                 desiredIsPaused = false
+                desiredIsAudible = false
             }
             if var active,
                active.identity.key.playbackRunID == run.playbackRunID,
                active.identity.flowInstanceID == run.flowInstanceID {
+                active.isAudible = false
                 (active.visual as? any MindEyeAuthoredMouthControlling)?
                     .stopAuthoredMouthPlayback(
                         reason: "fillerStartFailure",
@@ -1663,6 +1682,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
                 visual: prepared.visual,
                 providerID: currentTarget.providerID,
                 providerRevision: currentTarget.revision,
+                isAudible: desiredIsAudible,
                 isPaused: desiredIsPaused,
                 playbackClock: playbackClock,
                 authoredTrackLease: nil,
@@ -1935,6 +1955,25 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             return
         }
 
+        // A pre-audio reveal never owns the one card over media that is
+        // already audible. This check precedes continuity promotion because
+        // promotion also changes the active source and stops its mouth track.
+        // Selecting the new device and starting its compute remain independent;
+        // its portrait can join at actual audio start after this PR completes.
+        if let active, active.isAudible {
+            print(
+                "[MindEyePresentation] pre-audio reveal deferred; audible owner retained " +
+                    "activeRun=\(active.identity.key.playbackRunID) " +
+                    "activeMedia=\(active.identity.mediaIdentity) " +
+                    "requestedRun=\(request.run.playbackRunID) " +
+                    "requestedMedia=\(request.source.mediaIdentity) " +
+                    "requestedSurface=\(request.interactionSurface.rawValue) " +
+                    "deviceSelectionContinues=true computeContinues=true"
+            )
+            await resolveReveal(request, outcome: .audioOnly)
+            return
+        }
+
         if canPromoteGeneratedContinuity(to: previewContext) {
             await promoteGeneratedContinuity(to: previewContext)
             pendingRevealRequest = request
@@ -1978,6 +2017,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             origin: previewContext.clockOrigin
         )
         desiredIsPaused = false
+        desiredIsAudible = false
         let preparation = schedulePreparation(
             characterID: request.speakerCharacterID,
             reason: "preAudioReveal.\(request.key)"
@@ -1996,6 +2036,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             pendingRevealRequest = nil
             desiredContext = nil
             desiredPlaybackClock = nil
+            desiredIsAudible = false
             await resolveReveal(request, outcome: .audioOnly)
             return
         }

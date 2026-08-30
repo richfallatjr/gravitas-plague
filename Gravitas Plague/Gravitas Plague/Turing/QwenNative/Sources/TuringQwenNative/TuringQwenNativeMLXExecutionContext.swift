@@ -21,6 +21,9 @@ public struct TuringQwenNativeMLXExecutionContext: Sendable, Equatable {
     public let decodeID: Int?
     public let phase: TuringQwenNativeMLXPhase
     public let stage: String?
+    public let residencyOwnerID: String?
+    public let weightStoreID: String?
+    public let laneMutableStateID: String?
     public let rowRange: Range<Int>?
     public let talkerPositionRange: Range<Int>?
     public let appMetalInFlightCount: Int
@@ -34,6 +37,9 @@ public struct TuringQwenNativeMLXExecutionContext: Sendable, Equatable {
         decodeID: Int? = nil,
         phase: TuringQwenNativeMLXPhase,
         stage: String? = nil,
+        residencyOwnerID: String? = nil,
+        weightStoreID: String? = nil,
+        laneMutableStateID: String? = nil,
         rowRange: Range<Int>? = nil,
         talkerPositionRange: Range<Int>? = nil,
         appMetalInFlightCount: Int = 0,
@@ -46,6 +52,9 @@ public struct TuringQwenNativeMLXExecutionContext: Sendable, Equatable {
         self.decodeID = decodeID
         self.phase = phase
         self.stage = stage
+        self.residencyOwnerID = residencyOwnerID
+        self.weightStoreID = weightStoreID
+        self.laneMutableStateID = laneMutableStateID
         self.rowRange = rowRange
         self.talkerPositionRange = talkerPositionRange
         self.appMetalInFlightCount = appMetalInFlightCount
@@ -61,6 +70,9 @@ public struct TuringQwenNativeMLXExecutionContext: Sendable, Equatable {
             decodeID: decodeID,
             phase: phase.rawValue,
             stage: stage,
+            residencyOwnerID: residencyOwnerID,
+            weightStoreID: weightStoreID,
+            laneMutableStateID: laneMutableStateID,
             rowRange: rowRange,
             talkerPositionRange: talkerPositionRange,
             appMetalInFlightCount: appMetalInFlightCount,

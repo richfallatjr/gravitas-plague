@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "productionDefault": "independentFresh2",
+  "fixedControls": {
+    "admissionMode": "currentOverlap",
+    "commandBufferProfile": "operations40Megabytes32",
+    "mindEyeEnabled": true,
+    "runtimePhonemeLipSyncEnabled": true
+  },
+  "rows": [
+    {
+      "mode": "independentFresh2",
+      "laneCount": 2,
+      "sharedResources": false,
+      "shippingEligible": true
+    },
+    {
+      "mode": "sharedImmutableFresh2",
+      "laneCount": 2,
+      "sharedResources": true,
+      "shippingEligible": true
+    },
+    {
+      "mode": "singleLaneSharedControl",
+      "laneCount": 1,
+      "sharedResources": true,
+      "shippingEligible": false
+    }
+  ],
+  "gates": {
+    "minimumAvailableProcessMemoryMB": 1024,
+    "minimumAbsoluteWarmPoolSavingsMB": 256,
+    "maximumRequiredWarmPoolSavingsMB": 512,
+    "secondInstanceSavingsFraction": 0.6,
+    "maximumRepeatedRegressionFraction": 0.05,
+    "postUnloadToleranceFraction": 0.1
+  }
+}

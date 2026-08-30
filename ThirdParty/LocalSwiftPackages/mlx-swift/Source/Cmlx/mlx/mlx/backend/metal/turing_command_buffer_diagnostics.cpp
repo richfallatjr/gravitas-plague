@@ -1,4 +1,5 @@
 #include "mlx/backend/metal/turing_command_buffer_diagnostics.h"
+#include "mlx/backend/metal/turing_metal_recovery.h"
 
 #include <algorithm>
 #include <chrono>
@@ -245,6 +246,7 @@ void CommandBufferDiagnostics::prepare_submission(
   record.submit_uptime_nanoseconds = uptime_nanoseconds();
   record.mlx_buffers_in_flight_at_submit =
       in_flight_count_.fetch_add(1, std::memory_order_acq_rel) + 1;
+  RecoveryController::shared().command_buffer_submitted();
   const auto context_app_count = state->last_context.app_metal_in_flight_count;
   const auto context_mind_eye_count =
       state->last_context.mind_eye_compositor_in_flight_count;
@@ -337,6 +339,7 @@ void CommandBufferDiagnostics::complete_noexcept(
     publish_minimal_internal_failure_noexcept(state->command_buffer_id);
   }
   in_flight_count_.fetch_sub(1, std::memory_order_acq_rel);
+  RecoveryController::shared().command_buffer_completed();
 }
 
 void CommandBufferDiagnostics::append_record_noexcept(
@@ -375,8 +378,8 @@ void CommandBufferDiagnostics::publish_failure_noexcept(
       std::lock_guard lock(failure_mutex_);
       last_failure_ = record;
       has_failure_ = true;
+      poisoned_.store(true, std::memory_order_release);
     }
-    poisoned_.store(true, std::memory_order_release);
     persist_failure_noexcept(record);
     append_record_noexcept(record);
   } catch (...) {
@@ -518,6 +521,21 @@ uint64_t CommandBufferDiagnostics::failure_epoch() const noexcept {
 
 bool CommandBufferDiagnostics::is_poisoned() const noexcept {
   return poisoned_.load(std::memory_order_acquire);
+}
+
+uint64_t CommandBufferDiagnostics::acknowledge_failure_for_recovery() noexcept {
+  std::lock_guard lock(failure_mutex_);
+  if (!has_failure_) {
+    return 0;
+  }
+  const uint64_t acknowledged_epoch = last_failure_.failure_epoch;
+  // Keep the record bytes, monotonic failure epoch, bounded ring, aggregate,
+  // and persisted JSON intact for postmortem analysis. Only remove the active
+  // throw latch after the failed residency pool has been fully unloaded so a
+  // genuinely fresh pool can submit work in the same process.
+  has_failure_ = false;
+  poisoned_.store(false, std::memory_order_release);
+  return acknowledged_epoch;
 }
 
 bool CommandBufferDiagnostics::copy_last_failure(

@@ -86,6 +86,25 @@ public enum TuringQwenNativeDiagnostics {
             "label=\(label, privacy: .public) runID=\(runID ?? "none", privacy: .public) segmentIndex=\(segmentIndex ?? -1, privacy: .public) footprintMB=\(process.physFootprintMB, privacy: .public) mlxActiveMB=\(mlx.activeMemoryBytes / 1_048_576, privacy: .public)"
         )
     }
+
+    public static func recordResidencyEvent(
+        _ label: String,
+        ownerID: UUID? = nil,
+        runID: String? = nil,
+        instanceID: String? = nil,
+        details: [String: String] = [:]
+    ) {
+        var residencyDetails = details
+        if let ownerID {
+            residencyDetails["residencyOwnerID"] = ownerID.uuidString
+        }
+        recordBreadcrumb(
+            label,
+            runID: runID,
+            instanceID: instanceID,
+            details: residencyDetails
+        )
+    }
 }
 
 private struct TuringQwenNativeCrashBreadcrumb: Codable, Sendable {

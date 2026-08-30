@@ -47,7 +47,7 @@ struct TuringQwenNativeWeightResolver: @unchecked Sendable {
         _ key: String,
         rows: [Int]
     ) throws -> MLXArray {
-        try store.requireRows(key, rows: rows)
+        try store.makeLaneLocalRows(key, rows: rows)
     }
 
     private func quantizedCompanionKey(

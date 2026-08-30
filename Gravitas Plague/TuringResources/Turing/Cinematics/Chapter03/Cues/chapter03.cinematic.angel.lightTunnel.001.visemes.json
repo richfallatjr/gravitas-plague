@@ -1,0 +1,3679 @@
+{
+  "schemaVersion": 1,
+  "compilerVersion": "chapter03-angel-visemes/1.0.0",
+  "trackID": "chapter03.cinematic.angel.lightTunnel.001.visemes",
+  "sourceCinematicID": "chapter03.cinematic.angel.lightTunnel.001",
+  "descriptorResourcePath": "Turing/Cinematics/Chapter03/pr_angel_01.json",
+  "descriptorSHA256": "7d74d9234ed505aadbad5bc106eb3fd147e4fda06f46cd76ea9064efa6121de4",
+  "audioResourcePath": "Turing/Audio/chapter03/pr-angel-01.mp3",
+  "audioSHA256": "bf29723c20efc7e89a5824e7c919e1e64f18e5cd9f69a87b19a04dc06387a3c0",
+  "timeline": {
+    "sampleRate": 48000,
+    "sampleCount": 6994565,
+    "durationSeconds": 145.72010416666666,
+    "framesPerSecond": 60,
+    "samplesPerNominalFrame": 800,
+    "frameCount": 8744
+  },
+  "requiredPoseFamilies": [
+    "rest",
+    "small",
+    "wide",
+    "round",
+    "teeth"
+  ],
+  "densityMultipliers": {
+    "rest": 1.0,
+    "small": 1.33,
+    "wide": 2.0,
+    "round": 1.5,
+    "teeth": 1.75
+  },
+  "alignment": {
+    "mode": "pocketsphinxAllPhone",
+    "engine": "pocketsphinx",
+    "engineVersion": "5.1.1",
+    "acousticModelSHA256": "88b15292ae279697836e8510e405beacc00a216be8e5733be40cf5429b4faa55",
+    "phoneLanguageModelSHA256": "c57e0fa4191b096b1279cfe3a77927f52568fdecfc6624ddb5cec9527c763a54",
+    "transcriptSHA256": null,
+    "VADModelSHA256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+    "phonePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c"
+  },
+  "runsSHA256": "6a48f84827b2842fb3199c1bf4965113b3a65f8c55eedd7c0b23772c983b4a8a",
+  "runs": [
+    {
+      "startFrame": 0,
+      "endFrameExclusive": 6,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 6,
+      "endFrameExclusive": 11,
+      "pose": "round"
+    },
+    {
+      "startFrame": 11,
+      "endFrameExclusive": 30,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 30,
+      "endFrameExclusive": 50,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 50,
+      "endFrameExclusive": 78,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 78,
+      "endFrameExclusive": 81,
+      "pose": "small"
+    },
+    {
+      "startFrame": 81,
+      "endFrameExclusive": 91,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 91,
+      "endFrameExclusive": 98,
+      "pose": "small"
+    },
+    {
+      "startFrame": 98,
+      "endFrameExclusive": 144,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 144,
+      "endFrameExclusive": 167,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 167,
+      "endFrameExclusive": 177,
+      "pose": "small"
+    },
+    {
+      "startFrame": 177,
+      "endFrameExclusive": 184,
+      "pose": "round"
+    },
+    {
+      "startFrame": 184,
+      "endFrameExclusive": 193,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 193,
+      "endFrameExclusive": 209,
+      "pose": "small"
+    },
+    {
+      "startFrame": 209,
+      "endFrameExclusive": 229,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 229,
+      "endFrameExclusive": 239,
+      "pose": "small"
+    },
+    {
+      "startFrame": 239,
+      "endFrameExclusive": 282,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 282,
+      "endFrameExclusive": 284,
+      "pose": "small"
+    },
+    {
+      "startFrame": 284,
+      "endFrameExclusive": 290,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 290,
+      "endFrameExclusive": 295,
+      "pose": "small"
+    },
+    {
+      "startFrame": 295,
+      "endFrameExclusive": 299,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 299,
+      "endFrameExclusive": 304,
+      "pose": "round"
+    },
+    {
+      "startFrame": 304,
+      "endFrameExclusive": 311,
+      "pose": "small"
+    },
+    {
+      "startFrame": 311,
+      "endFrameExclusive": 318,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 318,
+      "endFrameExclusive": 325,
+      "pose": "small"
+    },
+    {
+      "startFrame": 325,
+      "endFrameExclusive": 334,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 334,
+      "endFrameExclusive": 345,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 345,
+      "endFrameExclusive": 365,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 365,
+      "endFrameExclusive": 375,
+      "pose": "small"
+    },
+    {
+      "startFrame": 375,
+      "endFrameExclusive": 385,
+      "pose": "round"
+    },
+    {
+      "startFrame": 385,
+      "endFrameExclusive": 395,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 395,
+      "endFrameExclusive": 414,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 414,
+      "endFrameExclusive": 445,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 445,
+      "endFrameExclusive": 453,
+      "pose": "small"
+    },
+    {
+      "startFrame": 453,
+      "endFrameExclusive": 459,
+      "pose": "round"
+    },
+    {
+      "startFrame": 459,
+      "endFrameExclusive": 464,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 464,
+      "endFrameExclusive": 493,
+      "pose": "small"
+    },
+    {
+      "startFrame": 493,
+      "endFrameExclusive": 499,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 499,
+      "endFrameExclusive": 511,
+      "pose": "round"
+    },
+    {
+      "startFrame": 511,
+      "endFrameExclusive": 513,
+      "pose": "small"
+    },
+    {
+      "startFrame": 513,
+      "endFrameExclusive": 527,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 527,
+      "endFrameExclusive": 536,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 536,
+      "endFrameExclusive": 539,
+      "pose": "small"
+    },
+    {
+      "startFrame": 539,
+      "endFrameExclusive": 546,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 546,
+      "endFrameExclusive": 566,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 566,
+      "endFrameExclusive": 586,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 586,
+      "endFrameExclusive": 591,
+      "pose": "small"
+    },
+    {
+      "startFrame": 591,
+      "endFrameExclusive": 599,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 599,
+      "endFrameExclusive": 607,
+      "pose": "small"
+    },
+    {
+      "startFrame": 607,
+      "endFrameExclusive": 636,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 636,
+      "endFrameExclusive": 643,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 643,
+      "endFrameExclusive": 683,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 683,
+      "endFrameExclusive": 686,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 686,
+      "endFrameExclusive": 699,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 699,
+      "endFrameExclusive": 703,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 703,
+      "endFrameExclusive": 717,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 717,
+      "endFrameExclusive": 725,
+      "pose": "small"
+    },
+    {
+      "startFrame": 725,
+      "endFrameExclusive": 735,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 735,
+      "endFrameExclusive": 744,
+      "pose": "small"
+    },
+    {
+      "startFrame": 744,
+      "endFrameExclusive": 748,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 748,
+      "endFrameExclusive": 762,
+      "pose": "small"
+    },
+    {
+      "startFrame": 762,
+      "endFrameExclusive": 769,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 769,
+      "endFrameExclusive": 781,
+      "pose": "small"
+    },
+    {
+      "startFrame": 781,
+      "endFrameExclusive": 792,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 792,
+      "endFrameExclusive": 808,
+      "pose": "small"
+    },
+    {
+      "startFrame": 808,
+      "endFrameExclusive": 819,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 819,
+      "endFrameExclusive": 830,
+      "pose": "small"
+    },
+    {
+      "startFrame": 830,
+      "endFrameExclusive": 868,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 868,
+      "endFrameExclusive": 870,
+      "pose": "small"
+    },
+    {
+      "startFrame": 870,
+      "endFrameExclusive": 879,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 879,
+      "endFrameExclusive": 889,
+      "pose": "round"
+    },
+    {
+      "startFrame": 889,
+      "endFrameExclusive": 895,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 895,
+      "endFrameExclusive": 902,
+      "pose": "small"
+    },
+    {
+      "startFrame": 902,
+      "endFrameExclusive": 947,
+      "pose": "round"
+    },
+    {
+      "startFrame": 947,
+      "endFrameExclusive": 964,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 964,
+      "endFrameExclusive": 989,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 989,
+      "endFrameExclusive": 996,
+      "pose": "small"
+    },
+    {
+      "startFrame": 996,
+      "endFrameExclusive": 1019,
+      "pose": "round"
+    },
+    {
+      "startFrame": 1019,
+      "endFrameExclusive": 1031,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1031,
+      "endFrameExclusive": 1037,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1037,
+      "endFrameExclusive": 1042,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1042,
+      "endFrameExclusive": 1051,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1051,
+      "endFrameExclusive": 1072,
+      "pose": "round"
+    },
+    {
+      "startFrame": 1072,
+      "endFrameExclusive": 1081,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1081,
+      "endFrameExclusive": 1100,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 1100,
+      "endFrameExclusive": 1137,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 1137,
+      "endFrameExclusive": 1139,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1139,
+      "endFrameExclusive": 1141,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1141,
+      "endFrameExclusive": 1153,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 1153,
+      "endFrameExclusive": 1168,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1168,
+      "endFrameExclusive": 1177,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 1177,
+      "endFrameExclusive": 1186,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1186,
+      "endFrameExclusive": 1204,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1204,
+      "endFrameExclusive": 1213,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 1213,
+      "endFrameExclusive": 1221,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1221,
+      "endFrameExclusive": 1228,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 1228,
+      "endFrameExclusive": 1237,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1237,
+      "endFrameExclusive": 1248,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1248,
+      "endFrameExclusive": 1252,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 1252,
+      "endFrameExclusive": 1256,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1256,
+      "endFrameExclusive": 1282,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1282,
+      "endFrameExclusive": 1285,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1285,
+      "endFrameExclusive": 1296,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1296,
+      "endFrameExclusive": 1300,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1300,
+      "endFrameExclusive": 1312,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1312,
+      "endFrameExclusive": 1315,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1315,
+      "endFrameExclusive": 1321,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1321,
+      "endFrameExclusive": 1329,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1329,
+      "endFrameExclusive": 1346,
+      "pose": "round"
+    },
+    {
+      "startFrame": 1346,
+      "endFrameExclusive": 1383,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 1383,
+      "endFrameExclusive": 1387,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1387,
+      "endFrameExclusive": 1398,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1398,
+      "endFrameExclusive": 1402,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1402,
+      "endFrameExclusive": 1405,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1405,
+      "endFrameExclusive": 1412,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 1412,
+      "endFrameExclusive": 1417,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1417,
+      "endFrameExclusive": 1425,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1425,
+      "endFrameExclusive": 1432,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 1432,
+      "endFrameExclusive": 1446,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1446,
+      "endFrameExclusive": 1521,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 1521,
+      "endFrameExclusive": 1529,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1529,
+      "endFrameExclusive": 1534,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1534,
+      "endFrameExclusive": 1541,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1541,
+      "endFrameExclusive": 1550,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1550,
+      "endFrameExclusive": 1553,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1553,
+      "endFrameExclusive": 1561,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1561,
+      "endFrameExclusive": 1576,
+      "pose": "round"
+    },
+    {
+      "startFrame": 1576,
+      "endFrameExclusive": 1585,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1585,
+      "endFrameExclusive": 1598,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1598,
+      "endFrameExclusive": 1643,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 1643,
+      "endFrameExclusive": 1657,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1657,
+      "endFrameExclusive": 1674,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1674,
+      "endFrameExclusive": 1706,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 1706,
+      "endFrameExclusive": 1712,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1712,
+      "endFrameExclusive": 1723,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1723,
+      "endFrameExclusive": 1735,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1735,
+      "endFrameExclusive": 1744,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 1744,
+      "endFrameExclusive": 1749,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1749,
+      "endFrameExclusive": 1760,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 1760,
+      "endFrameExclusive": 1780,
+      "pose": "round"
+    },
+    {
+      "startFrame": 1780,
+      "endFrameExclusive": 1785,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1785,
+      "endFrameExclusive": 1801,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 1801,
+      "endFrameExclusive": 1867,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 1867,
+      "endFrameExclusive": 1870,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1870,
+      "endFrameExclusive": 1875,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1875,
+      "endFrameExclusive": 1891,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1891,
+      "endFrameExclusive": 1897,
+      "pose": "round"
+    },
+    {
+      "startFrame": 1897,
+      "endFrameExclusive": 1916,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 1916,
+      "endFrameExclusive": 1921,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1921,
+      "endFrameExclusive": 1941,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1941,
+      "endFrameExclusive": 1946,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1946,
+      "endFrameExclusive": 1952,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1952,
+      "endFrameExclusive": 1956,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 1956,
+      "endFrameExclusive": 1978,
+      "pose": "small"
+    },
+    {
+      "startFrame": 1978,
+      "endFrameExclusive": 1993,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 1993,
+      "endFrameExclusive": 2026,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 2026,
+      "endFrameExclusive": 2029,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2029,
+      "endFrameExclusive": 2035,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2035,
+      "endFrameExclusive": 2044,
+      "pose": "round"
+    },
+    {
+      "startFrame": 2044,
+      "endFrameExclusive": 2049,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2049,
+      "endFrameExclusive": 2061,
+      "pose": "round"
+    },
+    {
+      "startFrame": 2061,
+      "endFrameExclusive": 2068,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2068,
+      "endFrameExclusive": 2080,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2080,
+      "endFrameExclusive": 2089,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2089,
+      "endFrameExclusive": 2102,
+      "pose": "round"
+    },
+    {
+      "startFrame": 2102,
+      "endFrameExclusive": 2110,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2110,
+      "endFrameExclusive": 2146,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 2146,
+      "endFrameExclusive": 2152,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 2152,
+      "endFrameExclusive": 2158,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2158,
+      "endFrameExclusive": 2175,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2175,
+      "endFrameExclusive": 2183,
+      "pose": "round"
+    },
+    {
+      "startFrame": 2183,
+      "endFrameExclusive": 2187,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2187,
+      "endFrameExclusive": 2197,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 2197,
+      "endFrameExclusive": 2202,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2202,
+      "endFrameExclusive": 2216,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 2216,
+      "endFrameExclusive": 2236,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2236,
+      "endFrameExclusive": 2242,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2242,
+      "endFrameExclusive": 2252,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 2252,
+      "endFrameExclusive": 2284,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 2284,
+      "endFrameExclusive": 2287,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2287,
+      "endFrameExclusive": 2293,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2293,
+      "endFrameExclusive": 2306,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 2306,
+      "endFrameExclusive": 2316,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2316,
+      "endFrameExclusive": 2328,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 2328,
+      "endFrameExclusive": 2338,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2338,
+      "endFrameExclusive": 2344,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2344,
+      "endFrameExclusive": 2350,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2350,
+      "endFrameExclusive": 2364,
+      "pose": "round"
+    },
+    {
+      "startFrame": 2364,
+      "endFrameExclusive": 2375,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2375,
+      "endFrameExclusive": 2397,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2397,
+      "endFrameExclusive": 2444,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 2444,
+      "endFrameExclusive": 2451,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2451,
+      "endFrameExclusive": 2461,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2461,
+      "endFrameExclusive": 2471,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2471,
+      "endFrameExclusive": 2477,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2477,
+      "endFrameExclusive": 2492,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2492,
+      "endFrameExclusive": 2512,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 2512,
+      "endFrameExclusive": 2514,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2514,
+      "endFrameExclusive": 2525,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 2525,
+      "endFrameExclusive": 2537,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2537,
+      "endFrameExclusive": 2543,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2543,
+      "endFrameExclusive": 2565,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 2565,
+      "endFrameExclusive": 2601,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 2601,
+      "endFrameExclusive": 2606,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2606,
+      "endFrameExclusive": 2616,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2616,
+      "endFrameExclusive": 2619,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2619,
+      "endFrameExclusive": 2624,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2624,
+      "endFrameExclusive": 2630,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2630,
+      "endFrameExclusive": 2640,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2640,
+      "endFrameExclusive": 2647,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 2647,
+      "endFrameExclusive": 2654,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2654,
+      "endFrameExclusive": 2666,
+      "pose": "round"
+    },
+    {
+      "startFrame": 2666,
+      "endFrameExclusive": 2671,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2671,
+      "endFrameExclusive": 2678,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2678,
+      "endFrameExclusive": 2688,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2688,
+      "endFrameExclusive": 2705,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 2705,
+      "endFrameExclusive": 2710,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2710,
+      "endFrameExclusive": 2719,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2719,
+      "endFrameExclusive": 2726,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2726,
+      "endFrameExclusive": 2729,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2729,
+      "endFrameExclusive": 2734,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2734,
+      "endFrameExclusive": 2737,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2737,
+      "endFrameExclusive": 2749,
+      "pose": "round"
+    },
+    {
+      "startFrame": 2749,
+      "endFrameExclusive": 2753,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2753,
+      "endFrameExclusive": 2772,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2772,
+      "endFrameExclusive": 2775,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2775,
+      "endFrameExclusive": 2816,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 2816,
+      "endFrameExclusive": 2828,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 2828,
+      "endFrameExclusive": 2839,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2839,
+      "endFrameExclusive": 2850,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2850,
+      "endFrameExclusive": 2855,
+      "pose": "round"
+    },
+    {
+      "startFrame": 2855,
+      "endFrameExclusive": 2882,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2882,
+      "endFrameExclusive": 2930,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 2930,
+      "endFrameExclusive": 2935,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2935,
+      "endFrameExclusive": 2939,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 2939,
+      "endFrameExclusive": 2944,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2944,
+      "endFrameExclusive": 2956,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2956,
+      "endFrameExclusive": 2960,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2960,
+      "endFrameExclusive": 2968,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 2968,
+      "endFrameExclusive": 2984,
+      "pose": "small"
+    },
+    {
+      "startFrame": 2984,
+      "endFrameExclusive": 2997,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 2997,
+      "endFrameExclusive": 3012,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 3012,
+      "endFrameExclusive": 3017,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3017,
+      "endFrameExclusive": 3043,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 3043,
+      "endFrameExclusive": 3047,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3047,
+      "endFrameExclusive": 3055,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 3055,
+      "endFrameExclusive": 3060,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 3060,
+      "endFrameExclusive": 3064,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 3064,
+      "endFrameExclusive": 3072,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3072,
+      "endFrameExclusive": 3075,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3075,
+      "endFrameExclusive": 3085,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3085,
+      "endFrameExclusive": 3090,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3090,
+      "endFrameExclusive": 3101,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3101,
+      "endFrameExclusive": 3116,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3116,
+      "endFrameExclusive": 3120,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3120,
+      "endFrameExclusive": 3132,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3132,
+      "endFrameExclusive": 3135,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3135,
+      "endFrameExclusive": 3142,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3142,
+      "endFrameExclusive": 3153,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3153,
+      "endFrameExclusive": 3170,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3170,
+      "endFrameExclusive": 3205,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 3205,
+      "endFrameExclusive": 3209,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3209,
+      "endFrameExclusive": 3218,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3218,
+      "endFrameExclusive": 3221,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3221,
+      "endFrameExclusive": 3228,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3228,
+      "endFrameExclusive": 3232,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3232,
+      "endFrameExclusive": 3242,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3242,
+      "endFrameExclusive": 3257,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3257,
+      "endFrameExclusive": 3274,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3274,
+      "endFrameExclusive": 3283,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3283,
+      "endFrameExclusive": 3333,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 3333,
+      "endFrameExclusive": 3335,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3335,
+      "endFrameExclusive": 3342,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3342,
+      "endFrameExclusive": 3352,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3352,
+      "endFrameExclusive": 3366,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3366,
+      "endFrameExclusive": 3368,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3368,
+      "endFrameExclusive": 3376,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 3376,
+      "endFrameExclusive": 3380,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3380,
+      "endFrameExclusive": 3388,
+      "pose": "round"
+    },
+    {
+      "startFrame": 3388,
+      "endFrameExclusive": 3397,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3397,
+      "endFrameExclusive": 3408,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3408,
+      "endFrameExclusive": 3413,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3413,
+      "endFrameExclusive": 3415,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3415,
+      "endFrameExclusive": 3424,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 3424,
+      "endFrameExclusive": 3428,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3428,
+      "endFrameExclusive": 3430,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3430,
+      "endFrameExclusive": 3441,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 3441,
+      "endFrameExclusive": 3446,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3446,
+      "endFrameExclusive": 3460,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3460,
+      "endFrameExclusive": 3465,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3465,
+      "endFrameExclusive": 3471,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 3471,
+      "endFrameExclusive": 3480,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3480,
+      "endFrameExclusive": 3491,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 3491,
+      "endFrameExclusive": 3503,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3503,
+      "endFrameExclusive": 3520,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 3520,
+      "endFrameExclusive": 3552,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 3552,
+      "endFrameExclusive": 3557,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3557,
+      "endFrameExclusive": 3562,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3562,
+      "endFrameExclusive": 3570,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3570,
+      "endFrameExclusive": 3576,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3576,
+      "endFrameExclusive": 3581,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 3581,
+      "endFrameExclusive": 3584,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3584,
+      "endFrameExclusive": 3590,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3590,
+      "endFrameExclusive": 3603,
+      "pose": "round"
+    },
+    {
+      "startFrame": 3603,
+      "endFrameExclusive": 3613,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3613,
+      "endFrameExclusive": 3616,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3616,
+      "endFrameExclusive": 3620,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3620,
+      "endFrameExclusive": 3629,
+      "pose": "round"
+    },
+    {
+      "startFrame": 3629,
+      "endFrameExclusive": 3637,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3637,
+      "endFrameExclusive": 3643,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3643,
+      "endFrameExclusive": 3671,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3671,
+      "endFrameExclusive": 3710,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 3710,
+      "endFrameExclusive": 3719,
+      "pose": "round"
+    },
+    {
+      "startFrame": 3719,
+      "endFrameExclusive": 3724,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3724,
+      "endFrameExclusive": 3732,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 3732,
+      "endFrameExclusive": 3736,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3736,
+      "endFrameExclusive": 3758,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3758,
+      "endFrameExclusive": 3763,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3763,
+      "endFrameExclusive": 3775,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 3775,
+      "endFrameExclusive": 3781,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3781,
+      "endFrameExclusive": 3789,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3789,
+      "endFrameExclusive": 3797,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3797,
+      "endFrameExclusive": 3808,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3808,
+      "endFrameExclusive": 3817,
+      "pose": "round"
+    },
+    {
+      "startFrame": 3817,
+      "endFrameExclusive": 3823,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3823,
+      "endFrameExclusive": 3827,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3827,
+      "endFrameExclusive": 3841,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3841,
+      "endFrameExclusive": 3857,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 3857,
+      "endFrameExclusive": 3860,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3860,
+      "endFrameExclusive": 3870,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3870,
+      "endFrameExclusive": 3888,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3888,
+      "endFrameExclusive": 3898,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3898,
+      "endFrameExclusive": 3917,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3917,
+      "endFrameExclusive": 3956,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 3956,
+      "endFrameExclusive": 3961,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3961,
+      "endFrameExclusive": 3970,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 3970,
+      "endFrameExclusive": 3985,
+      "pose": "small"
+    },
+    {
+      "startFrame": 3985,
+      "endFrameExclusive": 4009,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4009,
+      "endFrameExclusive": 4021,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4021,
+      "endFrameExclusive": 4053,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 4053,
+      "endFrameExclusive": 4054,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4054,
+      "endFrameExclusive": 4077,
+      "pose": "round"
+    },
+    {
+      "startFrame": 4077,
+      "endFrameExclusive": 4082,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4082,
+      "endFrameExclusive": 4127,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 4127,
+      "endFrameExclusive": 4135,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4135,
+      "endFrameExclusive": 4141,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4141,
+      "endFrameExclusive": 4147,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4147,
+      "endFrameExclusive": 4159,
+      "pose": "round"
+    },
+    {
+      "startFrame": 4159,
+      "endFrameExclusive": 4166,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4166,
+      "endFrameExclusive": 4171,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4171,
+      "endFrameExclusive": 4178,
+      "pose": "round"
+    },
+    {
+      "startFrame": 4178,
+      "endFrameExclusive": 4186,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 4186,
+      "endFrameExclusive": 4190,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4190,
+      "endFrameExclusive": 4209,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4209,
+      "endFrameExclusive": 4218,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4218,
+      "endFrameExclusive": 4255,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 4255,
+      "endFrameExclusive": 4262,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4262,
+      "endFrameExclusive": 4267,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4267,
+      "endFrameExclusive": 4282,
+      "pose": "round"
+    },
+    {
+      "startFrame": 4282,
+      "endFrameExclusive": 4288,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4288,
+      "endFrameExclusive": 4292,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4292,
+      "endFrameExclusive": 4296,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4296,
+      "endFrameExclusive": 4300,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4300,
+      "endFrameExclusive": 4309,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4309,
+      "endFrameExclusive": 4313,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4313,
+      "endFrameExclusive": 4329,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4329,
+      "endFrameExclusive": 4332,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4332,
+      "endFrameExclusive": 4341,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4341,
+      "endFrameExclusive": 4345,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4345,
+      "endFrameExclusive": 4352,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 4352,
+      "endFrameExclusive": 4385,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4385,
+      "endFrameExclusive": 4400,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4400,
+      "endFrameExclusive": 4422,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4422,
+      "endFrameExclusive": 4456,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 4456,
+      "endFrameExclusive": 4462,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4462,
+      "endFrameExclusive": 4483,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 4483,
+      "endFrameExclusive": 4492,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4492,
+      "endFrameExclusive": 4497,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4497,
+      "endFrameExclusive": 4507,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 4507,
+      "endFrameExclusive": 4520,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4520,
+      "endFrameExclusive": 4536,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4536,
+      "endFrameExclusive": 4546,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 4546,
+      "endFrameExclusive": 4552,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4552,
+      "endFrameExclusive": 4564,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 4564,
+      "endFrameExclusive": 4579,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 4579,
+      "endFrameExclusive": 4583,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 4583,
+      "endFrameExclusive": 4614,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4614,
+      "endFrameExclusive": 4629,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 4629,
+      "endFrameExclusive": 4632,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4632,
+      "endFrameExclusive": 4653,
+      "pose": "round"
+    },
+    {
+      "startFrame": 4653,
+      "endFrameExclusive": 4658,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4658,
+      "endFrameExclusive": 4663,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4663,
+      "endFrameExclusive": 4667,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4667,
+      "endFrameExclusive": 4679,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4679,
+      "endFrameExclusive": 4709,
+      "pose": "round"
+    },
+    {
+      "startFrame": 4709,
+      "endFrameExclusive": 4738,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 4738,
+      "endFrameExclusive": 4741,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4741,
+      "endFrameExclusive": 4747,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4747,
+      "endFrameExclusive": 4753,
+      "pose": "round"
+    },
+    {
+      "startFrame": 4753,
+      "endFrameExclusive": 4763,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4763,
+      "endFrameExclusive": 4777,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4777,
+      "endFrameExclusive": 4793,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4793,
+      "endFrameExclusive": 4829,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 4829,
+      "endFrameExclusive": 4833,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4833,
+      "endFrameExclusive": 4838,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 4838,
+      "endFrameExclusive": 4847,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4847,
+      "endFrameExclusive": 4850,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4850,
+      "endFrameExclusive": 4853,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4853,
+      "endFrameExclusive": 4861,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4861,
+      "endFrameExclusive": 4866,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4866,
+      "endFrameExclusive": 4873,
+      "pose": "round"
+    },
+    {
+      "startFrame": 4873,
+      "endFrameExclusive": 4887,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 4887,
+      "endFrameExclusive": 4911,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 4911,
+      "endFrameExclusive": 4922,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 4922,
+      "endFrameExclusive": 4925,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4925,
+      "endFrameExclusive": 4928,
+      "pose": "small"
+    },
+    {
+      "startFrame": 4928,
+      "endFrameExclusive": 4948,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 4948,
+      "endFrameExclusive": 4967,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 4967,
+      "endFrameExclusive": 4996,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 4996,
+      "endFrameExclusive": 5003,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5003,
+      "endFrameExclusive": 5009,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5009,
+      "endFrameExclusive": 5020,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5020,
+      "endFrameExclusive": 5027,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 5027,
+      "endFrameExclusive": 5041,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 5041,
+      "endFrameExclusive": 5050,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5050,
+      "endFrameExclusive": 5095,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 5095,
+      "endFrameExclusive": 5098,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5098,
+      "endFrameExclusive": 5101,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5101,
+      "endFrameExclusive": 5108,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5108,
+      "endFrameExclusive": 5117,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5117,
+      "endFrameExclusive": 5120,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5120,
+      "endFrameExclusive": 5129,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5129,
+      "endFrameExclusive": 5137,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5137,
+      "endFrameExclusive": 5151,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5151,
+      "endFrameExclusive": 5164,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 5164,
+      "endFrameExclusive": 5215,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 5215,
+      "endFrameExclusive": 5221,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5221,
+      "endFrameExclusive": 5227,
+      "pose": "round"
+    },
+    {
+      "startFrame": 5227,
+      "endFrameExclusive": 5236,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5236,
+      "endFrameExclusive": 5241,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5241,
+      "endFrameExclusive": 5248,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 5248,
+      "endFrameExclusive": 5253,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 5253,
+      "endFrameExclusive": 5260,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5260,
+      "endFrameExclusive": 5267,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5267,
+      "endFrameExclusive": 5271,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5271,
+      "endFrameExclusive": 5286,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5286,
+      "endFrameExclusive": 5291,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 5291,
+      "endFrameExclusive": 5309,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5309,
+      "endFrameExclusive": 5356,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 5356,
+      "endFrameExclusive": 5371,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5371,
+      "endFrameExclusive": 5384,
+      "pose": "round"
+    },
+    {
+      "startFrame": 5384,
+      "endFrameExclusive": 5392,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5392,
+      "endFrameExclusive": 5416,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5416,
+      "endFrameExclusive": 5422,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5422,
+      "endFrameExclusive": 5476,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 5476,
+      "endFrameExclusive": 5485,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5485,
+      "endFrameExclusive": 5488,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5488,
+      "endFrameExclusive": 5493,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5493,
+      "endFrameExclusive": 5507,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 5507,
+      "endFrameExclusive": 5516,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5516,
+      "endFrameExclusive": 5523,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5523,
+      "endFrameExclusive": 5526,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5526,
+      "endFrameExclusive": 5536,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 5536,
+      "endFrameExclusive": 5550,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5550,
+      "endFrameExclusive": 5573,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 5573,
+      "endFrameExclusive": 5616,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 5616,
+      "endFrameExclusive": 5620,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5620,
+      "endFrameExclusive": 5630,
+      "pose": "round"
+    },
+    {
+      "startFrame": 5630,
+      "endFrameExclusive": 5636,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5636,
+      "endFrameExclusive": 5641,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5641,
+      "endFrameExclusive": 5644,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5644,
+      "endFrameExclusive": 5649,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5649,
+      "endFrameExclusive": 5657,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 5657,
+      "endFrameExclusive": 5671,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5671,
+      "endFrameExclusive": 5675,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 5675,
+      "endFrameExclusive": 5693,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5693,
+      "endFrameExclusive": 5740,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 5740,
+      "endFrameExclusive": 5752,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5752,
+      "endFrameExclusive": 5757,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5757,
+      "endFrameExclusive": 5777,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5777,
+      "endFrameExclusive": 5790,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5790,
+      "endFrameExclusive": 5851,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 5851,
+      "endFrameExclusive": 5855,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5855,
+      "endFrameExclusive": 5863,
+      "pose": "round"
+    },
+    {
+      "startFrame": 5863,
+      "endFrameExclusive": 5875,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5875,
+      "endFrameExclusive": 5887,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5887,
+      "endFrameExclusive": 5902,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5902,
+      "endFrameExclusive": 5917,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5917,
+      "endFrameExclusive": 5964,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 5964,
+      "endFrameExclusive": 5977,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 5977,
+      "endFrameExclusive": 5983,
+      "pose": "small"
+    },
+    {
+      "startFrame": 5983,
+      "endFrameExclusive": 5987,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 5987,
+      "endFrameExclusive": 6000,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6000,
+      "endFrameExclusive": 6019,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6019,
+      "endFrameExclusive": 6069,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 6069,
+      "endFrameExclusive": 6071,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6071,
+      "endFrameExclusive": 6082,
+      "pose": "round"
+    },
+    {
+      "startFrame": 6082,
+      "endFrameExclusive": 6086,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6086,
+      "endFrameExclusive": 6103,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6103,
+      "endFrameExclusive": 6120,
+      "pose": "round"
+    },
+    {
+      "startFrame": 6120,
+      "endFrameExclusive": 6124,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6124,
+      "endFrameExclusive": 6129,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 6129,
+      "endFrameExclusive": 6134,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6134,
+      "endFrameExclusive": 6145,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6145,
+      "endFrameExclusive": 6157,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6157,
+      "endFrameExclusive": 6160,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6160,
+      "endFrameExclusive": 6169,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6169,
+      "endFrameExclusive": 6179,
+      "pose": "round"
+    },
+    {
+      "startFrame": 6179,
+      "endFrameExclusive": 6188,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 6188,
+      "endFrameExclusive": 6197,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6197,
+      "endFrameExclusive": 6211,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6211,
+      "endFrameExclusive": 6222,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6222,
+      "endFrameExclusive": 6229,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 6229,
+      "endFrameExclusive": 6255,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 6255,
+      "endFrameExclusive": 6261,
+      "pose": "round"
+    },
+    {
+      "startFrame": 6261,
+      "endFrameExclusive": 6265,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6265,
+      "endFrameExclusive": 6269,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6269,
+      "endFrameExclusive": 6274,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6274,
+      "endFrameExclusive": 6287,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 6287,
+      "endFrameExclusive": 6298,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6298,
+      "endFrameExclusive": 6305,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6305,
+      "endFrameExclusive": 6310,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6310,
+      "endFrameExclusive": 6319,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6319,
+      "endFrameExclusive": 6336,
+      "pose": "round"
+    },
+    {
+      "startFrame": 6336,
+      "endFrameExclusive": 6355,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6355,
+      "endFrameExclusive": 6364,
+      "pose": "round"
+    },
+    {
+      "startFrame": 6364,
+      "endFrameExclusive": 6369,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6369,
+      "endFrameExclusive": 6376,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6376,
+      "endFrameExclusive": 6389,
+      "pose": "round"
+    },
+    {
+      "startFrame": 6389,
+      "endFrameExclusive": 6398,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6398,
+      "endFrameExclusive": 6438,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 6438,
+      "endFrameExclusive": 6445,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 6445,
+      "endFrameExclusive": 6451,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6451,
+      "endFrameExclusive": 6455,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6455,
+      "endFrameExclusive": 6460,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6460,
+      "endFrameExclusive": 6466,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6466,
+      "endFrameExclusive": 6470,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6470,
+      "endFrameExclusive": 6476,
+      "pose": "round"
+    },
+    {
+      "startFrame": 6476,
+      "endFrameExclusive": 6484,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6484,
+      "endFrameExclusive": 6496,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6496,
+      "endFrameExclusive": 6505,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6505,
+      "endFrameExclusive": 6518,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6518,
+      "endFrameExclusive": 6528,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6528,
+      "endFrameExclusive": 6555,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 6555,
+      "endFrameExclusive": 6556,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6556,
+      "endFrameExclusive": 6563,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 6563,
+      "endFrameExclusive": 6570,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6570,
+      "endFrameExclusive": 6583,
+      "pose": "round"
+    },
+    {
+      "startFrame": 6583,
+      "endFrameExclusive": 6589,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6589,
+      "endFrameExclusive": 6595,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6595,
+      "endFrameExclusive": 6602,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6602,
+      "endFrameExclusive": 6605,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6605,
+      "endFrameExclusive": 6609,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6609,
+      "endFrameExclusive": 6612,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6612,
+      "endFrameExclusive": 6620,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 6620,
+      "endFrameExclusive": 6626,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6626,
+      "endFrameExclusive": 6632,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6632,
+      "endFrameExclusive": 6642,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6642,
+      "endFrameExclusive": 6645,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6645,
+      "endFrameExclusive": 6660,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6660,
+      "endFrameExclusive": 6671,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6671,
+      "endFrameExclusive": 6716,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6716,
+      "endFrameExclusive": 6721,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6721,
+      "endFrameExclusive": 6733,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 6733,
+      "endFrameExclusive": 6737,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6737,
+      "endFrameExclusive": 6743,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 6743,
+      "endFrameExclusive": 6752,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6752,
+      "endFrameExclusive": 6767,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6767,
+      "endFrameExclusive": 6847,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 6847,
+      "endFrameExclusive": 6850,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6850,
+      "endFrameExclusive": 6859,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6859,
+      "endFrameExclusive": 6862,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6862,
+      "endFrameExclusive": 6867,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6867,
+      "endFrameExclusive": 6875,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6875,
+      "endFrameExclusive": 6883,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6883,
+      "endFrameExclusive": 6890,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 6890,
+      "endFrameExclusive": 6903,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6903,
+      "endFrameExclusive": 6919,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6919,
+      "endFrameExclusive": 6934,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6934,
+      "endFrameExclusive": 6950,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 6950,
+      "endFrameExclusive": 6968,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6968,
+      "endFrameExclusive": 6976,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6976,
+      "endFrameExclusive": 6984,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 6984,
+      "endFrameExclusive": 6994,
+      "pose": "small"
+    },
+    {
+      "startFrame": 6994,
+      "endFrameExclusive": 7006,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7006,
+      "endFrameExclusive": 7027,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 7027,
+      "endFrameExclusive": 7042,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 7042,
+      "endFrameExclusive": 7048,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7048,
+      "endFrameExclusive": 7063,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7063,
+      "endFrameExclusive": 7065,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7065,
+      "endFrameExclusive": 7074,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 7074,
+      "endFrameExclusive": 7080,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7080,
+      "endFrameExclusive": 7088,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 7088,
+      "endFrameExclusive": 7101,
+      "pose": "round"
+    },
+    {
+      "startFrame": 7101,
+      "endFrameExclusive": 7107,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7107,
+      "endFrameExclusive": 7130,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 7130,
+      "endFrameExclusive": 7186,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 7186,
+      "endFrameExclusive": 7188,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7188,
+      "endFrameExclusive": 7191,
+      "pose": "round"
+    },
+    {
+      "startFrame": 7191,
+      "endFrameExclusive": 7201,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 7201,
+      "endFrameExclusive": 7210,
+      "pose": "round"
+    },
+    {
+      "startFrame": 7210,
+      "endFrameExclusive": 7217,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 7217,
+      "endFrameExclusive": 7226,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7226,
+      "endFrameExclusive": 7237,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7237,
+      "endFrameExclusive": 7245,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 7245,
+      "endFrameExclusive": 7255,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7255,
+      "endFrameExclusive": 7262,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7262,
+      "endFrameExclusive": 7268,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7268,
+      "endFrameExclusive": 7273,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7273,
+      "endFrameExclusive": 7278,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7278,
+      "endFrameExclusive": 7283,
+      "pose": "round"
+    },
+    {
+      "startFrame": 7283,
+      "endFrameExclusive": 7298,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7298,
+      "endFrameExclusive": 7306,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7306,
+      "endFrameExclusive": 7313,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7313,
+      "endFrameExclusive": 7319,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7319,
+      "endFrameExclusive": 7331,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7331,
+      "endFrameExclusive": 7355,
+      "pose": "round"
+    },
+    {
+      "startFrame": 7355,
+      "endFrameExclusive": 7377,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 7377,
+      "endFrameExclusive": 7412,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7412,
+      "endFrameExclusive": 7418,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7418,
+      "endFrameExclusive": 7432,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7432,
+      "endFrameExclusive": 7442,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7442,
+      "endFrameExclusive": 7447,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7447,
+      "endFrameExclusive": 7454,
+      "pose": "round"
+    },
+    {
+      "startFrame": 7454,
+      "endFrameExclusive": 7472,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7472,
+      "endFrameExclusive": 7482,
+      "pose": "round"
+    },
+    {
+      "startFrame": 7482,
+      "endFrameExclusive": 7486,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7486,
+      "endFrameExclusive": 7502,
+      "pose": "round"
+    },
+    {
+      "startFrame": 7502,
+      "endFrameExclusive": 7529,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7529,
+      "endFrameExclusive": 7553,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 7553,
+      "endFrameExclusive": 7555,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7555,
+      "endFrameExclusive": 7564,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7564,
+      "endFrameExclusive": 7566,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7566,
+      "endFrameExclusive": 7570,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7570,
+      "endFrameExclusive": 7582,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 7582,
+      "endFrameExclusive": 7586,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7586,
+      "endFrameExclusive": 7589,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7589,
+      "endFrameExclusive": 7607,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7607,
+      "endFrameExclusive": 7616,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7616,
+      "endFrameExclusive": 7629,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7629,
+      "endFrameExclusive": 7640,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7640,
+      "endFrameExclusive": 7651,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 7651,
+      "endFrameExclusive": 7654,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7654,
+      "endFrameExclusive": 7657,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7657,
+      "endFrameExclusive": 7682,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7682,
+      "endFrameExclusive": 7726,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 7726,
+      "endFrameExclusive": 7734,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7734,
+      "endFrameExclusive": 7744,
+      "pose": "round"
+    },
+    {
+      "startFrame": 7744,
+      "endFrameExclusive": 7753,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7753,
+      "endFrameExclusive": 7760,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7760,
+      "endFrameExclusive": 7765,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7765,
+      "endFrameExclusive": 7768,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7768,
+      "endFrameExclusive": 7780,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7780,
+      "endFrameExclusive": 7799,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7799,
+      "endFrameExclusive": 7825,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7825,
+      "endFrameExclusive": 7829,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7829,
+      "endFrameExclusive": 7838,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 7838,
+      "endFrameExclusive": 7846,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7846,
+      "endFrameExclusive": 7852,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7852,
+      "endFrameExclusive": 7876,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7876,
+      "endFrameExclusive": 7889,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 7889,
+      "endFrameExclusive": 7901,
+      "pose": "round"
+    },
+    {
+      "startFrame": 7901,
+      "endFrameExclusive": 7907,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7907,
+      "endFrameExclusive": 7954,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 7954,
+      "endFrameExclusive": 7967,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7967,
+      "endFrameExclusive": 7976,
+      "pose": "round"
+    },
+    {
+      "startFrame": 7976,
+      "endFrameExclusive": 7989,
+      "pose": "small"
+    },
+    {
+      "startFrame": 7989,
+      "endFrameExclusive": 8002,
+      "pose": "round"
+    },
+    {
+      "startFrame": 8002,
+      "endFrameExclusive": 8009,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8009,
+      "endFrameExclusive": 8012,
+      "pose": "round"
+    },
+    {
+      "startFrame": 8012,
+      "endFrameExclusive": 8025,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 8025,
+      "endFrameExclusive": 8030,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8030,
+      "endFrameExclusive": 8047,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8047,
+      "endFrameExclusive": 8052,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8052,
+      "endFrameExclusive": 8086,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 8086,
+      "endFrameExclusive": 8089,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8089,
+      "endFrameExclusive": 8099,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 8099,
+      "endFrameExclusive": 8113,
+      "pose": "round"
+    },
+    {
+      "startFrame": 8113,
+      "endFrameExclusive": 8187,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 8187,
+      "endFrameExclusive": 8192,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8192,
+      "endFrameExclusive": 8196,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8196,
+      "endFrameExclusive": 8203,
+      "pose": "round"
+    },
+    {
+      "startFrame": 8203,
+      "endFrameExclusive": 8206,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8206,
+      "endFrameExclusive": 8215,
+      "pose": "round"
+    },
+    {
+      "startFrame": 8215,
+      "endFrameExclusive": 8217,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8217,
+      "endFrameExclusive": 8224,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8224,
+      "endFrameExclusive": 8231,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8231,
+      "endFrameExclusive": 8241,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8241,
+      "endFrameExclusive": 8250,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8250,
+      "endFrameExclusive": 8258,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8258,
+      "endFrameExclusive": 8260,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8260,
+      "endFrameExclusive": 8272,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 8272,
+      "endFrameExclusive": 8278,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8278,
+      "endFrameExclusive": 8287,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8287,
+      "endFrameExclusive": 8303,
+      "pose": "round"
+    },
+    {
+      "startFrame": 8303,
+      "endFrameExclusive": 8326,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 8326,
+      "endFrameExclusive": 8331,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8331,
+      "endFrameExclusive": 8339,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 8339,
+      "endFrameExclusive": 8344,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8344,
+      "endFrameExclusive": 8352,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8352,
+      "endFrameExclusive": 8360,
+      "pose": "round"
+    },
+    {
+      "startFrame": 8360,
+      "endFrameExclusive": 8364,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8364,
+      "endFrameExclusive": 8373,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 8373,
+      "endFrameExclusive": 8435,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 8435,
+      "endFrameExclusive": 8440,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8440,
+      "endFrameExclusive": 8467,
+      "pose": "round"
+    },
+    {
+      "startFrame": 8467,
+      "endFrameExclusive": 8520,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 8520,
+      "endFrameExclusive": 8527,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8527,
+      "endFrameExclusive": 8535,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8535,
+      "endFrameExclusive": 8560,
+      "pose": "teeth"
+    },
+    {
+      "startFrame": 8560,
+      "endFrameExclusive": 8636,
+      "pose": "rest"
+    },
+    {
+      "startFrame": 8636,
+      "endFrameExclusive": 8640,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8640,
+      "endFrameExclusive": 8648,
+      "pose": "round"
+    },
+    {
+      "startFrame": 8648,
+      "endFrameExclusive": 8657,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8657,
+      "endFrameExclusive": 8663,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8663,
+      "endFrameExclusive": 8667,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8667,
+      "endFrameExclusive": 8672,
+      "pose": "round"
+    },
+    {
+      "startFrame": 8672,
+      "endFrameExclusive": 8685,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8685,
+      "endFrameExclusive": 8691,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8691,
+      "endFrameExclusive": 8695,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8695,
+      "endFrameExclusive": 8720,
+      "pose": "wide"
+    },
+    {
+      "startFrame": 8720,
+      "endFrameExclusive": 8732,
+      "pose": "small"
+    },
+    {
+      "startFrame": 8732,
+      "endFrameExclusive": 8744,
+      "pose": "rest"
+    }
+  ],
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 2577,
+      "small": 2168,
+      "wide": 2150,
+      "round": 823,
+      "teeth": 1026
+    },
+    "speechFrameCount": 6167,
+    "silenceFrameCount": 2577,
+    "unknownPhoneCount": 0,
+    "runCount": 723,
+    "warnings": [
+      "alignedPhoneSuppressedOutsideSpeech:P:120000-133440",
+      "boundaryAllowance:AH:4989600-4991520",
+      "boundaryAllowance:AW:4815840-4817280",
+      "boundaryAllowance:IH:3691680-3693120"
+    ]
+  }
+}

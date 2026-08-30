@@ -20,4 +20,8 @@ public actor TuringQwenRenderReleaseLedger {
     public func clearRun(_ runID: String) {
         released = released.filter { $0.runID != runID }
     }
+
+    public func isRunClear(_ runID: String) -> Bool {
+        released.contains { $0.runID == runID } == false
+    }
 }

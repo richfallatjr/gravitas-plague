@@ -1,0 +1,82 @@
+{
+  "baseAssetSHA256After": "c274c2a294cf32b4d3dca036d36e854e07bf12a6279a1177d88e5a6148bbaa0f",
+  "baseAssetSHA256Before": "7c7b71c23a4dccd33bd227d11b31e57f68df476acd243c2b325704e3ebf7610c",
+  "blendShapeName": "jawOpenProjection",
+  "package": {
+    "authored": [
+      {
+        "blendShapePrimPath": "/root/Root/mesh1/mesh1_jawOpenProjection",
+        "meshPrimPath": "/root/Root/mesh1/mesh1",
+        "normalOffsets": "unavailable",
+        "sparsePointIndexCount": 5721
+      }
+    ],
+    "baseBytes": 135660822,
+    "baseInventory": [
+      "angel_posed_01.usdc",
+      "textures/angel_emission.png",
+      "textures/color_0C0C0C.exr",
+      "textures/extracted_image_0.jpg",
+      "textures/extracted_image_1.jpg",
+      "textures/extracted_image_2.jpg_metallic.png",
+      "textures/extracted_image_2.jpg_roughness.png"
+    ],
+    "outputBytes": 135735464,
+    "outputInventory": [
+      "angel_posed_01.usdc",
+      "textures/angel_emission.png",
+      "textures/color_0C0C0C.exr",
+      "textures/extracted_image_0.jpg",
+      "textures/extracted_image_1.jpg",
+      "textures/extracted_image_2.jpg_metallic.png",
+      "textures/extracted_image_2.jpg_roughness.png"
+    ]
+  },
+  "projection": {
+    "cameraControl": {
+      "centerSubjectMeters": [
+        -0.0196926798671484,
+        1.6981061697006226,
+        -0.010549830272793393
+      ],
+      "controlPrimPath": "/root/face_proxy/Cube_001",
+      "forwardAxisSubject": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "halfExtentsMeters": [
+        0.10000000149011612,
+        0.10000000149011612,
+        0.10000000149011612
+      ],
+      "rightAxisSubject": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "schemaVersion": 1,
+      "sourceAsset": "angel_posed_mouth_open_blend_01_v0001.usdz",
+      "sourceAssetSHA256": "830d005f31b13a106598b4f0ae241bfedf451cc113d679cffbcdb14addeef28f",
+      "upAxisSubject": [
+        0.0,
+        1.0,
+        2.2551404851656373e-16
+      ]
+    },
+    "cameraDescriptorSHA256": "fa0a71ad70262e009aa3f2d131e5c62b2e66c59ccbec3d26472b2bcd2474a184",
+    "projectionMask": {
+      "SHA256": "19f755220e37d411b2ebeb386614abe4093490f5ac9b4715ed39e1fd269a73a1",
+      "bitsPerChannel": 8,
+      "byteCount": 28841,
+      "colorType": "RGBA",
+      "height": 1024,
+      "width": 1024
+    },
+    "projectionMaskResourcePath": "Turing/MindsEye/Projection/masks/angel_head_v1_projection-mask-uv.png",
+    "targetDescriptorSHA256": "0afb7e088d35f8994be87d0ab725e6eb56b17ef9bdde725336c4e0db7639337d"
+  },
+  "schemaVersion": 1,
+  "targetAssetSHA256": "830d005f31b13a106598b4f0ae241bfedf451cc113d679cffbcdb14addeef28f",
+  "targetBundled": false
+}

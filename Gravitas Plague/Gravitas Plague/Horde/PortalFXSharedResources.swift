@@ -48,6 +48,21 @@ enum PortalFXDefaults {
     /// Ongoing side acceleration in meters / second^2.
     static let emberSideAccelerationMetersPerSecond2: Float = 0.14
 
+    static let emberSpawnUpwardJitterMin: Float = 0.0
+    static let emberSpawnUpwardJitterMax: Float = 0.18
+    static let emberUpwardAccelerationMetersPerSecond2: Float = 0.18
+    static let emberSurfaceOffsetMetersMin: Float = 0.0
+    static let emberSurfaceOffsetMetersMax: Float = 0.012
+    static let emberSpinRadiansPerSecondMin: Float = -4.0
+    static let emberSpinRadiansPerSecondMax: Float = 4.0
+
+    static let emberBirthPhaseEnd: Float = 0.18
+    static let emberHotPhaseEnd: Float = 0.50
+    static let emberLatePhaseEnd: Float = 0.84
+
+    /// The circular portal's perimeter sits just in front of its aperture disc.
+    static let perimeterSurfaceOffsetMeters: Float = 0.018
+
     static let emberStartSizeMetersMin: Float = 0.0045
     static let emberStartSizeMetersMax: Float = 0.010
     static let emberEndSizeMetersMin: Float = 0.0018
@@ -109,6 +124,89 @@ enum PortalFXPalette {
         alpha: 0.0
     )
 
+    /// Heaven embers are born at either bright endpoint, then both coherent
+    /// tracks converge toward the same saturated, low-value purple. This keeps
+    /// the portal energetic at the rim without leaving cyan or fuchsia sparks
+    /// hanging in the dark tail.
+    static let heavenBirthFuchsiaBase = UIColor(
+        red: 1.00,
+        green: 0.00,
+        blue: 0.62,
+        alpha: 1.0
+    )
+    static let heavenBirthFuchsiaEmission = UIColor(
+        red: 1.00,
+        green: 0.02,
+        blue: 0.72,
+        alpha: 1.0
+    )
+    static let heavenBirthCyanBase = UIColor(
+        red: 0.00,
+        green: 0.78,
+        blue: 1.00,
+        alpha: 1.0
+    )
+    static let heavenBirthCyanEmission = UIColor(
+        red: 0.00,
+        green: 1.00,
+        blue: 1.00,
+        alpha: 1.0
+    )
+
+    static let heavenHotFuchsiaTowardPurpleBase = UIColor(
+        red: 0.62,
+        green: 0.00,
+        blue: 0.92,
+        alpha: 1.0
+    )
+    static let heavenHotFuchsiaTowardPurpleEmission = UIColor(
+        red: 0.72,
+        green: 0.00,
+        blue: 1.00,
+        alpha: 1.0
+    )
+    static let heavenHotCyanTowardPurpleBase = UIColor(
+        red: 0.16,
+        green: 0.12,
+        blue: 0.82,
+        alpha: 1.0
+    )
+    static let heavenHotCyanTowardPurpleEmission = UIColor(
+        red: 0.16,
+        green: 0.18,
+        blue: 1.00,
+        alpha: 1.0
+    )
+
+    static let heavenPurpleHue: CGFloat = 278.0 / 360.0
+    static let heavenPurpleSaturation: CGFloat = 1.0
+    static let heavenLatePurpleBrightness: CGFloat = 0.29
+    static let heavenDarkPurpleBrightness: CGFloat = 0.14
+    static let heavenLatePurpleBase = UIColor(
+        hue: heavenPurpleHue,
+        saturation: heavenPurpleSaturation,
+        brightness: heavenLatePurpleBrightness,
+        alpha: 1.0
+    )
+    static let heavenLatePurpleEmission = UIColor(
+        hue: heavenPurpleHue,
+        saturation: heavenPurpleSaturation,
+        brightness: 0.40,
+        alpha: 1.0
+    )
+    static let heavenDarkPurpleBase = UIColor(
+        hue: heavenPurpleHue,
+        saturation: heavenPurpleSaturation,
+        brightness: heavenDarkPurpleBrightness,
+        alpha: 0.45
+    )
+    static let heavenDarkPurpleEmission = UIColor(
+        hue: heavenPurpleHue,
+        saturation: heavenPurpleSaturation,
+        brightness: 0.20,
+        alpha: 1.0
+    )
+
     /// Uses fixed blood-red hue/saturation/value while preserving source alpha.
     static func bloodRedPreservingAlpha(
         _ color: UIColor
@@ -145,6 +243,9 @@ final class PortalFXSharedResources {
     let emberHotMaterials: [RealityKit.Material]
     let emberRedMaterials: [RealityKit.Material]
     let emberDarkMaterials: [RealityKit.Material]
+
+    let hellEmberPalette: PortalEmberMaterialPalette
+    let heavenEmberPalette: PortalEmberMaterialPalette
 
     let emberMesh: MeshResource
 
@@ -224,6 +325,64 @@ final class PortalFXSharedResources {
             )
         ]
 
+        hellEmberPalette = PortalEmberMaterialPalette(
+            identifier: "horde.hellfire.current",
+            selectionMode: .independentPerPhase,
+            birthMaterials: emberBirthMaterials,
+            hotMaterials: emberHotMaterials,
+            lateMaterials: emberRedMaterials,
+            darkMaterials: emberDarkMaterials
+        )
+
+        heavenEmberPalette = PortalEmberMaterialPalette(
+            identifier: "heaven.purpleMagentaCyan.v1",
+            selectionMode: .coherentTrack,
+            birthMaterials: [Self.makeEmissiveMaterial(
+                base: PortalFXPalette.heavenBirthFuchsiaBase,
+                emissive: PortalFXPalette.heavenBirthFuchsiaEmission,
+                intensity: 3.2,
+                label: "heaven_birth_bright_fuchsia_32"
+            ), Self.makeEmissiveMaterial(
+                base: PortalFXPalette.heavenBirthCyanBase,
+                emissive: PortalFXPalette.heavenBirthCyanEmission,
+                intensity: 2.8,
+                label: "heaven_birth_bright_cyan_28"
+            )],
+            hotMaterials: [Self.makeEmissiveMaterial(
+                base: PortalFXPalette.heavenHotFuchsiaTowardPurpleBase,
+                emissive: PortalFXPalette.heavenHotFuchsiaTowardPurpleEmission,
+                intensity: 2.4,
+                label: "heaven_hot_fuchsia_toward_purple_24"
+            ), Self.makeEmissiveMaterial(
+                base: PortalFXPalette.heavenHotCyanTowardPurpleBase,
+                emissive: PortalFXPalette.heavenHotCyanTowardPurpleEmission,
+                intensity: 2.0,
+                label: "heaven_hot_cyan_toward_purple_20"
+            )],
+            lateMaterials: [Self.makeEmissiveMaterial(
+                base: PortalFXPalette.heavenLatePurpleBase,
+                emissive: PortalFXPalette.heavenLatePurpleEmission,
+                intensity: 1.4,
+                label: "heaven_late_deep_purple_fuchsia_track_14"
+            ), Self.makeEmissiveMaterial(
+                base: PortalFXPalette.heavenLatePurpleBase,
+                emissive: PortalFXPalette.heavenLatePurpleEmission,
+                intensity: 1.0,
+                label: "heaven_late_deep_purple_cyan_track_10"
+            )],
+            darkMaterials: [Self.makeEmissiveMaterial(
+                base: PortalFXPalette.heavenDarkPurpleBase,
+                emissive: PortalFXPalette.heavenDarkPurpleEmission,
+                intensity: 0.25,
+                label: "heaven_dark_deep_purple_fuchsia_track_025"
+            ), Self.makeEmissiveMaterial(
+                base: PortalFXPalette.heavenDarkPurpleBase,
+                emissive: PortalFXPalette.heavenDarkPurpleEmission,
+                intensity: 0.25,
+                label: "heaven_dark_deep_purple_cyan_track_025"
+            )]
+        )
+
         emberMesh = .generateSphere(
             radius: 0.5
         )
@@ -231,7 +390,18 @@ final class PortalFXSharedResources {
         print("[PortalFX] shared resources initialized")
     }
 
-    private static func makeEmissiveMaterial(
+    func emberPalette(
+        for identifier: PortalEmberPaletteID
+    ) -> PortalEmberMaterialPalette {
+        switch identifier {
+        case .hordeHellfire:
+            hellEmberPalette
+        case .heavenPurpleMagentaCyan:
+            heavenEmberPalette
+        }
+    }
+
+    static func makeEmissiveMaterial(
         base: UIColor,
         emissive: UIColor,
         intensity: Float,

@@ -9,10 +9,10 @@
     "conversationKey": "chapter01.dialogue.big_mike.rich.four_chances",
     "outputRoute": "walkieSpatial",
     "interactionSurface": "walkie",
-    "computeStart": "foundationBeforePrerecording",
+    "computeStart": "beforePrerecording",
     "fillerMode": "continuousFromPrerecordingToGenerated",
     "commSFX": { "openBeforePrerecording": false, "sendAfterGenerated": false, "sendingLeadInAfterGeneratedSeconds": null },
-    "fixedLeadInSeconds": 10,
+    "fixedLeadInSeconds": null,
     "generationPipeline": null,
     "backgroundMusic": null
   },

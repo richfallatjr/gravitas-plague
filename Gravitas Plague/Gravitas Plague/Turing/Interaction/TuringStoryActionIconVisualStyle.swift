@@ -1,3 +1,4 @@
+import CoreImage
 import RealityKit
 import UIKit
 
@@ -5,10 +6,22 @@ import UIKit
 enum TuringStoryActionIconVisualStyle {
     static let textureSize = CGSize(width: 256, height: 256)
 
-    static func material(symbolName: String) throws -> UnlitMaterial {
+    static func material(
+        symbolName: String,
+        microphoneCTAEmphasis: StoryMicrophoneCTAEmphasis = .saturated
+    ) throws -> UnlitMaterial {
+        let sourceImage = try makeImage(symbolName: symbolName)
+        let image = microphoneCTAEmphasis == .saturated
+            ? sourceImage
+            : applyingSaturation(
+                microphoneCTAEmphasis.saturation,
+                to: sourceImage
+            )
         let texture = try TextureResource(
-            image: makeImage(symbolName: symbolName),
-            withName: "turing_story_hot_action_\(symbolName)",
+            image: image,
+            withName:
+                "turing_story_hot_action_\(symbolName)_" +
+                microphoneCTAEmphasis.rawValue,
             options: .init(semantic: .color)
         )
         var material = UnlitMaterial()
@@ -16,6 +29,28 @@ enum TuringStoryActionIconVisualStyle {
         material.blending = .transparent(opacity: .init(floatLiteral: 1.0))
         material.faceCulling = .none
         return material
+    }
+
+    private static func applyingSaturation(
+        _ saturation: Float,
+        to image: CGImage
+    ) -> CGImage {
+        let input = CIImage(cgImage: image)
+        guard let filter = CIFilter(name: "CIColorControls") else {
+            return image
+        }
+        filter.setValue(input, forKey: kCIInputImageKey)
+        filter.setValue(
+            min(1, max(0, saturation)),
+            forKey: kCIInputSaturationKey
+        )
+        guard let output = filter.outputImage,
+              let rendered = CIContext(options: [
+                .cacheIntermediates: false
+              ]).createCGImage(output, from: input.extent) else {
+            return image
+        }
+        return rendered
     }
 
     static func material(

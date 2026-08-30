@@ -28,7 +28,11 @@ actor StoryInteractionArbiter {
         let generation: UInt64
         var seedIDsBySurface: [StoryInteractionSurfaceID: UUID]
         var actions: [StoryInteractionSurfaceID: StoryTuringActionPresentation]
+        var nonselectableMicrophones:
+            [StoryInteractionSurfaceID: StoryTuringActionPresentation]
         var activities: [StoryInteractionSurfaceID: StoryTuringActivityPresentation]
+        var microphoneCTAEmphasisBySurface:
+            [StoryInteractionSurfaceID: StoryMicrophoneCTAEmphasis]
         var activeChild: StoryLiveConversationChildToken?
     }
     private var liveConversationPresentation: LiveConversationPresentation?
@@ -83,11 +87,8 @@ actor StoryInteractionArbiter {
         await publish(reason: "microphones.latched.\(reason)")
     }
 
-    /// Replaces the latched seed and the visible microphone presentation in a
-    /// single actor transaction. This is the authored-audio boundary between
-    /// a pre-PR ConversationVoice context and the current PromptVoice context;
-    /// publishing the latch and presentation separately would expose a brief
-    /// stale-seed race to a microphone press.
+    /// Installs the upcoming PromptVoice seed and its visible microphone in a
+    /// single actor transaction so a gesture can never observe a stale seed.
     func activateConversationMicrophone(
         slot: TuringLatchedMicrophoneSlot,
         expectedGeneration: UInt64,
@@ -125,7 +126,11 @@ actor StoryInteractionArbiter {
             generation: presentationGeneration,
             seedIDsBySurface: seedIDs,
             actions: actions,
+            nonselectableMicrophones: [:],
             activities: activities,
+            microphoneCTAEmphasisBySurface: seedIDs.mapValues { _ in
+                .saturated
+            },
             activeChild: nil
         )
         await publish(reason: "microphones.activated.\(reason)")
@@ -588,10 +593,66 @@ actor StoryInteractionArbiter {
             generation: generation,
             seedIDsBySurface: seedIDs,
             actions: actions,
+            nonselectableMicrophones: [:],
             activities: activities,
+            microphoneCTAEmphasisBySurface: seedIDs.mapValues { _ in
+                .saturated
+            },
             activeChild: nil
         )
         await publish(reason: "liveConversationInstalled.\(reason)")
+    }
+
+    func setLiveConversationMicrophoneCTAEmphasis(
+        _ emphasis: StoryMicrophoneCTAEmphasis,
+        surface: StoryInteractionSurfaceID,
+        parentLease: StoryInteractionLease,
+        sessionID: UUID,
+        generation: UInt64,
+        reason: String
+    ) async throws {
+        try requireLiveConversationParent(parentLease)
+        guard var presentation = liveConversationPresentation,
+              presentation.parentLeaseID == parentLease.id,
+              presentation.sessionID == sessionID,
+              presentation.generation == generation,
+              presentation.seedIDsBySurface[surface] != nil else {
+            throw StoryInteractionClaimError.staleLease
+        }
+        guard presentation.microphoneCTAEmphasisBySurface[surface] != emphasis else {
+            return
+        }
+        presentation.microphoneCTAEmphasisBySurface[surface] = emphasis
+        liveConversationPresentation = presentation
+        await publish(reason: "liveConversationCTA.\(reason)")
+    }
+
+    /// Hides only selectable microphone actions. Active authored/generated
+    /// activity remains intact so a Qwen recovery transition cannot stop or
+    /// visually replace media that is already audible.
+    func suspendLiveConversationMicrophones(
+        parentLease: StoryInteractionLease,
+        sessionID: UUID,
+        generation: UInt64,
+        unavailable: Bool,
+        reason: String
+    ) async {
+        guard var presentation = liveConversationPresentation,
+              presentation.parentLeaseID == parentLease.id,
+              presentation.sessionID == sessionID,
+              presentation.generation == generation else {
+            return
+        }
+        let nonselectableAction: StoryTuringActionPresentation = unavailable
+            ? .microphoneUnavailable
+            : .microphoneRecovering
+        for surface in presentation.actions.keys {
+            presentation.nonselectableMicrophones[surface] = nonselectableAction
+            presentation.microphoneCTAEmphasisBySurface[surface] = .desaturated
+        }
+        presentation.actions.removeAll(keepingCapacity: true)
+        liveConversationPresentation = presentation
+        await publish(reason: "liveConversationMicrophonesSuspended.\(reason)")
     }
 
     func claimLiveConversationChild(
@@ -638,6 +699,9 @@ actor StoryInteractionArbiter {
         presentation.actions = actions.filter {
             presentation.seedIDsBySurface[$0.key] != nil
         }
+        for surface in presentation.actions.keys {
+            presentation.nonselectableMicrophones.removeValue(forKey: surface)
+        }
         presentation.activities = activities
         if childStillActive == false {
             presentation.activeChild = nil
@@ -662,15 +726,6 @@ actor StoryInteractionArbiter {
         await publish(reason: "liveConversationRemoved.\(reason)")
     }
 
-    private func requireLiveConversationParent(
-        _ lease: StoryInteractionLease
-    ) throws {
-        guard exclusiveLease == lease,
-              case .turingFlow = lease.owner else {
-            throw StoryInteractionClaimError.staleLease
-        }
-    }
-
     private func validateConversationMicrophoneSlot(
         _ slot: TuringLatchedMicrophoneSlot,
         expectedGeneration: UInt64
@@ -686,6 +741,15 @@ actor StoryInteractionArbiter {
             }
         } else {
             microphoneSegmentID = slot.segmentID
+        }
+    }
+
+    private func requireLiveConversationParent(
+        _ lease: StoryInteractionLease
+    ) throws {
+        guard exclusiveLease == lease,
+              case .turingFlow = lease.owner else {
+            throw StoryInteractionClaimError.staleLease
         }
     }
 
@@ -871,6 +935,50 @@ actor StoryInteractionArbiter {
         )
     }
 
+    private func resolvedWalkiePresentation(
+        _ live: LiveConversationPresentation
+    ) -> StoryWalkiePresentation {
+        switch live.actions[.walkie] ?? live.nonselectableMicrophones[.walkie] {
+        case .microphone: .microphone
+        case .microphoneRecovering: .microphoneRecovering
+        case .microphoneUnavailable: .microphoneUnavailable
+        default: .hidden
+        }
+    }
+
+    private func resolvedDadFramePresentation(
+        _ live: LiveConversationPresentation
+    ) -> StoryDadFramePresentation {
+        switch live.actions[.dadFrame] ?? live.nonselectableMicrophones[.dadFrame] {
+        case .microphone: .microphone
+        case .microphoneRecovering: .microphoneRecovering
+        case .microphoneUnavailable: .microphoneUnavailable
+        default: .hidden
+        }
+    }
+
+    private func resolvedCrankRadioPresentation(
+        _ live: LiveConversationPresentation
+    ) -> StoryCrankRadioPresentation {
+        switch live.actions[.crankRadio] ?? live.nonselectableMicrophones[.crankRadio] {
+        case .microphone: .microphone
+        case .microphoneRecovering: .microphoneRecovering
+        case .microphoneUnavailable: .microphoneUnavailable
+        default: .hidden
+        }
+    }
+
+    private func resolvedHamReceiverPresentation(
+        _ live: LiveConversationPresentation
+    ) -> StoryHamReceiverPresentation {
+        switch live.actions[.hamReceiver] ?? live.nonselectableMicrophones[.hamReceiver] {
+        case .microphone: .microphone
+        case .microphoneRecovering: .microphoneRecovering
+        case .microphoneUnavailable: .microphoneUnavailable
+        default: .hidden
+        }
+    }
+
     private func makeSnapshot() -> StoryInteractionSnapshot {
         let capabilities: Set<StoryInteractionCapability>
         let walkie: StoryWalkiePresentation
@@ -891,9 +999,14 @@ actor StoryInteractionArbiter {
                     var resolvedCapabilities:
                         Set<StoryInteractionCapability> = []
                     for surface in StoryInteractionSurfaceID.allCases {
+                        let action = live.actions[surface] ??
+                            live.nonselectableMicrophones[surface] ?? .hidden
                         let presentation = StoryTuringSurfacePresentation(
-                            action: live.actions[surface] ?? .hidden,
-                            activity: live.activities[surface] ?? .hidden
+                            action: action,
+                            activity: live.activities[surface] ?? .hidden,
+                            microphoneCTAEmphasis:
+                                live.microphoneCTAEmphasisBySurface[surface]
+                                    ?? .saturated
                         )
                         surfacePresentations[surface] = presentation
                         guard presentation.action == .microphone else { continue }
@@ -909,14 +1022,10 @@ actor StoryInteractionArbiter {
                         }
                     }
                     capabilities = resolvedCapabilities
-                    walkie = live.actions[.walkie] == .microphone
-                        ? .microphone : .hidden
-                    dadFrame = live.actions[.dadFrame] == .microphone
-                        ? .microphone : .hidden
-                    crankRadio = live.actions[.crankRadio] == .microphone
-                        ? .microphone : .hidden
-                    hamReceiver = live.actions[.hamReceiver] == .microphone
-                        ? .microphone : .hidden
+                    walkie = resolvedWalkiePresentation(live)
+                    dadFrame = resolvedDadFramePresentation(live)
+                    crankRadio = resolvedCrankRadioPresentation(live)
+                    hamReceiver = resolvedHamReceiverPresentation(live)
                     door = .hidden
                 } else {
                     capabilities = []

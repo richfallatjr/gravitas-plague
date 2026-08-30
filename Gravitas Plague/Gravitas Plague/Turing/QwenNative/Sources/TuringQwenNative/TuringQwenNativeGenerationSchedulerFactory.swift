@@ -4,15 +4,43 @@ public enum TuringQwenNativeGenerationSchedulerFactory {
     public static let exactFreshInstanceCount = 2
 
     public static func makeFresh2Pool(
-        memoryGate: TuringQwenNativeFreshInstanceMemoryGate = TuringQwenNativeFreshInstanceMemoryGate()
+        memoryGate: TuringQwenNativeFreshInstanceMemoryGate = TuringQwenNativeFreshInstanceMemoryGate(),
+        recoverySessionID: UUID = UUID(),
+        recoveryRunID: String = "unregistered",
+        recoveryGeneration: TuringQwenNativeRecoveryGeneration = .initial
+    ) throws -> TuringQwenNativeFreshInstancePool {
+        try makeFresh2Pool(
+            memoryGate: memoryGate,
+            residencyMode: .independentFresh2,
+            recoverySessionID: recoverySessionID,
+            recoveryRunID: recoveryRunID,
+            recoveryGeneration: recoveryGeneration
+        )
+    }
+
+    public static func makeFresh2Pool(
+        memoryGate: TuringQwenNativeFreshInstanceMemoryGate = TuringQwenNativeFreshInstanceMemoryGate(),
+        residencyMode: TuringQwenNativeResidencyMode,
+        recoverySessionID: UUID = UUID(),
+        recoveryRunID: String = "unregistered",
+        recoveryGeneration: TuringQwenNativeRecoveryGeneration = .initial
     ) throws -> TuringQwenNativeFreshInstancePool {
         let config = TuringQwenNativeFreshInstanceConfig.exactTwo
         try config.validateExactTwoFreshInstances()
+        guard residencyMode != .singleLaneSharedControl else {
+            throw TuringQwenNativeError.invalidConfig(
+                "Single-lane control must use the qualification harness."
+            )
+        }
 
-        return TuringQwenNativeFreshInstancePool(
+        return try TuringQwenNativeFreshInstancePool(
             requestedInstanceCount: exactFreshInstanceCount,
             fallbackAllowed: false,
-            memoryGate: memoryGate
+            memoryGate: memoryGate,
+            residencyMode: residencyMode,
+            recoverySessionID: recoverySessionID,
+            recoveryRunID: recoveryRunID,
+            recoveryGeneration: recoveryGeneration
         )
     }
 
@@ -24,7 +52,8 @@ public enum TuringQwenNativeGenerationSchedulerFactory {
         TuringQwenNativeFreshInstanceScheduler(
             instancePool: instancePool,
             admissionPolicy: gpuAdmissionPolicy,
-            commandBufferProfile: commandBufferProfile
+            commandBufferProfile: commandBufferProfile,
+            recoveryGeneration: instancePool.recoveryGeneration
         )
     }
 

@@ -3,3 +3,4 @@
 #include "mlx/c/linalg.h"
 #include "mlx/c/fast.h"
 #include "mlx/c/turing_metal_diagnostics.h"
+#include "mlx/c/turing_metal_recovery.h"

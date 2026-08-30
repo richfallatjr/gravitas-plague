@@ -1,4 +1,61 @@
+import AVFoundation
 import Foundation
+import TuringQwenNative
+
+nonisolated enum TuringPrerecordingMicrophoneCTAPolicy {
+    static let fullyDesaturatedRemainingSeconds = 20.0
+    static let maximumTransitionSteps = 100
+    static let maximumUpdatesPerSecond = 20.0
+
+    static func transitionDuration(
+        prerecordingDurationSeconds duration: Double
+    ) -> Double {
+        max(0, duration - fullyDesaturatedRemainingSeconds)
+    }
+
+    static func transitionStepCount(
+        prerecordingDurationSeconds duration: Double
+    ) -> Int {
+        let transition = transitionDuration(
+            prerecordingDurationSeconds: duration
+        )
+        guard transition > 0 else { return 0 }
+        return min(
+            maximumTransitionSteps,
+            max(1, Int(ceil(transition * maximumUpdatesPerSecond)))
+        )
+    }
+
+    static func saturationStep(
+        prerecordingDurationSeconds duration: Double,
+        elapsedPlaybackSeconds elapsed: Double,
+        stepCount: Int
+    ) -> Int {
+        let transition = transitionDuration(
+            prerecordingDurationSeconds: duration
+        )
+        guard transition > 0, stepCount > 0 else { return 0 }
+        let progress = min(1, max(0, elapsed / transition))
+        let completedSteps = min(
+            stepCount,
+            Int(floor(progress * Double(stepCount)))
+        )
+        return stepCount - completedSteps
+    }
+
+    static func saturation(
+        prerecordingDurationSeconds duration: Double,
+        elapsedPlaybackSeconds elapsed: Double,
+        stepCount: Int
+    ) -> Float {
+        guard stepCount > 0 else { return 0 }
+        return Float(saturationStep(
+            prerecordingDurationSeconds: duration,
+            elapsedPlaybackSeconds: elapsed,
+            stepCount: stepCount
+        )) / Float(stepCount)
+    }
+}
 
 @MainActor
 final class TuringLiveConversationSessionCoordinator:
@@ -19,6 +76,17 @@ final class TuringLiveConversationSessionCoordinator:
         let microphoneGeneration: UInt64
     }
 
+    private struct MicrophoneCTAPlaybackState {
+        let generation: UInt64
+        let itemID: String
+        let surfaces: Set<StoryInteractionSurfaceID>
+        var prerecordingDurationSeconds: Double?
+        var transitionStepCount: Int
+        var lastPublishedSaturationStep: Int?
+        var accumulatedPlaybackSeconds: Double
+        var runningSince: ContinuousClock.Instant?
+    }
+
     private let arbiter = StoryInteractionArbiter.shared
     private let computeAdmission = TuringLiveConversationComputeAdmission.shared
     private let filler = TuringLiveConversationInitialFillerController.shared
@@ -30,11 +98,25 @@ final class TuringLiveConversationSessionCoordinator:
     private var activeResponseTurnID: UUID?
     private var waitingResponseTurnID: UUID?
     private var presentedSeedIDs: [StoryInteractionSurfaceID: UUID] = [:]
+    private var actualAuthoredMediaStartedItemID: String?
     private var currentAuthoredSeed: TuringLiveConversationSeed?
     private var currentAuthoredItemID: String?
+    private var completedAuthoredMediaItemIDs: Set<String> = []
+    private var authoredMediaCompletionWaiters:
+        [String: [UUID: CheckedContinuation<Bool, Never>]] = [:]
+    private var microphoneCTAGeneration: UInt64 = 0
+    private var microphoneCTAState: MicrophoneCTAPlaybackState?
+    private var microphoneCTADurationTasks: [String: Task<Void, Never>] = [:]
+    private var authoredMediaDurationSeconds: [String: Double] = [:]
+    private var microphoneCTATimerTask: Task<Void, Never>?
+    private var desaturatedMicrophoneSurfaces:
+        Set<StoryInteractionSurfaceID> = []
     private var pendingHoldSurface: StoryInteractionSurfaceID?
     private var pendingHoldEndRequested = false
     private weak var hudEventSink: (any TuringLiveConversationHUDEventSink)?
+    private var recoveryAvailability:
+        TuringQwenNativeRecoveryAvailability = .ready(generation: 1)
+    private var recoveryAvailabilityTask: Task<Void, Never>?
 
     private init() {}
 
@@ -64,6 +146,7 @@ final class TuringLiveConversationSessionCoordinator:
                 spokenPlayback: spokenPlayback,
                 previousSession: liveSession
             )
+            await refreshRecoveryAvailabilityAndObserve()
             return
         }
         await detach(reason: "replaceAttachment")
@@ -80,6 +163,7 @@ final class TuringLiveConversationSessionCoordinator:
             microphoneGeneration: microphoneGeneration
         )
         await playback.setPlaybackLifecycleSink(self)
+        await refreshRecoveryAvailabilityAndObserve()
         print("[TuringLiveConversation] attached sequenceID=\(parentSequenceID.uuidString) flowInstanceID=\(identity.flowInstanceID.uuidString)")
     }
 
@@ -89,6 +173,7 @@ final class TuringLiveConversationSessionCoordinator:
               turns.isEmpty else {
             return
         }
+        actualAuthoredMediaStartedItemID = nil
         currentAuthoredItemID = nil
         currentAuthoredSeed = nil
         if await restoreRetainedAvailabilityIfPossible(
@@ -113,6 +198,9 @@ final class TuringLiveConversationSessionCoordinator:
             await cancelTurn(turn, reason: reason, publishFailure: false)
         }
         turns.removeAll(keepingCapacity: false)
+        cancelMicrophoneCTA(reason: "detach.\(reason)")
+        resumeAllAuthoredMediaCompletionWaiters(completed: false)
+        completedAuthoredMediaItemIDs.removeAll(keepingCapacity: false)
         activeResponseTurnID = nil
         waitingResponseTurnID = nil
         if let session {
@@ -133,15 +221,19 @@ final class TuringLiveConversationSessionCoordinator:
         attachment = nil
         currentAuthoredSeed = nil
         currentAuthoredItemID = nil
+        actualAuthoredMediaStartedItemID = nil
         pendingHoldSurface = nil
         pendingHoldEndRequested = false
         presentedSeedIDs.removeAll(keepingCapacity: false)
         hudEventSink = nil
+        recoveryAvailabilityTask?.cancel()
+        recoveryAvailabilityTask = nil
         print("[TuringLiveConversation] detached reason=\(reason)")
     }
 
     func canAcceptMicrophoneHold(surface: StoryInteractionSurfaceID) -> Bool {
-        guard let session,
+        guard case .ready = recoveryAvailability,
+              let session,
               session.activeTurnID == nil,
               waitingResponseTurnID == nil,
               pendingHoldSurface == nil,
@@ -229,7 +321,9 @@ final class TuringLiveConversationSessionCoordinator:
     func prepareForPrerecordingPreFiller(
         _ item: TuringAuthoredMediaItem
     ) async {
-        guard let attachment,
+        guard Task.isCancelled == false,
+              actualAuthoredMediaStartedItemID != item.id,
+              let attachment,
               let catalogEntry = item.liveConversationCatalogEntry,
               let speaker = TuringConversationCharacterID(
                 rawValue: item.speakerCharacterID
@@ -244,20 +338,27 @@ final class TuringLiveConversationSessionCoordinator:
             prerecordingID: item.id,
             role: item.role
         )
+        completedAuthoredMediaItemIDs.remove(item.id)
+        preloadMicrophoneCTADuration(for: item)
         let run = TuringSpokenPresentationRunIdentity(
             flowIdentity: attachment.identity
         )
-        let microphoneContext = await stagePrerecordingPreFillerMicrophones(
+        // Start microphone installation alongside the visual path. It must not
+        // sit in front of the two-to-five-second orientation filler: on device,
+        // that was long enough for walkie static/radio tuning/Dad score to end
+        // before Mind's Eye ever received its reveal request.
+        async let microphoneContext = stagePrerecordingPreFillerMicrophones(
             item: item,
             catalogEntry: catalogEntry,
             attachment: attachment
         )
 
         // The PR-orientation interval is the first audible filler for an
-        // authored point. Stage the same portrait that the PR will promote so
-        // keep-alive motion and blinking are already visible while the device
-        // static/tuning filler plays. Mouth playback remains at rest until the
-        // actual authored-audio start supplies its pause-aware clock.
+        // authored point. Immediately stage the same portrait that the PR will
+        // promote so keep-alive motion and blinking remain visible for the
+        // entire device filler. These fillers are non-speech device audio, so
+        // the mouth correctly stays at rest until authored speech actually
+        // starts with its pause-aware playback clock.
         await TuringAuthoredPresentationPreparationHub.shared.publish(
             TuringAuthoredPresentationPreparationHint(
                 run: run,
@@ -267,6 +368,10 @@ final class TuringLiveConversationSessionCoordinator:
                 interactionSurface: catalogEntry.interactionSurface
             )
         )
+        guard Task.isCancelled == false,
+              actualAuthoredMediaStartedItemID != item.id else {
+            return
+        }
         let request = TuringSpokenPresentationRevealRequest(
             id: UUID(),
             run: run,
@@ -275,24 +380,36 @@ final class TuringLiveConversationSessionCoordinator:
             source: source,
             generatedSpeechFrameTrack: nil
         )
+        print(
+            "[MindEyeFiller] pre-PR device filler visual requested " +
+                "itemID=\(item.id) speaker=\(speaker.rawValue) " +
+                "surface=\(catalogEntry.interactionSurface.rawValue) " +
+                "authoredPlaybackBlocked=false"
+        )
         let outcome = await TuringSpokenPresentationRevealHub.shared
             .requestReveal(
                 request,
                 timeout: Self.prerecordingPreFillerRevealTimeout
             )
+        let resolvedMicrophoneContext = await microphoneContext
 
         guard self.attachment?.identity.flowInstanceID ==
                 attachment.identity.flowInstanceID else {
             return
         }
+        let stagedIdentity =
+            "itemID=\(item.id) speaker=\(speaker.rawValue)"
+        let stagedSurface =
+            "surface=\(catalogEntry.interactionSurface.rawValue)"
+        let stagedOutcome =
+            "outcome=\(String(describing: outcome))"
         print(
             "[MindEyeFiller] pre-PR portrait staged " +
-                "itemID=\(item.id) speaker=\(speaker.rawValue) " +
-                "surface=\(catalogEntry.interactionSurface.rawValue) " +
-                "outcome=\(String(describing: outcome)) " +
-                "motion=keepAlive blink=active mouth=rest " +
-                "microphoneContext=\(microphoneContext) " +
-                "currentPromptActivation=actualAuthoredMediaStart"
+                "\(stagedIdentity) \(stagedSurface) \(stagedOutcome) " +
+                "orientationAudio=deviceFiller " +
+                "motion=keepAlive blink=active mouth=restNonSpeech " +
+                "microphoneContext=\(resolvedMicrophoneContext) " +
+                "microphoneActionActivation=preFillerSelectable"
         )
     }
 
@@ -301,6 +418,9 @@ final class TuringLiveConversationSessionCoordinator:
         catalogEntry: TuringLiveConversationCatalog.Entry,
         attachment: Attachment
     ) async -> String {
+        // Pre-filler installs a real selectable microphone for the upcoming
+        // PromptVoice seed. Selecting it starts dictation and compute now,
+        // without acquiring a progression hold that could delay PR start.
         var liveSession: TuringLiveConversationSession
         if let session {
             liveSession = session
@@ -319,74 +439,44 @@ final class TuringLiveConversationSessionCoordinator:
             session = liveSession
         }
 
-        let stablePolicy = await arbiter.currentStableInteractionPolicy()
-        let retainedSeeds = await arbiter.currentLatchedConversationSeedSnapshot(
-            allowedSurfaces: stablePolicy.allowedTuringSurfaces
-        )
-        let context = TuringPrerecordingPreFillerMicrophonePolicy.context(
-            retainedSeeds: retainedSeeds,
-            upcomingSurface: catalogEntry.interactionSurface
-        )
-
         do {
-            switch context {
-            case .previousConversationVoice(let seedID):
-                let previousSeed = retainedSeeds.seedsBySurface[
-                    catalogEntry.interactionSurface
-                ]
-                presentedSeedIDs = retainedSeeds.seedsBySurface.mapValues(\.seedID)
-                try await arbiter.installLiveConversationAvailability(
-                    parentLease: liveSession.parentLease,
-                    sessionID: liveSession.sessionID,
-                    generation: liveSession.generation,
-                    eligibleSeeds: retainedSeeds,
-                    authoredActivitySurface: nil,
-                    reason: "prerecordingPreFiller.previousConversationVoice.\(item.id)"
-                )
-                print(
-                    "[TuringLiveConversation] pre-PR microphones staged " +
-                        "itemID=\(item.id) " +
-                        "surface=\(catalogEntry.interactionSurface.rawValue) " +
-                        "context=previousConversationVoice " +
-                        "seedID=\(seedID.uuidString) " +
-                        "selectedMomentID=" +
-                        "\(previousSeed?.targetContext.selectedMomentID ?? "missing") " +
-                        "voicePromptID=\(previousSeed?.voicePromptID ?? "missing")"
-                )
-                return "previousConversationVoice"
-
-            case .currentPromptVoiceFallback:
-                let activation = try await
-                    TuringConversationMicrophoneActivationCoordinator.shared
-                        .authoredMediaStarted(
-                            entry: catalogEntry,
-                            item: item,
-                            descriptor: attachment.descriptor,
-                            parentSequenceID: attachment.parentSequenceID,
-                            identity: attachment.identity,
-                            expectedMicrophoneGeneration:
-                                attachment.microphoneGeneration,
-                            parentLease: liveSession.parentLease,
-                            liveSessionID: liveSession.sessionID,
-                            livePresentationGeneration: liveSession.generation,
-                            activationPhase: "preFillerCurrentPromptFallback"
-                        )
-                currentAuthoredItemID = item.id
-                currentAuthoredSeed = activation.seed
-                presentedSeedIDs = activation.eligibleSeeds.seedsBySurface
-                    .mapValues(\.seedID)
-                print(
-                    "[TuringLiveConversation] pre-PR microphones staged " +
-                        "itemID=\(item.id) " +
-                        "surface=\(catalogEntry.interactionSurface.rawValue) " +
-                        "context=currentPromptVoiceFallback " +
-                        "seedID=\(activation.seed.seedID.uuidString) " +
-                        "selectedMomentID=" +
-                        "\(activation.seed.targetContext.selectedMomentID) " +
-                        "voicePromptID=\(activation.seed.voicePromptID)"
-                )
-                return "currentPromptVoiceFallback"
+            let activation = try await
+                TuringConversationMicrophoneActivationCoordinator.shared
+                    .authoredMediaStarted(
+                        entry: catalogEntry,
+                        item: item,
+                        descriptor: attachment.descriptor,
+                        parentSequenceID: attachment.parentSequenceID,
+                        identity: attachment.identity,
+                        expectedMicrophoneGeneration:
+                            attachment.microphoneGeneration,
+                        parentLease: liveSession.parentLease,
+                        liveSessionID: liveSession.sessionID,
+                        livePresentationGeneration: liveSession.generation,
+                        activationPhase: "preFillerUpcomingPromptVoice"
+            )
+            guard actualAuthoredMediaStartedItemID != item.id else {
+                return "actualAuthoredMediaAlreadyStarted"
             }
+            currentAuthoredItemID = item.id
+            currentAuthoredSeed = activation.seed
+            presentedSeedIDs = activation.eligibleSeeds.seedsBySurface
+                .mapValues(\.seedID)
+            desaturatedMicrophoneSurfaces.subtract(
+                presentedSeedIDs.keys
+            )
+            print(
+                "[TuringLiveConversation] pre-PR microphones staged " +
+                    "itemID=\(item.id) " +
+                    "surface=\(catalogEntry.interactionSurface.rawValue) " +
+                    "context=upcomingPromptVoice " +
+                    "selectable=true computeAhead=true progressionHold=false " +
+                    "seedID=\(activation.seed.seedID.uuidString) " +
+                    "selectedMomentID=" +
+                    "\(activation.seed.targetContext.selectedMomentID) " +
+                    "voicePromptID=\(activation.seed.voicePromptID)"
+            )
+            return "upcomingPromptVoice"
         } catch {
             print(
                 "[TuringLiveConversation] pre-PR microphone staging failed " +
@@ -542,13 +632,15 @@ final class TuringLiveConversationSessionCoordinator:
         switch event {
         case .authoredMediaStarted(_, let item, _):
             await authoredMediaDidStart(item, attachment: attachment)
+        case .authoredMediaPaused(_, let itemID, _, _):
+            await pauseMicrophoneCTA(itemID: itemID)
+        case .authoredMediaResumed(_, let itemID, _, _):
+            await resumeMicrophoneCTA(itemID: itemID)
         case .authoredMediaCompleted(_, let itemID, _):
             await authoredMediaDidComplete(itemID: itemID)
         case .failed(_, let reason):
             await detach(reason: "authoredPlaybackFailed.\(reason)")
-        case .authoredMediaPaused,
-             .authoredMediaResumed,
-             .generatedSegmentStarted,
+        case .generatedSegmentStarted,
              .generatedSegmentCompleted,
              .generatedPlaybackCompleted:
             break
@@ -559,6 +651,8 @@ final class TuringLiveConversationSessionCoordinator:
         _ item: TuringAuthoredMediaItem,
         attachment: Attachment
     ) async {
+        actualAuthoredMediaStartedItemID = item.id
+        completedAuthoredMediaItemIDs.remove(item.id)
         guard item.liveConversationCatalogEntry != nil else {
             currentAuthoredItemID = item.id
             currentAuthoredSeed = nil
@@ -569,11 +663,16 @@ final class TuringLiveConversationSessionCoordinator:
                let seed = currentAuthoredSeed,
                seed.authoredMediaItemID == item.id,
                let existingSession = session {
+                await beginMicrophoneCTA(for: item)
                 let heldSession = try await ensureProgressionHold(
                     existingSession,
                     reason: "eligibleAuthoredMediaStarted.\(item.id)"
                 )
                 session = heldSession
+                await pauseAuthoredMediaForActivePrePRDictationIfNeeded(
+                    itemID: item.id,
+                    attachment: attachment
+                )
                 print(
                     "[TuringLiveConversation] pre-filler seed promoted to authored media " +
                         "itemID=\(item.id) seedID=\(seed.seedID.uuidString) " +
@@ -587,6 +686,7 @@ final class TuringLiveConversationSessionCoordinator:
                 acquireProgressionHold: true,
                 reason: "authoredMediaStarted"
             )
+            await beginMicrophoneCTA(for: item)
         } catch {
             print("[TuringLiveConversation] seed rejected itemID=\(item.id) error=\(error.localizedDescription)")
             await finishSessionIfIdle(reason: "seedResolutionFailed")
@@ -594,6 +694,11 @@ final class TuringLiveConversationSessionCoordinator:
     }
 
     private func authoredMediaDidComplete(itemID: String) async {
+        markAuthoredMediaCompleted(itemID: itemID)
+        await completeMicrophoneCTA(itemID: itemID)
+        if actualAuthoredMediaStartedItemID == itemID {
+            actualAuthoredMediaStartedItemID = nil
+        }
         guard itemID == currentAuthoredItemID else { return }
         currentAuthoredItemID = nil
         if let liveSession = session,
@@ -610,11 +715,417 @@ final class TuringLiveConversationSessionCoordinator:
         }
     }
 
+    private func pauseAuthoredMediaForActivePrePRDictationIfNeeded(
+        itemID: String,
+        attachment: Attachment
+    ) async {
+        guard let activeTurnID = session?.activeTurnID,
+              let turn = turns[activeTurnID],
+              turn.seed.authoredMediaItemID == itemID,
+              turn.state == .dictating,
+              turn.coverReceipt.handle == nil else {
+            return
+        }
+        do {
+            turn.coverReceipt = try await attachment.spokenPlayback
+                .pauseCurrentSpokenMedia(interruptionID: turn.turnID)
+            print(
+                "[TuringLiveConversation] PR paused for active pre-PR dictation " +
+                    "turnID=\(turn.turnID.uuidString) itemID=\(itemID) " +
+                    "pauseResult=\(String(describing: turn.coverReceipt.result))"
+            )
+        } catch {
+            print(
+                "[TuringLiveConversation] PR pause failed during pre-PR dictation " +
+                    "turnID=\(turn.turnID.uuidString) itemID=\(itemID) " +
+                    "authoredPlaybackContinues=true " +
+                    "error=\(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func waitForAuthoredMediaCompletion(itemID: String) async -> Bool {
+        if completedAuthoredMediaItemIDs.contains(itemID) {
+            return true
+        }
+        let waiterID = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume(returning: false)
+                } else if completedAuthoredMediaItemIDs.contains(itemID) {
+                    continuation.resume(returning: true)
+                } else {
+                    authoredMediaCompletionWaiters[itemID, default: [:]][waiterID] =
+                        continuation
+                }
+            }
+        } onCancel: { [weak self] in
+            Task { @MainActor in
+                self?.cancelAuthoredMediaCompletionWaiter(
+                    itemID: itemID,
+                    waiterID: waiterID
+                )
+            }
+        }
+    }
+
+    private func markAuthoredMediaCompleted(itemID: String) {
+        completedAuthoredMediaItemIDs.insert(itemID)
+        let waiters = authoredMediaCompletionWaiters.removeValue(forKey: itemID)
+            ?? [:]
+        for continuation in waiters.values {
+            continuation.resume(returning: true)
+        }
+    }
+
+    private func cancelAuthoredMediaCompletionWaiter(
+        itemID: String,
+        waiterID: UUID
+    ) {
+        guard let continuation = authoredMediaCompletionWaiters[itemID]?
+            .removeValue(forKey: waiterID) else {
+            return
+        }
+        if authoredMediaCompletionWaiters[itemID]?.isEmpty == true {
+            authoredMediaCompletionWaiters.removeValue(forKey: itemID)
+        }
+        continuation.resume(returning: false)
+    }
+
+    private func resumeAllAuthoredMediaCompletionWaiters(completed: Bool) {
+        let waiters = authoredMediaCompletionWaiters.values.flatMap {
+            Array($0.values)
+        }
+        authoredMediaCompletionWaiters.removeAll(keepingCapacity: false)
+        for continuation in waiters {
+            continuation.resume(returning: completed)
+        }
+    }
+
+    private func preloadMicrophoneCTADuration(
+        for item: TuringAuthoredMediaItem
+    ) {
+        guard authoredMediaDurationSeconds[item.id] == nil,
+              microphoneCTADurationTasks[item.id] == nil else {
+            return
+        }
+        let expectedGeneration = generation
+        microphoneCTADurationTasks[item.id] = Task { [weak self] in
+            let duration = await Self.readAudioDurationSeconds(
+                fileURL: item.fileURL
+            )
+            guard Task.isCancelled == false, let self else { return }
+            await self.microphoneCTADurationLoaded(
+                duration,
+                itemID: item.id,
+                expectedGeneration: expectedGeneration
+            )
+        }
+    }
+
+    private func microphoneCTADurationLoaded(
+        _ duration: Double?,
+        itemID: String,
+        expectedGeneration: UInt64
+    ) async {
+        microphoneCTADurationTasks.removeValue(forKey: itemID)
+        guard expectedGeneration == generation,
+              let duration,
+              duration.isFinite,
+              duration > 0 else {
+            print(
+                "[TuringLiveConversation] microphone CTA duration unavailable " +
+                    "itemID=\(itemID)"
+            )
+            return
+        }
+        authoredMediaDurationSeconds[itemID] = duration
+        guard microphoneCTAState?.itemID == itemID else { return }
+        await configureMicrophoneCTA(
+            itemID: itemID,
+            durationSeconds: duration
+        )
+    }
+
+    nonisolated private static func readAudioDurationSeconds(
+        fileURL: URL
+    ) async -> Double? {
+        await Task.detached(priority: .utility) {
+            guard let file = try? AVAudioFile(forReading: fileURL),
+                  file.fileFormat.sampleRate > 0 else {
+                return nil
+            }
+            return Double(file.length) / file.fileFormat.sampleRate
+        }.value
+    }
+
+    private func beginMicrophoneCTA(
+        for item: TuringAuthoredMediaItem
+    ) async {
+        microphoneCTAGeneration &+= 1
+        microphoneCTATimerTask?.cancel()
+        microphoneCTATimerTask = nil
+        let surfaces = Set(presentedSeedIDs.keys)
+        microphoneCTAState = MicrophoneCTAPlaybackState(
+            generation: microphoneCTAGeneration,
+            itemID: item.id,
+            surfaces: surfaces,
+            prerecordingDurationSeconds: nil,
+            transitionStepCount: 0,
+            lastPublishedSaturationStep: nil,
+            accumulatedPlaybackSeconds: 0,
+            runningSince: ContinuousClock.now
+        )
+        desaturatedMicrophoneSurfaces.subtract(surfaces)
+        if let duration = authoredMediaDurationSeconds[item.id] {
+            await configureMicrophoneCTA(
+                itemID: item.id,
+                durationSeconds: duration
+            )
+        } else {
+            preloadMicrophoneCTADuration(for: item)
+        }
+    }
+
+    private func configureMicrophoneCTA(
+        itemID: String,
+        durationSeconds: Double
+    ) async {
+        guard var state = microphoneCTAState,
+              state.itemID == itemID else {
+            return
+        }
+        let stepCount = TuringPrerecordingMicrophoneCTAPolicy
+            .transitionStepCount(
+                prerecordingDurationSeconds: durationSeconds
+            )
+        let transitionDuration = TuringPrerecordingMicrophoneCTAPolicy
+            .transitionDuration(
+                prerecordingDurationSeconds: durationSeconds
+            )
+        state.prerecordingDurationSeconds = durationSeconds
+        state.transitionStepCount = stepCount
+        state.lastPublishedSaturationStep = nil
+        microphoneCTAState = state
+        print(
+            "[TuringLiveConversation] microphone CTA scheduled " +
+                "itemID=\(itemID) durationSeconds=\(durationSeconds) " +
+                "transitionStartsAtFrame=1 " +
+                "transitionDurationSeconds=\(transitionDuration) " +
+                "fullyDesaturatedRemainingSeconds=" +
+                "\(TuringPrerecordingMicrophoneCTAPolicy.fullyDesaturatedRemainingSeconds) " +
+                "transitionSteps=\(stepCount)"
+        )
+        await refreshMicrophoneCTA(
+            generation: state.generation,
+            itemID: itemID,
+            reason: stepCount == 0 ? "shortPR" : "prFrame1"
+        )
+    }
+
+    private func pauseMicrophoneCTA(itemID: String) async {
+        guard var state = microphoneCTAState,
+              state.itemID == itemID,
+              let runningSince = state.runningSince else {
+            return
+        }
+        state.accumulatedPlaybackSeconds += Self.seconds(
+            runningSince.duration(to: ContinuousClock.now)
+        )
+        state.runningSince = nil
+        microphoneCTAState = state
+        microphoneCTATimerTask?.cancel()
+        microphoneCTATimerTask = nil
+        await refreshMicrophoneCTA(
+            generation: state.generation,
+            itemID: itemID,
+            reason: "prPaused"
+        )
+    }
+
+    private func resumeMicrophoneCTA(itemID: String) async {
+        guard var state = microphoneCTAState,
+              state.itemID == itemID,
+              state.runningSince == nil else {
+            return
+        }
+        state.runningSince = ContinuousClock.now
+        microphoneCTAState = state
+        await refreshMicrophoneCTA(
+            generation: state.generation,
+            itemID: itemID,
+            reason: "prResumed"
+        )
+    }
+
+    private func scheduleMicrophoneCTATimer() {
+        microphoneCTATimerTask?.cancel()
+        microphoneCTATimerTask = nil
+        guard let state = microphoneCTAState,
+              let duration = state.prerecordingDurationSeconds,
+              state.transitionStepCount > 0,
+              let runningSince = state.runningSince else {
+            return
+        }
+        let elapsed = state.accumulatedPlaybackSeconds + Self.seconds(
+            runningSince.duration(to: ContinuousClock.now)
+        )
+        let transitionDuration = TuringPrerecordingMicrophoneCTAPolicy
+            .transitionDuration(
+                prerecordingDurationSeconds: duration
+            )
+        let completedSteps = min(
+            state.transitionStepCount,
+            Int(floor(
+                min(1, max(0, elapsed / transitionDuration)) *
+                    Double(state.transitionStepCount)
+            ))
+        )
+        guard completedSteps < state.transitionStepCount else { return }
+        let nextStepOffset =
+            Double(completedSteps + 1) /
+            Double(state.transitionStepCount) * transitionDuration
+        let remaining = max(0, nextStepOffset - elapsed)
+        let generation = state.generation
+        let itemID = state.itemID
+        microphoneCTATimerTask = Task { [weak self] in
+            if remaining > 0 {
+                let nanoseconds = UInt64(
+                    min(remaining * 1_000_000_000, Double(UInt64.max))
+                )
+                try? await Task.sleep(nanoseconds: nanoseconds)
+            }
+            guard Task.isCancelled == false, let self else { return }
+            await self.refreshMicrophoneCTA(
+                generation: generation,
+                itemID: itemID,
+                reason: "linearDrainStep"
+            )
+        }
+    }
+
+    private func refreshMicrophoneCTA(
+        generation expectedGeneration: UInt64,
+        itemID: String,
+        reason: String
+    ) async {
+        guard var state = microphoneCTAState,
+              state.generation == expectedGeneration,
+              state.itemID == itemID,
+              let duration = state.prerecordingDurationSeconds else {
+            return
+        }
+        microphoneCTATimerTask = nil
+        let elapsed = state.accumulatedPlaybackSeconds + (
+            state.runningSince.map {
+                Self.seconds($0.duration(to: ContinuousClock.now))
+            } ?? 0
+        )
+        let step = TuringPrerecordingMicrophoneCTAPolicy.saturationStep(
+            prerecordingDurationSeconds: duration,
+            elapsedPlaybackSeconds: elapsed,
+            stepCount: state.transitionStepCount
+        )
+        if state.lastPublishedSaturationStep != step {
+            state.lastPublishedSaturationStep = step
+            microphoneCTAState = state
+            let saturation = TuringPrerecordingMicrophoneCTAPolicy.saturation(
+                prerecordingDurationSeconds: duration,
+                elapsedPlaybackSeconds: elapsed,
+                stepCount: state.transitionStepCount
+            )
+            if saturation == 0 {
+                desaturatedMicrophoneSurfaces.formUnion(state.surfaces)
+            } else {
+                desaturatedMicrophoneSurfaces.subtract(state.surfaces)
+            }
+            await applyMicrophoneCTAEmphasis(
+                StoryMicrophoneCTAEmphasis(saturation: saturation),
+                surfaces: state.surfaces,
+                reason: reason
+            )
+            print(
+                "[TuringLiveConversation] microphone CTA drain " +
+                    "itemID=\(itemID) elapsedSeconds=\(elapsed) " +
+                    "saturation=\(saturation) step=\(step)/" +
+                    "\(state.transitionStepCount)"
+            )
+        }
+        scheduleMicrophoneCTATimer()
+    }
+
+    private func completeMicrophoneCTA(itemID: String) async {
+        guard let state = microphoneCTAState,
+              state.itemID == itemID else {
+            return
+        }
+        microphoneCTATimerTask?.cancel()
+        microphoneCTATimerTask = nil
+        microphoneCTAState = nil
+        desaturatedMicrophoneSurfaces.formUnion(state.surfaces)
+        await applyMicrophoneCTAEmphasis(
+            .desaturated,
+            surfaces: state.surfaces,
+            reason: "prCompleted"
+        )
+    }
+
+    private func cancelMicrophoneCTA(reason: String) {
+        microphoneCTAGeneration &+= 1
+        microphoneCTATimerTask?.cancel()
+        microphoneCTATimerTask = nil
+        microphoneCTAState = nil
+        for task in microphoneCTADurationTasks.values {
+            task.cancel()
+        }
+        microphoneCTADurationTasks.removeAll(keepingCapacity: false)
+        authoredMediaDurationSeconds.removeAll(keepingCapacity: false)
+        desaturatedMicrophoneSurfaces.removeAll(keepingCapacity: false)
+        print("[TuringLiveConversation] microphone CTA cancelled reason=\(reason)")
+    }
+
+    private func applyMicrophoneCTAEmphasis(
+        _ emphasis: StoryMicrophoneCTAEmphasis,
+        surfaces: Set<StoryInteractionSurfaceID>,
+        reason: String
+    ) async {
+        guard let liveSession = session else { return }
+        for surface in surfaces {
+            do {
+                try await arbiter.setLiveConversationMicrophoneCTAEmphasis(
+                    emphasis,
+                    surface: surface,
+                    parentLease: liveSession.parentLease,
+                    sessionID: liveSession.sessionID,
+                    generation: liveSession.generation,
+                    reason: "\(reason).\(surface.rawValue)"
+                )
+            } catch {
+                print(
+                    "[TuringLiveConversation] microphone CTA update ignored " +
+                        "surface=\(surface.rawValue) reason=\(reason) " +
+                        "error=\(error.localizedDescription)"
+                )
+            }
+        }
+    }
+
+    nonisolated private static func seconds(_ duration: Duration) -> Double {
+        let components = duration.components
+        return Double(components.seconds) +
+            Double(components.attoseconds) / 1_000_000_000_000_000_000
+    }
+
     private func beginTurn(
         surface: StoryInteractionSurfaceID,
         source: String,
         dictation: TuringDictationCoordinator
     ) async {
+        guard case .ready = recoveryAvailability else {
+            clearPendingHold(surface: surface)
+            return
+        }
         guard var liveSession = session,
               liveSession.activeTurnID == nil,
               waitingResponseTurnID == nil,
@@ -640,11 +1151,22 @@ final class TuringLiveConversationSessionCoordinator:
                 selectedSurface: surface,
                 reason: source
             )
-            liveSession = try await ensureProgressionHold(
-                liveSession,
-                reason: "microphoneSelected.\(surface.rawValue)"
-            )
-            session = liveSession
+            let selectedBeforeUpcomingPRStarted =
+                actualAuthoredMediaStartedItemID != seed.authoredMediaItemID
+            if selectedBeforeUpcomingPRStarted == false {
+                liveSession = try await ensureProgressionHold(
+                    liveSession,
+                    reason: "microphoneSelected.\(surface.rawValue)"
+                )
+                session = liveSession
+            } else {
+                print(
+                    "[TuringLiveConversation] pre-PR microphone selected " +
+                        "itemID=\(seed.authoredMediaItemID) " +
+                        "surface=\(surface.rawValue) selectable=true " +
+                        "computeAhead=true progressionHold=false"
+                )
+            }
             computeToken = try await computeAdmission.reserve(
                 sessionID: liveSession.sessionID,
                 turnID: turnID
@@ -696,7 +1218,11 @@ final class TuringLiveConversationSessionCoordinator:
             }
             let submitImmediately = pendingHoldEndRequested
             clearPendingHold(surface: surface)
-            print("[TuringLiveConversation] dictation started turnID=\(turnID.uuidString) surface=\(surface.rawValue)")
+            print(
+                "[TuringLiveConversation] dictation started " +
+                    "turnID=\(turnID.uuidString) surface=\(surface.rawValue) " +
+                    "computeAhead=\(selectedBeforeUpcomingPRStarted)"
+            )
             if submitImmediately {
                 await submitTurn(
                     surface: surface,
@@ -821,6 +1347,18 @@ final class TuringLiveConversationSessionCoordinator:
     private func resumeAndWaitForSpokenCover(
         _ turn: TuringLiveConversationTurn
     ) async -> Bool {
+        if turn.coverReceipt.handle == nil,
+           turn.coverReceipt.itemIdentity == "prerecordingPreFiller" {
+            print(
+                "[TuringLiveConversation] generated response held for " +
+                    "upcoming PR completion turnID=\(turn.turnID.uuidString) " +
+                    "itemID=\(turn.seed.authoredMediaItemID)"
+            )
+            return await waitForAuthoredMediaCompletion(
+                itemID: turn.seed.authoredMediaItemID
+            )
+        }
+
         if turn.coverReceipt.result == .paused,
            turn.initialFillerToken?
                 .mustEndBeforeSpokenCoverResumes == true {
@@ -1071,6 +1609,17 @@ final class TuringLiveConversationSessionCoordinator:
             } else {
                 session = liveSession
             }
+            let restoredDesaturatedSurfaces =
+                desaturatedMicrophoneSurfaces.intersection(
+                    Set(snapshot.seedsBySurface.keys)
+                )
+            if restoredDesaturatedSurfaces.isEmpty == false {
+                await applyMicrophoneCTAEmphasis(
+                    .desaturated,
+                    surfaces: restoredDesaturatedSurfaces,
+                    reason: "retainedAvailability.\(reason)"
+                )
+            }
             print(
                 "[TuringLiveConversation] retained microphones restored " +
                     "surfaces=\(snapshot.seedsBySurface.keys.map(\.rawValue).sorted()) " +
@@ -1127,6 +1676,10 @@ final class TuringLiveConversationSessionCoordinator:
             activeTurnID: nil
         )
         session = replacementSession
+        cancelMicrophoneCTA(reason: "attachmentReplaced")
+        resumeAllAuthoredMediaCompletionWaiters(completed: false)
+        completedAuthoredMediaItemIDs.removeAll(keepingCapacity: false)
+        actualAuthoredMediaStartedItemID = nil
         currentAuthoredSeed = nil
         currentAuthoredItemID = nil
         presentedSeedIDs = snapshot.seedsBySurface.mapValues(\.seedID)
@@ -1179,6 +1732,7 @@ final class TuringLiveConversationSessionCoordinator:
         acquireProgressionHold: Bool,
         reason: String
     ) async throws {
+        try await TuringQwenNativeRecoveryCoordinator.shared.requireReady()
         guard let entry = item.liveConversationCatalogEntry else {
             return
         }
@@ -1248,7 +1802,8 @@ final class TuringLiveConversationSessionCoordinator:
     private func exposeNextTurnMicrophonesIfPossible(
         for activeResponse: TuringLiveConversationTurn
     ) async {
-        guard var liveSession = session,
+        guard case .ready = recoveryAvailability,
+              var liveSession = session,
               activeResponse.responseStarted,
               activeResponse.responseCompleted == false,
               activeResponse.allComputeFinished,
@@ -1296,6 +1851,61 @@ final class TuringLiveConversationSessionCoordinator:
                 "coverTurnID=\(activeResponse.turnID.uuidString) " +
                 "surfaces=\(presentedSeedIDs.keys.map(\.rawValue).sorted())"
         )
+    }
+
+    private func ensureRecoveryAvailabilityObserver() {
+        guard recoveryAvailabilityTask == nil else { return }
+        recoveryAvailabilityTask = Task { [weak self] in
+            let updates = await TuringQwenNativeRecoveryCoordinator.shared
+                .availabilityUpdates()
+            for await availability in updates {
+                guard Task.isCancelled == false else { return }
+                await self?.recoveryAvailabilityChanged(availability)
+            }
+        }
+    }
+
+    private func refreshRecoveryAvailabilityAndObserve() async {
+        recoveryAvailability = await TuringQwenNativeRecoveryCoordinator.shared
+            .currentAvailability()
+        ensureRecoveryAvailabilityObserver()
+    }
+
+    private func recoveryAvailabilityChanged(
+        _ availability: TuringQwenNativeRecoveryAvailability
+    ) async {
+        recoveryAvailability = availability
+        switch availability {
+        case .ready:
+            if let activeResponseTurnID,
+               let activeResponse = turns[activeResponseTurnID] {
+                await exposeNextTurnMicrophonesIfPossible(for: activeResponse)
+            }
+        case .recovering, .unavailableUntilRelaunch:
+            pendingHoldSurface = nil
+            pendingHoldEndRequested = false
+            cancelMicrophoneCTA(reason: "qwenRecoveryAvailability")
+            presentedSeedIDs.removeAll(keepingCapacity: false)
+            if let session {
+                await arbiter.suspendLiveConversationMicrophones(
+                    parentLease: session.parentLease,
+                    sessionID: session.sessionID,
+                    generation: session.generation,
+                    unavailable: {
+                        if case .unavailableUntilRelaunch = availability {
+                            return true
+                        }
+                        return false
+                    }(),
+                    reason: "qwenRecoveryAvailability"
+                )
+            }
+            print(
+                "[TuringQwenRecovery] microphones suspended " +
+                    "availability=\(String(describing: availability)) " +
+                    "audiblePlaybackUnaffected=true"
+            )
+        }
     }
 
     private func publishHUD(

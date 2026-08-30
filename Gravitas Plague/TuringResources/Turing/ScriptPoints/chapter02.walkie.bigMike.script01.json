@@ -8,7 +8,7 @@
     "characterID": "big_mike",
     "conversationKey": "chapter02.dialogue.big_mike.rich.outbreak_night",
     "outputRoute": "walkieSpatial",
-    "computeStart": "foundationBeforePrerecording",
+    "computeStart": "beforePrerecording",
     "fillerMode": "continuousFromPrerecordingToGenerated",
     "commSFX": { "openBeforePrerecording": false, "sendAfterGenerated": false, "sendingLeadInAfterGeneratedSeconds": null },
     "fixedLeadInSeconds": null,

@@ -17,6 +17,18 @@ actor TuringPhase1PresentationRecorder:
     }
 }
 
+private actor TuringPhase1CompletionProbe {
+    private var completed = false
+
+    func markCompleted() {
+        completed = true
+    }
+
+    func isCompleted() -> Bool {
+        completed
+    }
+}
+
 @MainActor
 private final class TuringPhase1LifecycleRecorder:
     TuringFlowPlaybackLifecycleSink
@@ -166,6 +178,88 @@ private actor TuringPhase1TimestampEndpoint:
 
 @MainActor
 final class TuringStoryPlaybackPhase1LifecycleTests: XCTestCase {
+    func testAuthoredProgressionHoldCoalescesForOneLiveSession() async throws {
+        let fixture = makeFixture(character: .broadcaster)
+        let liveSessionID = UUID()
+        let probe = TuringPhase1CompletionProbe()
+
+        await fixture.coordinator.beginAuthoredRun(identity: fixture.identity)
+        let availabilityHold = try await fixture.coordinator
+            .acquireAuthoredProgressionHold(
+                liveSessionID: liveSessionID,
+                reason: "eligibleAuthoredMediaStarted"
+            )
+        let selectionHold = try await fixture.coordinator
+            .acquireAuthoredProgressionHold(
+                liveSessionID: liveSessionID,
+                reason: "microphoneSelected"
+            )
+        XCTAssertEqual(
+            availabilityHold,
+            selectionHold,
+            "One live-conversation session must never strand a second parent-flow hold."
+        )
+
+        await fixture.coordinator.sealAuthoredInput()
+        let waiter = Task {
+            try? await fixture.coordinator.waitUntilAuthoredPlaybackFinished()
+            await probe.markCompleted()
+        }
+        await settle()
+        let completedWhileHeld = await probe.isCompleted()
+        XCTAssertFalse(completedWhileHeld)
+
+        try await fixture.coordinator.releaseAuthoredProgressionHold(
+            selectionHold,
+            reason: "responsePlaybackCompleted"
+        )
+        await waiter.value
+        let completedAfterRelease = await probe.isCompleted()
+        XCTAssertTrue(completedAfterRelease)
+    }
+
+    func testGeneratedTerminalWaitsForExternalSpokenCoverGate() async {
+        let fixture = makeFixture(character: .bigMike)
+        let gate = TuringConversationPlaybackStartGate()
+        let probe = TuringPhase1CompletionProbe()
+
+        await fixture.coordinator.configureFlowIdentity(fixture.identity)
+        await fixture.coordinator.configureGeneratedPlayback(
+            TuringGeneratedPlaybackConfiguration(
+                startGate: gate,
+                initialGapOwnership: .externallyOwned
+            )
+        )
+        await fixture.coordinator.beginRun(
+            runID: fixture.identity.playbackRunID,
+            expectedSegmentCount: 1
+        )
+        await fixture.coordinator.qwenComputeSkipped(
+            segmentIndex: 0,
+            reason: "regression.allGeneratedAudioSkipped"
+        )
+        await fixture.coordinator.sealGeneratedInput(
+            finalExpectedSegmentCount: 1
+        )
+
+        let waiter = Task {
+            await fixture.coordinator.waitUntilPlaybackFinished()
+            await probe.markCompleted()
+        }
+        await settle()
+        let completedWhileCoverClosed = await probe.isCompleted()
+        XCTAssertFalse(
+            completedWhileCoverClosed,
+            "TTS terminal state must not finish its route while the authored PR cover gate is closed."
+        )
+
+        await gate.open()
+        await fixture.coordinator.generatedPlaybackGateDidChange()
+        await waiter.value
+        let completedAfterCoverOpened = await probe.isCompleted()
+        XCTAssertTrue(completedAfterCoverOpened)
+    }
+
     func testPrimaryStartRaceAndCompletionAreSymmetric() async {
         let fixture = makeFixture(character: .bigMike)
         let sink = TuringPhase1LifecycleRecorder()

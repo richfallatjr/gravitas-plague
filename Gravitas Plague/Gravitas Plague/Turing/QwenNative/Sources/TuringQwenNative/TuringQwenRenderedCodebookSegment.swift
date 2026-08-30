@@ -27,17 +27,20 @@ public struct TuringQwenRenderReleaseToken: Hashable, Sendable {
     public let segmentIndex: Int
     public let instanceID: TuringQwenNativeFreshInstanceID
     public let releaseID: UUID
+    public let recoveryGeneration: TuringQwenNativeRecoveryGeneration
 
     public init(
         runID: String,
         segmentIndex: Int,
         instanceID: TuringQwenNativeFreshInstanceID,
-        releaseID: UUID = UUID()
+        releaseID: UUID = UUID(),
+        recoveryGeneration: TuringQwenNativeRecoveryGeneration = .initial
     ) {
         self.runID = runID
         self.segmentIndex = segmentIndex
         self.instanceID = instanceID
         self.releaseID = releaseID
+        self.recoveryGeneration = recoveryGeneration
     }
 }
 
@@ -70,6 +73,7 @@ public struct TuringQwenRenderedCodebookSegment: Sendable, Equatable {
     public let performanceMode: TuringQwenNativePerformanceMode
     public let renderMetrics: TuringQwenRenderPhaseMetrics
     public let releaseToken: TuringQwenRenderReleaseToken
+    public let recoveryGeneration: TuringQwenNativeRecoveryGeneration
 
     public init(
         runID: String,
@@ -84,7 +88,8 @@ public struct TuringQwenRenderedCodebookSegment: Sendable, Equatable {
         reachedEOS: Bool,
         performanceMode: TuringQwenNativePerformanceMode,
         renderMetrics: TuringQwenRenderPhaseMetrics,
-        releaseToken: TuringQwenRenderReleaseToken
+        releaseToken: TuringQwenRenderReleaseToken,
+        recoveryGeneration: TuringQwenNativeRecoveryGeneration = .initial
     ) {
         self.runID = runID
         self.instanceID = instanceID
@@ -99,6 +104,34 @@ public struct TuringQwenRenderedCodebookSegment: Sendable, Equatable {
         self.performanceMode = performanceMode
         self.renderMetrics = renderMetrics
         self.releaseToken = releaseToken
+        self.recoveryGeneration = recoveryGeneration
+    }
+
+    public func withRecoveryGeneration(
+        _ generation: TuringQwenNativeRecoveryGeneration
+    ) -> Self {
+        .init(
+            runID: runID,
+            instanceID: instanceID,
+            segmentIndex: segmentIndex,
+            voiceID: voiceID,
+            referenceCodes: referenceCodes,
+            generatedCodes: generatedCodes,
+            referenceRowCount: referenceRowCount,
+            generatedRowCount: generatedRowCount,
+            codebookCount: codebookCount,
+            reachedEOS: reachedEOS,
+            performanceMode: performanceMode,
+            renderMetrics: renderMetrics,
+            releaseToken: .init(
+                runID: releaseToken.runID,
+                segmentIndex: releaseToken.segmentIndex,
+                instanceID: releaseToken.instanceID,
+                releaseID: releaseToken.releaseID,
+                recoveryGeneration: generation
+            ),
+            recoveryGeneration: generation
+        )
     }
 
     public var rowsForDecode: [[Int]] {

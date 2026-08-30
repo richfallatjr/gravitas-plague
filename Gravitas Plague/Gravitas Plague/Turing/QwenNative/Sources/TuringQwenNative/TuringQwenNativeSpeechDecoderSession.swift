@@ -32,7 +32,10 @@ final class TuringQwenNativeSpeechDecoderSession {
                 segmentIndex: diagnosticContext?.segmentIndex,
                 decodeID: diagnosticContext?.decodeID,
                 phase: .speechDecoder,
-                stage: "speechDecoder.session"
+                stage: "speechDecoder.session",
+                residencyOwnerID: diagnosticContext?.residencyOwnerID,
+                weightStoreID: diagnosticContext?.weightStoreID,
+                laneMutableStateID: diagnosticContext?.laneMutableStateID
             )
         ) {
             try TuringQwenNativeSpeechDecoder.decodeRows(

@@ -18,7 +18,7 @@
       "sendAfterGenerated": false,
       "sendingLeadInAfterGeneratedSeconds": null
     },
-    "fixedLeadInSeconds": 10
+    "fixedLeadInSeconds": null
   },
   "progression": {
     "nextScriptPointID": null,

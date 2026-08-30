@@ -34,15 +34,20 @@ struct TuringCharacterQwenRenderSessionFactory:
         any TuringHighMemoryScenePreparing
     private let gpuAdmissionConfiguration:
         TuringQwenGPUAdmissionExperimentConfiguration?
+    private let residencyConfiguration:
+        TuringQwenResidencyExperimentConfiguration?
 
     init(
         highMemoryPreflight: any TuringHighMemoryScenePreparing =
             TuringHighMemoryPreflightCoordinator.shared,
         gpuAdmissionConfiguration:
-            TuringQwenGPUAdmissionExperimentConfiguration? = nil
+            TuringQwenGPUAdmissionExperimentConfiguration? = nil,
+        residencyConfiguration:
+            TuringQwenResidencyExperimentConfiguration? = nil
     ) {
         self.highMemoryPreflight = highMemoryPreflight
         self.gpuAdmissionConfiguration = gpuAdmissionConfiguration
+        self.residencyConfiguration = residencyConfiguration
     }
 
     func make(
@@ -53,7 +58,8 @@ struct TuringCharacterQwenRenderSessionFactory:
             runtime: runtime,
             runID: runID,
             highMemoryPreflight: highMemoryPreflight,
-            gpuAdmissionConfiguration: gpuAdmissionConfiguration
+            gpuAdmissionConfiguration: gpuAdmissionConfiguration,
+            residencyConfiguration: residencyConfiguration
         )
     }
 
@@ -65,7 +71,8 @@ struct TuringCharacterQwenRenderSessionFactory:
             runtime: runtime,
             runID: runID,
             highMemoryPreflight: highMemoryPreflight,
-            gpuAdmissionConfiguration: gpuAdmissionConfiguration
+            gpuAdmissionConfiguration: gpuAdmissionConfiguration,
+            residencyConfiguration: residencyConfiguration
         )
     }
 
@@ -79,6 +86,7 @@ struct TuringCharacterQwenRenderSessionFactory:
             runID: runID,
             highMemoryPreflight: highMemoryPreflight,
             gpuAdmissionConfiguration: gpuAdmissionConfiguration,
+            residencyConfiguration: residencyConfiguration,
             spokenPresentationContinuity: continuity
         )
     }
@@ -90,6 +98,7 @@ actor TuringCharacterQwenRenderSession:
 {
     private let runtime: TuringCharacterRuntimeDefinition
     private let runID: String
+    private let recoverySessionID = UUID()
     private let resources: TuringBaseCloneRuntimeResources
     private let arbiter: TuringQwenCharacterPoolArbiter
     private let highMemoryPreflight:
@@ -97,6 +106,8 @@ actor TuringCharacterQwenRenderSession:
     private let spokenPresentationContinuity: TuringSpokenPresentationContinuity?
     private let gpuAdmissionConfiguration:
         TuringQwenGPUAdmissionExperimentConfiguration?
+    private let residencyConfiguration:
+        TuringQwenResidencyExperimentConfiguration?
 
     private var pool: TuringQwenNativeFreshInstancePool?
     private var scheduler: TuringQwenNativeFreshInstanceScheduler?
@@ -113,6 +124,7 @@ actor TuringCharacterQwenRenderSession:
         Task<TuringQwenNativeFreshInstanceRunReport, Error>?
     private var streamingState: TuringCharacterStreamingRenderState?
     private var streamingInputSealed = false
+    private var recoveryGeneration: TuringQwenNativeRecoveryGeneration = .initial
 
     init(
         runtime: TuringCharacterRuntimeDefinition,
@@ -124,6 +136,8 @@ actor TuringCharacterQwenRenderSession:
             TuringHighMemoryPreflightCoordinator.shared,
         gpuAdmissionConfiguration:
             TuringQwenGPUAdmissionExperimentConfiguration? = nil,
+        residencyConfiguration:
+            TuringQwenResidencyExperimentConfiguration? = nil,
         spokenPresentationContinuity: TuringSpokenPresentationContinuity? = nil
     ) {
         self.runtime = runtime
@@ -132,14 +146,25 @@ actor TuringCharacterQwenRenderSession:
         self.arbiter = arbiter
         self.highMemoryPreflight = highMemoryPreflight
         self.gpuAdmissionConfiguration = gpuAdmissionConfiguration
+        self.residencyConfiguration = residencyConfiguration
         self.spokenPresentationContinuity = spokenPresentationContinuity
     }
 
     func begin() async throws {
         guard started == false else { return }
 
+        let recoveryAdmission = try await
+            TuringQwenNativeRecoveryCoordinator.shared
+                .acquireSessionAdmission(
+                    sessionID: recoverySessionID,
+                    runID: runID
+                )
+        recoveryGeneration = recoveryAdmission.generation
+
         let resolvedGPUAdmissionConfiguration = try
             gpuAdmissionConfiguration ?? .current()
+        let resolvedResidencyConfiguration = try
+            residencyConfiguration ?? .current()
         let gpuAdmissionPolicy = try resolvedGPUAdmissionConfiguration.policy()
         let mlxCommandBufferConfiguration = try
             TuringMLXCommandBufferExperimentConfiguration.current()
@@ -190,7 +215,12 @@ actor TuringCharacterQwenRenderSession:
             )
             let freshPool =
                 try TuringQwenNativeGenerationSchedulerFactory
-                    .makeFresh2Pool()
+                    .makeFresh2Pool(
+                        residencyMode: resolvedResidencyConfiguration.mode,
+                        recoverySessionID: recoverySessionID,
+                        recoveryRunID: runID,
+                        recoveryGeneration: recoveryAdmission.generation
+                    )
             pool = freshPool
 
             logMemory("session.beforeFresh2WarmLoad")
@@ -204,17 +234,23 @@ actor TuringCharacterQwenRenderSession:
                 .verifyResolvedDeviceConfiguration()
             logMemory("session.afterFresh2WarmLoad")
 
-            let selectedVariant = try loadedProfile.requireVariant(
-                loadedProfile.defaultVariantID
-            )
-            let selectedArtifacts =
-                try TuringQwenNativeCloneArtifactsLoader().load(
-                    from: selectedVariant,
-                    expectedVoiceID: loadedProfile.voiceID
+            if resolvedResidencyConfiguration.mode == .sharedImmutableFresh2 {
+                referenceRowLimit = runtime.qwen.useExactReferenceRowCount
+                    ? try await freshPool.preparedSharedCloneReferenceRowCount()
+                    : nil
+            } else {
+                let selectedVariant = try loadedProfile.requireVariant(
+                    loadedProfile.defaultVariantID
                 )
-            referenceRowLimit = runtime.qwen.useExactReferenceRowCount
-                ? selectedArtifacts.referenceRowCount
-                : nil
+                let selectedArtifacts =
+                    try TuringQwenNativeCloneArtifactsLoader().load(
+                        from: selectedVariant,
+                        expectedVoiceID: loadedProfile.voiceID
+                    )
+                referenceRowLimit = runtime.qwen.useExactReferenceRowCount
+                    ? selectedArtifacts.referenceRowCount
+                    : nil
+            }
 
             switch runtime.qwen.referenceWindowStrategy {
             case "full":
@@ -239,6 +275,7 @@ actor TuringCharacterQwenRenderSession:
             started = true
             logMemory("session.ready")
 
+            let residencyOwnership = try await freshPool.residencyOwnershipReport()
             print("""
             [TuringStagedSpeech] Fresh2 render session started
               runID: \(runID)
@@ -246,11 +283,19 @@ actor TuringCharacterQwenRenderSession:
               voiceID: \(runtime.voiceID)
               requestedInstanceCount: 2
               actualInstanceCount: 2
-              sharedWeights: false
+              residencyMode: \(resolvedResidencyConfiguration.mode.rawValue)
+              uniqueResidentResources: \(residencyOwnership.uniqueResidentResourceCount)
+              uniqueWeightStores: \(residencyOwnership.uniqueWeightStoreCount)
+              uniqueCloneConditionings: \(residencyOwnership.uniqueCloneConditioningCount)
+              laneEngineCount: \(residencyOwnership.laneEngineCount)
+              sharedWeights: \(resolvedResidencyConfiguration.mode == .sharedImmutableFresh2)
               gpuAdmissionMode: \(resolvedGPUAdmissionConfiguration.mode.rawValue)
               mlxCommandBufferProfile: \(mlxCommandBufferConfiguration.profile.rawValue)
               mlxTargetedBoundary: \(mlxCommandBufferConfiguration.targetedBoundary.rawValue)
               fallbackUsed: false
+              recoveryGeneration: \(recoveryAdmission.generation.rawValue)
+              recoverySessionID: \(recoverySessionID.uuidString)
+              recoveryPoolID: \(freshPool.poolID.uuidString)
             """)
         } catch {
             logMemory(
@@ -261,6 +306,8 @@ actor TuringCharacterQwenRenderSession:
                 reason: "turingFlow.\(runtime.characterID).beginFailed.\(runID)"
             )
             pool = nil
+            _ = await TuringQwenNativeRecoveryCoordinator.shared
+                .waitUntilRecoverySettles()
             await releaseOwner(reason: "beginFailed")
             TuringQwenActiveModelTelemetry.unregister(runID: runID)
             throw error
@@ -421,7 +468,8 @@ actor TuringCharacterQwenRenderSession:
             runID: stageRunID,
             profile: nativeReport.commandBufferMetrics.profile,
             admissionMode: nativeReport.commandBufferMetrics.admissionMode,
-            runMetrics: nativeReport.commandBufferMetrics
+            runMetrics: nativeReport.commandBufferMetrics,
+            freshRunReport: nativeReport
         )
 
         let result = await state.snapshot()
@@ -550,7 +598,8 @@ actor TuringCharacterQwenRenderSession:
                     runID: streamRunID,
                     profile: report.commandBufferMetrics.profile,
                     admissionMode: report.commandBufferMetrics.admissionMode,
-                    runMetrics: report.commandBufferMetrics
+                    runMetrics: report.commandBufferMetrics,
+                    freshRunReport: report
                 )
                 await state.schedulerFinished()
                 return report
@@ -689,6 +738,8 @@ actor TuringCharacterQwenRenderSession:
         streamingQueue = nil
         streamingTask = nil
         streamingState = nil
+        _ = await TuringQwenNativeRecoveryCoordinator.shared
+            .waitUntilRecoverySettles()
         await releaseOwner(reason: reason)
         TuringQwenActiveModelTelemetry.unregister(runID: runID)
         logMemory(

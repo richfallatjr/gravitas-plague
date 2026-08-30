@@ -11,7 +11,7 @@
     "computeStart": "beforePrerecording",
     "fillerMode": "continuousFromPrerecordingToGenerated",
     "commSFX": { "openBeforePrerecording": false, "sendAfterGenerated": false, "sendingLeadInAfterGeneratedSeconds": null },
-    "fixedLeadInSeconds": 10,
+    "fixedLeadInSeconds": null,
     "generationPipeline": null,
     "interactionSurface": "walkie",
     "backgroundMusic": null

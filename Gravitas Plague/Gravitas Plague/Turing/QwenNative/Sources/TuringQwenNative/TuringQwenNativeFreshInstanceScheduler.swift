@@ -25,16 +25,40 @@ public actor TuringQwenNativeFreshInstanceScheduler {
     private let instancePool: TuringQwenNativeFreshInstancePool
     private let admissionPolicy: TuringQwenNativeGPUAdmissionPolicy
     private let commandBufferProfile: TuringQwenNativeCommandBufferProfile
+    private let recoveryGeneration: TuringQwenNativeRecoveryGeneration
+    #if GR_TURING_QUALIFICATION
+    private let qualificationSingleLaneControl: Bool
+    #endif
 
     public init(
         instancePool: TuringQwenNativeFreshInstancePool,
         admissionPolicy: TuringQwenNativeGPUAdmissionPolicy,
-        commandBufferProfile: TuringQwenNativeCommandBufferProfile = .deviceDefault
+        commandBufferProfile: TuringQwenNativeCommandBufferProfile = .deviceDefault,
+        recoveryGeneration: TuringQwenNativeRecoveryGeneration = .initial
     ) {
         self.instancePool = instancePool
         self.admissionPolicy = admissionPolicy
         self.commandBufferProfile = commandBufferProfile
+        self.recoveryGeneration = recoveryGeneration
+        #if GR_TURING_QUALIFICATION
+        self.qualificationSingleLaneControl = false
+        #endif
     }
+
+    #if GR_TURING_QUALIFICATION
+    init(
+        qualificationSingleLaneInstancePool instancePool:
+            TuringQwenNativeFreshInstancePool,
+        admissionPolicy: TuringQwenNativeGPUAdmissionPolicy,
+        commandBufferProfile: TuringQwenNativeCommandBufferProfile
+    ) {
+        self.instancePool = instancePool
+        self.admissionPolicy = admissionPolicy
+        self.commandBufferProfile = commandBufferProfile
+        self.recoveryGeneration = instancePool.recoveryGeneration
+        self.qualificationSingleLaneControl = true
+    }
+    #endif
 
     public func runSegments(
         _ requests: [TuringQwenNativeBaseCloneSegmentRequest],
@@ -87,11 +111,31 @@ public actor TuringQwenNativeFreshInstanceScheduler {
         let instances = try await instancePool.warmedInstancesExactlyRequestedCount()
         let requested = await instancePool.requestedInstanceCount
         let actual = instances.count
+        #if GR_TURING_QUALIFICATION
+        if qualificationSingleLaneControl {
+            let mode = instancePool.residencyMode
+            guard mode == .singleLaneSharedControl,
+                  requested == 1,
+                  actual == 1 else {
+                throw TuringQwenNativeError.invalidConfig(
+                    "Qualification single-lane scheduler requires one warmed shared-control instance."
+                )
+            }
+        } else {
+            guard requested == 2, actual == 2 else {
+                throw TuringQwenNativeError.invalidConfig(
+                    "Fresh2 requires exactly two warmed instances."
+                )
+            }
+        }
+        #else
         guard requested == 2, actual == 2 else {
             throw TuringQwenNativeError.invalidConfig(
                 "Fresh2 requires exactly two warmed instances."
             )
         }
+        #endif
+        let residencyOwnership = try await instancePool.residencyOwnershipReport()
 
         let runStart = Date()
         let commandBufferCapture = TuringQwenNativeCommandBufferRunCapture()
@@ -106,6 +150,8 @@ public actor TuringQwenNativeFreshInstanceScheduler {
         let renderPhaseState = TuringQwenRenderPhaseState()
         try await renderPhaseState.beginRun(runID: runID)
         let releaseLedger = TuringQwenRenderReleaseLedger()
+        let residencySnapshots = try await instancePool
+            .residencySnapshotsForDiagnostics()
         let gpuAdmission = TuringQwenNativeGPUAdmissionController(
             policy: admissionPolicy
         )
@@ -113,11 +159,13 @@ public actor TuringQwenNativeFreshInstanceScheduler {
         let decodeCoordinator = TuringQwenNativeSpeechDecodeCoordinator(
             releaseLedger: releaseLedger,
             renderPhaseState: renderPhaseState,
-            gpuAdmission: gpuAdmission
+            gpuAdmission: gpuAdmission,
+            residencySnapshots: residencySnapshots
         )
         let decodeToken = try await decodeCoordinator.beginRun(
             runID: runID,
-            modelRoot: modelRoot
+            modelRoot: modelRoot,
+            generation: recoveryGeneration
         )
         let metricsCollector = TuringQwenNativeFreshInstanceMetricsCollector(
             instanceIDs: instances.map(\.id)
@@ -129,7 +177,11 @@ public actor TuringQwenNativeFreshInstanceScheduler {
           requestedInstanceCount: \(requested)
           actualInstanceCount: \(actual)
           skipSegmentFailures: \(skipSegmentFailures)
-          sharedWeights: false
+          residencyMode: \(residencyOwnership.mode.rawValue)
+          uniqueResidentResources: \(residencyOwnership.uniqueResidentResourceCount)
+          uniqueWeightStores: \(residencyOwnership.uniqueWeightStoreCount)
+          uniqueCloneConditionings: \(residencyOwnership.uniqueCloneConditioningCount)
+          sharedWeights: \(residencyOwnership.mode == .sharedImmutableFresh2)
           dynamicWorkerQueue: true
           openInputQueue: true
           globalRenderBarrier: false
@@ -143,39 +195,35 @@ public actor TuringQwenNativeFreshInstanceScheduler {
 
         let admissionSnapshot: TuringQwenNativeGPUAdmissionSnapshot
         do {
-            async let lane0: Void = Self.runLane(
-                laneIndex: 0,
-                instance: instances[0],
-                queue: queue,
-                runID: runID,
-                skipSegmentFailures: skipSegmentFailures,
-                renderPhaseState: renderPhaseState,
-                releaseLedger: releaseLedger,
-                gpuAdmission: gpuAdmission,
-                decodeCoordinator: decodeCoordinator,
-                decodeToken: decodeToken,
-                metricsCollector: metricsCollector,
-                onSegmentStarted: onSegmentStarted,
-                onSegmentDecoded: onSegmentDecoded,
-                onSegmentSkipped: onSegmentSkipped
+            try await Self.runLaneOperations(
+                instances.indices.map { laneIndex in
+                    let instance = instances[laneIndex]
+                    return {
+                        try await Self.runLane(
+                            laneIndex: laneIndex,
+                            instance: instance,
+                            instancePool: self.instancePool,
+                            queue: queue,
+                            runID: runID,
+                            recoveryGeneration: self.recoveryGeneration,
+                            skipSegmentFailures: skipSegmentFailures,
+                            renderPhaseState: renderPhaseState,
+                            releaseLedger: releaseLedger,
+                            gpuAdmission: gpuAdmission,
+                            decodeCoordinator: decodeCoordinator,
+                            decodeToken: decodeToken,
+                            metricsCollector: metricsCollector,
+                            onSegmentStarted: onSegmentStarted,
+                            onSegmentDecoded: onSegmentDecoded,
+                            onSegmentSkipped: onSegmentSkipped
+                        )
+                    }
+                }
             )
-            async let lane1: Void = Self.runLane(
-                laneIndex: 1,
-                instance: instances[1],
-                queue: queue,
-                runID: runID,
-                skipSegmentFailures: skipSegmentFailures,
-                renderPhaseState: renderPhaseState,
-                releaseLedger: releaseLedger,
-                gpuAdmission: gpuAdmission,
-                decodeCoordinator: decodeCoordinator,
-                decodeToken: decodeToken,
-                metricsCollector: metricsCollector,
-                onSegmentStarted: onSegmentStarted,
-                onSegmentDecoded: onSegmentDecoded,
-                onSegmentSkipped: onSegmentSkipped
-            )
-            _ = try await (lane0, lane1)
+
+            #if GR_TURING_QUALIFICATION
+            try await instancePool.verifySharedWeightsUnchangedAfterQualificationRun()
+            #endif
 
             await decodeCoordinator.finishRun(decodeToken)
             await releaseLedger.clearRun(runID)
@@ -195,7 +243,10 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                 reason: "schedulerFailed"
             )
             if let metalFailure = error as? TuringQwenNativeMetalFailure {
-                await TuringQwenNativeMetalCircuitBreaker.shared.trip(metalFailure)
+                await TuringQwenNativeMetalCircuitBreaker.shared.trip(
+                    metalFailure,
+                    generation: recoveryGeneration
+                )
                 TuringQwenNativeDiagnostics.recordBreadcrumb(
                     "qwen.metalCircuitBreaker.tripped",
                     runID: runID,
@@ -205,12 +256,41 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                         "stage": metalFailure.record.record.lastContext.stage ?? "none"
                     ]
                 )
-                await instancePool.unloadAll(reason: "mlxMetalFailure")
+                let decoderReceipt = await decodeCoordinator
+                    .cancelAndReleaseForRecovery(
+                        token: decodeToken,
+                        failure: metalFailure
+                    )
+                let admissionReceipt = await gpuAdmission.cancelForRecovery(
+                    generation: recoveryGeneration,
+                    failure: metalFailure
+                )
+                let queueCancelled = await queue
+                    .recoveryCancellationIsComplete()
+                let releaseLedgerCleared = await releaseLedger
+                    .isRunClear(runID)
+                let receipt = await instancePool.unloadForRecovery(
+                    reason: "mlxMetalFailure",
+                    schedulerEvidence: .init(
+                        decoderReceipt: decoderReceipt,
+                        admissionReceipt: admissionReceipt,
+                        queueCancelled: queueCancelled,
+                        releaseLedgerCleared: releaseLedgerCleared
+                    )
+                )
+                await TuringQwenNativeMetalCircuitBreaker.shared
+                    .beginAfterOwnershipRelease(
+                        receipt: receipt,
+                        baselineActiveBytes:
+                            instancePool.baselineMLXActiveBytes
+                    )
             }
             throw error
         }
 
         await metricsCollector.sampleMemory(label: "runFinished")
+        await instancePool.recordResidencyPeakBoundary()
+        let residencyMemory = await instancePool.residencyRunMetrics()
         let metrics = await metricsCollector.snapshot()
         let overlap = await renderPhaseState.snapshot()
         let submittedCount = await queue.submittedCount()
@@ -237,15 +317,40 @@ public actor TuringQwenNativeFreshInstanceScheduler {
             crossSegmentRenderDecodeOverlapCount: overlap.crossSegmentRenderDecodeOverlapCount,
             gpuAdmission: admissionSnapshot,
             commandBufferMetrics: commandBufferMetrics,
+            residencyOwnership: residencyOwnership,
+            residencyMemory: residencyMemory,
             fallbackUsed: false
         )
+    }
+
+    static func runLaneOperations(
+        _ operations: [@Sendable () async throws -> Void]
+    ) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for operation in operations {
+                group.addTask(operation: operation)
+            }
+
+            do {
+                while try await group.next() != nil {}
+            } catch {
+                // Observe either lane's terminal error immediately. Awaiting
+                // an async-let tuple in lane order allowed lane 0 to keep
+                // generating indefinitely when lane 1 was the first task to
+                // surface a global MLX Metal failure.
+                group.cancelAll()
+                throw error
+            }
+        }
     }
 
     private static func runLane(
         laneIndex: Int,
         instance: TuringQwenNativeFreshInstance,
+        instancePool: TuringQwenNativeFreshInstancePool,
         queue: TuringQwenOpenSegmentQueue,
         runID: String,
+        recoveryGeneration: TuringQwenNativeRecoveryGeneration,
         skipSegmentFailures: Bool,
         renderPhaseState: TuringQwenRenderPhaseState,
         releaseLedger: TuringQwenRenderReleaseLedger,
@@ -287,6 +392,9 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                     releaseLedger: releaseLedger,
                     gpuAdmission: gpuAdmission,
                     onRenderStarted: {
+                        await instancePool.recordResidencyMemoryBoundary(
+                            "lane\(laneIndex).firstRenderStarted"
+                        )
                         await onSegmentStarted(
                             instanceID,
                             request.segmentIndex
@@ -295,11 +403,12 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                             label: "render.started.\(request.segmentIndex)"
                         )
                     }
-                )
+                ).withRecoveryGeneration(recoveryGeneration)
             } catch {
                 if let metalFailure = error as? TuringQwenNativeMetalFailure {
                     await cancelForMetalFailure(
                         metalFailure,
+                        generation: recoveryGeneration,
                         queue: queue,
                         gpuAdmission: gpuAdmission,
                         decodeCoordinator: decodeCoordinator,
@@ -325,8 +434,14 @@ public actor TuringQwenNativeFreshInstanceScheduler {
             await metricsCollector.sampleMemory(
                 label: "render.released.\(request.segmentIndex)"
             )
+            await instancePool.recordResidencyMemoryBoundary(
+                "lane\(laneIndex).firstRenderReleased"
+            )
 
             do {
+                await instancePool.recordResidencyMemoryBoundary(
+                    "decoder.firstStarted"
+                )
                 print("""
                 [TuringFresh2] lane entered decoder
                   runID: \(runID)
@@ -353,6 +468,13 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                 )
                 #endif
 
+                guard decoded.recoveryGeneration == recoveryGeneration,
+                      await TuringQwenNativeRecoveryCoordinator.shared
+                        .isPublishable(generation: recoveryGeneration) else {
+                    throw TuringQwenNativeRecoveryUnavailableError(
+                        availability: .recovering
+                    )
+                }
                 // Publication returns after the file-backed clip is queued.
                 // It does not wait for playback completion.
                 try await onSegmentDecoded(decoded)
@@ -386,6 +508,7 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                 if let metalFailure = error as? TuringQwenNativeMetalFailure {
                     await cancelForMetalFailure(
                         metalFailure,
+                        generation: recoveryGeneration,
                         queue: queue,
                         gpuAdmission: gpuAdmission,
                         decodeCoordinator: decodeCoordinator,
@@ -410,12 +533,16 @@ public actor TuringQwenNativeFreshInstanceScheduler {
 
     private static func cancelForMetalFailure(
         _ failure: TuringQwenNativeMetalFailure,
+        generation: TuringQwenNativeRecoveryGeneration,
         queue: TuringQwenOpenSegmentQueue,
         gpuAdmission: TuringQwenNativeGPUAdmissionController,
         decodeCoordinator: TuringQwenNativeSpeechDecodeCoordinator,
         decodeToken: TuringQwenNativeSpeechDecodeCoordinator.RunToken
     ) async {
-        await TuringQwenNativeMetalCircuitBreaker.shared.trip(failure)
+        await TuringQwenNativeMetalCircuitBreaker.shared.trip(
+            failure,
+            generation: generation
+        )
         await queue.cancel(reason: "mlxMetalFailure")
         await gpuAdmission.cancelAll(reason: "mlxMetalFailure")
         await decodeCoordinator.cancelRun(

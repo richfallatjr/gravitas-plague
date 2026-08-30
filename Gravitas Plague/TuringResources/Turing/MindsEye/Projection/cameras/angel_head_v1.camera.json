@@ -1,0 +1,93 @@
+{
+  "cameraID" : "angel_head_v1.camera",
+  "cameraMathVersion" : "mind-eye-projection-camera-cube-v1",
+  "clipFromCamera" : [
+    3.7320511,
+    0,
+    0,
+    0,
+    0,
+    3.7320511,
+    0,
+    0,
+    0,
+    0,
+    -1.001001,
+    -1,
+    0,
+    0,
+    -0.02002002,
+    0
+  ],
+  "clipFromSubject" : [
+    3.7320511,
+    0,
+    0,
+    0,
+    0,
+    3.7320511,
+    2.2573979e-16,
+    2.2551405e-16,
+    0,
+    0,
+    -1.001001,
+    -1,
+    0.07349409,
+    -6.337419,
+    0.48792785,
+    0.5074399
+  ],
+  "farMeters" : 20,
+  "fieldOfViewDegrees" : 30,
+  "fieldOfViewOrientation" : "vertical",
+  "framingPadding" : 1.12,
+  "imageHeight" : 1728,
+  "imageWidth" : 1728,
+  "nearMeters" : 0.02,
+  "profileID" : "angel_head_v1",
+  "sceneDefinitionSHA256" : "7d36333a80df7916bd11a207ddb3fbc72d8bc2f834044e9430f7957e0462a41d",
+  "schemaVersion" : 1,
+  "sourceCropOrigin" : [
+    144,
+    144
+  ],
+  "sourceCropSize" : [
+    1440,
+    1440
+  ],
+  "subjectAssetSHA256" : "c274c2a294cf32b4d3dca036d36e854e07bf12a6279a1177d88e5a6148bbaa0f",
+  "subjectFromCamera" : [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    2.2551405e-16,
+    0,
+    0,
+    0,
+    1,
+    0,
+    -0.01969268,
+    1.6981062,
+    0.5074399,
+    1
+  ],
+  "targetBoundsMaximumSubjectMeters" : [
+    0.08030732,
+    1.7981062,
+    0.08945017
+  ],
+  "targetBoundsMinimumSubjectMeters" : [
+    -0.11969268,
+    1.5981061,
+    -0.11054983
+  ],
+  "targetCenterSubjectMeters" : [
+    -0.01969268,
+    1.6981062,
+    -0.01054983
+  ],
+  "targetDescriptorSHA256" : "0afb7e088d35f8994be87d0ab725e6eb56b17ef9bdde725336c4e0db7639337d"
+}

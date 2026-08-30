@@ -1439,3 +1439,310 @@ use `Scripts/turing/analyze_mlx_command_buffers.py` on the per-run JSON. Only
 after `deviceDefault` evidence identifies aggregate pressure should the six
 profile calibration matrix run. Only after a repeating slow single primitive is
 identified may one exact primitive-level split be designed.
+
+## 22. First Phase 2 Vision Pro failure evidence — 2026-08-29
+
+The first instrumented `currentOverlap + deviceDefault` device run produced the
+failure record Phase 2 was built to capture. This was not a process SIGABRT.
+The nonthrowing MLX completion path converted the Metal failure into a typed
+Qwen error, cancelled both Fresh lanes and the decoder, unloaded the pool, and
+kept the app alive. Later same-launch microphone attempts were rejected by the
+launch-lifetime circuit breaker and repeated the original failure record; they
+were not new Metal failures.
+
+Three Qwen sessions completed earlier in the same launch with zero Metal
+failures and the locked topology intact: two Fresh instances, two render
+workers, peak render concurrency two, decoder concurrency one, and
+`currentOverlap`. Their completed-session buffer counts were 29,725, 26,625,
+and 31,901. The fourth session was a Broadcaster response. It published and
+began playing segments 0 and 1 before the failure occurred while segment 2 was
+in the speech decoder and segment 3 was rendering on the other Fresh lane.
+
+Exact failure evidence:
+
+```text
+buffer:                         111480
+Metal status:                   5
+domain/code:                    MTLCommandBufferErrorDomain / 1
+GPU duration:                   19.0505 ms
+run:                            FD51F2D0-F5E1-4020-B816-BA357D05EBD3.legacy
+instance / segment / decode:    fresh-0 / 2 / 2
+phase / stage:                  speechDecoder / speechDecoder.decoder.3.residual.4
+shape:                          1x37120x192
+operation count:                16
+referenced-input byte estimate: 43,289,666
+first / last primitive:         Exp / Multiply
+device-default resolved limits: 40 operations / 40 MB
+physical footprint before stage: 5,525.0 MB
+MLX active before stage:        3,144.2 MB
+MLX cache before stage:         135.9 MB
+OS available near run:          approximately 2,808 MB
+```
+
+This evidence does not justify removing Qwen concurrency. The failing buffer is
+not operation-count-heavy, and the process retained substantial available
+memory. It is an aggregate of 16 operations whose referenced-input estimate is
+above the resolved 40 MB limit. The next controlled crossed-profile candidate
+is therefore `operations40Megabytes32`: preserve the existing 40-operation
+limit and the complete two-lane `currentOverlap` pipeline, while lowering only
+the aggregate byte threshold to 32 MB. Debug device builds are pinned to that
+candidate for the next run. No targeted primitive split is authorized yet.
+
+One secondary recovery defect was exposed. Although Phase 2 correctly left the
+process alive, the app-level `conversationFailed.qwen` path cancelled generated
+segment 1 at approximately 1.04 seconds and detached its Mind's Eye visual even
+though that segment had already been published and was audible. This contradicts
+the intended “already-published audio continues” recovery contract. Keep it
+separate from command-buffer root-cause optimization: the Metal failure remains
+the primary issue, and the next profile experiment should not change lane,
+scheduler, model, sampling, or decode concurrency.
+
+## 23. Crossed-profile failure and infinite-filler recovery — 2026-08-29
+
+The next Vision Pro run correctly resolved `operations40Megabytes32` at startup
+while retaining the complete two-Fresh-lane `currentOverlap` topology. Three
+Qwen sessions completed in that launch. The fourth published and played
+generated segments 0 and 1, then produced another typed Metal failure:
+
+```text
+buffer:                         183666
+Metal status:                   5
+domain/code:                    MTLCommandBufferErrorDomain / 1
+GPU duration:                   11.767750 ms
+run:                            4FA3071D-AFE3-4F7E-B3AB-F26C527E2470.legacy
+recorded source instance/seg:   fresh-0 / 2
+lane that surfaced the error:  fresh-1 / 3
+phase / stage:                  dynamicTalker / baseClone.dynamicRow
+operation count:                41
+referenced-input byte estimate: 2,945,792
+first / last primitive:         AsType / Negative
+resolved profile limits:        40 operations / 32 MB
+observed physical-footprint max: at least 5,989.9 MB
+observed MLX peak:              3,818 MB
+```
+
+This is a materially different failure signature from the `deviceDefault`
+decoder failure. Lowering only the aggregate byte threshold did not make the
+pipeline safe: the crossed-profile failure was operation-heavy and byte-light.
+The evidence is now sufficient to reject `operations40Megabytes32` as a safe
+shipping profile, but this handoff deliberately does not select the next profile
+or prescribe a primitive-level optimization. That decision belongs to the next
+architect phase. Qwen lane count, model, quantization, sampling, decoder
+serialization, and `currentOverlap` remain unchanged.
+
+The same run exposed a separate functional recovery hang. The process-global
+failure was recorded against fresh lane 0/segment 2 but first surfaced as a
+typed Swift error from fresh lane 1/segment 3. The scheduler used two `async let`
+children and awaited them as the ordered tuple `(lane0, lane1)`. It therefore
+continued waiting for lane 0 instead of immediately observing lane 1's terminal
+error. Lane 0 kept generating rows. At the app layer, generated segments 0 and 1
+finished, `nextPlaybackSegmentIndex` advanced to 2, `pendingGenerated` became
+empty, and `allComputeFinished` never became true. Playback then repeated
+`computeWithoutSpeech` filler followed by dead air indefinitely.
+
+The functional containment change does not optimize or serialize Qwen. The two
+lane operations now run in a throwing task group that observes whichever lane
+finishes or fails first and cancels its sibling on the first error. The base-clone
+dynamic-row loop checks task cancellation before submitting another row. This
+allows the existing top-level `qwenComputeFailed` path to mark unpublished
+segments skipped, finish already-published audio, exit filler, release the live
+conversation admission, and end the run. A focused host regression test proves
+that a lane-1 error cancels a still-running lane 0 without waiting in lane order.
+The Qwen-native package builds and the focused test passes; Vision Pro proof of
+the recovery path remains required.
+
+## 24. Second crossed-profile launch: severe slowdown reported as a loop — 2026-08-29
+
+A later `operations40Megabytes32` Vision Pro capture contains five distinct live
+conversation attempts. The first four reached all of the normal terminal
+markers: decoder run finished, Fresh2 run finished, pool unloaded,
+`allTTSComputeFinished`, generated playback completion, and conversation
+playback completion. They used distinct run IDs and were initiated by distinct
+player dictation submissions. There was no repeated flow ID, Metal failure,
+terminal filler/dead-air cycle, or missing compute-finished signal in those four
+runs.
+
+The fifth attempt was Big Mike run
+`E488707F-DB4D-4711-BF16-F714152BDA8F`. The capture ends while lanes 0 and 1 are
+still generating segments 0 and 1. Both lanes had reached only row 8 of the
+existing hard 160-row per-segment ceiling. Their logged averages had degraded
+to 0.513 and 0.547 seconds per row, with projected real-time factors of 6.408
+and 6.839. No Metal error, cancellation, repeated request, or terminal state
+appears before the file ends, so this evidence cannot distinguish eventual
+completion from a later stall. It does establish severe and visibly
+unacceptable latency after four completed Qwen conversations in one launch.
+
+Do not ask the owner to reproduce this again before the next architect phase.
+Treat the two crossed-profile launches together:
+
+```text
+profile:                  operations40Megabytes32
+launches:                 2
+attempts captured:        9
+completed attempts:       7
+typed Metal failures:     1
+incomplete slow attempt:  1
+slow-attempt phase:       dynamicTalker / baseClone.dynamicRow
+slow-attempt progress:    row 8 on both active lanes
+projected RTF:            6.408 / 6.839
+```
+
+No new optimization, timeout, lane serialization, concurrency reduction, model
+change, or sampling change was made from this incomplete trace. The architect
+must use it alongside the two exact Metal failure signatures when selecting the
+next low-level Turing optimization phase.
+
+## 25. Third crossed-profile launch: breaker prevents same-launch recovery — 2026-08-30
+
+The third `operations40Megabytes32` Vision Pro launch completed eight distinct
+Qwen conversations before the ninth produced another typed Metal failure:
+
+```text
+buffer:                         391542
+Metal status:                   5
+domain/code:                    MTLCommandBufferErrorDomain / 1
+GPU duration:                   11.680875 ms
+run:                            1000585B-9E36-40F2-8D12-4A99DCE1DFD6.legacy
+recorded source instance/seg:   fresh-1 / 4
+lane that surfaced the error:  fresh-0 / 5
+phase / stage:                  dynamicTalker / baseClone.dynamicRow
+operation count:                41
+referenced-input byte estimate: 2,441,984
+first / last primitive:         AsType / QuantizedMatmul
+resolved profile limits:        40 operations / 32 MB
+post-unload physical footprint: 1,884 MB
+post-unload MLX active/cache:   0 MB / 0 MB
+post-unload OS available:       approximately 6,307 MB
+```
+
+This repeats the architecturally important signature from buffer 183666:
+`dynamicTalker / baseClone.dynamicRow`, exactly 41 operations under the
+40-operation profile, low referenced-input bytes, and an approximately 11.7 ms
+failed GPU duration. It is the second failure of this type under the crossed
+profile and occurred only after eight successful conversations in that launch.
+
+The first-error scheduler containment change is proven by this run. Fresh lane
+0 surfaced the process-global error recorded against fresh lane 1. The throwing
+task group immediately cancelled the sibling; fresh lane 1 then exited with
+`CancellationError`. Decoder cancellation completed, both Fresh instances
+unloaded, MLX active/cache returned to zero, and story interaction returned
+without the prior filler/dead-air loop.
+
+Two separate product-recovery problems remain:
+
+1. Generated segment 3 was actively audible at 3.779 seconds when the failure
+   occurred during segments 4 and 5. The app used `conversationFailed.qwen`,
+   cancelled the audible handle, detached Mind's Eye, and removed the generated
+   run. It did not use the playback coordinator's existing terminal-compute
+   reconciliation path that can finish already-published audio and skip only
+   missing segments.
+2. `TuringQwenNativeMetalCircuitBreaker` is intentionally
+   `failedUntilRelaunch`. Three subsequent player questions in the same launch
+   were rejected during session begin, before Fresh warm load, and displayed
+   the original buffer 391542 error. Physical and MLX memory had recovered; the
+   repeated failures were circuit-breaker policy, not three new GPU failures.
+   Story microphones were restored after each rejection, so the UI invited
+   interactions that the runtime already knew could not succeed.
+
+The next architect phase must explicitly decide the production contract after
+a typed Metal poison event. Safe options to evaluate include a proven low-level
+MLX/Metal reinitialization boundary or a fail-closed product state that disables
+Qwen-backed microphones and clearly requires relaunch. Do not merely clear the
+breaker and reuse poisoned MLX state. Separately, route the first failed run
+through terminal compute reconciliation so already-published audible speech is
+allowed to finish. No breaker reset, MLX restart, concurrency change, profile
+change, or other optimization has been implemented from this evidence.
+
+## 26. Owner-directed same-launch retry policy — 2026-08-30
+
+The next captured launch again proved that Foundation Models was not the
+component rejecting the later interaction. All ten Foundation fresh sessions,
+including the final `conversationPrompt_playerTurn_noBible` request, completed
+successfully. The subsequent Fresh2 session begin replayed an earlier typed
+Metal failure before warm load:
+
+```text
+command buffer:       315336
+Metal status:         5
+domain/code:          MTLCommandBufferErrorDomain / 1
+phase/stage:          dynamicTalker / baseClone.dynamicRow
+source run:           FF778DAA-B99E-41FE-BBE1-D76001518448.legacy
+source segment:       3
+new run rejected:     B1A58761-D389-4223-A25B-4BF00D4EA09F
+post-unload MLX:      0 MB active / 0 MB cache
+OS available:         approximately 6,437 MB
+```
+
+The owner explicitly rejected the launch-lifetime lockout. An initial recovery
+change made the circuit breaker a first-error diagnostic latch and allowed the
+next run to perform a fresh pool warm load. The next trace proved that change
+was necessary but insufficient; section 27 supersedes its exact reset boundary.
+Current-run cancellation, pool unload, failure recording, two Fresh lanes,
+`currentOverlap`, decoder serialization, model, sampling, and command-buffer
+profile remained unchanged.
+
+## 27. Low-level MLX poison replay and audible-card ownership — 2026-08-30
+
+The next device trace proves the app-level circuit breaker was no longer the
+same-launch blocker. The first typed failure was:
+
+```text
+command buffer:       333894
+failure epoch:        1
+Metal status:         5
+domain/code:          MTLCommandBufferErrorDomain / 1
+GPU duration:         222.043583 ms
+run:                  D32544BC-4FEE-436D-AD1D-2A0A695AE5F2.legacy
+segment:              2
+phase/stage:          speechDecoder / speechDecoder.decoder.1.residual.2
+operations:           19
+referenced bytes:     35,619,075
+```
+
+The trace then printed the app-level recovery marker, started a new Fresh2 pool
+warm load, and started a new render session. Every subsequent MLX eval still
+threw the exact old epoch-1/buffer-333894 failure. Foundation Models continued
+to complete fresh requests after this point. This isolates the recovery defect
+below the app circuit breaker and excludes Foundation Models as its cause.
+
+Source inspection found the persistent latch in the local MLX fork:
+`throw_if_turing_metal_failed()` calls `copy_last_failure()` before every GPU
+eval, stream synchronization, and command-buffer acquisition. `last_failure_`
+and `has_failure_` were never acknowledged outside test-only reset code, so a
+fresh pool could never submit one new command after any prior failure.
+
+The recovery boundary is now explicit and narrow:
+
+- MLX exports `acknowledge_failure_for_recovery()` in production.
+- It clears only `has_failure_` and `poisoned_` after the failed pool has been
+  unloaded.
+- It preserves the monotonic failure epoch, last-record bytes, bounded command
+  buffer ring, aggregate counters, and persisted JSON for architecture work.
+- Only `warmLoadExactlyRequestedInstances` consumes the recoverable breaker and
+  invokes the low-level acknowledgment. Ordinary in-run `requireHealthy()`
+  calls still throw, preventing a sibling lane or decoder stage from silently
+  continuing after the first failure.
+- The recovery log reports the original command buffer, recorded epoch,
+  acknowledged epoch, and `diagnosticHistoryPreserved=true`.
+
+Focused tests prove acknowledgment removes the active throw latch, retains the
+epoch/ring/aggregate failure evidence, and permits a new synthetic completion.
+The Qwen-native package tests pass and the visionOS Simulator app build passes.
+Same-launch Vision Pro recovery remains the required device proof. No lane,
+`currentOverlap`, model, quantization, sampling, decoder serialization, or
+command-buffer-profile change was made.
+
+The same trace exposed a separate one-card ownership regression. While authored
+CatEye PR `prologue.room.cateye81.hamReceiver.003` was still audible, selecting
+Dad launched a pre-PR reveal whose `preAudioRevealReplacement` path detached and
+disposed CatEye. Later, while a Rich Dad PR was still audible, a Big Mike
+pre-audio reveal repeated the same replacement. The issue was not memory or
+Qwen preflight; `handleRevealRequest` unconditionally replaced the active card.
+
+`ActivePresentation` now records whether its media is actually audible. A
+pre-audio reveal checks this ownership before continuity promotion, preparation,
+detach, or disposal. If another PR is audible, the reveal resolves audio-only
+for its lead-in and logs `audible owner retained`; device selection and Qwen
+compute continue, and the requested portrait can claim the card at its own
+actual audio start. This is functional containment only and is not a Mind's Eye
+memory optimization.

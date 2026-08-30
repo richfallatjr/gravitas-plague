@@ -11,6 +11,8 @@
 
 namespace mlx::core::metal::turing {
 
+class RecoveryController;
+
 constexpr uint64_t kFNVOffsetBasis = 14695981039346656037ULL;
 constexpr uint64_t kFNVPrime = 1099511628211ULL;
 constexpr size_t kCommandBufferRingCapacity = 64;
@@ -90,7 +92,10 @@ class CommandBufferDiagnostics {
 #endif
 
  private:
+  friend class RecoveryController;
   CommandBufferDiagnostics() = default;
+
+  uint64_t acknowledge_failure_for_recovery() noexcept;
 
   void append_record_noexcept(mlx_turing_command_buffer_record record) noexcept;
   void publish_failure_noexcept(mlx_turing_command_buffer_record record) noexcept;

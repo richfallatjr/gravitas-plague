@@ -12,6 +12,7 @@
 #include "mlx/backend/metal/metal.h"
 #include "mlx/backend/metal/turing_command_buffer_diagnostics.h"
 #include "mlx/backend/metal/turing_metal_failure.h"
+#include "mlx/backend/metal/turing_metal_recovery.h"
 #include "mlx/backend/metal/utils.h"
 #include "mlx/primitives.h"
 #include "mlx/utils.h"
@@ -246,6 +247,30 @@ CommandEncoder::~CommandEncoder() {
   enc_->release();
 }
 
+void DeviceStream::dispose() noexcept {
+  try {
+    encoder.reset();
+    temporaries.clear();
+    fence.reset();
+    {
+      std::lock_guard<std::mutex> lock(fence_mtx);
+      outputs.clear();
+    }
+    turing_buffer_state.reset();
+    buffer_ops = 0;
+    buffer_sizes = 0;
+    if (buffer != nullptr) {
+      buffer->release();
+      buffer = nullptr;
+    }
+    if (queue != nullptr) {
+      queue->release();
+      queue = nullptr;
+    }
+  } catch (...) {
+  }
+}
+
 void CommandEncoder::set_buffer(
     const MTL::Buffer* buf,
     int idx,
@@ -383,16 +408,39 @@ Device::~Device() {
 
 void Device::new_queue(int index) {
   auto thread_pool = metal::new_scoped_memory_pool();
+  std::lock_guard<std::mutex> lock(stream_map_mtx_);
+  if (auto existing = stream_map_.find(index); existing != stream_map_.end()) {
+    if (existing->second.recovery_generation ==
+        turing::RecoveryController::shared().generation()) {
+      return;
+    }
+    throw std::runtime_error(
+        "[metal::Device] Refusing to reuse a stale recovery-generation stream.");
+  }
   auto q = device_->newCommandQueue();
   debug_set_stream_queue_label(q, index);
   if (!q) {
     throw std::runtime_error(
         "[metal::Device] Failed to make new command queue.");
   }
-  stream_map_.emplace(index, q);
+  stream_map_.try_emplace(
+      index, q, turing::RecoveryController::shared().generation());
   if (residency_set_ != nullptr) {
     q->addResidencySet(residency_set_);
   }
+}
+
+DeviceStream& Device::get_stream_(int index) {
+  auto stream = stream_map_.find(index);
+  if (stream == stream_map_.end()) {
+    throw std::runtime_error("[metal::Device] Missing Metal stream.");
+  }
+  if (stream->second.recovery_generation !=
+      turing::RecoveryController::shared().generation()) {
+    throw std::runtime_error(
+        "[metal::Device] Metal stream belongs to a stale recovery generation.");
+  }
+  return stream->second;
 }
 
 MTL::CommandQueue* Device::get_queue(Stream stream) {
@@ -844,6 +892,52 @@ void Device::set_residency_set(const MTL::ResidencySet* residency_set) {
   for (auto& [_, stream] : stream_map_) {
     stream.queue->addResidencySet(residency_set_);
   }
+}
+
+Device::TuringRecoveryResetResult Device::reset_streams_for_turing_recovery(
+    uint64_t candidate_generation) {
+  auto pool = new_scoped_memory_pool();
+  std::lock_guard<std::mutex> lock(stream_map_mtx_);
+  std::vector<int32_t> indexes;
+  indexes.reserve(stream_map_.size());
+  for (const auto& [index, _] : stream_map_) {
+    indexes.push_back(index);
+  }
+  if (indexes.empty()) {
+    // MLX creates stream zero as its default GPU stream.
+    indexes.push_back(0);
+  }
+
+  const uint64_t disposed = stream_map_.size();
+  for (auto& [_, stream] : stream_map_) {
+    stream.dispose();
+  }
+  stream_map_.clear();
+
+  uint64_t recreated = 0;
+  for (const auto index : indexes) {
+    auto* queue = device_->newCommandQueue();
+    if (!queue) {
+      throw std::runtime_error(
+          "[metal::Device] Failed to recreate a recovery command queue.");
+    }
+    debug_set_stream_queue_label(queue, index);
+    if (residency_set_ != nullptr) {
+      queue->addResidencySet(residency_set_);
+    }
+    stream_map_.try_emplace(index, queue, candidate_generation);
+    ++recreated;
+  }
+  return {disposed, recreated};
+}
+
+MTL::CommandQueue* Device::turing_recovery_probe_queue() {
+  std::lock_guard<std::mutex> lock(stream_map_mtx_);
+  if (stream_map_.empty()) {
+    throw std::runtime_error(
+        "[metal::Device] Recovery reset did not recreate a stream queue.");
+  }
+  return stream_map_.begin()->second.queue;
 }
 
 Device& device(mlx::core::Device) {

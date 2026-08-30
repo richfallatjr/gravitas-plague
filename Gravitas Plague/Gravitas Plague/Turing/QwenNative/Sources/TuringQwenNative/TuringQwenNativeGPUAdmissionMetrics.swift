@@ -1,6 +1,6 @@
 import Foundation
 
-public struct TuringQwenNativeGPUAdmissionSnapshot: Sendable, Equatable {
+public struct TuringQwenNativeGPUAdmissionSnapshot: Sendable, Equatable, Codable {
     public let mode: TuringQwenNativeGPUAdmissionMode
     public let activeGenerationLeaseCount: Int
     public let activeDecodeLeaseCount: Int

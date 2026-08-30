@@ -96,6 +96,15 @@ final class Chapter03DefinitionAndCatalogTests: XCTestCase {
                 duckAttackSeconds: 0.75,
                 duckReleaseSeconds: 0.75
             ),
+            heavenPortalEmbers: .init(
+                enabled: true,
+                visemeResourcePath:
+                    "Turing/Cinematics/Chapter03/Cues/" +
+                    "chapter03.cinematic.angel.lightTunnel.001.visemes.json",
+                sourceCinematicID:
+                    "chapter03.cinematic.angel.lightTunnel.001",
+                paletteID: "heavenPurpleMagentaCyan.v1"
+            ),
             completion: .init(
                 waitForMusicActualCompletion: true,
                 waitForAngelPrerecordingIfStarted: true,
