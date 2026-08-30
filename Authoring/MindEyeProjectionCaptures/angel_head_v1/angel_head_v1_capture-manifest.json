@@ -18,7 +18,7 @@
     -15,
     -15
   ],
-  "maskCoverageFraction" : 0.6441531501843278,
+  "maskCoverageFraction" : 0.48371726037379975,
   "maskPixelFormat" : "bgra8Unorm",
   "mediaTimeSeconds" : 0,
   "outputs" : [
@@ -45,10 +45,10 @@
       "width" : 1728
     },
     {
-      "SHA256" : "5c34df03c09725eb521ef056db5e5c117b29cdb233f99faf8b05816f8a1f095e",
+      "SHA256" : "74522d1f74cd5036761a84e97f1818b38c5f2a2e4a70292b59632c9712e2f6e8",
       "alphaMode" : "opaque",
       "bitsPerChannel" : 8,
-      "byteCount" : 88835,
+      "byteCount" : 230821,
       "colorSpace" : "linearRGB",
       "filename" : "angel_head_v1_projection-mask-aov.png",
       "height" : 1728,
@@ -56,10 +56,10 @@
       "width" : 1728
     },
     {
-      "SHA256" : "03816c69ed05eba098d87f0e388c982be8c09ff7c19fae8d81ed65fa17718a71",
+      "SHA256" : "16cd9b6fa3ebc1770f5adee59022c3bea044d27e94fe54dbc1419b5ceef83469",
       "alphaMode" : "none",
       "bitsPerChannel" : 16,
-      "byteCount" : 292708,
+      "byteCount" : 358423,
       "colorSpace" : "linearGray",
       "filename" : "angel_head_v1_projection-mask-linear16.png",
       "height" : 1728,
@@ -67,10 +67,10 @@
       "width" : 1728
     },
     {
-      "SHA256" : "978e37c2ec26b5ce62ce5733f7d1befb3da3f79e79981298787c04608d760f4a",
+      "SHA256" : "3c229b2e326cabeffd4c53aa5550adb233948dabd5348e7a52e18517cb7f0494",
       "alphaMode" : "none",
       "bitsPerChannel" : 8,
-      "byteCount" : 119286,
+      "byteCount" : 149422,
       "colorSpace" : "gray",
       "filename" : "angel_head_v1_projection-mask-preview.png",
       "height" : 1728,
@@ -78,10 +78,10 @@
       "width" : 1728
     },
     {
-      "SHA256" : "6d42c601569cda5e56315187a31c346e3baa3affb5833de489cc82bded5ae994",
+      "SHA256" : "95a39765ccbf90b83d99b48d1c409014a1adde1357ade803478b80b9cd0b64e7",
       "alphaMode" : "opaque",
       "bitsPerChannel" : 8,
-      "byteCount" : 2803013,
+      "byteCount" : 2810044,
       "colorSpace" : "sRGB",
       "filename" : "angel_head_v1_alignment-guide.png",
       "height" : 1728,
