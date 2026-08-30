@@ -52,7 +52,20 @@ public enum TuringQwenNativeDiagnostics {
         segmentIndex: Int? = nil,
         details: [String: String] = [:]
     ) {
+        // The package's macOS target exists for host-side contract tests. MLX
+        // attempts to load its default Metal library when queried there, which
+        // is not available in that test process. Runtime Turing is visionOS-only.
+        #if os(visionOS)
         let mlx = memorySnapshot()
+        #else
+        let mlx = TuringQwenNativeMemorySnapshot(
+            activeMemoryBytes: 0,
+            cacheMemoryBytes: 0,
+            peakMemoryBytes: 0,
+            cacheLimitBytes: 0,
+            memoryLimitBytes: 0
+        )
+        #endif
         let process = TuringQwenNativeProcessMemoryProbe.snapshot()
         let breadcrumb = TuringQwenNativeCrashBreadcrumb(
             schemaVersion: 1,
@@ -65,6 +78,7 @@ public enum TuringQwenNativeDiagnostics {
             mlx: mlx,
             physicalFootprintMB: process.physFootprintMB,
             residentSizeMB: process.residentSizeMB,
+            availableProcessMemoryMB: process.availableProcessMemoryMB,
             details: details
         )
         breadcrumbWriter.write(breadcrumb)
@@ -85,14 +99,17 @@ private struct TuringQwenNativeCrashBreadcrumb: Codable, Sendable {
     let mlx: TuringQwenNativeMemorySnapshot
     let physicalFootprintMB: Double
     let residentSizeMB: Double
+    let availableProcessMemoryMB: Double
     let details: [String: String]
 }
 
 private final class TuringQwenNativeCrashBreadcrumbWriter:
     @unchecked Sendable
 {
+    private static let maximumTimelineBytes = 1_048_576
     private let lock = NSLock()
     private let url: URL?
+    private let timelineURL: URL?
 
     init() {
         guard let applicationSupport = try? FileManager.default.url(
@@ -102,6 +119,7 @@ private final class TuringQwenNativeCrashBreadcrumbWriter:
             create: true
         ) else {
             url = nil
+            timelineURL = nil
             return
         }
         let root = applicationSupport.appendingPathComponent(
@@ -119,6 +137,9 @@ private final class TuringQwenNativeCrashBreadcrumbWriter:
         url = root.appendingPathComponent(
             "qwen-native-last-breadcrumb.json"
         )
+        timelineURL = root.appendingPathComponent(
+            "qwen-native-timeline.jsonl"
+        )
     }
 
     func write(_ breadcrumb: TuringQwenNativeCrashBreadcrumb) {
@@ -128,15 +149,42 @@ private final class TuringQwenNativeCrashBreadcrumbWriter:
         do {
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try encoder.encode(breadcrumb).write(
+            encoder.outputFormatting = [.sortedKeys]
+            let encoded = try encoder.encode(breadcrumb)
+            try encoded.write(
                 to: url,
                 options: [.atomic]
             )
+            try appendToBoundedTimeline(encoded)
         } catch {
             print(
                 "[TuringQwenNativeDiagnostics] breadcrumb write failed: \(error.localizedDescription)"
             )
         }
+    }
+
+    private func appendToBoundedTimeline(_ encoded: Data) throws {
+        guard let timelineURL else { return }
+        var line = encoded
+        line.append(0x0A)
+
+        let existingBytes = (
+            try? timelineURL.resourceValues(
+                forKeys: [.fileSizeKey]
+            ).fileSize
+        ) ?? 0
+        if existingBytes + line.count > Self.maximumTimelineBytes {
+            try line.write(to: timelineURL, options: [.atomic])
+            return
+        }
+        guard FileManager.default.fileExists(atPath: timelineURL.path) else {
+            try line.write(to: timelineURL, options: [.atomic])
+            return
+        }
+
+        let handle = try FileHandle(forWritingTo: timelineURL)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        try handle.write(contentsOf: line)
     }
 }

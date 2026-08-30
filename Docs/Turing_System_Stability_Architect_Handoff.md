@@ -183,6 +183,56 @@ Apple references:
 | Stable post-run baseline but a large spike at one stage | Transient peak | Serialize or chunk that stage and prevent generation/decode/RealityKit peaks from overlapping. |
 | No memory evidence and a repeatable Qwen stage/segment | Logic/data-dependent abort | Reproduce the same input/seed in an optimized device build and inspect the symbolicated stack. |
 
+### 2026-08-29 current-overlap crash: confirmed Metal execution abort
+
+The longer on-device run supplied on 2026-08-29 ends with an explicit abort,
+not merely a truncated console stream:
+
+```text
+libc++abi: terminating due to uncaught exception of type std::runtime_error:
+[METAL] Command buffer execution failed: Impacting Interactivity
+(0000000e:kIOGPUCommandBufferCallbackErrorImpactingInteractivity)
+status=5 errorDomain=MTLCommandBufferErrorDomain errorCode=1
+```
+
+This run used the Phase 1 production baseline `gpuAdmissionMode:
+currentOverlap`. The admission queues were both zero and no admission invariant
+violation was reported. The final chronology is important:
+
+1. CatEye segment 0 rendered and decoded successfully.
+2. Segment 1 finished rendering on `fresh-1`; its render working set and render
+   phase were released before its decoder admission.
+3. Segment 1 entered the speech decoder on `fresh-1`.
+4. While segment 1 was decoding, `fresh-0` entered the render phase for segment
+   2 and began a new CatEye talker prompt forward pass.
+5. Segment 1 successfully materialized
+   `speechDecoder.decoder.1.residual.3` at shape `1x2496x768`.
+6. The next Metal command-buffer completion raised the uncaught
+   `ImpactingInteractivity` runtime error and terminated the process.
+
+The last completed decoder boundary reported approximately:
+
+```text
+physFootprintMB: 5527.9
+mlxActiveMB: 3217.5
+mlxCacheMB: 0.0
+```
+
+The last explicit available-memory sample near decoder admission was about
+2,649 MB. The run had emitted a memory-pressure warning earlier, but this final
+evidence is not a jetsam or a process-memory-limit termination. It is a Metal
+command-buffer execution failure surfaced by MLX as an uncaught C++ exception.
+
+The strongest experiment now is the Phase 1 serialized-admission A/B using the
+same path and device conditions. Do not remove Fresh2 or redesign concurrency
+from this one result. First determine whether prohibiting generation/decode GPU
+overlap removes `ImpactingInteractivity` while retaining the two-instance
+pipeline. If it does, the architect should focus on a low-level scheduling or
+command-buffer-boundary solution that preserves useful concurrency while
+preventing the specific competing GPU interval. Also determine whether MLX can
+surface this command-buffer failure as a recoverable Swift error; the current
+uncaught `std::runtime_error` guarantees `SIGABRT` once Metal rejects the work.
+
 There are intentional `precondition` calls in the Turing flow, interaction,
 audio, rendered-codebook, and release-ledger paths. They are another reason not to
 label every `SIGABRT` as OOM.

@@ -7,6 +7,7 @@ final class TuringLiveConversationSessionCoordinator:
 {
     static let shared = TuringLiveConversationSessionCoordinator()
     static let submittedQuestionHold: Duration = .seconds(2)
+    private static let prerecordingPreFillerRevealTimeout: Duration = .seconds(5)
 
     private struct Attachment {
         let parentSequenceID: UUID
@@ -228,10 +229,64 @@ final class TuringLiveConversationSessionCoordinator:
     func prepareForPrerecordingPreFiller(
         _ item: TuringAuthoredMediaItem
     ) async {
-        guard item.liveConversationCatalogEntry != nil else { return }
+        guard let attachment,
+              let catalogEntry = item.liveConversationCatalogEntry,
+              let speaker = TuringConversationCharacterID(
+                rawValue: item.speakerCharacterID
+              ),
+              catalogEntry.speakerCharacterID == speaker,
+              catalogEntry.interactionSurface ==
+                attachment.identity.interactionSurface else {
+            return
+        }
+
+        let source = TuringSpokenPresentationSource.authored(
+            prerecordingID: item.id,
+            role: item.role
+        )
+        let run = TuringSpokenPresentationRunIdentity(
+            flowIdentity: attachment.identity
+        )
+
+        // The PR-orientation interval is the first audible filler for an
+        // authored point. Stage the same portrait that the PR will promote so
+        // keep-alive motion and blinking are already visible while the device
+        // static/tuning filler plays. Mouth playback remains at rest until the
+        // actual authored-audio start supplies its pause-aware clock.
+        await TuringAuthoredPresentationPreparationHub.shared.publish(
+            TuringAuthoredPresentationPreparationHint(
+                run: run,
+                prerecordingID: item.id,
+                role: item.role,
+                speakerCharacterID: speaker,
+                interactionSurface: catalogEntry.interactionSurface
+            )
+        )
+        let request = TuringSpokenPresentationRevealRequest(
+            id: UUID(),
+            run: run,
+            speakerCharacterID: speaker,
+            interactionSurface: catalogEntry.interactionSurface,
+            source: source,
+            generatedSpeechFrameTrack: nil
+        )
+        let outcome = await TuringSpokenPresentationRevealHub.shared
+            .requestReveal(
+                request,
+                timeout: Self.prerecordingPreFillerRevealTimeout
+            )
+
+        guard self.attachment?.identity.flowInstanceID ==
+                attachment.identity.flowInstanceID else {
+            return
+        }
         print(
-            "[TuringLiveConversation] pre-filler did not latch microphone " +
-                "itemID=\(item.id) activation=actualAuthoredMediaStart"
+            "[MindEyeFiller] pre-PR portrait staged " +
+                "itemID=\(item.id) speaker=\(speaker.rawValue) " +
+                "surface=\(catalogEntry.interactionSurface.rawValue) " +
+                "outcome=\(String(describing: outcome)) " +
+                "motion=keepAlive blink=active mouth=rest " +
+                "microphoneActivation=actualAuthoredMediaStart"
         )
     }
 

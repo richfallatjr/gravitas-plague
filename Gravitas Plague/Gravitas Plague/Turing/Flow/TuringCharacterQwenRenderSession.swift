@@ -32,12 +32,17 @@ struct TuringCharacterQwenRenderSessionFactory:
 {
     private let highMemoryPreflight:
         any TuringHighMemoryScenePreparing
+    private let gpuAdmissionConfiguration:
+        TuringQwenGPUAdmissionExperimentConfiguration?
 
     init(
         highMemoryPreflight: any TuringHighMemoryScenePreparing =
-            TuringHighMemoryPreflightCoordinator.shared
+            TuringHighMemoryPreflightCoordinator.shared,
+        gpuAdmissionConfiguration:
+            TuringQwenGPUAdmissionExperimentConfiguration? = nil
     ) {
         self.highMemoryPreflight = highMemoryPreflight
+        self.gpuAdmissionConfiguration = gpuAdmissionConfiguration
     }
 
     func make(
@@ -47,7 +52,8 @@ struct TuringCharacterQwenRenderSessionFactory:
         TuringCharacterQwenRenderSession(
             runtime: runtime,
             runID: runID,
-            highMemoryPreflight: highMemoryPreflight
+            highMemoryPreflight: highMemoryPreflight,
+            gpuAdmissionConfiguration: gpuAdmissionConfiguration
         )
     }
 
@@ -58,7 +64,8 @@ struct TuringCharacterQwenRenderSessionFactory:
         TuringCharacterQwenRenderSession(
             runtime: runtime,
             runID: runID,
-            highMemoryPreflight: highMemoryPreflight
+            highMemoryPreflight: highMemoryPreflight,
+            gpuAdmissionConfiguration: gpuAdmissionConfiguration
         )
     }
 
@@ -71,6 +78,7 @@ struct TuringCharacterQwenRenderSessionFactory:
             runtime: runtime,
             runID: runID,
             highMemoryPreflight: highMemoryPreflight,
+            gpuAdmissionConfiguration: gpuAdmissionConfiguration,
             spokenPresentationContinuity: continuity
         )
     }
@@ -87,6 +95,8 @@ actor TuringCharacterQwenRenderSession:
     private let highMemoryPreflight:
         any TuringHighMemoryScenePreparing
     private let spokenPresentationContinuity: TuringSpokenPresentationContinuity?
+    private let gpuAdmissionConfiguration:
+        TuringQwenGPUAdmissionExperimentConfiguration?
 
     private var pool: TuringQwenNativeFreshInstancePool?
     private var scheduler: TuringQwenNativeFreshInstanceScheduler?
@@ -112,6 +122,8 @@ actor TuringCharacterQwenRenderSession:
         arbiter: TuringQwenCharacterPoolArbiter = .shared,
         highMemoryPreflight: any TuringHighMemoryScenePreparing =
             TuringHighMemoryPreflightCoordinator.shared,
+        gpuAdmissionConfiguration:
+            TuringQwenGPUAdmissionExperimentConfiguration? = nil,
         spokenPresentationContinuity: TuringSpokenPresentationContinuity? = nil
     ) {
         self.runtime = runtime
@@ -119,11 +131,16 @@ actor TuringCharacterQwenRenderSession:
         self.resources = resources
         self.arbiter = arbiter
         self.highMemoryPreflight = highMemoryPreflight
+        self.gpuAdmissionConfiguration = gpuAdmissionConfiguration
         self.spokenPresentationContinuity = spokenPresentationContinuity
     }
 
     func begin() async throws {
         guard started == false else { return }
+
+        let resolvedGPUAdmissionConfiguration = try
+            gpuAdmissionConfiguration ?? .current()
+        let gpuAdmissionPolicy = try resolvedGPUAdmissionConfiguration.policy()
 
         logMemory("session.beforeHighMemoryPreflight")
         try await highMemoryPreflight.prepareForTuringHighMemoryRun(
@@ -197,7 +214,10 @@ actor TuringCharacterQwenRenderSession:
 
             scheduler =
                 TuringQwenNativeGenerationSchedulerFactory
-                    .makeFresh2Scheduler(instancePool: freshPool)
+                    .makeFresh2Scheduler(
+                        instancePool: freshPool,
+                        gpuAdmissionPolicy: gpuAdmissionPolicy
+                    )
             profile = loadedProfile
             stagedModel = writableModel
             started = true
@@ -211,6 +231,7 @@ actor TuringCharacterQwenRenderSession:
               requestedInstanceCount: 2
               actualInstanceCount: 2
               sharedWeights: false
+              gpuAdmissionMode: \(resolvedGPUAdmissionConfiguration.mode.rawValue)
               fallbackUsed: false
             """)
         } catch {

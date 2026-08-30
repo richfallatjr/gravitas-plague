@@ -17,8 +17,31 @@ public enum TuringQwenNativeGenerationSchedulerFactory {
     }
 
     public static func makeFresh2Scheduler(
+        instancePool: TuringQwenNativeFreshInstancePool,
+        gpuAdmissionPolicy: TuringQwenNativeGPUAdmissionPolicy
+    ) -> TuringQwenNativeFreshInstanceScheduler {
+        TuringQwenNativeFreshInstanceScheduler(
+            instancePool: instancePool,
+            admissionPolicy: gpuAdmissionPolicy
+        )
+    }
+
+    /// Retains source compatibility for diagnostic canaries that intentionally
+    /// exercise the current production scheduler without the Phase 1 candidate.
+    public static func makeFresh2Scheduler(
         instancePool: TuringQwenNativeFreshInstancePool
     ) -> TuringQwenNativeFreshInstanceScheduler {
-        TuringQwenNativeFreshInstanceScheduler(instancePool: instancePool)
+        let productionPolicy: TuringQwenNativeGPUAdmissionPolicy
+        do {
+            productionPolicy = try .currentProduction
+        } catch {
+            preconditionFailure(
+                "The locked Fresh2 production admission policy is invalid: \(error)"
+            )
+        }
+        return makeFresh2Scheduler(
+            instancePool: instancePool,
+            gpuAdmissionPolicy: productionPolicy
+        )
     }
 }

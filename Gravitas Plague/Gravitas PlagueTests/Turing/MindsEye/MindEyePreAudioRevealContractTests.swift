@@ -39,6 +39,28 @@ final class MindEyePreAudioRevealContractTests: XCTestCase {
         XCTAssertTrue(source.contains("motionRestarted=false"))
     }
 
+    func testPrerecordingFillerStagesTheAuthoredPortraitBeforeOrientation() throws {
+        let source = try productionSource(
+            "Turing/Conversation/TuringLiveConversationSessionCoordinator.swift"
+        )
+        let method = try XCTUnwrap(
+            source.range(of: "func prepareForPrerecordingPreFiller(")
+        )
+        let remainder = source[method.lowerBound...]
+
+        XCTAssertTrue(
+            remainder.contains("TuringAuthoredPresentationPreparationHub.shared.publish")
+        )
+        XCTAssertTrue(
+            remainder.contains("TuringSpokenPresentationRevealRequest(")
+        )
+        XCTAssertTrue(remainder.contains("source: source"))
+        XCTAssertTrue(remainder.contains("motion=keepAlive blink=active mouth=rest"))
+        XCTAssertTrue(
+            remainder.contains("microphoneActivation=actualAuthoredMediaStart")
+        )
+    }
+
     func testMissingVisualFallsThroughToAudioOnly() throws {
         let source = try productionSource(
             "Turing/Audio/TuringSpokenPresentationReveal.swift"

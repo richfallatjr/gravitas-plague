@@ -21,13 +21,16 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
     private var nextDecodeID = 0
     private let releaseLedger: TuringQwenRenderReleaseLedger
     private let renderPhaseState: TuringQwenRenderPhaseState
+    private let gpuAdmission: TuringQwenNativeGPUAdmissionController
 
     public init(
         releaseLedger: TuringQwenRenderReleaseLedger,
-        renderPhaseState: TuringQwenRenderPhaseState
+        renderPhaseState: TuringQwenRenderPhaseState,
+        gpuAdmission: TuringQwenNativeGPUAdmissionController
     ) {
         self.releaseLedger = releaseLedger
         self.renderPhaseState = renderPhaseState
+        self.gpuAdmission = gpuAdmission
     }
 
     public func beginRun(runID: String, modelRoot: URL) throws -> RunToken {
@@ -77,14 +80,25 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
             )
         }
         try await releaseLedger.requireReleased(rendered.releaseToken)
+
+        let decodeID = nextDecodeID
+        nextDecodeID += 1
+        let decodeLease = try await gpuAdmission.acquireDecode(
+            work: TuringQwenNativeGPUWorkIdentity(
+                runID: rendered.runID,
+                segmentIndex: rendered.segmentIndex,
+                laneIndex: nil,
+                instanceID: rendered.instanceID.rawValue,
+                decodeID: decodeID
+            )
+        )
         let overlap = await renderPhaseState.decodeAcquired(
             runID: rendered.runID,
             segmentIndex: rendered.segmentIndex
         )
         let rowsForDecode = rendered.rowsForDecode
 
-        let decodeID = nextDecodeID
-        nextDecodeID += 1
+        let admissionAtAcquire = await gpuAdmission.snapshot()
         let before = TuringQwenNativeProcessMemoryProbe.snapshot()
         let startedAt = Date()
         print("""
@@ -101,6 +115,9 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
           segmentRenderReleasedBeforeDecode: true
           waitedForOtherFreshWorker: false
           freshPathUsesLegacyDecodeGate: false
+          gpuAdmissionMode: \(admissionAtAcquire.mode.rawValue)
+          gpuAdmissionGenerationQueue: \(admissionAtAcquire.queuedGenerationCount)
+          gpuAdmissionDecodeQueue: \(admissionAtAcquire.queuedDecodeCount)
           activeRenderCountAtDecodeAcquire: \(overlap.activeRenderCount)
           sameSegmentRenderActive: \(overlap.sameSegmentRenderActive)
           crossSegmentRenderActive: \(overlap.crossSegmentRenderActive)
@@ -114,6 +131,9 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
             details: [
                 "decodeID": String(decodeID),
                 "totalRows": String(rowsForDecode.count),
+                "gpuAdmissionMode": admissionAtAcquire.mode.rawValue,
+                "gpuAdmissionGenerationQueue": String(admissionAtAcquire.queuedGenerationCount),
+                "gpuAdmissionDecodeQueue": String(admissionAtAcquire.queuedDecodeCount),
                 "activeRenderCountAtDecodeAcquire": String(overlap.activeRenderCount),
                 "sameSegmentRenderActive": String(overlap.sameSegmentRenderActive),
                 "crossSegmentRenderActive": String(overlap.crossSegmentRenderActive),
@@ -183,8 +203,16 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
                     "samples": String(audio.samples.count)
                 ]
             )
+            await gpuAdmission.release(
+                decodeLease,
+                reason: "decodeCompleted"
+            )
             return result
         } catch {
+            await gpuAdmission.release(
+                decodeLease,
+                reason: "decodeFailed"
+            )
             TuringQwenNativeMemoryControl.clearCache(
                 label: "speechDecoder.segmentFailed.\(rendered.runID).\(rendered.segmentIndex)",
                 shouldLogSnapshot: true

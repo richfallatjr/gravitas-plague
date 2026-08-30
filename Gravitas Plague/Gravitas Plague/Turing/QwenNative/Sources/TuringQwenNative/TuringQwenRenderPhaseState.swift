@@ -13,6 +13,11 @@ public struct TuringQwenDecodeAcquireObservation: Sendable, Equatable {
     public let activeRenderKeys: [String]
 }
 
+public struct TuringQwenActiveRenderSnapshot: Sendable, Equatable {
+    public let activeRenderCount: Int
+    public let activeRenderKeys: [String]
+}
+
 public actor TuringQwenRenderPhaseState {
     private struct ActiveRender: Hashable {
         let runID: String
@@ -114,6 +119,16 @@ public actor TuringQwenRenderPhaseState {
             peakActiveRenderCount: peakActiveRenderCount,
             sameSegmentRenderDecodeOverlapCount: sameSegmentRenderDecodeOverlapCount,
             crossSegmentRenderDecodeOverlapCount: crossSegmentRenderDecodeOverlapCount
+        )
+    }
+
+    public func activeSnapshot() -> TuringQwenActiveRenderSnapshot {
+        let keys = activeRenders.map {
+            "\($0.runID).\($0.segmentIndex).\($0.instanceID.rawValue)"
+        }.sorted()
+        return TuringQwenActiveRenderSnapshot(
+            activeRenderCount: activeRenders.count,
+            activeRenderKeys: keys
         )
     }
 }

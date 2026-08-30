@@ -1,6 +1,10 @@
 import Foundation
 import MLX
 
+#if GR_TURING_QUALIFICATION
+import CryptoKit
+#endif
+
 public struct TuringQwenNativeFreshSegmentSkip: Sendable {
     public let instanceID: TuringQwenNativeFreshInstanceID
     public let segmentIndex: Int
@@ -19,9 +23,14 @@ public struct TuringQwenNativeFreshSegmentSkip: Sendable {
 
 public actor TuringQwenNativeFreshInstanceScheduler {
     private let instancePool: TuringQwenNativeFreshInstancePool
+    private let admissionPolicy: TuringQwenNativeGPUAdmissionPolicy
 
-    public init(instancePool: TuringQwenNativeFreshInstancePool) {
+    public init(
+        instancePool: TuringQwenNativeFreshInstancePool,
+        admissionPolicy: TuringQwenNativeGPUAdmissionPolicy
+    ) {
         self.instancePool = instancePool
+        self.admissionPolicy = admissionPolicy
     }
 
     public func runSegments(
@@ -83,9 +92,14 @@ public actor TuringQwenNativeFreshInstanceScheduler {
         let renderPhaseState = TuringQwenRenderPhaseState()
         try await renderPhaseState.beginRun(runID: runID)
         let releaseLedger = TuringQwenRenderReleaseLedger()
+        let gpuAdmission = TuringQwenNativeGPUAdmissionController(
+            policy: admissionPolicy
+        )
+        await gpuAdmission.beginRun(runID: runID)
         let decodeCoordinator = TuringQwenNativeSpeechDecodeCoordinator(
             releaseLedger: releaseLedger,
-            renderPhaseState: renderPhaseState
+            renderPhaseState: renderPhaseState,
+            gpuAdmission: gpuAdmission
         )
         let decodeToken = try await decodeCoordinator.beginRun(
             runID: runID,
@@ -105,11 +119,15 @@ public actor TuringQwenNativeFreshInstanceScheduler {
           dynamicWorkerQueue: true
           openInputQueue: true
           globalRenderBarrier: false
+          gpuAdmissionMode: \(admissionPolicy.mode.rawValue)
+          maximumConcurrentGenerationLeases: \(admissionPolicy.maximumConcurrentGenerationLeases)
+          decoderHasPriority: \(admissionPolicy.decoderHasPriority)
           freshPathUsesLegacyDecodeGate: false
           fallbackUsed: false
         """)
         await metricsCollector.sampleMemory(label: "runStarted")
 
+        let admissionSnapshot: TuringQwenNativeGPUAdmissionSnapshot
         do {
             async let lane0: Void = Self.runLane(
                 laneIndex: 0,
@@ -119,6 +137,7 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                 skipSegmentFailures: skipSegmentFailures,
                 renderPhaseState: renderPhaseState,
                 releaseLedger: releaseLedger,
+                gpuAdmission: gpuAdmission,
                 decodeCoordinator: decodeCoordinator,
                 decodeToken: decodeToken,
                 metricsCollector: metricsCollector,
@@ -134,6 +153,7 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                 skipSegmentFailures: skipSegmentFailures,
                 renderPhaseState: renderPhaseState,
                 releaseLedger: releaseLedger,
+                gpuAdmission: gpuAdmission,
                 decodeCoordinator: decodeCoordinator,
                 decodeToken: decodeToken,
                 metricsCollector: metricsCollector,
@@ -145,14 +165,21 @@ public actor TuringQwenNativeFreshInstanceScheduler {
 
             await decodeCoordinator.finishRun(decodeToken)
             await releaseLedger.clearRun(runID)
+            admissionSnapshot = try await gpuAdmission.finishRun(
+                reason: "schedulerFinished"
+            )
         } catch {
             await queue.cancel(reason: error.localizedDescription)
+            await gpuAdmission.cancelAll(reason: error.localizedDescription)
             await decodeCoordinator.cancelRun(
                 decodeToken,
                 reason: error.localizedDescription
             )
             await decodeCoordinator.finishRun(decodeToken)
             await releaseLedger.clearRun(runID)
+            _ = try? await gpuAdmission.finishRun(
+                reason: "schedulerFailed"
+            )
             throw error
         }
 
@@ -176,6 +203,7 @@ public actor TuringQwenNativeFreshInstanceScheduler {
             peakDecodeConcurrency: metrics.successfulSegmentCount > 0 ? 1 : 0,
             sameSegmentRenderDecodeOverlapCount: overlap.sameSegmentRenderDecodeOverlapCount,
             crossSegmentRenderDecodeOverlapCount: overlap.crossSegmentRenderDecodeOverlapCount,
+            gpuAdmission: admissionSnapshot,
             fallbackUsed: false
         )
     }
@@ -188,6 +216,7 @@ public actor TuringQwenNativeFreshInstanceScheduler {
         skipSegmentFailures: Bool,
         renderPhaseState: TuringQwenRenderPhaseState,
         releaseLedger: TuringQwenRenderReleaseLedger,
+        gpuAdmission: TuringQwenNativeGPUAdmissionController,
         decodeCoordinator: TuringQwenNativeSpeechDecodeCoordinator,
         decodeToken: TuringQwenNativeSpeechDecodeCoordinator.RunToken,
         metricsCollector: TuringQwenNativeFreshInstanceMetricsCollector,
@@ -214,29 +243,27 @@ public actor TuringQwenNativeFreshInstanceScheduler {
               segmentIndex: \(request.segmentIndex)
             """)
 
-            await renderPhaseState.renderStarted(
-                runID: runID,
-                segmentIndex: request.segmentIndex,
-                instanceID: instanceID
-            )
-            await onSegmentStarted(instanceID, request.segmentIndex)
-            await metricsCollector.sampleMemory(
-                label: "render.started.\(request.segmentIndex)"
-            )
-
             let rendered: TuringQwenRenderedCodebookSegment
             do {
-                rendered = try await instance.renderCodebookAndRelease(
-                    request,
+                rendered = try await renderWithAdmission(
+                    instance: instance,
+                    request: request,
                     runID: runID,
-                    releaseLedger: releaseLedger
+                    laneIndex: laneIndex,
+                    renderPhaseState: renderPhaseState,
+                    releaseLedger: releaseLedger,
+                    gpuAdmission: gpuAdmission,
+                    onRenderStarted: {
+                        await onSegmentStarted(
+                            instanceID,
+                            request.segmentIndex
+                        )
+                        await metricsCollector.sampleMemory(
+                            label: "render.started.\(request.segmentIndex)"
+                        )
+                    }
                 )
             } catch {
-                await renderPhaseState.renderReleased(
-                    runID: runID,
-                    segmentIndex: request.segmentIndex,
-                    instanceID: instanceID
-                )
                 await metricsCollector.sampleMemory(
                     label: "render.failed.\(request.segmentIndex)"
                 )
@@ -252,12 +279,6 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                 }
                 throw error
             }
-
-            await renderPhaseState.renderReleased(
-                runID: runID,
-                segmentIndex: request.segmentIndex,
-                instanceID: instanceID
-            )
             await metricsCollector.sampleMemory(
                 label: "render.released.\(request.segmentIndex)"
             )
@@ -281,6 +302,13 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                     rms: decoded.audio.rms,
                     durationSeconds: decoded.audio.durationSeconds
                 )
+
+                #if GR_TURING_QUALIFICATION
+                await recordQualificationFingerprint(
+                    rendered: rendered,
+                    decoded: decoded
+                )
+                #endif
 
                 // Publication returns after the file-backed clip is queued.
                 // It does not wait for playback completion.
@@ -326,6 +354,107 @@ public actor TuringQwenNativeFreshInstanceScheduler {
             }
         }
     }
+
+    private static func renderWithAdmission(
+        instance: TuringQwenNativeFreshInstance,
+        request: TuringQwenNativeBaseCloneSegmentRequest,
+        runID: String,
+        laneIndex: Int,
+        renderPhaseState: TuringQwenRenderPhaseState,
+        releaseLedger: TuringQwenRenderReleaseLedger,
+        gpuAdmission: TuringQwenNativeGPUAdmissionController,
+        onRenderStarted: @Sendable @escaping () async -> Void
+    ) async throws -> TuringQwenRenderedCodebookSegment {
+        let instanceID = instance.id
+        let lease = try await gpuAdmission.acquireGeneration(
+            work: TuringQwenNativeGPUWorkIdentity(
+                runID: runID,
+                segmentIndex: request.segmentIndex,
+                laneIndex: laneIndex,
+                instanceID: instanceID.rawValue,
+                decodeID: nil
+            )
+        )
+
+        await renderPhaseState.renderStarted(
+            runID: runID,
+            segmentIndex: request.segmentIndex,
+            instanceID: instanceID
+        )
+        await onRenderStarted()
+
+        do {
+            let rendered = try await instance.renderCodebookAndRelease(
+                request,
+                runID: runID,
+                releaseLedger: releaseLedger
+            )
+            await renderPhaseState.renderReleased(
+                runID: runID,
+                segmentIndex: request.segmentIndex,
+                instanceID: instanceID
+            )
+            await gpuAdmission.release(
+                lease,
+                reason: "renderCompleted"
+            )
+            return rendered
+        } catch {
+            await renderPhaseState.renderReleased(
+                runID: runID,
+                segmentIndex: request.segmentIndex,
+                instanceID: instanceID
+            )
+            await gpuAdmission.release(
+                lease,
+                reason: "renderFailed"
+            )
+            throw error
+        }
+    }
+
+    #if GR_TURING_QUALIFICATION
+    private static func recordQualificationFingerprint(
+        rendered: TuringQwenRenderedCodebookSegment,
+        decoded: TuringQwenDecodedSegment
+    ) async {
+        let generatedCodes = rendered.generatedCodes
+        let samples = decoded.audio.samples
+        let hashes = await Task.detached(priority: .utility) {
+            let codebookData = generatedCodes.withUnsafeBytes { Data($0) }
+            let pcmData = samples.withUnsafeBytes { Data($0) }
+            return (
+                codebooks: SHA256.hash(data: codebookData).map {
+                    String(format: "%02x", $0)
+                }.joined(),
+                pcm: SHA256.hash(data: pcmData).map {
+                    String(format: "%02x", $0)
+                }.joined()
+            )
+        }.value
+
+        TuringQwenNativeDiagnostics.recordBreadcrumb(
+            "gpuAdmission.outputFingerprint",
+            runID: rendered.runID,
+            instanceID: rendered.instanceID.rawValue,
+            segmentIndex: rendered.segmentIndex,
+            details: [
+                "generatedRowCount": String(rendered.generatedRowCount),
+                "codebookCount": String(rendered.codebookCount),
+                "codebookSHA256": hashes.codebooks,
+                "pcmSampleCount": String(decoded.audio.samples.count),
+                "sampleRate": String(decoded.audio.sampleRate),
+                "pcmSHA256": hashes.pcm,
+                "durationSeconds": String(
+                    format: "%.9f",
+                    decoded.audio.durationSeconds
+                ),
+                "peak": String(format: "%.9f", decoded.audio.peakAbs),
+                "rms": String(format: "%.9f", decoded.audio.rms)
+            ]
+        )
+    }
+    #endif
 
     private static func isSkippableEOSBeforeGeneratedAudio(_ error: Error) -> Bool {
         if case TuringQwenNativeError.invalidConfig(let message) = error {

@@ -18,6 +18,7 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
     public let peakDecodeConcurrency: Int
     public let sameSegmentRenderDecodeOverlapCount: Int
     public let crossSegmentRenderDecodeOverlapCount: Int
+    public let gpuAdmission: TuringQwenNativeGPUAdmissionSnapshot
     public let endPhysFootprintMB: Double
     public let endResidentSizeMB: Double
     public let fallbackUsed: Bool
@@ -38,6 +39,7 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
         peakDecodeConcurrency: Int,
         sameSegmentRenderDecodeOverlapCount: Int,
         crossSegmentRenderDecodeOverlapCount: Int,
+        gpuAdmission: TuringQwenNativeGPUAdmissionSnapshot,
         fallbackUsed: Bool
     ) {
         self.requestedInstanceCount = requestedInstanceCount
@@ -58,6 +60,7 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
         self.peakDecodeConcurrency = peakDecodeConcurrency
         self.sameSegmentRenderDecodeOverlapCount = sameSegmentRenderDecodeOverlapCount
         self.crossSegmentRenderDecodeOverlapCount = crossSegmentRenderDecodeOverlapCount
+        self.gpuAdmission = gpuAdmission
         let endMemory = TuringQwenNativeProcessMemoryProbe.snapshot()
         self.endPhysFootprintMB = endMemory.physFootprintMB
         self.endResidentSizeMB = endMemory.residentSizeMB
@@ -83,6 +86,13 @@ public struct TuringQwenNativeFreshInstanceRunReport: Sendable {
           peakDecodeConcurrency: \(peakDecodeConcurrency)
           sameSegmentRenderDecodeOverlapCount: \(sameSegmentRenderDecodeOverlapCount)
           crossSegmentRenderDecodeOverlapCount: \(crossSegmentRenderDecodeOverlapCount)
+          gpuAdmissionMode: \(gpuAdmission.mode.rawValue)
+          gpuAdmissionPeakGenerationLeases: \(gpuAdmission.peakActiveGenerationLeaseCount)
+          gpuAdmissionBlockedGenerationCount: \(gpuAdmission.blockedGenerationAcquisitionCount)
+          gpuAdmissionBlockedDecodeCount: \(gpuAdmission.blockedDecodeAcquisitionCount)
+          gpuAdmissionMaxGenerationWaitNanoseconds: \(gpuAdmission.maximumGenerationWaitNanoseconds)
+          gpuAdmissionMaxDecodeWaitNanoseconds: \(gpuAdmission.maximumDecodeWaitNanoseconds)
+          gpuAdmissionInvariantViolationCount: \(gpuAdmission.invariantViolationCount)
           endPhysFootprintMB: \(String(format: "%.1f", endPhysFootprintMB))
           endResidentSizeMB: \(String(format: "%.1f", endResidentSizeMB))
           fallbackUsed: \(fallbackUsed)

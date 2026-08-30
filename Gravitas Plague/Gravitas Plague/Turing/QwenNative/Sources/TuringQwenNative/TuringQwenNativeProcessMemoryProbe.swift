@@ -1,9 +1,10 @@
-import Darwin.Mach
+import Darwin
 import Foundation
 
 struct TuringQwenNativeProcessMemorySnapshot: Sendable {
     let physFootprintMB: Double
     let residentSizeMB: Double
+    let availableProcessMemoryMB: Double
 }
 
 enum TuringQwenNativeProcessMemoryProbe {
@@ -31,14 +32,24 @@ enum TuringQwenNativeProcessMemoryProbe {
         guard result == KERN_SUCCESS else {
             return TuringQwenNativeProcessMemorySnapshot(
                 physFootprintMB: 0,
-                residentSizeMB: 0
+                residentSizeMB: 0,
+                availableProcessMemoryMB: availableProcessMemoryMB()
             )
         }
 
         let divisor = 1024.0 * 1024.0
         return TuringQwenNativeProcessMemorySnapshot(
             physFootprintMB: Double(info.phys_footprint) / divisor,
-            residentSizeMB: Double(info.resident_size) / divisor
+            residentSizeMB: Double(info.resident_size) / divisor,
+            availableProcessMemoryMB: availableProcessMemoryMB()
         )
+    }
+
+    private static func availableProcessMemoryMB() -> Double {
+        #if os(visionOS) || os(iOS) || os(tvOS)
+        return Double(max(os_proc_available_memory(), 0)) / 1_048_576.0
+        #else
+        return 0
+        #endif
     }
 }
