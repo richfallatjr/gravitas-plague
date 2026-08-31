@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class MindEyeProjectionRuntimeMaterialTests: XCTestCase {
-    func testVisionOS27FactoryFailsSoftWithoutMutatingPBRMaterial() throws {
+    func testTargetPreflightDoesNotMutatePBRMaterial() throws {
         let root = Entity()
         root.name = "Chapter03PortalAngelRoot"
         let face = ModelEntity(
@@ -34,5 +34,10 @@ final class MindEyeProjectionRuntimeMaterialTests: XCTestCase {
         XCTAssertEqual(report.appliedMaterialCount, 0)
         XCTAssertFalse(report.runtimeMaterialAvailable)
         XCTAssertTrue(face.model?.materials[0] is PhysicallyBasedMaterial)
+    }
+
+    func testProductionProjectionShaderGraphValidates() throws {
+        let graph = try MindEyeProjectionShaderGraph.make()
+        XCTAssertTrue(graph.validate())
     }
 }

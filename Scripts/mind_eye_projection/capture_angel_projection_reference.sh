@@ -13,6 +13,11 @@ DERIVED_DATA="$REPO_ROOT/.build/mind-eye-projection/DerivedData"
 STAGING="$REPO_ROOT/.build/mind-eye-projection/$CAPTURE_ID"
 FINAL="$REPO_ROOT/Authoring/MindEyeProjectionCaptures/$CAPTURE_ID"
 RUNTIME_ROOT="$REPO_ROOT/Gravitas Plague/TuringResources/Turing/MindsEye/Projection"
+SUBJECT_ASSET="${GR_MIND_EYE_SUBJECT_ASSET:-$REPO_ROOT/angel_posed_01.usdz}"
+if [[ ! -f "$SUBJECT_ASSET" ]]; then
+  printf 'Projection subject asset is missing: %s\n' "$SUBJECT_ASSET" >&2
+  exit 1
+fi
 COMMIT="$(git rev-parse HEAD)"
 if [[ -n "$(git status --short)" ]]; then WORKTREE_DIRTY=1; else WORKTREE_DIRTY=0; fi
 
@@ -48,8 +53,9 @@ build_app() {
   # JSON contracts it consumes, excluding the multi-gigabyte model payload.
   mkdir -p \
     "$APP_PATH/Turing/MindsEye/Projection" \
-    "$APP_PATH/Turing/Chapters/Chapter03"
-  cp "$REPO_ROOT/angel_posed_01.usdz" "$APP_PATH/angel_posed_01.usdz"
+    "$APP_PATH/Turing/Chapters/Chapter03" \
+    "$APP_PATH/Turing/Chapter03/AngelProjection"
+  cp "$SUBJECT_ASSET" "$APP_PATH/angel_posed_01.usdz"
   cp "$REPO_ROOT/heaven-sunrise.exr" "$APP_PATH/heaven-sunrise.exr"
   cp -R "$RUNTIME_ROOT/profiles" "$APP_PATH/Turing/MindsEye/Projection/"
   cp -R "$RUNTIME_ROOT/cameras" "$APP_PATH/Turing/MindsEye/Projection/"
@@ -58,6 +64,12 @@ build_app() {
   cp \
     "$REPO_ROOT/Gravitas Plague/TuringResources/Turing/Chapters/Chapter03/chapter03_light_tunnel_test.json" \
     "$APP_PATH/Turing/Chapters/Chapter03/chapter03_light_tunnel_test.json"
+  cp \
+    "$REPO_ROOT/Gravitas Plague/TuringResources/Turing/Chapter03/AngelProjection/angel_jaw_open_projection.json" \
+    "$APP_PATH/Turing/Chapter03/AngelProjection/angel_jaw_open_projection.json"
+  cp \
+    "$REPO_ROOT/Gravitas Plague/TuringResources/Turing/Chapter03/AngelProjection/angel_jaw_open_projection_offsets.bin" \
+    "$APP_PATH/Turing/Chapter03/AngelProjection/angel_jaw_open_projection_offsets.bin"
   xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
   xcrun simctl uninstall "$UDID" "$BUNDLE_ID" 2>/dev/null || true
   xcrun simctl install "$UDID" "$APP_PATH"
@@ -76,7 +88,7 @@ PY
   SIMCTL_CHILD_GR_WORKTREE_DIRTY="$WORKTREE_DIRTY" \
     xcrun simctl launch \
       --terminate-running-process \
-      --stdout="$STAGING/$job.stdout.log" \
+      --stdout=/dev/null \
       --stderr="$STAGING/$job.stderr.log" \
       "$UDID" \
       "$BUNDLE_ID" \
@@ -86,17 +98,24 @@ PY
     --udid "$UDID" \
     --bundle-id "$BUNDLE_ID" \
     --capture-id "$CAPTURE_ID" \
-    --timeout-seconds 120 \
+    --timeout-seconds 300 \
     --copy-to "$output"
 }
 
 build_app
-run_job inspect-subject
+if [[ -n "${GR_MIND_EYE_JOB_ONLY:-}" ]]; then
+  run_job "$GR_MIND_EYE_JOB_ONLY"
+  printf '\nMind’s Eye projection authoring job complete:\n%s\n' \
+    "$STAGING/$GR_MIND_EYE_JOB_ONLY"
+  exit 0
+fi
+if [[ "${GR_MIND_EYE_CAPTURE_ONLY:-0}" != "1" ]]; then
+  run_job inspect-subject
 
-# The runtime target descriptor is generated from the owner-authored framing
-# cube. The hierarchy report remains useful evidence, but must never overwrite
-# that more precise camera-control contract with whole-body visual bounds.
-python3 - "$RUNTIME_ROOT/targets/$CAPTURE_ID.target.json" <<'PY'
+  # The runtime target descriptor is generated from the owner-authored framing
+  # cube. The hierarchy report remains useful evidence, but must never overwrite
+  # that more precise camera-control contract with whole-body visual bounds.
+  python3 - "$RUNTIME_ROOT/targets/$CAPTURE_ID.target.json" <<'PY'
 import json, pathlib, sys
 target = json.loads(pathlib.Path(sys.argv[1]).read_text())
 if "authoringFramingControl" not in target:
@@ -105,18 +124,19 @@ print("Using owner-authored camera framing cube:",
       target["authoringFramingControl"]["controlPrimPath"])
 PY
 
-# Rebuild so camera resolution uses the inspected, exact target descriptor.
-build_app
-run_job resolve-camera
+  # Rebuild so camera resolution uses the inspected, exact target descriptor.
+  build_app
+  run_job resolve-camera
 
-python3 Scripts/mind_eye_projection/publish_projection_camera.py \
-  --candidate "$STAGING/resolve-camera/$CAPTURE_ID.camera.json" \
-  --target "$RUNTIME_ROOT/cameras/$CAPTURE_ID.camera.json" \
-  --profile "$RUNTIME_ROOT/profiles/$CAPTURE_ID.json" \
-  --target-descriptor "$RUNTIME_ROOT/targets/$CAPTURE_ID.target.json"
+  python3 Scripts/mind_eye_projection/publish_projection_camera.py \
+    --candidate "$STAGING/resolve-camera/$CAPTURE_ID.camera.json" \
+    --target "$RUNTIME_ROOT/cameras/$CAPTURE_ID.camera.json" \
+    --profile "$RUNTIME_ROOT/profiles/$CAPTURE_ID.json" \
+    --target-descriptor "$RUNTIME_ROOT/targets/$CAPTURE_ID.target.json"
 
-# Rebuild so final capture consumes the exact runtime-bundled camera bytes.
-build_app
+  # Rebuild so final capture consumes the exact runtime-bundled camera bytes.
+  build_app
+fi
 run_job capture-reference
 
 python3 - "$STAGING/capture-reference" "$FINAL" <<'PY'
@@ -132,9 +152,17 @@ if os.path.exists(final):
 os.replace(stage, final)
 PY
 
+python3 Scripts/mind_eye_projection/publish_projection_union_mask.py \
+  --repository-root "$REPO_ROOT" \
+  --capture-directory "$FINAL"
+
 python3 Scripts/mind_eye_projection/validate_projection_capture.py \
   --directory "$FINAL" \
-  --runtime-camera "$RUNTIME_ROOT/cameras/$CAPTURE_ID.camera.json"
+  --runtime-camera "$RUNTIME_ROOT/cameras/$CAPTURE_ID.camera.json" \
+  --runtime-profile "$RUNTIME_ROOT/profiles/$CAPTURE_ID.json"
+
+python3 Scripts/mind_eye_projection/validate_projection_source.py \
+  --repository-root "$REPO_ROOT"
 
 xcrun simctl terminate "$UDID" "$BUNDLE_ID" 2>/dev/null || true
 printf '\nMind’s Eye projection capture complete:\n%s\n' "$FINAL"

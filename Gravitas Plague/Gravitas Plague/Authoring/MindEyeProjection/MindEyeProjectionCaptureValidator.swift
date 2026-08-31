@@ -28,7 +28,38 @@ nonisolated enum MindEyeProjectionCaptureValidator {
                 throw MindEyeProjectionError.invalidCapture("non-image output has image dimensions")
             }
         }
-        try MindEyeProjectionValidation.validateMask(.init(
+        let geometryDirectory = directory.appendingPathComponent(
+            "GeometryPoses",
+            isDirectory: true
+        )
+        let beautyNames = [
+            "angel_head_v1_geometry-rest_000.png",
+            "angel_head_v1_geometry-small_033.png",
+            "angel_head_v1_geometry-round_050.png",
+            "angel_head_v1_geometry-wide_100.png",
+        ]
+        let coverageNames = [
+            "angel_head_v1_coverage-rest_000.png",
+            "angel_head_v1_coverage-small_033.png",
+            "angel_head_v1_coverage-round_050.png",
+            "angel_head_v1_coverage-wide_100.png",
+        ]
+        let beautyHashes = try Set(beautyNames.map {
+            try MindEyeProjectionExportStore.sha256(
+                file: geometryDirectory.appendingPathComponent($0)
+            )
+        })
+        let coverageHashes = try Set(coverageNames.map {
+            try MindEyeProjectionExportStore.sha256(
+                file: geometryDirectory.appendingPathComponent($0)
+            )
+        })
+        guard beautyHashes.count == 4, coverageHashes.count >= 2 else {
+            throw MindEyeProjectionError.invalidCapture(
+                "blendshape pose captures do not contain distinct deformation states"
+            )
+        }
+        try MindEyeProjectionValidation.validateAuthoredMaskForLockedCrop(.init(
             coverageFraction: manifest.maskCoverageFraction,
             boundingBox: manifest.maskBoundingBoxPixels,
             centerErrorPixels: manifest.maskCenterErrorPixels,

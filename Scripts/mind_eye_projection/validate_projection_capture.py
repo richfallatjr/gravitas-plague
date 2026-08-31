@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import argparse
 import hashlib
 import json
@@ -19,6 +21,19 @@ REQUIRED = {
     "angel_head_v1_capture-manifest.json": None,
     "angel_head_v1_scene-hierarchy.txt": None,
     "angel_head_v1_complete.json": None,
+    "GeometryPoses/angel_head_v1_geometry-rest_000.png": (1728, 1728, 8),
+    "GeometryPoses/angel_head_v1_coverage-rest_000.png": (1728, 1728, 8),
+    "GeometryPoses/angel_head_v1_geometry-small_033.png": (1728, 1728, 8),
+    "GeometryPoses/angel_head_v1_coverage-small_033.png": (1728, 1728, 8),
+    "GeometryPoses/angel_head_v1_geometry-round_050.png": (1728, 1728, 8),
+    "GeometryPoses/angel_head_v1_coverage-round_050.png": (1728, 1728, 8),
+    "GeometryPoses/angel_head_v1_geometry-wide_100.png": (1728, 1728, 8),
+    "GeometryPoses/angel_head_v1_coverage-wide_100.png": (1728, 1728, 8),
+    "GeometryPoses/angel_head_v1_projection-mask-union-linear16.png": (1728, 1728, 16),
+    "GeometryPoses/angel_head_v1_projection-mask-union-preview.png": (1728, 1728, 8),
+    "GeometryPoses/angel_head_v1_geometry-pose-contact-sheet.png": (3456, 3456, 8),
+    "GeometryPoses/angel_head_v1_geometry-displacement-heatmap.png": (1728, 1728, 8),
+    "GeometryPoses/angel_head_v1_geometry-pose-manifest.json": None,
 }
 
 
@@ -67,7 +82,7 @@ def source_audit(root: str) -> None:
     print("Mind's Eye projection source audit: PASS")
 
 
-def validate(directory: str, runtime_camera: str) -> None:
+def validate(directory: str, runtime_camera: str, runtime_profile: str | None) -> None:
     for filename, image_contract in REQUIRED.items():
         path = os.path.join(directory, filename)
         if not os.path.isfile(path) or os.path.getsize(path) == 0:
@@ -87,8 +102,21 @@ def validate(directory: str, runtime_camera: str) -> None:
     coverage = float(manifest.get("maskCoverageFraction", -1))
     if not 0.12 <= coverage <= 0.80:
         raise SystemExit(f"Mask coverage outside contract: {coverage}")
-    if any(abs(float(v)) > 1728 * 0.02 for v in manifest.get("maskCenterErrorPixels", [])):
-        raise SystemExit("Mask center error exceeds 2%.")
+    bounds = manifest.get("maskBoundingBoxPixels", [])
+    if len(bounds) != 4:
+        raise SystemExit("Mask bounding box is missing.")
+    minimum_x, minimum_y, width, height = map(int, bounds)
+    maximum_x = minimum_x + width - 1
+    maximum_y = minimum_y + height - 1
+    if not (
+        minimum_x >= 144
+        and minimum_y >= 144
+        and maximum_x < 1584
+        and maximum_y < 1584
+    ):
+        raise SystemExit(
+            f"Authored mask escapes the locked 1440 crop: {bounds}"
+        )
     outputs = {item["filename"]: item for item in manifest.get("outputs", [])}
     for filename, output in outputs.items():
         path = os.path.join(directory, filename)
@@ -101,6 +129,49 @@ def validate(directory: str, runtime_camera: str) -> None:
         raise SystemExit("Capture camera bytes differ from the bundled runtime camera bytes.")
     if manifest.get("cameraSHA256") != sha256(runtime_camera):
         raise SystemExit("Manifest camera hash differs from runtime camera hash.")
+    if runtime_profile:
+        if manifest.get("profileSHA256") != sha256(runtime_profile):
+            raise SystemExit("Manifest profile hash differs from runtime profile hash.")
+        with open(runtime_profile, encoding="utf-8") as handle:
+            profile = json.load(handle)
+        if (
+            profile.get("sourceWidth"), profile.get("sourceHeight"),
+            profile.get("viewportWidth"), profile.get("viewportHeight"),
+            profile.get("cropOriginX"), profile.get("cropOriginY"),
+        ) != (1728, 1728, 1440, 1440, 144, 144):
+            raise SystemExit("Runtime profile differs from the locked square crop.")
+    pose_manifest_path = os.path.join(
+        directory,
+        "GeometryPoses/angel_head_v1_geometry-pose-manifest.json",
+    )
+    with open(pose_manifest_path, encoding="utf-8") as handle:
+        pose_manifest = json.load(handle)
+    actual_poses = {
+        item.get("semanticPose"): float(item.get("geometryWeight", -1))
+        for item in pose_manifest.get("poses", [])
+    }
+    if actual_poses != {"rest": 0.0, "small": 0.33, "round": 0.5, "wide": 1.0}:
+        raise SystemExit(f"Geometry pose mapping differs from locked contract: {actual_poses}")
+    if pose_manifest.get("teethGeometryAlias") != "rest":
+        raise SystemExit("Teeth must remain a zero-geometry alias of rest.")
+    if pose_manifest.get("projectorCameraSHA256") != sha256(runtime_camera):
+        raise SystemExit("Geometry poses were not captured with the runtime projector camera.")
+    beauty_hashes = {
+        sha256(os.path.join(directory, item["beautyFilename"]))
+        for item in pose_manifest.get("poses", [])
+    }
+    coverage_hashes = {
+        sha256(os.path.join(directory, item["coverageFilename"]))
+        for item in pose_manifest.get("poses", [])
+    }
+    if len(beauty_hashes) != 4:
+        raise SystemExit(
+            "Blendshape pose beauty renders are not four distinct geometry states."
+        )
+    if len(coverage_hashes) < 2:
+        raise SystemExit(
+            "Blendshape coverage renders do not respond to geometry deformation."
+        )
     with open(capture_camera, encoding="utf-8") as handle:
         camera = json.load(handle)
     with open(os.path.join(directory, "angel_head_v1_complete.json"), encoding="utf-8") as handle:
@@ -150,6 +221,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--directory")
     parser.add_argument("--runtime-camera")
+    parser.add_argument("--runtime-profile")
     parser.add_argument("--source-audit-only", action="store_true")
     parser.add_argument("--repository-root", default=".")
     args = parser.parse_args()
@@ -158,7 +230,11 @@ def main() -> None:
         return
     if not args.directory or not args.runtime_camera:
         parser.error("--directory and --runtime-camera are required")
-    validate(os.path.realpath(args.directory), os.path.realpath(args.runtime_camera))
+    validate(
+        os.path.realpath(args.directory),
+        os.path.realpath(args.runtime_camera),
+        os.path.realpath(args.runtime_profile) if args.runtime_profile else None,
+    )
 
 
 if __name__ == "__main__":

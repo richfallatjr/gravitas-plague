@@ -18,6 +18,7 @@ final class Chapter03LightTunnelPresenter {
     private var heavenPortalEmbers: Chapter03HeavenPortalEmberController?
     private var angelVisemeTrack: Chapter03AngelVisemeTrack?
     private var angelPerformance: Chapter03AngelPerformanceCoordinator?
+    private var angelProjection: MindEyeAngelProjectionController?
     private(set) var angelAudioEmitter: Entity?
     private var lastLoggedDistanceBucket: Int?
 
@@ -61,6 +62,20 @@ final class Chapter03LightTunnelPresenter {
         }
         worldAnchor.addChild(bundle.root)
 
+        let preparedProjection: MindEyeAngelProjectionController?
+        do {
+            preparedProjection = try await MindEyeAngelProjectionController.prepare(
+                runID: runID,
+                subjectRoot: bundle.angel.root
+            )
+        } catch {
+            preparedProjection = nil
+            print(
+                "[MindEyeProjection] Angel unavailable; imported material retained " +
+                    "runID=\(runID.uuidString) error=\(error.localizedDescription)"
+            )
+        }
+
         self.runID = runID
         sceneBundle = bundle
         root = bundle.root
@@ -73,10 +88,20 @@ final class Chapter03LightTunnelPresenter {
         heavenPortalEmbers = preparedHeavenEmbers
         self.angelVisemeTrack = angelVisemeTrack
         angelPerformance = Chapter03AngelPerformanceCoordinator()
-        // The current facial-projection increment has authoring/capture
-        // contracts but no production material/texture owner yet. Holding this
-        // unavailable prevents exposing the projection-only jaw geometry.
-        bundle.angel.setProjectionReadiness(.unavailable)
+        angelProjection = preparedProjection
+        if preparedProjection != nil {
+            bundle.angel.setProjectionReadiness(
+                Chapter03AngelProjectionReadiness(
+                    cameraReady: true,
+                    materialReady: true,
+                    textureReady: true,
+                    maskReady: true,
+                    blendShapeReady: true
+                )
+            )
+        } else {
+            bundle.angel.setProjectionReadiness(.unavailable)
+        }
         angelAudioEmitter = emitter
         lastLoggedDistanceBucket = nil
 
@@ -151,6 +176,7 @@ final class Chapter03LightTunnelPresenter {
     func updateFrame(deltaTime: TimeInterval) {
         guard runID != nil else { return }
         angel?.updateFloatMotion(deltaTime: deltaTime)
+        angelProjection?.update(deltaTime: deltaTime)
         angelPerformance?.update(deltaTime: deltaTime)
         heavenPortalEmbers?.update(deltaTime: deltaTime)
     }
@@ -169,7 +195,7 @@ final class Chapter03LightTunnelPresenter {
         angelPerformance?.begin(
             start: start,
             track: angelVisemeTrack,
-            projection: nil,
+            projection: angelProjection,
             blendShape: angel?.blendShapeController,
             embers: heavenPortalEmbers
         )
@@ -197,6 +223,9 @@ final class Chapter03LightTunnelPresenter {
 
         angelPerformance?.teardown(reason: reason)
         angelPerformance = nil
+        angelProjection?.release(reason: reason)
+        angelProjection = nil
+        angel?.setProjectionReadiness(.unavailable)
         heavenPortalEmbers?.teardown(reason: reason)
         heavenPortalEmbers = nil
         angelVisemeTrack = nil

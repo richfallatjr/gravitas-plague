@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -12,6 +13,7 @@ from .mask import write_projection_mask
 from .package import atomically_install, build_staged_package, package_inventory
 from .paths import ToolPaths
 from .report import serializable_validation, write_build, write_validation
+from .runtime_offsets import write_runtime_offsets
 from .stages import mesh_paths, open_stage, stage_contract
 from .validation import load_source_descriptor, sha256, validate_pair
 
@@ -79,6 +81,18 @@ def build(paths: ToolPaths) -> int:
         staged_sha = sha256(staged)
         runtime = json.loads(paths.runtime_descriptor.read_text(encoding="utf-8"))
         runtime["assetSHA256"] = staged_sha
+        offset_payload = write_runtime_offsets(
+            paths.base_asset,
+            validation,
+            paths.runtime_offsets,
+        )
+        runtime["offsetPayloadResourcePath"] = (
+            "Turing/Chapter03/AngelProjection/"
+            "angel_jaw_open_projection_offsets.bin"
+        )
+        runtime["offsetPayloadSHA256"] = offset_payload["SHA256"]
+        runtime["offsetPayloadMeshCount"] = offset_payload["meshCount"]
+        runtime["offsetPayloadRecordCount"] = offset_payload["recordCount"]
         atomically_install(staged, paths.base_asset)
         write(paths.runtime_descriptor, runtime)
         projection = write_projection_contracts(
@@ -95,6 +109,7 @@ def build(paths: ToolPaths) -> int:
         "baseAssetSHA256After": sha256(paths.base_asset),
         "targetBundled": False,
         "package": package_result,
+        "runtimeOffsetPayload": offset_payload,
         "projection": projection,
     }
     write_build(paths.reports, build_report)
@@ -118,6 +133,17 @@ def validate_runtime(paths: ToolPaths) -> int:
         "teeth": 0.0,
     }:
         raise ValueError("runtime pose mapping differs from locked contract")
+    if runtime.get("offsetPayloadResourcePath") != (
+        "Turing/Chapter03/AngelProjection/"
+        "angel_jaw_open_projection_offsets.bin"
+    ):
+        raise ValueError("runtime offset payload path differs from contract")
+    if sha256(paths.runtime_offsets) != runtime.get("offsetPayloadSHA256"):
+        raise ValueError("runtime offset payload hash differs from descriptor")
+    if runtime.get("offsetPayloadMeshCount") != 1:
+        raise ValueError("runtime offset payload mesh count differs from production")
+    if runtime.get("offsetPayloadRecordCount") != 5721:
+        raise ValueError("runtime offset payload record count differs from production")
     profile = json.loads(paths.projection_profile.read_text(encoding="utf-8"))
     target = json.loads(
         paths.projection_target_descriptor.read_text(encoding="utf-8")
@@ -125,13 +151,13 @@ def validate_runtime(paths: ToolPaths) -> int:
     camera = json.loads(
         paths.projection_camera_descriptor.read_text(encoding="utf-8")
     )
-    expected_mask_path = (
-        "Turing/MindsEye/Projection/masks/"
-        "angel_head_v1_projection-mask-uv.png"
-    )
-    if profile.get("projectionMaskResourcePath") != expected_mask_path:
-        raise ValueError("projection profile does not reference the packaged UV mask")
-    mask_sha = sha256(paths.projection_mask)
+    mask_resource_path = profile.get("projectionMaskResourcePath", "")
+    if not mask_resource_path.startswith("Turing/MindsEye/Projection/masks/"):
+        raise ValueError("projection profile mask path is unsafe")
+    runtime_mask = paths.repository / "Gravitas Plague/TuringResources" / mask_resource_path
+    if not runtime_mask.is_file():
+        raise ValueError("projection profile mask is missing")
+    mask_sha = sha256(runtime_mask)
     if profile.get("projectionMaskSHA256") != mask_sha:
         raise ValueError("projection mask hash differs from the projection profile")
     if target.get("authoringFramingControl", {}).get("sourceAssetSHA256") != \
@@ -183,13 +209,18 @@ def write_projection_contracts(
         paths.projection_mask,
     )
     profile = json.loads(paths.projection_profile.read_text(encoding="utf-8"))
-    profile["projectionMaskResourcePath"] = (
-        "Turing/MindsEye/Projection/masks/"
-        "angel_head_v1_projection-mask-uv.png"
-    )
-    profile["projectionMaskSHA256"] = mask["SHA256"]
-    profile["projectionMaskConvention"] = source["projectionMaskConvention"]
-    write(paths.projection_profile, profile)
+    # Geometry authoring always republishes the owner's flat UV mask as
+    # evidence. Once the facial round-trip phase has installed a plate manifest
+    # and captured 1440-square union mask, it owns the production mask contract;
+    # rebuilding the blendshape must never silently roll that contract back.
+    if "plateManifestResourcePath" not in profile:
+        profile["projectionMaskResourcePath"] = (
+            "Turing/MindsEye/Projection/masks/"
+            "angel_head_v1_projection-mask-uv.png"
+        )
+        profile["projectionMaskSHA256"] = mask["SHA256"]
+        profile["projectionMaskConvention"] = source["projectionMaskConvention"]
+        write(paths.projection_profile, profile)
 
     previous_camera = json.loads(
         paths.projection_camera_descriptor.read_text(encoding="utf-8")
@@ -224,6 +255,7 @@ def write_projection_contracts(
         "cameraDescriptorSHA256": sha256(paths.projection_camera_descriptor),
         "targetDescriptorSHA256": target_sha,
         "projectionMask": mask,
+        "sourceProjectionMask": mask,
         "projectionMaskResourcePath": profile["projectionMaskResourcePath"],
     }
 
@@ -231,9 +263,16 @@ def write_projection_contracts(
 def capture_poses(paths: ToolPaths) -> int:
     paths.require_target()
     validate_runtime(paths)
-    print(
-        "The production target is packaged and ready. Run the Xcode authoring "
-        "capture pass for weights 0.00, 0.33, 0.50, and 1.00."
+    capture_script = (
+        paths.repository / "Scripts/mind_eye_projection/"
+        "capture_angel_projection_reference.sh"
+    )
+    if not capture_script.is_file():
+        raise FileNotFoundError(f"pose capture script missing: {capture_script}")
+    subprocess.run(
+        [str(capture_script)],
+        cwd=paths.repository,
+        check=True,
     )
     return 0
 

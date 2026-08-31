@@ -9,6 +9,7 @@ import simd
 @MainActor
 final class MindEyeProjectionAuthoringJobRunner {
     private let factory = Chapter03LightTunnelSceneFactory()
+    private var cachedHeavenResources: Chapter03LightTunnelSceneFactory.HeavenResources?
 
     func run(_ job: MindEyeProjectionAuthoringJob) async throws {
         let store = try MindEyeProjectionExportStore(captureID: job.configuration.captureID)
@@ -41,10 +42,12 @@ final class MindEyeProjectionAuthoringJobRunner {
         let bindingSummary = blendShape.bindings.map {
             "\($0.entityPath)#\($0.groupIndex):\($0.weightIndex)=\($0.weightName)"
         }.joined(separator: ",")
+        let meshEvidence = blendShape.importedMeshEvidence.joined(separator: " | ")
         let inspectedText = report.text +
             "BLENDSHAPE_PROBE target=jawOpenProjection " +
             "modelEntityCount=\(blendShape.modelEntityCount) " +
             "bindings=\(bindingSummary) " +
+            "meshEvidence=\(meshEvidence) " +
             "testedWeights=\(blendShape.testedWeights) " +
             "returnedToZero=\(blendShape.returnedToZero)\n"
         try await store.write(
@@ -128,8 +131,10 @@ final class MindEyeProjectionAuthoringJobRunner {
         let cameraStore = MindEyeProjectionCameraStore(locator: locator)
         let camera = try cameraStore.loadCamera(resourcePath: profile.cameraResourcePath)
         let (_, cameraHash) = try cameraStore.dataAndSHA256(resourcePath: profile.cameraResourcePath)
+        let authoringMaskPath =
+            "Turing/MindsEye/Projection/masks/angel_head_v1_projection-mask-uv.png"
         let projectionMaskTexture = try await TextureResource(
-            contentsOf: locator.resolve(resourcePath: profile.projectionMaskResourcePath),
+            contentsOf: locator.resolve(resourcePath: authoringMaskPath),
             options: .init(semantic: .raw, mipmapsMode: .none)
         )
         let renderer = MindEyeProjectionRealityRenderer(device: device)
@@ -160,19 +165,31 @@ final class MindEyeProjectionAuthoringJobRunner {
         maskScene.release(reason: "projectionAuthoring.mask")
 
         let (projectionMaskAOV, processed) = try await Task.detached(priority: .userInitiated) {
-            let projectionMaskAOV = try Self.clipProjectionMaskAOVToFramingCube(
-                renderedProjectionMaskAOV,
-                camera: camera,
-                target: target
-            )
+            // Preserve the AOV as the exact flat owner texture rendered on the
+            // geometry. Its black facial island is converted to the canonical
+            // white-projects runtime convention only for the processed mask.
+            let projectionMaskAOV = renderedProjectionMaskAOV
             let processed = try MindEyeProjectionMaskProcessor.process(
                 projectionMaskAOV,
                 inset: profile.maskInsetPixels,
-                feather: profile.maskFeatherPixels
+                feather: profile.maskFeatherPixels,
+                foregroundIsDark: true
             )
             return (projectionMaskAOV, processed)
         }.value
-        try MindEyeProjectionValidation.validateMask(processed.metrics)
+        try MindEyeProjectionValidation.validateAuthoredMaskForLockedCrop(
+            processed.metrics
+        )
+
+        let geometryPoseOutputs = try await captureGeometryPoses(
+            store: store,
+            renderer: renderer,
+            camera: camera,
+            cameraSHA256: cameraHash,
+            target: target,
+            profile: profile,
+            projectionMaskTexture: projectionMaskTexture
+        )
 
         let sceneURL = await store.url("angel_head_v1_scene-beauty.png")
         let faceURL = await store.url("angel_head_v1_face-beauty.png")
@@ -196,24 +213,25 @@ final class MindEyeProjectionAuthoringJobRunner {
         try await store.write(Data(hierarchy.text.utf8), filename: "angel_head_v1_scene-hierarchy.txt")
         try await store.write(camera, filename: "angel_head_v1_camera.json")
 
-        let roles: [(String, String, Int, String, String)] = [
-            ("sceneBeauty", "angel_head_v1_scene-beauty.png", 8, "sRGB", "opaque"),
-            ("faceBeauty", "angel_head_v1_face-beauty.png", 8, "sRGB", "opaque"),
-            ("projectionMaskAOV", "angel_head_v1_projection-mask-aov.png", 8, "linearRGB", "opaque"),
-            ("projectionMaskLinear16", "angel_head_v1_projection-mask-linear16.png", 16, "linearGray", "none"),
-            ("projectionMaskPreview", "angel_head_v1_projection-mask-preview.png", 8, "gray", "none"),
-            ("alignmentGuide", "angel_head_v1_alignment-guide.png", 8, "sRGB", "opaque"),
-            ("camera", "angel_head_v1_camera.json", 8, "UTF-8", "none"),
-            ("hierarchy", "angel_head_v1_scene-hierarchy.txt", 8, "UTF-8", "none")
+        var roles: [(String, String, Int, String, String, Int, Int)] = [
+            ("sceneBeauty", "angel_head_v1_scene-beauty.png", 8, "sRGB", "opaque", 1_728, 1_728),
+            ("faceBeauty", "angel_head_v1_face-beauty.png", 8, "sRGB", "opaque", 1_728, 1_728),
+            ("projectionMaskAOV", "angel_head_v1_projection-mask-aov.png", 8, "linearRGB", "opaque", 1_728, 1_728),
+            ("projectionMaskLinear16", "angel_head_v1_projection-mask-linear16.png", 16, "linearGray", "none", 1_728, 1_728),
+            ("projectionMaskPreview", "angel_head_v1_projection-mask-preview.png", 8, "gray", "none", 1_728, 1_728),
+            ("alignmentGuide", "angel_head_v1_alignment-guide.png", 8, "sRGB", "opaque", 1_728, 1_728),
+            ("camera", "angel_head_v1_camera.json", 8, "UTF-8", "none", 0, 0),
+            ("hierarchy", "angel_head_v1_scene-hierarchy.txt", 8, "UTF-8", "none", 0, 0)
         ]
+        roles.append(contentsOf: geometryPoseOutputs)
         var outputs: [MindEyeProjectionCaptureManifest.Output] = []
-        for (role, filename, bits, color, alpha) in roles {
+        for (role, filename, bits, color, alpha, width, height) in roles {
             let url = await store.url(filename)
             let data = try Data(contentsOf: url, options: [.mappedIfSafe])
             outputs.append(.init(
                 role: role, filename: filename,
-                width: filename.hasSuffix(".png") ? 1_728 : 0,
-                height: filename.hasSuffix(".png") ? 1_728 : 0,
+                width: width,
+                height: height,
                 bitsPerChannel: bits, colorSpace: color, alphaMode: alpha,
                 byteCount: data.count, SHA256: MindEyeProjectionExportStore.sha256(data)
             ))
@@ -254,15 +272,206 @@ final class MindEyeProjectionAuthoringJobRunner {
         ))
     }
 
+    private func captureGeometryPoses(
+        store: MindEyeProjectionExportStore,
+        renderer: MindEyeProjectionRealityRenderer,
+        camera: MindEyeProjectionCameraDescriptor,
+        cameraSHA256: String,
+        target: MindEyeProjectionTargetDescriptor,
+        profile: MindEyeProjectionProfile,
+        projectionMaskTexture: TextureResource
+    ) async throws -> [(String, String, Int, String, String, Int, Int)] {
+        let directory = "GeometryPoses"
+        try await store.createDirectory(directory)
+        var beauties: [MindEyeProjectionPixelBuffer] = []
+        var coverages: [MindEyeProjectionPixelBuffer] = []
+        var manifestPoses: [AngelBlendShapePoseCaptureManifest.Pose] = []
+        var outputs: [(String, String, Int, String, String, Int, Int)] = []
+
+        // Each pose uses a fresh entity graph. Authoring pass materials replace
+        // ModelComponent values, so the weight must be applied after each
+        // material replacement and before that graph is attached to a renderer.
+        // Applying it earlier can leave the public blend-weight arrays updated
+        // while RealityKit renders the undeformed mesh. The expensive EXR/IBL
+        // resources remain shared through cachedHeavenResources.
+        for (pose, weight) in AngelBlendShapePoseCapture.orderedGeometryPoses {
+            let poseScene = try await makeScene(mode: .projectionAuthoringBeauty)
+            do {
+                let bindings = try Chapter03AngelBlendShapeResolver().resolve(
+                    in: poseScene.angel.visualRoot,
+                    targetName: "jawOpenProjection"
+                )
+                poseScene.portalDome.isEnabled = false
+                try applyAuthoringMaterials(
+                    target: target,
+                    subjectRoot: poseScene.angel.root,
+                    pass: .faceBeauty
+                )
+                try AngelBlendShapePoseCapture.assign(weight, bindings: bindings)
+                beauties.append(try await renderer.render(
+                    scene: poseScene,
+                    camera: camera
+                ))
+                try applyAuthoringMaterials(
+                    target: target,
+                    subjectRoot: poseScene.angel.root,
+                    pass: .binaryMask,
+                    projectionMaskTexture: projectionMaskTexture
+                )
+                try AngelBlendShapePoseCapture.assign(weight, bindings: bindings)
+                coverages.append(try await renderer.render(
+                    scene: poseScene,
+                    camera: camera,
+                    toneMappingEnabled: false,
+                    pixelFormat: .bgra8Unorm
+                ))
+                poseScene.release(
+                    reason: "projectionAuthoring.geometryPose.\(pose.rawValue).complete"
+                )
+            } catch {
+                poseScene.release(
+                    reason: "projectionAuthoring.geometryPose.\(pose.rawValue).failed"
+                )
+                throw error
+            }
+        }
+
+        let beautyStateHashes = Set(beauties.map {
+            MindEyeProjectionExportStore.sha256($0.bgra8)
+        })
+        let coverageStateHashes = Set(coverages.map {
+            MindEyeProjectionExportStore.sha256($0.bgra8)
+        })
+        guard beautyStateHashes.count == AngelBlendShapePoseCapture.orderedGeometryPoses.count else {
+            throw MindEyeProjectionError.invalidCapture(
+                "blendshape pose beauty renders are not four distinct geometry states"
+            )
+        }
+        guard coverageStateHashes.count >= 2 else {
+            throw MindEyeProjectionError.invalidCapture(
+                "blendshape projection coverage does not respond to geometry deformation"
+            )
+        }
+
+        for (pose, weight) in AngelBlendShapePoseCapture.orderedGeometryPoses {
+            let suffix: String
+            switch pose {
+            case .rest: suffix = "rest_000"
+            case .small: suffix = "small_033"
+            case .round: suffix = "round_050"
+            case .wide: suffix = "wide_100"
+            case .teeth:
+                preconditionFailure("teeth aliases rest and is not captured separately")
+            }
+            let beautyFilename = "\(directory)/angel_head_v1_geometry-\(suffix).png"
+            let coverageFilename = "\(directory)/angel_head_v1_coverage-\(suffix).png"
+            manifestPoses.append(.init(
+                semanticPose: pose,
+                geometryWeight: weight,
+                beautyFilename: beautyFilename,
+                coverageFilename: coverageFilename
+            ))
+            outputs.append((
+                "geometryPoseBeauty.\(pose.rawValue)", beautyFilename,
+                8, "sRGB", "opaque", 1_728, 1_728
+            ))
+            outputs.append((
+                "geometryPoseCoverage.\(pose.rawValue)", coverageFilename,
+                8, "linearRGB", "opaque", 1_728, 1_728
+            ))
+        }
+
+        let unionCoverage = Self.unionCoverage(coverages)
+        let processedUnion = try await Task.detached(priority: .userInitiated) {
+            try MindEyeProjectionMaskProcessor.process(
+                unionCoverage,
+                inset: profile.maskInsetPixels,
+                feather: profile.maskFeatherPixels
+            )
+        }.value
+        try MindEyeProjectionValidation.validateAuthoredMaskForLockedCrop(
+            processedUnion.metrics
+        )
+        let contactSheet = Self.makeContactSheet(beauties)
+        let deformationHeatmap = Self.makeDeformationHeatmap(
+            rest: beauties[0],
+            wide: beauties[3]
+        )
+
+        let unionFilename = "\(directory)/angel_head_v1_projection-mask-union-linear16.png"
+        let unionPreviewFilename = "\(directory)/angel_head_v1_projection-mask-union-preview.png"
+        let contactFilename = "\(directory)/angel_head_v1_geometry-pose-contact-sheet.png"
+        let heatmapFilename = "\(directory)/angel_head_v1_geometry-displacement-heatmap.png"
+        let poseManifestFilename = "\(directory)/angel_head_v1_geometry-pose-manifest.json"
+        let poseManifest = AngelBlendShapePoseCaptureManifest(
+            schemaVersion: 1,
+            blendShapeName: "jawOpenProjection",
+            projectorCameraSHA256: cameraSHA256,
+            poses: manifestPoses,
+            teethGeometryAlias: .rest,
+            unionMaskFilename: unionFilename
+        )
+
+        var beautyURLs: [(URL, URL)] = []
+        for pose in manifestPoses {
+            beautyURLs.append((
+                await store.url(pose.beautyFilename),
+                await store.url(pose.coverageFilename)
+            ))
+        }
+        let unionURL = await store.url(unionFilename)
+        let unionPreviewURL = await store.url(unionPreviewFilename)
+        let contactURL = await store.url(contactFilename)
+        let heatmapURL = await store.url(heatmapFilename)
+        try await Task.detached(priority: .userInitiated) {
+            for index in beauties.indices {
+                try MindEyeProjectionPNGWriter.writeBGRA8(
+                    beauties[index], to: beautyURLs[index].0
+                )
+                try MindEyeProjectionPNGWriter.writeBGRA8(
+                    coverages[index], to: beautyURLs[index].1
+                )
+            }
+            try MindEyeProjectionPNGWriter.writeGray16(
+                processedUnion.linear16, width: 1_728, height: 1_728, to: unionURL
+            )
+            try MindEyeProjectionPNGWriter.writeGray8(
+                processedUnion.preview8, width: 1_728, height: 1_728, to: unionPreviewURL
+            )
+            try MindEyeProjectionPNGWriter.writeBGRA8(contactSheet, to: contactURL)
+            try MindEyeProjectionPNGWriter.writeBGRA8(deformationHeatmap, to: heatmapURL)
+        }.value
+        try await store.write(poseManifest, filename: poseManifestFilename)
+
+        outputs.append(contentsOf: [
+            ("geometryUnionMaskLinear16", unionFilename, 16, "linearGray", "none", 1_728, 1_728),
+            ("geometryUnionMaskPreview", unionPreviewFilename, 8, "gray", "none", 1_728, 1_728),
+            ("geometryContactSheet", contactFilename, 8, "sRGB", "opaque", 3_456, 3_456),
+            ("geometryDeformationHeatmap", heatmapFilename, 8, "sRGB", "opaque", 1_728, 1_728),
+            ("geometryPoseManifest", poseManifestFilename, 8, "UTF-8", "none", 0, 0),
+        ])
+        return outputs
+    }
+
     private func makeScene(mode: Chapter03LightTunnelSceneMode) async throws -> Chapter03LightTunnelSceneBundle {
         let definition = try TuringResourceLoader.decodeResource(
             Chapter03LightTunnelDefinition.self,
             resourcePath: Chapter03LightTunnelDefinitionStore.resourcePath
         )
         try definition.validate()
+        let resources: Chapter03LightTunnelSceneFactory.HeavenResources
+        if let cachedHeavenResources {
+            resources = cachedHeavenResources
+        } else {
+            let loaded = try factory.loadHeavenResources()
+            cachedHeavenResources = loaded
+            resources = loaded
+        }
         return try await factory.make(
             runID: UUID(), definition: definition.visual,
-            originFromDevice: matrix_identity_float4x4, mode: mode
+            originFromDevice: matrix_identity_float4x4,
+            mode: mode,
+            resources: resources
         )
     }
 
@@ -297,6 +506,7 @@ final class MindEyeProjectionAuthoringJobRunner {
         let resolution = try MindEyeProjectionTargetResolver.resolve(descriptor: target, subjectRoot: subjectRoot)
         let selected = Set(resolution.materials.map { "\($0.entityPath)#\($0.materialIndex)" })
         var black = UnlitMaterial(); black.color = .init(tint: .black)
+        var white = UnlitMaterial(); white.color = .init(tint: .white)
         let projectionMaskMaterial: UnlitMaterial?
         if let projectionMaskTexture {
             var material = UnlitMaterial(texture: projectionMaskTexture)
@@ -319,6 +529,8 @@ final class MindEyeProjectionAuthoringJobRunner {
                     return isTarget ? material : black
                 case .binaryMask:
                     return isTarget ? projectionMaskMaterial! : black
+                case .binaryCoverage:
+                    return isTarget ? white : black
                 case .sceneBeauty:
                     return material
                 }
@@ -336,6 +548,110 @@ final class MindEyeProjectionAuthoringJobRunner {
         for child in entity.children {
             visitModels(child, path: path + "/" + child.name, body: body)
         }
+    }
+
+    nonisolated private static func unionCoverage(
+        _ buffers: [MindEyeProjectionPixelBuffer]
+    ) -> MindEyeProjectionPixelBuffer {
+        precondition(buffers.count == 4)
+        let width = 1_728
+        let height = 1_728
+        let bytesPerRow = width * 4
+        var output = Data(repeating: 0, count: bytesPerRow * height)
+        let isolated = buffers.map {
+            MindEyeProjectionMaskProcessor.isolatedForeground(
+                $0,
+                foregroundIsDark: true
+            )
+        }
+        output.withUnsafeMutableBytes { destinationRaw in
+            guard let destination = destinationRaw.bindMemory(to: UInt8.self).baseAddress else {
+                return
+            }
+            for y in 0..<height {
+                for x in 0..<width {
+                    let index = y * width + x
+                    let visible = isolated.contains { $0[index] }
+                    let pixel = destination + y * bytesPerRow + x * 4
+                    let value: UInt8 = visible ? 255 : 0
+                    pixel[0] = value
+                    pixel[1] = value
+                    pixel[2] = value
+                    pixel[3] = 255
+                }
+            }
+        }
+        return .init(width: width, height: height, bytesPerRow: bytesPerRow, bgra8: output)
+    }
+
+    nonisolated private static func makeContactSheet(
+        _ buffers: [MindEyeProjectionPixelBuffer]
+    ) -> MindEyeProjectionPixelBuffer {
+        precondition(buffers.count == 4)
+        let tile = 1_728
+        let width = tile * 2
+        let height = tile * 2
+        let bytesPerRow = width * 4
+        var output = Data(repeating: 0, count: bytesPerRow * height)
+        output.withUnsafeMutableBytes { destinationRaw in
+            guard let destination = destinationRaw.baseAddress else { return }
+            for (index, buffer) in buffers.enumerated() {
+                let originX = (index % 2) * tile
+                let originY = (index / 2) * tile
+                buffer.bgra8.withUnsafeBytes { sourceRaw in
+                    guard let source = sourceRaw.baseAddress else { return }
+                    for y in 0..<tile {
+                        let sourceRow = source.advanced(by: y * buffer.bytesPerRow)
+                        let destinationRow = destination.advanced(
+                            by: (originY + y) * bytesPerRow + originX * 4
+                        )
+                        destinationRow.copyMemory(from: sourceRow, byteCount: tile * 4)
+                    }
+                }
+            }
+        }
+        return .init(width: width, height: height, bytesPerRow: bytesPerRow, bgra8: output)
+    }
+
+    nonisolated private static func makeDeformationHeatmap(
+        rest: MindEyeProjectionPixelBuffer,
+        wide: MindEyeProjectionPixelBuffer
+    ) -> MindEyeProjectionPixelBuffer {
+        let width = 1_728
+        let height = 1_728
+        let bytesPerRow = width * 4
+        var output = Data(repeating: 0, count: bytesPerRow * height)
+        output.withUnsafeMutableBytes { destinationRaw in
+            rest.bgra8.withUnsafeBytes { restRaw in
+                wide.bgra8.withUnsafeBytes { wideRaw in
+                    guard let destination = destinationRaw.bindMemory(to: UInt8.self).baseAddress,
+                          let restBytes = restRaw.bindMemory(to: UInt8.self).baseAddress,
+                          let wideBytes = wideRaw.bindMemory(to: UInt8.self).baseAddress else {
+                        return
+                    }
+                    for y in 0..<height {
+                        for x in 0..<width {
+                            let restPixel = restBytes + y * rest.bytesPerRow + x * 4
+                            let widePixel = wideBytes + y * wide.bytesPerRow + x * 4
+                            let difference = max(
+                                abs(Int(restPixel[0]) - Int(widePixel[0])),
+                                max(
+                                    abs(Int(restPixel[1]) - Int(widePixel[1])),
+                                    abs(Int(restPixel[2]) - Int(widePixel[2]))
+                                )
+                            )
+                            let amplified = UInt8(min(255, difference * 3))
+                            let pixel = destination + y * bytesPerRow + x * 4
+                            pixel[0] = 0
+                            pixel[1] = amplified / 4
+                            pixel[2] = amplified
+                            pixel[3] = 255
+                        }
+                    }
+                }
+            }
+        }
+        return .init(width: width, height: height, bytesPerRow: bytesPerRow, bgra8: output)
     }
 
     nonisolated private static func makeAlignmentGuide(

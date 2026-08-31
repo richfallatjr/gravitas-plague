@@ -9,6 +9,10 @@
   "blendShapeName": "jawOpenProjection",
   "descriptorID": "chapter03.angel.jawOpenProjection.v1",
   "fallbackWeight": 0.0,
+  "offsetPayloadMeshCount": 1,
+  "offsetPayloadRecordCount": 5721,
+  "offsetPayloadResourcePath": "Turing/Chapter03/AngelProjection/angel_jaw_open_projection_offsets.bin",
+  "offsetPayloadSHA256": "de3912c12331b805e737f50e9975dc72e635055079fd6c5daf375ae84b8d85c8",
   "poseWeights": {
     "rest": 0.0,
     "round": 0.5,

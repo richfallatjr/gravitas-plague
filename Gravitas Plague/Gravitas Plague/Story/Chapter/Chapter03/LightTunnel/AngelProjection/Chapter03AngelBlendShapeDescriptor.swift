@@ -43,6 +43,10 @@ nonisolated struct Chapter03AngelBlendShapeDescriptor: Codable, Sendable, Equata
     let assetExtension: String
     let assetSHA256: String
     let blendShapeName: String
+    let offsetPayloadResourcePath: String
+    let offsetPayloadSHA256: String
+    let offsetPayloadMeshCount: Int
+    let offsetPayloadRecordCount: Int
     let requiresProjectionReady: Bool
     let poseWeights: PoseWeights
     let response: Response
@@ -57,6 +61,12 @@ nonisolated struct Chapter03AngelBlendShapeDescriptor: Codable, Sendable, Equata
               assetResourceName == "angel_posed_01",
               assetExtension == "usdz",
               blendShapeName == "jawOpenProjection",
+              offsetPayloadResourcePath ==
+                "Turing/Chapter03/AngelProjection/angel_jaw_open_projection_offsets.bin",
+              offsetPayloadSHA256.count == 64,
+              offsetPayloadSHA256.allSatisfy(\.isHexDigit),
+              offsetPayloadMeshCount == 1,
+              offsetPayloadRecordCount == 5_721,
               requiresProjectionReady,
               assetSHA256.count == 64,
               assetSHA256.allSatisfy(\.isHexDigit) else {

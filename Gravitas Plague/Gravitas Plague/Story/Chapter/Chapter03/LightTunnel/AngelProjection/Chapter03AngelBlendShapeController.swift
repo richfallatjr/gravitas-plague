@@ -99,18 +99,7 @@ final class Chapter03AngelBlendShapeController {
     private func assignExact(_ requested: Float) throws {
         let value = min(1, max(0, requested))
         for binding in bindings {
-            guard let entity = binding.entity else {
-                throw Chapter03AngelBlendShapeError.entityReleased(
-                    binding.entityPath
-                )
-            }
-            var groups = entity.blendWeights
-            guard groups.indices.contains(binding.groupIndex),
-                  groups[binding.groupIndex].indices.contains(binding.weightIndex) else {
-                throw Chapter03AngelBlendShapeError.staleBinding
-            }
-            groups[binding.groupIndex][binding.weightIndex] = value
-            entity.blendWeights = groups
+            try binding.setWeight(value)
         }
         assignmentCount &+= 1
     }

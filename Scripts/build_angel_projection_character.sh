@@ -10,6 +10,9 @@ PYTHON="${REPOSITORY_ROOT}/.tools/angel-projection-blendshape/bin/python"
 "${PYTHON}" "${REPOSITORY_ROOT}/Scripts/angel_projection_blendshape.py" build
 "${PYTHON}" "${REPOSITORY_ROOT}/Scripts/angel_projection_blendshape.py" validate-runtime
 
-if [[ "${1:-}" == "--capture-poses" ]]; then
+# The handoff's default command is the complete qualification path. Keep an
+# explicit host-only escape hatch for fast asset iteration; production runs
+# always include the RealityKit import probe and four-pose capture gate.
+if [[ "${1:-}" != "--skip-capture" ]]; then
   "${PYTHON}" "${REPOSITORY_ROOT}/Scripts/angel_projection_blendshape.py" capture-poses
 fi

@@ -1,6 +1,7 @@
 #if DEBUG || GR_MIND_EYE_PROJECTION_AUTHORING
 import Foundation
 import RealityKit
+import simd
 
 @MainActor
 enum AngelBlendShapeRealityKitProbe {
@@ -14,6 +15,7 @@ enum AngelBlendShapeRealityKitProbe {
     struct Report: Sendable, Equatable {
         let modelEntityCount: Int
         let bindings: [Binding]
+        let importedMeshEvidence: [String]
         let testedWeights: [Float]
         let returnedToZero: Bool
     }
@@ -26,21 +28,36 @@ enum AngelBlendShapeRealityKitProbe {
             in: root,
             targetName: targetName
         )
+        var importedMeshEvidence: [String] = []
+        for binding in resolved {
+            guard let entity = binding.entity,
+                  let mesh = entity.model?.mesh else {
+                throw Chapter03AngelBlendShapeError.entityReleased(
+                    binding.entityPath
+                )
+            }
+            for model in mesh.contents.models {
+                for part in model.parts {
+                    guard part.blendShapeNames.contains(targetName) else {
+                        continue
+                    }
+                    let offsets = part.blendShapeOffsets(named: targetName)
+                    let maximum = offsets?.elements.reduce(Float.zero) {
+                        max($0, simd_length($1))
+                    } ?? 0
+                    importedMeshEvidence.append(
+                        "entity=\(binding.entityPath) model=\(model.id) " +
+                        "part=\(part.id) target=\(targetName) " +
+                        "offsetCount=\(offsets?.count ?? 0) " +
+                        "maximumOffset=\(maximum)"
+                    )
+                }
+            }
+        }
         let weights: [Float] = [0, 0.33, 0.5, 1, 0]
         for weight in weights {
             for binding in resolved {
-                guard let entity = binding.entity else {
-                    throw Chapter03AngelBlendShapeError.entityReleased(
-                        binding.entityPath
-                    )
-                }
-                var groups = entity.blendWeights
-                guard groups.indices.contains(binding.groupIndex),
-                      groups[binding.groupIndex].indices.contains(binding.weightIndex) else {
-                    throw Chapter03AngelBlendShapeError.staleBinding
-                }
-                groups[binding.groupIndex][binding.weightIndex] = weight
-                entity.blendWeights = groups
+                try binding.setWeight(weight)
             }
         }
         return Report(
@@ -53,10 +70,10 @@ enum AngelBlendShapeRealityKitProbe {
                     weightName: $0.weightName
                 )
             },
+            importedMeshEvidence: importedMeshEvidence,
             testedWeights: weights,
             returnedToZero: resolved.allSatisfy { binding in
-                guard let entity = binding.entity else { return false }
-                return entity.blendWeights[binding.groupIndex][binding.weightIndex] == 0
+                (try? binding.currentWeight()) == 0
             }
         )
     }

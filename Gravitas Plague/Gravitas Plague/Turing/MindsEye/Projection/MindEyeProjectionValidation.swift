@@ -27,4 +27,44 @@ nonisolated enum MindEyeProjectionValidation {
             )
         }
     }
+
+    /// The artist-authored Angel mask is intentionally asymmetric within the
+    /// owner-authored framing cube. For that path, the cube locks the camera and
+    /// the hard safety requirement is that every projected pixel survives the
+    /// exact 1728 -> 1440 crop without touching an edge. Re-centering the camera
+    /// from the mask would break the cube contract and plate registration.
+    static func validateAuthoredMaskForLockedCrop(
+        _ metrics: MaskMetrics,
+        cropOriginX: Int = 144,
+        cropOriginY: Int = 144,
+        cropWidth: Int = 1_440,
+        cropHeight: Int = 1_440
+    ) throws {
+        guard (0.12...0.80).contains(metrics.coverageFraction) else {
+            throw MindEyeProjectionError.invalidCapture(
+                "authored mask coverage \(metrics.coverageFraction) is outside 12...80%"
+            )
+        }
+        guard metrics.boundingBox.count == 4,
+              metrics.centerErrorPixels.count == 2 else {
+            throw MindEyeProjectionError.invalidCapture(
+                "authored mask metrics are incomplete"
+            )
+        }
+        let minimumX = metrics.boundingBox[0]
+        let minimumY = metrics.boundingBox[1]
+        let maximumX = minimumX + metrics.boundingBox[2] - 1
+        let maximumY = minimumY + metrics.boundingBox[3] - 1
+        guard minimumX >= cropOriginX,
+              minimumY >= cropOriginY,
+              maximumX < cropOriginX + cropWidth,
+              maximumY < cropOriginY + cropHeight,
+              !metrics.touchesEdge else {
+            throw MindEyeProjectionError.invalidCapture(
+                "authored mask escapes locked crop: bounds=\(metrics.boundingBox) " +
+                "crop=[\(cropOriginX), \(cropOriginY), \(cropWidth), \(cropHeight)] " +
+                "touchesEdge=\(metrics.touchesEdge)"
+            )
+        }
+    }
 }

@@ -1,4 +1,6 @@
 import json
+import hashlib
+import struct
 import unittest
 from pathlib import Path
 
@@ -19,6 +21,19 @@ class RuntimeContractTests(unittest.TestCase):
             "teeth": 0.0,
         })
         self.assertTrue(descriptor["requiresProjectionReady"])
+        payload = root / (
+            "Gravitas Plague/TuringResources/Turing/Chapter03/"
+            "AngelProjection/angel_jaw_open_projection_offsets.bin"
+        )
+        data = payload.read_bytes()
+        self.assertEqual(hashlib.sha256(data).hexdigest(), descriptor[
+            "offsetPayloadSHA256"
+        ])
+        self.assertEqual(data[:8], b"GRJAWP1\0")
+        schema, mesh_count = struct.unpack_from("<II", data, 8)
+        self.assertEqual(schema, 1)
+        self.assertEqual(mesh_count, descriptor["offsetPayloadMeshCount"])
+        self.assertEqual(descriptor["offsetPayloadRecordCount"], 5721)
 
 
 if __name__ == "__main__":

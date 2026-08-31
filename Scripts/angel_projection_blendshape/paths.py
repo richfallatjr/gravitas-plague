@@ -11,6 +11,7 @@ class ToolPaths:
     target_asset: Path
     source_descriptor: Path
     runtime_descriptor: Path
+    runtime_offsets: Path
     projection_profile: Path
     projection_target_descriptor: Path
     projection_camera_descriptor: Path
@@ -32,6 +33,10 @@ class ToolPaths:
             runtime_descriptor=root / (
                 "Gravitas Plague/TuringResources/Turing/Chapter03/"
                 "AngelProjection/angel_jaw_open_projection.json"
+            ),
+            runtime_offsets=root / (
+                "Gravitas Plague/TuringResources/Turing/Chapter03/"
+                "AngelProjection/angel_jaw_open_projection_offsets.bin"
             ),
             projection_profile=root / (
                 "Gravitas Plague/TuringResources/Turing/MindsEye/Projection/"

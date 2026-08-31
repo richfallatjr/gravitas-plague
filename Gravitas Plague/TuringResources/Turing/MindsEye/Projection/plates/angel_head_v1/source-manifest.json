@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "packageID": "angel_head_v1",
+  "profileID": "angel_head_v1",
+  "profileSHA256": "f76b896fbacf672ab07418582bfe6c2d2b28d253a66af6d0a2163704cd539082",
+  "cameraID": "angel_head_v1.camera",
+  "cameraSHA256": "0f0c8382a94ee2ae2409b6420023be937addbfc4eee9c49ef71360e0111c9092",
+  "targetSHA256": "0afb7e088d35f8994be87d0ab725e6eb56b17ef9bdde725336c4e0db7639337d",
+  "subjectAssetName": "angel_posed_01.usdz",
+  "subjectAssetSHA256": "c274c2a294cf32b4d3dca036d36e854e07bf12a6279a1177d88e5a6148bbaa0f",
+  "sceneLightingRevision": "chapter03.lightTunnelTest.v2",
+  "sourceWidth": 1728,
+  "sourceHeight": 1728,
+  "viewportWidth": 1440,
+  "viewportHeight": 1440,
+  "cropOriginX": 144,
+  "cropOriginY": 144,
+  "colorSpace": "sRGB",
+  "projectionMask": {
+    "resourcePath": "Turing/MindsEye/Projection/masks/angel_head_v1_projection-mask-linear16.png",
+    "SHA256": "dcc34bb6186c8b64d4b7d3512ddadb085c944ca6758e3752341cbbc775414ca3",
+    "width": 1440,
+    "height": 1440,
+    "bitsPerChannel": 16,
+    "colorSpace": "linearGray"
+  },
+  "projectionBase": {
+    "filename": "projection-base.png",
+    "SHA256": "dc4575d267261d6163ecaf34429c761e3f511b369c5ed8882de6335a8320a668"
+  },
+  "eyes": {
+    "open": [
+      {
+        "filename": "eyes-open-01.png",
+        "SHA256": "0722baa666c4bb67e236abc0c81fdcfb7bb85b09e4ea95b91cfa3ea68de9e80a"
+      }
+    ],
+    "closed": [
+      {
+        "filename": "eyes-closed-01.png",
+        "SHA256": "0af2d62a1bdfe7cdd94a640b87c00bb0ae4e8b0279e74441a40fd95bf5c20215"
+      }
+    ]
+  },
+  "mouths": {
+    "rest": [
+      {
+        "filename": "mouth-rest-01.png",
+        "SHA256": "2db29960625f45864ed6c12d2deff2c3f4a839aa4e688e75438ea7a121aa7bc0"
+      }
+    ],
+    "small": [
+      {
+        "filename": "mouth-small-01.png",
+        "SHA256": "5e23ee263ee8d714a5c1a1ca04055b65b5014d03f2802b378a8cd955d7fe537e"
+      }
+    ],
+    "wide": [
+      {
+        "filename": "mouth-wide-01.png",
+        "SHA256": "fc6d9b0312520f1fb68822f0ec677d40e71924c80ebba2535a293a53d7474e7c"
+      },
+      {
+        "filename": "mouth-wide-02.png",
+        "SHA256": "7145fe3250ef3c99b81743717f4a031b2cbc9a1e57f9b6fa6cb5d8cf3f3eea91"
+      }
+    ],
+    "round": [
+      {
+        "filename": "mouth-round-01.png",
+        "SHA256": "909f765b61c2d479d4576b8b77d4440a1835b1b7c5570042a860048981b06c5e"
+      }
+    ],
+    "teeth": [
+      {
+        "filename": "mouth-teeth-01.png",
+        "SHA256": "05a7699c714462f9fd9772854c0e3e9a3befc9fc9569cb3ea1fb4946a985504a"
+      }
+    ]
+  }
+}

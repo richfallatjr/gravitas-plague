@@ -21,18 +21,7 @@ enum AngelBlendShapePoseCapture {
             )
         }
         for binding in bindings {
-            guard let entity = binding.entity else {
-                throw Chapter03AngelBlendShapeError.entityReleased(
-                    binding.entityPath
-                )
-            }
-            var groups = entity.blendWeights
-            guard groups.indices.contains(binding.groupIndex),
-                  groups[binding.groupIndex].indices.contains(binding.weightIndex) else {
-                throw Chapter03AngelBlendShapeError.staleBinding
-            }
-            groups[binding.groupIndex][binding.weightIndex] = weight
-            entity.blendWeights = groups
+            try binding.setWeight(weight)
         }
     }
 }

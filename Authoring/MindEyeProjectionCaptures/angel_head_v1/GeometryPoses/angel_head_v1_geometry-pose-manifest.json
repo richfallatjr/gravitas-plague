@@ -1,0 +1,33 @@
+{
+  "blendShapeName" : "jawOpenProjection",
+  "poses" : [
+    {
+      "beautyFilename" : "GeometryPoses/angel_head_v1_geometry-rest_000.png",
+      "coverageFilename" : "GeometryPoses/angel_head_v1_coverage-rest_000.png",
+      "geometryWeight" : 0,
+      "semanticPose" : "rest"
+    },
+    {
+      "beautyFilename" : "GeometryPoses/angel_head_v1_geometry-small_033.png",
+      "coverageFilename" : "GeometryPoses/angel_head_v1_coverage-small_033.png",
+      "geometryWeight" : 0.33,
+      "semanticPose" : "small"
+    },
+    {
+      "beautyFilename" : "GeometryPoses/angel_head_v1_geometry-round_050.png",
+      "coverageFilename" : "GeometryPoses/angel_head_v1_coverage-round_050.png",
+      "geometryWeight" : 0.5,
+      "semanticPose" : "round"
+    },
+    {
+      "beautyFilename" : "GeometryPoses/angel_head_v1_geometry-wide_100.png",
+      "coverageFilename" : "GeometryPoses/angel_head_v1_coverage-wide_100.png",
+      "geometryWeight" : 1,
+      "semanticPose" : "wide"
+    }
+  ],
+  "projectorCameraSHA256" : "0f0c8382a94ee2ae2409b6420023be937addbfc4eee9c49ef71360e0111c9092",
+  "schemaVersion" : 1,
+  "teethGeometryAlias" : "rest",
+  "unionMaskFilename" : "GeometryPoses/angel_head_v1_projection-mask-union-linear16.png"
+}

@@ -1,4 +1,5 @@
 import XCTest
+import simd
 @testable import Gravitas_Plague
 
 final class Chapter03AngelBlendShapeTests: XCTestCase {
@@ -81,6 +82,52 @@ final class Chapter03AngelBlendShapeTests: XCTestCase {
         XCTAssertEqual(descriptor.poseWeights.teeth, 0)
         XCTAssertEqual(descriptor.poseWeights.wide, 1)
         XCTAssertTrue(descriptor.requiresProjectionReady)
+    }
+
+    func testProductionOffsetPayloadIsHashBoundAndSparse() throws {
+        let root = try repositoryRoot()
+        let descriptorURL = root.appendingPathComponent(
+            "Gravitas Plague/TuringResources/Turing/Chapter03/" +
+                "AngelProjection/angel_jaw_open_projection.json"
+        )
+        let descriptor = try JSONDecoder().decode(
+            Chapter03AngelBlendShapeDescriptor.self,
+            from: Data(contentsOf: descriptorURL)
+        )
+        let payloadURL = root.appendingPathComponent(
+            "Gravitas Plague/TuringResources/" +
+                descriptor.offsetPayloadResourcePath
+        )
+        let payload = try Chapter03AngelBlendShapeOffsetPayload(
+            data: Data(contentsOf: payloadURL),
+            expectedMeshCount: descriptor.offsetPayloadMeshCount,
+            expectedRecordCount: descriptor.offsetPayloadRecordCount
+        )
+        XCTAssertEqual(payload.meshes.count, 1)
+        XCTAssertEqual(payload.meshes[0].sourcePointCount, 1_062_657)
+        XCTAssertEqual(payload.meshes[0].records.count, 5_721)
+        XCTAssertEqual(
+            payload.meshes[0].records.map(\.pointIndex),
+            payload.meshes[0].records.map(\.pointIndex).sorted()
+        )
+        XCTAssertGreaterThan(
+            payload.meshes[0].records.map { simd_length($0.offset) }.max() ?? 0,
+            0.011
+        )
+    }
+
+    func testOffsetPayloadRejectsTruncation() throws {
+        let root = try repositoryRoot()
+        let url = root.appendingPathComponent(
+            "Gravitas Plague/TuringResources/Turing/Chapter03/" +
+                "AngelProjection/angel_jaw_open_projection_offsets.bin"
+        )
+        let truncated = Data(try Data(contentsOf: url).dropLast())
+        XCTAssertThrowsError(try Chapter03AngelBlendShapeOffsetPayload(
+            data: truncated,
+            expectedMeshCount: 1,
+            expectedRecordCount: 5_721
+        ))
     }
 
     func testVisualProjectionOwnsEmissionWithoutDependingOnBlendShape() {

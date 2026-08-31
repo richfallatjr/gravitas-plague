@@ -26,6 +26,17 @@ struct Chapter03AngelBlendShapeResolver {
         bindings: inout [Chapter03AngelBlendShapeBinding]
     ) throws {
         if let model = entity as? ModelEntity {
+            // Some USDZ imports expose blendWeightNames from the mesh resource
+            // without installing the component that drives deformation. The
+            // handoff's required stable-API fallback is to construct that
+            // component once from the imported mesh before resolving indices.
+            if model.components[BlendShapeWeightsComponent.self] == nil,
+               !model.blendWeightNames.isEmpty,
+               let mesh = model.model?.mesh {
+                model.components.set(BlendShapeWeightsComponent(
+                    weightsMapping: BlendShapeWeightsMapping(meshResource: mesh)
+                ))
+            }
             let names = model.blendWeightNames
             let weights = model.blendWeights
             guard names.count == weights.count else {

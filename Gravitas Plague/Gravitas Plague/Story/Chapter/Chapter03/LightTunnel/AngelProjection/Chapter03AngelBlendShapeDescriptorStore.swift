@@ -29,4 +29,27 @@ nonisolated struct Chapter03AngelBlendShapeDescriptorStore {
             return descriptor
         }.value
     }
+
+    func loadOffsetPayload(
+        descriptor: Chapter03AngelBlendShapeDescriptor,
+        payloadURL: URL
+    ) async throws -> Chapter03AngelBlendShapeOffsetPayload {
+        try await Task.detached(priority: .userInitiated) {
+            let data = try Data(contentsOf: payloadURL, options: .mappedIfSafe)
+            let actualSHA = SHA256.hash(data: data).map {
+                String(format: "%02x", $0)
+            }.joined()
+            guard actualSHA == descriptor.offsetPayloadSHA256.lowercased() else {
+                throw Chapter03AngelBlendShapeError.offsetPayloadHashMismatch(
+                    expected: descriptor.offsetPayloadSHA256,
+                    actual: actualSHA
+                )
+            }
+            return try Chapter03AngelBlendShapeOffsetPayload(
+                data: data,
+                expectedMeshCount: descriptor.offsetPayloadMeshCount,
+                expectedRecordCount: descriptor.offsetPayloadRecordCount
+            )
+        }.value
+    }
 }

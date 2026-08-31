@@ -276,6 +276,25 @@ final class Chapter03AngelPortalEntity {
                     descriptorURL: descriptorURL,
                     assetURL: assetURL
                 )
+            let offsetPayloadURL = try TuringResourceLoader.resourceURL(
+                resourcePath: descriptor.offsetPayloadResourcePath
+            )
+            let offsetPayload = try await Chapter03AngelBlendShapeDescriptorStore()
+                .loadOffsetPayload(
+                    descriptor: descriptor,
+                    payloadURL: offsetPayloadURL
+                )
+            let repair = try Chapter03AngelBlendShapeMeshRepair.repairIfNeeded(
+                root: visual,
+                targetName: descriptor.blendShapeName,
+                payload: offsetPayload
+            )
+            print(
+                "[Chapter03AngelBlendShape] mesh import ready " +
+                "repairedParts=\(repair.repairedPartCount) " +
+                "alreadyValidParts=\(repair.alreadyValidPartCount) " +
+                "maximumImportedOffsetBeforeRepair=\(repair.maximumImportedOffset)"
+            )
             let bindings = try Chapter03AngelBlendShapeResolver().resolve(
                 in: visual,
                 targetName: descriptor.blendShapeName

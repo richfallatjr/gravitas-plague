@@ -16,6 +16,7 @@ nonisolated struct MindEyeProjectionProfile: Codable, Sendable, Equatable {
     let cropOriginY: Int
     let cameraResourcePath: String
     let targetResourcePath: String
+    let plateManifestResourcePath: String
     let projectionMaskResourcePath: String
     let projectionMaskSHA256: String
     let projectionMaskConvention: String
@@ -60,6 +61,7 @@ nonisolated struct MindEyeProjectionProfile: Codable, Sendable, Equatable {
         }
         guard MindEyeSafeRelativePath.validates(cameraResourcePath),
               MindEyeSafeRelativePath.validates(targetResourcePath),
+              MindEyeSafeRelativePath.validates(plateManifestResourcePath),
               MindEyeSafeRelativePath.validates(projectionMaskResourcePath),
               projectionMaskSHA256.count == 64,
               projectionMaskSHA256.allSatisfy(\.isHexDigit),

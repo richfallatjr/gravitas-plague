@@ -11,9 +11,11 @@ nonisolated enum MindEyeProjectionError: LocalizedError, Sendable, Equatable {
     case invalidCameraDescriptor
     case nonfiniteCameraDescriptor
     case invalidTargetDescriptor(String)
+    case invalidPlateManifest(String)
     case missingResource(String)
     case hashMismatch(String)
     case targetResolutionFailed(String)
+    case materialApplicationFailed(String)
     case rendererUnavailable(String)
     case renderTimedOut
     case renderFailed(String)
@@ -32,9 +34,11 @@ nonisolated enum MindEyeProjectionError: LocalizedError, Sendable, Equatable {
         case .invalidCameraDescriptor: "The projection camera descriptor is invalid."
         case .nonfiniteCameraDescriptor: "The projection camera contains a non-finite value."
         case .invalidTargetDescriptor(let message): "Invalid projection target: \(message)"
+        case .invalidPlateManifest(let message): "Invalid projection plate package: \(message)"
         case .missingResource(let path): "Missing projection resource: \(path)"
         case .hashMismatch(let role): "Projection resource hash mismatch: \(role)"
         case .targetResolutionFailed(let message): "Projection target resolution failed: \(message)"
+        case .materialApplicationFailed(let message): "Projection material application failed: \(message)"
         case .rendererUnavailable(let message): "RealityRenderer is unavailable: \(message)"
         case .renderTimedOut: "Projection authoring render exceeded its ten-second watchdog."
         case .renderFailed(let message): "Projection render failed: \(message)"

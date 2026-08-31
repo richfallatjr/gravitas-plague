@@ -14,9 +14,15 @@ struct Chapter03LightTunnelSceneFactory {
         runID: UUID,
         definition: Chapter03LightTunnelVisualDefinition,
         originFromDevice: simd_float4x4,
-        mode: Chapter03LightTunnelSceneMode
+        mode: Chapter03LightTunnelSceneMode,
+        resources providedResources: HeavenResources? = nil
     ) async throws -> Chapter03LightTunnelSceneBundle {
-        let resources = try loadHeavenResources()
+        let resources: HeavenResources
+        if let providedResources {
+            resources = providedResources
+        } else {
+            resources = try loadHeavenResources()
+        }
         let portalGeometry = try Chapter03CircularPortalGeometry.make(
             diameterMeters: definition.portalDiameterMeters
         )
@@ -77,7 +83,7 @@ struct Chapter03LightTunnelSceneFactory {
         )
     }
 
-    private func loadHeavenResources() throws -> HeavenResources {
+    func loadHeavenResources() throws -> HeavenResources {
         guard let url = Bundle.main.url(forResource: "heaven-sunrise", withExtension: "exr") else {
             throw Chapter03Error.heavenResourceMissing("heaven-sunrise.exr")
         }

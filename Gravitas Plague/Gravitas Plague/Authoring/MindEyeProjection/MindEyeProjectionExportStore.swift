@@ -24,6 +24,13 @@ actor MindEyeProjectionExportStore {
 
     func url(_ filename: String) -> URL { staging.appendingPathComponent(filename) }
 
+    func createDirectory(_ relativePath: String) throws {
+        try fileManager.createDirectory(
+            at: staging.appendingPathComponent(relativePath, isDirectory: true),
+            withIntermediateDirectories: true
+        )
+    }
+
     func write<T: Encodable>(_ value: T, filename: String) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]

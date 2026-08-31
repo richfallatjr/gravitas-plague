@@ -11,8 +11,32 @@ nonisolated enum MindEyeProjectionMaskProcessor {
     static func process(
         _ buffer: MindEyeProjectionPixelBuffer,
         inset: Float,
-        feather: Float
+        feather: Float,
+        foregroundIsDark: Bool = false
     ) throws -> MindEyeProjectionProcessedMask {
+        let width = buffer.width
+        let height = buffer.height
+        let binary = isolatedForeground(
+            buffer,
+            foregroundIsDark: foregroundIsDark
+        )
+        return try process(
+            binary: binary,
+            width: width,
+            height: height,
+            inset: inset,
+            feather: feather
+        )
+    }
+
+    /// Converts a flat mask AOV into one isolated receiver region. The
+    /// owner-authored Angel mask uses black for the facial receiver and white
+    /// for the surrounding mesh, so that case selects the component containing
+    /// the locked camera center instead of the much larger black background.
+    static func isolatedForeground(
+        _ buffer: MindEyeProjectionPixelBuffer,
+        foregroundIsDark: Bool
+    ) -> [Bool] {
         let width = buffer.width
         let height = buffer.height
         var binary = [Bool](repeating: false, count: width * height)
@@ -22,11 +46,25 @@ nonisolated enum MindEyeProjectionMaskProcessor {
                 let row = bytes + y * buffer.bytesPerRow
                 for x in 0..<width {
                     let pixel = row + x * 4
-                    binary[y * width + x] = max(pixel[0], max(pixel[1], pixel[2])) >= 128
+                    let luminance = max(pixel[0], max(pixel[1], pixel[2]))
+                    binary[y * width + x] = foregroundIsDark
+                        ? luminance < 128
+                        : luminance >= 128
                 }
             }
         }
-        binary = keepLargestComponent(binary, width: width, height: height)
+        return foregroundIsDark
+            ? keepCenterComponent(binary, width: width, height: height)
+            : keepLargestComponent(binary, width: width, height: height)
+    }
+
+    private static func process(
+        binary: [Bool],
+        width: Int,
+        height: Int,
+        inset: Float,
+        feather: Float
+    ) throws -> MindEyeProjectionProcessedMask {
         let insideSquared = squaredDistance(toValue: false, binary: binary, width: width, height: height)
         let outsideSquared = squaredDistance(toValue: true, binary: binary, width: width, height: height)
         var linear16 = [UInt16](repeating: 0, count: binary.count)
@@ -59,6 +97,36 @@ nonisolated enum MindEyeProjectionMaskProcessor {
             touchesEdge: touchesEdge
         )
         return MindEyeProjectionProcessedMask(linear16: linear16, preview8: preview, metrics: metrics)
+    }
+
+    private static func keepCenterComponent(
+        _ input: [Bool],
+        width: Int,
+        height: Int
+    ) -> [Bool] {
+        let center = (height / 2) * width + width / 2
+        guard input.indices.contains(center), input[center] else {
+            return [Bool](repeating: false, count: input.count)
+        }
+        var output = [Bool](repeating: false, count: input.count)
+        var queue = [center]
+        var head = 0
+        output[center] = true
+        while head < queue.count {
+            let value = queue[head]
+            head += 1
+            let x = value % width
+            let y = value / width
+            for (nx, ny) in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
+                where nx >= 0 && ny >= 0 && nx < width && ny < height {
+                let next = ny * width + nx
+                if input[next] && !output[next] {
+                    output[next] = true
+                    queue.append(next)
+                }
+            }
+        }
+        return output
     }
 
     private static func smootherstep(_ edge0: Float, _ edge1: Float, _ value: Float) -> Float {
