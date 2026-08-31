@@ -39,7 +39,7 @@ def load_source_descriptor(path: Path) -> dict[str, Any]:
             raise ValueError(f"cameraFramingControl.{key} is invalid")
     if not value.get("projectionMaskPackagePath"):
         raise ValueError("projectionMaskPackagePath is missing")
-    if value.get("projectionMaskConvention") != "whiteProjectsBlackSuppresses":
+    if value.get("projectionMaskConvention") != "darkProjectsLightSuppresses":
         raise ValueError("projection mask convention differs from the runtime contract")
     return value
 

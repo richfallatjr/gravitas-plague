@@ -61,6 +61,9 @@ build_app() {
   cp -R "$RUNTIME_ROOT/cameras" "$APP_PATH/Turing/MindsEye/Projection/"
   cp -R "$RUNTIME_ROOT/targets" "$APP_PATH/Turing/MindsEye/Projection/"
   cp -R "$RUNTIME_ROOT/masks" "$APP_PATH/Turing/MindsEye/Projection/"
+  cp -R "$RUNTIME_ROOT/plates" "$APP_PATH/Turing/MindsEye/Projection/"
+  cp -R "$RUNTIME_ROOT/materials" "$APP_PATH/Turing/MindsEye/Projection/"
+  cp -R "$RUNTIME_ROOT/qualification" "$APP_PATH/Turing/MindsEye/Projection/"
   cp \
     "$REPO_ROOT/Gravitas Plague/TuringResources/Turing/Chapters/Chapter03/chapter03_light_tunnel_test.json" \
     "$APP_PATH/Turing/Chapters/Chapter03/chapter03_light_tunnel_test.json"
@@ -88,7 +91,7 @@ PY
   SIMCTL_CHILD_GR_WORKTREE_DIRTY="$WORKTREE_DIRTY" \
     xcrun simctl launch \
       --terminate-running-process \
-      --stdout=/dev/null \
+      --stdout="$STAGING/$job.stdout.log" \
       --stderr="$STAGING/$job.stderr.log" \
       "$UDID" \
       "$BUNDLE_ID" \
@@ -151,10 +154,6 @@ if os.path.exists(final):
     shutil.rmtree(final)
 os.replace(stage, final)
 PY
-
-python3 Scripts/mind_eye_projection/publish_projection_union_mask.py \
-  --repository-root "$REPO_ROOT" \
-  --capture-directory "$FINAL"
 
 python3 Scripts/mind_eye_projection/validate_projection_capture.py \
   --directory "$FINAL" \

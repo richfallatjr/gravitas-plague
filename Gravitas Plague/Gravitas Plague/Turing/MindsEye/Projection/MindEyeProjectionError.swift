@@ -8,6 +8,12 @@ nonisolated enum MindEyeProjectionError: LocalizedError, Sendable, Equatable {
     case invalidMaterialControls
     case invalidViewCone
     case invalidMaskControls
+    case invalidReceiverMask(String)
+    case unsupportedImportedPBR(String)
+    case materialParityUnqualified
+    case materialContractMismatch(String)
+    case stalePreparation
+    case coordinateSpaceProofFailed(String)
     case invalidCameraDescriptor
     case nonfiniteCameraDescriptor
     case invalidTargetDescriptor(String)
@@ -31,6 +37,12 @@ nonisolated enum MindEyeProjectionError: LocalizedError, Sendable, Equatable {
         case .invalidMaterialControls: "Projection material controls are invalid."
         case .invalidViewCone: "Projection view-cone controls are invalid."
         case .invalidMaskControls: "Projection mask controls are invalid."
+        case .invalidReceiverMask(let message): "Invalid projection receiver mask: \(message)"
+        case .unsupportedImportedPBR(let message): "Unsupported imported Angel PBR contract: \(message)"
+        case .materialParityUnqualified: "The Angel replacement material has not passed parity qualification."
+        case .materialContractMismatch(let message): "Angel material contract mismatch: \(message)"
+        case .stalePreparation: "The Angel projection material preparation became stale."
+        case .coordinateSpaceProofFailed(let message): "Projection coordinate-space proof failed: \(message)"
         case .invalidCameraDescriptor: "The projection camera descriptor is invalid."
         case .nonfiniteCameraDescriptor: "The projection camera contains a non-finite value."
         case .invalidTargetDescriptor(let message): "Invalid projection target: \(message)"

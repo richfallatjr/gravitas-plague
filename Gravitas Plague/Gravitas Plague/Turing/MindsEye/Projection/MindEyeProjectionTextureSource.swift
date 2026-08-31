@@ -32,3 +32,48 @@ final class MindEyeProjectionTextureSource {
         )
     }
 }
+
+#if DEBUG || GR_MIND_EYE_PROJECTION_AUTHORING
+@MainActor
+enum MindEyeProjectionDiagnosticCheckerEncoder {
+    static func encode(
+        output: MindEyeProjectionTextureSource,
+        device: any MTLDevice
+    ) async throws {
+        guard let library = device.makeDefaultLibrary(),
+              let function = library.makeFunction(
+                name: "mindEyeProjectionDiagnosticChecker"
+              ),
+              let queue = device.makeCommandQueue(),
+              let buffer = queue.makeCommandBuffer(),
+              let encoder = buffer.makeComputeCommandEncoder() else {
+            throw MindEyeProjectionError.rendererUnavailable(
+                "diagnostic checker Metal resources are unavailable"
+            )
+        }
+        let pipeline = try await device.makeComputePipelineState(function: function)
+        let destination = output.lowLevelTexture.replace(using: buffer)
+        encoder.setComputePipelineState(pipeline)
+        encoder.setTexture(destination, index: 0)
+        let width = max(1, pipeline.threadExecutionWidth)
+        let height = max(1, pipeline.maxTotalThreadsPerThreadgroup / width)
+        encoder.dispatchThreads(
+            MTLSize(width: destination.width, height: destination.height, depth: 1),
+            threadsPerThreadgroup: MTLSize(width: width, height: height, depth: 1)
+        )
+        encoder.endEncoding()
+        let completed = await withCheckedContinuation {
+            (continuation: CheckedContinuation<Bool, Never>) in
+            buffer.addCompletedHandler {
+                continuation.resume(returning: $0.status == .completed)
+            }
+            buffer.commit()
+        }
+        guard completed else {
+            throw MindEyeProjectionError.coordinateSpaceProofFailed(
+                "diagnostic checker command failed"
+            )
+        }
+    }
+}
+#endif

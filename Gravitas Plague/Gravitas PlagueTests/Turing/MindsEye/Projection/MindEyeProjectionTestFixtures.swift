@@ -38,6 +38,24 @@ func mindEyeProjectionTargetFixture() throws -> MindEyeProjectionTargetDescripto
     )
 }
 
+func mindEyeProjectionPBRContractFixture() throws -> MindEyeProjectionImportedPBRContract {
+    try JSONDecoder().decode(
+        MindEyeProjectionImportedPBRContract.self,
+        from: mindEyeProjectionResourceData(
+            "Gravitas Plague/TuringResources/Turing/MindsEye/Projection/materials/angel_head_v1.pbr-binding.json"
+        )
+    )
+}
+
+func mindEyeProjectionParityFixture() throws -> MindEyeProjectionMaterialParityQualification {
+    try JSONDecoder().decode(
+        MindEyeProjectionMaterialParityQualification.self,
+        from: mindEyeProjectionResourceData(
+            "Gravitas Plague/TuringResources/Turing/MindsEye/Projection/qualification/angel_head_v1.material-parity.json"
+        )
+    )
+}
+
 func mindEyeProjectionManifestFixture(captureID: String = "angel_head_v1") -> MindEyeProjectionCaptureManifest {
     MindEyeProjectionCaptureManifest(
         schemaVersion: 1,

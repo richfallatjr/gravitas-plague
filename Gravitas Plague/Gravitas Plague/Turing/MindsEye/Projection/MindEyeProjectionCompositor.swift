@@ -101,8 +101,6 @@ enum MindEyeProjectionCompositeEncoder {
             $0.width == 1_728 && $0.height == 1_728 &&
                 [.rgba8Unorm_srgb, .bgra8Unorm_srgb].contains($0.pixelFormat)
         }),
-        package.projectionMask.texture.width == 1_440,
-        package.projectionMask.texture.height == 1_440,
         output.lowLevelTexture.descriptor.width == 1_440,
         output.lowLevelTexture.descriptor.height == 1_440 else {
             throw MindEyeProjectionError.invalidPlateManifest(
@@ -123,8 +121,7 @@ enum MindEyeProjectionCompositeEncoder {
         encoder.setTexture(package.projectionBase.texture, index: 0)
         encoder.setTexture(eye.texture, index: 1)
         encoder.setTexture(mouth.texture, index: 2)
-        encoder.setTexture(package.projectionMask.texture, index: 3)
-        encoder.setTexture(destination, index: 4)
+        encoder.setTexture(destination, index: 3)
         var uniforms = MindEyeProjectionCompositeUniforms(
             sourceAndOutputDimensions: SIMD4(1_728, 1_728, 1_440, 1_440),
             cropOrigin: SIMD2(144, 144)

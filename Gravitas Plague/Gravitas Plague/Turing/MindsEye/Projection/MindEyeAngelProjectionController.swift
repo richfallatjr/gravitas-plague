@@ -14,6 +14,7 @@ final class MindEyeAngelProjectionController:
 
     private let runID: UUID
     private let package: MindEyeProjectionPlatePackage
+    private let receiverMask: MindEyeProjectionReceiverMaskTextureSource
     private let textureSource: MindEyeProjectionTextureSource
     private let compositorResources: MindEyeProjectionCompositorResources
     private let materialController: MindEyeProjectionMaterialController
@@ -43,12 +44,14 @@ final class MindEyeAngelProjectionController:
     private init(
         runID: UUID,
         package: MindEyeProjectionPlatePackage,
+        receiverMask: MindEyeProjectionReceiverMaskTextureSource,
         textureSource: MindEyeProjectionTextureSource,
         compositorResources: MindEyeProjectionCompositorResources,
         materialController: MindEyeProjectionMaterialController
     ) {
         self.runID = runID
         self.package = package
+        self.receiverMask = receiverMask
         self.textureSource = textureSource
         self.compositorResources = compositorResources
         self.materialController = materialController
@@ -80,7 +83,8 @@ final class MindEyeAngelProjectionController:
 
     static func prepare(
         runID: UUID,
-        subjectRoot: Entity
+        subjectRoot: Entity,
+        preparationToken: MindEyeProjectionPreparationToken
     ) async throws -> MindEyeAngelProjectionController {
         guard let device = MTLCreateSystemDefaultDevice() else {
             throw MindEyeProjectionError.rendererUnavailable(
@@ -92,8 +96,21 @@ final class MindEyeAngelProjectionController:
             device: device
         ).load(
             locator: locator,
-            profileResourcePath: profileResourcePath
+            profileResourcePath: profileResourcePath,
+            qualificationPolicy: runtimeQualificationPolicy
         )
+        try preparationToken.requireCurrent()
+        let rawReceiverMask = try await MindEyeProjectionReceiverMaskLoader(
+            device: device
+        ).load(
+            locator: locator,
+            descriptor: package.profile.projectionReceiverUVMask
+        )
+        let receiverMask = try await MindEyeProjectionReceiverMaskTextureSource.make(
+            payload: rawReceiverMask,
+            device: device
+        )
+        try preparationToken.requireCurrent()
         let textureSource = try await MindEyeProjectionTextureSource.make()
         let compositorResources = try await MindEyeProjectionCompositorPipeline(
             device: device
@@ -102,6 +119,7 @@ final class MindEyeAngelProjectionController:
         let controller = MindEyeAngelProjectionController(
             runID: runID,
             package: package,
+            receiverMask: receiverMask,
             textureSource: textureSource,
             compositorResources: compositorResources,
             materialController: materialController
@@ -116,13 +134,17 @@ final class MindEyeAngelProjectionController:
             resources: compositorResources
         )
         controller.lastCompletedSequence = 0
-        let report = try await MindEyeProjectionMaterialFactory.install(
+        try preparationToken.requireCurrent()
+        let preparation = try await MindEyeProjectionMaterialFactory.prepare(
             package: package,
-            textureSource: textureSource,
-            subjectRoot: subjectRoot,
-            controller: materialController
+            projectionTexture: textureSource,
+            receiverMask: receiverMask,
+            subjectRoot: subjectRoot
         )
-        guard report.runtimeMaterialAvailable else {
+        try preparationToken.requireCurrent()
+        try materialController.commit(preparation)
+        guard materialController.appliedMaterialCount ==
+                package.target.requiredTargetMaterialCount else {
             materialController.release(reason: "incompleteInstallation")
             throw MindEyeProjectionError.materialApplicationFailed(
                 "the exact Angel projection target did not receive its material"
@@ -135,11 +157,30 @@ final class MindEyeAngelProjectionController:
                 "cameraSHA=\(package.manifest.cameraSHA256) " +
                 "targetSHA=\(package.manifest.targetSHA256) " +
                 "profileSHA=\(package.manifest.profileSHA256) " +
-                "residentBytes=\(package.estimatedResidentBytes) " +
+                "pbrContract=\(package.importedPBRContract.contractID) " +
+                "receiverMaskSHA=\(receiverMask.metadata.SHA256) " +
+                "plateResidentBytes=\(package.estimatedPlateResidentBytes) " +
                 "sourceTextureCount=\(package.sourceTextureCount) " +
-                "outputTextureCount=1 materialCount=\(report.appliedMaterialCount)"
+                "outputTextureCount=2 materialCount=\(materialController.appliedMaterialCount)"
         )
         return controller
+    }
+
+    /// Development builds intentionally expose the unqualified replacement
+    /// material so it can be judged on Vision Pro. Release/TestFlight builds
+    /// remain fail-closed until the captured material-parity resource passes.
+    private static var runtimeQualificationPolicy:
+        MindEyeProjectionPlatePackageLoader.QualificationPolicy
+    {
+        #if DEBUG
+        print(
+            "[MindEyeProjection] DEBUG TEST OVERRIDE: " +
+                "material parity qualification is not enforced"
+        )
+        return .allowUnqualifiedAuthoringRun
+        #else
+        return .requirePassingResource
+        #endif
     }
 
     func setAngelMouthPose(_ pose: MindEyeMouthPose) {
@@ -245,7 +286,7 @@ final class MindEyeAngelProjectionController:
 
 private nonisolated extension MindEyeProjectionPlatePackage {
     var sourceTextureCount: Int {
-        2 + eyeOpen.count + eyeClosed.count +
+        1 + eyeOpen.count + eyeClosed.count +
             MindEyeMouthPose.allCases.reduce(0) {
                 $0 + (mouths[$1]?.count ?? 0)
             }

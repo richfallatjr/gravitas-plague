@@ -234,12 +234,15 @@ final class Chapter03AngelPortalEntity {
             blendShapeReady: readiness.blendShapeReady &&
                 blendShapeController != nil
         )
-        emissionFallbackController?.setProjectionOwnsEmission(
-            resolved.isVisualProjectionReady,
-            reason: resolved.isVisualProjectionReady
-                ? "projectionReady"
-                : "projectionUnavailable"
-        )
+        if resolved.isVisualProjectionReady {
+            emissionFallbackController?.projectionMaterialDidInstall(
+                reason: "projectionReady"
+            )
+        } else {
+            emissionFallbackController?.restoreFallback(
+                reason: "projectionUnavailable"
+            )
+        }
         blendShapeController?.setProjectionReadiness(resolved)
     }
 

@@ -19,6 +19,7 @@ final class Chapter03LightTunnelPresenter {
     private var angelVisemeTrack: Chapter03AngelVisemeTrack?
     private var angelPerformance: Chapter03AngelPerformanceCoordinator?
     private var angelProjection: MindEyeAngelProjectionController?
+    private var projectionPreparationToken: MindEyeProjectionPreparationToken?
     private(set) var angelAudioEmitter: Entity?
     private var lastLoggedDistanceBucket: Int?
 
@@ -32,7 +33,11 @@ final class Chapter03LightTunnelPresenter {
         definition: Chapter03LightTunnelVisualDefinition,
         angelVisemeTrack: Chapter03AngelVisemeTrack?
     ) async throws {
+        projectionPreparationToken?.cancel()
+        projectionPreparationToken = nil
         remove(runID: self.runID, reason: "replacement")
+        let preparationToken = MindEyeProjectionPreparationToken()
+        projectionPreparationToken = preparationToken
 
         let bundle = try await sceneFactory.make(
             runID: runID,
@@ -40,6 +45,8 @@ final class Chapter03LightTunnelPresenter {
             originFromDevice: originFromDevice,
             mode: .runtimePortal
         )
+        try preparationToken.requireCurrent()
+        bundle.root.isEnabled = false
         let worldAnchor = try cinematicWorld.claimChapter03LightTunnel(
             runID: runID
         )
@@ -60,20 +67,56 @@ final class Chapter03LightTunnelPresenter {
             // The visual accent may never delay or stop the authored chapter.
             Chapter03HeavenPortalEmberDiagnostics.cueUnavailable(error)
         }
-        worldAnchor.addChild(bundle.root)
-
         let preparedProjection: MindEyeAngelProjectionController?
         do {
             preparedProjection = try await MindEyeAngelProjectionController.prepare(
                 runID: runID,
-                subjectRoot: bundle.angel.root
+                subjectRoot: bundle.angel.root,
+                preparationToken: preparationToken
             )
+        } catch is CancellationError {
+            preparedHeavenEmbers?.teardown(
+                reason: "projectionPreparationCancelled"
+            )
+            bundle.release(reason: "projectionPreparationCancelled")
+            cinematicWorld.releaseChapter03LightTunnel(runID: runID)
+            if projectionPreparationToken === preparationToken {
+                projectionPreparationToken = nil
+            }
+            throw CancellationError()
         } catch {
             preparedProjection = nil
+            bundle.angel.setProjectionReadiness(.unavailable)
             print(
                 "[MindEyeProjection] Angel unavailable; imported material retained " +
-                    "runID=\(runID.uuidString) error=\(error.localizedDescription)"
+                "runID=\(runID.uuidString) error=\(error.localizedDescription)"
             )
+        }
+        do {
+            try preparationToken.requireCurrent()
+        } catch {
+            preparedProjection?.release(reason: "staleBeforeRootAttach")
+            preparedHeavenEmbers?.teardown(reason: "staleBeforeRootAttach")
+            bundle.release(reason: "staleBeforeRootAttach")
+            cinematicWorld.releaseChapter03LightTunnel(runID: runID)
+            if projectionPreparationToken === preparationToken {
+                projectionPreparationToken = nil
+            }
+            throw error
+        }
+
+        if preparedProjection != nil {
+            bundle.angel.setProjectionReadiness(
+                Chapter03AngelProjectionReadiness(
+                    cameraReady: true,
+                    materialReady: true,
+                    textureReady: true,
+                    maskReady: true,
+                    blendShapeReady: true
+                )
+            )
+        } else {
+            bundle.angel.setProjectionReadiness(.unavailable)
         }
 
         self.runID = runID
@@ -89,21 +132,11 @@ final class Chapter03LightTunnelPresenter {
         self.angelVisemeTrack = angelVisemeTrack
         angelPerformance = Chapter03AngelPerformanceCoordinator()
         angelProjection = preparedProjection
-        if preparedProjection != nil {
-            bundle.angel.setProjectionReadiness(
-                Chapter03AngelProjectionReadiness(
-                    cameraReady: true,
-                    materialReady: true,
-                    textureReady: true,
-                    maskReady: true,
-                    blendShapeReady: true
-                )
-            )
-        } else {
-            bundle.angel.setProjectionReadiness(.unavailable)
-        }
         angelAudioEmitter = emitter
         lastLoggedDistanceBucket = nil
+        worldAnchor.addChild(bundle.root)
+        bundle.root.isEnabled = true
+        projectionPreparationToken = nil
 
         print(
             """
@@ -218,6 +251,8 @@ final class Chapter03LightTunnelPresenter {
     }
 
     func remove(runID: UUID?, reason: String) {
+        projectionPreparationToken?.cancel()
+        projectionPreparationToken = nil
         guard let current = self.runID,
               runID == nil || runID == current else { return }
 

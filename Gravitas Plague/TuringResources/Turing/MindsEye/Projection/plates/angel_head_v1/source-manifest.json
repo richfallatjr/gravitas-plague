@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "packageID": "angel_head_v1",
   "profileID": "angel_head_v1",
-  "profileSHA256": "f76b896fbacf672ab07418582bfe6c2d2b28d253a66af6d0a2163704cd539082",
+  "profileSHA256": "cafe527742aeff449e640d850bb6ecfa262161c096bc0de04497af18e5913ae8",
   "cameraID": "angel_head_v1.camera",
   "cameraSHA256": "0f0c8382a94ee2ae2409b6420023be937addbfc4eee9c49ef71360e0111c9092",
   "targetSHA256": "0afb7e088d35f8994be87d0ab725e6eb56b17ef9bdde725336c4e0db7639337d",
@@ -16,14 +16,7 @@
   "cropOriginX": 144,
   "cropOriginY": 144,
   "colorSpace": "sRGB",
-  "projectionMask": {
-    "resourcePath": "Turing/MindsEye/Projection/masks/angel_head_v1_projection-mask-linear16.png",
-    "SHA256": "dcc34bb6186c8b64d4b7d3512ddadb085c944ca6758e3752341cbbc775414ca3",
-    "width": 1440,
-    "height": 1440,
-    "bitsPerChannel": 16,
-    "colorSpace": "linearGray"
-  },
+  "compositeAlphaSemantics": "sourceOverOnly",
   "projectionBase": {
     "filename": "projection-base.png",
     "SHA256": "dc4575d267261d6163ecaf34429c761e3f511b369c5ed8882de6335a8320a668"

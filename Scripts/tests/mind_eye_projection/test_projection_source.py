@@ -12,11 +12,18 @@ import validate_projection_source as validator
 
 
 class ProjectionSourceValidatorTests(unittest.TestCase):
-    def test_repository_package_passes(self):
-        report = validator.validate(ROOT)
-        self.assertEqual(report["status"], "PASS")
-        self.assertEqual(report["plateCount"], 9)
-        self.assertIn("teeth", report["mouthFamilies"])
+    def test_repository_package_is_fail_closed_until_parity_passes(self):
+        qualification = validator.load_json(
+            ROOT / "Gravitas Plague/TuringResources/Turing/MindsEye/Projection/qualification/angel_head_v1.material-parity.json"
+        )
+        if qualification["passed"]:
+            report = validator.validate(ROOT)
+            self.assertEqual(report["status"], "PASS")
+            self.assertEqual(report["plateCount"], 9)
+            self.assertIn("teeth", report["mouthFamilies"])
+        else:
+            with self.assertRaisesRegex(ValueError, "parity is not qualified"):
+                validator.validate(ROOT)
 
     def test_missing_teeth_is_rejected(self):
         original = validator.load_json

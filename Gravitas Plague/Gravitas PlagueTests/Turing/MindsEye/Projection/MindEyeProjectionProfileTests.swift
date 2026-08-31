@@ -10,14 +10,20 @@ final class MindEyeProjectionProfileTests: XCTestCase {
         XCTAssertEqual(profile.cropOriginX, 144)
         XCTAssertEqual(profile.cropOriginY, 144)
         XCTAssertEqual(
-            profile.projectionMaskResourcePath,
-            "Turing/MindsEye/Projection/masks/angel_head_v1_projection-mask-linear16.png"
+            profile.projectionReceiverUVMask.resourcePath,
+            "Turing/MindsEye/Projection/masks/angel_head_v1_projection-mask-uv.png"
         )
         XCTAssertEqual(
             profile.plateManifestResourcePath,
             "Turing/MindsEye/Projection/plates/angel_head_v1/source-manifest.json"
         )
-        XCTAssertEqual(profile.projectionMaskSHA256.count, 64)
-        XCTAssertEqual(profile.projectionMaskConvention, "whiteProjectsBlackSuppresses")
+        XCTAssertEqual(profile.schemaVersion, 2)
+        XCTAssertEqual(profile.projectionReceiverUVMask.SHA256.count, 64)
+        XCTAssertEqual(
+            profile.projectionReceiverUVMask.convention,
+            .darkProjectsLightSuppresses
+        )
+        XCTAssertEqual(profile.projectionReceiverUVMask.UVSetName, "primvars:st")
+        XCTAssertEqual(profile.projectionCompositeAlphaSemantics, "sourceOverOnly")
     }
 }

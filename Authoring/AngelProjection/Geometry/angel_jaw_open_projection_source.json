@@ -23,7 +23,7 @@
     "framingPadding": 1.12
   },
   "projectionMaskPackagePath": "textures/projection-mask.png",
-  "projectionMaskConvention": "whiteProjectsBlackSuppresses",
+  "projectionMaskConvention": "darkProjectsLightSuppresses",
   "unchangedMeshPolicy": "requireTopologyAndTransformIdentity",
   "maximumDisplacementAsHeadBoundsFraction": 0.2,
   "sparseOffsetEpsilonMeters": 0.000001

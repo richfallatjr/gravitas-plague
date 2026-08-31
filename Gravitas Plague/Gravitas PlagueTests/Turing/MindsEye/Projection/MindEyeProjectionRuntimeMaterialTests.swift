@@ -37,7 +37,44 @@ final class MindEyeProjectionRuntimeMaterialTests: XCTestCase {
     }
 
     func testProductionProjectionShaderGraphValidates() throws {
-        let graph = try MindEyeProjectionShaderGraph.make()
+        let graph = try MindEyeProjectionShaderGraph.make(
+            contract: mindEyeProjectionPBRContractFixture()
+        )
         XCTAssertTrue(graph.validate())
+    }
+
+    func testReceiverMaskDiagnosticGraphValidates() throws {
+        let graph = try MindEyeProjectionShaderGraph.make(
+            contract: mindEyeProjectionPBRContractFixture(),
+            diagnosticMode: .visualizeReceiverUVMask
+        )
+        XCTAssertTrue(graph.validate())
+    }
+
+    func testImportedPBRContractMatchesProfileAndTarget() throws {
+        let contract = try mindEyeProjectionPBRContractFixture()
+        XCTAssertNoThrow(
+            try contract.validate(
+                profile: mindEyeProjectionProfileFixture(),
+                target: mindEyeProjectionTargetFixture()
+            )
+        )
+        XCTAssertEqual(contract.graphVersion, "angel-camera-projector-uv-receiver/2")
+        XCTAssertEqual(contract.normal.semantic, .tangentSpaceNormal)
+        XCTAssertEqual(contract.normal.UVSetName, "primvars:st")
+    }
+
+    func testCheckedInParityQualificationRemainsClosedUntilThresholdsPass() throws {
+        let qualification = try mindEyeProjectionParityFixture()
+        XCTAssertFalse(qualification.passed)
+        XCTAssertThrowsError(
+            try qualification.validate(identities: .init(
+                subjectAssetSHA256: qualification.subjectAssetSHA256,
+                profileSHA256: qualification.profileSHA256,
+                cameraSHA256: qualification.cameraSHA256,
+                targetSHA256: qualification.targetSHA256,
+                importedPBRContractSHA256: qualification.importedPBRContractSHA256
+            ))
+        )
     }
 }

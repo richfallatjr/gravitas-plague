@@ -166,15 +166,23 @@ final class Chapter03AngelEmissionApplierTests: XCTestCase {
         )
         let controller = try Chapter03AngelEmissionFallbackController(root: root)
 
-        controller.setProjectionOwnsEmission(true, reason: "test.ready")
-        let suppressed = try XCTUnwrap(pbrMaterial(from: modelEntity))
-        XCTAssertEqual(suppressed.emissiveIntensity, 0)
-        XCTAssertTrue(suppressed.emissiveColor.texture?.resource === texture)
+        var replacement = UnlitMaterial()
+        replacement.color = .init(tint: .green)
+        var model = try XCTUnwrap(modelEntity.components[ModelComponent.self])
+        model.materials[0] = replacement
+        modelEntity.components.set(model)
 
-        controller.setProjectionOwnsEmission(false, reason: "test.failure")
+        controller.projectionMaterialDidInstall(reason: "test.ready")
+        XCTAssertTrue(controller.projectionOwnsEmission)
+        XCTAssertTrue(
+            modelEntity.components[ModelComponent.self]?.materials[0] is UnlitMaterial
+        )
+
+        controller.restoreFallback(reason: "test.failure")
         let fallback = try XCTUnwrap(pbrMaterial(from: modelEntity))
         XCTAssertEqual(fallback.emissiveIntensity, 1)
         XCTAssertTrue(fallback.emissiveColor.texture?.resource === texture)
+        XCTAssertFalse(controller.projectionOwnsEmission)
         XCTAssertEqual(controller.transitionCount, 2)
     }
 

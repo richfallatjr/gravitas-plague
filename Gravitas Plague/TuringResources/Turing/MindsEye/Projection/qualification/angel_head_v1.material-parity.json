@@ -1,0 +1,19 @@
+{
+  "PSNRDecibels": 0.0,
+  "RMSELinearRGB": 1.0,
+  "SDKBuild": "UNQUALIFIED",
+  "cameraSHA256": "0f0c8382a94ee2ae2409b6420023be937addbfc4eee9c49ef71360e0111c9092",
+  "graphVersion": "angel-camera-projector-uv-receiver/2",
+  "importedPBRContractSHA256": "e1b4a859f961c6bad3b22699fa2d45f8515d348bd20c1e2fdcc2307193de6780",
+  "maskPixelCount": 0,
+  "maximumAbsoluteErrorLinearRGB": 1.0,
+  "p99AbsoluteErrorLinearRGB": 1.0,
+  "passed": false,
+  "profileSHA256": "cafe527742aeff449e640d850bb6ecfa262161c096bc0de04497af18e5913ae8",
+  "qualificationID": "angel_head_v1.material-parity",
+  "renderHeight": 1024,
+  "renderWidth": 1024,
+  "schemaVersion": 1,
+  "subjectAssetSHA256": "c274c2a294cf32b4d3dca036d36e854e07bf12a6279a1177d88e5a6148bbaa0f",
+  "targetSHA256": "0afb7e088d35f8994be87d0ab725e6eb56b17ef9bdde725336c4e0db7639337d"
+}

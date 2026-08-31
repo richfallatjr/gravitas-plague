@@ -22,46 +22,49 @@ final class MindEyeProjectionMaterialController {
         }
     }
 
-    private var bindings: [Binding] = []
+    private enum State {
+        case idle
+        case installed([Binding])
+        case released
+    }
+
+    private var state: State = .idle
     private(set) var appliedMaterialCount = 0
 
-    func apply(
-        _ materials: [ShaderGraphMaterial],
-        to resolution: MindEyeProjectionTargetResolver.Resolution
-    ) throws {
-        guard bindings.isEmpty,
-              materials.count == resolution.materials.count else {
+    func commit(_ preparation: MindEyeProjectionMaterialPreparation) throws {
+        guard case .idle = state else {
             throw MindEyeProjectionError.materialApplicationFailed(
-                "projection material count does not match the exact target resolution"
+                "material controller was already committed or released"
             )
         }
 
         var installed: [Binding] = []
+        installed.reserveCapacity(preparation.targets.count)
         do {
-            for (index, resolved) in resolution.materials.enumerated() {
-                guard var model = resolved.entity.components[ModelComponent.self],
-                      model.materials.indices.contains(resolved.materialIndex) else {
+            for target in preparation.targets {
+                guard var model = target.entity.components[ModelComponent.self],
+                      model.materials.indices.contains(target.materialIndex) else {
                     throw MindEyeProjectionError.materialApplicationFailed(
-                        "target material disappeared before installation: \(resolved.entityPath)"
+                        "target material disappeared before atomic commit: \(target.entityPath)"
                     )
                 }
                 installed.append(
                     Binding(
-                        entity: resolved.entity,
-                        entityPath: resolved.entityPath,
-                        materialIndex: resolved.materialIndex,
-                        originalMaterial: model.materials[resolved.materialIndex]
+                        entity: target.entity,
+                        entityPath: target.entityPath,
+                        materialIndex: target.materialIndex,
+                        originalMaterial: target.originalMaterial
                     )
                 )
-                model.materials[resolved.materialIndex] = materials[index]
-                resolved.entity.components.set(model)
+                model.materials[target.materialIndex] = target.replacement
+                target.entity.components.set(model)
             }
         } catch {
             Self.restore(installed)
             throw error
         }
 
-        bindings = installed
+        state = .installed(installed)
         appliedMaterialCount = installed.count
         print(
             "[MindEyeProjection] mesh materials installed " +
@@ -71,14 +74,23 @@ final class MindEyeProjectionMaterialController {
     }
 
     func release(reason: String = "release") {
-        Self.restore(bindings)
-        if !bindings.isEmpty {
+        let restoredBindings: [Binding]
+        switch state {
+        case .idle:
+            restoredBindings = []
+        case .installed(let bindings):
+            Self.restore(bindings)
+            restoredBindings = bindings
+        case .released:
+            return
+        }
+        state = .released
+        if !restoredBindings.isEmpty {
             print(
                 "[MindEyeProjection] mesh materials restored " +
-                    "count=\(bindings.count) reason=\(reason)"
+                    "count=\(restoredBindings.count) reason=\(reason)"
             )
         }
-        bindings.removeAll(keepingCapacity: false)
         appliedMaterialCount = 0
     }
 

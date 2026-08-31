@@ -60,57 +60,22 @@ final class Chapter03AngelEmissionFallbackController {
         )
     }
 
-    func setProjectionOwnsEmission(_ active: Bool, reason: String) {
-        guard projectionOwnsEmission != active else { return }
-        projectionOwnsEmission = active
+    func projectionMaterialDidInstall(reason: String) {
+        guard !projectionOwnsEmission else { return }
+        projectionOwnsEmission = true
         transitionCount &+= 1
-
-        var suppressed = 0
-        var restored = 0
-        var projectionMaterialsRetained = 0
-        for binding in bindings {
-            guard let entity = binding.entity,
-                  var model = entity.components[ModelComponent.self],
-                  model.materials.indices.contains(binding.materialIndex) else {
-                continue
-            }
-            if active {
-                if var pbr = model.materials[binding.materialIndex]
-                    as? PhysicallyBasedMaterial {
-                    pbr.emissiveIntensity = 0
-                    model.materials[binding.materialIndex] = pbr
-                    entity.components.set(model)
-                    suppressed += 1
-                } else {
-                    // A live projection ShaderGraph material already owns this
-                    // slot, so replacing it here would destroy the projection.
-                    projectionMaterialsRetained += 1
-                }
-            } else {
-                // Projection failure is fail-soft and deterministic: restore
-                // the captured PBR material, including its texture and the
-                // normalized fallback intensity installed at scene load.
-                model.materials[binding.materialIndex] = binding.fallbackMaterial
-                entity.components.set(model)
-                restored += 1
-            }
-        }
         print(
-            "[Chapter03AngelEmission] ownership changed " +
-                "projectionOwnsEmission=\(active) reason=\(reason) " +
-                "suppressed=\(suppressed) restored=\(restored) " +
-                "projectionMaterialsRetained=\(projectionMaterialsRetained) " +
+            "[Chapter03AngelEmission] projection material owns emission " +
+                "reason=\(reason) materialWrites=0 " +
                 "transitionCount=\(transitionCount)"
         )
     }
 
     func restoreFallback(reason: String) {
-        if projectionOwnsEmission {
-            setProjectionOwnsEmission(false, reason: reason)
-            return
-        }
-        // Teardown can follow a partially installed or failed projection before
-        // readiness changes. Reassert the saved PBR slots even in that case.
+        let changed = projectionOwnsEmission
+        projectionOwnsEmission = false
+        if changed { transitionCount &+= 1 }
+        var restored = 0
         for binding in bindings {
             guard let entity = binding.entity,
                   var model = entity.components[ModelComponent.self],
@@ -119,7 +84,13 @@ final class Chapter03AngelEmissionFallbackController {
             }
             model.materials[binding.materialIndex] = binding.fallbackMaterial
             entity.components.set(model)
+            restored += 1
         }
+        print(
+            "[Chapter03AngelEmission] imported PBR fallback restored " +
+                "reason=\(reason) restored=\(restored) " +
+                "transitionCount=\(transitionCount)"
+        )
     }
 
     private static func visitRecursively(

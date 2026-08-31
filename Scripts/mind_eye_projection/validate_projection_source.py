@@ -90,8 +90,14 @@ def validate(repository: pathlib.Path) -> dict:
     profile = load_json(profile_path)
     manifest_path = resource(repository, profile["plateManifestResourcePath"])
     manifest = load_json(manifest_path)
-    if manifest["schemaVersion"] != 1 or manifest["packageID"] != "angel_head_v1":
+    if profile["schemaVersion"] != 2 or manifest["schemaVersion"] != 2 or \
+            manifest["packageID"] != "angel_head_v1":
         raise ValueError("invalid package identity")
+    if manifest.get("compositeAlphaSemantics") != "sourceOverOnly" or \
+            profile.get("projectionCompositeAlphaSemantics") != "sourceOverOnly":
+        raise ValueError("camera-space plates must use source-over alpha only")
+    if "projectionMask" in manifest:
+        raise ValueError("plate manifest may not own model-UV receiver coverage")
     expected_geometry = (1728, 1728, 8, 6)
     if (profile["sourceWidth"], profile["sourceHeight"], profile["cropOriginX"],
             profile["cropOriginY"], profile["viewportWidth"], profile["viewportHeight"]) != (
@@ -138,13 +144,50 @@ def validate(repository: pathlib.Path) -> dict:
         if index > 0 and not (minimum == 0 and maximum > 0):
             raise ValueError(f"{path.name}: overlay must contain transparent and visible pixels")
 
-    mask = manifest["projectionMask"]
+    mask = profile["projectionReceiverUVMask"]
     mask_path = resource(repository, mask["resourcePath"])
     header, _ = inspect_png(mask_path)
-    if header != (1440, 1440, 16, 0):
-        raise ValueError(f"projection mask must be 1440x1440 16-bit gray, found {header}")
-    if sha256(mask_path) != mask["SHA256"] or mask["SHA256"] != profile["projectionMaskSHA256"]:
-        raise ValueError("projection mask SHA256 mismatch")
+    if header != (1024, 1024, 8, 6):
+        raise ValueError(f"receiver mask must be 1024x1024 8-bit RGBA, found {header}")
+    if sha256(mask_path) != mask["SHA256"]:
+        raise ValueError("receiver mask SHA256 mismatch")
+    if mask.get("convention") != "darkProjectsLightSuppresses" or \
+            mask.get("UVSetName") != "primvars:st" or mask.get("UVSetIndex") != 0:
+        raise ValueError("receiver mask coordinate or inversion contract is invalid")
+    if alpha_range(mask_path, 1024, 1024) != (255, 255):
+        raise ValueError("receiver mask alpha must be fully opaque and ignored")
+    retired_mask = mask_path.parent / "angel_head_v1_projection-mask-linear16.png"
+    if retired_mask.exists():
+        raise ValueError("retired camera-space runtime mask is still shipping")
+
+    contract_path = resource(repository, profile["importedPBRContractResourcePath"])
+    contract = load_json(contract_path)
+    if contract.get("subjectAssetSHA256") != manifest["subjectAssetSHA256"] or \
+            contract.get("graphVersion") != "angel-camera-projector-uv-receiver/2" or \
+            contract.get("unsupportedNondefaultFeatures"):
+        raise ValueError("imported PBR binding contract is invalid or unsupported")
+    qualification_path = resource(
+        repository, profile["materialParityQualificationResourcePath"]
+    )
+    qualification = load_json(qualification_path)
+    expected_qualification = {
+        "subjectAssetSHA256": manifest["subjectAssetSHA256"],
+        "profileSHA256": sha256(profile_path),
+        "cameraSHA256": manifest["cameraSHA256"],
+        "targetSHA256": manifest["targetSHA256"],
+        "importedPBRContractSHA256": sha256(contract_path),
+        "graphVersion": "angel-camera-projector-uv-receiver/2",
+    }
+    for key, value in expected_qualification.items():
+        if qualification.get(key) != value:
+            raise ValueError(f"material parity qualification identity is stale: {key}")
+    if not qualification.get("passed"):
+        raise ValueError("replacement material parity is not qualified")
+    if qualification.get("RMSELinearRGB", 1) > 0.0075 or \
+            qualification.get("p99AbsoluteErrorLinearRGB", 1) > 0.020 or \
+            qualification.get("maximumAbsoluteErrorLinearRGB", 1) > 0.080 or \
+            qualification.get("PSNRDecibels", 0) < 42:
+        raise ValueError("replacement material parity metrics exceed release gates")
 
     return {
         "status": "PASS",
@@ -154,7 +197,8 @@ def validate(repository: pathlib.Path) -> dict:
         "sourceDimensions": [1728, 1728],
         "viewportDimensions": [1440, 1440],
         "cropOrigin": [144, 144],
-        "projectionMaskSHA256": mask["SHA256"],
+        "receiverUVMaskSHA256": mask["SHA256"],
+        "importedPBRContractSHA256": sha256(contract_path),
         "estimatedRGBA8SourceBytes": len(layers) * 1728 * 1728 * 4,
     }
 

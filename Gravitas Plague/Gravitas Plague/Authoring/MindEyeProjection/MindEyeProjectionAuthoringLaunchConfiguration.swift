@@ -7,6 +7,8 @@ nonisolated struct MindEyeProjectionAuthoringLaunchConfiguration: Sendable, Equa
         case resolveCamera = "resolve-camera"
         case captureReference = "capture-reference"
         case validateRuntimeProjection = "validate-runtime-projection"
+        case materialParity = "material-parity"
+        case coordinateSpaceProof = "coordinate-space-proof"
     }
 
     let job: Job

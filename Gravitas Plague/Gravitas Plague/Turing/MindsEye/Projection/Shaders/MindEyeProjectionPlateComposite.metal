@@ -31,8 +31,7 @@ kernel void mindEyeCompositeProjectionFrame(
     texture2d<half, access::sample> projectionBase [[texture(0)]],
     texture2d<half, access::sample> selectedEyes [[texture(1)]],
     texture2d<half, access::sample> selectedMouth [[texture(2)]],
-    texture2d<half, access::read> projectionMask [[texture(3)]],
-    texture2d<half, access::write> output [[texture(4)]],
+    texture2d<half, access::write> output [[texture(3)]],
     constant MindEyeProjectionCompositeUniforms &uniforms [[buffer(0)]],
     uint2 gid [[thread_position_in_grid]]
 ) {
@@ -64,12 +63,11 @@ kernel void mindEyeCompositeProjectionFrame(
         )
     );
 
-    half mask = clamp(projectionMask.read(gid).r, half(0.0), half(1.0));
     half3 straightRGB = composed.a > half(0.0000152588)
         ? composed.rgb / composed.a
         : half3(0.0);
     output.write(
-        clamp(half4(straightRGB, composed.a * mask), half4(0.0), half4(1.0)),
+        clamp(half4(straightRGB, composed.a), half4(0.0), half4(1.0)),
         gid
     );
 }

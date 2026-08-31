@@ -1,0 +1,179 @@
+{
+  "baseColor": {
+    "UVSetIndex": 0,
+    "UVSetName": "primvars:st",
+    "bias": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "noFlipV": true,
+    "role": "baseColor",
+    "scalarChannel": null,
+    "scale": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "semantic": "color",
+    "sourceAssetPath": "textures/extracted_image_1.jpg",
+    "sourceAssetSHA256": "5a430630681c1ec70e68d7a49a94f29f711c965a5ed17aba77f43331823e649d",
+    "transformRotationDegrees": 0.0,
+    "transformScale": [
+      1.0,
+      1.0
+    ],
+    "transformTranslation": [
+      0.0,
+      0.0
+    ],
+    "wrapS": "repeat",
+    "wrapT": "repeat"
+  },
+  "contractID": "angel_head_v1.pbr-binding",
+  "emission": {
+    "UVSetIndex": 0,
+    "UVSetName": "primvars:st",
+    "bias": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "noFlipV": true,
+    "role": "emission",
+    "scalarChannel": null,
+    "scale": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "semantic": "color",
+    "sourceAssetPath": "textures/angel_emission.png",
+    "sourceAssetSHA256": "5b2aa59551eafdc16e652b1ee4946588334a1ebd5e931a8747da566e7879bca9",
+    "transformRotationDegrees": 0.0,
+    "transformScale": [
+      1.0,
+      1.0
+    ],
+    "transformTranslation": [
+      0.0,
+      0.0
+    ],
+    "wrapS": "repeat",
+    "wrapT": "repeat"
+  },
+  "expectedFaceCulling": "none",
+  "expectedOpacityMode": "opaque",
+  "graphVersion": "angel-camera-projector-uv-receiver/2",
+  "materialIndex": 0,
+  "materialNetworkType": "UsdPreviewSurface",
+  "metallic": {
+    "UVSetIndex": 0,
+    "UVSetName": "primvars:st",
+    "bias": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "noFlipV": true,
+    "role": "metallic",
+    "scalarChannel": "red",
+    "scale": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "semantic": "rawData",
+    "sourceAssetPath": "textures/extracted_image_2.jpg_metallic.png",
+    "sourceAssetSHA256": "5ada9c046d69e55811896d966b924e35ff3ef541b080bfec2d6d62f63bfc8cc7",
+    "transformRotationDegrees": 0.0,
+    "transformScale": [
+      1.0,
+      1.0
+    ],
+    "transformTranslation": [
+      0.0,
+      0.0
+    ],
+    "wrapS": "repeat",
+    "wrapT": "repeat"
+  },
+  "normal": {
+    "UVSetIndex": 0,
+    "UVSetName": "primvars:st",
+    "bias": [
+      -1.0,
+      -1.0,
+      -1.0,
+      -1.0
+    ],
+    "noFlipV": true,
+    "role": "normal",
+    "scalarChannel": null,
+    "scale": [
+      2.0,
+      2.0,
+      2.0,
+      2.0
+    ],
+    "semantic": "tangentSpaceNormal",
+    "sourceAssetPath": "textures/extracted_image_0.jpg",
+    "sourceAssetSHA256": "e65c9501bf87400c5958478edc970bf8b34f730d28d6dbb333000a83cf3537e2",
+    "transformRotationDegrees": 0.0,
+    "transformScale": [
+      1.0,
+      1.0
+    ],
+    "transformTranslation": [
+      0.0,
+      0.0
+    ],
+    "wrapS": "repeat",
+    "wrapT": "repeat"
+  },
+  "roughness": {
+    "UVSetIndex": 0,
+    "UVSetName": "primvars:st",
+    "bias": [
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "noFlipV": true,
+    "role": "roughness",
+    "scalarChannel": "red",
+    "scale": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "semantic": "rawData",
+    "sourceAssetPath": "textures/extracted_image_2.jpg_roughness.png",
+    "sourceAssetSHA256": "047e68e1646eabf41c028904cfe4038e605eab2da9e295116cd541f97c88fcb9",
+    "transformRotationDegrees": 0.0,
+    "transformScale": [
+      1.0,
+      1.0
+    ],
+    "transformTranslation": [
+      0.0,
+      0.0
+    ],
+    "wrapS": "repeat",
+    "wrapT": "repeat"
+  },
+  "schemaVersion": 1,
+  "subjectAssetName": "angel_posed_01.usdz",
+  "subjectAssetSHA256": "c274c2a294cf32b4d3dca036d36e854e07bf12a6279a1177d88e5a6148bbaa0f",
+  "surfaceShaderID": "UsdPreviewSurface",
+  "targetEntityPath": "Chapter03PortalAngelRoot/Chapter03StaticPosedAngelVisual/root/Root/mesh1/mesh1",
+  "unsupportedNondefaultFeatures": []
+}

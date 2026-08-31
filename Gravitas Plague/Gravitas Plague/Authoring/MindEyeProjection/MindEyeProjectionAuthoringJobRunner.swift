@@ -25,10 +25,311 @@ final class MindEyeProjectionAuthoringJobRunner {
                 throw MindEyeProjectionError.rendererUnavailable(
                     "visionOS 27 marks CustomMaterial unavailable; a ShaderGraphMaterial program is required"
                 )
+            case .materialParity:
+                try await materialParity(store: store)
+            case .coordinateSpaceProof:
+                try await coordinateSpaceProof(store: store)
             }
         } catch {
             try? await store.publishFailure(error)
             throw error
+        }
+    }
+
+    private func coordinateSpaceProof(store: MindEyeProjectionExportStore) async throws {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw MindEyeProjectionError.rendererUnavailable("Metal device is unavailable")
+        }
+        let locator = try MindEyeResourceLocator.applicationBundle()
+        let package = try await MindEyeProjectionPlatePackageLoader(
+            device: device,
+            label: "com.gravitas.plague.mindseye.coordinate-proof-loader"
+        ).load(
+            locator: locator,
+            profileResourcePath: MindEyeAngelProjectionController.profileResourcePath,
+            qualificationPolicy: .allowUnqualifiedAuthoringRun
+        )
+        let rawMask = try await MindEyeProjectionReceiverMaskLoader(device: device).load(
+            locator: locator,
+            descriptor: package.profile.projectionReceiverUVMask
+        )
+        let receiverMask = try await MindEyeProjectionReceiverMaskTextureSource.make(
+            payload: rawMask,
+            device: device
+        )
+        let projectionTexture = try await MindEyeProjectionTextureSource.make()
+        try await MindEyeProjectionDiagnosticCheckerEncoder.encode(
+            output: projectionTexture,
+            device: device
+        )
+        let renderer = MindEyeProjectionRealityRenderer(device: device)
+
+        func render(
+            mode: MindEyeProjectionMaterialDiagnosticMode,
+            weight: Float
+        ) async throws -> MindEyeProjectionPixelBuffer {
+            let scene = try await makeScene(mode: .projectionAuthoringBeauty)
+            do {
+                scene.portalDome.isEnabled = false
+                try applyAuthoringMaterials(
+                    target: package.target,
+                    subjectRoot: scene.angel.root,
+                    pass: .faceBeauty
+                )
+                let bindings = try Chapter03AngelBlendShapeResolver().resolve(
+                    in: scene.angel.visualRoot,
+                    targetName: "jawOpenProjection"
+                )
+                try AngelBlendShapePoseCapture.assign(weight, bindings: bindings)
+                let controller = MindEyeProjectionMaterialController()
+                if mode != .originalImportedPBR {
+                    let preparation = try await MindEyeProjectionMaterialFactory.prepare(
+                        package: package,
+                        projectionTexture: projectionTexture,
+                        receiverMask: receiverMask,
+                        subjectRoot: scene.angel.root,
+                        diagnosticMode: mode
+                    )
+                    try controller.commit(preparation)
+                }
+                let image = try await renderer.render(
+                    scene: scene,
+                    camera: package.camera,
+                    toneMappingEnabled: false,
+                    pixelFormat: .bgra8Unorm_srgb
+                )
+                controller.release(reason: "coordinateSpaceProof.complete")
+                scene.release(reason: "projectionAuthoring.coordinateSpaceProof.complete")
+                return image
+            } catch {
+                scene.release(reason: "projectionAuthoring.coordinateSpaceProof.failed")
+                throw error
+            }
+        }
+
+        let original = try await render(mode: .originalImportedPBR, weight: 0)
+        let coverageZero = try await render(
+            mode: .projectionMaterialCoverageZero,
+            weight: 0
+        )
+        let receiverUV = try await render(mode: .visualizeReceiverUVMask, weight: 0)
+        let weights: [Float] = [0, 0.33, 0.50, 1]
+        var checkerFrames: [MindEyeProjectionPixelBuffer] = []
+        for weight in weights {
+            checkerFrames.append(
+                try await render(mode: .visualizeProjectorChecker, weight: weight)
+            )
+        }
+        let frameHashes = checkerFrames.map {
+            MindEyeProjectionExportStore.sha256($0.bgra8)
+        }
+        guard Set(frameHashes).count >= 2 else {
+            throw MindEyeProjectionError.coordinateSpaceProofFailed(
+                "checker did not respond to blendshape deformation"
+            )
+        }
+
+        let fixed: [(MindEyeProjectionPixelBuffer, String)] = [
+            (original, "angel_head_v1_coordinate-original-pbr.png"),
+            (coverageZero, "angel_head_v1_coordinate-projection-zero.png"),
+            (receiverUV, "angel_head_v1_coordinate-receiver-uv.png"),
+        ]
+        let checkerNames = weights.map {
+            String(format: "angel_head_v1_coordinate-checker-%03d.png", Int($0 * 100))
+        }
+        var fixedURLs: [URL] = []
+        for entry in fixed { fixedURLs.append(await store.url(entry.1)) }
+        var checkerURLs: [URL] = []
+        for name in checkerNames { checkerURLs.append(await store.url(name)) }
+        try await Task.detached(priority: .userInitiated) {
+            for (entry, URL) in zip(fixed, fixedURLs) {
+                try MindEyeProjectionPNGWriter.writeBGRA8(entry.0, to: URL)
+            }
+            for (frame, URL) in zip(checkerFrames, checkerURLs) {
+                try MindEyeProjectionPNGWriter.writeBGRA8(frame, to: URL)
+            }
+        }.value
+
+        let report = MindEyeProjectionCoordinateProofReport(
+            schemaVersion: 1,
+            graphVersion: package.importedPBRContract.graphVersion,
+            cameraSHA256: package.manifest.cameraSHA256,
+            receiverMaskSHA256: rawMask.metadata.SHA256,
+            receiverUVSetName: rawMask.metadata.UVSetName,
+            receiverUVSetIndex: rawMask.metadata.UVSetIndex,
+            weights: weights,
+            checkerFrameSHA256: frameHashes,
+            blendshapeChangesProjectedSurface: Set(frameHashes).count >= 2,
+            projectorMotionChangesChecker: false,
+            projectorMotionChangesUVBoundary: nil,
+            UVMaskChangeReframesChecker: nil,
+            physicalDeviceQualified: false,
+            qualificationNote: "Simulator captures prove distinct mesh-deformation states. Independent projector-motion and physical-device observations remain required."
+        )
+        try await store.write(report, filename: "angel_head_v1.coordinate-space-proof.json")
+        let reportData = try JSONEncoder.canonical.encode(report)
+        try await store.publish(marker: .init(
+            schemaVersion: 1,
+            captureID: "angel_head_v1",
+            status: "complete",
+            manifest: "angel_head_v1.coordinate-space-proof.json",
+            cameraSHA256: package.manifest.cameraSHA256,
+            outputSetSHA256: MindEyeProjectionExportStore.sha256(reportData),
+            failureCode: nil,
+            message: report.qualificationNote
+        ))
+    }
+
+    private func materialParity(store: MindEyeProjectionExportStore) async throws {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            throw MindEyeProjectionError.rendererUnavailable("Metal device is unavailable")
+        }
+        let locator = try MindEyeResourceLocator.applicationBundle()
+        let package = try await MindEyeProjectionPlatePackageLoader(
+            device: device,
+            label: "com.gravitas.plague.mindseye.material-parity-loader"
+        ).load(
+            locator: locator,
+            profileResourcePath: MindEyeAngelProjectionController.profileResourcePath,
+            qualificationPolicy: .allowUnqualifiedAuthoringRun
+        )
+        let rawMask = try await MindEyeProjectionReceiverMaskLoader(
+            device: device
+        ).load(
+            locator: locator,
+            descriptor: package.profile.projectionReceiverUVMask
+        )
+        let receiverMask = try await MindEyeProjectionReceiverMaskTextureSource.make(
+            payload: rawMask,
+            device: device
+        )
+        let projectionTexture = try await MindEyeProjectionTextureSource.make()
+        let compositor = try await MindEyeProjectionCompositorPipeline(
+            device: device
+        ).resources()
+        try await MindEyeProjectionCompositeEncoder.encodeAndCommit(
+            package: package,
+            frame: MindEyeCompositeFrameState(
+                sequence: 0,
+                backgroundTransform: .identity,
+                characterTransform: .identity,
+                eyeSelection: .open(variantIndex: 0),
+                mouthSelection: .init(pose: .rest, variantIndex: 0),
+                maskMode: .artistRGB
+            ),
+            output: projectionTexture,
+            resources: compositor
+        )
+        let renderer = MindEyeProjectionRealityRenderer(device: device)
+
+        // Render A and B from the same entity graph, IBL resources, camera,
+        // transforms, and frame state. Reconstructing the scene between the
+        // two samples admits asynchronous environment-processing variance and
+        // measures more than the material replacement under qualification.
+        let parityScene = try await makeScene(mode: .projectionAuthoringBeauty)
+        parityScene.portalDome.isEnabled = false
+        try applyAuthoringMaterials(
+            target: package.target,
+            subjectRoot: parityScene.angel.root,
+            pass: .faceBeauty
+        )
+        let original = try await renderer.render(
+            scene: parityScene,
+            camera: package.camera,
+            toneMappingEnabled: false,
+            pixelFormat: .bgra8Unorm_srgb
+        )
+        let materialController = MindEyeProjectionMaterialController()
+        let preparation = try await MindEyeProjectionMaterialFactory.prepare(
+            package: package,
+            projectionTexture: projectionTexture,
+            receiverMask: receiverMask,
+            subjectRoot: parityScene.angel.root,
+            diagnosticMode: .projectionMaterialCoverageZero
+        )
+        try materialController.commit(preparation)
+        let replacement = try await renderer.render(
+            scene: parityScene,
+            camera: package.camera,
+            toneMappingEnabled: false,
+            pixelFormat: .bgra8Unorm_srgb
+        )
+        materialController.release(reason: "materialParity.complete")
+        try applyAuthoringMaterials(
+            target: package.target,
+            subjectRoot: parityScene.angel.root,
+            pass: .binaryCoverage
+        )
+        let targetMask = try await renderer.render(
+            scene: parityScene,
+            camera: package.camera,
+            toneMappingEnabled: false,
+            pixelFormat: .bgra8Unorm
+        )
+        parityScene.release(reason: "projectionAuthoring.materialParity.complete")
+
+        let parity = try await Task.detached(priority: .userInitiated) {
+            try Self.measureMaterialParity(
+                original: original,
+                replacement: replacement,
+                targetMask: targetMask
+            )
+        }.value
+        let originalURL = await store.url("angel_head_v1_material-parity-original.png")
+        let replacementURL = await store.url("angel_head_v1_material-parity-replacement.png")
+        let maskURL = await store.url("angel_head_v1_material-parity-target-mask.png")
+        let diffURL = await store.url("angel_head_v1_material-parity-diff.png")
+        try await Task.detached(priority: .userInitiated) {
+            try MindEyeProjectionPNGWriter.writeBGRA8(original, to: originalURL)
+            try MindEyeProjectionPNGWriter.writeBGRA8(replacement, to: replacementURL)
+            try MindEyeProjectionPNGWriter.writeBGRA8(targetMask, to: maskURL)
+            try MindEyeProjectionPNGWriter.writeBGRA8(parity.diff, to: diffURL)
+        }.value
+
+        let (_, profileHash) = try MindEyeProjectionCameraStore(
+            locator: locator
+        ).dataAndSHA256(resourcePath: MindEyeAngelProjectionController.profileResourcePath)
+        let contractURL = try locator.resolve(
+            resourcePath: package.profile.importedPBRContractResourcePath
+        )
+        let contractHash = try MindEyeProjectionExportStore.sha256(file: contractURL)
+        let qualification = MindEyeProjectionMaterialParityQualification(
+            schemaVersion: 1,
+            qualificationID: "angel_head_v1.material-parity",
+            subjectAssetSHA256: package.manifest.subjectAssetSHA256,
+            profileSHA256: profileHash,
+            cameraSHA256: package.manifest.cameraSHA256,
+            targetSHA256: package.manifest.targetSHA256,
+            importedPBRContractSHA256: contractHash,
+            graphVersion: package.importedPBRContract.graphVersion,
+            SDKBuild: ProcessInfo.processInfo.environment["GR_SDK_BUILD"] ??
+                ProcessInfo.processInfo.operatingSystemVersionString,
+            renderWidth: original.width,
+            renderHeight: original.height,
+            maskPixelCount: parity.maskPixelCount,
+            RMSELinearRGB: parity.RMSE,
+            p99AbsoluteErrorLinearRGB: parity.p99,
+            maximumAbsoluteErrorLinearRGB: parity.maximum,
+            PSNRDecibels: parity.PSNR,
+            passed: parity.passed
+        )
+        try await store.write(
+            qualification,
+            filename: "angel_head_v1.material-parity.json"
+        )
+        let qualificationData = try JSONEncoder.canonical.encode(qualification)
+        try await store.publish(marker: .init(
+            schemaVersion: 1,
+            captureID: "angel_head_v1",
+            status: parity.passed ? "complete" : "failed",
+            manifest: "angel_head_v1.material-parity.json",
+            cameraSHA256: package.manifest.cameraSHA256,
+            outputSetSHA256: MindEyeProjectionExportStore.sha256(qualificationData),
+            failureCode: parity.passed ? nil : "materialParityUnqualified",
+            message: parity.passed ? nil : "replacement PBR exceeded parity gates"
+        ))
+        guard parity.passed else {
+            throw MindEyeProjectionError.materialParityUnqualified
         }
     }
 
@@ -171,8 +472,10 @@ final class MindEyeProjectionAuthoringJobRunner {
             let projectionMaskAOV = renderedProjectionMaskAOV
             let processed = try MindEyeProjectionMaskProcessor.process(
                 projectionMaskAOV,
-                inset: profile.maskInsetPixels,
-                feather: profile.maskFeatherPixels,
+                // Authoring-only camera-space diagnostic controls. Runtime
+                // receiver coverage comes exclusively from model UVs.
+                inset: 12,
+                feather: 32,
                 foregroundIsDark: true
             )
             return (projectionMaskAOV, processed)
@@ -385,8 +688,8 @@ final class MindEyeProjectionAuthoringJobRunner {
         let processedUnion = try await Task.detached(priority: .userInitiated) {
             try MindEyeProjectionMaskProcessor.process(
                 unionCoverage,
-                inset: profile.maskInsetPixels,
-                feather: profile.maskFeatherPixels
+                inset: 12,
+                feather: 32
             )
         }.value
         try MindEyeProjectionValidation.validateAuthoredMaskForLockedCrop(
@@ -796,6 +1099,121 @@ final class MindEyeProjectionAuthoringJobRunner {
             bytesPerRow: buffer.bytesPerRow,
             bgra8: data
         )
+    }
+
+    nonisolated private struct MaterialParityMeasurement: Sendable {
+        let maskPixelCount: Int
+        let RMSE: Double
+        let p99: Double
+        let maximum: Double
+        let PSNR: Double
+        let passed: Bool
+        let diff: MindEyeProjectionPixelBuffer
+    }
+
+    nonisolated private static func measureMaterialParity(
+        original: MindEyeProjectionPixelBuffer,
+        replacement: MindEyeProjectionPixelBuffer,
+        targetMask: MindEyeProjectionPixelBuffer
+    ) throws -> MaterialParityMeasurement {
+        guard original.width == replacement.width,
+              original.height == replacement.height,
+              original.width == targetMask.width,
+              original.height == targetMask.height else {
+            throw MindEyeProjectionError.invalidCapture(
+                "material parity buffers have different dimensions"
+            )
+        }
+        var errors: [Double] = []
+        errors.reserveCapacity(original.width * original.height)
+        var squaredError = 0.0
+        var maximum = 0.0
+        var maskPixelCount = 0
+        var diffData = Data(
+            repeating: 0,
+            count: original.bytesPerRow * original.height
+        )
+        original.bgra8.withUnsafeBytes { originalRaw in
+            replacement.bgra8.withUnsafeBytes { replacementRaw in
+                targetMask.bgra8.withUnsafeBytes { maskRaw in
+                    diffData.withUnsafeMutableBytes { diffRaw in
+                        guard let originalBytes = originalRaw.bindMemory(
+                            to: UInt8.self
+                        ).baseAddress,
+                        let replacementBytes = replacementRaw.bindMemory(
+                            to: UInt8.self
+                        ).baseAddress,
+                        let maskBytes = maskRaw.bindMemory(to: UInt8.self).baseAddress,
+                        let diffBytes = diffRaw.bindMemory(to: UInt8.self).baseAddress else {
+                            return
+                        }
+                        for y in 0..<original.height {
+                            let originalRow = originalBytes + y * original.bytesPerRow
+                            let replacementRow = replacementBytes + y * replacement.bytesPerRow
+                            let maskRow = maskBytes + y * targetMask.bytesPerRow
+                            let diffRow = diffBytes + y * original.bytesPerRow
+                            for x in 0..<original.width {
+                                let offset = x * 4
+                                let included = max(
+                                    maskRow[offset],
+                                    max(maskRow[offset + 1], maskRow[offset + 2])
+                                ) >= 128
+                                diffRow[offset + 3] = 255
+                                guard included else { continue }
+                                maskPixelCount += 1
+                                for channel in 0..<3 {
+                                    let left = linearSRGB(originalRow[offset + channel])
+                                    let right = linearSRGB(replacementRow[offset + channel])
+                                    let error = abs(left - right)
+                                    errors.append(error)
+                                    squaredError += error * error
+                                    maximum = max(maximum, error)
+                                    diffRow[offset + channel] = UInt8(
+                                        min(255, Int((error * 1_024).rounded()))
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        guard maskPixelCount > 0, !errors.isEmpty else {
+            throw MindEyeProjectionError.invalidCapture(
+                "material parity target mask is empty"
+            )
+        }
+        errors.sort()
+        let RMSE = sqrt(squaredError / Double(errors.count))
+        let p99Index = min(
+            errors.count - 1,
+            max(0, Int(ceil(Double(errors.count) * 0.99)) - 1)
+        )
+        let p99 = errors[p99Index]
+        let PSNR = RMSE > 0 ? -20 * log10(RMSE) : 120
+        let passed = RMSE <= 0.0075 && p99 <= 0.020 &&
+            maximum <= 0.080 && PSNR >= 42
+        return MaterialParityMeasurement(
+            maskPixelCount: maskPixelCount,
+            RMSE: RMSE,
+            p99: p99,
+            maximum: maximum,
+            PSNR: PSNR,
+            passed: passed,
+            diff: .init(
+                width: original.width,
+                height: original.height,
+                bytesPerRow: original.bytesPerRow,
+                bgra8: diffData
+            )
+        )
+    }
+
+    nonisolated private static func linearSRGB(_ byte: UInt8) -> Double {
+        let value = Double(byte) / 255
+        return value <= 0.04045
+            ? value / 12.92
+            : pow((value + 0.055) / 1.055, 2.4)
     }
 }
 

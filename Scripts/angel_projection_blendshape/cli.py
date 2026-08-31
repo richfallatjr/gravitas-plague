@@ -151,14 +151,15 @@ def validate_runtime(paths: ToolPaths) -> int:
     camera = json.loads(
         paths.projection_camera_descriptor.read_text(encoding="utf-8")
     )
-    mask_resource_path = profile.get("projectionMaskResourcePath", "")
+    receiver_mask = profile.get("projectionReceiverUVMask", {})
+    mask_resource_path = receiver_mask.get("resourcePath", "")
     if not mask_resource_path.startswith("Turing/MindsEye/Projection/masks/"):
         raise ValueError("projection profile mask path is unsafe")
     runtime_mask = paths.repository / "Gravitas Plague/TuringResources" / mask_resource_path
     if not runtime_mask.is_file():
         raise ValueError("projection profile mask is missing")
     mask_sha = sha256(runtime_mask)
-    if profile.get("projectionMaskSHA256") != mask_sha:
+    if receiver_mask.get("SHA256") != mask_sha:
         raise ValueError("projection mask hash differs from the projection profile")
     if target.get("authoringFramingControl", {}).get("sourceAssetSHA256") != \
             sha256(paths.target_asset):
@@ -179,7 +180,7 @@ def validate_runtime(paths: ToolPaths) -> int:
         "cameraControlPrimPath": target["authoringFramingControl"][
             "controlPrimPath"
         ],
-        "projectionMaskSHA256": mask_sha,
+        "receiverUVMaskSHA256": mask_sha,
     }, indent=2, sort_keys=True))
     return 0
 
@@ -209,18 +210,15 @@ def write_projection_contracts(
         paths.projection_mask,
     )
     profile = json.loads(paths.projection_profile.read_text(encoding="utf-8"))
-    # Geometry authoring always republishes the owner's flat UV mask as
-    # evidence. Once the facial round-trip phase has installed a plate manifest
-    # and captured 1440-square union mask, it owns the production mask contract;
-    # rebuilding the blendshape must never silently roll that contract back.
-    if "plateManifestResourcePath" not in profile:
-        profile["projectionMaskResourcePath"] = (
-            "Turing/MindsEye/Projection/masks/"
-            "angel_head_v1_projection-mask-uv.png"
-        )
-        profile["projectionMaskSHA256"] = mask["SHA256"]
-        profile["projectionMaskConvention"] = source["projectionMaskConvention"]
-        write(paths.projection_profile, profile)
+    receiver_mask = profile["projectionReceiverUVMask"]
+    receiver_mask["resourcePath"] = (
+        "Turing/MindsEye/Projection/masks/"
+        "angel_head_v1_projection-mask-uv.png"
+    )
+    receiver_mask["SHA256"] = mask["SHA256"]
+    receiver_mask["convention"] = source["projectionMaskConvention"]
+    profile["projectionReceiverUVMask"] = receiver_mask
+    write(paths.projection_profile, profile)
 
     previous_camera = json.loads(
         paths.projection_camera_descriptor.read_text(encoding="utf-8")
@@ -256,7 +254,7 @@ def write_projection_contracts(
         "targetDescriptorSHA256": target_sha,
         "projectionMask": mask,
         "sourceProjectionMask": mask,
-        "projectionMaskResourcePath": profile["projectionMaskResourcePath"],
+        "projectionMaskResourcePath": profile["projectionReceiverUVMask"]["resourcePath"],
     }
 
 

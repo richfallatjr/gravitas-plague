@@ -1,7 +1,40 @@
 import Foundation
 
 nonisolated struct MindEyeProjectionProfile: Codable, Sendable, Equatable {
-    static let supportedSchemaVersion = 1
+    static let supportedSchemaVersion = 2
+
+    enum ReceiverMaskConvention: String, Codable, Sendable, Equatable {
+        case darkProjectsLightSuppresses
+    }
+
+    struct ReceiverUVMask: Codable, Sendable, Equatable {
+        let resourcePath: String
+        let SHA256: String
+        let width: Int
+        let height: Int
+        let bitsPerChannel: Int
+        let colorSpace: String
+        let convention: ReceiverMaskConvention
+        let UVSetName: String
+        let UVSetIndex: Int
+
+        func validate() throws {
+            guard MindEyeSafeRelativePath.validates(resourcePath),
+                  SHA256.count == 64,
+                  SHA256.allSatisfy(\.isHexDigit),
+                  width == 1_024,
+                  height == 1_024,
+                  [8, 16].contains(bitsPerChannel),
+                  colorSpace == "linearData",
+                  convention == .darkProjectsLightSuppresses,
+                  UVSetName == "primvars:st",
+                  UVSetIndex == 0 else {
+                throw MindEyeProjectionError.invalidReceiverMask(
+                    "profile receiver-mask contract is invalid"
+                )
+            }
+        }
+    }
 
     let schemaVersion: Int
     let profileID: String
@@ -17,26 +50,23 @@ nonisolated struct MindEyeProjectionProfile: Codable, Sendable, Equatable {
     let cameraResourcePath: String
     let targetResourcePath: String
     let plateManifestResourcePath: String
-    let projectionMaskResourcePath: String
-    let projectionMaskSHA256: String
-    let projectionMaskConvention: String
+    let importedPBRContractResourcePath: String
+    let materialParityQualificationResourcePath: String
+    let projectionReceiverUVMask: ReceiverUVMask
+    let projectionCompositeAlphaSemantics: String
     let projectionEmissionGain: Float
     let albedoSuppression: Float
     let specularSuppression: Float
     let fullQualityAngleDegrees: Float
     let zeroProjectionAngleDegrees: Float
-    let maskInsetPixels: Float
-    let maskFeatherPixels: Float
 
     func validate() throws {
         guard schemaVersion == Self.supportedSchemaVersion else {
             throw MindEyeProjectionError.unsupportedSchemaVersion(schemaVersion)
         }
-        guard profileID == "angel_head_v1" else {
+        guard profileID == "angel_head_v1",
+              subjectAssetName == "angel_posed_01.usdz" else {
             throw MindEyeProjectionError.invalidProfileID(profileID)
-        }
-        guard subjectAssetName == "angel_posed_01.usdz" else {
-            throw MindEyeProjectionError.invalidSubjectAsset
         }
         guard sourceWidth == 1_728, sourceHeight == 1_728,
               viewportWidth == 1_440, viewportHeight == 1_440,
@@ -45,7 +75,18 @@ nonisolated struct MindEyeProjectionProfile: Codable, Sendable, Equatable {
               viewportWidth * viewportHeight == 1_920 * 1_080 else {
             throw MindEyeProjectionError.invalidSquarePixelBudget
         }
-        guard projectionEmissionGain.isFinite,
+        guard MindEyeSafeRelativePath.validates(cameraResourcePath),
+              MindEyeSafeRelativePath.validates(targetResourcePath),
+              MindEyeSafeRelativePath.validates(plateManifestResourcePath),
+              MindEyeSafeRelativePath.validates(importedPBRContractResourcePath),
+              MindEyeSafeRelativePath.validates(materialParityQualificationResourcePath) else {
+            throw MindEyeProjectionError.missingResource(
+                "unsafe projection profile path"
+            )
+        }
+        try projectionReceiverUVMask.validate()
+        guard projectionCompositeAlphaSemantics == "sourceOverOnly",
+              projectionEmissionGain.isFinite,
               (0.25...2).contains(projectionEmissionGain),
               albedoSuppression.isFinite, (0...1).contains(albedoSuppression),
               specularSuppression.isFinite, (0...1).contains(specularSuppression) else {
@@ -55,18 +96,6 @@ nonisolated struct MindEyeProjectionProfile: Codable, Sendable, Equatable {
               zeroProjectionAngleDegrees > fullQualityAngleDegrees,
               zeroProjectionAngleDegrees <= 70 else {
             throw MindEyeProjectionError.invalidViewCone
-        }
-        guard maskInsetPixels >= 0, maskFeatherPixels > 0, maskFeatherPixels <= 128 else {
-            throw MindEyeProjectionError.invalidMaskControls
-        }
-        guard MindEyeSafeRelativePath.validates(cameraResourcePath),
-              MindEyeSafeRelativePath.validates(targetResourcePath),
-              MindEyeSafeRelativePath.validates(plateManifestResourcePath),
-              MindEyeSafeRelativePath.validates(projectionMaskResourcePath),
-              projectionMaskSHA256.count == 64,
-              projectionMaskSHA256.allSatisfy(\.isHexDigit),
-              projectionMaskConvention == "whiteProjectsBlackSuppresses" else {
-            throw MindEyeProjectionError.missingResource("unsafe profile resource path")
         }
     }
 }
