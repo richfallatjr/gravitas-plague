@@ -4,6 +4,10 @@ import XCTest
 @testable import Gravitas_Plague
 
 final class Chapter03HeavenPortalEmberTests: XCTestCase {
+    func testHeavenEmbersAreDisabledAtRuntime() {
+        XCTAssertFalse(Chapter03HeavenPortalEmberController.isRuntimeEnabled)
+    }
+
     func testCircularGeometryIsTheSingleExactPortalContract() throws {
         let geometry = try Chapter03CircularPortalGeometry.make(diameterMeters: 2.286)
         XCTAssertEqual(geometry.boundaryPoints.count, 128)
@@ -35,11 +39,19 @@ final class Chapter03HeavenPortalEmberTests: XCTestCase {
     }
 
     func testDensityMappingUsesApprovedUnsmoothValues() {
-        XCTAssertEqual(PortalFXVisemeDensityMapper.multiplier(for: .rest), 1)
+        XCTAssertEqual(PortalFXVisemeDensityMapper.multiplier(for: .rest), 0)
         XCTAssertEqual(PortalFXVisemeDensityMapper.multiplier(for: .small), 1.33)
         XCTAssertEqual(PortalFXVisemeDensityMapper.multiplier(for: .round), 1.5)
         XCTAssertEqual(PortalFXVisemeDensityMapper.multiplier(for: .teeth), 1.75)
         XCTAssertEqual(PortalFXVisemeDensityMapper.multiplier(for: .wide), 2)
+        XCTAssertEqual(
+            PortalTransitionFXConfiguration.heavenPortal.initialBirthRateMultiplier,
+            0
+        )
+        XCTAssertEqual(
+            PortalTransitionFXConfiguration.hordePortal.initialBirthRateMultiplier,
+            1
+        )
     }
 
     func testCoherentMaterialSelectionUsesOneIndexAcrossAllPhases() {

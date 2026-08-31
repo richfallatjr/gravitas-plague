@@ -54,6 +54,8 @@ def main() -> int:
             "camera-space compositor still binds receiver coverage")
     for token in ("projectedUV", "modelUVPrimvarsST", "projectionReceiverUVMask", "deformedObjectPosition", "clipFromEntity"):
         require(token in material, f"material omits coordinate contract token: {token}")
+    require("projectionSampleUHorizontalFlip" in material,
+            "camera-space photographic plate is not horizontally corrected at sampling")
     require("angel_posed_mouth_open_blend_01_v0001" not in runtime_swift,
             "runtime Swift loads or names the sculpt target")
     require("bundle.root.isEnabled = false" in presenter, "portal root is not hidden during preparation")
@@ -71,6 +73,7 @@ def main() -> int:
         "receiverMaskSHA256": mask["SHA256"],
         "cameraSpaceRuntimeMaskPresent": False,
         "projectorCoordinate": "deformedObjectPosition->clipFromEntity->projectedUV",
+        "projectionPlateUOrientation": "horizontallyCorrectedAtSample",
         "receiverCoordinate": "primvars:st/modelUV",
         "rootAtomicPresentation": True,
     }, indent=2, sort_keys=True))

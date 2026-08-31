@@ -1,5 +1,5 @@
 {
-  "albedoSuppression": 0.96,
+  "albedoSuppression": 1,
   "cameraResourcePath": "Turing/MindsEye/Projection/cameras/angel_head_v1.camera.json",
   "cropOriginX": 144,
   "cropOriginY": 144,
@@ -26,7 +26,7 @@
   "schemaVersion": 2,
   "sourceHeight": 1728,
   "sourceWidth": 1728,
-  "specularSuppression": 0.9,
+  "specularSuppression": 1,
   "subjectAssetName": "angel_posed_01.usdz",
   "targetResourcePath": "Turing/MindsEye/Projection/targets/angel_head_v1.target.json",
   "viewportHeight": 1440,

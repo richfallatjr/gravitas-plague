@@ -57,15 +57,17 @@ final class Chapter03LightTunnelPresenter {
         emitter.components.set(SpatialAudioComponent())
         bundle.angel.root.addChild(emitter)
         var preparedHeavenEmbers: Chapter03HeavenPortalEmberController?
-        do {
-            let controller = try Chapter03HeavenPortalEmberController(
-                perimeterLocalPoints: bundle.portalGeometry.boundaryPoints
-            )
-            bundle.portalTravelRoot.addChild(controller.rootEntity)
-            preparedHeavenEmbers = controller
-        } catch {
-            // The visual accent may never delay or stop the authored chapter.
-            Chapter03HeavenPortalEmberDiagnostics.cueUnavailable(error)
+        if Chapter03HeavenPortalEmberController.isRuntimeEnabled {
+            do {
+                let controller = try Chapter03HeavenPortalEmberController(
+                    perimeterLocalPoints: bundle.portalGeometry.boundaryPoints
+                )
+                bundle.portalTravelRoot.addChild(controller.rootEntity)
+                preparedHeavenEmbers = controller
+            } catch {
+                // The visual accent may never delay or stop the authored chapter.
+                Chapter03HeavenPortalEmberDiagnostics.cueUnavailable(error)
+            }
         }
         let preparedProjection: MindEyeAngelProjectionController?
         do {

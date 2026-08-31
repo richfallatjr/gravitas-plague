@@ -8,12 +8,6 @@ struct MindEyeProjectionCompositeUniforms {
     uint2 reserved;
 };
 
-constexpr sampler mindEyeProjectionPlateSampler(
-    coord::normalized,
-    address::clamp_to_edge,
-    filter::linear
-);
-
 inline half4 mindEyeProjectionPremultiply(half4 straightColor) {
     half alpha = clamp(straightColor.a, half(0.0), half(1.0));
     return half4(straightColor.rgb * alpha, alpha);
@@ -28,9 +22,9 @@ inline half4 mindEyeProjectionSourceOver(half4 under, half4 over) {
 }
 
 kernel void mindEyeCompositeProjectionFrame(
-    texture2d<half, access::sample> projectionBase [[texture(0)]],
-    texture2d<half, access::sample> selectedEyes [[texture(1)]],
-    texture2d<half, access::sample> selectedMouth [[texture(2)]],
+    texture2d<half, access::read> projectionBase [[texture(0)]],
+    texture2d<half, access::read> selectedEyes [[texture(1)]],
+    texture2d<half, access::read> selectedMouth [[texture(2)]],
     texture2d<half, access::write> output [[texture(3)]],
     constant MindEyeProjectionCompositeUniforms &uniforms [[buffer(0)]],
     uint2 gid [[thread_position_in_grid]]
@@ -40,26 +34,25 @@ kernel void mindEyeCompositeProjectionFrame(
     if (gid.x >= outputWidth || gid.y >= outputHeight) {
         return;
     }
-    float2 sourceSize = float2(
-        uniforms.sourceAndOutputDimensions.x,
-        uniforms.sourceAndOutputDimensions.y
-    );
-    float2 sourcePixel = float2(uniforms.cropOrigin + gid) + 0.5;
-    float2 sourceUV = sourcePixel / sourceSize;
+    // All authored plates share the same 1728-square pixel grid and the output
+    // is its exact 1440-square center crop. Direct texel reads are both exact
+    // and substantially cheaper than three bilinear samples (twelve filtered
+    // fetches) for every output pixel on every viseme transition.
+    uint2 sourcePixel = uniforms.cropOrigin + gid;
 
     half4 composed = mindEyeProjectionPremultiply(
-        projectionBase.sample(mindEyeProjectionPlateSampler, sourceUV)
+        projectionBase.read(sourcePixel)
     );
     composed = mindEyeProjectionSourceOver(
         composed,
         mindEyeProjectionPremultiply(
-            selectedEyes.sample(mindEyeProjectionPlateSampler, sourceUV)
+            selectedEyes.read(sourcePixel)
         )
     );
     composed = mindEyeProjectionSourceOver(
         composed,
         mindEyeProjectionPremultiply(
-            selectedMouth.sample(mindEyeProjectionPlateSampler, sourceUV)
+            selectedMouth.read(sourcePixel)
         )
     );
 

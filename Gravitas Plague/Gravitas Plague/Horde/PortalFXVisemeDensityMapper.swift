@@ -1,7 +1,7 @@
 import Foundation
 
 nonisolated enum PortalFXVisemeDensityMapper {
-    static let rest: Float = 1.00
+    static let rest: Float = 0.00
     static let small: Float = 1.33
     static let round: Float = 1.50
     static let teeth: Float = 1.75

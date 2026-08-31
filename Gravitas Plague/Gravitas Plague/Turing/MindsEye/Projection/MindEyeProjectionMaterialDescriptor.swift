@@ -10,8 +10,6 @@ nonisolated struct MindEyeProjectionMaterialDescriptor: Sendable, Equatable {
     let emissionGain: Float
     let albedoSuppression: Float
     let specularSuppression: Float
-    let fullQualityAngleRadians: Float
-    let zeroProjectionAngleRadians: Float
     let frustumFeather: Float
     let receiverMaskConvention: MindEyeProjectionProfile.ReceiverMaskConvention
     let receiverUVSetIndex: Int
@@ -30,8 +28,6 @@ nonisolated struct MindEyeProjectionMaterialDescriptor: Sendable, Equatable {
         emissionGain = profile.projectionEmissionGain
         albedoSuppression = profile.albedoSuppression
         specularSuppression = profile.specularSuppression
-        fullQualityAngleRadians = profile.fullQualityAngleDegrees * .pi / 180
-        zeroProjectionAngleRadians = profile.zeroProjectionAngleDegrees * .pi / 180
         frustumFeather = 0.015
         receiverMaskConvention = profile.projectionReceiverUVMask.convention
         receiverUVSetIndex = profile.projectionReceiverUVMask.UVSetIndex
@@ -52,39 +48,36 @@ nonisolated enum MindEyeProjectionMaterialMath {
         receiverMaskLuminance: Float,
         projectedAlpha: Float,
         validProjectorPosition: Float,
-        angleRadians: Float,
         frustumFade: Float,
         projectionEnabled: Float,
         descriptor: MindEyeProjectionMaterialDescriptor
     ) -> Contributions {
         let receiver = min(1, max(0, 1 - receiverMaskLuminance))
-        let facing = 1 - smootherstep(
-            descriptor.fullQualityAngleRadians,
-            descriptor.zeroProjectionAngleRadians,
-            angleRadians
-        )
         let receiverVisibility = min(1, max(
             0,
-            receiver * validProjectorPosition * facing *
+            receiver * validProjectorPosition *
                 frustumFade * projectionEnabled
         ))
+        let receiverMaskSuppression = min(
+            1,
+            max(0, receiver * projectionEnabled)
+        )
         let coverage = min(1, max(0, receiverVisibility * projectedAlpha))
         return Contributions(
             coverage: coverage,
-            // The owner UV mask directly suppresses imported albedo inside the
-            // valid projector region. Photographic alpha only controls the
-            // projected contribution; it must not reveal the base face beneath
-            // transparent/feathered plate pixels.
-            baseMultiplier: 1 - receiverVisibility * descriptor.albedoSuppression,
-            specularMultiplier: 1 - coverage * descriptor.specularSuppression,
-            importedEmissionMultiplier: 1 - coverage,
+            // The owner UV mask is the direct material multiplier. A black mask
+            // texel must produce zero imported albedo/specular even when the
+            // photographic plate or projector safety fade has zero coverage.
+            baseMultiplier:
+                1 - receiverMaskSuppression * descriptor.albedoSuppression,
+            specularMultiplier:
+                1 - receiverMaskSuppression * descriptor.specularSuppression,
+            // The projection material owns emission while active. The imported
+            // eye-glow map is a fail-soft property of the restored PBR material,
+            // never an additive layer underneath the photographic projection.
+            importedEmissionMultiplier: 1 - min(1, max(0, projectionEnabled)),
             projectedEmissionMultiplier: coverage * descriptor.emissionGain
         )
     }
 
-    static func smootherstep(_ edge0: Float, _ edge1: Float, _ value: Float) -> Float {
-        guard edge1 > edge0 else { return value >= edge1 ? 1 : 0 }
-        let u = min(1, max(0, (value - edge0) / (edge1 - edge0)))
-        return u * u * u * (u * (u * 6 - 15) + 10)
-    }
 }

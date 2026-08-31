@@ -9,7 +9,7 @@
   "maximumAbsoluteErrorLinearRGB": 1.0,
   "p99AbsoluteErrorLinearRGB": 1.0,
   "passed": false,
-  "profileSHA256": "cafe527742aeff449e640d850bb6ecfa262161c096bc0de04497af18e5913ae8",
+  "profileSHA256": "b6139bd3599c60f53b07acfb92ffdb73ac04fd793180020d190245008165d4ba",
   "qualificationID": "angel_head_v1.material-parity",
   "renderHeight": 1024,
   "renderWidth": 1024,

@@ -65,6 +65,11 @@ nonisolated struct MindEyeProjectionCompositeUniforms: Sendable, Equatable {
 
 @MainActor
 enum MindEyeProjectionCompositeEncoder {
+    #if DEBUG
+    private static var completedFrameCount: UInt64 = 0
+    private static var accumulatedGPUMilliseconds: Double = 0
+    #endif
+
     static func encodeAndCommit(
         package: MindEyeProjectionPlatePackage,
         frame: MindEyeCompositeFrameState,
@@ -160,5 +165,23 @@ enum MindEyeProjectionCompositeEncoder {
                 "projection compositor command failed; last good frame retained"
             )
         }
+        #if DEBUG
+        if commandBuffer.gpuEndTime > commandBuffer.gpuStartTime,
+           commandBuffer.gpuStartTime > 0 {
+            let GPUms = (commandBuffer.gpuEndTime - commandBuffer.gpuStartTime) * 1_000
+            completedFrameCount &+= 1
+            accumulatedGPUMilliseconds += GPUms
+            if completedFrameCount <= 3 || completedFrameCount % 30 == 0 {
+                let average = accumulatedGPUMilliseconds /
+                    Double(completedFrameCount)
+                print(
+                    "[MindEyeProjectionPerf] frame=\(frame.sequence) " +
+                        "gpuMS=\(String(format: "%.3f", GPUms)) " +
+                        "averageGPUms=\(String(format: "%.3f", average)) " +
+                        "compositor=directTexelRead"
+                )
+            }
+        }
+        #endif
     }
 }

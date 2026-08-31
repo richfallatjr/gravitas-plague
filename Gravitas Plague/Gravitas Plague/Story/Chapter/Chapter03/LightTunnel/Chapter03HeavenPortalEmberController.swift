@@ -4,6 +4,8 @@ import simd
 
 @MainActor
 final class Chapter03HeavenPortalEmberController {
+    nonisolated static let isRuntimeEnabled = false
+
     let rootEntity: Entity
     private let portalFX: PortalTransitionFXController
     private var activeRunID: UUID?
@@ -55,14 +57,14 @@ final class Chapter03HeavenPortalEmberController {
         activeRunID = nil
         activePlaybackID = nil
         lastLoggedPose = .rest
-        portalFX.setBirthRateMultiplier(1)
+        portalFX.setBirthRateMultiplier(PortalFXVisemeDensityMapper.rest)
     }
 
     func teardown(reason: String) {
         activeRunID = nil
         activePlaybackID = nil
         lastLoggedPose = nil
-        portalFX.setBirthRateMultiplier(1)
+        portalFX.setBirthRateMultiplier(PortalFXVisemeDensityMapper.rest)
         portalFX.teardown()
         Chapter03HeavenPortalEmberDiagnostics.tornDown(reason: reason)
     }

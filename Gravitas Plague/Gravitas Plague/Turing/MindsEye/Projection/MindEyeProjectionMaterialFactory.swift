@@ -54,12 +54,6 @@ enum MindEyeProjectionMaterialFactory {
             profile: package.profile,
             camera: package.camera
         )
-        let cameraPositionSubject = SIMD3<Float>(
-            package.camera.subjectFromCameraMatrix.columns.3.x,
-            package.camera.subjectFromCameraMatrix.columns.3.y,
-            package.camera.subjectFromCameraMatrix.columns.3.z
-        )
-
         var payloads: [CompilationPayload] = []
         var snapshots: [MindEyeProjectionImportedPBRSnapshot] = []
         for target in resolution.materials {
@@ -75,7 +69,6 @@ enum MindEyeProjectionMaterialFactory {
             )
             snapshots.append(snapshot)
             let subjectFromEntity = target.entity.transformMatrix(relativeTo: subjectRoot)
-            let entityFromSubject = subjectFromEntity.inverse
             payloads.append(
                 CompilationPayload(
                     inputValues: try inputValues(
@@ -84,7 +77,6 @@ enum MindEyeProjectionMaterialFactory {
                         projectionTexture: projectionTexture.textureResource,
                         receiverMask: receiverMask.textureResource,
                         clipFromEntity: package.camera.clipFromSubjectMatrix * subjectFromEntity,
-                        cameraPositionEntity: entityFromSubject.transformPoint(cameraPositionSubject),
                         descriptor: materialDescriptor,
                         diagnosticMode: diagnosticMode
                     ),
@@ -202,7 +194,6 @@ enum MindEyeProjectionMaterialFactory {
         projectionTexture: TextureResource,
         receiverMask: TextureResource,
         clipFromEntity: simd_float4x4,
-        cameraPositionEntity: SIMD3<Float>,
         descriptor: MindEyeProjectionMaterialDescriptor,
         diagnosticMode: MindEyeProjectionMaterialDiagnosticMode
     ) throws -> [String: MaterialParameters.Value] {
@@ -221,7 +212,6 @@ enum MindEyeProjectionMaterialFactory {
             "specularScale": .float(PBR.specularScale),
             "emissionIntensity": .float(PBR.emissionIntensity),
             "clipFromEntity": .float4x4(clipFromEntity),
-            "cameraPositionEntity": .simd3Float(cameraPositionEntity),
             "projectorUVScaleX": .float(descriptor.projectorUVScaleX),
             "projectorUVScaleY": .float(descriptor.projectorUVScaleY),
             "projectorUVOffsetX": .float(descriptor.projectorUVOffsetX),
@@ -229,19 +219,9 @@ enum MindEyeProjectionMaterialFactory {
             "projectionEmissionGain": .float(descriptor.emissionGain),
             "albedoSuppression": .float(descriptor.albedoSuppression),
             "specularSuppression": .float(descriptor.specularSuppression),
-            "fullQualityCosine": .float(cos(descriptor.fullQualityAngleRadians)),
-            "zeroProjectionCosine": .float(cos(descriptor.zeroProjectionAngleRadians)),
             "frustumFeather": .float(descriptor.frustumFeather),
             "projectionEnabled": .float(diagnosticMode.projectionEnabled),
         ]
-    }
-}
-
-private nonisolated extension simd_float4x4 {
-    func transformPoint(_ point: SIMD3<Float>) -> SIMD3<Float> {
-        let transformed = self * SIMD4<Float>(point, 1)
-        return SIMD3<Float>(transformed.x, transformed.y, transformed.z) /
-            max(0.000_001, transformed.w)
     }
 }
 
@@ -305,7 +285,6 @@ nonisolated enum MindEyeProjectionShaderGraph {
         .init(name: "specularScale", type: .float, isUniform: true),
         .init(name: "emissionIntensity", type: .float, isUniform: true),
         .init(name: "clipFromEntity", type: .float4x4, isUniform: true),
-        .init(name: "cameraPositionEntity", type: .float3, isUniform: true),
         .init(name: "projectorUVScaleX", type: .float, isUniform: true),
         .init(name: "projectorUVScaleY", type: .float, isUniform: true),
         .init(name: "projectorUVOffsetX", type: .float, isUniform: true),
@@ -313,8 +292,6 @@ nonisolated enum MindEyeProjectionShaderGraph {
         .init(name: "projectionEmissionGain", type: .float, isUniform: true),
         .init(name: "albedoSuppression", type: .float, isUniform: true),
         .init(name: "specularSuppression", type: .float, isUniform: true),
-        .init(name: "fullQualityCosine", type: .float, isUniform: true),
-        .init(name: "zeroProjectionCosine", type: .float, isUniform: true),
         .init(name: "frustumFeather", type: .float, isUniform: true),
         .init(name: "projectionEnabled", type: .float, isUniform: true),
     ]
@@ -396,8 +373,20 @@ nonisolated enum MindEyeProjectionShaderGraph {
                 argument: "projectorUVOffsetY",
                 name: "projectedV"
             )
+            // The authored camera plate arrives horizontally mirrored relative
+            // to RealityKit's camera-space projector convention. Flip only the
+            // photographic plate lookup; the owner-authored UV receiver mask
+            // remains in its original primvars:st orientation.
+            let projectionSampleU = try binary(
+                "ND_subtract_float",
+                one,
+                nil,
+                u,
+                nil,
+                "projectionSampleUHorizontalFlip"
+            )
             let projectedUV = try node("ND_combine2_vector2", "projectedUV")
-            try connect(u, to: projectedUV, input: "in1")
+            try connect(projectionSampleU, to: projectedUV, input: "in1")
             try connect(v, to: projectedUV, input: "in2")
 
             let projection = try textureSample(
@@ -444,6 +433,16 @@ nonisolated enum MindEyeProjectionShaderGraph {
                 receiverCoverage,
                 name: "clampedProjectionReceiverCoverage"
             )
+            let receiverMaskSuppression = try multiply(
+                clampedReceiverCoverage,
+                port: nil,
+                argument: "projectionEnabled",
+                name: "receiverMaskSuppression"
+            )
+            let clampedReceiverMaskSuppression = try clamp01(
+                receiverMaskSuppression,
+                name: "clampedReceiverMaskSuppression"
+            )
 
             let oneMinusU = try binary("ND_subtract_float", one, nil, u, nil, "oneMinusU")
             let oneMinusV = try binary("ND_subtract_float", one, nil, v, nil, "oneMinusV")
@@ -456,24 +455,9 @@ nonisolated enum MindEyeProjectionShaderGraph {
             let depthFar = try smoothstep(oneMinusZ, low: zero, high: 0.001, name: "depthFar")
             let positiveW = try ifGreater(clip, port: "outw", threshold: 0.000_001, name: "positiveW")
 
-            let normal = try node("ND_normal_vector3", "objectNormal")
-            try connect(object, to: normal, input: "space")
-            let toCamera = try node("ND_subtract_vector3", "toCamera")
-            try argument("cameraPositionEntity", to: toCamera, input: "in1")
-            try connect(deformedObjectPosition, to: toCamera, input: "in2")
-            let viewDirection = try node("ND_normalize_vector3", "viewDirection")
-            try connect(toCamera, to: viewDirection, input: "in")
-            let facingDot = try node("ND_dotproduct_vector3", "facingDot")
-            try connect(normal, to: facingDot, input: "in1")
-            try connect(viewDirection, to: facingDot, input: "in2")
-            let facing = try node("ND_smoothstep_float", "viewConeFade")
-            try connect(facingDot, to: facing, input: "in")
-            try argument("zeroProjectionCosine", to: facing, input: "low")
-            try argument("fullQualityCosine", to: facing, input: "high")
-
             // Build mask/geometric visibility independently from photographic
-            // alpha. The UV receiver must multiply imported albedo down even
-            // where the plate itself is transparent or feathered.
+            // alpha or mesh-facing angle. The owner-authored projection is
+            // camera-space and must remain present across the curved face.
             var receiverVisibility = clampedReceiverCoverage
             for (factor, name) in [
                 (edgeU0, "receiverVisibilityEdgeU0"),
@@ -483,7 +467,6 @@ nonisolated enum MindEyeProjectionShaderGraph {
                 (depthNear, "receiverVisibilityDepthNear"),
                 (depthFar, "receiverVisibilityDepthFar"),
                 (positiveW, "receiverVisibilityPositiveW"),
-                (facing, "receiverVisibilityViewCone"),
             ] {
                 receiverVisibility = try multiply(
                     receiverVisibility,
@@ -526,7 +509,7 @@ nonisolated enum MindEyeProjectionShaderGraph {
             try connect(baseParts, port: "outrgb", to: tintedBase, input: "in1")
             try argument("baseTint", to: tintedBase, input: "in2")
             let coverageAlbedo = try multiply(
-                clampedReceiverVisibility,
+                clampedReceiverMaskSuppression,
                 port: nil,
                 argument: "albedoSuppression",
                 name: "receiverMaskAlbedoSuppression"
@@ -548,20 +531,24 @@ nonisolated enum MindEyeProjectionShaderGraph {
                 binding: contract.roughness,
                 scaleArgument: "roughnessScale", name: "roughness"
             )
-            let oneMinusCoverage = try binary(
-                "ND_subtract_float", one, nil, clampedCoverage, nil, "oneMinusCoverage"
+            let oneMinusReceiverMaskSuppression = try binary(
+                "ND_subtract_float", one, nil,
+                clampedReceiverMaskSuppression, nil,
+                "oneMinusReceiverMaskSuppression"
             )
             let retainedRoughness = try multiply(
-                roughnessValue, port: nil, oneMinusCoverage,
+                roughnessValue, port: nil, oneMinusReceiverMaskSuppression,
                 name: "retainedRoughness"
             )
             let finalRoughness = try binary(
-                "ND_add_float", retainedRoughness, nil, clampedCoverage, nil,
+                "ND_add_float", retainedRoughness, nil,
+                clampedReceiverMaskSuppression, nil,
                 "finalRoughness"
             )
             let coverageSpecular = try multiply(
-                clampedCoverage, port: nil, argument: "specularSuppression",
-                name: "coverageSpecularSuppression"
+                clampedReceiverMaskSuppression, port: nil,
+                argument: "specularSuppression",
+                name: "receiverMaskSpecularSuppression"
             )
             let specularMultiplier = try binary(
                 "ND_subtract_float", one, nil, coverageSpecular, nil,
@@ -587,8 +574,19 @@ nonisolated enum MindEyeProjectionShaderGraph {
             let tintedEmission = try node("ND_multiply_color3", "tintedEmission")
             try connect(emissionParts, port: "outrgb", to: tintedEmission, input: "in1")
             try argument("emissionTint", to: tintedEmission, input: "in2")
+            let importedEmissionEnabled = try node(
+                "ND_subtract_float",
+                "importedEmissionEnabled"
+            )
+            try connect(one, to: importedEmissionEnabled, input: "in1")
+            try argument(
+                "projectionEnabled",
+                to: importedEmissionEnabled,
+                input: "in2"
+            )
             let retainedEmissionScale = try multiply(
-                oneMinusCoverage, port: nil, argument: "emissionIntensity",
+                importedEmissionEnabled, port: nil,
+                argument: "emissionIntensity",
                 name: "retainedEmissionScale"
             )
             let retainedEmission = try node("ND_multiply_color3FA", "retainedEmission")

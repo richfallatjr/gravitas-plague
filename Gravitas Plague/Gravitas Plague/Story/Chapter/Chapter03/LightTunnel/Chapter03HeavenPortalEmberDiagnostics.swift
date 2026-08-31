@@ -21,7 +21,7 @@ enum Chapter03HeavenPortalEmberDiagnostics {
     }
 
     static func cueUnavailable(_ error: Error) {
-        print("[Chapter03HeavenEmbers] cue unavailable; using rest/1x error=\(error)")
+        print("[Chapter03HeavenEmbers] cue unavailable; using rest/0x error=\(error)")
     }
 
     static func tornDown(reason: String) {

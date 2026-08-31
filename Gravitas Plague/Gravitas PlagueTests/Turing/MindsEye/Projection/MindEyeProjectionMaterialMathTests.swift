@@ -8,7 +8,6 @@ final class MindEyeProjectionMaterialMathTests: XCTestCase {
             receiverMaskLuminance: 1,
             projectedAlpha: 1,
             validProjectorPosition: 1,
-            angleRadians: 0,
             frustumFade: 1,
             projectionEnabled: 1,
             descriptor: descriptor
@@ -22,29 +21,29 @@ final class MindEyeProjectionMaterialMathTests: XCTestCase {
             receiverMaskLuminance: 0,
             projectedAlpha: 1,
             validProjectorPosition: 1,
-            angleRadians: 0,
             frustumFade: 1,
             projectionEnabled: 1,
             descriptor: descriptor
         )
-        XCTAssertEqual(full.baseMultiplier, 0.04, accuracy: 0.0001)
-        XCTAssertEqual(full.specularMultiplier, 0.1, accuracy: 0.0001)
+        XCTAssertEqual(full.baseMultiplier, 0, accuracy: 0.0001)
+        XCTAssertEqual(full.specularMultiplier, 0, accuracy: 0.0001)
         XCTAssertEqual(full.importedEmissionMultiplier, 0)
         XCTAssertEqual(full.projectedEmissionMultiplier, 1)
     }
 
-    func testViewConeFadesToPhysicalMaterial() throws {
-        let descriptor = try descriptor()
-        let cutoff = MindEyeProjectionMaterialMath.contributions(
+    func testInvalidProjectorPositionRejectsProjectionWithoutAffectingReceiverMaskSuppression() throws {
+        let result = MindEyeProjectionMaterialMath.contributions(
             receiverMaskLuminance: 0,
             projectedAlpha: 1,
-            validProjectorPosition: 1,
-            angleRadians: 42 * .pi / 180,
+            validProjectorPosition: 0,
             frustumFade: 1,
             projectionEnabled: 1,
-            descriptor: descriptor
+            descriptor: try descriptor()
         )
-        XCTAssertEqual(cutoff.coverage, 0, accuracy: 0.0001)
+
+        XCTAssertEqual(result.coverage, 0, accuracy: 0.0001)
+        XCTAssertEqual(result.baseMultiplier, 0, accuracy: 0.0001)
+        XCTAssertEqual(result.specularMultiplier, 0, accuracy: 0.0001)
     }
 
     func testReceiverMaskSuppressesAlbedoIndependentlyFromPlateAlpha() throws {
@@ -52,16 +51,32 @@ final class MindEyeProjectionMaterialMathTests: XCTestCase {
             receiverMaskLuminance: 0,
             projectedAlpha: 0,
             validProjectorPosition: 1,
-            angleRadians: 0,
             frustumFade: 1,
             projectionEnabled: 1,
             descriptor: try descriptor()
         )
 
         XCTAssertEqual(result.coverage, 0, accuracy: 0.0001)
-        XCTAssertEqual(result.baseMultiplier, 0.04, accuracy: 0.0001)
-        XCTAssertEqual(result.importedEmissionMultiplier, 1, accuracy: 0.0001)
+        XCTAssertEqual(result.baseMultiplier, 0, accuracy: 0.0001)
+        XCTAssertEqual(result.specularMultiplier, 0, accuracy: 0.0001)
+        XCTAssertEqual(result.importedEmissionMultiplier, 0, accuracy: 0.0001)
         XCTAssertEqual(result.projectedEmissionMultiplier, 0, accuracy: 0.0001)
+    }
+
+    func testReceiverMaskIsTheDirectMaterialMultiplier() throws {
+        let result = MindEyeProjectionMaterialMath.contributions(
+            receiverMaskLuminance: 0,
+            projectedAlpha: 0,
+            validProjectorPosition: 0,
+            frustumFade: 0,
+            projectionEnabled: 1,
+            descriptor: try descriptor()
+        )
+
+        XCTAssertEqual(result.coverage, 0, accuracy: 0.0001)
+        XCTAssertEqual(result.baseMultiplier, 0, accuracy: 0.0001)
+        XCTAssertEqual(result.specularMultiplier, 0, accuracy: 0.0001)
+        XCTAssertEqual(result.importedEmissionMultiplier, 0, accuracy: 0.0001)
     }
 
     func testProjectorUsesExactAuthoredCameraCrop() throws {

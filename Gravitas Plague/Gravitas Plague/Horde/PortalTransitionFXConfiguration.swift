@@ -42,7 +42,7 @@ nonisolated struct PortalTransitionFXConfiguration: Sendable, Equatable {
         guard !identifier.isEmpty,
               initialBirthRateMultiplier.isFinite,
               maximumBirthRateMultiplier.isFinite,
-              initialBirthRateMultiplier == 1,
+              initialBirthRateMultiplier >= 0,
               maximumBirthRateMultiplier >= initialBirthRateMultiplier,
               maximumBirthRateMultiplier <= 2 else {
             throw PortalFXError.invalidConfiguration
@@ -67,7 +67,7 @@ nonisolated struct PortalTransitionFXConfiguration: Sendable, Equatable {
         identifier: "chapter03.heaven.visemeReactive.v1",
         borderRendering: .embersOnly,
         paletteID: .heavenPurpleMagentaCyan,
-        initialBirthRateMultiplier: 1,
+        initialBirthRateMultiplier: PortalFXVisemeDensityMapper.rest,
         maximumBirthRateMultiplier: 2
     )
 }
