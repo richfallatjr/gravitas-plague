@@ -1,5 +1,5 @@
 {
-  "baseAssetSHA256After": "f031dbd8757356c7ef88fc1ea15aa56556c8a6b90587c6b597a75752b005e251",
+  "baseAssetSHA256After": "fdb2195ca84723466ca8361813834b46a7b82591c9486ce95df224cfd49dad31",
   "baseAssetSHA256Before": "8db46a2f98994ececfdb2dbd10854e5b61d64290268537dbe00e5a898b6c1e13",
   "blendShapeName": "jawOpenProjection",
   "package": {
@@ -21,7 +21,7 @@
       "textures/extracted_image_2.jpg_metallic.png",
       "textures/extracted_image_2.jpg_roughness.png"
     ],
-    "outputBytes": 136000238,
+    "outputBytes": 68149902,
     "outputInventory": [
       "angel_posed_01.usdc",
       "textures/angel_emission.png",
@@ -64,7 +64,7 @@
         2.2551404851656373e-16
       ]
     },
-    "cameraDescriptorSHA256": "79148cbdae2e3978c5e0f61014a2141be0ba3c5f0f4db24ce6d608c34bdcb1ae",
+    "cameraDescriptorSHA256": "8183706e476a4067d3049b8f4053231c4b91afa6f2516982ad0e15d30c0124fc",
     "projectionMask": {
       "SHA256": "421367f960862900d73a6cbc95ef453eca389b0d3e2d83157e29349a6c6aac47",
       "bitsPerChannel": 8,

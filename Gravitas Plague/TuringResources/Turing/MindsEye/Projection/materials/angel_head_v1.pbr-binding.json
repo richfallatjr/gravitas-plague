@@ -19,7 +19,7 @@
     ],
     "semantic": "color",
     "sourceAssetPath": "textures/extracted_image_1.jpg",
-    "sourceAssetSHA256": "5a430630681c1ec70e68d7a49a94f29f711c965a5ed17aba77f43331823e649d",
+    "sourceAssetSHA256": "402d18c73df4e733271b5f94d6dc94ac136f6b66c7d85a193dbc6446b87e1ec2",
     "transformRotationDegrees": 0.0,
     "transformScale": [
       1.0,
@@ -53,7 +53,7 @@
     ],
     "semantic": "color",
     "sourceAssetPath": "textures/angel_emission.png",
-    "sourceAssetSHA256": "5b2aa59551eafdc16e652b1ee4946588334a1ebd5e931a8747da566e7879bca9",
+    "sourceAssetSHA256": "d8ffd44d1a131ac2c12fe691404e72bce9b8d6d507a25d150818bb00d1b25522",
     "transformRotationDegrees": 0.0,
     "transformScale": [
       1.0,
@@ -91,7 +91,7 @@
     ],
     "semantic": "rawData",
     "sourceAssetPath": "textures/extracted_image_2.jpg_metallic.png",
-    "sourceAssetSHA256": "5ada9c046d69e55811896d966b924e35ff3ef541b080bfec2d6d62f63bfc8cc7",
+    "sourceAssetSHA256": "be1ebcff08386d8108b5726181556e7e92ce7563ba4d268b730acbf037173613",
     "transformRotationDegrees": 0.0,
     "transformScale": [
       1.0,
@@ -124,7 +124,7 @@
     ],
     "semantic": "tangentSpaceNormal",
     "sourceAssetPath": "textures/extracted_image_0.jpg",
-    "sourceAssetSHA256": "e65c9501bf87400c5958478edc970bf8b34f730d28d6dbb333000a83cf3537e2",
+    "sourceAssetSHA256": "37f4270246833970282d48f79d13dc17f0a472df7a2e9e465d5e55015c8fd38a",
     "transformRotationDegrees": 0.0,
     "transformScale": [
       1.0,
@@ -157,7 +157,7 @@
     ],
     "semantic": "rawData",
     "sourceAssetPath": "textures/extracted_image_2.jpg_roughness.png",
-    "sourceAssetSHA256": "047e68e1646eabf41c028904cfe4038e605eab2da9e295116cd541f97c88fcb9",
+    "sourceAssetSHA256": "b5fa228364d0ec1f4036de987cf3b2fc30cea0bbaf188acf69a89d02c72bc20d",
     "transformRotationDegrees": 0.0,
     "transformScale": [
       1.0,
@@ -172,7 +172,7 @@
   },
   "schemaVersion": 1,
   "subjectAssetName": "angel_posed_01.usdz",
-  "subjectAssetSHA256": "f031dbd8757356c7ef88fc1ea15aa56556c8a6b90587c6b597a75752b005e251",
+  "subjectAssetSHA256": "fdb2195ca84723466ca8361813834b46a7b82591c9486ce95df224cfd49dad31",
   "surfaceShaderID": "UsdPreviewSurface",
   "targetEntityPath": "Chapter03PortalAngelRoot/Chapter03StaticPosedAngelVisual/root/Root/mesh1/mesh1",
   "unsupportedNondefaultFeatures": []
