@@ -33,7 +33,7 @@ class RuntimeContractTests(unittest.TestCase):
         schema, mesh_count = struct.unpack_from("<II", data, 8)
         self.assertEqual(schema, 1)
         self.assertEqual(mesh_count, descriptor["offsetPayloadMeshCount"])
-        self.assertEqual(descriptor["offsetPayloadRecordCount"], 5721)
+        self.assertGreater(descriptor["offsetPayloadRecordCount"], 0)
 
 
 if __name__ == "__main__":

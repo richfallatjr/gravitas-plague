@@ -1,93 +1,93 @@
 {
-  "cameraID" : "angel_head_v1.camera",
-  "cameraMathVersion" : "mind-eye-projection-camera-cube-v1",
-  "clipFromCamera" : [
-    3.7320511,
-    0,
-    0,
-    0,
-    0,
-    3.7320511,
-    0,
-    0,
-    0,
-    0,
-    -1.001001,
-    -1,
-    0,
-    0,
-    -0.02002002,
-    0
+  "cameraID": "angel_head_v1.camera",
+  "cameraMathVersion": "mind-eye-projection-camera-cube-v1",
+  "clipFromCamera": [
+    3.7320508075688776,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    3.7320508075688776,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -1.001001001001001,
+    -1.0,
+    0.0,
+    0.0,
+    -0.020020020020020023,
+    0.0
   ],
-  "clipFromSubject" : [
-    3.7320511,
-    0,
-    0,
-    0,
-    0,
-    3.7320511,
-    2.2573979e-16,
-    2.2551405e-16,
-    0,
-    0,
-    -1.001001,
-    -1,
-    0.07349409,
-    -6.337419,
-    0.48792785,
-    0.5074399
+  "clipFromSubject": [
+    3.7320508075688776,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    3.7320508075688776,
+    0.0,
+    0.0,
+    0.0,
+    8.416298868843688e-16,
+    -1.001001001001001,
+    -1.0,
+    0.07349408180138656,
+    -6.337418501968902,
+    0.48792779568925804,
+    0.5074398678935688
   ],
-  "farMeters" : 20,
-  "fieldOfViewDegrees" : 30,
-  "fieldOfViewOrientation" : "vertical",
-  "framingPadding" : 1.12,
-  "imageHeight" : 1728,
-  "imageWidth" : 1728,
-  "nearMeters" : 0.02,
-  "profileID" : "angel_head_v1",
-  "sceneDefinitionSHA256" : "7d36333a80df7916bd11a207ddb3fbc72d8bc2f834044e9430f7957e0462a41d",
-  "schemaVersion" : 1,
-  "sourceCropOrigin" : [
+  "farMeters": 20.0,
+  "fieldOfViewDegrees": 30.0,
+  "fieldOfViewOrientation": "vertical",
+  "framingPadding": 1.12,
+  "imageHeight": 1728,
+  "imageWidth": 1728,
+  "nearMeters": 0.02,
+  "profileID": "angel_head_v1",
+  "sceneDefinitionSHA256": "7d36333a80df7916bd11a207ddb3fbc72d8bc2f834044e9430f7957e0462a41d",
+  "schemaVersion": 1,
+  "sourceCropOrigin": [
     144,
     144
   ],
-  "sourceCropSize" : [
+  "sourceCropSize": [
     1440,
     1440
   ],
-  "subjectAssetSHA256" : "c274c2a294cf32b4d3dca036d36e854e07bf12a6279a1177d88e5a6148bbaa0f",
-  "subjectFromCamera" : [
-    1,
-    0,
-    0,
-    0,
-    0,
-    1,
-    2.2551405e-16,
-    0,
-    0,
-    0,
-    1,
-    0,
-    -0.01969268,
-    1.6981062,
-    0.5074399,
-    1
+  "subjectAssetSHA256": "f031dbd8757356c7ef88fc1ea15aa56556c8a6b90587c6b597a75752b005e251",
+  "subjectFromCamera": [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    2.2551404851656373e-16,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    -0.0196926798671484,
+    1.6981061697006226,
+    0.5074398678935688,
+    1.0
   ],
-  "targetBoundsMaximumSubjectMeters" : [
-    0.08030732,
-    1.7981062,
-    0.08945017
+  "targetBoundsMaximumSubjectMeters": [
+    0.08030732162296772,
+    1.7981061711907387,
+    0.08945017121732275
   ],
-  "targetBoundsMinimumSubjectMeters" : [
-    -0.11969268,
-    1.5981061,
-    -0.11054983
+  "targetBoundsMinimumSubjectMeters": [
+    -0.11969268135726452,
+    1.5981061682105064,
+    -0.11054983176290953
   ],
-  "targetCenterSubjectMeters" : [
-    -0.01969268,
-    1.6981062,
-    -0.01054983
+  "targetCenterSubjectMeters": [
+    -0.0196926798671484,
+    1.6981061697006226,
+    -0.010549830272793393
   ],
-  "targetDescriptorSHA256" : "0afb7e088d35f8994be87d0ab725e6eb56b17ef9bdde725336c4e0db7639337d"
+  "targetDescriptorSHA256": "8a6e914efa04ad142592254888acafb2387c57f352d6f2932729e381e5731b72"
 }

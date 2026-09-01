@@ -5,6 +5,29 @@ import Testing
 
 struct TuringQwenNativeRecoveryCoordinatorTests {
     @Test
+    func configuredBuildUsesArchitectedRecovery() {
+        #if GR_TURING_METAL_RECOVERY_QUALIFICATION
+        #expect(
+            TuringQwenNativeRecoveryPolicy.current.lowLevelMode ==
+                .resetStreamsThenProbe
+        )
+        #expect(
+            TuringQwenNativeRecoveryPolicy.current.maximumAttemptsPerLaunch == 12
+        )
+        #elseif GR_TURING_METAL_STREAM_RECOVERY
+        #expect(
+            TuringQwenNativeRecoveryPolicy.current.lowLevelMode ==
+                .resetStreamsThenProbe
+        )
+        #expect(
+            TuringQwenNativeRecoveryPolicy.current.maximumAttemptsPerLaunch == 3
+        )
+        #else
+        Issue.record("Same-launch recovery is not enabled for this build.")
+        #endif
+    }
+
+    @Test
     func admissionCarriesInitialGeneration() async throws {
         let coordinator = TuringQwenNativeRecoveryCoordinator(
             policy: .production

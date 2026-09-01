@@ -105,7 +105,10 @@ final class Chapter03AngelBlendShapeTests: XCTestCase {
         )
         XCTAssertEqual(payload.meshes.count, 1)
         XCTAssertEqual(payload.meshes[0].sourcePointCount, 1_062_657)
-        XCTAssertEqual(payload.meshes[0].records.count, 5_721)
+        XCTAssertEqual(
+            payload.meshes[0].records.count,
+            descriptor.offsetPayloadRecordCount
+        )
         XCTAssertEqual(
             payload.meshes[0].records.map(\.pointIndex),
             payload.meshes[0].records.map(\.pointIndex).sorted()
@@ -118,6 +121,14 @@ final class Chapter03AngelBlendShapeTests: XCTestCase {
 
     func testOffsetPayloadRejectsTruncation() throws {
         let root = try repositoryRoot()
+        let descriptorURL = root.appendingPathComponent(
+            "Gravitas Plague/TuringResources/Turing/Chapter03/" +
+                "AngelProjection/angel_jaw_open_projection.json"
+        )
+        let descriptor = try JSONDecoder().decode(
+            Chapter03AngelBlendShapeDescriptor.self,
+            from: Data(contentsOf: descriptorURL)
+        )
         let url = root.appendingPathComponent(
             "Gravitas Plague/TuringResources/Turing/Chapter03/" +
                 "AngelProjection/angel_jaw_open_projection_offsets.bin"
@@ -125,8 +136,8 @@ final class Chapter03AngelBlendShapeTests: XCTestCase {
         let truncated = Data(try Data(contentsOf: url).dropLast())
         XCTAssertThrowsError(try Chapter03AngelBlendShapeOffsetPayload(
             data: truncated,
-            expectedMeshCount: 1,
-            expectedRecordCount: 5_721
+            expectedMeshCount: descriptor.offsetPayloadMeshCount,
+            expectedRecordCount: descriptor.offsetPayloadRecordCount
         ))
     }
 

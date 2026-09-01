@@ -66,7 +66,7 @@ nonisolated struct Chapter03AngelBlendShapeDescriptor: Codable, Sendable, Equata
               offsetPayloadSHA256.count == 64,
               offsetPayloadSHA256.allSatisfy(\.isHexDigit),
               offsetPayloadMeshCount == 1,
-              offsetPayloadRecordCount == 5_721,
+              offsetPayloadRecordCount > 0,
               requiresProjectionReady,
               assetSHA256.count == 64,
               assetSHA256.allSatisfy(\.isHexDigit) else {

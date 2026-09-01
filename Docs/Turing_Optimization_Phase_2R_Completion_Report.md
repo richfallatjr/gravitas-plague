@@ -4,8 +4,16 @@
 
 - Decision: BLOCKED
 - Selected production branch: failSoftUnavailable
-- Production recovery enabled: No. `GR_TURING_METAL_STREAM_RECOVERY` remains unset pending actual-device proof.
-- Qualification recovery enabled: Available only behind `GR_TURING_METAL_RECOVERY_QUALIFICATION`; not enabled in the normal build.
+- Production recovery enabled: Yes as of 2026-09-01. Release builds define `GR_TURING_METAL_STREAM_RECOVERY` and select the bounded production reset/probe policy (one attempt per failure, three per launch).
+- Qualification recovery enabled: Yes for ordinary Debug builds as of 2026-09-01. The local `TuringQwenNative` package defines `GR_TURING_METAL_RECOVERY_QUALIFICATION` only for Debug; Release remains fail-closed.
+
+## 2026-09-01 device finding and next qualification run
+
+- Observed result before enablement: a real `Device Failed` event transitioned the shared recovery coordinator to same-launch unavailability and Turing never reopened.
+- Confirmed cause: the Phase 2R low-level reset/probe implementation was present, but the normal Debug package compiled without either recovery flag, selecting `failSoftUnavailable` and `productionRecoveryUnqualified` by design.
+- Change for the next device run: Debug now selects the existing architected qualification policy (`resetStreamsThenProbe`, one attempt per typed failure, twelve attempts per launch). No Qwen lane, scheduler, residency, admission, sampling, or playback-concurrency contract changed.
+- Required device evidence: after the next typed failure, capture the transition chain `failing -> draining -> resettingMetal -> probing -> readyForFreshRuntime`; then submit another microphone turn in the same launch and prove it uses the new recovery generation. If the result is `unavailable`, retain the exact reason and low-level recovery report for the architect.
+- Build clarification: the observed permanent lockout occurred during a full Release playthrough, not a Debug qualification run. Release recovery is therefore now enabled rather than leaving the known permanent lockout in the shipping configuration.
 - Starting commit: `3f85a367683704eb91b8c747ddc3f58ae24011e6`
 - Branch: `main`
 - Dirty worktree preserved: Yes

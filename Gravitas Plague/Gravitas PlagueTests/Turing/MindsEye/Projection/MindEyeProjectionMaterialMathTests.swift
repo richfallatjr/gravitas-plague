@@ -8,7 +8,6 @@ final class MindEyeProjectionMaterialMathTests: XCTestCase {
             receiverMaskLuminance: 1,
             projectedAlpha: 1,
             validProjectorPosition: 1,
-            frustumFade: 1,
             projectionEnabled: 1,
             descriptor: descriptor
         )
@@ -21,7 +20,6 @@ final class MindEyeProjectionMaterialMathTests: XCTestCase {
             receiverMaskLuminance: 0,
             projectedAlpha: 1,
             validProjectorPosition: 1,
-            frustumFade: 1,
             projectionEnabled: 1,
             descriptor: descriptor
         )
@@ -36,7 +34,6 @@ final class MindEyeProjectionMaterialMathTests: XCTestCase {
             receiverMaskLuminance: 0,
             projectedAlpha: 1,
             validProjectorPosition: 0,
-            frustumFade: 1,
             projectionEnabled: 1,
             descriptor: try descriptor()
         )
@@ -51,7 +48,6 @@ final class MindEyeProjectionMaterialMathTests: XCTestCase {
             receiverMaskLuminance: 0,
             projectedAlpha: 0,
             validProjectorPosition: 1,
-            frustumFade: 1,
             projectionEnabled: 1,
             descriptor: try descriptor()
         )
@@ -68,7 +64,6 @@ final class MindEyeProjectionMaterialMathTests: XCTestCase {
             receiverMaskLuminance: 0,
             projectedAlpha: 0,
             validProjectorPosition: 0,
-            frustumFade: 0,
             projectionEnabled: 1,
             descriptor: try descriptor()
         )

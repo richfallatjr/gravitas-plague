@@ -27,6 +27,16 @@ let package = Package(
                 .product(name: "MLXRandom", package: "mlx-swift")
             ],
             swiftSettings: [
+                // Debug exercises the qualification budget; Release uses the
+                // bounded Phase 2R production recovery policy.
+                .define(
+                    "GR_TURING_METAL_RECOVERY_QUALIFICATION",
+                    .when(configuration: .debug)
+                ),
+                .define(
+                    "GR_TURING_METAL_STREAM_RECOVERY",
+                    .when(configuration: .release)
+                ),
                 .enableExperimentalFeature("StrictConcurrency")
             ]
         ),
@@ -37,6 +47,14 @@ let package = Package(
                 .product(name: "MLX", package: "mlx-swift")
             ],
             swiftSettings: [
+                .define(
+                    "GR_TURING_METAL_RECOVERY_QUALIFICATION",
+                    .when(configuration: .debug)
+                ),
+                .define(
+                    "GR_TURING_METAL_STREAM_RECOVERY",
+                    .when(configuration: .release)
+                ),
                 .enableExperimentalFeature("StrictConcurrency")
             ]
         )

@@ -10,7 +10,6 @@ nonisolated struct MindEyeProjectionMaterialDescriptor: Sendable, Equatable {
     let emissionGain: Float
     let albedoSuppression: Float
     let specularSuppression: Float
-    let frustumFeather: Float
     let receiverMaskConvention: MindEyeProjectionProfile.ReceiverMaskConvention
     let receiverUVSetIndex: Int
     let graphVersion: String
@@ -28,7 +27,6 @@ nonisolated struct MindEyeProjectionMaterialDescriptor: Sendable, Equatable {
         emissionGain = profile.projectionEmissionGain
         albedoSuppression = profile.albedoSuppression
         specularSuppression = profile.specularSuppression
-        frustumFeather = 0.015
         receiverMaskConvention = profile.projectionReceiverUVMask.convention
         receiverUVSetIndex = profile.projectionReceiverUVMask.UVSetIndex
         graphVersion = "angel-camera-projector-uv-receiver/2"
@@ -48,15 +46,13 @@ nonisolated enum MindEyeProjectionMaterialMath {
         receiverMaskLuminance: Float,
         projectedAlpha: Float,
         validProjectorPosition: Float,
-        frustumFade: Float,
         projectionEnabled: Float,
         descriptor: MindEyeProjectionMaterialDescriptor
     ) -> Contributions {
         let receiver = min(1, max(0, 1 - receiverMaskLuminance))
         let receiverVisibility = min(1, max(
             0,
-            receiver * validProjectorPosition *
-                frustumFade * projectionEnabled
+            receiver * validProjectorPosition * projectionEnabled
         ))
         let receiverMaskSuppression = min(
             1,

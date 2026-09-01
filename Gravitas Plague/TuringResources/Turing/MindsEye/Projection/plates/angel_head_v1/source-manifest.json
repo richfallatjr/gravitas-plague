@@ -2,12 +2,12 @@
   "schemaVersion": 2,
   "packageID": "angel_head_v1",
   "profileID": "angel_head_v1",
-  "profileSHA256": "b6139bd3599c60f53b07acfb92ffdb73ac04fd793180020d190245008165d4ba",
+  "profileSHA256": "142d3b317cee4bb048092f16527933c16c8c4979e156b789f3fe845d9de7e8c0",
   "cameraID": "angel_head_v1.camera",
-  "cameraSHA256": "0f0c8382a94ee2ae2409b6420023be937addbfc4eee9c49ef71360e0111c9092",
-  "targetSHA256": "0afb7e088d35f8994be87d0ab725e6eb56b17ef9bdde725336c4e0db7639337d",
+  "cameraSHA256": "79148cbdae2e3978c5e0f61014a2141be0ba3c5f0f4db24ce6d608c34bdcb1ae",
+  "targetSHA256": "8a6e914efa04ad142592254888acafb2387c57f352d6f2932729e381e5731b72",
   "subjectAssetName": "angel_posed_01.usdz",
-  "subjectAssetSHA256": "c274c2a294cf32b4d3dca036d36e854e07bf12a6279a1177d88e5a6148bbaa0f",
+  "subjectAssetSHA256": "f031dbd8757356c7ef88fc1ea15aa56556c8a6b90587c6b597a75752b005e251",
   "sceneLightingRevision": "chapter03.lightTunnelTest.v2",
   "sourceWidth": 1728,
   "sourceHeight": 1728,
@@ -19,7 +19,7 @@
   "compositeAlphaSemantics": "sourceOverOnly",
   "projectionBase": {
     "filename": "projection-base.png",
-    "SHA256": "dc4575d267261d6163ecaf34429c761e3f511b369c5ed8882de6335a8320a668"
+    "SHA256": "c387bff32c0be5e1668c78c5b1d64e680f563dd74d867901848e7ec0b487075d"
   },
   "eyes": {
     "open": [
@@ -45,7 +45,7 @@
     "small": [
       {
         "filename": "mouth-small-01.png",
-        "SHA256": "5e23ee263ee8d714a5c1a1ca04055b65b5014d03f2802b378a8cd955d7fe537e"
+        "SHA256": "88be9fac4f3e1981cf3ec94694fcb299c6fc4f588fc476794274b8b904274c17"
       }
     ],
     "wide": [
@@ -55,19 +55,19 @@
       },
       {
         "filename": "mouth-wide-02.png",
-        "SHA256": "7145fe3250ef3c99b81743717f4a031b2cbc9a1e57f9b6fa6cb5d8cf3f3eea91"
+        "SHA256": "9de8a980da774dca633d091f2cc691f34b44fe346e7bea1a1bc782e2cc8fec5b"
       }
     ],
     "round": [
       {
         "filename": "mouth-round-01.png",
-        "SHA256": "909f765b61c2d479d4576b8b77d4440a1835b1b7c5570042a860048981b06c5e"
+        "SHA256": "04f4b22515ad1b6775f2f0544d1e5619c14cb207ee533e85cbe7e14985adaea0"
       }
     ],
     "teeth": [
       {
         "filename": "mouth-teeth-01.png",
-        "SHA256": "05a7699c714462f9fd9772854c0e3e9a3befc9fc9569cb3ea1fb4946a985504a"
+        "SHA256": "48c397dd24b81f551aa9db1f29aa9b8ebb3038f449034f9a6dbc04ef55111fe8"
       }
     ]
   }

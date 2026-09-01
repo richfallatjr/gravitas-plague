@@ -219,7 +219,6 @@ enum MindEyeProjectionMaterialFactory {
             "projectionEmissionGain": .float(descriptor.emissionGain),
             "albedoSuppression": .float(descriptor.albedoSuppression),
             "specularSuppression": .float(descriptor.specularSuppression),
-            "frustumFeather": .float(descriptor.frustumFeather),
             "projectionEnabled": .float(diagnosticMode.projectionEnabled),
         ]
     }
@@ -238,9 +237,9 @@ private nonisolated extension Array {
     }
 }
 
-/// Exact perspective projection, mask/view-cone coverage, original PBR
-/// reconstruction, and emission ownership. The composited texture already
-/// carries the artist mask in alpha; this graph adds only view/frustum safety.
+/// Exact perspective projection, authored UV-mask coverage, original PBR
+/// reconstruction, and emission ownership. Projector bounds use a binary cutoff;
+/// no view-angle or frustum-edge attenuation is applied to the authored plate.
 nonisolated enum MindEyeProjectionShaderGraph {
     static func make(
         contract: MindEyeProjectionImportedPBRContract,
@@ -292,7 +291,6 @@ nonisolated enum MindEyeProjectionShaderGraph {
         .init(name: "projectionEmissionGain", type: .float, isUniform: true),
         .init(name: "albedoSuppression", type: .float, isUniform: true),
         .init(name: "specularSuppression", type: .float, isUniform: true),
-        .init(name: "frustumFeather", type: .float, isUniform: true),
         .init(name: "projectionEnabled", type: .float, isUniform: true),
     ]
 
@@ -447,12 +445,24 @@ nonisolated enum MindEyeProjectionShaderGraph {
             let oneMinusU = try binary("ND_subtract_float", one, nil, u, nil, "oneMinusU")
             let oneMinusV = try binary("ND_subtract_float", one, nil, v, nil, "oneMinusV")
             let oneMinusZ = try binary("ND_subtract_float", one, nil, ndcZ, nil, "oneMinusZ")
-            let edgeU0 = try smoothstep(u, low: zero, highArgument: "frustumFeather", name: "edgeU0")
-            let edgeU1 = try smoothstep(oneMinusU, low: zero, highArgument: "frustumFeather", name: "edgeU1")
-            let edgeV0 = try smoothstep(v, low: zero, highArgument: "frustumFeather", name: "edgeV0")
-            let edgeV1 = try smoothstep(oneMinusV, low: zero, highArgument: "frustumFeather", name: "edgeV1")
-            let depthNear = try smoothstep(ndcZ, low: zero, high: 0.001, name: "depthNear")
-            let depthFar = try smoothstep(oneMinusZ, low: zero, high: 0.001, name: "depthFar")
+            let insideU0 = try ifGreater(
+                u, port: nil, threshold: -0.000_001, name: "insideU0"
+            )
+            let insideU1 = try ifGreater(
+                oneMinusU, port: nil, threshold: -0.000_001, name: "insideU1"
+            )
+            let insideV0 = try ifGreater(
+                v, port: nil, threshold: -0.000_001, name: "insideV0"
+            )
+            let insideV1 = try ifGreater(
+                oneMinusV, port: nil, threshold: -0.000_001, name: "insideV1"
+            )
+            let depthNear = try ifGreater(
+                ndcZ, port: nil, threshold: -0.000_001, name: "depthNear"
+            )
+            let depthFar = try ifGreater(
+                oneMinusZ, port: nil, threshold: -0.000_001, name: "depthFar"
+            )
             let positiveW = try ifGreater(clip, port: "outw", threshold: 0.000_001, name: "positiveW")
 
             // Build mask/geometric visibility independently from photographic
@@ -460,10 +470,10 @@ nonisolated enum MindEyeProjectionShaderGraph {
             // camera-space and must remain present across the curved face.
             var receiverVisibility = clampedReceiverCoverage
             for (factor, name) in [
-                (edgeU0, "receiverVisibilityEdgeU0"),
-                (edgeU1, "receiverVisibilityEdgeU1"),
-                (edgeV0, "receiverVisibilityEdgeV0"),
-                (edgeV1, "receiverVisibilityEdgeV1"),
+                (insideU0, "receiverVisibilityInsideU0"),
+                (insideU1, "receiverVisibilityInsideU1"),
+                (insideV0, "receiverVisibilityInsideV0"),
+                (insideV1, "receiverVisibilityInsideV1"),
                 (depthNear, "receiverVisibilityDepthNear"),
                 (depthFar, "receiverVisibilityDepthFar"),
                 (positiveW, "receiverVisibilityPositiveW"),
@@ -754,36 +764,9 @@ nonisolated enum MindEyeProjectionShaderGraph {
             return result
         }
 
-        private mutating func smoothstep(
-            _ value: String,
-            low: String,
-            highArgument: String,
-            name: String
-        ) throws -> String {
-            let result = try node("ND_smoothstep_float", name)
-            try connect(value, to: result, input: "in")
-            try connect(low, to: result, input: "low")
-            try argument(highArgument, to: result, input: "high")
-            return result
-        }
-
-        private mutating func smoothstep(
-            _ value: String,
-            low: String,
-            high: Float,
-            name: String
-        ) throws -> String {
-            let highValue = try constant(.float(high), "\(name)High")
-            let result = try node("ND_smoothstep_float", name)
-            try connect(value, to: result, input: "in")
-            try connect(low, to: result, input: "low")
-            try connect(highValue, to: result, input: "high")
-            return result
-        }
-
         private mutating func ifGreater(
             _ value: String,
-            port: String,
+            port: String?,
             threshold: Float,
             name: String
         ) throws -> String {

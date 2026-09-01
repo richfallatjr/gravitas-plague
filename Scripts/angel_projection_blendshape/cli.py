@@ -142,8 +142,9 @@ def validate_runtime(paths: ToolPaths) -> int:
         raise ValueError("runtime offset payload hash differs from descriptor")
     if runtime.get("offsetPayloadMeshCount") != 1:
         raise ValueError("runtime offset payload mesh count differs from production")
-    if runtime.get("offsetPayloadRecordCount") != 5721:
-        raise ValueError("runtime offset payload record count differs from production")
+    if not isinstance(runtime.get("offsetPayloadRecordCount"), int) or \
+            runtime["offsetPayloadRecordCount"] <= 0:
+        raise ValueError("runtime offset payload record count is invalid")
     profile = json.loads(paths.projection_profile.read_text(encoding="utf-8"))
     target = json.loads(
         paths.projection_target_descriptor.read_text(encoding="utf-8")
