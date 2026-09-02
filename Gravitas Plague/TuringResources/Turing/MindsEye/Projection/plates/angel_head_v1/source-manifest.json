@@ -1,34 +1,19 @@
 {
-  "schemaVersion": 2,
-  "packageID": "angel_head_v1",
-  "profileID": "angel_head_v1",
-  "profileSHA256": "142d3b317cee4bb048092f16527933c16c8c4979e156b789f3fe845d9de7e8c0",
   "cameraID": "angel_head_v1.camera",
-  "cameraSHA256": "8183706e476a4067d3049b8f4053231c4b91afa6f2516982ad0e15d30c0124fc",
-  "targetSHA256": "8a6e914efa04ad142592254888acafb2387c57f352d6f2932729e381e5731b72",
-  "subjectAssetName": "angel_posed_01.usdz",
-  "subjectAssetSHA256": "fdb2195ca84723466ca8361813834b46a7b82591c9486ce95df224cfd49dad31",
-  "sceneLightingRevision": "chapter03.lightTunnelTest.v2",
-  "sourceWidth": 1728,
-  "sourceHeight": 1728,
-  "viewportWidth": 1440,
-  "viewportHeight": 1440,
-  "cropOriginX": 144,
-  "cropOriginY": 144,
+  "cameraSHA256": "9212c740a080fcc8cc6b9e969275792b49d1e3e34d9c8920bf65867f007ce26b",
   "colorSpace": "sRGB",
   "compositeAlphaSemantics": "sourceOverOnly",
-  "projectionBase": {
-    "filename": "projection-base.png"
-  },
+  "cropOriginX": 144,
+  "cropOriginY": 144,
   "eyes": {
-    "open": [
-      {
-        "filename": "eyes-open-01.png"
-      }
-    ],
     "closed": [
       {
         "filename": "eyes-closed-01.png"
+      }
+    ],
+    "open": [
+      {
+        "filename": "eyes-open-01.png"
       }
     ]
   },
@@ -38,9 +23,19 @@
         "filename": "mouth-rest-01.png"
       }
     ],
+    "round": [
+      {
+        "filename": "mouth-round-01.png"
+      }
+    ],
     "small": [
       {
         "filename": "mouth-small-01.png"
+      }
+    ],
+    "teeth": [
+      {
+        "filename": "mouth-teeth-01.png"
       }
     ],
     "wide": [
@@ -50,16 +45,21 @@
       {
         "filename": "mouth-wide-02.png"
       }
-    ],
-    "round": [
-      {
-        "filename": "mouth-round-01.png"
-      }
-    ],
-    "teeth": [
-      {
-        "filename": "mouth-teeth-01.png"
-      }
     ]
-  }
+  },
+  "packageID": "angel_head_v1",
+  "profileID": "angel_head_v1",
+  "profileSHA256": "142d3b317cee4bb048092f16527933c16c8c4979e156b789f3fe845d9de7e8c0",
+  "projectionBase": {
+    "filename": "projection-base.png"
+  },
+  "sceneLightingRevision": "chapter03.lightTunnelTest.v2",
+  "schemaVersion": 2,
+  "sourceHeight": 1728,
+  "sourceWidth": 1728,
+  "subjectAssetName": "angel_posed_01.usdz",
+  "subjectAssetSHA256": "003713b84131426fe0fc93370f14367bd083787915d823f726209f69129a3995",
+  "targetSHA256": "11993a172bc085d27964e59035310c7d7df4814049571ae65d8166d4058fd879",
+  "viewportHeight": 1440,
+  "viewportWidth": 1440
 }

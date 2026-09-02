@@ -16,6 +16,9 @@ class ToolPaths:
     projection_target_descriptor: Path
     projection_camera_descriptor: Path
     projection_mask: Path
+    projection_plate_manifest: Path
+    projection_pbr_contract: Path
+    projection_material_qualification: Path
     reports: Path
     build_root: Path
 
@@ -53,6 +56,18 @@ class ToolPaths:
             projection_mask=root / (
                 "Gravitas Plague/TuringResources/Turing/MindsEye/Projection/"
                 "masks/angel_head_v1_projection-mask-uv.png"
+            ),
+            projection_plate_manifest=root / (
+                "Gravitas Plague/TuringResources/Turing/MindsEye/Projection/"
+                "plates/angel_head_v1/source-manifest.json"
+            ),
+            projection_pbr_contract=root / (
+                "Gravitas Plague/TuringResources/Turing/MindsEye/Projection/"
+                "materials/angel_head_v1.pbr-binding.json"
+            ),
+            projection_material_qualification=root / (
+                "Gravitas Plague/TuringResources/Turing/MindsEye/Projection/"
+                "qualification/angel_head_v1.material-parity.json"
             ),
             reports=root / "Authoring/AngelProjection/Geometry/Reports",
             build_root=root / ".build/angel-projection-blendshape",

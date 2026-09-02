@@ -18,6 +18,10 @@ from .stages import mesh_paths, open_stage, stage_contract
 from .validation import load_source_descriptor, sha256, validate_pair
 
 
+def _load_json(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def doctor(paths: ToolPaths) -> int:
     from pxr import Usd
 
@@ -127,7 +131,7 @@ def validate_runtime(paths: ToolPaths) -> int:
         )
     if runtime["poseWeights"] != {
         "rest": 0.0,
-        "small": 0.33,
+        "small": 0.5,
         "wide": 1.0,
         "round": 0.5,
         "teeth": 0.0,
@@ -152,6 +156,9 @@ def validate_runtime(paths: ToolPaths) -> int:
     camera = json.loads(
         paths.projection_camera_descriptor.read_text(encoding="utf-8")
     )
+    manifest = _load_json(paths.projection_plate_manifest)
+    contract = _load_json(paths.projection_pbr_contract)
+    qualification = _load_json(paths.projection_material_qualification)
     receiver_mask = profile.get("projectionReceiverUVMask", {})
     mask_resource_path = receiver_mask.get("resourcePath", "")
     if not mask_resource_path.startswith("Turing/MindsEye/Projection/masks/"):
@@ -171,6 +178,28 @@ def validate_runtime(paths: ToolPaths) -> int:
         paths.projection_target_descriptor
     ):
         raise ValueError("projection camera target descriptor hash is stale")
+    expected_projection_identities = {
+        "profileSHA256": sha256(paths.projection_profile),
+        "cameraSHA256": sha256(paths.projection_camera_descriptor),
+        "targetSHA256": sha256(paths.projection_target_descriptor),
+        "subjectAssetSHA256": actual,
+    }
+    for field, expected in expected_projection_identities.items():
+        if manifest.get(field) != expected:
+            raise ValueError(
+                f"projection plate manifest identity is stale: {field}"
+            )
+    if contract.get("subjectAssetSHA256") != actual:
+        raise ValueError("projection PBR contract subject identity is stale")
+    expected_qualification_identities = {
+        **expected_projection_identities,
+        "importedPBRContractSHA256": sha256(paths.projection_pbr_contract),
+    }
+    for field, expected in expected_qualification_identities.items():
+        if qualification.get(field) != expected:
+            raise ValueError(
+                f"projection material qualification identity is stale: {field}"
+            )
     print(json.dumps({
         "status": "PASS",
         "assetSHA256": actual,
@@ -249,6 +278,39 @@ def write_projection_contracts(
         "cameraMathVersion": "mind-eye-projection-camera-cube-v1",
     }
     write(paths.projection_camera_descriptor, camera)
+
+    # The production USDZ, camera, and target form one immutable projection
+    # identity. Republish every downstream identity in the same build so a
+    # sculpt-only update cannot leave the runtime manifest pinned to the prior
+    # Angel and silently force the imported-material fallback.
+    from mind_eye_projection.extract_angel_pbr_contract import generate_contract
+
+    pbr_contract = generate_contract(
+        paths.base_asset,
+        paths.projection_target_descriptor,
+    )
+    write(paths.projection_pbr_contract, pbr_contract)
+
+    identities = {
+        "profileSHA256": sha256(paths.projection_profile),
+        "cameraSHA256": sha256(paths.projection_camera_descriptor),
+        "targetSHA256": target_sha,
+        "subjectAssetSHA256": subject_asset_sha256,
+    }
+    plate_manifest = _load_json(paths.projection_plate_manifest)
+    plate_manifest.update(identities)
+    write(paths.projection_plate_manifest, plate_manifest)
+
+    # A geometry change invalidates the previous material-parity measurement.
+    # Keep its identity current for authoring/debug runs, but fail closed in a
+    # production qualification until the RealityKit parity capture is rerun.
+    qualification = _load_json(paths.projection_material_qualification)
+    qualification.update(identities)
+    qualification["importedPBRContractSHA256"] = sha256(
+        paths.projection_pbr_contract
+    )
+    qualification["passed"] = False
+    write(paths.projection_material_qualification, qualification)
     return {
         "cameraControl": framing_descriptor,
         "cameraDescriptorSHA256": sha256(paths.projection_camera_descriptor),
@@ -256,6 +318,9 @@ def write_projection_contracts(
         "projectionMask": mask,
         "sourceProjectionMask": mask,
         "projectionMaskResourcePath": profile["projectionReceiverUVMask"]["resourcePath"],
+        "plateManifestSHA256": sha256(paths.projection_plate_manifest),
+        "importedPBRContractSHA256": sha256(paths.projection_pbr_contract),
+        "materialParityInvalidated": True,
     }
 
 

@@ -46,8 +46,7 @@ enum TuringProductionDiagnostics {
         #if DEBUG
         return true
         #else
-        return Bundle.main.appStoreReceiptURL?.lastPathComponent
-            == "sandboxReceipt"
+        return false
         #endif
     }
 

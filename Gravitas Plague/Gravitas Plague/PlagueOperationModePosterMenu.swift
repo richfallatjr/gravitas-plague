@@ -234,7 +234,7 @@ struct PlagueOperationModePosterRoot: View {
                     attachmentAnchor: .scene(.top),
                     contentAlignment: .center
                 ) {
-                    PlagueRoomSkinningTopOrnament(session: session)
+                    PlagueMainMenuTopOrnament(session: session)
                 }
         }
     }
@@ -595,13 +595,10 @@ struct SuppressedControlWindowAutoDismiss: View {
     }
 }
 
-struct PlagueRoomSkinningTopOrnament: View {
+struct PlagueMainMenuTopOrnament: View {
     @ObservedObject var session: PlagueDemoSession
-    @State private var diagnosticsExportURL: URL?
 
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.openImmersiveSpace) private var openImmersiveSpace
-    @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
 
     var body: some View {
         HStack(spacing: 10) {
@@ -620,145 +617,10 @@ struct PlagueRoomSkinningTopOrnament: View {
                 .help("Leaderboards")
                 .accessibilityLabel("Leaderboards")
             }
-
-            if TuringProductionDiagnostics.shouldOfferExport,
-               let diagnosticsExportURL {
-                ShareLink(item: diagnosticsExportURL) {
-                    Image(systemName: "waveform.path.ecg")
-                        .font(.system(size: 23, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .help("Export Turing diagnostics")
-                .accessibilityLabel("Export Turing diagnostics")
-            }
-
-            Button {
-                Task { @MainActor in
-                    await session.toggleForestImmersive(
-                        openImmersiveSpace: openImmersiveSpace,
-                        dismissImmersiveSpace: dismissImmersiveSpace
-                    )
-                }
-            } label: {
-                Image(systemName: mixedSceneIconName)
-                    .font(.system(size: 23, weight: .semibold))
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.plain)
-            .help(mixedSceneHelpText)
-            .accessibilityLabel(mixedSceneHelpText)
-
-            if session.shouldShowForestDayNightToggle {
-                Button {
-                    session.togglePortalHDRIAtmosphere()
-                } label: {
-                    Image(systemName: session.portalHDRIAtmosphere == .night ? "moon.stars.fill" : "cloud.sun.fill")
-                        .font(.system(size: 23, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .disabled(session.forestImmersiveState != .open)
-                .help("Switch portal backdrop")
-                .accessibilityLabel("Switch portal backdrop")
-            }
-
-            if session.shouldShowStoryRoomSkinningControls {
-                Button {
-                    session.startRoomSkinningExperiment()
-                } label: {
-                    Image(systemName: "door.left.hand.open")
-                        .font(.system(size: 23, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .disabled(session.forestImmersiveState != .open)
-                .help("Scan wall and preview portal door")
-                .accessibilityLabel("Scan wall and preview portal door")
-
-                Button {
-                    session.confirmRoomSkinningPlacement()
-                } label: {
-                    Image(systemName: "checkmark.circle")
-                        .font(.system(size: 23, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .disabled(session.forestImmersiveState != .open)
-                .help("Confirm portal door")
-                .accessibilityLabel("Confirm portal door")
-
-                Button {
-                    session.enterRoomSkinningDoorAdjustment()
-                } label: {
-                    Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
-                        .font(.system(size: 22, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .disabled(session.forestImmersiveState != .open)
-                .help("Adjust portal door")
-                .accessibilityLabel("Adjust portal door")
-
-                Button {
-                    session.confirmRoomSkinningDoorAdjustment()
-                } label: {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 22, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .disabled(session.forestImmersiveState != .open)
-                .help("Lock portal door")
-                .accessibilityLabel("Lock portal door")
-            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .glassBackgroundEffect()
-        .onAppear {
-            print("[RoomSkinning] top ornament appeared")
-            if TuringProductionDiagnostics.shouldOfferExport {
-                diagnosticsExportURL = try? TuringProductionDiagnostics
-                    .makeExportFile()
-            }
-            if !session.shouldShowStoryRoomSkinningControls {
-                print("[RoomSkinning] debug test door hidden outside story/debug mode")
-            }
-
-            if !session.shouldShowForestDayNightToggle {
-                print("[PlagueForest] day/night toggle hidden")
-            }
-        }
-    }
-
-    private var mixedSceneIconName: String {
-        switch session.forestImmersiveState {
-        case .open:
-            return "door.left.hand.open"
-
-        case .opening, .closing:
-            return "hourglass"
-
-        case .closed, .failed:
-            return "door.left.hand.closed"
-        }
-    }
-
-    private var mixedSceneHelpText: String {
-        switch session.forestImmersiveState {
-        case .open:
-            return "Exit mixed room scene"
-
-        case .opening:
-            return "Opening mixed room scene"
-
-        case .closing:
-            return "Closing mixed room scene"
-
-        case .closed, .failed:
-            return "Enter mixed room scene"
-        }
     }
 }
 

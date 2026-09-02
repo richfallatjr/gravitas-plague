@@ -39,15 +39,30 @@ def inspect_mesh(stage: Any, prim_path: str) -> MeshTopology:
     points = mesh.GetPointsAttr().Get()
     if points is None:
         raise ValueError(f"mesh has no default points: {prim_path}")
+    face_vertex_indices = _plain(mesh.GetFaceVertexIndicesAttr().Get())
     uv_payload = []
     for primvar in UsdGeom.PrimvarsAPI(prim).GetPrimvars():
         if "st" not in primvar.GetPrimvarName().lower():
             continue
+        interpolation = str(primvar.GetInterpolation())
+        indices = _plain(primvar.GetIndices())
+        values = _plain(primvar.Get())
+        # Blender may serialize vertex UVs as indexed face-varying data even
+        # when every face-vertex index maps directly back to its mesh vertex.
+        # Canonicalize that lossless representation so sculpt-only exports do
+        # not fail the topology gate.
+        if (
+            interpolation == "faceVarying"
+            and indices == face_vertex_indices
+            and len(values) == len(points)
+        ):
+            interpolation = "vertex"
+            indices = []
         uv_payload.append({
             "name": str(primvar.GetPrimvarName()),
-            "interpolation": str(primvar.GetInterpolation()),
-            "indices": _plain(primvar.GetIndices()),
-            "values": _plain(primvar.Get()),
+            "interpolation": interpolation,
+            "indices": indices,
+            "values": values,
         })
     normals = mesh.GetNormalsAttr().Get()
     normal_interpolation = str(mesh.GetNormalsInterpolation())
@@ -56,7 +71,7 @@ def inspect_mesh(stage: Any, prim_path: str) -> MeshTopology:
         "primPath": prim_path,
         "pointCount": len(points),
         "faceVertexCounts": _plain(mesh.GetFaceVertexCountsAttr().Get()),
-        "faceVertexIndices": _plain(mesh.GetFaceVertexIndicesAttr().Get()),
+        "faceVertexIndices": face_vertex_indices,
         "orientation": str(mesh.GetOrientationAttr().Get()),
         "subdivisionScheme": str(mesh.GetSubdivisionSchemeAttr().Get()),
         "creaseIndices": _plain(mesh.GetCreaseIndicesAttr().Get()),

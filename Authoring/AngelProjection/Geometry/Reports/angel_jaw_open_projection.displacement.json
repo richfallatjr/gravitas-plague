@@ -1,6 +1,6 @@
 {
-  "baseAssetSHA256After": "fdb2195ca84723466ca8361813834b46a7b82591c9486ce95df224cfd49dad31",
-  "baseAssetSHA256Before": "8db46a2f98994ececfdb2dbd10854e5b61d64290268537dbe00e5a898b6c1e13",
+  "baseAssetSHA256After": "003713b84131426fe0fc93370f14367bd083787915d823f726209f69129a3995",
+  "baseAssetSHA256Before": "787ba4cf1144a355405e88e5983c9ed8f011fb666b8a9e60477bd9b49c8ecc19",
   "blendShapeName": "jawOpenProjection",
   "package": {
     "authored": [
@@ -8,10 +8,10 @@
         "blendShapePrimPath": "/root/Root/mesh1/mesh1_jawOpenProjection",
         "meshPrimPath": "/root/Root/mesh1/mesh1",
         "normalOffsets": "unavailable",
-        "sparsePointIndexCount": 7576
+        "sparsePointIndexCount": 7608
       }
     ],
-    "baseBytes": 135901975,
+    "baseBytes": 68248535,
     "baseInventory": [
       "angel_posed_01.usdc",
       "textures/angel_emission.png",
@@ -21,7 +21,7 @@
       "textures/extracted_image_2.jpg_metallic.png",
       "textures/extracted_image_2.jpg_roughness.png"
     ],
-    "outputBytes": 68149902,
+    "outputBytes": 68347157,
     "outputInventory": [
       "angel_posed_01.usdc",
       "textures/angel_emission.png",
@@ -57,14 +57,17 @@
       ],
       "schemaVersion": 1,
       "sourceAsset": "angel_posed_mouth_open_blend_01_v0001.usdz",
-      "sourceAssetSHA256": "734571f0361eccc90aee53846ea3c9f646615e8bd0531e9b3f731198951d561e",
+      "sourceAssetSHA256": "41449e769245ebdafcaedf0a568952b3cf4fa33fcda5254484427b4d9518ea14",
       "upAxisSubject": [
         0.0,
         1.0,
         2.2551404851656373e-16
       ]
     },
-    "cameraDescriptorSHA256": "8183706e476a4067d3049b8f4053231c4b91afa6f2516982ad0e15d30c0124fc",
+    "cameraDescriptorSHA256": "9212c740a080fcc8cc6b9e969275792b49d1e3e34d9c8920bf65867f007ce26b",
+    "importedPBRContractSHA256": "24bd13c736bc23e8896b2d07288a783a2e805cf3fa52f16d953955293d857f44",
+    "materialParityInvalidated": true,
+    "plateManifestSHA256": "db68319fae770d9eda0b9fb62f60d3720ee46b1af97d6142d8315a8fa25afcae",
     "projectionMask": {
       "SHA256": "421367f960862900d73a6cbc95ef453eca389b0d3e2d83157e29349a6c6aac47",
       "bitsPerChannel": 8,
@@ -82,16 +85,16 @@
       "height": 1024,
       "width": 1024
     },
-    "targetDescriptorSHA256": "8a6e914efa04ad142592254888acafb2387c57f352d6f2932729e381e5731b72"
+    "targetDescriptorSHA256": "11993a172bc085d27964e59035310c7d7df4814049571ae65d8166d4058fd879"
   },
   "runtimeOffsetPayload": {
-    "SHA256": "21e9f7cff2dabfb685ec89c9bf03ea88d416f8eee10464140a3fe08753eff02c",
-    "byteCount": 212182,
+    "SHA256": "78c18706f50b8943b7961d6bd8582488b71f297098a5087c6c30b5ef3e4bd825",
+    "byteCount": 213078,
     "meshCount": 1,
-    "recordCount": 7576,
+    "recordCount": 7608,
     "schemaVersion": 1
   },
   "schemaVersion": 1,
-  "targetAssetSHA256": "734571f0361eccc90aee53846ea3c9f646615e8bd0531e9b3f731198951d561e",
+  "targetAssetSHA256": "41449e769245ebdafcaedf0a568952b3cf4fa33fcda5254484427b4d9518ea14",
   "targetBundled": false
 }

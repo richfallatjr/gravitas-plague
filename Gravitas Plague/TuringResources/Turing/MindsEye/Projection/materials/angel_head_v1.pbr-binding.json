@@ -172,7 +172,7 @@
   },
   "schemaVersion": 1,
   "subjectAssetName": "angel_posed_01.usdz",
-  "subjectAssetSHA256": "fdb2195ca84723466ca8361813834b46a7b82591c9486ce95df224cfd49dad31",
+  "subjectAssetSHA256": "003713b84131426fe0fc93370f14367bd083787915d823f726209f69129a3995",
   "surfaceShaderID": "UsdPreviewSurface",
   "targetEntityPath": "Chapter03PortalAngelRoot/Chapter03StaticPosedAngelVisual/root/Root/mesh1/mesh1",
   "unsupportedNondefaultFeatures": []
