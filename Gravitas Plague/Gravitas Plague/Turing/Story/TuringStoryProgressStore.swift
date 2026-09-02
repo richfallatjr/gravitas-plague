@@ -49,10 +49,6 @@ enum TuringStoryContinuationTarget: Sendable, Equatable {
 
     var titleCardDescriptor: StoryTitleCardDescriptor {
         switch self {
-        case .chapter03(let snapshot)
-            where snapshot.checkpoint == .endCardPending ||
-                snapshot.checkpoint == .complete:
-            return StoryTitleCardCatalog.endOfAvailableContent
         case .prologue, .chapter01, .chapter02, .chapter03:
             return StoryTitleCardCatalog.descriptor(for: episodeID)
         }
@@ -60,10 +56,6 @@ enum TuringStoryContinuationTarget: Sendable, Equatable {
 
     var titleCardDestination: StoryTitleCardDestination {
         switch self {
-        case .chapter03(let snapshot)
-            where snapshot.checkpoint == .endCardPending ||
-                snapshot.checkpoint == .complete:
-            return .endOfAvailableContent(completedEpisode: .chapter03)
         case .prologue, .chapter01, .chapter02, .chapter03:
             return .continueFrom(self)
         }

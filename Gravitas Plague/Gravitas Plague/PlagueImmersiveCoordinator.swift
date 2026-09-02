@@ -170,6 +170,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         StoryAmbientAircraftWorldBridge()
     private var storyAmbientAircraftLifecycle:
         StoryAmbientAircraftLifecycleController?
+    private var lastKnownTitleCardDeviceTransform: simd_float4x4?
     private var turingHighMemoryPreflightAdapter:
         StoryTuringHighMemoryPreflightAdapter?
     private let wallPropOccupancyRegistry = WallPropOccupancyRegistry()
@@ -567,6 +568,26 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                     reason: reason
                 )
             }
+    }
+
+    private func beginTerminalStoryAmbienceCutoff(reason: String) {
+        storyAmbientGunfireLifecycle?.finalAngelDeathSequenceBegan(
+            reason: reason
+        )
+        storyAmbientCountyLifecycle?.finalAngelDeathSequenceBegan(
+            reason: reason
+        )
+        storyAmbientCountySecondaryLifecycle?.finalAngelDeathSequenceBegan(
+            reason: reason
+        )
+        storyAmbientAircraftLifecycle?.finalAngelDeathSequenceBegan(
+            reason: reason
+        )
+        print(
+            "[StoryAmbient] terminal production cutoff latched " +
+                "channels=gunfire,county,countySecondary,aircraft " +
+                "reason=\(reason)"
+        )
     }
 
     func makeSceneRoot(
@@ -997,22 +1018,9 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 self?.onPlayerDamaged?(amount)
             },
             onFinalAngelDeathSequenceBegan: { [weak self] in
-                self?.storyAmbientGunfireLifecycle?
-                    .finalAngelDeathSequenceBegan(
-                        reason: "chapter03.mike.nonlethalDefeatThreshold"
-                    )
-                self?.storyAmbientCountyLifecycle?
-                    .finalAngelDeathSequenceBegan(
-                        reason: "chapter03.mike.nonlethalDefeatThreshold"
-                    )
-                self?.storyAmbientCountySecondaryLifecycle?
-                    .finalAngelDeathSequenceBegan(
-                        reason: "chapter03.mike.nonlethalDefeatThreshold"
-                    )
-                self?.storyAmbientAircraftLifecycle?
-                    .finalAngelDeathSequenceBegan(
-                        reason: "chapter03.mike.nonlethalDefeatThreshold"
-                    )
+                self?.beginTerminalStoryAmbienceCutoff(
+                    reason: "chapter03.mike.nonlethalDefeatThreshold"
+                )
             },
             onPlayerDeath: { [weak self] in
                 self?.handleChapter01PlayerDeath(source: .chapter03Mike)
@@ -2095,6 +2103,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         audioController.stopAllAudio()
 
         storyTitleCardTransitionCoordinator.reset(reason: reason)
+        lastKnownTitleCardDeviceTransform = nil
         StoryModeActionCoordinator.shared.reset(reason: reason)
         battle01Coordinator?.cancel(reason: reason)
         prologueStoryActionRouter?.reset(reason: reason)
@@ -3660,6 +3669,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         storyAmbientAircraftLifecycle?.shutdown(reason: "immersiveShutdown")
         storyAmbientAircraftWorldBridge.unbind(reason: "immersiveShutdown")
         storyTitleCardTransitionCoordinator.reset(reason: "immersiveShutdown")
+        lastKnownTitleCardDeviceTransform = nil
         StoryModeActionCoordinator.shared.reset(reason: "immersiveShutdown")
         StoryInteractionPresentationCoordinator.shared.stop()
         TuringStoryStateTeleportCoordinator.shared.detach(self)
@@ -7265,7 +7275,17 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
 extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
     func currentTitleCardDeviceTransform() -> simd_float4x4? {
-        spatialProvider.currentTrackedDeviceTransform()
+        if let current = spatialProvider.currentTrackedDeviceTransform() {
+            lastKnownTitleCardDeviceTransform = current
+            return current
+        }
+        if lastKnownTitleCardDeviceTransform != nil {
+            print(
+                "[StoryTitleCard] current headset pose unavailable; " +
+                    "using last valid pose for fail-soft presentation"
+            )
+        }
+        return lastKnownTitleCardDeviceTransform
     }
 
     func acquireTitleCardTransitionLease(
@@ -7394,6 +7414,12 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
         case .continueFrom(.chapter03(let snapshot)):
             guard let chapter03Coordinator else {
                 throw StoryTitleCardError.missingRouteOwner
+            }
+            if snapshot.checkpoint >= .heavenTransitionPending {
+                beginTerminalStoryAmbienceCutoff(
+                    reason:
+                        "chapter03.continue.\(snapshot.checkpoint.rawValue)"
+                )
             }
             disposition = try await chapter03Coordinator
                 .resumeFromSavedCheckpoint(
@@ -7604,9 +7630,15 @@ extension PlagueImmersiveCoordinator: StoryTitleCardTransitionWorld {
             clearAfterSeconds: 4,
             reason: "titleCardFailed.\(request.requestID.uuidString)"
         )
-        onStoryEpisodePickerRequested?(
-            "titleCardFailed.\(request.source.rawValue)"
-        )
+        if request.destination.returnsToOperationMenuAfterCompletion {
+            onOperationMenuRequested?(
+                "terminalTitleCardFailed.\(request.destination.episodeID.rawValue)"
+            )
+        } else {
+            onStoryEpisodePickerRequested?(
+                "titleCardFailed.\(request.source.rawValue)"
+            )
+        }
         print(
             "[StoryTitleCard] route failure requestID=" +
                 request.requestID.uuidString +

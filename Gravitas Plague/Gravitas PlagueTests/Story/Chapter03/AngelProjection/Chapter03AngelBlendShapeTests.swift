@@ -80,6 +80,8 @@ final class Chapter03AngelBlendShapeTests: XCTestCase {
         )
         XCTAssertNoThrow(try descriptor.validate())
         XCTAssertEqual(descriptor.poseWeights.teeth, 0)
+        XCTAssertEqual(descriptor.poseWeights.small, 0.5)
+        XCTAssertEqual(descriptor.poseWeights.round, 0.5)
         XCTAssertEqual(descriptor.poseWeights.wide, 1)
         XCTAssertTrue(descriptor.requiresProjectionReady)
     }

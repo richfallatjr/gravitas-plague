@@ -269,6 +269,7 @@ final class Chapter03MikeBattleCoordinator {
         prepared?.portalMirror.refreshPortalLightingIfNeeded()
         if combat != nil {
             combat?.update(deltaTime: deltaTime)
+            updateFinalInvincibleReactionMode()
         } else {
             intro.update(deltaTime: deltaTime)
         }
@@ -460,6 +461,13 @@ final class Chapter03MikeBattleCoordinator {
                     )
                 }
             }
+            print(
+                "[Chapter03MikeBattle] protected full-body reactions active " +
+                    "playbackID=\(event.playbackID.uuidString) " +
+                    "durationSeconds=\(String(format: "%.3f", event.durationSeconds)) " +
+                    "invincibleTailSeconds=\(Chapter03MikePostDefeatReactionPolicy.invincibleTailSeconds)"
+            )
+            updateFinalInvincibleReactionMode()
         } catch {
             crossfadeTask = Task { @MainActor [weak self] in
                 guard let self,
@@ -470,6 +478,27 @@ final class Chapter03MikeBattleCoordinator {
                 )
             }
         }
+    }
+
+    private func updateFinalInvincibleReactionMode() {
+        guard let battleInstanceID,
+              let surrenderPlaybackID,
+              combat?.finalInvincibleReactionMode == false else { return }
+        let remainingSeconds = richQueue.activeRemainingDurationSeconds(
+            battleInstanceID: battleInstanceID,
+            cueID: "mikeSurrender",
+            playbackID: surrenderPlaybackID
+        )
+        guard Chapter03MikePostDefeatReactionPolicy
+            .shouldUseFinalInvincibleReaction(
+                remainingPlaybackSeconds: remainingSeconds
+            ) else { return }
+        combat?.enterFinalInvincibleReactionMode()
+        print(
+            "[Chapter03MikeBattle] final five-second invincibility entered " +
+                "playbackID=\(surrenderPlaybackID.uuidString) " +
+                "remainingSeconds=\(String(format: "%.3f", remainingSeconds ?? 0))"
+        )
     }
 
     private func finishAfterSurrender(

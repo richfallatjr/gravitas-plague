@@ -228,7 +228,10 @@ final class Chapter03Coordinator:
             pendingActivationCheckpoint = .mikeBattlePending
             return .transferredByDestination
 
-        case .heavenTransitionPending, .lightTunnelPending:
+        case .heavenTransitionPending,
+             .lightTunnelPending,
+             .endCardPending,
+             .complete:
             guard let blackout else {
                 throw StoryTitleCardError.missingPresentationOwner
             }
@@ -242,11 +245,6 @@ final class Chapter03Coordinator:
                 blackoutRequestID: requestID
             )
             return .destinationOwnsFullBlackAndLease
-
-        case .endCardPending, .complete:
-            titleTransitionLease = transitionLease
-            state = .ending(requestID)
-            return .releaseAfterFade
         }
     }
 
@@ -531,14 +529,37 @@ final class Chapter03Coordinator:
               transitionLease == event.interactionLease,
               blackoutRequestID == event.blackoutRequestID else { return }
         do {
+            guard let blackout else {
+                throw StoryTitleCardError.missingPresentationOwner
+            }
             try await arbiter.requireCurrent(event.interactionLease)
+            try blackout.requireFullBlackOwnership(
+                requestID: event.blackoutRequestID
+            )
             _ = try await progress.commit(
                 .endCardPending,
                 sourceEventID: event.completionEventID
             )
+
+            // The terminal card is a separate transition from the Continue
+            // card or Mike-to-Heaven handoff. Give it a fresh identity while
+            // atomically retaining both the interaction lease and full black.
+            let endCardRequestID = UUID()
+            let endCardLease = try await arbiter
+                .transferStoryTransitionToStoryTransition(
+                    storyTransitionLease: event.interactionLease,
+                    transitionID: endCardRequestID,
+                    reason: "chapter03.heavenCompleted.endCard"
+                )
+            try blackout.transferFullBlackOwnership(
+                from: event.blackoutRequestID,
+                to: endCardRequestID
+            )
+            transitionLease = endCardLease
+            blackoutRequestID = endCardRequestID
             state = .ending(event.chapterRunID)
             let request = StoryTitleCardTransitionRequest(
-                requestID: event.blackoutRequestID,
+                requestID: endCardRequestID,
                 source: .naturalEpisodeBoundary,
                 descriptor: StoryTitleCardCatalog.endOfAvailableContent,
                 destination: .endOfAvailableContent(completedEpisode: .chapter03),
@@ -547,16 +568,17 @@ final class Chapter03Coordinator:
             print(
                 "[Chapter03Transition] Heaven tunnel transferring full-black ownership " +
                     "chapterRunID=\(event.chapterRunID.uuidString) " +
-                    "titleTransitionID=\(event.blackoutRequestID.uuidString) " +
-                    "leaseOwner=\(event.interactionLease.owner)"
+                    "previousTransitionID=\(event.blackoutRequestID.uuidString) " +
+                    "titleTransitionID=\(endCardRequestID.uuidString) " +
+                    "leaseOwner=\(endCardLease.owner)"
             )
             guard let onEndCardRequested else {
                 throw StoryTitleCardError.missingRouteOwner
             }
             try onEndCardRequested(
                 request,
-                event.interactionLease,
-                event.blackoutRequestID
+                endCardLease,
+                endCardRequestID
             )
         } catch {
             await lightTunnelFailed(runID: event.chapterRunID, error: error)

@@ -9,6 +9,7 @@ nonisolated struct StoryBattlePrerecordingStartedEvent:
     let cueID: String
     let prerecordingID: String
     let playbackID: UUID
+    let durationSeconds: TimeInterval
 }
 
 @MainActor
@@ -134,6 +135,18 @@ final class StoryBattleRichPrerecordingQueue: NSObject, AVAudioPlayerDelegate {
             }) == false
     }
 
+    func activeRemainingDurationSeconds(
+        battleInstanceID: UUID,
+        cueID: String,
+        playbackID: UUID
+    ) -> TimeInterval? {
+        guard activeCue?.battleInstanceID == battleInstanceID,
+              activeCue?.cueID == cueID,
+              activePlaybackID == playbackID,
+              let activePlayer else { return nil }
+        return max(0, activePlayer.duration - activePlayer.currentTime)
+    }
+
     func cancel(battleInstanceID: UUID? = nil, reason: String) {
         let applies: (UUID) -> Bool = { id in
             battleInstanceID == nil || battleInstanceID == id
@@ -199,7 +212,8 @@ final class StoryBattleRichPrerecordingQueue: NSObject, AVAudioPlayerDelegate {
                     battleInstanceID: next.battleInstanceID,
                     cueID: next.cueID,
                     prerecordingID: next.descriptor.prerecordingID,
-                    playbackID: playbackID
+                    playbackID: playbackID,
+                    durationSeconds: player.duration
                 )
             )
             print(

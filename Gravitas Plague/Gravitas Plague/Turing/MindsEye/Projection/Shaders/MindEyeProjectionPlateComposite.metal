@@ -8,9 +8,9 @@ struct MindEyeProjectionCompositeUniforms {
     uint2 reserved;
 };
 
-inline half4 mindEyeProjectionPremultiply(half4 straightColor) {
-    half alpha = clamp(straightColor.a, half(0.0), half(1.0));
-    return half4(straightColor.rgb * alpha, alpha);
+inline half4 mindEyeProjectionPremultiplyStraight(half4 color) {
+    half alpha = clamp(color.a, half(0.0), half(1.0));
+    return half4(color.rgb * alpha, alpha);
 }
 
 inline half4 mindEyeProjectionSourceOver(half4 under, half4 over) {
@@ -40,27 +40,30 @@ kernel void mindEyeCompositeProjectionFrame(
     // fetches) for every output pixel on every viseme transition.
     uint2 sourcePixel = uniforms.cropOrigin + gid;
 
-    half4 composed = mindEyeProjectionPremultiply(
+    // Base, eyes, and mouths are authored in the same 1728-square camera space.
+    // Merge them without any per-layer transform so facial registration and key
+    // direction remain identical. No later runtime stage mirrors the composite.
+    // The authored PNG payload and MTKTextureLoader texture are straight RGBA.
+    // Match a Nuke Premult -> Merge(over) graph exactly: premultiply each input
+    // once, then evaluate A + B * (1 - A.alpha). Do not clamp straight RGB to
+    // alpha and do not unpremultiply between layers.
+    half4 composed = mindEyeProjectionPremultiplyStraight(
         projectionBase.read(sourcePixel)
     );
     composed = mindEyeProjectionSourceOver(
         composed,
-        mindEyeProjectionPremultiply(
+        mindEyeProjectionPremultiplyStraight(
             selectedEyes.read(sourcePixel)
         )
     );
     composed = mindEyeProjectionSourceOver(
         composed,
-        mindEyeProjectionPremultiply(
+        mindEyeProjectionPremultiplyStraight(
             selectedMouth.read(sourcePixel)
         )
     );
 
-    half3 straightRGB = composed.a > half(0.0000152588)
-        ? composed.rgb / composed.a
-        : half3(0.0);
-    output.write(
-        clamp(half4(straightRGB, composed.a), half4(0.0), half4(1.0)),
-        gid
-    );
+    // projection-base.png is contractually opaque, so the merged alpha is 1
+    // and premultiplied RGB is numerically identical to straight RGB here.
+    output.write(clamp(composed, half4(0.0), half4(1.0)), gid);
 }

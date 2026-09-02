@@ -73,7 +73,7 @@ nonisolated struct Chapter03AngelBlendShapeDescriptor: Codable, Sendable, Equata
             throw Chapter03AngelBlendShapeError.invalidDescriptor("identity")
         }
         let expected: [(MindEyeMouthPose, Float)] = [
-            (.rest, 0), (.teeth, 0), (.small, 0.33),
+            (.rest, 0), (.teeth, 0), (.small, 0.5),
             (.round, 0.5), (.wide, 1),
         ]
         guard expected.allSatisfy({ poseWeights.weight(for: $0.0) == $0.1 }) else {

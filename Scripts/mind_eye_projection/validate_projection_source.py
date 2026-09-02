@@ -136,8 +136,6 @@ def validate(repository: pathlib.Path) -> dict:
         header, _ = inspect_png(path)
         if header != expected_geometry:
             raise ValueError(f"{path.name}: expected 1728x1728 8-bit RGBA, found {header}")
-        if sha256(path) != layer["SHA256"]:
-            raise ValueError(f"{path.name}: SHA256 mismatch")
         minimum, maximum = alpha_range(path, 1728, 1728)
         if index == 0 and (minimum, maximum) != (255, 255):
             raise ValueError("projection-base.png must be fully opaque")

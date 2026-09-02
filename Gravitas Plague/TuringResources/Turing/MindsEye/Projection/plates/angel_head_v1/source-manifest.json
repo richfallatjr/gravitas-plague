@@ -18,56 +18,47 @@
   "colorSpace": "sRGB",
   "compositeAlphaSemantics": "sourceOverOnly",
   "projectionBase": {
-    "filename": "projection-base.png",
-    "SHA256": "c387bff32c0be5e1668c78c5b1d64e680f563dd74d867901848e7ec0b487075d"
+    "filename": "projection-base.png"
   },
   "eyes": {
     "open": [
       {
-        "filename": "eyes-open-01.png",
-        "SHA256": "0722baa666c4bb67e236abc0c81fdcfb7bb85b09e4ea95b91cfa3ea68de9e80a"
+        "filename": "eyes-open-01.png"
       }
     ],
     "closed": [
       {
-        "filename": "eyes-closed-01.png",
-        "SHA256": "0af2d62a1bdfe7cdd94a640b87c00bb0ae4e8b0279e74441a40fd95bf5c20215"
+        "filename": "eyes-closed-01.png"
       }
     ]
   },
   "mouths": {
     "rest": [
       {
-        "filename": "mouth-rest-01.png",
-        "SHA256": "2db29960625f45864ed6c12d2deff2c3f4a839aa4e688e75438ea7a121aa7bc0"
+        "filename": "mouth-rest-01.png"
       }
     ],
     "small": [
       {
-        "filename": "mouth-small-01.png",
-        "SHA256": "88be9fac4f3e1981cf3ec94694fcb299c6fc4f588fc476794274b8b904274c17"
+        "filename": "mouth-small-01.png"
       }
     ],
     "wide": [
       {
-        "filename": "mouth-wide-01.png",
-        "SHA256": "fc6d9b0312520f1fb68822f0ec677d40e71924c80ebba2535a293a53d7474e7c"
+        "filename": "mouth-wide-01.png"
       },
       {
-        "filename": "mouth-wide-02.png",
-        "SHA256": "9de8a980da774dca633d091f2cc691f34b44fe346e7bea1a1bc782e2cc8fec5b"
+        "filename": "mouth-wide-02.png"
       }
     ],
     "round": [
       {
-        "filename": "mouth-round-01.png",
-        "SHA256": "04f4b22515ad1b6775f2f0544d1e5619c14cb207ee533e85cbe7e14985adaea0"
+        "filename": "mouth-round-01.png"
       }
     ],
     "teeth": [
       {
-        "filename": "mouth-teeth-01.png",
-        "SHA256": "48c397dd24b81f551aa9db1f29aa9b8ebb3038f449034f9a6dbc04ef55111fe8"
+        "filename": "mouth-teeth-01.png"
       }
     ]
   }

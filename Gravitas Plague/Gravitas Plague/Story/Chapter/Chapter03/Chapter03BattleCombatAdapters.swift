@@ -1,6 +1,32 @@
 import Foundation
 import simd
 
+nonisolated enum Chapter03MikePostDefeatReactionPolicy {
+    static let invincibleTailSeconds: TimeInterval = 5
+
+    static func shouldUseFinalInvincibleReaction(
+        remainingPlaybackSeconds: TimeInterval?
+    ) -> Bool {
+        guard let remainingPlaybackSeconds,
+              remainingPlaybackSeconds.isFinite,
+              remainingPlaybackSeconds >= 0 else { return false }
+        return remainingPlaybackSeconds <= invincibleTailSeconds
+    }
+
+    static func enemyDamageDisposition(
+        postDefeatMode: Bool,
+        finalInvincibleReactionMode: Bool
+    ) -> StoryEnemyDamageDisposition {
+        if finalInvincibleReactionMode {
+            return .headSnapAndImpactOnly
+        }
+        if postDefeatMode {
+            return .feedbackOnly
+        }
+        return .applyDamage
+    }
+}
+
 struct Chapter03BikerCombatContext {
     let battleInstanceID: UUID
     let playerTargetProvider: @MainActor () -> SIMD3<Float>?
@@ -89,6 +115,7 @@ final class Chapter03MikeBattleCombatAdapter {
     private var context: Chapter03MikeCombatContext?
     private var active = false
     private(set) var postDefeatMode = false
+    private(set) var finalInvincibleReactionMode = false
     private var playerDeathClaimed = false
     private var thresholdClaimed = false
 
@@ -110,7 +137,12 @@ final class Chapter03MikeBattleCombatAdapter {
         }
         enemy.onStoryEnemyDamageDisposition = { [weak self] in
             guard let self, self.active else { return .headSnapAndImpactOnly }
-            return self.postDefeatMode ? .headSnapAndImpactOnly : .applyDamage
+            return Chapter03MikePostDefeatReactionPolicy
+                .enemyDamageDisposition(
+                    postDefeatMode: self.postDefeatMode,
+                    finalInvincibleReactionMode:
+                        self.finalInvincibleReactionMode
+                )
         }
         enemy.onBenchmarkPlayerHit = { [weak self] _, _ in
             guard let self, self.active, !self.postDefeatMode else { return false }
@@ -136,6 +168,17 @@ final class Chapter03MikeBattleCombatAdapter {
             assertionFailure("Big Mike played a death animation.")
         }
         try enemy.activateStoryCombat()
+    }
+
+    func enterFinalInvincibleReactionMode() {
+        guard active,
+              postDefeatMode,
+              !finalInvincibleReactionMode else { return }
+        finalInvincibleReactionMode = true
+        print(
+            "[Chapter03MikeBattle] final invincible reaction mode enabled " +
+                "healthMutation=false fullBodyReaction=false"
+        )
     }
 
     func update(deltaTime: TimeInterval) {

@@ -8,12 +8,6 @@ import MetalKit
 nonisolated struct MindEyeProjectionPlateManifest: Codable, Sendable, Equatable {
     struct Layer: Codable, Sendable, Equatable {
         let filename: String
-        let sha256: String
-
-        private enum CodingKeys: String, CodingKey {
-            case filename
-            case sha256 = "SHA256"
-        }
     }
 
     struct Eyes: Codable, Sendable, Equatable {
@@ -80,9 +74,7 @@ nonisolated struct MindEyeProjectionPlateManifest: Codable, Sendable, Equatable 
               colorSpace == "sRGB",
               compositeAlphaSemantics == "sourceOverOnly",
               layerFamilies.allSatisfy({ !$0.isEmpty }),
-              layers.allSatisfy({
-                  Self.validFilename($0.filename) && Self.validSHA($0.sha256)
-              }),
+              layers.allSatisfy({ Self.validFilename($0.filename) }),
               Self.validSHA(profileSHA256),
               Self.validSHA(cameraSHA256),
               Self.validSHA(targetSHA256),
@@ -197,6 +189,7 @@ nonisolated final class MindEyeProjectionPlatePackageLoader: @unchecked Sendable
     private struct ValidatedLayer {
         let descriptor: MindEyeProjectionPlateManifest.Layer
         let url: URL
+        let actualSHA256: String
     }
 
     private let device: any MTLDevice
@@ -341,7 +334,7 @@ nonisolated final class MindEyeProjectionPlatePackageLoader: @unchecked Sendable
                 try validate($0, under: packageDirectory, semantic: .transparentOverlay)
             }
         }
-        // All JSON, hashes, headers, alpha scans, and identities are valid before
+        // All JSON, identity hashes, headers, and alpha scans are valid before
         // source texture zero is allocated. Textures then upload strictly one at a time.
         let textureLoader = MTKTextureLoader(device: device)
         let baseTexture = try loadTexture(base, loader: textureLoader, sRGB: true)
@@ -379,16 +372,20 @@ nonisolated final class MindEyeProjectionPlatePackageLoader: @unchecked Sendable
         guard url.path.hasPrefix(root) else {
             throw MindEyeProjectionError.invalidPlateManifest("plate escaped package directory")
         }
-        let hash = try inspectPNG(
+        let actualSHA256 = try inspectPNG(
             at: url,
             expectedWidth: 1_728,
             expectedHeight: 1_728,
             semantic: semantic
         )
-        guard hash == layer.sha256 else {
-            throw MindEyeProjectionError.hashMismatch(layer.filename)
-        }
-        return ValidatedLayer(descriptor: layer, url: url)
+        // Projection plates are artist-owned, in-place resources. Their filenames and
+        // structural contracts are manifest-owned, but their bytes are deliberately not
+        // pinned: saving a new plate must be sufficient to update the next app build.
+        return ValidatedLayer(
+            descriptor: layer,
+            url: url,
+            actualSHA256: actualSHA256
+        )
     }
 
     private func inspectPNG(
@@ -449,7 +446,7 @@ nonisolated final class MindEyeProjectionPlatePackageLoader: @unchecked Sendable
         return MindEyeProjectionPlateTexture(
             texture: texture,
             filename: layer.descriptor.filename,
-            sha256: layer.descriptor.sha256
+            sha256: layer.actualSHA256
         )
     }
 

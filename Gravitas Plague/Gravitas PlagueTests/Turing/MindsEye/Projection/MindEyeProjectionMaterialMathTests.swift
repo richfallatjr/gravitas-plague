@@ -2,6 +2,35 @@ import XCTest
 @testable import Gravitas_Plague
 
 final class MindEyeProjectionMaterialMathTests: XCTestCase {
+    func testAuthoredStraightRGBAUsesOneNukePremultBeforeOver() throws {
+        let shaderURL = mindEyeProjectRoot().appendingPathComponent(
+            "Gravitas Plague/Gravitas Plague/Turing/MindsEye/Projection/Shaders/MindEyeProjectionPlateComposite.metal"
+        )
+        let source = try String(contentsOf: shaderURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("return half4(color.rgb * alpha, alpha);"))
+        XCTAssertTrue(source.contains("over.rgb + under.rgb * inverseAlpha"))
+        XCTAssertTrue(source.contains("over.a + under.a * inverseAlpha"))
+        XCTAssertTrue(source.contains("selectedEyes.read(sourcePixel)"))
+        XCTAssertTrue(source.contains("selectedMouth.read(sourcePixel)"))
+        XCTAssertTrue(source.contains("projectionBase.read(sourcePixel)"))
+        XCTAssertFalse(source.contains("overlaySourcePixel"))
+        XCTAssertFalse(source.contains("clamp(color.rgb, half3(0.0), half3(alpha))"))
+        XCTAssertFalse(source.contains("composed.rgb / composed.a"))
+    }
+
+    func testProjectionMaterialPreservesArtistAuthoredHorizontalOrientation() throws {
+        let factoryURL = mindEyeProjectRoot().appendingPathComponent(
+            "Gravitas Plague/Gravitas Plague/Turing/MindsEye/Projection/MindEyeProjectionMaterialFactory.swift"
+        )
+        let source = try String(contentsOf: factoryURL, encoding: .utf8)
+
+        XCTAssertFalse(source.contains("projectionSampleUHorizontalFlip"))
+        XCTAssertTrue(source.contains(
+            "try connect(u, to: projectedUV, input: \"in1\")"
+        ))
+    }
+
     func testInverseSuppressionEquation() throws {
         let descriptor = try descriptor()
         let zero = MindEyeProjectionMaterialMath.contributions(

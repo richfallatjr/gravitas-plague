@@ -371,20 +371,11 @@ nonisolated enum MindEyeProjectionShaderGraph {
                 argument: "projectorUVOffsetY",
                 name: "projectedV"
             )
-            // The authored camera plate arrives horizontally mirrored relative
-            // to RealityKit's camera-space projector convention. Flip only the
-            // photographic plate lookup; the owner-authored UV receiver mask
-            // remains in its original primvars:st orientation.
-            let projectionSampleU = try binary(
-                "ND_subtract_float",
-                one,
-                nil,
-                u,
-                nil,
-                "projectionSampleUHorizontalFlip"
-            )
+            // The projection plates are artist-owned in final orientation.
+            // Sample their U coordinate exactly as authored; runtime must not
+            // mirror the base, eyes, mouths, or completed composite.
             let projectedUV = try node("ND_combine2_vector2", "projectedUV")
-            try connect(projectionSampleU, to: projectedUV, input: "in1")
+            try connect(u, to: projectedUV, input: "in1")
             try connect(v, to: projectedUV, input: "in2")
 
             let projection = try textureSample(

@@ -524,6 +524,24 @@ actor StoryInteractionArbiter {
         )
     }
 
+    func transferStoryTransitionToStoryTransition(
+        storyTransitionLease: StoryInteractionLease,
+        transitionID: UUID,
+        reason: String
+    ) async throws -> StoryInteractionLease {
+        guard exclusiveLease == storyTransitionLease else {
+            throw StoryInteractionClaimError.staleLease
+        }
+        guard case .storyTransition = storyTransitionLease.owner else {
+            throw StoryInteractionClaimError.invalidTransfer
+        }
+        return await transfer(
+            from: storyTransitionLease,
+            to: .storyTransition(transitionID: transitionID),
+            reason: reason
+        )
+    }
+
     func transferBattleToStoryTransition(
         battleLease: StoryInteractionLease,
         transitionID: UUID,

@@ -101,6 +101,32 @@ final class StoryInteractionArbiterTests: XCTestCase {
         XCTAssertEqual(snapshot.doorPresentation, .hidden)
     }
 
+    func testTerminalCardRekeysExistingStoryTransitionWithoutOwnerGap() async throws {
+        let arbiter = StoryInteractionArbiter()
+        let continueID = UUID()
+        let endCardID = UUID()
+        let continueLease = try await arbiter.claimStoryTransition(
+            transitionID: continueID,
+            source: "terminalContinueTest"
+        )
+
+        let endCardLease = try await arbiter
+            .transferStoryTransitionToStoryTransition(
+                storyTransitionLease: continueLease,
+                transitionID: endCardID,
+                reason: "terminalCardTest"
+            )
+        let snapshot = await arbiter.currentSnapshot()
+
+        XCTAssertNotEqual(endCardLease.id, continueLease.id)
+        XCTAssertEqual(
+            endCardLease.owner,
+            .storyTransition(transitionID: endCardID)
+        )
+        XCTAssertEqual(snapshot.exclusiveOwner, endCardLease.owner)
+        XCTAssertTrue(snapshot.capabilities.isEmpty)
+    }
+
     func testDoorClaimHidesWalkieBeforeLoadingAndRetainsCloseOnly() async throws {
         let arbiter = StoryInteractionArbiter()
         await arbiter.updateTuringGate(.play, reason: "test")

@@ -157,6 +157,7 @@ final class MindEyeAngelProjectionController:
                 "cameraSHA=\(package.manifest.cameraSHA256) " +
                 "targetSHA=\(package.manifest.targetSHA256) " +
                 "profileSHA=\(package.manifest.profileSHA256) " +
+                "basePlateSHA=\(package.projectionBase.sha256) " +
                 "pbrContract=\(package.importedPBRContract.contractID) " +
                 "receiverMaskSHA=\(receiverMask.metadata.SHA256) " +
                 "plateResidentBytes=\(package.estimatedPlateResidentBytes) " +

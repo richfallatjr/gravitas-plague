@@ -16,7 +16,7 @@
   "poseWeights": {
     "rest": 0.0,
     "round": 0.5,
-    "small": 0.33,
+    "small": 0.5,
     "teeth": 0.0,
     "wide": 1.0
   },

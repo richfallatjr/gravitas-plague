@@ -100,7 +100,11 @@ final class StoryTitleCardFlowTests: XCTestCase {
             TuringEpisodeCatalog.nextUnlockedEpisode(after: .chapter01),
             .chapter02
         )
-        XCTAssertNil(TuringEpisodeCatalog.nextUnlockedEpisode(after: .chapter02))
+        XCTAssertEqual(
+            TuringEpisodeCatalog.nextUnlockedEpisode(after: .chapter02),
+            .chapter03
+        )
+        XCTAssertNil(TuringEpisodeCatalog.nextUnlockedEpisode(after: .chapter03))
     }
 
     func testChapterOneCardStopsPrologueAftermathOnlyAfterFade() {
@@ -148,5 +152,31 @@ final class StoryTitleCardFlowTests: XCTestCase {
                 to: .chapter03
             ).returnsToOperationMenuAfterCompletion
         )
+    }
+
+    func testCompletedChapterThreeContinueRoutesBackIntoHeaven() {
+        for checkpoint in [
+            Chapter03Checkpoint.endCardPending,
+            Chapter03Checkpoint.complete,
+        ] {
+            let snapshot = Chapter03ProgressSnapshot(
+                schemaVersion: Chapter03ProgressSnapshot.currentSchemaVersion,
+                contentRevision: Chapter03ProgressSnapshot.currentContentRevision,
+                checkpoint: checkpoint,
+                revision: 12,
+                sourceEventIDs: [UUID()],
+                committedAt: Date(timeIntervalSince1970: 1)
+            )
+            let target = TuringStoryContinuationTarget.chapter03(snapshot)
+
+            XCTAssertEqual(
+                target.titleCardDescriptor,
+                StoryTitleCardCatalog.descriptor(for: .chapter03)
+            )
+            XCTAssertEqual(target.titleCardDestination, .continueFrom(target))
+            XCTAssertFalse(
+                target.titleCardDestination.returnsToOperationMenuAfterCompletion
+            )
+        }
     }
 }
