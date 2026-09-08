@@ -1,0 +1,1037 @@
+{
+  "aggregate" : {
+    "audioSeconds" : {
+      "status" : "measured",
+      "value" : 48.959999999999994
+    },
+    "audioSecondsPerWallSecond" : {
+      "status" : "measured",
+      "value" : 1.5231538059392717
+    },
+    "caseCount" : 3,
+    "commandBufferFailures" : {
+      "status" : "measured",
+      "value" : 0
+    },
+    "failedCaseCount" : 0,
+    "generatedRows" : {
+      "status" : "measured",
+      "value" : 612
+    },
+    "hostReadbackElementCount" : {
+      "detail" : "The baseline runtime exposes no complete host-readback element count.",
+      "status" : "unavailable",
+      "value" : null
+    },
+    "passedCaseCount" : 3,
+    "peakMLXActiveMB" : {
+      "status" : "measured",
+      "value" : 2441.760513305664
+    },
+    "peakMLXCacheMB" : {
+      "status" : "measured",
+      "value" : 561.6268424987793
+    },
+    "peakProcessFootprintMB" : {
+      "status" : "measured",
+      "value" : 4875.894493103027
+    },
+    "rowsPerSecond" : {
+      "status" : "measured",
+      "value" : 19.0394225742409
+    },
+    "segmentCount" : 8,
+    "synchronizationBarrierCount" : {
+      "detail" : "The baseline runtime exposes no complete count of MLX evaluation/synchronization barriers.",
+      "status" : "unavailable",
+      "value" : null
+    },
+    "tokenMaterializationSeconds" : {
+      "detail" : "The baseline runtime exposes no isolated token-materialization completion timing.",
+      "status" : "unavailable",
+      "value" : null
+    },
+    "totalWallSeconds" : {
+      "status" : "measured",
+      "value" : 32.143831968307495
+    }
+  },
+  "build" : {
+    "commandBufferProfile" : "deviceDefault",
+    "configuration" : "release",
+    "executable" : {
+      "status" : "measured",
+      "value" : "/private/tmp/turing-phase0-quick-v2-final.EM1wXy/turing-qwen-benchmark"
+    },
+    "gitRevision" : {
+      "detail" : "workingTree=dirty; changedPathCount=8",
+      "status" : "measured",
+      "value" : "44e7bebcb5266b73e015f9f110294ca48be11a04"
+    }
+  },
+  "comparison" : {
+    "baselineLabel" : {
+      "detail" : "Pass --baseline to compute before/after deltas.",
+      "status" : "unavailable",
+      "value" : null
+    },
+    "exactAudioDigestMatchCount" : {
+      "detail" : "No baseline report was provided.",
+      "status" : "unavailable",
+      "value" : null
+    },
+    "matchingCaseCount" : {
+      "detail" : "No baseline report was provided.",
+      "status" : "unavailable",
+      "value" : null
+    },
+    "metrics" : [
+      {
+        "after" : {
+          "status" : "measured",
+          "value" : 32.143831968307495
+        },
+        "before" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "delta" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "deltaPercent" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "metric" : "totalWallSeconds"
+      },
+      {
+        "after" : {
+          "status" : "measured",
+          "value" : 1.5231538059392717
+        },
+        "before" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "delta" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "deltaPercent" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "metric" : "audioSecondsPerWallSecond"
+      },
+      {
+        "after" : {
+          "status" : "measured",
+          "value" : 19.0394225742409
+        },
+        "before" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "delta" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "deltaPercent" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "metric" : "rowsPerSecond"
+      },
+      {
+        "after" : {
+          "detail" : "Current metric is unavailable.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "before" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "delta" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "deltaPercent" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "metric" : "synchronizationBarrierCount"
+      },
+      {
+        "after" : {
+          "detail" : "Current metric is unavailable.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "before" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "delta" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "deltaPercent" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "metric" : "hostReadbackElementCount"
+      },
+      {
+        "after" : {
+          "detail" : "Current metric is unavailable.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "before" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "delta" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "deltaPercent" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "metric" : "tokenMaterializationSeconds"
+      },
+      {
+        "after" : {
+          "status" : "measured",
+          "value" : 4875.894493103027
+        },
+        "before" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "delta" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "deltaPercent" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "metric" : "peakProcessFootprintMB"
+      },
+      {
+        "after" : {
+          "status" : "measured",
+          "value" : 2441.760513305664
+        },
+        "before" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "delta" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "deltaPercent" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "metric" : "peakMLXActiveMB"
+      },
+      {
+        "after" : {
+          "status" : "measured",
+          "value" : 561.6268424987793
+        },
+        "before" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "delta" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "deltaPercent" : {
+          "detail" : "No baseline report was provided.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "metric" : "peakMLXCacheMB"
+      }
+    ],
+    "qualityRegressions" : [
+
+    ],
+    "status" : "baselineNotProvided"
+  },
+  "completion" : {
+    "reasons" : [
+      "All selected deterministic corpus cases passed."
+    ],
+    "status" : "pass"
+  },
+  "configuration" : {
+    "benchmarkLanePolicy" : "one fixed Fresh2 lane; serial segments; default stream",
+    "corpusDigest" : "8c6d7cea2b4b370d",
+    "language" : "english",
+    "maxNewRowsPerSegment" : 160,
+    "performanceMode" : "performance",
+    "playbackRate" : 0.85,
+    "playbackRateApplied" : false,
+    "referenceWindowStrategy" : "full",
+    "residencyMode" : "sharedImmutableFresh2",
+    "samplingPolicy" : "greedyTalker+greedyCodePredictor",
+    "samplingSeed" : 5139241963636408659,
+    "suite" : "quick",
+    "warmupCount" : 1,
+    "warmupText" : "Big Mike, hold the line and confirm this warmup signal."
+  },
+  "device" : {
+    "architecture" : "arm64",
+    "hostName" : "richards-macbook-air.local",
+    "metalDevice" : {
+      "status" : "measured",
+      "value" : "Apple M4"
+    },
+    "operatingSystem" : "Version 27.0 (Build 26A5353q)",
+    "physicalMemoryBytes" : 25769803776
+  },
+  "generatedAtUTC" : "2026-09-06T08:22:36Z",
+  "label" : "phase0-baseline-44e7beb-runtime",
+  "model" : {
+    "cloneRevision" : {
+      "status" : "measured",
+      "value" : "sha256:0ce3714cf94346ee1df9a87baf91cdfed33d103719074d4c4f8859655b95c4b7"
+    },
+    "cloneVariantID" : "broadcast_reference_fast_01",
+    "cloneVoiceID" : "big_mike_base_clone_v1",
+    "modelID" : "qwen3-tts-12hz-1.7b-base-4bit",
+    "modelRoot" : "/Users/richardfallat/Projects/dev/gravitas-plague/Gravitas Plague/TuringResources/Turing/Models/Qwen3TTS/Qwen3-TTS-12Hz-1.7B-Base-4bit",
+    "quantizationBits" : {
+      "status" : "measured",
+      "value" : 4
+    },
+    "quantizationGroupSize" : {
+      "status" : "measured",
+      "value" : 64
+    },
+    "ttsModelType" : "base"
+  },
+  "results" : [
+    {
+      "execution" : {
+        "allocationCount" : {
+          "detail" : "MLX allocation counts are not exposed by the current runtime instrumentation.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "commandBufferFailures" : {
+          "status" : "measured",
+          "value" : 0
+        },
+        "commandBuffersCompleted" : {
+          "status" : "measured",
+          "value" : 5581
+        },
+        "commandBuffersSubmitted" : {
+          "status" : "measured",
+          "value" : 5581
+        },
+        "hostReadbackElementCount" : {
+          "detail" : "The baseline runtime exposes no complete host-readback element count.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "laneCount" : {
+          "detail" : "The benchmark executes serially on one checked-out Fresh instance.",
+          "status" : "measured",
+          "value" : 1
+        },
+        "laneIdentity" : {
+          "detail" : "A single fixed Fresh2 lane is held for deterministic comparisons.",
+          "status" : "measured",
+          "value" : "fresh-0"
+        },
+        "streamIdentity" : {
+          "status" : "measured",
+          "value" : "defaultOnly"
+        },
+        "synchronizationBarrierCount" : {
+          "detail" : "The baseline runtime exposes no complete count of MLX evaluation/synchronization barriers.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "underrunCount" : {
+          "detail" : "The CLI harness deliberately performs no playback.",
+          "status" : "notApplicable",
+          "value" : null
+        }
+      },
+      "input" : {
+        "characterCount" : 36,
+        "id" : "short-01",
+        "segments" : [
+          "Big Mike, confirm the road is clear."
+        ],
+        "text" : "Big Mike, confirm the road is clear.",
+        "textDigest" : "a65e0234091f837b",
+        "tier" : "short",
+        "wordCount" : 7
+      },
+      "memory" : {
+        "mlxActiveAfterMB" : {
+          "status" : "measured",
+          "value" : 1550.78955078125
+        },
+        "mlxActiveBeforeMB" : {
+          "status" : "measured",
+          "value" : 1550.78955078125
+        },
+        "mlxCacheAfterMB" : {
+          "status" : "measured",
+          "value" : 0
+        },
+        "mlxCacheBeforeMB" : {
+          "status" : "measured",
+          "value" : 0
+        },
+        "peakMLXActiveMB" : {
+          "status" : "measured",
+          "value" : 1785.2285232543945
+        },
+        "peakMLXCacheMB" : {
+          "status" : "measured",
+          "value" : 107.48447036743164
+        },
+        "peakProcessFootprintMB" : {
+          "detail" : "Sampled every 100 ms and at both request boundaries.",
+          "status" : "measured",
+          "value" : 2255.892936706543
+        },
+        "processFootprintAfterMB" : {
+          "status" : "measured",
+          "value" : 2056.861686706543
+        },
+        "processFootprintBeforeMB" : {
+          "status" : "measured",
+          "value" : 1824.7833786010742
+        }
+      },
+      "output" : {
+        "audioDigest" : {
+          "detail" : "FNV-1a over Float32 bit patterns in segment order.",
+          "status" : "measured",
+          "value" : "0b1fb77d8bd8236e"
+        },
+        "audioSeconds" : {
+          "status" : "measured",
+          "value" : 2.08
+        },
+        "generatedRows" : {
+          "status" : "measured",
+          "value" : 26
+        },
+        "reachedEOSSegments" : {
+          "status" : "measured",
+          "value" : 1
+        },
+        "rowCapSegments" : {
+          "status" : "measured",
+          "value" : 0
+        },
+        "sampleCount" : {
+          "status" : "measured",
+          "value" : 49920
+        },
+        "sampleRate" : {
+          "status" : "measured",
+          "value" : 24000
+        }
+      },
+      "quality" : {
+        "decodedSegmentCount" : 1,
+        "expectedSegmentCount" : 1,
+        "nonEmptyAudio" : {
+          "status" : "measured",
+          "value" : true
+        },
+        "passed" : true,
+        "peakAbsoluteSample" : {
+          "status" : "measured",
+          "value" : 0.8591979
+        },
+        "perceptualAssessment" : {
+          "detail" : "Human or reference-model listening assessment is intentionally not fabricated by the CLI.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "rms" : {
+          "status" : "measured",
+          "value" : 0.10191533
+        },
+        "samplesAreFinite" : {
+          "status" : "measured",
+          "value" : true
+        }
+      },
+      "status" : "passed",
+      "thermal" : {
+        "stateAfter" : {
+          "status" : "measured",
+          "value" : "nominal"
+        },
+        "stateBefore" : {
+          "status" : "measured",
+          "value" : "nominal"
+        }
+      },
+      "timing" : {
+        "audioSecondsPerWallSecond" : {
+          "status" : "measured",
+          "value" : 1.0627769093698218
+        },
+        "codePredictorSeconds" : {
+          "detail" : "Host-side talker/code-predictor timers bracket lazy MLX graph construction, not completed GPU execution; downstream evaluation can attribute one stage's work to another.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "initialPromptSeconds" : {
+          "status" : "measured",
+          "value" : 0.2274550199508667
+        },
+        "requestToAudibleCallbackSeconds" : {
+          "detail" : "The CLI harness has no audio-device callback.",
+          "status" : "notApplicable",
+          "value" : null
+        },
+        "requestToFirstPCMSeconds" : {
+          "detail" : "Batch decoder returned its first PCM segment.",
+          "status" : "measured",
+          "value" : 1.9569309949874878
+        },
+        "requestToFirstRowSeconds" : {
+          "detail" : "The baseline runtime exposes no completion-observed request-to-first-semantic-row timestamp; lazy graph construction/token selection cannot stand in for completed MLX execution.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "requestToScheduledPlaybackSeconds" : {
+          "detail" : "The CLI harness does not schedule playback.",
+          "status" : "notApplicable",
+          "value" : null
+        },
+        "rowsPerSecond" : {
+          "status" : "measured",
+          "value" : 13.284711367122771
+        },
+        "speechDecoderSeconds" : {
+          "status" : "measured",
+          "value" : 0.537308931350708
+        },
+        "talkerSeconds" : {
+          "detail" : "Host-side talker/code-predictor timers bracket lazy MLX graph construction, not completed GPU execution; downstream evaluation can attribute one stage's work to another.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "tokenMaterializationSeconds" : {
+          "detail" : "The baseline runtime exposes no isolated token-materialization completion timing.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "totalWallSeconds" : {
+          "status" : "measured",
+          "value" : 1.9571369886398315
+        }
+      }
+    },
+    {
+      "execution" : {
+        "allocationCount" : {
+          "detail" : "MLX allocation counts are not exposed by the current runtime instrumentation.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "commandBufferFailures" : {
+          "status" : "measured",
+          "value" : 0
+        },
+        "commandBuffersCompleted" : {
+          "status" : "measured",
+          "value" : 22870
+        },
+        "commandBuffersSubmitted" : {
+          "status" : "measured",
+          "value" : 22870
+        },
+        "hostReadbackElementCount" : {
+          "detail" : "The baseline runtime exposes no complete host-readback element count.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "laneCount" : {
+          "detail" : "The benchmark executes serially on one checked-out Fresh instance.",
+          "status" : "measured",
+          "value" : 1
+        },
+        "laneIdentity" : {
+          "detail" : "A single fixed Fresh2 lane is held for deterministic comparisons.",
+          "status" : "measured",
+          "value" : "fresh-0"
+        },
+        "streamIdentity" : {
+          "status" : "measured",
+          "value" : "defaultOnly"
+        },
+        "synchronizationBarrierCount" : {
+          "detail" : "The baseline runtime exposes no complete count of MLX evaluation/synchronization barriers.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "underrunCount" : {
+          "detail" : "The CLI harness deliberately performs no playback.",
+          "status" : "notApplicable",
+          "value" : null
+        }
+      },
+      "input" : {
+        "characterCount" : 175,
+        "id" : "medium-01",
+        "segments" : [
+          "The storm passed over the county line, but the roads are still washed out. Check the radio, count the batteries, and tell me what we can carry before the next warning arrives."
+        ],
+        "text" : "The storm passed over the county line, but the roads are still washed out. Check the radio, count the batteries, and tell me what we can carry before the next warning arrives.",
+        "textDigest" : "f589b3e67afeccee",
+        "tier" : "medium",
+        "wordCount" : 32
+      },
+      "memory" : {
+        "mlxActiveAfterMB" : {
+          "status" : "measured",
+          "value" : 1550.78955078125
+        },
+        "mlxActiveBeforeMB" : {
+          "status" : "measured",
+          "value" : 1550.78955078125
+        },
+        "mlxCacheAfterMB" : {
+          "status" : "measured",
+          "value" : 0
+        },
+        "mlxCacheBeforeMB" : {
+          "status" : "measured",
+          "value" : 0
+        },
+        "peakMLXActiveMB" : {
+          "status" : "measured",
+          "value" : 2174.2910232543945
+        },
+        "peakMLXCacheMB" : {
+          "status" : "measured",
+          "value" : 561.6268424987793
+        },
+        "peakProcessFootprintMB" : {
+          "detail" : "Sampled every 100 ms and at both request boundaries.",
+          "status" : "measured",
+          "value" : 2824.299186706543
+        },
+        "processFootprintAfterMB" : {
+          "status" : "measured",
+          "value" : 2295.892936706543
+        },
+        "processFootprintBeforeMB" : {
+          "status" : "measured",
+          "value" : 2056.877311706543
+        }
+      },
+      "output" : {
+        "audioDigest" : {
+          "detail" : "FNV-1a over Float32 bit patterns in segment order.",
+          "status" : "measured",
+          "value" : "e334969ae3ef0d12"
+        },
+        "audioSeconds" : {
+          "status" : "measured",
+          "value" : 8.72
+        },
+        "generatedRows" : {
+          "status" : "measured",
+          "value" : 109
+        },
+        "reachedEOSSegments" : {
+          "status" : "measured",
+          "value" : 1
+        },
+        "rowCapSegments" : {
+          "status" : "measured",
+          "value" : 0
+        },
+        "sampleCount" : {
+          "status" : "measured",
+          "value" : 209280
+        },
+        "sampleRate" : {
+          "status" : "measured",
+          "value" : 24000
+        }
+      },
+      "quality" : {
+        "decodedSegmentCount" : 1,
+        "expectedSegmentCount" : 1,
+        "nonEmptyAudio" : {
+          "status" : "measured",
+          "value" : true
+        },
+        "passed" : true,
+        "peakAbsoluteSample" : {
+          "status" : "measured",
+          "value" : 0.94265777
+        },
+        "perceptualAssessment" : {
+          "detail" : "Human or reference-model listening assessment is intentionally not fabricated by the CLI.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "rms" : {
+          "status" : "measured",
+          "value" : 0.07785017
+        },
+        "samplesAreFinite" : {
+          "status" : "measured",
+          "value" : true
+        }
+      },
+      "status" : "passed",
+      "thermal" : {
+        "stateAfter" : {
+          "status" : "measured",
+          "value" : "nominal"
+        },
+        "stateBefore" : {
+          "status" : "measured",
+          "value" : "nominal"
+        }
+      },
+      "timing" : {
+        "audioSecondsPerWallSecond" : {
+          "status" : "measured",
+          "value" : 1.6304380368382316
+        },
+        "codePredictorSeconds" : {
+          "detail" : "Host-side talker/code-predictor timers bracket lazy MLX graph construction, not completed GPU execution; downstream evaluation can attribute one stage's work to another.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "initialPromptSeconds" : {
+          "status" : "measured",
+          "value" : 0.1989579200744629
+        },
+        "requestToAudibleCallbackSeconds" : {
+          "detail" : "The CLI harness has no audio-device callback.",
+          "status" : "notApplicable",
+          "value" : null
+        },
+        "requestToFirstPCMSeconds" : {
+          "detail" : "Batch decoder returned its first PCM segment.",
+          "status" : "measured",
+          "value" : 5.347395896911621
+        },
+        "requestToFirstRowSeconds" : {
+          "detail" : "The baseline runtime exposes no completion-observed request-to-first-semantic-row timestamp; lazy graph construction/token selection cannot stand in for completed MLX execution.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "requestToScheduledPlaybackSeconds" : {
+          "detail" : "The CLI harness does not schedule playback.",
+          "status" : "notApplicable",
+          "value" : null
+        },
+        "rowsPerSecond" : {
+          "status" : "measured",
+          "value" : 20.380475460477893
+        },
+        "speechDecoderSeconds" : {
+          "status" : "measured",
+          "value" : 1.0833749771118164
+        },
+        "talkerSeconds" : {
+          "detail" : "Host-side talker/code-predictor timers bracket lazy MLX graph construction, not completed GPU execution; downstream evaluation can attribute one stage's work to another.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "tokenMaterializationSeconds" : {
+          "detail" : "The baseline runtime exposes no isolated token-materialization completion timing.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "totalWallSeconds" : {
+          "status" : "measured",
+          "value" : 5.34825599193573
+        }
+      }
+    },
+    {
+      "execution" : {
+        "allocationCount" : {
+          "detail" : "MLX allocation counts are not exposed by the current runtime instrumentation.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "commandBufferFailures" : {
+          "status" : "measured",
+          "value" : 0
+        },
+        "commandBuffersCompleted" : {
+          "status" : "measured",
+          "value" : 100579
+        },
+        "commandBuffersSubmitted" : {
+          "status" : "measured",
+          "value" : 100579
+        },
+        "hostReadbackElementCount" : {
+          "detail" : "The baseline runtime exposes no complete host-readback element count.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "laneCount" : {
+          "detail" : "The benchmark executes serially on one checked-out Fresh instance.",
+          "status" : "measured",
+          "value" : 1
+        },
+        "laneIdentity" : {
+          "detail" : "A single fixed Fresh2 lane is held for deterministic comparisons.",
+          "status" : "measured",
+          "value" : "fresh-0"
+        },
+        "streamIdentity" : {
+          "status" : "measured",
+          "value" : "defaultOnly"
+        },
+        "synchronizationBarrierCount" : {
+          "detail" : "The baseline runtime exposes no complete count of MLX evaluation/synchronization barriers.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "underrunCount" : {
+          "detail" : "The CLI harness deliberately performs no playback.",
+          "status" : "notApplicable",
+          "value" : null
+        }
+      },
+      "input" : {
+        "characterCount" : 681,
+        "id" : "long-01",
+        "segments" : [
+          "Before sunrise, the first county crew reached the eastern checkpoint and found the warning lights dark.",
+          "The team documented each observation, compared it with the previous shift, and separated confirmed facts from guesses.",
+          "Every radio call was logged with its time and direction.",
+          "Nothing moved until two people agreed on the route, the fallback point, and the signal that would bring everyone home.",
+          "By the end of the check, the equipment was staged, the entrances were secure, and the next watch understood the plan.",
+          "We left enough margin for a delayed message or a blocked road, because the safest schedule is the one that can survive a surprise without forcing a rushed decision."
+        ],
+        "text" : "Before sunrise, the first county crew reached the eastern checkpoint and found the warning lights dark. The team documented each observation, compared it with the previous shift, and separated confirmed facts from guesses. Every radio call was logged with its time and direction. Nothing moved until two people agreed on the route, the fallback point, and the signal that would bring everyone home. By the end of the check, the equipment was staged, the entrances were secure, and the next watch understood the plan. We left enough margin for a delayed message or a blocked road, because the safest schedule is the one that can survive a surprise without forcing a rushed decision.",
+        "textDigest" : "f736ffce48b6209e",
+        "tier" : "long",
+        "wordCount" : 113
+      },
+      "memory" : {
+        "mlxActiveAfterMB" : {
+          "status" : "measured",
+          "value" : 1550.78955078125
+        },
+        "mlxActiveBeforeMB" : {
+          "status" : "measured",
+          "value" : 1550.78955078125
+        },
+        "mlxCacheAfterMB" : {
+          "status" : "measured",
+          "value" : 0
+        },
+        "mlxCacheBeforeMB" : {
+          "status" : "measured",
+          "value" : 0
+        },
+        "peakMLXActiveMB" : {
+          "status" : "measured",
+          "value" : 2441.760513305664
+        },
+        "peakMLXCacheMB" : {
+          "status" : "measured",
+          "value" : 463.22059631347656
+        },
+        "peakProcessFootprintMB" : {
+          "detail" : "Sampled every 100 ms and at both request boundaries.",
+          "status" : "measured",
+          "value" : 4875.894493103027
+        },
+        "processFootprintAfterMB" : {
+          "status" : "measured",
+          "value" : 4355.347618103027
+        },
+        "processFootprintBeforeMB" : {
+          "status" : "measured",
+          "value" : 2295.908561706543
+        }
+      },
+      "output" : {
+        "audioDigest" : {
+          "detail" : "FNV-1a over Float32 bit patterns in segment order.",
+          "status" : "measured",
+          "value" : "6fb2b4d482d8866a"
+        },
+        "audioSeconds" : {
+          "status" : "measured",
+          "value" : 38.16
+        },
+        "generatedRows" : {
+          "status" : "measured",
+          "value" : 477
+        },
+        "reachedEOSSegments" : {
+          "status" : "measured",
+          "value" : 6
+        },
+        "rowCapSegments" : {
+          "status" : "measured",
+          "value" : 0
+        },
+        "sampleCount" : {
+          "status" : "measured",
+          "value" : 915840
+        },
+        "sampleRate" : {
+          "status" : "measured",
+          "value" : 24000
+        }
+      },
+      "quality" : {
+        "decodedSegmentCount" : 6,
+        "expectedSegmentCount" : 6,
+        "nonEmptyAudio" : {
+          "status" : "measured",
+          "value" : true
+        },
+        "passed" : true,
+        "peakAbsoluteSample" : {
+          "status" : "measured",
+          "value" : 0.93533087
+        },
+        "perceptualAssessment" : {
+          "detail" : "Human or reference-model listening assessment is intentionally not fabricated by the CLI.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "rms" : {
+          "status" : "measured",
+          "value" : 0.0973676
+        },
+        "samplesAreFinite" : {
+          "status" : "measured",
+          "value" : true
+        }
+      },
+      "status" : "passed",
+      "thermal" : {
+        "stateAfter" : {
+          "status" : "measured",
+          "value" : "nominal"
+        },
+        "stateBefore" : {
+          "status" : "measured",
+          "value" : "nominal"
+        }
+      },
+      "timing" : {
+        "audioSecondsPerWallSecond" : {
+          "status" : "measured",
+          "value" : 1.5363284310599299
+        },
+        "codePredictorSeconds" : {
+          "detail" : "Host-side talker/code-predictor timers bracket lazy MLX graph construction, not completed GPU execution; downstream evaluation can attribute one stage's work to another.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "initialPromptSeconds" : {
+          "status" : "measured",
+          "value" : 1.2302608489990234
+        },
+        "requestToAudibleCallbackSeconds" : {
+          "detail" : "The CLI harness has no audio-device callback.",
+          "status" : "notApplicable",
+          "value" : null
+        },
+        "requestToFirstPCMSeconds" : {
+          "detail" : "Batch decoder returned its first PCM segment.",
+          "status" : "measured",
+          "value" : 3.7230619192123413
+        },
+        "requestToFirstRowSeconds" : {
+          "detail" : "The baseline runtime exposes no completion-observed request-to-first-semantic-row timestamp; lazy graph construction/token selection cannot stand in for completed MLX execution.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "requestToScheduledPlaybackSeconds" : {
+          "detail" : "The CLI harness does not schedule playback.",
+          "status" : "notApplicable",
+          "value" : null
+        },
+        "rowsPerSecond" : {
+          "status" : "measured",
+          "value" : 19.204105388249125
+        },
+        "speechDecoderSeconds" : {
+          "status" : "measured",
+          "value" : 5.409854054450989
+        },
+        "talkerSeconds" : {
+          "detail" : "Host-side talker/code-predictor timers bracket lazy MLX graph construction, not completed GPU execution; downstream evaluation can attribute one stage's work to another.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "tokenMaterializationSeconds" : {
+          "detail" : "The baseline runtime exposes no isolated token-materialization completion timing.",
+          "status" : "unavailable",
+          "value" : null
+        },
+        "totalWallSeconds" : {
+          "status" : "measured",
+          "value" : 24.838438987731934
+        }
+      }
+    }
+  ],
+  "schemaVersion" : 2,
+  "warmup" : {
+    "detail" : "Inference warmup seconds. Residency warm-load took 0.015 seconds and is excluded.",
+    "status" : "measured",
+    "value" : 4.610597014427185
+  }
+}

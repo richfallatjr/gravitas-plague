@@ -2,6 +2,20 @@ import Foundation
 import RealityKit
 import simd
 
+nonisolated enum Chapter03MikeFinalInvincibleDeadlinePolicy {
+    static func delaySeconds(
+        playbackDurationSeconds: TimeInterval
+    ) -> TimeInterval? {
+        guard playbackDurationSeconds.isFinite,
+              playbackDurationSeconds >= 0 else { return nil }
+        return max(
+            0,
+            playbackDurationSeconds -
+                Chapter03MikePostDefeatReactionPolicy.invincibleTailSeconds
+        )
+    }
+}
+
 struct Chapter03MikeBattleReleasedEvent {
     let eventID: UUID
     let chapterRunID: UUID
@@ -101,6 +115,7 @@ final class Chapter03MikeBattleCoordinator {
     private var runTask: Task<Void, Never>?
     private var defeatTask: Task<Void, Never>?
     private var crossfadeTask: Task<Void, Never>?
+    private var finalInvincibleReactionTask: Task<Void, Never>?
     private var suppressionReceipt: Chapter03RoomSuppressionReceipt?
     private var heavenBridgeDeathVocalToken: StoryPlayerDeathVocalToken?
 
@@ -280,9 +295,11 @@ final class Chapter03MikeBattleCoordinator {
         runTask?.cancel()
         defeatTask?.cancel()
         crossfadeTask?.cancel()
+        finalInvincibleReactionTask?.cancel()
         runTask = nil
         defeatTask = nil
         crossfadeTask = nil
+        finalInvincibleReactionTask = nil
         doorObservation?.cancel()
         doorObservation = nil
         richQueue.cancel(battleInstanceID: instanceID, reason: reason)
@@ -433,8 +450,15 @@ final class Chapter03MikeBattleCoordinator {
         guard event.battleInstanceID == battleInstanceID,
               event.cueID == "mikeSurrender",
               surrenderPlaybackID == nil,
-              let battleInstanceID else { return }
+              let battleInstanceID,
+              let chapterRunID else { return }
         surrenderPlaybackID = event.playbackID
+        scheduleFinalInvincibleReaction(
+            chapterRunID: chapterRunID,
+            battleInstanceID: battleInstanceID,
+            playbackID: event.playbackID,
+            playbackDurationSeconds: event.durationSeconds
+        )
         do {
             let transition = try music.beginCrossfade(
                 from: phaseOneEpoch,
@@ -480,6 +504,60 @@ final class Chapter03MikeBattleCoordinator {
         }
     }
 
+    private func scheduleFinalInvincibleReaction(
+        chapterRunID: UUID,
+        battleInstanceID: UUID,
+        playbackID: UUID,
+        playbackDurationSeconds: TimeInterval
+    ) {
+        finalInvincibleReactionTask?.cancel()
+        guard let delaySeconds =
+            Chapter03MikeFinalInvincibleDeadlinePolicy.delaySeconds(
+                playbackDurationSeconds: playbackDurationSeconds
+            ) else {
+            print(
+                "[Chapter03MikeBattle] final invincible deadline rejected " +
+                    "playbackID=\(playbackID.uuidString) " +
+                    "durationSeconds=\(playbackDurationSeconds)"
+            )
+            finalInvincibleReactionTask = nil
+            return
+        }
+
+        let clock = self.clock
+        finalInvincibleReactionTask = Task { @MainActor [weak self] in
+            do {
+                if delaySeconds > 0 {
+                    try await clock.sleep(for: .seconds(delaySeconds))
+                }
+                try Task.checkCancellation()
+            } catch {
+                return
+            }
+            guard let self,
+                  self.chapterRunID == chapterRunID,
+                  self.battleInstanceID == battleInstanceID,
+                  self.surrenderPlaybackID == playbackID,
+                  self.combat?.postDefeatMode == true,
+                  self.combat?.finalInvincibleReactionMode == false else {
+                return
+            }
+            self.enterFinalInvincibleReactionMode(
+                playbackID: playbackID,
+                remainingSeconds:
+                    Chapter03MikePostDefeatReactionPolicy
+                        .invincibleTailSeconds,
+                trigger: "scheduledPlaybackDeadline"
+            )
+        }
+        print(
+            "[Chapter03MikeBattle] final invincible deadline armed " +
+                "playbackID=\(playbackID.uuidString) " +
+                "durationSeconds=\(String(format: "%.3f", playbackDurationSeconds)) " +
+                "delaySeconds=\(String(format: "%.3f", delaySeconds))"
+        )
+    }
+
     private func updateFinalInvincibleReactionMode() {
         guard let battleInstanceID,
               let surrenderPlaybackID,
@@ -493,11 +571,27 @@ final class Chapter03MikeBattleCoordinator {
             .shouldUseFinalInvincibleReaction(
                 remainingPlaybackSeconds: remainingSeconds
             ) else { return }
+        enterFinalInvincibleReactionMode(
+            playbackID: surrenderPlaybackID,
+            remainingSeconds: remainingSeconds,
+            trigger: "framePollingFallback"
+        )
+    }
+
+    private func enterFinalInvincibleReactionMode(
+        playbackID: UUID,
+        remainingSeconds: TimeInterval?,
+        trigger: String
+    ) {
+        guard surrenderPlaybackID == playbackID,
+              combat?.postDefeatMode == true,
+              combat?.finalInvincibleReactionMode == false else { return }
         combat?.enterFinalInvincibleReactionMode()
         print(
             "[Chapter03MikeBattle] final five-second invincibility entered " +
-                "playbackID=\(surrenderPlaybackID.uuidString) " +
-                "remainingSeconds=\(String(format: "%.3f", remainingSeconds ?? 0))"
+                "playbackID=\(playbackID.uuidString) " +
+                "remainingSeconds=\(String(format: "%.3f", remainingSeconds ?? 0)) " +
+                "trigger=\(trigger)"
         )
     }
 
@@ -505,6 +599,8 @@ final class Chapter03MikeBattleCoordinator {
         chapterRunID: UUID,
         battleInstanceID: UUID
     ) async throws {
+        finalInvincibleReactionTask?.cancel()
+        finalInvincibleReactionTask = nil
         guard let blackout, let definition, let battleLease else {
             throw Chapter03Error.staleRun
         }
@@ -601,6 +697,8 @@ final class Chapter03MikeBattleCoordinator {
     private func handlePlayerDeath(battleInstanceID: UUID) {
         guard self.battleInstanceID == battleInstanceID,
               combat?.postDefeatMode == false else { return }
+        finalInvincibleReactionTask?.cancel()
+        finalInvincibleReactionTask = nil
         richQueue.cancel(battleInstanceID: battleInstanceID, reason: "playerDeath")
         music.stopAll(reason: "playerDeath")
         Task { @MainActor [weak self] in
@@ -610,6 +708,8 @@ final class Chapter03MikeBattleCoordinator {
     }
 
     private func destructiveRelease(instanceID: UUID, reason: String) async {
+        finalInvincibleReactionTask?.cancel()
+        finalInvincibleReactionTask = nil
         doorObservation?.cancel()
         doorObservation = nil
         intro.cancelAndRelease(reason: reason)
@@ -653,6 +753,8 @@ final class Chapter03MikeBattleCoordinator {
     }
 
     private func fail(chapterRunID: UUID, error: Error) async {
+        finalInvincibleReactionTask?.cancel()
+        finalInvincibleReactionTask = nil
         stopOwnedHeavenBridgeDeathVocal(reason: "failure.\(error.localizedDescription)")
         await completionSink?.chapter03MikeBattleFailed(
             chapterRunID: chapterRunID,
@@ -661,6 +763,8 @@ final class Chapter03MikeBattleCoordinator {
     }
 
     private func clear() {
+        finalInvincibleReactionTask?.cancel()
+        finalInvincibleReactionTask = nil
         chapterRunID = nil
         battleInstanceID = nil
         definition = nil

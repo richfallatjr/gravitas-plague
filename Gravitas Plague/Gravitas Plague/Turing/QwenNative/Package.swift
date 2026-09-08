@@ -12,6 +12,10 @@ let package = Package(
         .library(
             name: "TuringQwenNative",
             targets: ["TuringQwenNative"]
+        ),
+        .executable(
+            name: "turing-qwen-benchmark",
+            targets: ["TuringQwenBenchmark"]
         )
     ],
     dependencies: [
@@ -37,6 +41,13 @@ let package = Package(
                     "GR_TURING_METAL_STREAM_RECOVERY",
                     .when(configuration: .release)
                 ),
+                .enableExperimentalFeature("StrictConcurrency")
+            ]
+        ),
+        .executableTarget(
+            name: "TuringQwenBenchmark",
+            dependencies: ["TuringQwenNative"],
+            swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
             ]
         ),

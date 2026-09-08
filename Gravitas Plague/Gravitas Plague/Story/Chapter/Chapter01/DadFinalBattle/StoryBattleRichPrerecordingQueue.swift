@@ -171,7 +171,10 @@ final class StoryBattleRichPrerecordingQueue: NSObject, AVAudioPlayerDelegate {
         if let battleInstanceID {
             resumeDrainWaiters(battleInstanceID: battleInstanceID)
         } else {
-            onActualPlaybackStarted = nil
+            // This observer belongs to the queue/coordinator lifetime, not to
+            // one battle run. Story teleport and chapter reset paths cancel
+            // the queue before Chapter 3 starts; clearing it here permanently
+            // disabled Mike's surrender-start transition on the later run.
             for id in drainWaiters.keys {
                 resumeDrainWaiters(battleInstanceID: id)
             }

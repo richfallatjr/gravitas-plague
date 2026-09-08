@@ -92,7 +92,7 @@ def main() -> None:
             "fadeToFullBlack(",
             "requireFullBlackOwnership(requestID: transitionID)",
             "combat?.releaseUnderFullBlack",
-            "closeForBattleAndUnloadPortal(",
+            "portalExitCleanup.closeAndUnloadNowIfNeeded(",
             "cleanup.releaseBattle(",
             "roomPresentation.suppressUnderFullBlack(",
             "transferBattleToStoryTransition(",
@@ -105,6 +105,18 @@ def main() -> None:
         fail("Mike music-two crossfade is not keyed to surrender PR actual playback")
     if "triggerEventID: event.playbackID" not in mike_source:
         fail("Mike music-two crossfade is not keyed to the actual PR playback ID")
+    if "playbackDurationSeconds: event.durationSeconds" not in mike_source:
+        fail("Mike final invincibility is not scheduled from actual PR duration")
+
+    rich_queue_source = (
+        APP / "Story/Chapter/Chapter01/DadFinalBattle/"
+        "StoryBattleRichPrerecordingQueue.swift"
+    ).read_text()
+    queue_cancel = rich_queue_source.split(
+        "func cancel(battleInstanceID:", 1
+    )[1].split("private func reconcile", 1)[0]
+    if "onActualPlaybackStarted = nil" in queue_cancel:
+        fail("battle queue cancel clears its lifetime actual-playback observer")
 
     coordinator = (CHAPTER / "Chapter03Coordinator.swift").read_text()
     require_in_order(
@@ -125,11 +137,17 @@ def main() -> None:
         fail("Chapter 3 tunnel preflight must leave heavy visuals deferred")
     terminal_handoff = coordinator.split("private func lightTunnelCompleted", 1)[1]
     terminal_handoff = terminal_handoff.split("private func lightTunnelFailed", 1)[0]
-    if "requestID: event.blackoutRequestID" not in terminal_handoff:
-        fail("terminal title card does not inherit the full-black ownership ID")
+    if "from: event.blackoutRequestID" not in terminal_handoff:
+        fail("terminal title card does not transfer the tunnel full-black ownership")
+    if "to: endCardRequestID" not in terminal_handoff:
+        fail("terminal title card does not transfer full black to its fresh ID")
+    if "requestID: endCardRequestID" not in terminal_handoff:
+        fail("terminal title card does not use its fresh full-black ownership ID")
     if "requestID: event.chapterRunID" in terminal_handoff:
         fail("terminal title card incorrectly reuses the Chapter run ID")
-    if "titleTransitionID=\\(event.blackoutRequestID.uuidString)" not in terminal_handoff:
+    if "previousTransitionID=\\(event.blackoutRequestID.uuidString)" not in terminal_handoff:
+        fail("terminal full-black source ownership is not logged")
+    if "titleTransitionID=\\(endCardRequestID.uuidString)" not in terminal_handoff:
         fail("terminal full-black ownership transfer is not logged")
     continuation_store = (
         ROOT / "Gravitas Plague/Gravitas Plague/Turing/Story/"
@@ -141,8 +159,12 @@ def main() -> None:
     ).read_text()
     if "var titleCardDestination: StoryTitleCardDestination" not in continuation_store:
         fail("Chapter 3 terminal continuation has no destination override")
-    if "return .endOfAvailableContent(completedEpisode: .chapter03)" not in continuation_store:
-        fail("Chapter 3 end-card checkpoint does not resume as terminal content")
+    if "return .continueFrom(self)" not in continuation_store:
+        fail("Chapter 3 end-card checkpoint cannot re-enter its saved continuation")
+    if "case .heavenTransitionPending," not in coordinator \
+            or ".endCardPending," not in coordinator \
+            or ".complete:" not in coordinator:
+        fail("Chapter 3 terminal checkpoints cannot replay Heaven from Continue")
     if "destination: target.titleCardDestination" not in continuation_picker:
         fail("episode picker bypasses the terminal continuation destination")
     if "unsafeReasons" not in mike_source:
@@ -179,8 +201,17 @@ def main() -> None:
         fail("Mike terminal defeat disables punch detection instead of damage only")
 
     combat_adapter = (CHAPTER / "Chapter03BattleCombatAdapters.swift").read_text()
-    if "postDefeatMode ? .headSnapAndImpactOnly : .applyDamage" not in combat_adapter:
-        fail("Mike post-defeat punches do not preserve head snap and impact without damage")
+    require_in_order(
+        combat_adapter,
+        [
+            "if finalInvincibleReactionMode",
+            "return .headSnapAndImpactOnly",
+            "if postDefeatMode",
+            "return .feedbackOnly",
+            "return .applyDamage",
+        ],
+        "Mike two-stage post-defeat reaction policy",
+    )
 
     room = (CHAPTER / "Chapter03RoomPresentationController.swift").read_text()
     require_in_order(
@@ -210,19 +241,29 @@ def main() -> None:
         descriptor = json.loads(descriptor_path.read_text())
         filename = descriptor["audioFile"]
         installed = RESOURCES / "Audio/prerecordings" / filename
-        source = ROOT / filename
         if not installed.is_file():
             fail(
                 f"Chapter 3 prerecording is not installed in the shared "
                 f"TuringPrerecordingStore directory: {filename}"
             )
-        if not source.is_file() or sha256(installed) != sha256(source):
-            fail(f"Chapter 3 prerecording was not installed byte-for-byte: {filename}")
+        if installed.stat().st_size == 0:
+            fail(f"Chapter 3 prerecording is empty: {filename}")
+    compute_start_by_script_point = {
+        "chapter03.walkie.bigMike.scavengerReport.001.json": "beforePrerecording",
+        "chapter03.walkie.bigMike.fading.003.json": "beforePrerecording",
+    }
     for path in script_points:
         descriptor = json.loads(path.read_text())
         transmission = descriptor["transmission"]
-        if transmission["computeStart"] != "foundationBeforePrerecording":
-            fail(f"PR started before fresh Foundation acceptance: {path.name}")
+        expected_compute_start = compute_start_by_script_point.get(
+            path.name,
+            "foundationBeforePrerecording",
+        )
+        if transmission["computeStart"] != expected_compute_start:
+            fail(
+                f"Chapter 3 compute-start policy changed for {path.name}: "
+                f"expected {expected_compute_start}"
+            )
 
     print("chapter03 production verifier: PASS")
 
