@@ -894,12 +894,9 @@ public enum TuringQwenOptimizationBenchmarkRunner {
             failures: &failures
         )
 
-        appendMismatch(
-            field: "device.hostName",
-            baseline: baseline.device.hostName,
-            current: currentDevice.hostName,
-            failures: &failures
-        )
+        // `ProcessInfo.hostName` can alternate between the local Bonjour name and
+        // reverse-DNS aliases on the same Mac. Keep it in the report for diagnostics,
+        // but use the stable hardware and OS fields below for device compatibility.
         appendMismatch(
             field: "device.operatingSystem",
             baseline: baseline.device.operatingSystem,

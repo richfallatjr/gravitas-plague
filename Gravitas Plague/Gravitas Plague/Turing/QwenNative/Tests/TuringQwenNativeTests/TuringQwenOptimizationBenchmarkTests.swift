@@ -261,7 +261,7 @@ struct TuringQwenOptimizationBenchmarkTests {
     }
 
     @Test
-    func baselineCompatibilityLocksModelDeviceBuildConfigurationAndCasePayload() {
+    func baselineCompatibilityLocksModelHardwareBuildConfigurationAndCasePayload() {
         let baseline = benchmarkReportFixture()
         let identical = benchmarkReportFixture()
         let identicalFailures = TuringQwenOptimizationBenchmarkRunner
@@ -293,10 +293,27 @@ struct TuringQwenOptimizationBenchmarkTests {
             )
 
         #expect(failures.contains("model.modelID differs"))
-        #expect(failures.contains("device.hostName differs"))
         #expect(failures.contains("build.configuration differs"))
         #expect(failures.contains("configuration.warmupText differs"))
         #expect(failures.contains("case payload differs for short-01"))
+    }
+
+    @Test
+    func baselineCompatibilityAllowsHostnameAliasOnSameHardware() {
+        let baseline = benchmarkReportFixture(hostName: "mac.lan")
+        let alias = benchmarkReportFixture(hostName: "richards-macbook-air.local")
+
+        let failures = TuringQwenOptimizationBenchmarkRunner
+            .baselineCompatibilityFailures(
+                baseline: baseline,
+                currentModel: alias.model,
+                currentDevice: alias.device,
+                currentBuild: alias.build,
+                currentConfiguration: alias.configuration,
+                currentResults: alias.results
+            )
+
+        #expect(failures.isEmpty)
     }
 }
 

@@ -103,6 +103,7 @@ public actor TuringQwenNativeBaseCloneEngine {
     private let trace: TuringQwenNativeTrace
     private let residency: ResidencyBinding
     private let config: TuringQwenNativeConfig
+    private let tokenizer: TuringQwenNativeTokenizer
     private var staticPromptContexts: [StaticPromptContextKey: TuringQwenNativeBaseCloneStaticPromptContext] = [:]
 
     private var residencyOwnerIDForDiagnostics: String? {
@@ -144,6 +145,7 @@ public actor TuringQwenNativeBaseCloneEngine {
         self.trace = trace
         residency = .independent(resources: resources)
         config = resources.config
+        tokenizer = try TuringQwenNativeTokenizer(modelRoot: modelRoot)
     }
 
     public init(
@@ -168,6 +170,7 @@ public actor TuringQwenNativeBaseCloneEngine {
         self.trace = trace
         residency = .independent(resources: ownedResidentResources)
         config = ownedResidentResources.config
+        tokenizer = try TuringQwenNativeTokenizer(modelRoot: modelRoot)
     }
 
     public init(
@@ -193,6 +196,7 @@ public actor TuringQwenNativeBaseCloneEngine {
         self.trace = trace
         residency = .shared(lease: sharedResidencyLease)
         config = resources.config
+        tokenizer = try TuringQwenNativeTokenizer(modelRoot: resources.modelRoot)
     }
 
     @available(
@@ -900,7 +904,6 @@ public actor TuringQwenNativeBaseCloneEngine {
         _ prompt: TuringQwenNativeBaseClonePrompt
     ) throws -> PreparedBaseClone {
         let conditioning = try resolveConditioning(for: prompt.cloneProfile)
-        let tokenizer = try TuringQwenNativeTokenizer(modelRoot: modelRoot)
         let preparedPrompt = try TuringQwenNativeBaseCloneInputBuilder.build(
             request: TuringQwenNativeBaseClonePromptRequest(
                 targetText: prompt.text,
