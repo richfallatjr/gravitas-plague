@@ -6,7 +6,8 @@ import simd
 final class Chapter01DadBattleEnemyFactory {
     typealias PreparedCallback = @MainActor (
         UUID,
-        JockRetargetTestController
+        JockRetargetTestController,
+        Entity?
     ) -> Void
 
     private let sceneRoot: Entity
@@ -94,13 +95,12 @@ final class Chapter01DadBattleEnemyFactory {
             characterID: attributes.characterID,
             reason: "Chapter01DadBattle.authoritativeSource"
         )
-        onPrepared(enemyID, source)
-
         let mirror = try StoryPortalEnemyRenderMirrorAdapter(
             source: source,
             portalWorldRoot: doorContext.portalWorldRoot,
             portalPlaneEntity: doorContext.portalPlane
         )
+        onPrepared(enemyID, source, mirror.visualRootEntity)
         source.rootEntity.isEnabled = false
 
         print("""

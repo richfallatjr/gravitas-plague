@@ -97,14 +97,18 @@ public actor TuringQwenNativeGenerationLane {
   public init(
     laneID: Int,
     residentResources:
-      TuringQwenNativeResidentResources
+      TuringQwenNativeResidentResources,
+    streamMode:
+      TuringQwenNativeLaneStreamMode =
+      .productionDefault
   ) throws {
     self.laneID = laneID
     self.residentResources =
       residentResources
     stream =
       TuringQwenNativeLaneStream(
-        laneID: laneID
+        laneID: laneID,
+        mode: streamMode
       )
     engine =
       try TuringQwenNativeBaseCloneEngine(
@@ -161,11 +165,14 @@ public actor TuringQwenNativeGenerationLane {
           .generationQualityPolicy
       )
 
-    let audio =
-      try await engine
-      .generateBaseClone(
-        prompt: prompt
-      )
+    let generationEngine = engine
+    let audio = try await stream
+      .withExecutionContext { @Sendable in
+        try await generationEngine
+          .generateBaseClone(
+            prompt: prompt
+          )
+      }
     let renderSeconds =
       Date().timeIntervalSince(
         renderStart

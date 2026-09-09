@@ -1,0 +1,38 @@
+{
+  "allowedWeightRange": [
+    0.0,
+    1.0
+  ],
+  "audioRoles": [
+    "presence_loop",
+    "damage_hits",
+    "death"
+  ],
+  "basePose": "wide",
+  "blendShapeName": "dadVocalClose",
+  "characterID": "dad",
+  "descriptorID": "dad.infected.vocalBlendShape.v1",
+  "fallbackWeight": 1.0,
+  "offsetPayloadMeshCount": 1,
+  "offsetPayloadRecordCount": 2004,
+  "offsetPayloadResourcePath": "CharacterLibrary/FacialPerformance/dad_infected_vocal_blendshape_offsets.bin",
+  "offsetPayloadSHA256": "c77649e5218dfd095da4fda580e45a1f325a33ab6b6406b97a8c6de0a40be67e",
+  "poseWeights": {
+    "rest": 1.0,
+    "round": 0.5,
+    "small": 0.5,
+    "teeth": 1.0,
+    "wide": 0.0
+  },
+  "response": {
+    "assignmentEpsilon": 0.0005,
+    "crossingHalfLifeSeconds": 0.035,
+    "decreasingWeightHalfLifeSeconds": 0.03,
+    "increasingWeightHalfLifeSeconds": 0.05,
+    "maximumDeltaTimeSeconds": 0.05
+  },
+  "schemaVersion": 1,
+  "sourceAssetExtension": "usdz",
+  "sourceAssetResourceName": "dad_biped",
+  "sourceAssetSHA256": "8549be0963c2e20c10f7b942e3db35e2bfca0416876b12110546b5aedd6439e6"
+}

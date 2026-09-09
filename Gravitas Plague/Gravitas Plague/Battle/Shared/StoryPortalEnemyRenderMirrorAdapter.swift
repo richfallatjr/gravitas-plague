@@ -36,6 +36,10 @@ final class StoryPortalEnemyRenderMirrorAdapter {
     private(set) var direction: StoryPortalTransitionDirection
     private(set) var phase: StoryPortalMirrorPhase
 
+    var visualRootEntity: Entity? {
+        mirror?.rootEntity
+    }
+
     init(
         source: JockRetargetTestController,
         portalWorldRoot: Entity,

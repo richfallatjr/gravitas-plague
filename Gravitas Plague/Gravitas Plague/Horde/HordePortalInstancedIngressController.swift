@@ -59,6 +59,85 @@ struct HordePortalPlaneDescriptor {
     }
 }
 
+nonisolated enum HordePortalBlendShapeWeightGroupMismatch:
+    Sendable,
+    Equatable
+{
+    case sourceGroupCount(nameGroups: Int, weightGroups: Int)
+    case mirrorGroupCount(nameGroups: Int, weightGroups: Int)
+    case sourceGroupShape(groupIndex: Int, names: Int, weights: Int)
+    case mirrorGroupShape(groupIndex: Int, names: Int, weights: Int)
+    case groupCount(source: Int, mirror: Int)
+    case weightNames(groupIndex: Int)
+
+    var diagnostic: String {
+        switch self {
+        case let .sourceGroupCount(nameGroups, weightGroups):
+            "source_group_count names=\(nameGroups) weights=\(weightGroups)"
+        case let .mirrorGroupCount(nameGroups, weightGroups):
+            "mirror_group_count names=\(nameGroups) weights=\(weightGroups)"
+        case let .sourceGroupShape(groupIndex, names, weights):
+            "source_group_shape group=\(groupIndex) names=\(names) weights=\(weights)"
+        case let .mirrorGroupShape(groupIndex, names, weights):
+            "mirror_group_shape group=\(groupIndex) names=\(names) weights=\(weights)"
+        case let .groupCount(source, mirror):
+            "source_mirror_group_count source=\(source) mirror=\(mirror)"
+        case let .weightNames(groupIndex):
+            "source_mirror_weight_names group=\(groupIndex)"
+        }
+    }
+}
+
+nonisolated enum HordePortalBlendShapeWeightGroupParity {
+    static func mismatch(
+        sourceNames: [[String]],
+        sourceWeights: [[Float]],
+        mirrorNames: [[String]],
+        mirrorWeights: [[Float]]
+    ) -> HordePortalBlendShapeWeightGroupMismatch? {
+        guard sourceNames.count == sourceWeights.count else {
+            return .sourceGroupCount(
+                nameGroups: sourceNames.count,
+                weightGroups: sourceWeights.count
+            )
+        }
+        guard mirrorNames.count == mirrorWeights.count else {
+            return .mirrorGroupCount(
+                nameGroups: mirrorNames.count,
+                weightGroups: mirrorWeights.count
+            )
+        }
+        guard sourceNames.count == mirrorNames.count else {
+            return .groupCount(
+                source: sourceNames.count,
+                mirror: mirrorNames.count
+            )
+        }
+
+        for groupIndex in sourceNames.indices {
+            guard sourceNames[groupIndex].count == sourceWeights[groupIndex].count else {
+                return .sourceGroupShape(
+                    groupIndex: groupIndex,
+                    names: sourceNames[groupIndex].count,
+                    weights: sourceWeights[groupIndex].count
+                )
+            }
+            guard mirrorNames[groupIndex].count == mirrorWeights[groupIndex].count else {
+                return .mirrorGroupShape(
+                    groupIndex: groupIndex,
+                    names: mirrorNames[groupIndex].count,
+                    weights: mirrorWeights[groupIndex].count
+                )
+            }
+            guard sourceNames[groupIndex] == mirrorNames[groupIndex] else {
+                return .weightNames(groupIndex: groupIndex)
+            }
+        }
+
+        return nil
+    }
+}
+
 @MainActor
 final class HordePortalSkinnedRenderMirror {
     let id = UUID()
@@ -75,6 +154,7 @@ final class HordePortalSkinnedRenderMirror {
     private let visibilityPolicy: PortalRenderMirrorVisibilityPolicy
     private(set) var visibilityState: PortalRenderMirrorVisibilityState = .visiblePortalSideOrCrossing
     private var hasCleanedUp = false
+    private var hasLoggedBlendShapeSyncMismatch = false
     private var lastSyncLogTime: CFTimeInterval = 0
 
     init(
@@ -277,7 +357,57 @@ final class HordePortalSkinnedRenderMirror {
         if let sourceSkinnedModel,
            let mirrorSkinnedModel {
             mirrorSkinnedModel.jointTransforms = sourceSkinnedModel.jointTransforms
+            syncBlendShapeWeightGroups(
+                from: sourceSkinnedModel,
+                to: mirrorSkinnedModel
+            )
         }
+    }
+
+    private func syncBlendShapeWeightGroups(
+        from sourceSkinnedModel: ModelEntity,
+        to mirrorSkinnedModel: ModelEntity
+    ) {
+        let sourceNames = sourceSkinnedModel.blendWeightNames
+        let sourceWeights = sourceSkinnedModel.blendWeights
+        let mirrorNames = mirrorSkinnedModel.blendWeightNames
+        let mirrorWeights = mirrorSkinnedModel.blendWeights
+
+        if let mismatch = HordePortalBlendShapeWeightGroupParity.mismatch(
+            sourceNames: sourceNames,
+            sourceWeights: sourceWeights,
+            mirrorNames: mirrorNames,
+            mirrorWeights: mirrorWeights
+        ) {
+            logBlendShapeSyncMismatchOnce(mismatch)
+            return
+        }
+
+        guard !sourceNames.isEmpty else {
+            return
+        }
+        mirrorSkinnedModel.blendWeights = sourceWeights
+    }
+
+    private func logBlendShapeSyncMismatchOnce(
+        _ mismatch: HordePortalBlendShapeWeightGroupMismatch
+    ) {
+        guard !hasLoggedBlendShapeSyncMismatch else {
+            return
+        }
+        hasLoggedBlendShapeSyncMismatch = true
+
+        print(
+            """
+            [HordePortalMirror] blendshape synchronization skipped
+              sourceEnemyID: \(sourceEnemyID)
+              mirrorID: \(id)
+              portalID: \(portalID)
+              mismatch: \(mismatch.diagnostic)
+              sourceAnimationContinues: true
+              secondAnimationClock: false
+            """
+        )
     }
 
     private func syncRootTransformOnly() {
@@ -492,6 +622,13 @@ final class HordePortalInstancedIngressController {
 
         roomVisualRevealEventPending = false
         return true
+    }
+
+    /// The physical render clone owned by this ingress. Custom mesh deformers
+    /// are not preserved by `Entity.clone(recursive:)`, so callers that install
+    /// one must bind this root independently from the authoritative enemy.
+    var portalMirrorRootEntity: Entity? {
+        portalInstance?.rootEntity
     }
 
     func update(

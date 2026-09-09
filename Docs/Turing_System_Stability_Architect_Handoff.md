@@ -1746,3 +1746,106 @@ for its lead-in and logs `audible owner retained`; device selection and Qwen
 compute continue, and the requested portrait can claim the card at its own
 actual audio start. This is functional containment only and is not a Mind's Eye
 memory optimization.
+
+## 28. Phase 3 battle test: recovery succeeded; terminal playback wake did not — 2026-09-07
+
+The owner supplied the complete device console capture at
+`/Users/richardfallat/.codex/attachments/f3a0bf3f-417a-481e-8719-c9136c18c6ab/pasted-text.txt`
+after the retained Phase 3 tokenizer-residency optimization. The capture must
+not be summarized as a Qwen terminal stall. It contains two separate findings.
+
+One earlier Turing request did encounter a real Metal command-buffer failure:
+
+```text
+run:                    FCAB6F61…
+segment:                1
+phase / stage:          speechDecoder / speechDecoder.decoder.0
+command buffer:         92286
+status:                 5
+domain / code:          MTLCommandBufferErrorDomain / 1
+```
+
+The Phase 2R same-launch recovery path then reconciled MLX active/cache memory
+to zero, unloaded the failed pool, restored product interaction, advanced the
+recovery generation, and allowed the next and later Qwen runs to complete.
+This is positive device evidence for recovery; it is not evidence that the
+underlying Metal failure is solved.
+
+The final user-visible stall had a different owner. Run
+`2FC698F1-7A17-40CA-A7F5-25A525F3F2C2.legacy` generated and decoded all five Dad
+segments successfully. Its terminal report showed:
+
+```text
+successful segments:               [0, 1, 2, 3, 4]
+skipped segments:                  []
+submitted / completed buffers:     23242 / 23242
+command-buffer failures:           0
+GPU admission invariant failures:  0
+aggregate generated audio:         12.960 s
+generation/decode wall time:       45.263 s
+peak physical footprint:           5291.2 MB
+post-unload MLX active/cache:       0 MB / 0 MB
+```
+
+Rich's compute-ahead prerecording finished before segment zero arrived. When
+segment zero later became ready, the playback coordinator entered a 1.63-second
+`missingFiller.firstSegmentPreroll.generatedReady` dead-air timer. The timer
+completed, but no generated playback request followed and no later event woke
+the scheduler. All five generated clips accumulated behind the unchanged
+cursor:
+
+```text
+nextPlaybackSegmentIndex: 0
+activeComputeSegments:    []
+pendingGenerated:         [0, 1, 2, 3, 4]
+```
+
+Ambient audio continued and the owner eventually used the quit control. The
+process and event loop were therefore alive. Record this as a **missed playback
+scheduler wake after the missing-filler timer during a cross-flow
+compute-ahead handoff**, not as MLX, decoder, memory-pressure, Foundation
+Models, or app-process failure. Do not change Qwen concurrency to address it.
+
+Two lesser non-terminal hiccups were also captured: one Mind's Eye pre-audio
+reveal timeout that correctly continued audio-only, and two PocketSphinx
+grammar misses that correctly emitted `allPhoneFallback` manifests. They do
+not explain the terminal stall.
+
+The same capture is a hard input to Phase 4 streaming economics. The terminal
+run produced 0.286 seconds of decoded audio per wall-clock second in aggregate,
+and an observed hot-row cadence elsewhere in the capture was approximately
+0.515 seconds of compute for 0.080 seconds of audio. A 400–800 ms intra-utterance
+buffer would drain before another equivalent chunk could be generated at that
+cadence. Phase 4 may add a qualification-gated incremental path, but it must not
+become the production default until actual-device measurements prove zero
+underruns, ordered samples, acceptable boundary quality, and a real audible
+start before semantic generation finishes.
+
+## 29. Phase 5 host scouting rejects dedicated MLX streams — 2026-09-07
+
+Phase 5 added a deterministic, isolated lane/stream matrix without changing the
+shipping Fresh2 topology. Its first real-model quick run is preserved at
+`Docs/TuringBenchmarks/phase5-host-quick.json`.
+
+The experiment uses the deprecated shared-weight raw-lane pool, so its
+two-lane/default-stream row is an approximation and not the exact
+`independentFresh2` production control. It is nevertheless useful negative
+evidence. Two dedicated streams increased first-needed decoded-PCM time from
+4.853 seconds to 13.097 seconds and reduced audio-per-wall throughput from
+1.965 to 0.770. Three dedicated streams produced nearly the same regression:
+13.228 seconds and 0.723. PCM Float32 digests matched across all eight segments,
+so the regression was speed rather than output corruption.
+
+Do not activate per-lane MLX streams from this implementation. Single lane
+improved first-needed latency to 1.469 seconds but reduced aggregate throughput
+to 1.889, so it also fails the current neutral-or-better rule. Three lanes on
+the default stream improved both raw metrics in one host sample, but that result
+is fixed-order, unrepeated, not thermally counterbalanced, not the exact Fresh2
+path, and not from Vision Pro. It is a lead for later exact qualification, not
+authorization to increase production lane count.
+
+The next meaningful Phase 5 comparison must run the exact Fresh2 residency,
+GPU-admission, decoder, ordered-playback, and Phase 2R recovery lifecycle on
+Vision Pro, with repeated/counterbalanced runs and hard process isolation for
+experimental modes. Preserve the existing two production lanes and
+`currentOverlap` until that evidence exists.

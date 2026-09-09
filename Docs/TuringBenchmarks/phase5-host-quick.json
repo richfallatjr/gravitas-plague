@@ -1,0 +1,1144 @@
+{
+  "automaticPromotionPerformed" : false,
+  "controlMode" : "currentTwoLaneDefaultStreamControl",
+  "corpusDigest" : "8c6d7cea2b4b370d",
+  "deterministicModeOrder" : [
+    "currentTwoLaneDefaultStreamControl",
+    "singleLane",
+    "threeLaneDefaultStream",
+    "twoLanePerStream",
+    "threeLanePerStream",
+    "microbatch2"
+  ],
+  "exactShippingControlExecuted" : false,
+  "exactShippingTopologyReference" : {
+    "gpuAdmissionMode" : "currentOverlap",
+    "laneCount" : 2,
+    "laneStreamMode" : "defaultOnly",
+    "residencyMode" : "independentFresh2"
+  },
+  "generatedAtUTC" : "2026-09-08T06:39:25Z",
+  "label" : "e4c5e5e0047f-phase5-quick",
+  "matrixScope" : "isolatedRawLaneTopologyApproximation",
+  "metricComparisonsToApproximateControl" : [
+    {
+      "aggregateAudioSecondsPerWallSecondDelta" : {
+        "status" : "measured",
+        "value" : -0.076423280188324
+      },
+      "aggregateThroughputIsNeutralOrBetter" : {
+        "status" : "measured",
+        "value" : false
+      },
+      "candidateMode" : "singleLane",
+      "nextRequiredPCMDeltaSeconds" : {
+        "status" : "measured",
+        "value" : -3.383591890335083
+      },
+      "nextRequiredPCMIsNeutralOrBetter" : {
+        "status" : "measured",
+        "value" : true
+      }
+    },
+    {
+      "aggregateAudioSecondsPerWallSecondDelta" : {
+        "status" : "measured",
+        "value" : 0.032637677985420055
+      },
+      "aggregateThroughputIsNeutralOrBetter" : {
+        "status" : "measured",
+        "value" : true
+      },
+      "candidateMode" : "threeLaneDefaultStream",
+      "nextRequiredPCMDeltaSeconds" : {
+        "status" : "measured",
+        "value" : -1.2237540483474731
+      },
+      "nextRequiredPCMIsNeutralOrBetter" : {
+        "status" : "measured",
+        "value" : true
+      }
+    },
+    {
+      "aggregateAudioSecondsPerWallSecondDelta" : {
+        "status" : "measured",
+        "value" : -1.1956013731839747
+      },
+      "aggregateThroughputIsNeutralOrBetter" : {
+        "status" : "measured",
+        "value" : false
+      },
+      "candidateMode" : "twoLanePerStream",
+      "nextRequiredPCMDeltaSeconds" : {
+        "status" : "measured",
+        "value" : 8.244470953941345
+      },
+      "nextRequiredPCMIsNeutralOrBetter" : {
+        "status" : "measured",
+        "value" : false
+      }
+    },
+    {
+      "aggregateAudioSecondsPerWallSecondDelta" : {
+        "status" : "measured",
+        "value" : -1.2427778920155772
+      },
+      "aggregateThroughputIsNeutralOrBetter" : {
+        "status" : "measured",
+        "value" : false
+      },
+      "candidateMode" : "threeLanePerStream",
+      "nextRequiredPCMDeltaSeconds" : {
+        "status" : "measured",
+        "value" : 8.374850988388062
+      },
+      "nextRequiredPCMIsNeutralOrBetter" : {
+        "status" : "measured",
+        "value" : false
+      }
+    },
+    {
+      "aggregateAudioSecondsPerWallSecondDelta" : {
+        "detail" : "Candidate mode did not produce complete comparable timing evidence.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "aggregateThroughputIsNeutralOrBetter" : {
+        "detail" : "Candidate mode did not produce complete comparable timing evidence.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "candidateMode" : "microbatch2",
+      "nextRequiredPCMDeltaSeconds" : {
+        "detail" : "Candidate mode did not produce complete comparable timing evidence.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "nextRequiredPCMIsNeutralOrBetter" : {
+        "detail" : "Candidate mode did not produce complete comparable timing evidence.",
+        "status" : "unavailable",
+        "value" : null
+      }
+    }
+  ],
+  "pcmComparisonsToApproximateControl" : [
+    {
+      "candidateMode" : "singleLane",
+      "exactMatchToApproximateControl" : {
+        "detail" : "Every completed segment's Float32 PCM digest matches the isolated two-lane/default-stream approximation.",
+        "status" : "measured",
+        "value" : true
+      },
+      "matchingSegmentCount" : {
+        "status" : "measured",
+        "value" : 8
+      },
+      "mismatchedSegmentIndices" : [
+
+      ]
+    },
+    {
+      "candidateMode" : "threeLaneDefaultStream",
+      "exactMatchToApproximateControl" : {
+        "detail" : "Every completed segment's Float32 PCM digest matches the isolated two-lane/default-stream approximation.",
+        "status" : "measured",
+        "value" : true
+      },
+      "matchingSegmentCount" : {
+        "status" : "measured",
+        "value" : 8
+      },
+      "mismatchedSegmentIndices" : [
+
+      ]
+    },
+    {
+      "candidateMode" : "twoLanePerStream",
+      "exactMatchToApproximateControl" : {
+        "detail" : "Every completed segment's Float32 PCM digest matches the isolated two-lane/default-stream approximation.",
+        "status" : "measured",
+        "value" : true
+      },
+      "matchingSegmentCount" : {
+        "status" : "measured",
+        "value" : 8
+      },
+      "mismatchedSegmentIndices" : [
+
+      ]
+    },
+    {
+      "candidateMode" : "threeLanePerStream",
+      "exactMatchToApproximateControl" : {
+        "detail" : "Every completed segment's Float32 PCM digest matches the isolated two-lane/default-stream approximation.",
+        "status" : "measured",
+        "value" : true
+      },
+      "matchingSegmentCount" : {
+        "status" : "measured",
+        "value" : 8
+      },
+      "mismatchedSegmentIndices" : [
+
+      ]
+    },
+    {
+      "candidateMode" : "microbatch2",
+      "exactMatchToApproximateControl" : {
+        "detail" : "Candidate mode did not complete successfully; exact PCM digest parity was not measured.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "matchingSegmentCount" : {
+        "detail" : "Candidate mode did not complete successfully; exact PCM digest parity was not measured.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "mismatchedSegmentIndices" : [
+
+      ]
+    }
+  ],
+  "promotionReasons" : [
+    "The matrix uses the isolated shared-weight ParallelLanePool to compare raw lane and stream scheduling. Its two-lane/default-stream row is an approximation, not the exact independentFresh2 shipping control.",
+    "This matrix does not exercise the production Stage 4 PCM path and therefore does not claim Stage 4 is active.",
+    "Actual playback underruns, ordered delivery, Stage 4 overhead, and listening clone quality are unavailable in this CLI harness.",
+    "Phase 5 promotion requires separate measured evidence through TuringQwenNativePhase5PromotionPolicy."
+  ],
+  "promotionStatus" : "notEvaluated",
+  "results" : [
+    {
+      "actualLaneCount" : {
+        "status" : "measured",
+        "value" : 2
+      },
+      "aggregateAudioSecondsPerWallSecond" : {
+        "status" : "measured",
+        "value" : 1.9653056133657814
+      },
+      "aggregateGeneratedAudioSeconds" : {
+        "status" : "measured",
+        "value" : 48.96
+      },
+      "aggregateWallSeconds" : {
+        "status" : "measured",
+        "value" : 24.912155985832214
+      },
+      "capability" : {
+        "missingCapabilities" : [
+
+        ],
+        "mode" : "currentTwoLaneDefaultStreamControl",
+        "requiredCapabilities" : [
+          "defaultGPUStream"
+        ]
+      },
+      "cloneQualityPassed" : {
+        "detail" : "Automated nonempty/sample-rate checks are not a listening clone-quality decision.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "commandBufferFailures" : {
+        "detail" : "The legacy raw-lane report does not expose command-buffer totals.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "completedSegmentIndices" : [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "consistentSampleRate" : {
+        "status" : "measured",
+        "value" : 24000
+      },
+      "currentPhysicalFootprintMB" : {
+        "status" : "measured",
+        "value" : 2539.6117553710938
+      },
+      "currentResidentSizeMB" : {
+        "status" : "measured",
+        "value" : 2162.171875
+      },
+      "duplicateSegmentCount" : {
+        "status" : "measured",
+        "value" : 0
+      },
+      "executionHarness" : "isolatedSharedWeightParallelLanePool",
+      "expectedSegmentCount" : 8,
+      "firstCompletedSegmentSeconds" : {
+        "detail" : "First completion from any qualification lane; it may belong to a later segment and is not the ordered-playback latency.",
+        "status" : "measured",
+        "value" : 4.852789998054504
+      },
+      "firstPCMObservationKind" : "completedSegmentReturn",
+      "firstPCMSeconds" : {
+        "detail" : "Decoded PCM for the segment required first by ordered playback; this is not an incremental Stage 4 callback.",
+        "status" : "measured",
+        "value" : 4.852789998054504
+      },
+      "isExactShippingTopology" : false,
+      "laneStreamMode" : {
+        "status" : "measured",
+        "value" : "defaultOnly"
+      },
+      "memoryGuardDowngraded" : {
+        "status" : "measured",
+        "value" : false
+      },
+      "missingSegmentCount" : {
+        "status" : "measured",
+        "value" : 0
+      },
+      "mlxCacheLimitMB" : {
+        "status" : "measured",
+        "value" : 512
+      },
+      "mode" : "currentTwoLaneDefaultStreamControl",
+      "nonemptyAudioForEveryCompletedSegment" : {
+        "status" : "measured",
+        "value" : true
+      },
+      "orderedPlaybackPassed" : {
+        "detail" : "Completion order is recorded, but the package matrix does not exercise the production ordered-playback owner.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "peakMLXActiveMemoryMB" : {
+        "detail" : "The isolated legacy lane harness does not sample MLX active-memory peaks.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "peakMLXCacheMemoryMB" : {
+        "detail" : "The isolated legacy lane harness does not sample MLX cache-memory peaks.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "perSegmentPCMDigests" : {
+        "1" : "0b1fb77d8bd8236e",
+        "2" : "e334969ae3ef0d12",
+        "3" : "aa501397dc1d6e58",
+        "4" : "b4c3ef5cd52ba305",
+        "5" : "3d9a43fc35088291",
+        "6" : "70a154cce4e4b684",
+        "7" : "db9e05ac78a6f866",
+        "8" : "df91879bb7086e81"
+      },
+      "playbackUnderrunCount" : {
+        "detail" : "The native package matrix does not schedule device playback.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "postRunMLXActiveMemoryMB" : {
+        "detail" : "This is the legacy report's end-of-run MLX active-memory snapshot, not a sampled peak.",
+        "status" : "measured",
+        "value" : 1551.69970703125
+      },
+      "postRunMLXCacheMemoryMB" : {
+        "detail" : "This is the legacy report's end-of-run MLX cache-memory snapshot, not a sampled peak.",
+        "status" : "measured",
+        "value" : 94.0676383972168
+      },
+      "requestedLaneCount" : 2,
+      "schedulerReportedUnderrunCount" : {
+        "detail" : "The isolated scheduler exposes this counter, but no audio-device playback occurs in the matrix.",
+        "status" : "measured",
+        "value" : 0
+      },
+      "stage4StreamingActive" : {
+        "detail" : "The Phase 5 topology matrix does not exercise or claim production Stage 4 streaming.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "status" : "passed",
+      "thermalState" : {
+        "detail" : "The legacy raw-lane report does not sample thermal state.",
+        "status" : "unavailable",
+        "value" : null
+      }
+    },
+    {
+      "actualLaneCount" : {
+        "status" : "measured",
+        "value" : 1
+      },
+      "aggregateAudioSecondsPerWallSecond" : {
+        "status" : "measured",
+        "value" : 1.8888823331774574
+      },
+      "aggregateGeneratedAudioSeconds" : {
+        "status" : "measured",
+        "value" : 48.96
+      },
+      "aggregateWallSeconds" : {
+        "status" : "measured",
+        "value" : 25.920089960098267
+      },
+      "capability" : {
+        "missingCapabilities" : [
+
+        ],
+        "mode" : "singleLane",
+        "requiredCapabilities" : [
+          "defaultGPUStream"
+        ]
+      },
+      "cloneQualityPassed" : {
+        "detail" : "Automated nonempty/sample-rate checks are not a listening clone-quality decision.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "commandBufferFailures" : {
+        "detail" : "The legacy raw-lane report does not expose command-buffer totals.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "completedSegmentIndices" : [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "consistentSampleRate" : {
+        "status" : "measured",
+        "value" : 24000
+      },
+      "currentPhysicalFootprintMB" : {
+        "status" : "measured",
+        "value" : 5282.738723754883
+      },
+      "currentResidentSizeMB" : {
+        "status" : "measured",
+        "value" : 3480.953125
+      },
+      "duplicateSegmentCount" : {
+        "status" : "measured",
+        "value" : 0
+      },
+      "executionHarness" : "isolatedSharedWeightParallelLanePool",
+      "expectedSegmentCount" : 8,
+      "firstCompletedSegmentSeconds" : {
+        "detail" : "First completion from any qualification lane; it may belong to a later segment and is not the ordered-playback latency.",
+        "status" : "measured",
+        "value" : 1.4691981077194214
+      },
+      "firstPCMObservationKind" : "completedSegmentReturn",
+      "firstPCMSeconds" : {
+        "detail" : "Decoded PCM for the segment required first by ordered playback; this is not an incremental Stage 4 callback.",
+        "status" : "measured",
+        "value" : 1.4691981077194214
+      },
+      "isExactShippingTopology" : false,
+      "laneStreamMode" : {
+        "status" : "measured",
+        "value" : "defaultOnly"
+      },
+      "memoryGuardDowngraded" : {
+        "status" : "measured",
+        "value" : false
+      },
+      "missingSegmentCount" : {
+        "status" : "measured",
+        "value" : 0
+      },
+      "mlxCacheLimitMB" : {
+        "status" : "measured",
+        "value" : 512
+      },
+      "mode" : "singleLane",
+      "nonemptyAudioForEveryCompletedSegment" : {
+        "status" : "measured",
+        "value" : true
+      },
+      "orderedPlaybackPassed" : {
+        "detail" : "Completion order is recorded, but the package matrix does not exercise the production ordered-playback owner.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "peakMLXActiveMemoryMB" : {
+        "detail" : "The isolated legacy lane harness does not sample MLX active-memory peaks.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "peakMLXCacheMemoryMB" : {
+        "detail" : "The isolated legacy lane harness does not sample MLX cache-memory peaks.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "perSegmentPCMDigests" : {
+        "1" : "0b1fb77d8bd8236e",
+        "2" : "e334969ae3ef0d12",
+        "3" : "aa501397dc1d6e58",
+        "4" : "b4c3ef5cd52ba305",
+        "5" : "3d9a43fc35088291",
+        "6" : "70a154cce4e4b684",
+        "7" : "db9e05ac78a6f866",
+        "8" : "df91879bb7086e81"
+      },
+      "playbackUnderrunCount" : {
+        "detail" : "The native package matrix does not schedule device playback.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "postRunMLXActiveMemoryMB" : {
+        "detail" : "This is the legacy report's end-of-run MLX active-memory snapshot, not a sampled peak.",
+        "status" : "measured",
+        "value" : 1550.78955078125
+      },
+      "postRunMLXCacheMemoryMB" : {
+        "detail" : "This is the legacy report's end-of-run MLX cache-memory snapshot, not a sampled peak.",
+        "status" : "measured",
+        "value" : 94.0676383972168
+      },
+      "requestedLaneCount" : 1,
+      "schedulerReportedUnderrunCount" : {
+        "detail" : "The isolated scheduler exposes this counter, but no audio-device playback occurs in the matrix.",
+        "status" : "measured",
+        "value" : 0
+      },
+      "stage4StreamingActive" : {
+        "detail" : "The Phase 5 topology matrix does not exercise or claim production Stage 4 streaming.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "status" : "passed",
+      "thermalState" : {
+        "detail" : "The legacy raw-lane report does not sample thermal state.",
+        "status" : "unavailable",
+        "value" : null
+      }
+    },
+    {
+      "actualLaneCount" : {
+        "status" : "measured",
+        "value" : 3
+      },
+      "aggregateAudioSecondsPerWallSecond" : {
+        "status" : "measured",
+        "value" : 1.9979432913512014
+      },
+      "aggregateGeneratedAudioSeconds" : {
+        "status" : "measured",
+        "value" : 48.96
+      },
+      "aggregateWallSeconds" : {
+        "status" : "measured",
+        "value" : 24.505200028419495
+      },
+      "capability" : {
+        "missingCapabilities" : [
+
+        ],
+        "mode" : "threeLaneDefaultStream",
+        "requiredCapabilities" : [
+          "defaultGPUStream"
+        ]
+      },
+      "cloneQualityPassed" : {
+        "detail" : "Automated nonempty/sample-rate checks are not a listening clone-quality decision.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "commandBufferFailures" : {
+        "detail" : "The legacy raw-lane report does not expose command-buffer totals.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "completedSegmentIndices" : [
+        1,
+        3,
+        4,
+        2,
+        5,
+        6,
+        7,
+        8
+      ],
+      "consistentSampleRate" : {
+        "status" : "measured",
+        "value" : 24000
+      },
+      "currentPhysicalFootprintMB" : {
+        "status" : "measured",
+        "value" : 3416.3472290039062
+      },
+      "currentResidentSizeMB" : {
+        "status" : "measured",
+        "value" : 3247.578125
+      },
+      "duplicateSegmentCount" : {
+        "status" : "measured",
+        "value" : 0
+      },
+      "executionHarness" : "isolatedSharedWeightParallelLanePool",
+      "expectedSegmentCount" : 8,
+      "firstCompletedSegmentSeconds" : {
+        "detail" : "First completion from any qualification lane; it may belong to a later segment and is not the ordered-playback latency.",
+        "status" : "measured",
+        "value" : 3.6290359497070312
+      },
+      "firstPCMObservationKind" : "completedSegmentReturn",
+      "firstPCMSeconds" : {
+        "detail" : "Decoded PCM for the segment required first by ordered playback; this is not an incremental Stage 4 callback.",
+        "status" : "measured",
+        "value" : 3.6290359497070312
+      },
+      "isExactShippingTopology" : false,
+      "laneStreamMode" : {
+        "status" : "measured",
+        "value" : "defaultOnly"
+      },
+      "memoryGuardDowngraded" : {
+        "status" : "measured",
+        "value" : false
+      },
+      "missingSegmentCount" : {
+        "status" : "measured",
+        "value" : 0
+      },
+      "mlxCacheLimitMB" : {
+        "status" : "measured",
+        "value" : 512
+      },
+      "mode" : "threeLaneDefaultStream",
+      "nonemptyAudioForEveryCompletedSegment" : {
+        "status" : "measured",
+        "value" : true
+      },
+      "orderedPlaybackPassed" : {
+        "detail" : "Completion order is recorded, but the package matrix does not exercise the production ordered-playback owner.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "peakMLXActiveMemoryMB" : {
+        "detail" : "The isolated legacy lane harness does not sample MLX active-memory peaks.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "peakMLXCacheMemoryMB" : {
+        "detail" : "The isolated legacy lane harness does not sample MLX cache-memory peaks.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "perSegmentPCMDigests" : {
+        "1" : "0b1fb77d8bd8236e",
+        "2" : "e334969ae3ef0d12",
+        "3" : "aa501397dc1d6e58",
+        "4" : "b4c3ef5cd52ba305",
+        "5" : "3d9a43fc35088291",
+        "6" : "70a154cce4e4b684",
+        "7" : "db9e05ac78a6f866",
+        "8" : "df91879bb7086e81"
+      },
+      "playbackUnderrunCount" : {
+        "detail" : "The native package matrix does not schedule device playback.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "postRunMLXActiveMemoryMB" : {
+        "detail" : "This is the legacy report's end-of-run MLX active-memory snapshot, not a sampled peak.",
+        "status" : "measured",
+        "value" : 1552.60986328125
+      },
+      "postRunMLXCacheMemoryMB" : {
+        "detail" : "This is the legacy report's end-of-run MLX cache-memory snapshot, not a sampled peak.",
+        "status" : "measured",
+        "value" : 94.0676383972168
+      },
+      "requestedLaneCount" : 3,
+      "schedulerReportedUnderrunCount" : {
+        "detail" : "The isolated scheduler exposes this counter, but no audio-device playback occurs in the matrix.",
+        "status" : "measured",
+        "value" : 0
+      },
+      "stage4StreamingActive" : {
+        "detail" : "The Phase 5 topology matrix does not exercise or claim production Stage 4 streaming.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "status" : "passed",
+      "thermalState" : {
+        "detail" : "The legacy raw-lane report does not sample thermal state.",
+        "status" : "unavailable",
+        "value" : null
+      }
+    },
+    {
+      "actualLaneCount" : {
+        "status" : "measured",
+        "value" : 2
+      },
+      "aggregateAudioSecondsPerWallSecond" : {
+        "status" : "measured",
+        "value" : 0.7697042401818067
+      },
+      "aggregateGeneratedAudioSeconds" : {
+        "status" : "measured",
+        "value" : 48.96
+      },
+      "aggregateWallSeconds" : {
+        "status" : "measured",
+        "value" : 63.608847975730896
+      },
+      "capability" : {
+        "missingCapabilities" : [
+
+        ],
+        "mode" : "twoLanePerStream",
+        "requiredCapabilities" : [
+          "perTaskGPUStreams"
+        ]
+      },
+      "cloneQualityPassed" : {
+        "detail" : "Automated nonempty/sample-rate checks are not a listening clone-quality decision.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "commandBufferFailures" : {
+        "detail" : "The legacy raw-lane report does not expose command-buffer totals.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "completedSegmentIndices" : [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "consistentSampleRate" : {
+        "status" : "measured",
+        "value" : 24000
+      },
+      "currentPhysicalFootprintMB" : {
+        "status" : "measured",
+        "value" : 2731.7689666748047
+      },
+      "currentResidentSizeMB" : {
+        "status" : "measured",
+        "value" : 2851.3125
+      },
+      "duplicateSegmentCount" : {
+        "status" : "measured",
+        "value" : 0
+      },
+      "executionHarness" : "isolatedSharedWeightParallelLanePool",
+      "expectedSegmentCount" : 8,
+      "firstCompletedSegmentSeconds" : {
+        "detail" : "First completion from any qualification lane; it may belong to a later segment and is not the ordered-playback latency.",
+        "status" : "measured",
+        "value" : 13.09726095199585
+      },
+      "firstPCMObservationKind" : "completedSegmentReturn",
+      "firstPCMSeconds" : {
+        "detail" : "Decoded PCM for the segment required first by ordered playback; this is not an incremental Stage 4 callback.",
+        "status" : "measured",
+        "value" : 13.09726095199585
+      },
+      "isExactShippingTopology" : false,
+      "laneStreamMode" : {
+        "status" : "measured",
+        "value" : "dedicatedGPU"
+      },
+      "memoryGuardDowngraded" : {
+        "status" : "measured",
+        "value" : false
+      },
+      "missingSegmentCount" : {
+        "status" : "measured",
+        "value" : 0
+      },
+      "mlxCacheLimitMB" : {
+        "status" : "measured",
+        "value" : 512
+      },
+      "mode" : "twoLanePerStream",
+      "nonemptyAudioForEveryCompletedSegment" : {
+        "status" : "measured",
+        "value" : true
+      },
+      "orderedPlaybackPassed" : {
+        "detail" : "Completion order is recorded, but the package matrix does not exercise the production ordered-playback owner.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "peakMLXActiveMemoryMB" : {
+        "detail" : "The isolated legacy lane harness does not sample MLX active-memory peaks.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "peakMLXCacheMemoryMB" : {
+        "detail" : "The isolated legacy lane harness does not sample MLX cache-memory peaks.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "perSegmentPCMDigests" : {
+        "1" : "0b1fb77d8bd8236e",
+        "2" : "e334969ae3ef0d12",
+        "3" : "aa501397dc1d6e58",
+        "4" : "b4c3ef5cd52ba305",
+        "5" : "3d9a43fc35088291",
+        "6" : "70a154cce4e4b684",
+        "7" : "db9e05ac78a6f866",
+        "8" : "df91879bb7086e81"
+      },
+      "playbackUnderrunCount" : {
+        "detail" : "The native package matrix does not schedule device playback.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "postRunMLXActiveMemoryMB" : {
+        "detail" : "This is the legacy report's end-of-run MLX active-memory snapshot, not a sampled peak.",
+        "status" : "measured",
+        "value" : 1551.69970703125
+      },
+      "postRunMLXCacheMemoryMB" : {
+        "detail" : "This is the legacy report's end-of-run MLX cache-memory snapshot, not a sampled peak.",
+        "status" : "measured",
+        "value" : 1.9375
+      },
+      "requestedLaneCount" : 2,
+      "schedulerReportedUnderrunCount" : {
+        "detail" : "The isolated scheduler exposes this counter, but no audio-device playback occurs in the matrix.",
+        "status" : "measured",
+        "value" : 0
+      },
+      "stage4StreamingActive" : {
+        "detail" : "The Phase 5 topology matrix does not exercise or claim production Stage 4 streaming.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "status" : "passed",
+      "thermalState" : {
+        "detail" : "The legacy raw-lane report does not sample thermal state.",
+        "status" : "unavailable",
+        "value" : null
+      }
+    },
+    {
+      "actualLaneCount" : {
+        "status" : "measured",
+        "value" : 3
+      },
+      "aggregateAudioSecondsPerWallSecond" : {
+        "status" : "measured",
+        "value" : 0.7225277213502043
+      },
+      "aggregateGeneratedAudioSeconds" : {
+        "status" : "measured",
+        "value" : 48.959999999999994
+      },
+      "aggregateWallSeconds" : {
+        "status" : "measured",
+        "value" : 67.76210594177246
+      },
+      "capability" : {
+        "missingCapabilities" : [
+
+        ],
+        "mode" : "threeLanePerStream",
+        "requiredCapabilities" : [
+          "perTaskGPUStreams"
+        ]
+      },
+      "cloneQualityPassed" : {
+        "detail" : "Automated nonempty/sample-rate checks are not a listening clone-quality decision.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "commandBufferFailures" : {
+        "detail" : "The legacy raw-lane report does not expose command-buffer totals.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "completedSegmentIndices" : [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "consistentSampleRate" : {
+        "status" : "measured",
+        "value" : 24000
+      },
+      "currentPhysicalFootprintMB" : {
+        "status" : "measured",
+        "value" : 3339.456672668457
+      },
+      "currentResidentSizeMB" : {
+        "status" : "measured",
+        "value" : 1642.40625
+      },
+      "duplicateSegmentCount" : {
+        "status" : "measured",
+        "value" : 0
+      },
+      "executionHarness" : "isolatedSharedWeightParallelLanePool",
+      "expectedSegmentCount" : 8,
+      "firstCompletedSegmentSeconds" : {
+        "detail" : "First completion from any qualification lane; it may belong to a later segment and is not the ordered-playback latency.",
+        "status" : "measured",
+        "value" : 13.227640986442566
+      },
+      "firstPCMObservationKind" : "completedSegmentReturn",
+      "firstPCMSeconds" : {
+        "detail" : "Decoded PCM for the segment required first by ordered playback; this is not an incremental Stage 4 callback.",
+        "status" : "measured",
+        "value" : 13.227640986442566
+      },
+      "isExactShippingTopology" : false,
+      "laneStreamMode" : {
+        "status" : "measured",
+        "value" : "dedicatedGPU"
+      },
+      "memoryGuardDowngraded" : {
+        "status" : "measured",
+        "value" : false
+      },
+      "missingSegmentCount" : {
+        "status" : "measured",
+        "value" : 0
+      },
+      "mlxCacheLimitMB" : {
+        "status" : "measured",
+        "value" : 512
+      },
+      "mode" : "threeLanePerStream",
+      "nonemptyAudioForEveryCompletedSegment" : {
+        "status" : "measured",
+        "value" : true
+      },
+      "orderedPlaybackPassed" : {
+        "detail" : "Completion order is recorded, but the package matrix does not exercise the production ordered-playback owner.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "peakMLXActiveMemoryMB" : {
+        "detail" : "The isolated legacy lane harness does not sample MLX active-memory peaks.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "peakMLXCacheMemoryMB" : {
+        "detail" : "The isolated legacy lane harness does not sample MLX cache-memory peaks.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "perSegmentPCMDigests" : {
+        "1" : "0b1fb77d8bd8236e",
+        "2" : "e334969ae3ef0d12",
+        "3" : "aa501397dc1d6e58",
+        "4" : "b4c3ef5cd52ba305",
+        "5" : "3d9a43fc35088291",
+        "6" : "70a154cce4e4b684",
+        "7" : "db9e05ac78a6f866",
+        "8" : "df91879bb7086e81"
+      },
+      "playbackUnderrunCount" : {
+        "detail" : "The native package matrix does not schedule device playback.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "postRunMLXActiveMemoryMB" : {
+        "detail" : "This is the legacy report's end-of-run MLX active-memory snapshot, not a sampled peak.",
+        "status" : "measured",
+        "value" : 1552.60986328125
+      },
+      "postRunMLXCacheMemoryMB" : {
+        "detail" : "This is the legacy report's end-of-run MLX cache-memory snapshot, not a sampled peak.",
+        "status" : "measured",
+        "value" : 94.0676383972168
+      },
+      "requestedLaneCount" : 3,
+      "schedulerReportedUnderrunCount" : {
+        "detail" : "The isolated scheduler exposes this counter, but no audio-device playback occurs in the matrix.",
+        "status" : "measured",
+        "value" : 0
+      },
+      "stage4StreamingActive" : {
+        "detail" : "The Phase 5 topology matrix does not exercise or claim production Stage 4 streaming.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "status" : "passed",
+      "thermalState" : {
+        "detail" : "The legacy raw-lane report does not sample thermal state.",
+        "status" : "unavailable",
+        "value" : null
+      }
+    },
+    {
+      "actualLaneCount" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "aggregateAudioSecondsPerWallSecond" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "aggregateGeneratedAudioSeconds" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "aggregateWallSeconds" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "capability" : {
+        "missingCapabilities" : [
+          "batchedKVCacheAndSampling"
+        ],
+        "mode" : "microbatch2",
+        "requiredCapabilities" : [
+          "batchedKVCacheAndSampling"
+        ]
+      },
+      "cloneQualityPassed" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "commandBufferFailures" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "completedSegmentIndices" : [
+
+      ],
+      "consistentSampleRate" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "currentPhysicalFootprintMB" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "currentResidentSizeMB" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "duplicateSegmentCount" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "error" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+      "executionHarness" : "isolatedSharedWeightParallelLanePool",
+      "expectedSegmentCount" : 0,
+      "firstCompletedSegmentSeconds" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "firstPCMObservationKind" : "unavailable",
+      "firstPCMSeconds" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "isExactShippingTopology" : false,
+      "laneStreamMode" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "memoryGuardDowngraded" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "missingSegmentCount" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "mlxCacheLimitMB" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "mode" : "microbatch2",
+      "nonemptyAudioForEveryCompletedSegment" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "orderedPlaybackPassed" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "peakMLXActiveMemoryMB" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "peakMLXCacheMemoryMB" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "perSegmentPCMDigests" : {
+
+      },
+      "playbackUnderrunCount" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "postRunMLXActiveMemoryMB" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "postRunMLXCacheMemoryMB" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "requestedLaneCount" : 2,
+      "schedulerReportedUnderrunCount" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "stage4StreamingActive" : {
+        "detail" : "The Phase 5 topology matrix does not exercise or claim production Stage 4 streaming.",
+        "status" : "unavailable",
+        "value" : null
+      },
+      "status" : "unsupported",
+      "thermalState" : {
+        "detail" : "Unsupported by installed engine capabilities: batchedKVCacheAndSampling.",
+        "status" : "unavailable",
+        "value" : null
+      }
+    }
+  ],
+  "schemaVersion" : 1,
+  "shippingTopologyChanged" : false,
+  "suite" : "quick"
+}

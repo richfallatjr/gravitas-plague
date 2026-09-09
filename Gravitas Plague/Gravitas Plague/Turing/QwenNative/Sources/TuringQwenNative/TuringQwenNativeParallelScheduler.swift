@@ -31,6 +31,7 @@ public actor TuringQwenNativeParallelScheduler {
 
         let requested = lanePool.laneCountRequested
         let active = await lanePool.laneCountActive
+        let streamMode = lanePool.streamMode
         let runStart = Date()
         let workQueue = TuringQwenNativeParallelWorkQueue(totalCount: requests.count)
         let metricsCollector = TuringQwenNativeParallelMetricsCollector(
@@ -44,7 +45,7 @@ public actor TuringQwenNativeParallelScheduler {
           laneCountActive: \(active)
           skipSegmentFailures: \(skipSegmentFailures)
           sharedWeights: true
-          streamMode: defaultOnly
+          streamMode: \(streamMode.rawValue)
         """)
 
         try await withThrowingTaskGroup(of: Void.self) { group in

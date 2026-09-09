@@ -17,6 +17,33 @@ private enum TuringQwenBenchmarkCLI {
                 return
             }
 
+            if arguments.mode == .phase5Matrix {
+                let report = await TuringQwenNativePhase5BenchmarkMatrixRunner
+                    .run(
+                        options: .init(
+                            modelRoot: arguments.modelRoot,
+                            bundleRoot: arguments.bundleRoot,
+                            suite: arguments.suite,
+                            label: arguments.label
+                        )
+                    )
+                try writeJSON(report, to: arguments.outputURL)
+                print(
+                    "Turing Qwen Phase 5 matrix report: \(arguments.outputURL.path)"
+                )
+                if report.supportedModeFailureCount > 0 {
+                    fputs(
+                        "turing-qwen-benchmark phase5-matrix: STRUCTURAL FAIL (no promotion decision)\n",
+                        stderr
+                    )
+                    Foundation.exit(EXIT_FAILURE)
+                }
+                print(
+                    "turing-qwen-benchmark phase5-matrix: SCOUTING COMPLETE (no promotion decision)"
+                )
+                return
+            }
+
             let baseline: TuringQwenOptimizationBenchmarkReport?
             if let baselineURL = arguments.baselineURL {
                 baseline = try JSONDecoder().decode(
@@ -39,14 +66,7 @@ private enum TuringQwenBenchmarkCLI {
                     baseline: baseline
                 )
             )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-            let data = try encoder.encode(report)
-            try FileManager.default.createDirectory(
-                at: arguments.outputURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try data.write(to: arguments.outputURL, options: .atomic)
+            try writeJSON(report, to: arguments.outputURL)
             print("Turing Qwen benchmark report: \(arguments.outputURL.path)")
             if report.completion.status == .fail {
                 fputs("turing-qwen-benchmark: FAIL\n", stderr)
@@ -57,6 +77,24 @@ private enum TuringQwenBenchmarkCLI {
             fputs("\(Arguments.usage)\n", stderr)
             Foundation.exit(EX_USAGE)
         }
+    }
+
+    private static func writeJSON<Value: Encodable>(
+        _ value: Value,
+        to outputURL: URL
+    ) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [
+            .prettyPrinted,
+            .sortedKeys,
+            .withoutEscapingSlashes
+        ]
+        let data = try encoder.encode(value)
+        try FileManager.default.createDirectory(
+            at: outputURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try data.write(to: outputURL, options: .atomic)
     }
 
     private static func discoverGitRevision(startingAt url: URL) -> String? {
@@ -90,6 +128,7 @@ private enum TuringQwenBenchmarkCLI {
 }
 
 private struct Arguments {
+    let mode: BenchmarkRunMode
     let modelRoot: URL
     let bundleRoot: URL
     let outputURL: URL
@@ -105,6 +144,7 @@ private struct Arguments {
         --model-root PATH \\
         --bundle-root PATH \\
         --output PATH \\
+        [--mode standard|phase5-matrix] \\
         [--suite quick|full] \\
         [--baseline PREVIOUS_REPORT.json] \\
         [--label LABEL] \\
@@ -113,12 +153,16 @@ private struct Arguments {
     `quick` runs one representative short, medium, and long case. `full` runs
     the locked 10 short, 10 medium, 10 long, and three multi-minute scripts.
     A baseline report enables automatic before/after/delta comparison.
+
+    `phase5-matrix` runs the isolated lane/stream qualification matrix once,
+    records microbatch2 as unsupported, and never changes shipping topology.
     """
 
     static func parse(_ raw: [String]) throws -> Self {
         if raw == ["--help"] || raw == ["-h"] {
             let placeholder = URL(fileURLWithPath: "/")
             return Self(
+                mode: .standard,
                 modelRoot: placeholder,
                 bundleRoot: placeholder,
                 outputURL: placeholder,
@@ -151,6 +195,7 @@ private struct Arguments {
             "--model-root",
             "--bundle-root",
             "--output",
+            "--mode",
             "--suite",
             "--baseline",
             "--label",
@@ -168,6 +213,15 @@ private struct Arguments {
         guard let suite = TuringQwenBenchmarkSuite(rawValue: suiteText) else {
             throw CLIError("--suite must be quick or full")
         }
+        let modeText = values["--mode"] ?? BenchmarkRunMode.standard.rawValue
+        guard let mode = BenchmarkRunMode(rawValue: modeText) else {
+            throw CLIError("--mode must be standard or phase5-matrix")
+        }
+        if mode == .phase5Matrix, values["--baseline"] != nil {
+            throw CLIError(
+                "--baseline is not used by phase5-matrix; its control is captured in the same invocation"
+            )
+        }
         let modelRoot = fileURL(modelPath)
         let bundleRoot = fileURL(bundlePath)
         let outputURL = fileURL(outputPath)
@@ -184,6 +238,7 @@ private struct Arguments {
             }
         }
         return Self(
+            mode: mode,
             modelRoot: modelRoot,
             bundleRoot: bundleRoot,
             outputURL: outputURL,
@@ -199,6 +254,11 @@ private struct Arguments {
         URL(fileURLWithPath: (value as NSString).expandingTildeInPath)
             .standardizedFileURL
     }
+}
+
+private enum BenchmarkRunMode: String {
+    case standard
+    case phase5Matrix = "phase5-matrix"
 }
 
 private struct CLIError: LocalizedError {

@@ -52,7 +52,7 @@ public struct StreamOrDevice: Sendable, CustomStringConvertible, Equatable {
     public static let gpu = device(.gpu)
 
     public static func stream(_ stream: Stream) -> StreamOrDevice {
-        StreamOrDevice(Device.defaultStream())
+        StreamOrDevice(stream)
     }
 
     /// Internal context -- used with Cmlx calls.
@@ -88,6 +88,28 @@ public final class Stream: @unchecked Sendable, Equatable {
 
     @TaskLocal static var defaultStream: Stream?
 
+    /// Use an existing stream as the ``StreamOrDevice/default`` scoped to a Task.
+    ///
+    /// Unlike ``withNewDefaultStream(device:_:)``, this overload preserves the
+    /// identity of a caller-owned stream. This is useful when a long-lived worker
+    /// owns one stream and every operation performed by that worker must remain on
+    /// the same stream for the lifetime of the task.
+    public static func withDefaultStream<R>(
+        _ stream: Stream,
+        _ body: () throws -> R
+    ) rethrows -> R {
+        try $defaultStream.withValue(stream, operation: body)
+    }
+
+    /// Use an existing stream as the ``StreamOrDevice/default`` scoped to an
+    /// asynchronous Task.
+    public static func withDefaultStream<R: Sendable>(
+        _ stream: Stream,
+        _ body: @Sendable () async throws -> R
+    ) async rethrows -> R {
+        try await $defaultStream.withValue(stream, operation: body)
+    }
+
     /// Set the ``StreamOrDevice/default`` scoped to a Task.
     public static func withNewDefaultStream<R>(device: Device? = nil, _ body: () throws -> R)
         rethrows -> R
@@ -107,6 +129,15 @@ public final class Stream: @unchecked Sendable, Equatable {
     init(_ ctx: mlx_stream) {
         self.ctx = ctx
     }
+
+    #if DEBUG
+        /// Empty handle used only by unit tests that validate Swift TaskLocal
+        /// routing without initializing either MLX compute backend. Never submit
+        /// an operation to this stream.
+        static func _taskLocalRoutingPlaceholder() -> Stream {
+            Stream(mlx_stream_new())
+        }
+    #endif
 
     /// Default stream on the default device.
     public init() {

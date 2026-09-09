@@ -1,7 +1,7 @@
 // Copyright © 2024 Apple Inc.
 
 import Foundation
-import MLX
+@testable import MLX
 import XCTest
 
 class StreamTests: XCTestCase {
@@ -89,6 +89,29 @@ class StreamTests: XCTestCase {
                 let x = MLXArray(1)
                 let _ = x * x
             }
+        }
+    }
+
+    func testExplicitStreamPreservesIdentity() {
+        let stream = Stream._taskLocalRoutingPlaceholder()
+
+        XCTAssertTrue(StreamOrDevice.stream(stream).stream === stream)
+    }
+
+    func testExistingDefaultStreamIsTaskScoped() async {
+        let outer = Stream._taskLocalRoutingPlaceholder()
+        let inner = Stream._taskLocalRoutingPlaceholder()
+
+        await Stream.withDefaultStream(outer) {
+            XCTAssertTrue(StreamOrDevice.default.stream === outer)
+
+            let scoped = await Stream.withDefaultStream(inner) {
+                await Task.yield()
+                return StreamOrDevice.default.stream
+            }
+
+            XCTAssertTrue(scoped === inner)
+            XCTAssertTrue(StreamOrDevice.default.stream === outer)
         }
     }
 

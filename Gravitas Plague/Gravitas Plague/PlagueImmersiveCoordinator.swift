@@ -814,10 +814,11 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             door: turingDoorBundleController,
             clock: ProductionBattleClock(),
             richVocalChannel: audioController,
-            onEnemyPrepared: { [weak self] enemyID, controller in
+            onEnemyPrepared: { [weak self] enemyID, controller, portalMirrorRoot in
                 self?.prepareChapter01DadBattleAudioAndCallbacks(
                     enemyID: enemyID,
-                    controller: controller
+                    controller: controller,
+                    portalMirrorRoot: portalMirrorRoot
                 )
             },
             onEnemyRemoved: { [weak self] enemyID in
@@ -1357,7 +1358,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
     private func prepareChapter01DadBattleAudioAndCallbacks(
         enemyID: UUID,
-        controller: JockRetargetTestController
+        controller: JockRetargetTestController,
+        portalMirrorRoot: Entity?
     ) {
         print(
             "[Chapter01DadBattleLighting] room-side Dad uses automatic " +
@@ -1368,6 +1370,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             hostRootEntity: controller.rootEntity,
             archetype: .dad,
             headAudioEntity: controller.characterAudioEmitter,
+            portalMirrorRootEntity: portalMirrorRoot,
             breathingStartDelay: 0
         )
         controller.onPunchHit = { [weak self, weak controller] region in
@@ -3584,6 +3587,12 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 currentHeadPosition: currentHeadPosition
             )
 
+            timingProfiler.measure("character.dad_vocal_blendshape") {
+                audioController.updateCharacterVocalVisuals(
+                    deltaTime: TimeInterval(deltaTime)
+                )
+            }
+
             timingProfiler.measure("portal_mirror.visibility_update") {
                 syncAllPortalMirrorsAfterEnemyAnimations()
             }
@@ -3643,6 +3652,12 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                         timingProfiler: timingProfiler
                     )
                 }
+            }
+
+            timingProfiler.measure("character.dad_vocal_blendshape") {
+                audioController.updateCharacterVocalVisuals(
+                    deltaTime: TimeInterval(deltaTime)
+                )
             }
         }
     }
@@ -4407,6 +4422,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                     hostRootEntity: controller.rootEntity,
                     archetype: controller.archetype,
                     headAudioEntity: controller.characterAudioEmitter,
+                    portalMirrorRootEntity: ingress.portalMirrorRootEntity,
                     breathingStartDelay: 0
                 )
 

@@ -1,0 +1,24 @@
+{
+  "basePose": "wide",
+  "blendShapeName": "dadVocalClose",
+  "donorAsset": "dad_biped_mouth_closed.usdz",
+  "excludedDonorPrimPaths": [
+    "/root/Cube",
+    "/root/Camera",
+    "/root/Light"
+  ],
+  "expectedChangedPointCount": 2004,
+  "expectedTopologySHA256": "6a51d7e09edb7a857601278ba9598ed7855cb7dd39363cdf1e8e5e77763527d9",
+  "maximumWorldDisplacementMeters": 0.02,
+  "meshBindings": [
+    {
+      "basePrimPath": "/root/Armature/char1/char1",
+      "donorPrimPath": "/root/Armature/char1/char1"
+    }
+  ],
+  "schemaVersion": 1,
+  "skelRootPrimPath": "/root/Armature",
+  "sourceAsset": "dad_biped.usdz",
+  "sparseOffsetEpsilonLocalUnits": 1e-06,
+  "targetPose": "closedTense"
+}

@@ -376,8 +376,16 @@ public actor TuringQwenNativeBaseCloneEngine {
         request: TuringQwenNativeBaseCloneSegmentRequest,
         runID: String,
         instanceID: TuringQwenNativeFreshInstanceID,
-        laneIndex: Int? = nil
+        laneIndex: Int? = nil,
+        recoveryGeneration: TuringQwenNativeRecoveryGeneration = .initial,
+        experimentalStreamingConfiguration:
+            TuringQwenNativeExperimentalStreamingConfiguration = .disabled,
+        incrementalCodebookEventSink:
+            TuringQwenNativeIncrementalCodebookEventSink? = nil
     ) throws -> TuringQwenRenderedCodebookMaterialization {
+        try experimentalStreamingConfiguration.validate(
+            eventSinkIsPresent: incrementalCodebookEventSink != nil
+        )
         do {
             let payload = try TuringQwenNativeMLXErrorBoundary.run(
                 context: TuringQwenNativeMLXExecutionContext(
@@ -396,7 +404,12 @@ public actor TuringQwenNativeBaseCloneEngine {
                     request: request,
                     runID: runID,
                     instanceID: instanceID,
-                    laneIndex: laneIndex
+                    laneIndex: laneIndex,
+                    recoveryGeneration: recoveryGeneration,
+                    experimentalStreamingConfiguration:
+                        experimentalStreamingConfiguration,
+                    incrementalCodebookEventSink:
+                        incrementalCodebookEventSink
                 )
             }
             releaseRequestWorkingSet(
@@ -419,7 +432,12 @@ public actor TuringQwenNativeBaseCloneEngine {
         request: TuringQwenNativeBaseCloneSegmentRequest,
         runID: String,
         instanceID: TuringQwenNativeFreshInstanceID,
-        laneIndex: Int?
+        laneIndex: Int?,
+        recoveryGeneration: TuringQwenNativeRecoveryGeneration,
+        experimentalStreamingConfiguration:
+            TuringQwenNativeExperimentalStreamingConfiguration,
+        incrementalCodebookEventSink:
+            TuringQwenNativeIncrementalCodebookEventSink?
     ) throws -> TuringQwenRenderedCodebookMaterialization {
         try autoreleasepool {
         let prompt = makePrompt(from: request)
@@ -445,6 +463,21 @@ public actor TuringQwenNativeBaseCloneEngine {
             details: ["voiceID": prompt.cloneProfile.voiceID]
         )
 
+        let incrementalStreamIdentity:
+            TuringQwenNativeIncrementalCodebookStreamIdentity?
+        if experimentalStreamingConfiguration.isEnabled {
+            incrementalStreamIdentity =
+                TuringQwenNativeIncrementalCodebookStreamIdentity(
+                    runID: runID,
+                    segmentIndex: request.segmentIndex,
+                    instanceID: instanceID,
+                    voiceID: prompt.cloneProfile.voiceID,
+                    recoveryGeneration: recoveryGeneration
+                )
+        } else {
+            incrementalStreamIdentity = nil
+        }
+
         do {
             let generated = try generateCodebookForDecode(
                 prompt,
@@ -453,7 +486,9 @@ public actor TuringQwenNativeBaseCloneEngine {
                     instanceID: instanceID.rawValue,
                     segmentIndex: request.segmentIndex,
                     laneIndex: laneIndex
-                )
+                ),
+                incrementalStreamIdentity: incrementalStreamIdentity,
+                incrementalCodebookEventSink: incrementalCodebookEventSink
             )
             TuringQwenNativeDiagnostics.recordBreadcrumb(
                 "baseClone.codebooks.generated",
@@ -530,8 +565,29 @@ public actor TuringQwenNativeBaseCloneEngine {
                     "referenceRows": String(result.referenceRowCount)
                 ]
             )
+            if let incrementalStreamIdentity,
+               let incrementalCodebookEventSink {
+                incrementalCodebookEventSink.yield(
+                    .finished(
+                        TuringQwenNativeIncrementalCodebookTerminal(
+                            identity: incrementalStreamIdentity,
+                            generatedRowCount: result.generatedRowCount,
+                            reachedEOS: result.reachedEOS
+                        )
+                    )
+                )
+            }
             return result
         } catch {
+            if let incrementalStreamIdentity,
+               let incrementalCodebookEventSink {
+                incrementalCodebookEventSink.yield(
+                    .failed(
+                        identity: incrementalStreamIdentity,
+                        message: error.localizedDescription
+                    )
+                )
+            }
             TuringQwenNativeDiagnostics.recordBreadcrumb(
                 "baseClone.render.failed",
                 runID: runID,
@@ -599,7 +655,11 @@ public actor TuringQwenNativeBaseCloneEngine {
 
     private func generateCodebookForDecode(
         _ prompt: TuringQwenNativeBaseClonePrompt,
-        diagnosticContext: RenderDiagnosticContext? = nil
+        diagnosticContext: RenderDiagnosticContext? = nil,
+        incrementalStreamIdentity:
+            TuringQwenNativeIncrementalCodebookStreamIdentity? = nil,
+        incrementalCodebookEventSink:
+            TuringQwenNativeIncrementalCodebookEventSink? = nil
     ) throws -> GeneratedCodebookForDecode {
         defer {
             TuringQwenNativeMemoryControl.clearCache(
@@ -628,6 +688,35 @@ public actor TuringQwenNativeBaseCloneEngine {
             seed: prompt.samplingSeed
         )
         let prepared = try prepareBaseClonePrompt(prompt)
+        let referenceRows = prepared.prompt.referenceCodes.map { row in
+            row.map(Int.init)
+        }
+        var incrementalWindowEmitter:
+            TuringQwenNativeIncrementalCodebookWindowEmitter?
+        if let incrementalStreamIdentity,
+           let incrementalCodebookEventSink {
+            let decodeReferenceRows = Array(
+                referenceRows.suffix(
+                    TuringQwenDecodeConfiguration.referenceContextRows
+                )
+            )
+            incrementalWindowEmitter = try
+                TuringQwenNativeIncrementalCodebookWindowEmitter(
+                    identity: incrementalStreamIdentity,
+                    referenceRows: decodeReferenceRows,
+                    codebookCount: prepared.report.codebookCount,
+                    performanceMode: prompt.performanceMode,
+                    sink: incrementalCodebookEventSink
+                )
+        } else {
+            guard incrementalStreamIdentity == nil,
+                  incrementalCodebookEventSink == nil else {
+                throw TuringQwenNativeError.invalidConfig(
+                    "Incremental codebook streaming identity and sink must be provided together."
+                )
+            }
+            incrementalWindowEmitter = nil
+        }
         let resident = try loadResidentWeights()
         let staticPromptContext = try cachedStaticPromptContext(
             prompt: prompt,
@@ -787,7 +876,8 @@ public actor TuringQwenNativeBaseCloneEngine {
             samplingPolicy: prompt.samplingPolicy,
             samplingContext: &samplingContext,
             resident: resident,
-            diagnosticContext: diagnosticContext
+            diagnosticContext: diagnosticContext,
+            incrementalWindowEmitter: &incrementalWindowEmitter
         )
         TuringQwenNativeDiagnostics.recordBreadcrumb(
             "baseClone.dynamicCodebook.completed",
@@ -804,12 +894,11 @@ public actor TuringQwenNativeBaseCloneEngine {
                 "Base clone generated no codec rows before EOS."
             )
         }
+        try incrementalWindowEmitter?.flushFinalPartialWindow()
 
         return GeneratedCodebookForDecode(
             generatedRows: dynamicCodebook.rows.map(\.tokenIDs),
-            referenceRows: prepared.prompt.referenceCodes.map { row in
-                row.map(Int.init)
-            },
+            referenceRows: referenceRows,
             initialPromptSeconds: initialPromptSeconds,
             initialTalkerForwardSeconds: initialTalkerForwardSeconds,
             talkerOneStepTotalSeconds: dynamicCodebook.talkerOneStepTotalSeconds,
@@ -1078,7 +1167,9 @@ public actor TuringQwenNativeBaseCloneEngine {
         samplingPolicy: TuringQwenNativeSamplingPolicy,
         samplingContext: inout TuringQwenNativeSamplingContext,
         resident: TuringQwenNativeResidentResources,
-        diagnosticContext: RenderDiagnosticContext?
+        diagnosticContext: RenderDiagnosticContext?,
+        incrementalWindowEmitter:
+            inout TuringQwenNativeIncrementalCodebookWindowEmitter?
     ) throws -> DynamicCodebookResult {
         let targetRowCount = max(maxNewRows, 1)
         let generationStart = Date()
@@ -1172,6 +1263,7 @@ public actor TuringQwenNativeBaseCloneEngine {
         }
 
         generatedRows.append(firstCodeGroup)
+        try incrementalWindowEmitter?.commit(firstCodeGroup.tokenIDs)
 
         while generatedRows.count < targetRowCount {
             // A sibling Fresh lane can surface a process-global MLX Metal
@@ -1274,6 +1366,7 @@ public actor TuringQwenNativeBaseCloneEngine {
             }
 
             generatedRows.append(nextStep.codeGroup)
+            try incrementalWindowEmitter?.commit(nextStep.codeGroup.tokenIDs)
         }
 
         print("""

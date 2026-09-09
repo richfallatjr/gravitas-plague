@@ -81,6 +81,8 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
         let usesResolvedHeadAnchor: Bool
         var loopController: AudioPlaybackController?
         var loopStartTask: Task<Void, Never>?
+        var loopIdentity: CharacterVocalPlaybackIdentity?
+        var loopClockOrigin: ContinuousClock.Instant?
     }
 
     private struct ActiveSpatialOneShot {
@@ -101,6 +103,8 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
         let file: String
         let startedAt: TimeInterval
         let expectedEndTime: TimeInterval
+        let identity: CharacterVocalPlaybackIdentity
+        let clockOrigin: ContinuousClock.Instant
         let playbackController: AudioPlaybackController
     }
 
@@ -232,6 +236,10 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
     private var hostAudioSourcesByID: [UUID: HostAudioSource] = [:]
     private var activeSpatialOneShotsByID: [UUID: ActiveSpatialOneShot] = [:]
     private var activeCharacterVocalBySourceID: [UUID: ActiveCharacterVocal] = [:]
+    private let characterVocalPlaybackEventHub = CharacterVocalPlaybackEventHub()
+    private lazy var dadVocalBlendShapeRuntime = DadVocalBlendShapeRuntimeRegistry(
+        eventHub: characterVocalPlaybackEventHub
+    )
     private static let enemyHitImpactAudioCooldownSeconds: TimeInterval = 0.15
     private var lastImpactAudioStartedAtBySourceID: [UUID: TimeInterval] = [:]
 
@@ -250,6 +258,17 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
         activeSpatialOneShotsByID.count +
             portalOneShotControllers.count +
             activeCharacterVocalBySourceID.count
+    }
+
+    var characterVocalPlaybackEvents: CharacterVocalPlaybackEventHub {
+        characterVocalPlaybackEventHub
+    }
+
+    func updateCharacterVocalVisuals(deltaTime: TimeInterval) {
+        dadVocalBlendShapeRuntime.update(
+            deltaTime: deltaTime,
+            now: .now
+        )
     }
     private let radioDistanceBehindUserFeet: Float = 5.0
     private let hostHeadAudioLocalPosition = SIMD3<Float>(0, 1.45, -0.04)
@@ -449,6 +468,7 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
         hostRootEntity: Entity,
         archetype: PlagueCharacterArchetype = .dad,
         headAudioEntity: Entity?,
+        portalMirrorRootEntity: Entity? = nil,
         breathingStartDelay: TimeInterval = TimeInterval.random(in: 0...1)
     ) {
         prepareIfNeeded()
@@ -487,8 +507,20 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
             archetype: archetype,
             usesResolvedHeadAnchor: usesResolvedHeadAnchor,
             loopController: nil,
-            loopStartTask: nil
+            loopStartTask: nil,
+            loopIdentity: nil,
+            loopClockOrigin: nil
         )
+
+        if archetype == .dad {
+            dadVocalBlendShapeRuntime.register(
+                sourceID: id,
+                characterID: "dad",
+                rootEntity: hostRootEntity,
+                portalMirrorRoot: portalMirrorRootEntity,
+                reason: "characterAudioSourceAttached"
+            )
+        }
 
         print(
             """
@@ -531,8 +563,11 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
         source.loopStartTask = nil
 
         if source.loopController != nil {
-            source.loopController?.stop()
-            source.loopController = nil
+            cancelCharacterLoop(
+                sourceID: id,
+                source: &source,
+                reason: "sourceRemoved"
+            )
 
             print(
                 """
@@ -546,7 +581,11 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
         if let vocal = activeCharacterVocalBySourceID.removeValue(
             forKey: id
         ) {
+            vocal.playbackController.completionHandler = nil
             vocal.playbackController.stop()
+            characterVocalPlaybackEventHub.publish(
+                .cancelled(vocal.identity, reason: "sourceRemoved")
+            )
 
             print(
                 """
@@ -565,6 +604,10 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
             source.headEntity.removeFromParent()
         }
 
+        characterVocalPlaybackEventHub.publish(
+            .sourceRemoved(sourceID: id, reason: "stopHostAudioSource")
+        )
+
         print("[Gravitas Audio] Stopped horde host audio source: \(id)")
     }
 
@@ -578,8 +621,11 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
         source.loopStartTask?.cancel()
         source.loopStartTask = nil
 
-        source.loopController?.stop()
-        source.loopController = nil
+        cancelCharacterLoop(
+            sourceID: id,
+            source: &source,
+            reason: "stopCharacterLoopAudio"
+        )
 
         hostAudioSourcesByID[id] = source
 
@@ -598,6 +644,29 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
         stopCharacterLoopAudio(
             id: id
         )
+    }
+
+    private func cancelCharacterLoop(
+        sourceID: UUID,
+        source: inout HostAudioSource,
+        reason: String
+    ) {
+        let didOwnPlayback = source.loopController != nil || source.loopIdentity != nil
+        source.loopController?.stop()
+        source.loopController = nil
+        if let identity = source.loopIdentity {
+            characterVocalPlaybackEventHub.publish(
+                .cancelled(identity, reason: reason)
+            )
+        }
+        source.loopIdentity = nil
+        source.loopClockOrigin = nil
+        if didOwnPlayback {
+            print(
+                "[CharacterVocalPlayback] loop cancelled sourceID=\(sourceID.uuidString) " +
+                "reason=\(reason)"
+            )
+        }
     }
 
     @discardableResult
@@ -1791,13 +1860,35 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
         }
 
         source.loopStartTask?.cancel()
-        source.loopController?.stop()
+        cancelCharacterLoop(
+            sourceID: sourceID,
+            source: &source,
+            reason: "presenceLoopReplaced"
+        )
 
         if delay <= 0 {
-            source.loopController = source.headEntity.playAudio(loopResource)
-            source.loopController?.gain = Double(loop.volumeDB ?? 0)
+            let controller = source.headEntity.playAudio(loopResource)
+            let clockOrigin = ContinuousClock.now
+            let identity = CharacterVocalPlaybackIdentity(
+                playbackID: UUID(),
+                sourceID: sourceID,
+                characterID: attributes.characterID,
+                archetype: archetype,
+                role: .presenceLoop,
+                fileName: loopFile.fullName,
+                isLooping: true
+            )
+            controller.gain = Double(loop.volumeDB ?? 0)
+            source.loopController = controller
+            source.loopIdentity = identity
+            source.loopClockOrigin = clockOrigin
             source.loopStartTask = nil
             hostAudioSourcesByID[sourceID] = source
+            characterVocalPlaybackEventHub.publish(.started(.init(
+                identity: identity,
+                clockOrigin: clockOrigin,
+                expectedDurationSeconds: nil
+            )))
 
             print(
                 """
@@ -1823,11 +1914,33 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
                 return
             }
 
-            source.loopController?.stop()
-            source.loopController = source.headEntity.playAudio(loopResource)
-            source.loopController?.gain = Double(loop.volumeDB ?? 0)
+            self.cancelCharacterLoop(
+                sourceID: sourceID,
+                source: &source,
+                reason: "delayedPresenceLoopReplaced"
+            )
+            let controller = source.headEntity.playAudio(loopResource)
+            let clockOrigin = ContinuousClock.now
+            let identity = CharacterVocalPlaybackIdentity(
+                playbackID: UUID(),
+                sourceID: sourceID,
+                characterID: attributes.characterID,
+                archetype: archetype,
+                role: .presenceLoop,
+                fileName: loopFile.fullName,
+                isLooping: true
+            )
+            controller.gain = Double(loop.volumeDB ?? 0)
+            source.loopController = controller
+            source.loopIdentity = identity
+            source.loopClockOrigin = clockOrigin
             source.loopStartTask = nil
             self.hostAudioSourcesByID[sourceID] = source
+            self.characterVocalPlaybackEventHub.publish(.started(.init(
+                identity: identity,
+                clockOrigin: clockOrigin,
+                expectedDurationSeconds: nil
+            )))
 
             print(
                 """
@@ -2093,7 +2206,11 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
 
     private func stopActiveCharacterVocals() {
         for vocal in activeCharacterVocalBySourceID.values {
+            vocal.playbackController.completionHandler = nil
             vocal.playbackController.stop()
+            characterVocalPlaybackEventHub.publish(
+                .cancelled(vocal.identity, reason: "stopAllCharacterVocals")
+            )
         }
 
         if !activeCharacterVocalBySourceID.isEmpty {
@@ -2567,9 +2684,16 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
             forKey: sourceID
         )
 
+        previous?.playbackController.completionHandler = nil
         previous?.playbackController.stop()
+        if let previous {
+            characterVocalPlaybackEventHub.publish(
+                .cancelled(previous.identity, reason: "replacedBy\(role)")
+            )
+        }
 
         let controller = source.headEntity.playAudio(resource)
+        let clockOrigin = ContinuousClock.now
         controller.gain = Double(volumeDB)
 
         let id = UUID()
@@ -2577,6 +2701,23 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
         let duration = estimatedDurationSeconds(
             for: file,
             fallback: 3.0
+        )
+        guard let vocalRole = CharacterVocalRole(rawValue: role) else {
+            controller.stop()
+            print(
+                "[CharacterAudio] ERROR unsupported character vocal role role=\(role) " +
+                "file=\(file.fullName)"
+            )
+            return nil
+        }
+        let identity = CharacterVocalPlaybackIdentity(
+            playbackID: id,
+            sourceID: sourceID,
+            characterID: characterID,
+            archetype: source.archetype,
+            role: vocalRole,
+            fileName: file.fullName,
+            isLooping: false
         )
 
         activeCharacterVocalBySourceID[sourceID] = ActiveCharacterVocal(
@@ -2587,8 +2728,20 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
             file: file.fullName,
             startedAt: now,
             expectedEndTime: now + duration + 0.25,
+            identity: identity,
+            clockOrigin: clockOrigin,
             playbackController: controller
         )
+        controller.completionHandler = { [weak self] in
+            Task { @MainActor in
+                self?.completeCharacterVocal(identity: identity)
+            }
+        }
+        characterVocalPlaybackEventHub.publish(.started(.init(
+            identity: identity,
+            clockOrigin: clockOrigin,
+            expectedDurationSeconds: duration
+        )))
 
         print(
             """
@@ -2608,6 +2761,23 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
         )
 
         return id
+    }
+
+    private func completeCharacterVocal(
+        identity: CharacterVocalPlaybackIdentity
+    ) {
+        guard let active = activeCharacterVocalBySourceID[identity.sourceID],
+              active.identity == identity else {
+            return
+        }
+        activeCharacterVocalBySourceID.removeValue(forKey: identity.sourceID)
+        active.playbackController.completionHandler = nil
+        characterVocalPlaybackEventHub.publish(.completed(identity))
+        print(
+            "[CharacterAudio] exact vocal completion sourceID=\(identity.sourceID.uuidString) " +
+            "playbackID=\(identity.playbackID.uuidString) role=\(identity.role.rawValue) " +
+            "file=\(identity.fileName)"
+        )
     }
 
     private func pruneFinishedSpatialOneShots() {
@@ -2642,9 +2812,13 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
         }
 
         for sourceID in expiredSourceIDs {
-            activeCharacterVocalBySourceID.removeValue(
-                forKey: sourceID
-            )
+            if let active = activeCharacterVocalBySourceID.removeValue(forKey: sourceID) {
+                active.playbackController.completionHandler = nil
+                active.playbackController.stop()
+                characterVocalPlaybackEventHub.publish(
+                    .cancelled(active.identity, reason: "watchdogExpired")
+                )
+            }
         }
 
         if !expiredSourceIDs.isEmpty {

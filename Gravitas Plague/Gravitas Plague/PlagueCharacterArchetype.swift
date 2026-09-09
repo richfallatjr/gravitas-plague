@@ -1,7 +1,7 @@
 import Foundation
 import RealityKit
 
-enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable {
+enum PlagueCharacterArchetype: String, CaseIterable, Identifiable, Codable, Sendable, Hashable {
     case dad
     case spouse
     case biker

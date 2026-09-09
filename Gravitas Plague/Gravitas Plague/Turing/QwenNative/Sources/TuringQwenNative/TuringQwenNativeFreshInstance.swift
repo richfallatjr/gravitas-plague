@@ -154,8 +154,15 @@ public actor TuringQwenNativeFreshInstance {
         _ request: TuringQwenNativeBaseCloneSegmentRequest,
         runID: String,
         laneIndex: Int? = nil,
-        releaseLedger: TuringQwenRenderReleaseLedger
+        releaseLedger: TuringQwenRenderReleaseLedger,
+        experimentalStreamingConfiguration:
+            TuringQwenNativeExperimentalStreamingConfiguration = .disabled,
+        incrementalCodebookEventSink:
+            TuringQwenNativeIncrementalCodebookEventSink? = nil
     ) async throws -> TuringQwenRenderedCodebookSegment {
+        try experimentalStreamingConfiguration.validate(
+            eventSinkIsPresent: incrementalCodebookEventSink != nil
+        )
         guard let binding, let engine = baseCloneEngine else {
             throw TuringQwenNativeError.nativeGenerationNotImplemented(
                 "Fresh Qwen instance \(id.rawValue) is not warm-loaded."
@@ -196,7 +203,12 @@ public actor TuringQwenNativeFreshInstance {
                 request: request,
                 runID: runID,
                 instanceID: id,
-                laneIndex: laneIndex
+                laneIndex: laneIndex,
+                recoveryGeneration: recoveryGeneration,
+                experimentalStreamingConfiguration:
+                    experimentalStreamingConfiguration,
+                incrementalCodebookEventSink:
+                    incrementalCodebookEventSink
             )
         }
 

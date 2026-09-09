@@ -10,15 +10,18 @@ public actor TuringQwenNativeParallelLanePool {
     public private(set) var laneCountActive: Int
     public let residentResources: TuringQwenNativeResidentResources
     public let memoryPolicy: TuringQwenNativeParallelMemoryPolicy
+    public let streamMode: TuringQwenNativeLaneStreamMode
     private let lanes: [TuringQwenNativeGenerationLane]
 
     public init(
         modelRoot: URL,
         laneCountRequested: Int,
-        memoryPolicy: TuringQwenNativeParallelMemoryPolicy = TuringQwenNativeParallelMemoryPolicy()
+        memoryPolicy: TuringQwenNativeParallelMemoryPolicy = TuringQwenNativeParallelMemoryPolicy(),
+        streamMode: TuringQwenNativeLaneStreamMode = .productionDefault
     ) throws {
         self.laneCountRequested = max(1, laneCountRequested)
         self.memoryPolicy = memoryPolicy
+        self.streamMode = streamMode
         let resident = try TuringQwenNativeResidentResources(modelRoot: modelRoot)
         self.residentResources = resident
         let active = Self.admittedLaneCount(
@@ -29,7 +32,8 @@ public actor TuringQwenNativeParallelLanePool {
         self.lanes = try (0..<active).map { laneID in
             try TuringQwenNativeGenerationLane(
                 laneID: laneID,
-                residentResources: resident
+                residentResources: resident,
+                streamMode: streamMode
             )
         }
 
@@ -41,12 +45,19 @@ public actor TuringQwenNativeParallelLanePool {
             """)
         }
 
+        let parallelMode = switch streamMode {
+        case .defaultOnly:
+            "inProcessSharedWeightsDefaultStream"
+        case .dedicatedGPU:
+            "inProcessSharedWeightsDedicatedGPUStream"
+        }
         print("""
         [TuringQwenParallel] lane pool ready
           parallelQwenLanes: \(laneCountRequested)
-          parallelQwenMode: inProcessSharedWeightsDefaultStream
+          parallelQwenMode: \(parallelMode)
           laneCountActive: \(active)
           sharedWeights: true
+          streamMode: \(streamMode.rawValue)
           memoryGuardDowngraded: \(active < laneCountRequested)
         """)
     }
