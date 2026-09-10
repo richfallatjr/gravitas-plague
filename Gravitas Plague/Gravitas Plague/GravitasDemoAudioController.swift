@@ -237,7 +237,7 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
     private var activeSpatialOneShotsByID: [UUID: ActiveSpatialOneShot] = [:]
     private var activeCharacterVocalBySourceID: [UUID: ActiveCharacterVocal] = [:]
     private let characterVocalPlaybackEventHub = CharacterVocalPlaybackEventHub()
-    private lazy var dadVocalBlendShapeRuntime = DadVocalBlendShapeRuntimeRegistry(
+    private lazy var characterVocalBlendShapeRuntime = CharacterVocalBlendShapeRuntimeRegistry(
         eventHub: characterVocalPlaybackEventHub
     )
     private static let enemyHitImpactAudioCooldownSeconds: TimeInterval = 0.15
@@ -264,8 +264,13 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
         characterVocalPlaybackEventHub
     }
 
+    func hasActiveCharacterPresenceLoop(id: UUID) -> Bool {
+        guard let source = hostAudioSourcesByID[id] else { return false }
+        return source.loopController != nil && source.loopIdentity != nil
+    }
+
     func updateCharacterVocalVisuals(deltaTime: TimeInterval) {
-        dadVocalBlendShapeRuntime.update(
+        characterVocalBlendShapeRuntime.update(
             deltaTime: deltaTime,
             now: .now
         )
@@ -512,10 +517,12 @@ final class GravitasDemoAudioController: StoryRichVocalChannelControlling {
             loopClockOrigin: nil
         )
 
-        if archetype == .dad {
-            dadVocalBlendShapeRuntime.register(
+        if let vocalProfile = CharacterVocalBlendShapeProfile.resolve(
+            archetype: archetype
+        ) {
+            characterVocalBlendShapeRuntime.register(
                 sourceID: id,
-                characterID: "dad",
+                characterID: vocalProfile.characterID,
                 rootEntity: hostRootEntity,
                 portalMirrorRoot: portalMirrorRootEntity,
                 reason: "characterAudioSourceAttached"

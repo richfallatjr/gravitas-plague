@@ -4,7 +4,11 @@ import simd
 
 @MainActor
 final class Chapter03BattleEnemyFactory {
-    typealias PreparedCallback = @MainActor (UUID, JockRetargetTestController) -> Void
+    typealias PreparedCallback = @MainActor (
+        UUID,
+        JockRetargetTestController,
+        Entity?
+    ) -> Void
 
     private let sceneRoot: Entity
     private let onPrepared: PreparedCallback
@@ -152,13 +156,12 @@ final class Chapter03BattleEnemyFactory {
             characterID: attributes.characterID,
             reason: "Chapter03.\(archetype.rawValue).authoritativeSource"
         )
-        onPrepared(enemyID, source)
-
         let mirror = try StoryPortalEnemyRenderMirrorAdapter(
             source: source,
             portalWorldRoot: doorContext.portalWorldRoot,
             portalPlaneEntity: doorContext.portalPlane
         )
+        onPrepared(enemyID, source, mirror.visualRootEntity)
         source.rootEntity.isEnabled = false
 
         print(

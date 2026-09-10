@@ -713,10 +713,11 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             door: turingDoorBundleController,
             clock: ProductionBattleClock(),
             richVocalChannel: audioController,
-            onEnemyPrepared: { [weak self] enemyID, controller in
+            onEnemyPrepared: { [weak self] enemyID, controller, portalMirrorRoot in
                 self?.prepareBattle01EnemyAudioAndCallbacks(
                     enemyID: enemyID,
-                    controller: controller
+                    controller: controller,
+                    portalMirrorRoot: portalMirrorRoot
                 )
             },
             onEnemyRemoved: { [weak self] enemyID in
@@ -800,7 +801,19 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
                 }
             )
         let dadWindow = Chapter01DadWindowCoordinator(
-            windowBundle: turingWindowBundleController
+            windowBundle: turingWindowBundleController,
+            onDadRuntimePrepared: { [weak self] sourceID, controller in
+                self?.audioController.attachHostAudioSource(
+                    id: sourceID,
+                    hostRootEntity: controller.rootEntity,
+                    archetype: .dad,
+                    headAudioEntity: controller.characterAudioEmitter,
+                    breathingStartDelay: 0
+                )
+            },
+            onDadRuntimeReleased: { [weak self] sourceID, _ in
+                self?.audioController.stopHostAudioSource(id: sourceID)
+            }
         )
         let postRobotInteractions = Chapter01PostRobotInteractionCoordinator(
             dadFrame: turingStoryDadFrameInteractionController,
@@ -893,16 +906,29 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         )
         let chapter02WindowWoman = Chapter02WindowWomanCoordinator(
             windowBundle: turingWindowBundleController,
-            sceneRoot: root
+            sceneRoot: root,
+            onWomanRuntimePrepared: { [weak self] sourceID, controller in
+                self?.audioController.attachHostAudioSource(
+                    id: sourceID,
+                    hostRootEntity: controller.rootEntity,
+                    archetype: .spouse,
+                    headAudioEntity: controller.characterAudioEmitter,
+                    breathingStartDelay: 0
+                )
+            },
+            onWomanRuntimeReleased: { [weak self] sourceID, _ in
+                self?.audioController.stopHostAudioSource(id: sourceID)
+            }
         )
         let chapter02WomanBattle = Chapter02WomanBattleCoordinator(
             sceneRoot: root,
             door: turingDoorBundleController,
             richVocalChannel: audioController,
-            onEnemyPrepared: { [weak self] enemyID, controller in
+            onEnemyPrepared: { [weak self] enemyID, controller, portalMirrorRoot in
                 self?.prepareChapter02WomanAudioAndCallbacks(
                     enemyID: enemyID,
-                    controller: controller
+                    controller: controller,
+                    portalMirrorRoot: portalMirrorRoot
                 )
             },
             onEnemyRemoved: { [weak self] enemyID in
@@ -972,12 +998,13 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             door: turingDoorBundleController,
             music: chapter03BikerMusic,
             richVocalChannel: audioController,
-            onEnemyPrepared: { [weak self] enemyID, controller in
+            onEnemyPrepared: { [weak self] enemyID, controller, portalMirrorRoot in
                 self?.prepareChapter03BattleAudioAndCallbacks(
                     enemyID: enemyID,
                     controller: controller,
                     archetype: .biker,
-                    label: "biker"
+                    label: "biker",
+                    portalMirrorRoot: portalMirrorRoot
                 )
             },
             onEnemyRemoved: { [weak self] enemyID in
@@ -1000,12 +1027,13 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             music: chapter03MikeMusic,
             roomPresentation: chapter03RoomPresentation,
             richVocalChannel: audioController,
-            onEnemyPrepared: { [weak self] enemyID, controller in
+            onEnemyPrepared: { [weak self] enemyID, controller, portalMirrorRoot in
                 self?.prepareChapter03BattleAudioAndCallbacks(
                     enemyID: enemyID,
                     controller: controller,
                     archetype: .neighbor,
-                    label: "bigMike"
+                    label: "bigMike",
+                    portalMirrorRoot: portalMirrorRoot
                 )
             },
             onEnemyRemoved: { [weak self] enemyID in
@@ -1316,7 +1344,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
     private func prepareBattle01EnemyAudioAndCallbacks(
         enemyID: UUID,
-        controller: JockRetargetTestController
+        controller: JockRetargetTestController,
+        portalMirrorRoot: Entity?
     ) {
         print(
             "[Battle01Lighting] room-side Grandma uses automatic passthrough lighting explicitIBLReceiver=false"
@@ -1326,6 +1355,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             hostRootEntity: controller.rootEntity,
             archetype: .grandma,
             headAudioEntity: controller.characterAudioEmitter,
+            portalMirrorRootEntity: portalMirrorRoot,
             breathingStartDelay: 0
         )
         controller.onPunchHit = { [weak self, weak controller] region in
@@ -1403,7 +1433,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
     private func prepareChapter02WomanAudioAndCallbacks(
         enemyID: UUID,
-        controller: JockRetargetTestController
+        controller: JockRetargetTestController,
+        portalMirrorRoot: Entity?
     ) {
         print(
             "[Chapter02WomanLighting] room-side spouse uses automatic " +
@@ -1414,6 +1445,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             hostRootEntity: controller.rootEntity,
             archetype: .spouse,
             headAudioEntity: controller.characterAudioEmitter,
+            portalMirrorRootEntity: portalMirrorRoot,
             breathingStartDelay: 0
         )
         controller.onPunchHit = { [weak self, weak controller] region in
@@ -1448,7 +1480,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         enemyID: UUID,
         controller: JockRetargetTestController,
         archetype: PlagueCharacterArchetype,
-        label: String
+        label: String,
+        portalMirrorRoot: Entity?
     ) {
         print(
             "[Chapter03BattleLighting] room-side \(archetype.rawValue) uses automatic passthrough lighting explicitIBLReceiver=false"
@@ -1458,6 +1491,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
             hostRootEntity: controller.rootEntity,
             archetype: archetype,
             headAudioEntity: controller.characterAudioEmitter,
+            portalMirrorRootEntity: portalMirrorRoot,
             breathingStartDelay: 0
         )
         controller.onPunchHit = { [weak self, weak controller] region in
@@ -4417,22 +4451,24 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
             if ingress.consumeRoomVisualRevealEvent(),
                let controller = hordeEnemyControllersByID[enemyID] {
-                audioController.attachHostAudioSource(
-                    id: enemyID,
-                    hostRootEntity: controller.rootEntity,
-                    archetype: controller.archetype,
-                    headAudioEntity: controller.characterAudioEmitter,
-                    portalMirrorRootEntity: ingress.portalMirrorRootEntity,
-                    breathingStartDelay: 0
-                )
+                if !audioController.hasActiveCharacterPresenceLoop(id: enemyID) {
+                    audioController.attachHostAudioSource(
+                        id: enemyID,
+                        hostRootEntity: controller.rootEntity,
+                        archetype: controller.archetype,
+                        headAudioEntity: controller.characterAudioEmitter,
+                        portalMirrorRootEntity: ingress.portalMirrorRootEntity,
+                        breathingStartDelay: 0
+                    )
+                }
 
                 print(
                     """
-                    [HordePortalIngress] character loop audio started at room visual reveal
+                    [HordePortalIngress] character loop audio active at room visual reveal
                       enemyID: \(enemyID)
                       archetype: \(controller.archetype.rawValue)
                       parent: enemyRoot
-                      delay: 0.000
+                      portalLoopStartedWithMirror: \(CharacterVocalBlendShapeProfile.resolve(archetype: controller.archetype) != nil)
                     """
                 )
             }
@@ -4517,6 +4553,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         }
 
         for enemyID in failedIDs {
+            audioController.stopHostAudioSource(id: enemyID)
             activeIngressControllers[enemyID]?.cleanupPortalMirror(
                 reason: "portal_ingress_failed"
             )
@@ -5910,6 +5947,17 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
 
             activeIngressControllers[id] = ingress
 
+            if CharacterVocalBlendShapeProfile.resolve(archetype: archetype) != nil {
+                audioController.attachHostAudioSource(
+                    id: id,
+                    hostRootEntity: controller.rootEntity,
+                    archetype: archetype,
+                    headAudioEntity: controller.characterAudioEmitter,
+                    portalMirrorRootEntity: ingress.portalMirrorRootEntity,
+                    breathingStartDelay: 0
+                )
+            }
+
             print(
                 """
                 [HordePortalMirror] retention policy selected
@@ -5927,6 +5975,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
         } catch {
             activeHordeEnemyIDs.remove(id)
             hordeEnemyControllersByID.removeValue(forKey: id)
+            audioController.stopHostAudioSource(id: id)
             controller.hide()
             controller.rootEntity.removeFromParent()
             recycleHordePrewarmedAssets(
@@ -5943,7 +5992,8 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
               firstPosePrimed: true
               noPrePortalAPose: true
               portalRenderInstance: true
-              breathingAudioStartsAtRoomReveal: true
+              vocalBlendShapeBreathingStartsWithPortalVisual: \(CharacterVocalBlendShapeProfile.resolve(archetype: archetype) != nil)
+              otherBreathingAudioStartsAtRoomReveal: \(CharacterVocalBlendShapeProfile.resolve(archetype: archetype) == nil)
             """
         )
 
@@ -5957,7 +6007,7 @@ final class PlagueImmersiveCoordinator: ObservableObject, TuringStoryStateTelepo
               portalID: \(portal.id)
               assignmentKind: \(assignmentKind.rawValue)
               side: \(side.rawValue)
-              breathingAudioStart: room_visual_reveal
+              breathingAudioStart: \(CharacterVocalBlendShapeProfile.resolve(archetype: archetype) != nil ? "portal_visual_reveal" : "room_visual_reveal")
               realParent: sceneRoot
               portalVisual: render_instance
               secondController: false

@@ -1,0 +1,38 @@
+{
+  "allowedWeightRange": [
+    0.0,
+    1.0
+  ],
+  "audioRoles": [
+    "presence_loop",
+    "damage_hits",
+    "death"
+  ],
+  "basePose": "wide",
+  "blendShapeName": "spouseVocalClose",
+  "characterID": "spouse",
+  "descriptorID": "spouse.infected.vocalBlendShape.v1",
+  "fallbackWeight": 1.0,
+  "offsetPayloadMeshCount": 1,
+  "offsetPayloadRecordCount": 1550,
+  "offsetPayloadResourcePath": "CharacterLibrary/FacialPerformance/spouse_infected_vocal_blendshape_offsets.bin",
+  "offsetPayloadSHA256": "376f4b44188f4250e82767f4d57617b280ea2522115209c196f5d193e102977f",
+  "poseWeights": {
+    "rest": 1.0,
+    "round": 0.5,
+    "small": 0.5,
+    "teeth": 1.0,
+    "wide": 0.0
+  },
+  "response": {
+    "assignmentEpsilon": 0.0005,
+    "crossingHalfLifeSeconds": 0.035,
+    "decreasingWeightHalfLifeSeconds": 0.03,
+    "increasingWeightHalfLifeSeconds": 0.05,
+    "maximumDeltaTimeSeconds": 0.05
+  },
+  "schemaVersion": 1,
+  "sourceAssetExtension": "usdz",
+  "sourceAssetResourceName": "spouse_biped",
+  "sourceAssetSHA256": "e3e7d01d4dab7e63b8fce498b3d1b76c28c1f35a98049c6672507ee3fe7e4f67"
+}

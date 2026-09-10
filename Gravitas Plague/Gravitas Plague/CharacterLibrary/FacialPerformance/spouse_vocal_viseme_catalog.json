@@ -1,0 +1,71 @@
+{
+  "catalogID": "spouse.infected.vocalVisemes.v1",
+  "characterID": "spouse",
+  "compilerVersion": "character-vocal-allphone-visemes/1.0.0",
+  "entries": [
+    {
+      "audioFile": "dad_breathing.wav",
+      "audioSHA256": "db27f0d2131e9776cc9858b7e7a4489c55058f23233ac33efcf27a5c09acf6bb",
+      "looping": true,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/SpouseVisemes/spouse-dad_breathing.visemes.json",
+      "role": "presence_loop"
+    },
+    {
+      "audioFile": "spouse-damaged-01.wav",
+      "audioSHA256": "3b10cc19599c05ccad5d48e8b2286a6e46fc95e1593b6ec198d2a3bc3a868ff6",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/SpouseVisemes/spouse-damaged-01.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "spouse-damaged-02.wav",
+      "audioSHA256": "17eb441692bbebef553706a99de16ccd6d01825c1b8c5d50097ec1b8453b13d0",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/SpouseVisemes/spouse-damaged-02.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "spouse-damaged-03.wav",
+      "audioSHA256": "b1baf3e615a1fbc48beaa70ba605420e896e78e522aff285dc0a47e6c10f9805",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/SpouseVisemes/spouse-damaged-03.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "spouse-damaged-04.wav",
+      "audioSHA256": "83d9ccc70b8084bc08231c6b43a73a2a3ed5edab889d172583f50d19eb7f66eb",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/SpouseVisemes/spouse-damaged-04.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "spouse-death-01.wav",
+      "audioSHA256": "f785c6c9bcdd71549418a144ae3da9378364cae404a6fe0a25858a244b1a057c",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/SpouseVisemes/spouse-death-01.visemes.json",
+      "role": "death"
+    },
+    {
+      "audioFile": "spouse-death-02.wav",
+      "audioSHA256": "d2a171bf68151b663c2fd7930dfdfd4f1396a1b1e3e7b1fe5d159326237773f4",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/SpouseVisemes/spouse-death-02.visemes.json",
+      "role": "death"
+    },
+    {
+      "audioFile": "spouse-death-03.wav",
+      "audioSHA256": "62de55305b678d9ce38f1a1d82618fefeaccb18b24e8128dcdc2b1d627efa879",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/SpouseVisemes/spouse-death-03.visemes.json",
+      "role": "death"
+    },
+    {
+      "audioFile": "spouse-death-04.wav",
+      "audioSHA256": "1f2f75b7f7f7f2c05c65f558dead60e03525473926d39c29e14c0a9176741a00",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/SpouseVisemes/spouse-death-04.visemes.json",
+      "role": "death"
+    }
+  ],
+  "schemaVersion": 1
+}

@@ -36,7 +36,7 @@ final class Chapter02WomanBattleCoordinator {
     private let cleanup: BattleRuntimeCleanupCoordinator
     private let richPR: Chapter02PrerecordingPlayer
     private let onEnemyPrepared:
-        @MainActor (UUID, JockRetargetTestController) -> Void
+        @MainActor (UUID, JockRetargetTestController, Entity?) -> Void
     private let onEnemyRemoved: @MainActor (UUID) -> Void
     private let playerTargetProvider: @MainActor () -> SIMD3<Float>?
     private let onPlayerDamage: @MainActor (Float) -> Void
@@ -61,7 +61,8 @@ final class Chapter02WomanBattleCoordinator {
         clock: any BattleClock = ProductionBattleClock(),
         onEnemyPrepared: @escaping @MainActor (
             UUID,
-            JockRetargetTestController
+            JockRetargetTestController,
+            Entity?
         ) -> Void,
         onEnemyRemoved: @escaping @MainActor (UUID) -> Void,
         playerTargetProvider: @escaping @MainActor () -> SIMD3<Float>?,
@@ -259,11 +260,15 @@ final class Chapter02WomanBattleCoordinator {
                 characterID: "spouse",
                 reason: "Chapter02WomanBattle.authoritativeSource"
             )
-            onEnemyPrepared(source.hordeBenchmarkID, source)
             let mirror = try StoryPortalEnemyRenderMirrorAdapter(
                 source: source,
                 portalWorldRoot: doorContext.portalWorldRoot,
                 portalPlaneEntity: doorContext.portalPlane
+            )
+            onEnemyPrepared(
+                source.hordeBenchmarkID,
+                source,
+                mirror.visualRootEntity
             )
             source.rootEntity.isEnabled = false
             let prepared = ScriptedPortalPreparedEnemy(

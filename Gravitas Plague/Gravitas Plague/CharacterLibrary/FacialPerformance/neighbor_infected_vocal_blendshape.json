@@ -1,0 +1,38 @@
+{
+  "allowedWeightRange": [
+    0.0,
+    1.0
+  ],
+  "audioRoles": [
+    "presence_loop",
+    "damage_hits",
+    "death"
+  ],
+  "basePose": "wide",
+  "blendShapeName": "neighborVocalClose",
+  "characterID": "neighbor",
+  "descriptorID": "neighbor.infected.vocalBlendShape.v1",
+  "fallbackWeight": 1.0,
+  "offsetPayloadMeshCount": 1,
+  "offsetPayloadRecordCount": 624,
+  "offsetPayloadResourcePath": "CharacterLibrary/FacialPerformance/neighbor_infected_vocal_blendshape_offsets.bin",
+  "offsetPayloadSHA256": "a73e00131328fe3f9a49ba64bdb01bfd6983ec566df96272e973acb300af4758",
+  "poseWeights": {
+    "rest": 1.0,
+    "round": 0.5,
+    "small": 0.5,
+    "teeth": 1.0,
+    "wide": 0.0
+  },
+  "response": {
+    "assignmentEpsilon": 0.0005,
+    "crossingHalfLifeSeconds": 0.035,
+    "decreasingWeightHalfLifeSeconds": 0.03,
+    "increasingWeightHalfLifeSeconds": 0.05,
+    "maximumDeltaTimeSeconds": 0.05
+  },
+  "schemaVersion": 1,
+  "sourceAssetExtension": "usdz",
+  "sourceAssetResourceName": "neighbor_biped",
+  "sourceAssetSHA256": "f38dba681edb1e4af2452d0f90c8801cd4bc03ad4b84e6e4f69220d3ac2b9636"
+}

@@ -13,8 +13,6 @@ nonisolated enum CharacterVocalBlendShapeError: Error, Sendable, Equatable {
     case weightCountMismatch(entityPath: String, groupIndex: Int)
     case entityReleased(String)
     case staleBinding
-    case audioDecodeFailed(String)
-    case poseAnalysisFailed(String)
 }
 
 nonisolated extension CharacterVocalBlendShapeError: LocalizedError {
@@ -42,10 +40,6 @@ nonisolated extension CharacterVocalBlendShapeError: LocalizedError {
             "Blendshape entity was released: \(path)"
         case .staleBinding:
             "Character vocal blendshape binding is stale"
-        case .audioDecodeFailed(let reason):
-            "Character vocal PCM decode failed: \(reason)"
-        case .poseAnalysisFailed(let reason):
-            "Character vocal pose analysis failed: \(reason)"
         }
     }
 }
@@ -76,6 +70,70 @@ nonisolated struct CharacterVocalBlendShapeResponseDescriptor: Codable, Sendable
     let assignmentEpsilon: Float
 }
 
+nonisolated struct CharacterVocalBlendShapeProfile: Sendable, Equatable {
+    let characterID: String
+    let archetype: PlagueCharacterArchetype
+    let descriptorID: String
+    let descriptorResourceName: String
+    let sourceAssetResourceName: String
+    let blendShapeName: String
+
+    static let dad = Self(
+        characterID: "dad",
+        archetype: .dad,
+        descriptorID: "dad.infected.vocalBlendShape.v1",
+        descriptorResourceName: "dad_infected_vocal_blendshape",
+        sourceAssetResourceName: "dad_biped",
+        blendShapeName: "dadVocalClose"
+    )
+
+    static let grandma = Self(
+        characterID: "grandma",
+        archetype: .grandma,
+        descriptorID: "grandma.infected.vocalBlendShape.v1",
+        descriptorResourceName: "grandma_infected_vocal_blendshape",
+        sourceAssetResourceName: "grandma_biped",
+        blendShapeName: "grandmaVocalClose"
+    )
+
+    static let spouse = Self(
+        characterID: "spouse",
+        archetype: .spouse,
+        descriptorID: "spouse.infected.vocalBlendShape.v1",
+        descriptorResourceName: "spouse_infected_vocal_blendshape",
+        sourceAssetResourceName: "spouse_biped",
+        blendShapeName: "spouseVocalClose"
+    )
+
+    static let biker = Self(
+        characterID: "biker",
+        archetype: .biker,
+        descriptorID: "biker.infected.vocalBlendShape.v1",
+        descriptorResourceName: "biker_infected_vocal_blendshape",
+        sourceAssetResourceName: "biker_biped",
+        blendShapeName: "bikerVocalClose"
+    )
+
+    static let neighbor = Self(
+        characterID: "neighbor",
+        archetype: .neighbor,
+        descriptorID: "neighbor.infected.vocalBlendShape.v1",
+        descriptorResourceName: "neighbor_infected_vocal_blendshape",
+        sourceAssetResourceName: "neighbor_biped",
+        blendShapeName: "neighborVocalClose"
+    )
+
+    static let supported: [Self] = [.dad, .grandma, .spouse, .biker, .neighbor]
+
+    static func resolve(characterID: String) -> Self? {
+        supported.first { $0.characterID == characterID }
+    }
+
+    static func resolve(archetype: PlagueCharacterArchetype) -> Self? {
+        supported.first { $0.archetype == archetype }
+    }
+}
+
 nonisolated struct CharacterVocalBlendShapeDescriptor: Codable, Sendable, Equatable {
     let schemaVersion: Int
     let descriptorID: String
@@ -99,11 +157,15 @@ nonisolated struct CharacterVocalBlendShapeDescriptor: Codable, Sendable, Equata
         guard schemaVersion == 1 else {
             throw CharacterVocalBlendShapeError.invalidDescriptor("schemaVersion")
         }
-        guard descriptorID == "dad.infected.vocalBlendShape.v1",
-              characterID == "dad",
-              sourceAssetResourceName == "dad_biped",
+        guard let profile = CharacterVocalBlendShapeProfile.resolve(
+            characterID: characterID
+        ) else {
+            throw CharacterVocalBlendShapeError.invalidDescriptor("characterID")
+        }
+        guard descriptorID == profile.descriptorID,
+              sourceAssetResourceName == profile.sourceAssetResourceName,
               sourceAssetExtension == "usdz",
-              blendShapeName == "dadVocalClose",
+              blendShapeName == profile.blendShapeName,
               basePose == "wide" else {
             throw CharacterVocalBlendShapeError.invalidDescriptor("identity")
         }
@@ -112,7 +174,7 @@ nonisolated struct CharacterVocalBlendShapeDescriptor: Codable, Sendable, Equata
               allowedWeightRange == [0, 1] else {
             throw CharacterVocalBlendShapeError.invalidDescriptor("lockedPoseMapping")
         }
-        guard audioRoles == DadVocalAudioInventory.animatedRoles else {
+        guard audioRoles == CharacterVocalAudioInventory.animatedRoles else {
             throw CharacterVocalBlendShapeError.invalidDescriptor("audioRoles")
         }
         let timing = [
@@ -161,22 +223,62 @@ nonisolated struct CharacterVocalBlendShapeResources: Sendable {
 }
 
 actor CharacterVocalBlendShapeDescriptorStore {
-    private var cached: Result<CharacterVocalBlendShapeResources, Error>?
+    private var cachedByCharacterID: [
+        String: Result<CharacterVocalBlendShapeResources, Error>
+    ] = [:]
 
     func loadDad(bundle: Bundle = .main) async throws -> CharacterVocalBlendShapeResources {
-        if let cached { return try cached.get() }
+        try await load(characterID: "dad", bundle: bundle)
+    }
+
+    func loadGrandma(
+        bundle: Bundle = .main
+    ) async throws -> CharacterVocalBlendShapeResources {
+        try await load(characterID: "grandma", bundle: bundle)
+    }
+
+    func loadSpouse(
+        bundle: Bundle = .main
+    ) async throws -> CharacterVocalBlendShapeResources {
+        try await load(characterID: "spouse", bundle: bundle)
+    }
+
+    func loadBiker(
+        bundle: Bundle = .main
+    ) async throws -> CharacterVocalBlendShapeResources {
+        try await load(characterID: "biker", bundle: bundle)
+    }
+
+    func loadNeighbor(
+        bundle: Bundle = .main
+    ) async throws -> CharacterVocalBlendShapeResources {
+        try await load(characterID: "neighbor", bundle: bundle)
+    }
+
+    func load(
+        characterID: String,
+        bundle: Bundle = .main
+    ) async throws -> CharacterVocalBlendShapeResources {
+        guard let profile = CharacterVocalBlendShapeProfile.resolve(
+            characterID: characterID
+        ) else {
+            throw CharacterVocalBlendShapeError.invalidDescriptor("characterID")
+        }
+        if let cached = cachedByCharacterID[characterID] {
+            return try cached.get()
+        }
 
         let result: Result<CharacterVocalBlendShapeResources, Error>
         do {
             let descriptorURL = try Self.resourceURL(
                 bundle: bundle,
-                name: "dad_infected_vocal_blendshape",
+                name: profile.descriptorResourceName,
                 extension: "json",
                 subdirectory: "CharacterLibrary/FacialPerformance"
             )
             let assetURL = try Self.resourceURL(
                 bundle: bundle,
-                name: "dad_biped",
+                name: profile.sourceAssetResourceName,
                 extension: "usdz",
                 subdirectory: nil
             )
@@ -234,7 +336,7 @@ actor CharacterVocalBlendShapeDescriptorStore {
         } catch {
             result = .failure(error)
         }
-        cached = result
+        cachedByCharacterID[characterID] = result
         return try result.get()
     }
 

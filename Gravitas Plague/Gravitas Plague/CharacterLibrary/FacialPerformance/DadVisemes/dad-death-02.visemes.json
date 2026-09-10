@@ -1,0 +1,108 @@
+{
+  "alignment": {
+    "VADModelSHA256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+    "acousticModelSHA256": "88b15292ae279697836e8510e405beacc00a216be8e5733be40cf5429b4faa55",
+    "engine": "pocketsphinx",
+    "engineCommit": "511126b492dcb267cf30d49d631946d7b61a9530",
+    "engineVersion": "5.1.1",
+    "mode": "pocketsphinxAllPhone",
+    "phoneLanguageModelSHA256": "c57e0fa4191b096b1279cfe3a77927f52568fdecfc6624ddb5cec9527c763a54",
+    "phonePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "resourceTreeSHA256": "e2ca8da1fecfd4a676fbd3d68537c705688b669b30ddaa1cb78dd1850e4fe12d",
+    "speechBoundaryPolicy": "pocketsphinxNonSilencePhoneIntervals",
+    "transcriptSHA256": null
+  },
+  "audioFile": "dad-death-02.wav",
+  "audioResourcePath": "Audio/dad-death-02.wav",
+  "audioSHA256": "bedad39a231b62e7acb4fc7462680d62d84367e5b3e341ccfe4761774853fcff",
+  "blendShapeDescriptorResourcePath": "CharacterLibrary/FacialPerformance/dad_infected_vocal_blendshape.json",
+  "blendShapeDescriptorSHA256": "c354894371eca9ae0e85883c6ac1add607f25b1c02b0187473a54b2eb7c608ad",
+  "characterID": "dad",
+  "compilerVersion": "character-vocal-allphone-visemes/1.0.0",
+  "looping": false,
+  "requiredPoseFamilies": [
+    "rest",
+    "small",
+    "wide",
+    "round",
+    "teeth"
+  ],
+  "role": "death",
+  "runs": [
+    {
+      "endFrameExclusive": 56,
+      "pose": "rest",
+      "startFrame": 0
+    },
+    {
+      "endFrameExclusive": 93,
+      "pose": "wide",
+      "startFrame": 56
+    },
+    {
+      "endFrameExclusive": 119,
+      "pose": "rest",
+      "startFrame": 93
+    },
+    {
+      "endFrameExclusive": 136,
+      "pose": "small",
+      "startFrame": 119
+    },
+    {
+      "endFrameExclusive": 139,
+      "pose": "wide",
+      "startFrame": 136
+    },
+    {
+      "endFrameExclusive": 151,
+      "pose": "round",
+      "startFrame": 139
+    },
+    {
+      "endFrameExclusive": 157,
+      "pose": "small",
+      "startFrame": 151
+    },
+    {
+      "endFrameExclusive": 180,
+      "pose": "teeth",
+      "startFrame": 157
+    },
+    {
+      "endFrameExclusive": 297,
+      "pose": "small",
+      "startFrame": 180
+    },
+    {
+      "endFrameExclusive": 300,
+      "pose": "rest",
+      "startFrame": 297
+    }
+  ],
+  "runsSHA256": "2bcd127d113dabe6db4d688a738b3a4214f0219945200206168781d55c5ce817",
+  "schemaVersion": 1,
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 85,
+      "round": 12,
+      "small": 140,
+      "teeth": 23,
+      "wide": 40
+    },
+    "runCount": 10,
+    "silenceFrameCount": 85,
+    "speechFrameCount": 215,
+    "unknownPhoneCount": 0,
+    "warnings": []
+  },
+  "timeline": {
+    "durationSeconds": 5.0,
+    "frameCount": 300,
+    "framesPerSecond": 60,
+    "sampleCount": 240000,
+    "sampleRate": 48000,
+    "samplesPerNominalFrame": 800
+  },
+  "trackID": "dad.death.dad-death-02.visemes"
+}

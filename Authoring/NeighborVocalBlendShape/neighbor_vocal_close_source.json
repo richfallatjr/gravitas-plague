@@ -1,0 +1,21 @@
+{
+  "basePose": "wide",
+  "blendShapeName": "neighborVocalClose",
+  "donorAsset": "neighbor_biped_mouth_closed.usdz",
+  "donorBlendShapeName": "Lattice",
+  "excludedDonorPrimPaths": [
+    "/root/Armature/Armature_001"
+  ],
+  "expectedTopologySHA256": "526475526eafda965e5dd77f728e37881ceca2f5d9a8c3fe4dd69749456799bb",
+  "meshBindings": [
+    {
+      "basePrimPath": "/root/Armature/char1/char1",
+      "donorPrimPath": "/root/Armature/char1/char1"
+    }
+  ],
+  "schemaVersion": 1,
+  "skelRootPrimPath": "/root/Armature",
+  "sourceAsset": "neighbor_biped.usdz",
+  "sparseOffsetEpsilonLocalUnits": 1e-06,
+  "targetPose": "closedTense"
+}

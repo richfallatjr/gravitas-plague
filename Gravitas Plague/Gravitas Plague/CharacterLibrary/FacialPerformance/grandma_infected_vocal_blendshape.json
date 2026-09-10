@@ -1,0 +1,38 @@
+{
+  "allowedWeightRange": [
+    0.0,
+    1.0
+  ],
+  "audioRoles": [
+    "presence_loop",
+    "damage_hits",
+    "death"
+  ],
+  "basePose": "wide",
+  "blendShapeName": "grandmaVocalClose",
+  "characterID": "grandma",
+  "descriptorID": "grandma.infected.vocalBlendShape.v1",
+  "fallbackWeight": 1.0,
+  "offsetPayloadMeshCount": 1,
+  "offsetPayloadRecordCount": 690,
+  "offsetPayloadResourcePath": "CharacterLibrary/FacialPerformance/grandma_infected_vocal_blendshape_offsets.bin",
+  "offsetPayloadSHA256": "0df8b0f379ca071576dfaa7de3d044e9a0218fe5624242bfb10e424e0813d33b",
+  "poseWeights": {
+    "rest": 1.0,
+    "round": 0.5,
+    "small": 0.5,
+    "teeth": 1.0,
+    "wide": 0.0
+  },
+  "response": {
+    "assignmentEpsilon": 0.0005,
+    "crossingHalfLifeSeconds": 0.035,
+    "decreasingWeightHalfLifeSeconds": 0.03,
+    "increasingWeightHalfLifeSeconds": 0.05,
+    "maximumDeltaTimeSeconds": 0.05
+  },
+  "schemaVersion": 1,
+  "sourceAssetExtension": "usdz",
+  "sourceAssetResourceName": "grandma_biped",
+  "sourceAssetSHA256": "c5847e8fe9e4df8e433a31c4492a72f0ea4fcc68d6f910efc68d08fb32bde002"
+}

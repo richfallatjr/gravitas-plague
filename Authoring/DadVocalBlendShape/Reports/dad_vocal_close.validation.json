@@ -66,7 +66,7 @@
     ]
   },
   "runtimeDescriptor": {
-    "SHA256": "d04e1bee5f190ecba33859a5a24e1ba06d89a72d2634a19ca0f1bcf41ee15115",
+    "SHA256": "c354894371eca9ae0e85883c6ac1add607f25b1c02b0187473a54b2eb7c608ad",
     "resourcePath": "CharacterLibrary/FacialPerformance/dad_infected_vocal_blendshape.json",
     "value": {
       "allowedWeightRange": [
@@ -74,6 +74,7 @@
         1.0
       ],
       "audioRoles": [
+        "presence_loop",
         "damage_hits",
         "death"
       ],

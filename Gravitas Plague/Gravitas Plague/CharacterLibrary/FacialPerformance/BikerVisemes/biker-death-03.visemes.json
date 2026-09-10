@@ -1,0 +1,98 @@
+{
+  "alignment": {
+    "VADModelSHA256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+    "acousticModelSHA256": "88b15292ae279697836e8510e405beacc00a216be8e5733be40cf5429b4faa55",
+    "engine": "pocketsphinx",
+    "engineCommit": "511126b492dcb267cf30d49d631946d7b61a9530",
+    "engineVersion": "5.1.1",
+    "mode": "pocketsphinxAllPhone",
+    "phoneLanguageModelSHA256": "c57e0fa4191b096b1279cfe3a77927f52568fdecfc6624ddb5cec9527c763a54",
+    "phonePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "resourceTreeSHA256": "e2ca8da1fecfd4a676fbd3d68537c705688b669b30ddaa1cb78dd1850e4fe12d",
+    "speechBoundaryPolicy": "pocketsphinxNonSilencePhoneIntervals",
+    "transcriptSHA256": null
+  },
+  "audioFile": "biker-death-03.wav",
+  "audioResourcePath": "Audio/biker-death-03.wav",
+  "audioSHA256": "57e1193655477f76daa6d854e4fca6d15b699901e1e96d79c236acaa19262c1c",
+  "blendShapeDescriptorResourcePath": "CharacterLibrary/FacialPerformance/biker_infected_vocal_blendshape.json",
+  "blendShapeDescriptorSHA256": "ff66756413c307b49a4398bf3e1dce34d0357c0fb37fa1dee364722d8f081015",
+  "characterID": "biker",
+  "compilerVersion": "character-vocal-allphone-visemes/1.0.0",
+  "looping": false,
+  "requiredPoseFamilies": [
+    "rest",
+    "small",
+    "wide",
+    "round",
+    "teeth"
+  ],
+  "role": "death",
+  "runs": [
+    {
+      "endFrameExclusive": 2,
+      "pose": "rest",
+      "startFrame": 0
+    },
+    {
+      "endFrameExclusive": 43,
+      "pose": "wide",
+      "startFrame": 2
+    },
+    {
+      "endFrameExclusive": 114,
+      "pose": "rest",
+      "startFrame": 43
+    },
+    {
+      "endFrameExclusive": 175,
+      "pose": "wide",
+      "startFrame": 114
+    },
+    {
+      "endFrameExclusive": 191,
+      "pose": "small",
+      "startFrame": 175
+    },
+    {
+      "endFrameExclusive": 258,
+      "pose": "wide",
+      "startFrame": 191
+    },
+    {
+      "endFrameExclusive": 286,
+      "pose": "round",
+      "startFrame": 258
+    },
+    {
+      "endFrameExclusive": 300,
+      "pose": "rest",
+      "startFrame": 286
+    }
+  ],
+  "runsSHA256": "dcce0a73ad23848744161f56473b77c3d8256681490504aa44832d54ffe7cc6b",
+  "schemaVersion": 1,
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 87,
+      "round": 28,
+      "small": 16,
+      "teeth": 0,
+      "wide": 169
+    },
+    "runCount": 8,
+    "silenceFrameCount": 87,
+    "speechFrameCount": 213,
+    "unknownPhoneCount": 0,
+    "warnings": []
+  },
+  "timeline": {
+    "durationSeconds": 5.0,
+    "frameCount": 300,
+    "framesPerSecond": 60,
+    "sampleCount": 240000,
+    "sampleRate": 48000,
+    "samplesPerNominalFrame": 800
+  },
+  "trackID": "biker.death.biker-death-03.visemes"
+}

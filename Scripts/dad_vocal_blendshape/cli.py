@@ -16,6 +16,7 @@ from Scripts.angel_projection_blendshape.package import (
     build_staged_package,
 )
 from Scripts.dad_vocal_blendshape.paths import ToolPaths
+from Scripts.dad_vocal_blendshape.profiles import DAD_PROFILE, PROFILES
 from Scripts.dad_vocal_blendshape.report import write_validation_report
 from Scripts.dad_vocal_blendshape.runtime_offsets import (
     validate_runtime_offsets,
@@ -37,7 +38,7 @@ LOCKED_POSE_WEIGHTS = {
     "round": 0.5,
     "teeth": 1.0,
 }
-LOCKED_AUDIO_ROLES = ["damage_hits", "death"]
+LOCKED_AUDIO_ROLES = list(DAD_PROFILE.audio_roles)
 LOCKED_RESPONSE = {
     "increasingWeightHalfLifeSeconds": 0.05,
     "decreasingWeightHalfLifeSeconds": 0.03,
@@ -46,27 +47,30 @@ LOCKED_RESPONSE = {
     "assignmentEpsilon": 0.0005,
 }
 RUNTIME_PAYLOAD_RESOURCE_PATH = (
-    "CharacterLibrary/FacialPerformance/"
-    "dad_infected_vocal_blendshape_offsets.bin"
+    DAD_PROFILE.runtime_offsets_resource_path
 )
 
 
-def _runtime_descriptor(asset_sha: str, payload: dict[str, Any]) -> dict[str, Any]:
+def _runtime_descriptor(
+    asset_sha: str,
+    payload: dict[str, Any],
+    profile=DAD_PROFILE,
+) -> dict[str, Any]:
     return {
         "schemaVersion": 1,
-        "descriptorID": "dad.infected.vocalBlendShape.v1",
-        "characterID": "dad",
-        "sourceAssetResourceName": "dad_biped",
+        "descriptorID": profile.descriptor_id,
+        "characterID": profile.character_id,
+        "sourceAssetResourceName": profile.source_asset_resource_name,
         "sourceAssetExtension": "usdz",
         "sourceAssetSHA256": asset_sha,
-        "blendShapeName": "dadVocalClose",
-        "basePose": "wide",
+        "blendShapeName": profile.blend_shape_name,
+        "basePose": profile.base_pose,
         "poseWeights": LOCKED_POSE_WEIGHTS,
         "fallbackWeight": 1.0,
         "allowedWeightRange": [0.0, 1.0],
-        "audioRoles": LOCKED_AUDIO_ROLES,
+        "audioRoles": list(profile.audio_roles),
         "response": LOCKED_RESPONSE,
-        "offsetPayloadResourcePath": RUNTIME_PAYLOAD_RESOURCE_PATH,
+        "offsetPayloadResourcePath": profile.runtime_offsets_resource_path,
         "offsetPayloadSHA256": payload["SHA256"],
         "offsetPayloadMeshCount": payload["meshCount"],
         "offsetPayloadRecordCount": payload["recordCount"],
@@ -85,24 +89,25 @@ def validate_runtime_descriptor(
     value: dict[str, Any],
     asset_sha: str,
     payload: dict[str, Any],
+    profile=DAD_PROFILE,
 ) -> None:
     identity = {
         "schemaVersion": 1,
-        "descriptorID": "dad.infected.vocalBlendShape.v1",
-        "characterID": "dad",
-        "sourceAssetResourceName": "dad_biped",
+        "descriptorID": profile.descriptor_id,
+        "characterID": profile.character_id,
+        "sourceAssetResourceName": profile.source_asset_resource_name,
         "sourceAssetExtension": "usdz",
         "sourceAssetSHA256": asset_sha,
-        "blendShapeName": "dadVocalClose",
-        "basePose": "wide",
+        "blendShapeName": profile.blend_shape_name,
+        "basePose": profile.base_pose,
         "poseWeights": LOCKED_POSE_WEIGHTS,
         "fallbackWeight": 1.0,
         "allowedWeightRange": [0.0, 1.0],
-        "audioRoles": LOCKED_AUDIO_ROLES,
+        "audioRoles": list(profile.audio_roles),
         "response": LOCKED_RESPONSE,
-        "offsetPayloadResourcePath": RUNTIME_PAYLOAD_RESOURCE_PATH,
+        "offsetPayloadResourcePath": profile.runtime_offsets_resource_path,
         "offsetPayloadSHA256": payload["SHA256"],
-        "offsetPayloadMeshCount": 1,
+        "offsetPayloadMeshCount": payload["meshCount"],
         "offsetPayloadRecordCount": payload["recordCount"],
     }
     if value != identity:
@@ -111,13 +116,16 @@ def validate_runtime_descriptor(
             if value.get(key) != identity.get(key)
         )
         raise ValueError(
-            "Dad runtime descriptor differs from the locked contract: "
+            f"{profile.display_name} runtime descriptor differs from the "
+            "locked contract: "
             + ", ".join(changed)
         )
     if not _valid_sha(value["sourceAssetSHA256"]) or not _valid_sha(
         value["offsetPayloadSHA256"]
     ):
-        raise ValueError("Dad runtime descriptor contains an invalid digest")
+        raise ValueError(
+            f"{profile.display_name} runtime descriptor contains an invalid digest"
+        )
     response_values = value["response"].values()
     if not all(
         isinstance(number, (int, float))
@@ -125,7 +133,9 @@ def validate_runtime_descriptor(
         and number > 0
         for number in response_values
     ):
-        raise ValueError("Dad runtime response contains an invalid value")
+        raise ValueError(
+            f"{profile.display_name} runtime response contains an invalid value"
+        )
 
 
 def doctor(paths: ToolPaths) -> int:
@@ -151,7 +161,7 @@ def doctor(paths: ToolPaths) -> int:
 
 def validated(paths: ToolPaths) -> tuple[dict[str, Any], dict[str, Any]]:
     paths.require_authoring_inputs()
-    source = load_source_descriptor(paths.source_descriptor)
+    source = load_source_descriptor(paths.source_descriptor, paths.profile)
     validation = validate_pair(paths.base_asset, paths.donor_asset, source)
     return source, validation
 
@@ -171,7 +181,7 @@ def build(paths: ToolPaths) -> int:
     paths.build_root.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="build-", dir=paths.build_root) as raw:
         staging = Path(raw)
-        staged_asset = staging / "dad_biped.usdz"
+        staged_asset = staging / paths.base_asset.name
         package_result = build_staged_package(
             paths.base_asset,
             validation,
@@ -192,10 +202,22 @@ def build(paths: ToolPaths) -> int:
             validation,
         )
         if checked_payload != payload:
-            raise ValueError("Dad runtime payload validation metadata differs")
+            raise ValueError(
+                f"{paths.profile.display_name} runtime payload validation "
+                "metadata differs"
+            )
 
-        runtime = _runtime_descriptor(authored["assetSHA256"], payload)
-        validate_runtime_descriptor(runtime, authored["assetSHA256"], payload)
+        runtime = _runtime_descriptor(
+            authored["assetSHA256"],
+            payload,
+            paths.profile,
+        )
+        validate_runtime_descriptor(
+            runtime,
+            authored["assetSHA256"],
+            payload,
+            paths.profile,
+        )
         staged_descriptor = staging / paths.runtime_descriptor.name
         write(staged_descriptor, runtime)
 
@@ -218,10 +240,7 @@ def build(paths: ToolPaths) -> int:
             "authoredAsset": authored,
             "runtimeOffsetPayload": payload,
             "runtimeDescriptor": {
-                "resourcePath": (
-                    "CharacterLibrary/FacialPerformance/"
-                    "dad_infected_vocal_blendshape.json"
-                ),
+                "resourcePath": paths.profile.runtime_descriptor_resource_path,
                 "SHA256": sha256(staged_descriptor),
                 "value": runtime,
             },
@@ -230,6 +249,8 @@ def build(paths: ToolPaths) -> int:
                 "status": "PASS",
             },
         }
+        if paths.profile != DAD_PROFILE:
+            report["characterID"] = paths.profile.character_id
         staged_report = staging / paths.validation_report.name
         write_validation_report(staged_report, report)
 
@@ -260,7 +281,12 @@ def validate_runtime(paths: ToolPaths) -> int:
         validation,
     )
     runtime = json.loads(paths.runtime_descriptor.read_text(encoding="utf-8"))
-    validate_runtime_descriptor(runtime, authored["assetSHA256"], payload)
+    validate_runtime_descriptor(
+        runtime,
+        authored["assetSHA256"],
+        payload,
+        paths.profile,
+    )
     subprocess.run(["/usr/bin/usdchecker", str(paths.base_asset)], check=True)
     print(json.dumps({
         "status": "PASS",
@@ -278,17 +304,33 @@ def validate_runtime(paths: ToolPaths) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    default_character: str = "dad",
+) -> int:
+    if default_character not in PROFILES:
+        raise ValueError(f"unknown character profile: {default_character}")
     parser = argparse.ArgumentParser(
-        description="Author Dad's owner-supplied mouth-close blendshape",
+        description=(
+            f"Author {PROFILES[default_character].display_name}'s "
+            "owner-supplied mouth-close blendshape"
+        ),
     )
     parser.add_argument(
         "command",
         choices=["doctor", "validate-donor", "build", "validate-runtime"],
     )
     parser.add_argument("--repository", type=Path)
+    parser.add_argument(
+        "--character",
+        choices=sorted(PROFILES),
+        default=default_character,
+    )
     args = parser.parse_args(argv)
-    paths = ToolPaths.discover(args.repository)
+    paths = ToolPaths.discover(
+        args.repository,
+        profile=PROFILES[args.character],
+    )
     commands = {
         "doctor": doctor,
         "validate-donor": validate_donor,

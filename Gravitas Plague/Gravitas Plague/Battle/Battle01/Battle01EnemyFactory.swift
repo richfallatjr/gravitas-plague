@@ -8,7 +8,8 @@ typealias Battle01PreparedEnemy = ScriptedPortalPreparedEnemy
 final class Battle01EnemyFactory {
     typealias PreparedCallback = @MainActor (
         UUID,
-        JockRetargetTestController
+        JockRetargetTestController,
+        Entity?
     ) -> Void
 
     private let sceneRoot: Entity
@@ -117,13 +118,12 @@ final class Battle01EnemyFactory {
             characterID: attributes.characterID,
             reason: "Battle01.authoritativeStoryEnemy"
         )
-        onPrepared(enemyID, source)
-
         let mirror = try StoryPortalEnemyRenderMirrorAdapter(
             source: source,
             portalWorldRoot: doorContext.portalWorldRoot,
             portalPlaneEntity: doorContext.portalPlane
         )
+        onPrepared(enemyID, source, mirror.visualRootEntity)
         TuringMemoryBudgetProbe.log(
             label: "afterBattle01PortalMirrorCreated"
         )

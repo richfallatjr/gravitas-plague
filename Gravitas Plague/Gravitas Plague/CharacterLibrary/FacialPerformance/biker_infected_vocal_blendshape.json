@@ -1,0 +1,38 @@
+{
+  "allowedWeightRange": [
+    0.0,
+    1.0
+  ],
+  "audioRoles": [
+    "presence_loop",
+    "damage_hits",
+    "death"
+  ],
+  "basePose": "wide",
+  "blendShapeName": "bikerVocalClose",
+  "characterID": "biker",
+  "descriptorID": "biker.infected.vocalBlendShape.v1",
+  "fallbackWeight": 1.0,
+  "offsetPayloadMeshCount": 1,
+  "offsetPayloadRecordCount": 878,
+  "offsetPayloadResourcePath": "CharacterLibrary/FacialPerformance/biker_infected_vocal_blendshape_offsets.bin",
+  "offsetPayloadSHA256": "40ac54b9a30ede50581d585106ae7f8b659b805cb63fa1557296937636715548",
+  "poseWeights": {
+    "rest": 1.0,
+    "round": 0.5,
+    "small": 0.5,
+    "teeth": 1.0,
+    "wide": 0.0
+  },
+  "response": {
+    "assignmentEpsilon": 0.0005,
+    "crossingHalfLifeSeconds": 0.035,
+    "decreasingWeightHalfLifeSeconds": 0.03,
+    "increasingWeightHalfLifeSeconds": 0.05,
+    "maximumDeltaTimeSeconds": 0.05
+  },
+  "schemaVersion": 1,
+  "sourceAssetExtension": "usdz",
+  "sourceAssetResourceName": "biker_biped",
+  "sourceAssetSHA256": "57bc9c0d8cb44f6039af12f8af61c747cace6ae2293a8bf1fc2cbcbd734d5588"
+}

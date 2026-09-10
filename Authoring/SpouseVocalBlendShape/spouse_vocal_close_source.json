@@ -1,0 +1,21 @@
+{
+  "basePose": "wide",
+  "blendShapeName": "spouseVocalClose",
+  "donorAsset": "spouse_biped_mouth_closed.usdz",
+  "donorBlendShapeName": "dadVocalClose",
+  "excludedDonorPrimPaths": [
+    "/root/Armature/Armature_001"
+  ],
+  "expectedTopologySHA256": "3406a5fdf35535d6099a9364dc5d6169ec65a4c2c620f3f8e28e05ef231127d5",
+  "meshBindings": [
+    {
+      "basePrimPath": "/root/Armature/char1/char1",
+      "donorPrimPath": "/root/Armature/char1/char1"
+    }
+  ],
+  "schemaVersion": 1,
+  "skelRootPrimPath": "/root/Armature",
+  "sourceAsset": "spouse_biped.usdz",
+  "sparseOffsetEpsilonLocalUnits": 1e-06,
+  "targetPose": "closedTense"
+}

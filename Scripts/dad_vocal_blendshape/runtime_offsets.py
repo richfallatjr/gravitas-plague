@@ -30,9 +30,11 @@ def write_runtime_offsets(
         ).Get()
         sparse = mesh_result["sparse"]
         if len(points) != mesh_result["pointCount"]:
-            raise ValueError("Dad runtime offset point count changed")
+            raise ValueError("character runtime offset point count changed")
         if len(sparse.indices) != len(sparse.values):
-            raise ValueError("Dad runtime sparse offset arrays differ in length")
+            raise ValueError(
+                "character runtime sparse offset arrays differ in length"
+            )
         body += struct.pack(
             "<IIII",
             len(prim_path),
@@ -44,7 +46,7 @@ def write_runtime_offsets(
         previous = -1
         for index, offset in zip(sparse.indices, sparse.values):
             if index <= previous or index >= len(points):
-                raise ValueError("Dad runtime sparse indices are invalid")
+                raise ValueError("character runtime sparse indices are invalid")
             previous = index
             base = points[index]
             values = (
@@ -56,7 +58,7 @@ def write_runtime_offsets(
                 float(offset[2]),
             )
             if not all(math.isfinite(value) for value in values):
-                raise ValueError("Dad runtime sparse record is nonfinite")
+                raise ValueError("character runtime sparse record is nonfinite")
             body += RECORD.pack(index, *values)
         total_records += len(sparse.indices)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -89,16 +91,16 @@ def validate_runtime_offsets(
     def take(count: int) -> memoryview:
         nonlocal cursor
         if count < 0 or cursor + count > len(view):
-            raise ValueError("Dad runtime offset payload is truncated")
+            raise ValueError("character runtime offset payload is truncated")
         result = view[cursor:cursor + count]
         cursor += count
         return result
 
     if bytes(take(8)) != MAGIC:
-        raise ValueError("Dad runtime offset payload magic is invalid")
+        raise ValueError("character runtime offset payload magic is invalid")
     schema, mesh_count = struct.unpack("<II", take(8))
     if schema != SCHEMA_VERSION or mesh_count != len(validation["meshes"]):
-        raise ValueError("Dad runtime offset payload header is invalid")
+        raise ValueError("character runtime offset payload header is invalid")
 
     stage = open_stage(base_asset)
     total_records = 0
@@ -114,7 +116,7 @@ def validate_runtime_offsets(
             or point_count != expected["pointCount"]
             or record_count != len(sparse.indices)
         ):
-            raise ValueError("Dad runtime offset mesh header is invalid")
+            raise ValueError("character runtime offset mesh header is invalid")
         points = stage.GetPrimAtPath(prim_path).GetAttribute("points").Get()
         previous = -1
         for expected_index, expected_offset in zip(
@@ -126,7 +128,7 @@ def validate_runtime_offsets(
             base = unpacked[1:4]
             offset = unpacked[4:7]
             if index <= previous or index != expected_index:
-                raise ValueError("Dad runtime sparse index order is invalid")
+                raise ValueError("character runtime sparse index order is invalid")
             previous = index
             expected_base = tuple(float(value) for value in points[index])
             maximum_error = max(
@@ -137,8 +139,10 @@ def validate_runtime_offsets(
                 )
             )
             if maximum_error > 0.000_001:
-                raise ValueError("Dad runtime sparse record differs from validation")
+                raise ValueError(
+                    "character runtime sparse record differs from validation"
+                )
         total_records += record_count
     if cursor != len(view):
-        raise ValueError("Dad runtime offset payload has trailing bytes")
+        raise ValueError("character runtime offset payload has trailing bytes")
     return _metadata(data, mesh_count, total_records)

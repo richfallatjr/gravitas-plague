@@ -1,0 +1,71 @@
+{
+  "catalogID": "grandma.infected.vocalVisemes.v1",
+  "characterID": "grandma",
+  "compilerVersion": "character-vocal-allphone-visemes/1.0.0",
+  "entries": [
+    {
+      "audioFile": "dad_breathing.wav",
+      "audioSHA256": "db27f0d2131e9776cc9858b7e7a4489c55058f23233ac33efcf27a5c09acf6bb",
+      "looping": true,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/GrandmaVisemes/grandma-dad_breathing.visemes.json",
+      "role": "presence_loop"
+    },
+    {
+      "audioFile": "grandma-damaged-01.wav",
+      "audioSHA256": "987f3502330da589d675293815b48bc1e692d03a2cd37b4d57cbdbae27170453",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/GrandmaVisemes/grandma-damaged-01.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "grandma-damaged-02.wav",
+      "audioSHA256": "6ab48c44af6a4e8b6c1d9c034ac804494a675013566c027d5bf99091e0c8bfc8",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/GrandmaVisemes/grandma-damaged-02.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "grandma-damaged-03.wav",
+      "audioSHA256": "fab41d36ab369770e9edffa1d06ebc6f04c565da8a893211a7f4e07c9e89fd4d",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/GrandmaVisemes/grandma-damaged-03.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "grandma-damaged-04.wav",
+      "audioSHA256": "652b9c471876f5a0a7050ad84b44d167990249076d4492c04e646d574950681c",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/GrandmaVisemes/grandma-damaged-04.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "grandma-death-01.wav",
+      "audioSHA256": "51f0cd4f03d9271c175262a4f62d66378c3ee8636a59aabf613c91e04e13b1dc",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/GrandmaVisemes/grandma-death-01.visemes.json",
+      "role": "death"
+    },
+    {
+      "audioFile": "grandma-death-02.wav",
+      "audioSHA256": "38293ffbf3b84bd7a0718d967093f57ab753281a2b9898622549cae7782f5697",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/GrandmaVisemes/grandma-death-02.visemes.json",
+      "role": "death"
+    },
+    {
+      "audioFile": "grandma-death-03.wav",
+      "audioSHA256": "a779ff2a8c5fba11915dc875981ff3db04161943c7945093dcac06dada543c79",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/GrandmaVisemes/grandma-death-03.visemes.json",
+      "role": "death"
+    },
+    {
+      "audioFile": "grandma-death-04.wav",
+      "audioSHA256": "afdb68decbef7e36c8978b48fe4bc6f3d05f718414966573a0790c5ef5050f8f",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/GrandmaVisemes/grandma-death-04.visemes.json",
+      "role": "death"
+    }
+  ],
+  "schemaVersion": 1
+}

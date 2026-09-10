@@ -20,11 +20,10 @@ from Scripts.angel_projection_blendshape.stages import (
     stage_contract,
 )
 from Scripts.angel_projection_blendshape.topology import inspect_mesh
-
-
-EXPECTED_BLEND_SHAPE_NAME = "dadVocalClose"
-EXPECTED_BASE_POSE = "wide"
-EXPECTED_TARGET_POSE = "closedTense"
+from Scripts.dad_vocal_blendshape.profiles import (
+    DAD_PROFILE,
+    CharacterVocalBlendShapeProfile,
+)
 
 
 @dataclass(frozen=True)
@@ -48,25 +47,33 @@ def apply_blend_shape_offsets(
         len(point) != 3 or not all(math.isfinite(component) for component in point)
         for point in points
     ):
-        raise ValueError("Dad donor base points are empty or malformed")
+        raise ValueError("character donor base points are empty or malformed")
     if not deltas or any(
         len(delta) != 3 or not all(math.isfinite(component) for component in delta)
         for delta in deltas
     ):
-        raise ValueError("Dad donor blendshape offsets are empty or malformed")
+        raise ValueError("character donor blendshape offsets are empty or malformed")
 
     if point_indices is None:
         if len(deltas) != len(points):
-            raise ValueError("dense Dad donor blendshape offset count differs from points")
+            raise ValueError(
+                "dense character donor blendshape offset count differs from points"
+            )
         indices = tuple(range(len(points)))
     else:
         indices = tuple(int(index) for index in point_indices)
         if len(indices) != len(deltas):
-            raise ValueError("sparse Dad donor blendshape arrays differ in length")
+            raise ValueError(
+                "sparse character donor blendshape arrays differ in length"
+            )
         if len(set(indices)) != len(indices):
-            raise ValueError("Dad donor blendshape point indices are duplicated")
+            raise ValueError(
+                "character donor blendshape point indices are duplicated"
+            )
         if any(index < 0 or index >= len(points) for index in indices):
-            raise ValueError("Dad donor blendshape point index is out of range")
+            raise ValueError(
+                "character donor blendshape point index is out of range"
+            )
 
     for index, delta in zip(indices, deltas):
         base = points[index]
@@ -84,6 +91,7 @@ def _resolve_donor_target(
     blend_shape_name: str,
     base_points: Sequence[Iterable[float]],
     epsilon: float,
+    require_blend_shape: bool = False,
 ) -> ResolvedDonorTarget:
     """Use the owner-authored shape key when the donor exports one.
 
@@ -98,10 +106,17 @@ def _resolve_donor_target(
     names = [str(name) for name in (binding.GetBlendShapesAttr().Get() or [])]
     targets = list(binding.GetBlendShapeTargetsRel().GetTargets() or [])
     if len(names) != len(targets):
-        raise ValueError(f"Dad donor blendshape binding mismatch at {mesh_path}")
+        raise ValueError(
+            f"character donor blendshape binding mismatch at {mesh_path}"
+        )
 
     matches = [index for index, name in enumerate(names) if name == blend_shape_name]
     if not matches:
+        if require_blend_shape:
+            raise ValueError(
+                f"required donor blendshape {blend_shape_name} is missing at "
+                f"{mesh_path}"
+            )
         return ResolvedDonorTarget(
             points=tuple(tuple(float(value) for value in point) for point in base_points),
             source="meshPoints",
@@ -111,16 +126,21 @@ def _resolve_donor_target(
         )
     if len(matches) != 1:
         raise ValueError(
-            f"Dad donor blendshape {blend_shape_name} is duplicated at {mesh_path}"
+            f"character donor blendshape {blend_shape_name} is duplicated at "
+            f"{mesh_path}"
         )
 
     target_path = targets[matches[0]]
     shape = UsdSkel.BlendShape(stage.GetPrimAtPath(target_path))
     if not shape:
-        raise ValueError(f"Dad donor blendshape target is invalid: {target_path}")
+        raise ValueError(
+            f"character donor blendshape target is invalid: {target_path}"
+        )
     offsets = shape.GetOffsetsAttr().Get()
     if offsets is None:
-        raise ValueError(f"Dad donor blendshape has no offsets: {target_path}")
+        raise ValueError(
+            f"character donor blendshape has no offsets: {target_path}"
+        )
     authored_indices = shape.GetPointIndicesAttr().Get()
     point_indices = None if authored_indices is None else tuple(authored_indices)
     points = apply_blend_shape_offsets(base_points, offsets, point_indices)
@@ -165,43 +185,81 @@ def _is_sha256(value: Any) -> bool:
     )
 
 
-def load_source_descriptor(path: Path) -> dict[str, Any]:
+def load_source_descriptor(
+    path: Path,
+    profile: CharacterVocalBlendShapeProfile = DAD_PROFILE,
+) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
     if value.get("schemaVersion") != 1:
-        raise ValueError("unsupported Dad source descriptor schema")
-    if value.get("sourceAsset") != "dad_biped.usdz":
-        raise ValueError("Dad source asset identity differs from production")
-    if value.get("donorAsset") != "dad_biped_mouth_closed.usdz":
-        raise ValueError("Dad donor asset identity differs from owner input")
-    if value.get("blendShapeName") != EXPECTED_BLEND_SHAPE_NAME:
-        raise ValueError("Dad blendshape name must be dadVocalClose")
-    if value.get("basePose") != EXPECTED_BASE_POSE:
-        raise ValueError("Dad base pose must remain wide")
-    if value.get("targetPose") != EXPECTED_TARGET_POSE:
-        raise ValueError("Dad target pose must be closedTense")
-    if value.get("skelRootPrimPath") != "/root/Armature":
-        raise ValueError("Dad SkelRoot path differs from production")
+        raise ValueError(
+            f"unsupported {profile.display_name} source descriptor schema"
+        )
+    if value.get("sourceAsset") != profile.source_asset_name:
+        raise ValueError(
+            f"{profile.display_name} source asset identity differs from production"
+        )
+    if value.get("donorAsset") != profile.donor_asset_name:
+        raise ValueError(
+            f"{profile.display_name} donor asset identity differs from owner input"
+        )
+    if value.get("blendShapeName") != profile.blend_shape_name:
+        raise ValueError(
+            f"{profile.display_name} blendshape name must be "
+            f"{profile.blend_shape_name}"
+        )
+    if profile.donor_blend_shape_name is not None:
+        if value.get("donorBlendShapeName") != profile.donor_blend_shape_name:
+            raise ValueError(
+                f"{profile.display_name} donor blendshape name must be "
+                f"{profile.donor_blend_shape_name}"
+            )
+    elif "donorBlendShapeName" in value:
+        raise ValueError(
+            f"{profile.display_name} must retain its implicit donor target contract"
+        )
+    if value.get("basePose") != profile.base_pose:
+        raise ValueError(
+            f"{profile.display_name} base pose must remain {profile.base_pose}"
+        )
+    if value.get("targetPose") != profile.target_pose:
+        raise ValueError(
+            f"{profile.display_name} target pose must be {profile.target_pose}"
+        )
+    if value.get("skelRootPrimPath") != profile.skel_root_prim_path:
+        raise ValueError(
+            f"{profile.display_name} SkelRoot path differs from production"
+        )
     bindings = value.get("meshBindings")
     if not isinstance(bindings, list) or len(bindings) != 1:
-        raise ValueError("Dad authoring requires exactly one mesh binding")
+        raise ValueError(
+            f"{profile.display_name} authoring requires exactly one mesh binding"
+        )
     binding = bindings[0]
-    expected_mesh = "/root/Armature/char1/char1"
+    expected_mesh = profile.mesh_prim_path
     if binding != {
         "basePrimPath": expected_mesh,
         "donorPrimPath": expected_mesh,
     }:
-        raise ValueError("Dad mesh binding differs from the audited mesh")
+        raise ValueError(
+            f"{profile.display_name} mesh binding differs from the audited mesh"
+        )
     topology = value.get("expectedTopologySHA256")
     if not _is_sha256(topology):
-        raise ValueError("Dad expected topology digest is invalid")
+        raise ValueError(
+            f"{profile.display_name} expected topology digest is invalid"
+        )
     epsilon = value.get("sparseOffsetEpsilonLocalUnits")
     if not isinstance(epsilon, (int, float)) or not math.isfinite(epsilon) or epsilon <= 0:
-        raise ValueError("Dad sparse offset epsilon is invalid")
+        raise ValueError(
+            f"{profile.display_name} sparse offset epsilon is invalid"
+        )
     excluded = value.get("excludedDonorPrimPaths")
     if not isinstance(excluded, list) or not all(
         isinstance(path, str) and path.startswith("/") for path in excluded
     ):
-        raise ValueError("Dad donor exclusion list is invalid")
+        raise ValueError(
+            f"{profile.display_name} donor exclusion list is invalid"
+        )
     return value
 
 
@@ -243,7 +301,7 @@ def _matching_world_transform(
     )
     if maximum_difference > 0.000_000_1:
         raise ValueError(
-            f"Dad mesh world transform mismatch: {base_path} != {donor_path}"
+            f"character mesh world transform mismatch: {base_path} != {donor_path}"
         )
     return base
 
@@ -259,10 +317,12 @@ def _skeleton_contract(stage: Any, mesh_path: str) -> dict[str, Any]:
     mesh_prim = stage.GetPrimAtPath(mesh_path)
     skeleton_targets = _relationship_targets(mesh_prim, "skel:skeleton")
     if len(skeleton_targets) != 1:
-        raise ValueError(f"Dad mesh must bind exactly one skeleton: {mesh_path}")
+        raise ValueError(
+            f"character mesh must bind exactly one skeleton: {mesh_path}"
+        )
     skeleton_prim = stage.GetPrimAtPath(skeleton_targets[0])
     if not skeleton_prim or skeleton_prim.GetTypeName() != "Skeleton":
-        raise ValueError(f"Dad skeleton binding is invalid: {mesh_path}")
+        raise ValueError(f"character skeleton binding is invalid: {mesh_path}")
     return {
         "meshPrimPath": mesh_path,
         "skeletonPrimPath": skeleton_targets[0],
@@ -318,7 +378,9 @@ def _compare_deformation_topology(base: Any, donor: Any) -> None:
 def _displacement_statistics(values: Iterable[float]) -> dict[str, float]:
     magnitudes = list(values)
     if not magnitudes or not all(math.isfinite(value) for value in magnitudes):
-        raise ValueError("Dad world-space displacement is empty or nonfinite")
+        raise ValueError(
+            "character world-space displacement is empty or nonfinite"
+        )
     return {
         "mean": sum(magnitudes) / len(magnitudes),
         "rms": math.sqrt(
@@ -341,13 +403,15 @@ def validate_pair(
     donor_stage_contract = stage_contract(donor_stage)
     for key in ("metersPerUnit", "upAxis", "defaultPrim"):
         if base_stage_contract[key] != donor_stage_contract[key]:
-            raise ValueError(f"Dad stage contract mismatch: {key}")
+            raise ValueError(f"character stage contract mismatch: {key}")
 
     skel_root_path = descriptor["skelRootPrimPath"]
     for label, stage in (("base", base_stage), ("donor", donor_stage)):
         skel_root = UsdSkel.Root(stage.GetPrimAtPath(skel_root_path))
         if not skel_root:
-            raise ValueError(f"Dad {label} SkelRoot is invalid: {skel_root_path}")
+            raise ValueError(
+                f"character {label} SkelRoot is invalid: {skel_root_path}"
+            )
 
     bindings = descriptor["meshBindings"]
     selected_base = [binding["basePrimPath"] for binding in bindings]
@@ -355,21 +419,23 @@ def validate_pair(
     actual_base = mesh_paths(base_stage)
     if sorted(actual_base) != sorted(selected_base):
         raise ValueError(
-            "production Dad mesh inventory differs from the exact selection: "
+            "production character mesh inventory differs from the exact selection: "
             f"{actual_base}"
         )
 
     excluded = descriptor["excludedDonorPrimPaths"]
     for path in excluded:
         if base_stage.GetPrimAtPath(path):
-            raise ValueError(f"production Dad unexpectedly contains donor debris: {path}")
+            raise ValueError(
+                f"production character unexpectedly contains donor debris: {path}"
+            )
     unexpected_donor_meshes = [
         path for path in mesh_paths(donor_stage)
         if path not in selected_donor and not _under_any(path, excluded)
     ]
     if unexpected_donor_meshes:
         raise ValueError(
-            "Dad donor contains an unclassified mesh: "
+            "character donor contains an unclassified mesh: "
             f"{unexpected_donor_meshes}"
         )
 
@@ -385,7 +451,8 @@ def validate_pair(
         expected_topology = descriptor["expectedTopologySHA256"]
         if base.topology_sha256 != expected_topology:
             raise ValueError(
-                "production Dad topology digest differs from the audited registration"
+                "production character topology digest differs from the audited "
+                "registration"
             )
         world_transform = _matching_world_transform(
             base_stage,
@@ -395,14 +462,18 @@ def validate_pair(
         )
         base_skeleton = _skeleton_contract(base_stage, base_path)
         if not _material_binding(base_stage, base_path):
-            raise ValueError("production Dad material binding is missing")
+            raise ValueError("production character material binding is missing")
 
         donor_target = _resolve_donor_target(
             donor_stage,
             donor_path,
-            descriptor["blendShapeName"],
+            descriptor.get(
+                "donorBlendShapeName",
+                descriptor["blendShapeName"],
+            ),
             donor.points,
             epsilon,
+            require_blend_shape="donorBlendShapeName" in descriptor,
         )
         sparse: SparseOffsets = compute_sparse_offsets(
             base.points,
@@ -410,7 +481,9 @@ def validate_pair(
             epsilon,
         )
         if not sparse.indices:
-            raise ValueError("Dad owner donor contains no meaningful point deltas")
+            raise ValueError(
+                "character owner donor contains no meaningful point deltas"
+            )
 
         world_magnitudes = []
         for offset in sparse.values:
@@ -486,10 +559,12 @@ def validate_authored_asset(
         mesh["basePrimPath"] for mesh in validation["meshes"]
     ]
     if sorted(mesh_paths(stage)) != sorted(expected_mesh_paths):
-        raise ValueError("authored Dad production mesh inventory changed")
+        raise ValueError("authored character production mesh inventory changed")
     for excluded in descriptor["excludedDonorPrimPaths"]:
         if stage.GetPrimAtPath(excluded):
-            raise ValueError(f"authored Dad contains donor-only prim: {excluded}")
+            raise ValueError(
+                f"authored character contains donor-only prim: {excluded}"
+            )
 
     authored = []
     for mesh_result in validation["meshes"]:
@@ -497,27 +572,31 @@ def validate_authored_asset(
         mesh_prim = stage.GetPrimAtPath(mesh_path)
         topology = inspect_mesh(stage, mesh_path)
         if topology.topology_sha256 != mesh_result["baseTopologySHA256"]:
-            raise ValueError("authored Dad topology changed")
+            raise ValueError("authored character topology changed")
         binding = UsdSkel.BindingAPI(mesh_prim)
         names = [str(name) for name in (binding.GetBlendShapesAttr().Get() or [])]
         targets = list(binding.GetBlendShapeTargetsRel().GetTargets() or [])
         if len(names) != len(targets):
-            raise ValueError("authored Dad blendshape binding count mismatch")
+            raise ValueError("authored character blendshape binding count mismatch")
         matches = [
             index for index, name in enumerate(names)
             if name == descriptor["blendShapeName"]
         ]
         if len(matches) != 1:
-            raise ValueError("authored Dad target is missing or duplicated")
+            raise ValueError("authored character target is missing or duplicated")
         target_path = targets[matches[0]]
         expected_path = Sdf.Path(mesh_path).GetParentPath().AppendChild(
             Sdf.Path(mesh_path).name + "_" + descriptor["blendShapeName"]
         )
         if target_path != expected_path:
-            raise ValueError("authored Dad target path differs from the contract")
+            raise ValueError(
+                "authored character target path differs from the contract"
+            )
         shape = UsdSkel.BlendShape(stage.GetPrimAtPath(target_path))
         if not shape:
-            raise ValueError("authored Dad target is not a UsdSkelBlendShape")
+            raise ValueError(
+                "authored character target is not a UsdSkelBlendShape"
+            )
         indices = tuple(int(value) for value in shape.GetPointIndicesAttr().Get())
         offsets = tuple(
             tuple(float(component) for component in value)
@@ -525,7 +604,9 @@ def validate_authored_asset(
         )
         sparse = mesh_result["sparse"]
         if indices != sparse.indices or len(offsets) != len(sparse.values):
-            raise ValueError("authored Dad sparse point records differ from validation")
+            raise ValueError(
+                "authored character sparse point records differ from validation"
+            )
         maximum_component_error = max(
             (
                 abs(actual - expected)
@@ -535,13 +616,17 @@ def validate_authored_asset(
             default=0.0,
         )
         if maximum_component_error > 0.000_001:
-            raise ValueError("authored Dad offsets differ from the owner donor")
+            raise ValueError(
+                "authored character offsets differ from the owner donor"
+            )
         if any(
             not all(math.isfinite(component) for component in offset)
             or sum(component * component for component in offset) <= 0
             for offset in offsets
         ):
-            raise ValueError("authored Dad contains zero or nonfinite offsets")
+            raise ValueError(
+                "authored character contains zero or nonfinite offsets"
+            )
         authored.append({
             "meshPrimPath": mesh_path,
             "blendShapePrimPath": target_path.pathString,
@@ -554,7 +639,7 @@ def validate_authored_asset(
     inventory = package_inventory(asset)
     donor_name = descriptor["donorAsset"]
     if donor_name in inventory or any(donor_name in item for item in inventory):
-        raise ValueError("the complete Dad donor was embedded in production")
+        raise ValueError("the complete character donor was embedded in production")
     return {
         "assetSHA256": sha256(asset),
         "assetBytes": asset.stat().st_size,

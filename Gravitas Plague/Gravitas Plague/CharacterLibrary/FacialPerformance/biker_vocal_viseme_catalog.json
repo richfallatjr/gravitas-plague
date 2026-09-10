@@ -1,0 +1,71 @@
+{
+  "catalogID": "biker.infected.vocalVisemes.v1",
+  "characterID": "biker",
+  "compilerVersion": "character-vocal-allphone-visemes/1.0.0",
+  "entries": [
+    {
+      "audioFile": "dad_breathing.wav",
+      "audioSHA256": "db27f0d2131e9776cc9858b7e7a4489c55058f23233ac33efcf27a5c09acf6bb",
+      "looping": true,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/BikerVisemes/biker-dad_breathing.visemes.json",
+      "role": "presence_loop"
+    },
+    {
+      "audioFile": "biker-damaged-01.wav",
+      "audioSHA256": "817c1ee8343ea12320961fe13e525e5c47c3e224dc2b167927c0f407b22130df",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/BikerVisemes/biker-damaged-01.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "biker-damaged-02.wav",
+      "audioSHA256": "2b5a8ada1d149465a803d0e96af40dd678c7de706b85c6dda371e0cf445f93a0",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/BikerVisemes/biker-damaged-02.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "biker-damaged-03.wav",
+      "audioSHA256": "a68a02a758942e9cfcfb1f3854891008a39caf766614b391b0807c2d13fe7ce2",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/BikerVisemes/biker-damaged-03.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "biker-damaged-04.wav",
+      "audioSHA256": "c25cc41f8a50bdfd8cd07260bfc9efcf0e225295ebc5be660fb9c4a45346b9d7",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/BikerVisemes/biker-damaged-04.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "biker-death-01.wav",
+      "audioSHA256": "2f3345b8073e3f5b86256f33f6f3e81466a5252b22c17d998bb82507b6359c33",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/BikerVisemes/biker-death-01.visemes.json",
+      "role": "death"
+    },
+    {
+      "audioFile": "biker-death-02.wav",
+      "audioSHA256": "1a04eb28f3b7900ac3ace88640a75fda79bf727b4c82f4976bcdfcf6f6d833b0",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/BikerVisemes/biker-death-02.visemes.json",
+      "role": "death"
+    },
+    {
+      "audioFile": "biker-death-03.wav",
+      "audioSHA256": "57e1193655477f76daa6d854e4fca6d15b699901e1e96d79c236acaa19262c1c",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/BikerVisemes/biker-death-03.visemes.json",
+      "role": "death"
+    },
+    {
+      "audioFile": "biker-death-04.wav",
+      "audioSHA256": "a736672b0fd2f4ee1aa55c71002c329c32049b0d957b3897f528e7baa398f880",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/BikerVisemes/biker-death-04.visemes.json",
+      "role": "death"
+    }
+  ],
+  "schemaVersion": 1
+}

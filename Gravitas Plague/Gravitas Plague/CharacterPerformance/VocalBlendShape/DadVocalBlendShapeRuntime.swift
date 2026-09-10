@@ -1,21 +1,158 @@
 import Foundation
 import RealityKit
 
-private nonisolated struct CharacterVocalActivePosePlayback: Sendable {
+private nonisolated struct CharacterVocalActiveVisemePlayback: Sendable {
     let start: CharacterVocalPlaybackStart
-    var track: TuringGeneratedSpeechFrameTrack?
+    var track: CharacterVocalVisemeTrack?
+    var runCursor: Int
+}
+
+/// Pure playback authority for supported character viseme tracks. Keeping
+/// event arbitration and clock sampling here makes those rules testable
+/// without a RealityKit entity or blend-shape binding.
+nonisolated struct CharacterVocalAuthorityState: Sendable {
+    enum TrackAttachResult: Sendable, Equatable {
+        case attached
+        case mismatchedIdentity
+        case inactivePlayback
+    }
+
+    let sourceID: UUID
+    let characterID: String
+    let archetype: PlagueCharacterArchetype
+    let audioRoles: [CharacterVocalRole]
+
+    private var presenceLoop: CharacterVocalActiveVisemePlayback?
+    private var oneShot: CharacterVocalActiveVisemePlayback?
+    private(set) var deathIsTerminal = false
+
+    var activeIdentity: CharacterVocalPlaybackIdentity? {
+        if let oneShot { return oneShot.start.identity }
+        if deathIsTerminal { return nil }
+        return presenceLoop?.start.identity
+    }
+
+    init(
+        sourceID: UUID,
+        characterID: String,
+        archetype: PlagueCharacterArchetype,
+        audioRoles: [CharacterVocalRole]
+    ) {
+        self.sourceID = sourceID
+        self.characterID = characterID
+        self.archetype = archetype
+        self.audioRoles = audioRoles
+    }
+
+    mutating func receive(_ event: CharacterVocalPlaybackEvent) {
+        guard event.sourceID == sourceID else { return }
+        switch event {
+        case .started(let start):
+            guard start.identity.characterID == characterID,
+                  start.identity.archetype == archetype,
+                  audioRoles.contains(start.identity.role),
+                  CharacterVocalAudioInventory.drivesAnimation(
+                      role: start.identity.role,
+                      isLooping: start.identity.isLooping
+                  ) else { return }
+            if start.identity.role == .presenceLoop {
+                guard !deathIsTerminal else { return }
+                presenceLoop = .init(start: start, track: nil, runCursor: 0)
+            } else {
+                if start.identity.role == .damageHit, deathIsTerminal { return }
+                oneShot = .init(start: start, track: nil, runCursor: 0)
+                if start.identity.role == .death { deathIsTerminal = true }
+            }
+
+        case .completed(let identity):
+            if presenceLoop?.start.identity == identity { presenceLoop = nil }
+            if oneShot?.start.identity == identity { oneShot = nil }
+
+        case .cancelled(let identity, _):
+            if presenceLoop?.start.identity == identity { presenceLoop = nil }
+            if oneShot?.start.identity == identity { oneShot = nil }
+
+        case .sourceRemoved:
+            clear()
+        }
+    }
+
+    mutating func trackDidBecomeReady(
+        for identity: CharacterVocalPlaybackIdentity,
+        track: CharacterVocalVisemeTrack
+    ) -> TrackAttachResult {
+        guard track.identity.matches(identity) else {
+            return .mismatchedIdentity
+        }
+        var didJoin = false
+        if presenceLoop?.start.identity == identity {
+            presenceLoop?.track = track
+            presenceLoop?.runCursor = 0
+            didJoin = true
+        }
+        if oneShot?.start.identity == identity {
+            oneShot?.track = track
+            oneShot?.runCursor = 0
+            didJoin = true
+        }
+        return didJoin ? .attached : .inactivePlayback
+    }
+
+    mutating func activePose(now: ContinuousClock.Instant) -> MindEyeMouthPose {
+        if var oneShot {
+            let pose = sample(&oneShot, now: now, loops: false)
+            self.oneShot = oneShot
+            return pose
+        }
+        if deathIsTerminal { return .rest }
+        if var presenceLoop {
+            let pose = sample(&presenceLoop, now: now, loops: true)
+            self.presenceLoop = presenceLoop
+            return pose
+        }
+        return .rest
+    }
+
+    mutating func clear() {
+        presenceLoop = nil
+        oneShot = nil
+        deathIsTerminal = false
+    }
+
+    private func sample(
+        _ playback: inout CharacterVocalActiveVisemePlayback,
+        now: ContinuousClock.Instant,
+        loops: Bool
+    ) -> MindEyeMouthPose {
+        guard let track = playback.track, track.frameCount > 0 else { return .rest }
+        let elapsed = max(0, Self.seconds(playback.start.clockOrigin.duration(to: now)))
+        let rawFrame = Int((elapsed * Double(track.framesPerSecond)).rounded(.down))
+        let frame: Int
+        if loops {
+            frame = rawFrame % track.frameCount
+        } else {
+            guard rawFrame < track.frameCount else { return .rest }
+            frame = rawFrame
+        }
+        return track.pose(atFrame: frame, cursor: &playback.runCursor)
+    }
+
+    private static func seconds(_ duration: Duration) -> Double {
+        let components = duration.components
+        return Double(components.seconds) + Double(components.attoseconds) / 1.0e18
+    }
 }
 
 @MainActor
-final class DadVocalBlendShapeController {
+final class CharacterVocalBlendShapeController {
     let sourceID: UUID
-    let characterID = "dad"
+    let characterID: String
 
+    private let profile: CharacterVocalBlendShapeProfile
     private let descriptor: CharacterVocalBlendShapeDescriptor
     private let response: CharacterVocalBlendShapeResponse
     private var bindings: [CharacterVocalBlendShapeBinding]
-    private var oneShot: CharacterVocalActivePosePlayback?
-    private var deathIsTerminal = false
+    private var authority: CharacterVocalAuthorityState
     private var lastAssignedWeight: Float
 
     private(set) var currentPose: MindEyeMouthPose = .rest
@@ -27,8 +164,21 @@ final class DadVocalBlendShapeController {
         descriptor: CharacterVocalBlendShapeDescriptor,
         bindings: [CharacterVocalBlendShapeBinding]
     ) throws {
+        guard let profile = CharacterVocalBlendShapeProfile.resolve(
+            characterID: descriptor.characterID
+        ) else {
+            throw CharacterVocalBlendShapeError.invalidDescriptor("characterID")
+        }
         self.sourceID = sourceID
+        self.characterID = profile.characterID
+        self.profile = profile
         self.descriptor = descriptor
+        authority = .init(
+            sourceID: sourceID,
+            characterID: profile.characterID,
+            archetype: profile.archetype,
+            audioRoles: descriptor.audioRoles
+        )
         response = .init(descriptor.response)
         self.bindings = bindings
         currentWeight = descriptor.fallbackWeight
@@ -44,46 +194,32 @@ final class DadVocalBlendShapeController {
     }
 
     func receive(_ event: CharacterVocalPlaybackEvent) {
-        guard event.sourceID == sourceID else { return }
-        switch event {
-        case .started(let start):
-            guard start.identity.characterID == characterID,
-                  start.identity.archetype == .dad,
-                  descriptor.audioRoles.contains(start.identity.role),
-                  DadVocalAudioInventory.drivesAnimation(
-                      role: start.identity.role,
-                      isLooping: start.identity.isLooping
-                  ) else { return }
-            if start.identity.role == .damageHit, deathIsTerminal { return }
-            oneShot = .init(start: start, track: nil)
-            if start.identity.role == .death { deathIsTerminal = true }
-
-        case .completed(let identity):
-            if oneShot?.start.identity == identity { oneShot = nil }
-
-        case .cancelled(let identity, _):
-            if oneShot?.start.identity == identity { oneShot = nil }
-
-        case .sourceRemoved:
+        authority.receive(event)
+        if case .sourceRemoved = event, event.sourceID == sourceID {
             reset(immediately: true, reason: "sourceRemoved")
         }
     }
 
     func trackDidBecomeReady(
         for identity: CharacterVocalPlaybackIdentity,
-        track: TuringGeneratedSpeechFrameTrack
+        track: CharacterVocalVisemeTrack
     ) {
-        var didJoin = false
-        if oneShot?.start.identity == identity {
-            oneShot?.track = track
-            didJoin = true
-        }
-        if didJoin {
+        switch authority.trackDidBecomeReady(for: identity, track: track) {
+        case .mismatchedIdentity:
             print(
-                "[DadVocalBlendShape] track joined " +
+                "[CharacterVocalBlendShape] rejected mismatched track " +
+                "characterID=\(characterID) sourceID=\(sourceID.uuidString) " +
+                "file=\(identity.fileName) audioUnaffected=true"
+            )
+        case .attached:
+            print(
+                "[CharacterVocalBlendShape] track joined " +
+                "characterID=\(characterID) " +
                 "sourceID=\(sourceID.uuidString) role=\(identity.role.rawValue) " +
                 "file=\(identity.fileName) frames=\(track.frameCount)"
             )
+        case .inactivePlayback:
+            break
         }
     }
 
@@ -97,7 +233,8 @@ final class DadVocalBlendShapeController {
         targetWeight = descriptor.poseWeights.weight(for: pose)
         if pose != previousPose {
             print(
-                "[DadVocalBlendShape] pose transition " +
+                "[CharacterVocalBlendShape] pose transition " +
+                "characterID=\(characterID) " +
                 "sourceID=\(sourceID.uuidString) pose=\(pose.rawValue) " +
                 "targetWeight=\(targetWeight) currentWeight=\(currentWeight)"
             )
@@ -111,15 +248,15 @@ final class DadVocalBlendShapeController {
             try assign(currentWeight, force: false)
         } catch {
             print(
-                "[DadVocalBlendShape] assignment failed sourceID=\(sourceID.uuidString) " +
+                "[CharacterVocalBlendShape] assignment failed " +
+                "characterID=\(characterID) sourceID=\(sourceID.uuidString) " +
                 "reason=\(error.localizedDescription) visualOnly=true"
             )
         }
     }
 
     func reset(immediately: Bool, reason: String) {
-        oneShot = nil
-        deathIsTerminal = false
+        authority.clear()
         currentPose = .rest
         targetWeight = descriptor.fallbackWeight
         if immediately {
@@ -127,7 +264,8 @@ final class DadVocalBlendShapeController {
             try? assign(descriptor.fallbackWeight, force: true)
         }
         print(
-            "[DadVocalBlendShape] reset sourceID=\(sourceID.uuidString) " +
+            "[CharacterVocalBlendShape] reset characterID=\(characterID) " +
+            "sourceID=\(sourceID.uuidString) " +
             "immediate=\(immediately) reason=\(reason) weight=\(targetWeight)"
         )
     }
@@ -139,29 +277,7 @@ final class DadVocalBlendShapeController {
     }
 
     private func activePose(now: ContinuousClock.Instant) -> MindEyeMouthPose {
-        if let oneShot {
-            return sample(oneShot, now: now, loops: false) ?? .rest
-        }
-        if deathIsTerminal { return .rest }
-        return .rest
-    }
-
-    private func sample(
-        _ playback: CharacterVocalActivePosePlayback,
-        now: ContinuousClock.Instant,
-        loops: Bool
-    ) -> MindEyeMouthPose? {
-        guard let track = playback.track, track.frameCount > 0 else { return nil }
-        let elapsed = max(0, Self.seconds(playback.start.clockOrigin.duration(to: now)))
-        let rawFrame = Int((elapsed * Double(track.framesPerSecond)).rounded(.down))
-        let frame: Int
-        if loops {
-            frame = rawFrame % track.frameCount
-        } else {
-            guard rawFrame < track.frameCount else { return nil }
-            frame = rawFrame
-        }
-        return track.pose(atFrame: frame)?.mindEyePose
+        authority.activePose(now: now)
     }
 
     private func assign(_ value: Float, force: Bool) throws {
@@ -186,16 +302,13 @@ final class DadVocalBlendShapeController {
         lastAssignedWeight = value
     }
 
-    private nonisolated static func seconds(_ duration: Duration) -> Double {
-        let components = duration.components
-        return Double(components.seconds) + Double(components.attoseconds) / 1.0e18
-    }
 }
 
 @MainActor
-final class DadVocalBlendShapeRuntimeRegistry {
+final class CharacterVocalBlendShapeRuntimeRegistry {
     private struct TrackJoin {
         let sourceID: UUID
+        let requestToken: UUID
         let task: Task<Void, Never>
     }
 
@@ -203,12 +316,12 @@ final class DadVocalBlendShapeRuntimeRegistry {
     private let trackStore = CharacterVocalPoseTrackStore()
     private let eventHub: CharacterVocalPlaybackEventHub
     private var eventSubscription: CharacterVocalPlaybackEventHub.Subscription?
-    private var controllers: [UUID: DadVocalBlendShapeController] = [:]
+    private var controllers: [UUID: CharacterVocalBlendShapeController] = [:]
     private var registrationGeneration: [UUID: UUID] = [:]
     private var registrationTasks: [UUID: Task<Void, Never>] = [:]
     private var trackJoinTasks: [UUID: TrackJoin] = [:]
     private var pendingEvents: [UUID: [CharacterVocalPlaybackEvent]] = [:]
-    private var prewarmTask: Task<Void, Never>?
+    private var prewarmTasksByCharacterID: [String: Task<Void, Never>] = [:]
 
     init(eventHub: CharacterVocalPlaybackEventHub) {
         self.eventHub = eventHub
@@ -224,17 +337,21 @@ final class DadVocalBlendShapeRuntimeRegistry {
         portalMirrorRoot: Entity?,
         reason: String
     ) {
-        guard characterID == "dad" else { return }
+        guard let profile = CharacterVocalBlendShapeProfile.resolve(
+            characterID: characterID
+        ) else { return }
         unregister(sourceID: sourceID, reason: "replacementRegistration")
         let generation = UUID()
         registrationGeneration[sourceID] = generation
         pendingEvents[sourceID] = []
-        startPrewarmIfNeeded()
+        startPrewarmIfNeeded(characterID: profile.characterID)
 
         let task = Task { @MainActor [weak self, weak rootEntity, weak portalMirrorRoot] in
             guard let self else { return }
             do {
-                let resources = try await descriptorStore.loadDad()
+                let resources = try await descriptorStore.load(
+                    characterID: profile.characterID
+                )
                 try Task.checkCancellation()
                 guard registrationGeneration[sourceID] == generation,
                       let rootEntity else { return }
@@ -247,7 +364,8 @@ final class DadVocalBlendShapeRuntimeRegistry {
                         payload: payload
                     )
                     let meshDiagnostic = [
-                        "[DadVocalBlendShape] mesh ready",
+                        "[CharacterVocalBlendShape] mesh ready",
+                        "characterID=\(profile.characterID)",
                         "sourceID=\(sourceID.uuidString)",
                         "nativeParts=\(sourceReport.nativePartCount)",
                         "skeletons=\(sourceReport.skeletonCount)",
@@ -286,7 +404,7 @@ final class DadVocalBlendShapeRuntimeRegistry {
                     for binding in bindings { binding.invalidate() }
                     throw error
                 }
-                let controller = try DadVocalBlendShapeController(
+                let controller = try CharacterVocalBlendShapeController(
                     sourceID: sourceID,
                     descriptor: descriptor,
                     bindings: bindings
@@ -304,7 +422,8 @@ final class DadVocalBlendShapeRuntimeRegistry {
                     if case .started(let start) = event { requestTrack(for: start) }
                 }
                 print(
-                    "[DadVocalBlendShape] registered sourceID=\(sourceID.uuidString) " +
+                    "[CharacterVocalBlendShape] registered " +
+                    "characterID=\(profile.characterID) sourceID=\(sourceID.uuidString) " +
                     "bindings=\(bindings.count) portalBound=\(portalMirrorRoot != nil) " +
                     "reason=\(reason) bufferedEvents=\(buffered.count)"
                 )
@@ -317,7 +436,8 @@ final class DadVocalBlendShapeRuntimeRegistry {
                 pendingEvents.removeValue(forKey: sourceID)
                 cancelTrackJoins(sourceID: sourceID)
                 print(
-                    "[DadVocalBlendShape] disabled sourceID=\(sourceID.uuidString) " +
+                    "[CharacterVocalBlendShape] disabled " +
+                    "characterID=\(profile.characterID) sourceID=\(sourceID.uuidString) " +
                     "reason=\(error.localizedDescription) audioAndGameplayUnaffected=true"
                 )
             }
@@ -363,7 +483,6 @@ final class DadVocalBlendShapeRuntimeRegistry {
             controller.receive(event)
         } else if registrationGeneration[sourceID] != nil {
             var buffered = pendingEvents[sourceID] ?? []
-            if buffered.count == 16 { buffered.removeFirst() }
             buffered.append(event)
             pendingEvents[sourceID] = buffered
         } else {
@@ -375,53 +494,69 @@ final class DadVocalBlendShapeRuntimeRegistry {
     }
 
     private func requestTrack(for start: CharacterVocalPlaybackStart) {
-        guard DadVocalAudioInventory.drivesAnimation(
+        guard CharacterVocalAudioInventory.drivesAnimation(
             role: start.identity.role,
             isLooping: start.identity.isLooping
         ) else {
             return
         }
-        guard let asset = DadVocalAudioInventory.asset(for: start) else {
+        guard let asset = CharacterVocalAudioInventory.asset(for: start) else {
             print(
-                "[DadVocalTrack] exact file unavailable file=\(start.identity.fileName) " +
+                "[CharacterVocalTrack] exact file unavailable " +
+                "characterID=\(start.identity.characterID) " +
+                "file=\(start.identity.fileName) " +
                 "role=\(start.identity.role.rawValue) audioUnaffected=true"
             )
             return
         }
         let playbackID = start.identity.playbackID
         trackJoinTasks[playbackID]?.task.cancel()
+        let requestToken = UUID()
         let task = Task { @MainActor [weak self] in
-            guard let self,
-                  let prepared = await trackStore.prepare(asset),
+            guard let self else { return }
+            defer {
+                if trackJoinTasks[playbackID]?.requestToken == requestToken {
+                    trackJoinTasks.removeValue(forKey: playbackID)
+                }
+            }
+            guard let prepared = await trackStore.prepare(asset),
                   !Task.isCancelled else { return }
             controllers[start.identity.sourceID]?.trackDidBecomeReady(
                 for: start.identity,
                 track: prepared.track
             )
-            trackJoinTasks.removeValue(forKey: playbackID)
         }
         trackJoinTasks[playbackID] = TrackJoin(
             sourceID: start.identity.sourceID,
+            requestToken: requestToken,
             task: task
         )
     }
 
-    private func startPrewarmIfNeeded() {
-        guard prewarmTask == nil else { return }
-        let assets = DadVocalAudioInventory.assets()
-        let expectedCount = DadVocalAudioInventory.ordered.count
+    private func startPrewarmIfNeeded(characterID: String) {
+        guard prewarmTasksByCharacterID[characterID] == nil else { return }
+        let assets = CharacterVocalAudioInventory.assets(
+            characterID: characterID
+        )
+        let expectedCount = CharacterVocalAudioInventory.ordered(
+            characterID: characterID
+        ).count
         if assets.count != expectedCount {
             print(
-                "[DadVocalTrack] prewarm inventory incomplete found=\(assets.count) " +
+                "[CharacterVocalTrack] prewarm inventory incomplete " +
+                "characterID=\(characterID) found=\(assets.count) " +
                 "expected=\(expectedCount) audioUnaffected=true"
             )
         }
-        prewarmTask = Task { [trackStore] in
+        prewarmTasksByCharacterID[characterID] = Task { [trackStore] in
             for asset in assets {
                 guard !Task.isCancelled else { return }
                 _ = await trackStore.prepare(asset)
             }
-            print("[DadVocalTrack] prewarm finished preparedOrderCount=\(assets.count)")
+            print(
+                "[CharacterVocalTrack] prewarm finished " +
+                "characterID=\(characterID) preparedOrderCount=\(assets.count)"
+            )
         }
     }
 

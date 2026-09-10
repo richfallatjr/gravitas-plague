@@ -1,0 +1,108 @@
+{
+  "alignment": {
+    "VADModelSHA256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+    "acousticModelSHA256": "88b15292ae279697836e8510e405beacc00a216be8e5733be40cf5429b4faa55",
+    "engine": "pocketsphinx",
+    "engineCommit": "511126b492dcb267cf30d49d631946d7b61a9530",
+    "engineVersion": "5.1.1",
+    "mode": "pocketsphinxAllPhone",
+    "phoneLanguageModelSHA256": "c57e0fa4191b096b1279cfe3a77927f52568fdecfc6624ddb5cec9527c763a54",
+    "phonePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "resourceTreeSHA256": "e2ca8da1fecfd4a676fbd3d68537c705688b669b30ddaa1cb78dd1850e4fe12d",
+    "speechBoundaryPolicy": "pocketsphinxNonSilencePhoneIntervals",
+    "transcriptSHA256": null
+  },
+  "audioFile": "grandma-death-04.wav",
+  "audioResourcePath": "Audio/grandma-death-04.wav",
+  "audioSHA256": "afdb68decbef7e36c8978b48fe4bc6f3d05f718414966573a0790c5ef5050f8f",
+  "blendShapeDescriptorResourcePath": "CharacterLibrary/FacialPerformance/grandma_infected_vocal_blendshape.json",
+  "blendShapeDescriptorSHA256": "0acbb8546dc62abc420f3c231824fb8ec7c85381833a91a67ee36448dd089ddf",
+  "characterID": "grandma",
+  "compilerVersion": "character-vocal-allphone-visemes/1.0.0",
+  "looping": false,
+  "requiredPoseFamilies": [
+    "rest",
+    "small",
+    "wide",
+    "round",
+    "teeth"
+  ],
+  "role": "death",
+  "runs": [
+    {
+      "endFrameExclusive": 7,
+      "pose": "rest",
+      "startFrame": 0
+    },
+    {
+      "endFrameExclusive": 35,
+      "pose": "wide",
+      "startFrame": 7
+    },
+    {
+      "endFrameExclusive": 59,
+      "pose": "round",
+      "startFrame": 35
+    },
+    {
+      "endFrameExclusive": 115,
+      "pose": "wide",
+      "startFrame": 59
+    },
+    {
+      "endFrameExclusive": 136,
+      "pose": "round",
+      "startFrame": 115
+    },
+    {
+      "endFrameExclusive": 150,
+      "pose": "rest",
+      "startFrame": 136
+    },
+    {
+      "endFrameExclusive": 175,
+      "pose": "teeth",
+      "startFrame": 150
+    },
+    {
+      "endFrameExclusive": 190,
+      "pose": "wide",
+      "startFrame": 175
+    },
+    {
+      "endFrameExclusive": 266,
+      "pose": "small",
+      "startFrame": 190
+    },
+    {
+      "endFrameExclusive": 300,
+      "pose": "rest",
+      "startFrame": 266
+    }
+  ],
+  "runsSHA256": "8046b0fbef9a509b3bb95d9f0375a40ff25444a31c676f3b0405ff990f77a5c2",
+  "schemaVersion": 1,
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 55,
+      "round": 45,
+      "small": 76,
+      "teeth": 25,
+      "wide": 99
+    },
+    "runCount": 10,
+    "silenceFrameCount": 55,
+    "speechFrameCount": 245,
+    "unknownPhoneCount": 0,
+    "warnings": []
+  },
+  "timeline": {
+    "durationSeconds": 5.0,
+    "frameCount": 300,
+    "framesPerSecond": 60,
+    "sampleCount": 240000,
+    "sampleRate": 48000,
+    "samplesPerNominalFrame": 800
+  },
+  "trackID": "grandma.death.grandma-death-04.visemes"
+}

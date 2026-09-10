@@ -1,0 +1,123 @@
+{
+  "alignment": {
+    "VADModelSHA256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+    "acousticModelSHA256": "88b15292ae279697836e8510e405beacc00a216be8e5733be40cf5429b4faa55",
+    "engine": "pocketsphinx",
+    "engineCommit": "511126b492dcb267cf30d49d631946d7b61a9530",
+    "engineVersion": "5.1.1",
+    "mode": "pocketsphinxAllPhone",
+    "phoneLanguageModelSHA256": "c57e0fa4191b096b1279cfe3a77927f52568fdecfc6624ddb5cec9527c763a54",
+    "phonePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "resourceTreeSHA256": "e2ca8da1fecfd4a676fbd3d68537c705688b669b30ddaa1cb78dd1850e4fe12d",
+    "speechBoundaryPolicy": "pocketsphinxNonSilencePhoneIntervals",
+    "transcriptSHA256": null
+  },
+  "audioFile": "spouse-death-03.wav",
+  "audioResourcePath": "Audio/spouse-death-03.wav",
+  "audioSHA256": "62de55305b678d9ce38f1a1d82618fefeaccb18b24e8128dcdc2b1d627efa879",
+  "blendShapeDescriptorResourcePath": "CharacterLibrary/FacialPerformance/spouse_infected_vocal_blendshape.json",
+  "blendShapeDescriptorSHA256": "2e9cfb47aef2d0ab9bbefc3ab0e9ef02846d4d45147dc1c4ff532428e35ba301",
+  "characterID": "spouse",
+  "compilerVersion": "character-vocal-allphone-visemes/1.0.0",
+  "looping": false,
+  "requiredPoseFamilies": [
+    "rest",
+    "small",
+    "wide",
+    "round",
+    "teeth"
+  ],
+  "role": "death",
+  "runs": [
+    {
+      "endFrameExclusive": 4,
+      "pose": "rest",
+      "startFrame": 0
+    },
+    {
+      "endFrameExclusive": 22,
+      "pose": "wide",
+      "startFrame": 4
+    },
+    {
+      "endFrameExclusive": 70,
+      "pose": "teeth",
+      "startFrame": 22
+    },
+    {
+      "endFrameExclusive": 124,
+      "pose": "rest",
+      "startFrame": 70
+    },
+    {
+      "endFrameExclusive": 153,
+      "pose": "round",
+      "startFrame": 124
+    },
+    {
+      "endFrameExclusive": 156,
+      "pose": "small",
+      "startFrame": 153
+    },
+    {
+      "endFrameExclusive": 167,
+      "pose": "teeth",
+      "startFrame": 156
+    },
+    {
+      "endFrameExclusive": 181,
+      "pose": "small",
+      "startFrame": 167
+    },
+    {
+      "endFrameExclusive": 199,
+      "pose": "rest",
+      "startFrame": 181
+    },
+    {
+      "endFrameExclusive": 209,
+      "pose": "small",
+      "startFrame": 199
+    },
+    {
+      "endFrameExclusive": 259,
+      "pose": "rest",
+      "startFrame": 209
+    },
+    {
+      "endFrameExclusive": 297,
+      "pose": "small",
+      "startFrame": 259
+    },
+    {
+      "endFrameExclusive": 300,
+      "pose": "rest",
+      "startFrame": 297
+    }
+  ],
+  "runsSHA256": "94ee109fec1b7a4b9dbd6c3d08ae23dc6c96958c94039c37f7e168abff443816",
+  "schemaVersion": 1,
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 129,
+      "round": 29,
+      "small": 65,
+      "teeth": 59,
+      "wide": 18
+    },
+    "runCount": 13,
+    "silenceFrameCount": 129,
+    "speechFrameCount": 171,
+    "unknownPhoneCount": 0,
+    "warnings": []
+  },
+  "timeline": {
+    "durationSeconds": 5.0,
+    "frameCount": 300,
+    "framesPerSecond": 60,
+    "sampleCount": 240000,
+    "sampleRate": 48000,
+    "samplesPerNominalFrame": 800
+  },
+  "trackID": "spouse.death.spouse-death-03.visemes"
+}

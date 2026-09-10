@@ -1,0 +1,103 @@
+{
+  "alignment": {
+    "VADModelSHA256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+    "acousticModelSHA256": "88b15292ae279697836e8510e405beacc00a216be8e5733be40cf5429b4faa55",
+    "engine": "pocketsphinx",
+    "engineCommit": "511126b492dcb267cf30d49d631946d7b61a9530",
+    "engineVersion": "5.1.1",
+    "mode": "pocketsphinxAllPhone",
+    "phoneLanguageModelSHA256": "c57e0fa4191b096b1279cfe3a77927f52568fdecfc6624ddb5cec9527c763a54",
+    "phonePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "resourceTreeSHA256": "e2ca8da1fecfd4a676fbd3d68537c705688b669b30ddaa1cb78dd1850e4fe12d",
+    "speechBoundaryPolicy": "pocketsphinxNonSilencePhoneIntervals",
+    "transcriptSHA256": null
+  },
+  "audioFile": "dad-damaged-01.wav",
+  "audioResourcePath": "Audio/dad-damaged-01.wav",
+  "audioSHA256": "fd079a1794c72cd18b565a7398bbb3d601c18fce8be68c85578d0d10f67bf7a5",
+  "blendShapeDescriptorResourcePath": "CharacterLibrary/FacialPerformance/dad_infected_vocal_blendshape.json",
+  "blendShapeDescriptorSHA256": "c354894371eca9ae0e85883c6ac1add607f25b1c02b0187473a54b2eb7c608ad",
+  "characterID": "dad",
+  "compilerVersion": "character-vocal-allphone-visemes/1.0.0",
+  "looping": false,
+  "requiredPoseFamilies": [
+    "rest",
+    "small",
+    "wide",
+    "round",
+    "teeth"
+  ],
+  "role": "damage_hits",
+  "runs": [
+    {
+      "endFrameExclusive": 57,
+      "pose": "rest",
+      "startFrame": 0
+    },
+    {
+      "endFrameExclusive": 59,
+      "pose": "small",
+      "startFrame": 57
+    },
+    {
+      "endFrameExclusive": 155,
+      "pose": "wide",
+      "startFrame": 59
+    },
+    {
+      "endFrameExclusive": 212,
+      "pose": "round",
+      "startFrame": 155
+    },
+    {
+      "endFrameExclusive": 230,
+      "pose": "small",
+      "startFrame": 212
+    },
+    {
+      "endFrameExclusive": 241,
+      "pose": "wide",
+      "startFrame": 230
+    },
+    {
+      "endFrameExclusive": 252,
+      "pose": "round",
+      "startFrame": 241
+    },
+    {
+      "endFrameExclusive": 257,
+      "pose": "small",
+      "startFrame": 252
+    },
+    {
+      "endFrameExclusive": 270,
+      "pose": "rest",
+      "startFrame": 257
+    }
+  ],
+  "runsSHA256": "eb684fbfd69b816f5e4ade079347f343907c22f688fa2936cba42e44a52f87ed",
+  "schemaVersion": 1,
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 70,
+      "round": 68,
+      "small": 25,
+      "teeth": 0,
+      "wide": 107
+    },
+    "runCount": 9,
+    "silenceFrameCount": 70,
+    "speechFrameCount": 200,
+    "unknownPhoneCount": 0,
+    "warnings": []
+  },
+  "timeline": {
+    "durationSeconds": 4.5,
+    "frameCount": 270,
+    "framesPerSecond": 60,
+    "sampleCount": 216000,
+    "sampleRate": 48000,
+    "samplesPerNominalFrame": 800
+  },
+  "trackID": "dad.damage_hits.dad-damaged-01.visemes"
+}

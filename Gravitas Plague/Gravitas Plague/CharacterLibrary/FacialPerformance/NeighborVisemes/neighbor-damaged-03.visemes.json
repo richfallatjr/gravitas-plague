@@ -1,0 +1,113 @@
+{
+  "alignment": {
+    "VADModelSHA256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+    "acousticModelSHA256": "88b15292ae279697836e8510e405beacc00a216be8e5733be40cf5429b4faa55",
+    "engine": "pocketsphinx",
+    "engineCommit": "511126b492dcb267cf30d49d631946d7b61a9530",
+    "engineVersion": "5.1.1",
+    "mode": "pocketsphinxAllPhone",
+    "phoneLanguageModelSHA256": "c57e0fa4191b096b1279cfe3a77927f52568fdecfc6624ddb5cec9527c763a54",
+    "phonePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "resourceTreeSHA256": "e2ca8da1fecfd4a676fbd3d68537c705688b669b30ddaa1cb78dd1850e4fe12d",
+    "speechBoundaryPolicy": "pocketsphinxNonSilencePhoneIntervals",
+    "transcriptSHA256": null
+  },
+  "audioFile": "neighbor-damaged-03.wav",
+  "audioResourcePath": "Audio/neighbor-damaged-03.wav",
+  "audioSHA256": "fbfc40ae796dffc22b1d54075bf2598a290cc46ed4e35951a08c55fbac821c24",
+  "blendShapeDescriptorResourcePath": "CharacterLibrary/FacialPerformance/neighbor_infected_vocal_blendshape.json",
+  "blendShapeDescriptorSHA256": "f6ba722a0194efa92ac4619aac99d56f2bcf3578c471a0d098ff85d37ab90076",
+  "characterID": "neighbor",
+  "compilerVersion": "character-vocal-allphone-visemes/1.0.0",
+  "looping": false,
+  "requiredPoseFamilies": [
+    "rest",
+    "small",
+    "wide",
+    "round",
+    "teeth"
+  ],
+  "role": "damage_hits",
+  "runs": [
+    {
+      "endFrameExclusive": 2,
+      "pose": "rest",
+      "startFrame": 0
+    },
+    {
+      "endFrameExclusive": 39,
+      "pose": "wide",
+      "startFrame": 2
+    },
+    {
+      "endFrameExclusive": 76,
+      "pose": "round",
+      "startFrame": 39
+    },
+    {
+      "endFrameExclusive": 79,
+      "pose": "small",
+      "startFrame": 76
+    },
+    {
+      "endFrameExclusive": 180,
+      "pose": "round",
+      "startFrame": 79
+    },
+    {
+      "endFrameExclusive": 206,
+      "pose": "small",
+      "startFrame": 180
+    },
+    {
+      "endFrameExclusive": 218,
+      "pose": "rest",
+      "startFrame": 206
+    },
+    {
+      "endFrameExclusive": 220,
+      "pose": "teeth",
+      "startFrame": 218
+    },
+    {
+      "endFrameExclusive": 265,
+      "pose": "wide",
+      "startFrame": 220
+    },
+    {
+      "endFrameExclusive": 290,
+      "pose": "small",
+      "startFrame": 265
+    },
+    {
+      "endFrameExclusive": 300,
+      "pose": "rest",
+      "startFrame": 290
+    }
+  ],
+  "runsSHA256": "6c0a1a1b98e71ff8277c6671a133bcbe57288ed5472333cb62aba3560c7415de",
+  "schemaVersion": 1,
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 24,
+      "round": 138,
+      "small": 54,
+      "teeth": 2,
+      "wide": 82
+    },
+    "runCount": 11,
+    "silenceFrameCount": 24,
+    "speechFrameCount": 276,
+    "unknownPhoneCount": 0,
+    "warnings": []
+  },
+  "timeline": {
+    "durationSeconds": 5.0,
+    "frameCount": 300,
+    "framesPerSecond": 60,
+    "sampleCount": 240000,
+    "sampleRate": 48000,
+    "samplesPerNominalFrame": 800
+  },
+  "trackID": "neighbor.damage_hits.neighbor-damaged-03.visemes"
+}

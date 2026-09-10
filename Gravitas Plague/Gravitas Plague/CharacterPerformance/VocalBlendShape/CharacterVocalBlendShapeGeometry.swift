@@ -39,7 +39,7 @@ nonisolated struct CharacterVocalBlendShapeResponse: Sendable, Equatable {
     }
 }
 
-/// Immutable GPU resources retained by one installed Dad deformation binding.
+/// Immutable GPU resources retained by one installed character deformation binding.
 /// Keeping them outside the Codable deformer value avoids copying a multi-MB
 /// delta buffer every time the scalar mouth weight changes.
 private nonisolated final class CharacterVocalGPUDeformerState: @unchecked Sendable {
@@ -81,7 +81,7 @@ private nonisolated final class CharacterVocalGPUDeformerRegistry: @unchecked Se
     )
     private var pipelineResources: PipelineResources?
     private var states: [UUID: CharacterVocalGPUDeformerState] = [:]
-    /// One immutable, validated Dad buffer stays resident as a zero-weight copy
+    /// One immutable, validated character buffer stays resident as a zero-weight copy
     /// source. The existing apply kernel is therefore also the fail-safe
     /// input-to-output passthrough kernel without another shader or allocation.
     private var passthroughStatesByVertexCount: [
@@ -94,7 +94,7 @@ private nonisolated final class CharacterVocalGPUDeformerRegistry: @unchecked Se
         precondition(!Thread.isMainThread)
         guard !offsets.isEmpty else {
             throw CharacterVocalBlendShapeError.meshRepairFailed(
-                "Dad GPU deformer received no offsets"
+                "Character GPU deformer received no offsets"
             )
         }
 
@@ -102,7 +102,7 @@ private nonisolated final class CharacterVocalGPUDeformerRegistry: @unchecked Se
 
         // Do the O(vertexCount) conversion and Metal allocation without holding
         // the callback registry lock. Existing Dad render callbacks consequently
-        // never wait behind a new Dad's multi-megabyte upload.
+        // never wait behind a new character's multi-megabyte upload.
         let alignedOffsets = offsets.map { SIMD4<Float>($0, 0) }
         let buffer: (any MTLBuffer)? = alignedOffsets.withUnsafeBytes { bytes in
             guard let baseAddress = bytes.baseAddress else { return nil }
@@ -114,10 +114,10 @@ private nonisolated final class CharacterVocalGPUDeformerRegistry: @unchecked Se
         }
         guard let buffer else {
             throw CharacterVocalBlendShapeError.meshRepairFailed(
-                "Dad GPU deformer offset upload failed"
+                "Character GPU deformer offset upload failed"
             )
         }
-        buffer.label = "DadVocalCloseDenseOffsets"
+        buffer.label = "CharacterVocalCloseDenseOffsets"
 
         let id = UUID()
         let state = CharacterVocalGPUDeformerState(
@@ -185,7 +185,7 @@ private nonisolated final class CharacterVocalGPUDeformerRegistry: @unchecked Se
                 name: "characterVocalApplyDenseOffsets"
               ) else {
             throw CharacterVocalBlendShapeError.meshRepairFailed(
-                "Dad GPU deformer Metal function is unavailable"
+                "Character GPU deformer Metal function is unavailable"
             )
         }
         let createdPipeline: any MTLComputePipelineState
@@ -195,7 +195,7 @@ private nonisolated final class CharacterVocalGPUDeformerRegistry: @unchecked Se
             )
         } catch {
             throw CharacterVocalBlendShapeError.meshRepairFailed(
-                "Dad GPU deformer pipeline failed: \(error.localizedDescription)"
+                "Character GPU deformer pipeline failed: \(error.localizedDescription)"
             )
         }
         let created = PipelineResources(
@@ -286,7 +286,7 @@ nonisolated struct CharacterVocalDenseOffsetDeformer: MeshDeformer {
               let callbackState = CharacterVocalGPUDeformerRegistry.shared
                 .callbackState(for: stateID, vertexCount: vertexCount) else {
             // Missing position buffers or an invalid Metal range cannot be
-            // dereferenced safely. All callback failures with a valid Dad buffer
+            // dereferenced safely. All callback failures with a valid character buffer
             // contract take the explicit zero-weight passthrough below.
             return
         }
@@ -424,7 +424,12 @@ final class CharacterVocalBlendShapeBinding {
                     vertexCount: vertexCount
                 ),
                 BlendShapeDeformer(),
-                SkinningDeformer(skinsTangentFrame: true)
+                SkinningDeformer(skinsTangentFrame: true),
+                // The custom stack replaces RealityKit's imported stack, so it
+                // must also restore animated bounds after skinning. Without this
+                // final pass visionOS can cull/depth-reproject against stale
+                // bind-pose bounds, which appears as close-up scanline clipping.
+                BoundingBoxCalculator()
             ],
             targets: [.all]
         )
@@ -434,9 +439,10 @@ final class CharacterVocalBlendShapeBinding {
         appliedWeight = value
         if isFirstInstallation {
             print(
-                "[DadVocalBlendShape] binding installed " +
+                "[CharacterVocalBlendShape] binding installed " +
                 "entityPath=\(entityPath) initialWeight=\(value) " +
-                "vertexCount=\(vertexCount) deformer=gpuOnDemandBeforeSkinning"
+                "vertexCount=\(vertexCount) " +
+                "deformer=gpuOnDemandBeforeSkinning bounds=postSkinning"
             )
         }
     }

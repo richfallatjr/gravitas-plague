@@ -1,0 +1,21 @@
+{
+  "basePose": "wide",
+  "blendShapeName": "bikerVocalClose",
+  "donorAsset": "biker_biped_mouth_closed.usdz",
+  "donorBlendShapeName": "Lattice",
+  "excludedDonorPrimPaths": [
+    "/root/Armature/Armature_001"
+  ],
+  "expectedTopologySHA256": "c6602c8f37214ff3594038ddf4d6f877c60625b6d31479284897694a0e16972b",
+  "meshBindings": [
+    {
+      "basePrimPath": "/root/Armature/char1/char1",
+      "donorPrimPath": "/root/Armature/char1/char1"
+    }
+  ],
+  "schemaVersion": 1,
+  "skelRootPrimPath": "/root/Armature",
+  "sourceAsset": "biker_biped.usdz",
+  "sparseOffsetEpsilonLocalUnits": 1e-06,
+  "targetPose": "closedTense"
+}

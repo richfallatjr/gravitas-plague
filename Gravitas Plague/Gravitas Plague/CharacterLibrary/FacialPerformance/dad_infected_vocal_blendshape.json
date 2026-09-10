@@ -4,6 +4,7 @@
     1.0
   ],
   "audioRoles": [
+    "presence_loop",
     "damage_hits",
     "death"
   ],

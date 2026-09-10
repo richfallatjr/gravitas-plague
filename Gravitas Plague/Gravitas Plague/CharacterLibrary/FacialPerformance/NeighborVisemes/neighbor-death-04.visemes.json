@@ -1,0 +1,93 @@
+{
+  "alignment": {
+    "VADModelSHA256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+    "acousticModelSHA256": "88b15292ae279697836e8510e405beacc00a216be8e5733be40cf5429b4faa55",
+    "engine": "pocketsphinx",
+    "engineCommit": "511126b492dcb267cf30d49d631946d7b61a9530",
+    "engineVersion": "5.1.1",
+    "mode": "pocketsphinxAllPhone",
+    "phoneLanguageModelSHA256": "c57e0fa4191b096b1279cfe3a77927f52568fdecfc6624ddb5cec9527c763a54",
+    "phonePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "resourceTreeSHA256": "e2ca8da1fecfd4a676fbd3d68537c705688b669b30ddaa1cb78dd1850e4fe12d",
+    "speechBoundaryPolicy": "pocketsphinxNonSilencePhoneIntervals",
+    "transcriptSHA256": null
+  },
+  "audioFile": "neighbor-death-04.wav",
+  "audioResourcePath": "Audio/neighbor-death-04.wav",
+  "audioSHA256": "e463fb5772a85adb14c29a4c9941efff0be6f017ac105cc7bccf99db3357eea2",
+  "blendShapeDescriptorResourcePath": "CharacterLibrary/FacialPerformance/neighbor_infected_vocal_blendshape.json",
+  "blendShapeDescriptorSHA256": "f6ba722a0194efa92ac4619aac99d56f2bcf3578c471a0d098ff85d37ab90076",
+  "characterID": "neighbor",
+  "compilerVersion": "character-vocal-allphone-visemes/1.0.0",
+  "looping": false,
+  "requiredPoseFamilies": [
+    "rest",
+    "small",
+    "wide",
+    "round",
+    "teeth"
+  ],
+  "role": "death",
+  "runs": [
+    {
+      "endFrameExclusive": 2,
+      "pose": "rest",
+      "startFrame": 0
+    },
+    {
+      "endFrameExclusive": 56,
+      "pose": "wide",
+      "startFrame": 2
+    },
+    {
+      "endFrameExclusive": 96,
+      "pose": "round",
+      "startFrame": 56
+    },
+    {
+      "endFrameExclusive": 156,
+      "pose": "wide",
+      "startFrame": 96
+    },
+    {
+      "endFrameExclusive": 189,
+      "pose": "small",
+      "startFrame": 156
+    },
+    {
+      "endFrameExclusive": 263,
+      "pose": "round",
+      "startFrame": 189
+    },
+    {
+      "endFrameExclusive": 300,
+      "pose": "rest",
+      "startFrame": 263
+    }
+  ],
+  "runsSHA256": "fa946dbf74e8c05bbec3a53909b451cc149295db7bc3672b7926a7f801b12f45",
+  "schemaVersion": 1,
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 39,
+      "round": 114,
+      "small": 33,
+      "teeth": 0,
+      "wide": 114
+    },
+    "runCount": 7,
+    "silenceFrameCount": 39,
+    "speechFrameCount": 261,
+    "unknownPhoneCount": 0,
+    "warnings": []
+  },
+  "timeline": {
+    "durationSeconds": 5.0,
+    "frameCount": 300,
+    "framesPerSecond": 60,
+    "sampleCount": 240000,
+    "sampleRate": 48000,
+    "samplesPerNominalFrame": 800
+  },
+  "trackID": "neighbor.death.neighbor-death-04.visemes"
+}

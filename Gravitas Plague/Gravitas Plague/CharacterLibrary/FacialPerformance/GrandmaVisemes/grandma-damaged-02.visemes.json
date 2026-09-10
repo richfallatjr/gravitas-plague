@@ -1,0 +1,103 @@
+{
+  "alignment": {
+    "VADModelSHA256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+    "acousticModelSHA256": "88b15292ae279697836e8510e405beacc00a216be8e5733be40cf5429b4faa55",
+    "engine": "pocketsphinx",
+    "engineCommit": "511126b492dcb267cf30d49d631946d7b61a9530",
+    "engineVersion": "5.1.1",
+    "mode": "pocketsphinxAllPhone",
+    "phoneLanguageModelSHA256": "c57e0fa4191b096b1279cfe3a77927f52568fdecfc6624ddb5cec9527c763a54",
+    "phonePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "resourceTreeSHA256": "e2ca8da1fecfd4a676fbd3d68537c705688b669b30ddaa1cb78dd1850e4fe12d",
+    "speechBoundaryPolicy": "pocketsphinxNonSilencePhoneIntervals",
+    "transcriptSHA256": null
+  },
+  "audioFile": "grandma-damaged-02.wav",
+  "audioResourcePath": "Audio/grandma-damaged-02.wav",
+  "audioSHA256": "6ab48c44af6a4e8b6c1d9c034ac804494a675013566c027d5bf99091e0c8bfc8",
+  "blendShapeDescriptorResourcePath": "CharacterLibrary/FacialPerformance/grandma_infected_vocal_blendshape.json",
+  "blendShapeDescriptorSHA256": "0acbb8546dc62abc420f3c231824fb8ec7c85381833a91a67ee36448dd089ddf",
+  "characterID": "grandma",
+  "compilerVersion": "character-vocal-allphone-visemes/1.0.0",
+  "looping": false,
+  "requiredPoseFamilies": [
+    "rest",
+    "small",
+    "wide",
+    "round",
+    "teeth"
+  ],
+  "role": "damage_hits",
+  "runs": [
+    {
+      "endFrameExclusive": 16,
+      "pose": "rest",
+      "startFrame": 0
+    },
+    {
+      "endFrameExclusive": 29,
+      "pose": "teeth",
+      "startFrame": 16
+    },
+    {
+      "endFrameExclusive": 89,
+      "pose": "rest",
+      "startFrame": 29
+    },
+    {
+      "endFrameExclusive": 109,
+      "pose": "teeth",
+      "startFrame": 89
+    },
+    {
+      "endFrameExclusive": 195,
+      "pose": "rest",
+      "startFrame": 109
+    },
+    {
+      "endFrameExclusive": 238,
+      "pose": "round",
+      "startFrame": 195
+    },
+    {
+      "endFrameExclusive": 281,
+      "pose": "wide",
+      "startFrame": 238
+    },
+    {
+      "endFrameExclusive": 286,
+      "pose": "small",
+      "startFrame": 281
+    },
+    {
+      "endFrameExclusive": 300,
+      "pose": "rest",
+      "startFrame": 286
+    }
+  ],
+  "runsSHA256": "266851d14936c2af1cacac5c840a3d5961fea98c92de5d2f4c9d4b3ff0b13ca1",
+  "schemaVersion": 1,
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 176,
+      "round": 43,
+      "small": 5,
+      "teeth": 33,
+      "wide": 43
+    },
+    "runCount": 9,
+    "silenceFrameCount": 176,
+    "speechFrameCount": 124,
+    "unknownPhoneCount": 0,
+    "warnings": []
+  },
+  "timeline": {
+    "durationSeconds": 5.0,
+    "frameCount": 300,
+    "framesPerSecond": 60,
+    "sampleCount": 240000,
+    "sampleRate": 48000,
+    "samplesPerNominalFrame": 800
+  },
+  "trackID": "grandma.damage_hits.grandma-damaged-02.visemes"
+}

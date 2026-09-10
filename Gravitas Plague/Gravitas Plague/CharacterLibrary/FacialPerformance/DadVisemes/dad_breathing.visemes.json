@@ -1,0 +1,263 @@
+{
+  "alignment": {
+    "VADModelSHA256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+    "acousticModelSHA256": "88b15292ae279697836e8510e405beacc00a216be8e5733be40cf5429b4faa55",
+    "engine": "pocketsphinx",
+    "engineCommit": "511126b492dcb267cf30d49d631946d7b61a9530",
+    "engineVersion": "5.1.1",
+    "mode": "pocketsphinxAllPhone",
+    "phoneLanguageModelSHA256": "c57e0fa4191b096b1279cfe3a77927f52568fdecfc6624ddb5cec9527c763a54",
+    "phonePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "resourceTreeSHA256": "e2ca8da1fecfd4a676fbd3d68537c705688b669b30ddaa1cb78dd1850e4fe12d",
+    "speechBoundaryPolicy": "pocketsphinxNonSilencePhoneIntervals",
+    "transcriptSHA256": null
+  },
+  "audioFile": "dad_breathing.wav",
+  "audioResourcePath": "dad_breathing.wav",
+  "audioSHA256": "db27f0d2131e9776cc9858b7e7a4489c55058f23233ac33efcf27a5c09acf6bb",
+  "blendShapeDescriptorResourcePath": "CharacterLibrary/FacialPerformance/dad_infected_vocal_blendshape.json",
+  "blendShapeDescriptorSHA256": "c354894371eca9ae0e85883c6ac1add607f25b1c02b0187473a54b2eb7c608ad",
+  "characterID": "dad",
+  "compilerVersion": "character-vocal-allphone-visemes/1.0.0",
+  "looping": true,
+  "requiredPoseFamilies": [
+    "rest",
+    "small",
+    "wide",
+    "round",
+    "teeth"
+  ],
+  "role": "presence_loop",
+  "runs": [
+    {
+      "endFrameExclusive": 19,
+      "pose": "rest",
+      "startFrame": 0
+    },
+    {
+      "endFrameExclusive": 34,
+      "pose": "small",
+      "startFrame": 19
+    },
+    {
+      "endFrameExclusive": 37,
+      "pose": "round",
+      "startFrame": 34
+    },
+    {
+      "endFrameExclusive": 92,
+      "pose": "small",
+      "startFrame": 37
+    },
+    {
+      "endFrameExclusive": 153,
+      "pose": "rest",
+      "startFrame": 92
+    },
+    {
+      "endFrameExclusive": 226,
+      "pose": "small",
+      "startFrame": 153
+    },
+    {
+      "endFrameExclusive": 230,
+      "pose": "round",
+      "startFrame": 226
+    },
+    {
+      "endFrameExclusive": 527,
+      "pose": "small",
+      "startFrame": 230
+    },
+    {
+      "endFrameExclusive": 548,
+      "pose": "teeth",
+      "startFrame": 527
+    },
+    {
+      "endFrameExclusive": 592,
+      "pose": "rest",
+      "startFrame": 548
+    },
+    {
+      "endFrameExclusive": 812,
+      "pose": "small",
+      "startFrame": 592
+    },
+    {
+      "endFrameExclusive": 830,
+      "pose": "rest",
+      "startFrame": 812
+    },
+    {
+      "endFrameExclusive": 868,
+      "pose": "small",
+      "startFrame": 830
+    },
+    {
+      "endFrameExclusive": 870,
+      "pose": "wide",
+      "startFrame": 868
+    },
+    {
+      "endFrameExclusive": 887,
+      "pose": "teeth",
+      "startFrame": 870
+    },
+    {
+      "endFrameExclusive": 1088,
+      "pose": "rest",
+      "startFrame": 887
+    },
+    {
+      "endFrameExclusive": 1132,
+      "pose": "round",
+      "startFrame": 1088
+    },
+    {
+      "endFrameExclusive": 1199,
+      "pose": "rest",
+      "startFrame": 1132
+    },
+    {
+      "endFrameExclusive": 1237,
+      "pose": "small",
+      "startFrame": 1199
+    },
+    {
+      "endFrameExclusive": 1252,
+      "pose": "round",
+      "startFrame": 1237
+    },
+    {
+      "endFrameExclusive": 1274,
+      "pose": "small",
+      "startFrame": 1252
+    },
+    {
+      "endFrameExclusive": 1280,
+      "pose": "round",
+      "startFrame": 1274
+    },
+    {
+      "endFrameExclusive": 1287,
+      "pose": "small",
+      "startFrame": 1280
+    },
+    {
+      "endFrameExclusive": 1301,
+      "pose": "wide",
+      "startFrame": 1287
+    },
+    {
+      "endFrameExclusive": 1337,
+      "pose": "rest",
+      "startFrame": 1301
+    },
+    {
+      "endFrameExclusive": 1393,
+      "pose": "small",
+      "startFrame": 1337
+    },
+    {
+      "endFrameExclusive": 1400,
+      "pose": "round",
+      "startFrame": 1393
+    },
+    {
+      "endFrameExclusive": 1410,
+      "pose": "small",
+      "startFrame": 1400
+    },
+    {
+      "endFrameExclusive": 1571,
+      "pose": "rest",
+      "startFrame": 1410
+    },
+    {
+      "endFrameExclusive": 1576,
+      "pose": "teeth",
+      "startFrame": 1571
+    },
+    {
+      "endFrameExclusive": 1588,
+      "pose": "wide",
+      "startFrame": 1576
+    },
+    {
+      "endFrameExclusive": 1594,
+      "pose": "small",
+      "startFrame": 1588
+    },
+    {
+      "endFrameExclusive": 1600,
+      "pose": "round",
+      "startFrame": 1594
+    },
+    {
+      "endFrameExclusive": 1643,
+      "pose": "rest",
+      "startFrame": 1600
+    },
+    {
+      "endFrameExclusive": 1658,
+      "pose": "small",
+      "startFrame": 1643
+    },
+    {
+      "endFrameExclusive": 1675,
+      "pose": "wide",
+      "startFrame": 1658
+    },
+    {
+      "endFrameExclusive": 1694,
+      "pose": "small",
+      "startFrame": 1675
+    },
+    {
+      "endFrameExclusive": 1741,
+      "pose": "rest",
+      "startFrame": 1694
+    },
+    {
+      "endFrameExclusive": 1791,
+      "pose": "small",
+      "startFrame": 1741
+    },
+    {
+      "endFrameExclusive": 1797,
+      "pose": "round",
+      "startFrame": 1791
+    },
+    {
+      "endFrameExclusive": 1800,
+      "pose": "rest",
+      "startFrame": 1797
+    }
+  ],
+  "runsSHA256": "941e12f55eb520ee8d042d8348a8a0b0ab06f322b7f7bd306cf97bd10c2291c2",
+  "schemaVersion": 1,
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 700,
+      "round": 91,
+      "small": 921,
+      "teeth": 43,
+      "wide": 45
+    },
+    "runCount": 41,
+    "silenceFrameCount": 700,
+    "speechFrameCount": 1100,
+    "unknownPhoneCount": 0,
+    "warnings": []
+  },
+  "timeline": {
+    "durationSeconds": 30.0,
+    "frameCount": 1800,
+    "framesPerSecond": 60,
+    "sampleCount": 1440000,
+    "sampleRate": 48000,
+    "samplesPerNominalFrame": 800
+  },
+  "trackID": "dad.presence_loop.dad_breathing.visemes"
+}

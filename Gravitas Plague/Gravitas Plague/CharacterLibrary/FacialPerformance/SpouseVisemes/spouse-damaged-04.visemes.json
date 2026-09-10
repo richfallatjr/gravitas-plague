@@ -1,0 +1,98 @@
+{
+  "alignment": {
+    "VADModelSHA256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+    "acousticModelSHA256": "88b15292ae279697836e8510e405beacc00a216be8e5733be40cf5429b4faa55",
+    "engine": "pocketsphinx",
+    "engineCommit": "511126b492dcb267cf30d49d631946d7b61a9530",
+    "engineVersion": "5.1.1",
+    "mode": "pocketsphinxAllPhone",
+    "phoneLanguageModelSHA256": "c57e0fa4191b096b1279cfe3a77927f52568fdecfc6624ddb5cec9527c763a54",
+    "phonePoseMapSHA256": "32aaf5b5b5369d684ada94c847a26db9e6ff80b4fee97b687f47a4d9fb98470c",
+    "resourceTreeSHA256": "e2ca8da1fecfd4a676fbd3d68537c705688b669b30ddaa1cb78dd1850e4fe12d",
+    "speechBoundaryPolicy": "pocketsphinxNonSilencePhoneIntervals",
+    "transcriptSHA256": null
+  },
+  "audioFile": "spouse-damaged-04.wav",
+  "audioResourcePath": "Audio/spouse-damaged-04.wav",
+  "audioSHA256": "83d9ccc70b8084bc08231c6b43a73a2a3ed5edab889d172583f50d19eb7f66eb",
+  "blendShapeDescriptorResourcePath": "CharacterLibrary/FacialPerformance/spouse_infected_vocal_blendshape.json",
+  "blendShapeDescriptorSHA256": "2e9cfb47aef2d0ab9bbefc3ab0e9ef02846d4d45147dc1c4ff532428e35ba301",
+  "characterID": "spouse",
+  "compilerVersion": "character-vocal-allphone-visemes/1.0.0",
+  "looping": false,
+  "requiredPoseFamilies": [
+    "rest",
+    "small",
+    "wide",
+    "round",
+    "teeth"
+  ],
+  "role": "damage_hits",
+  "runs": [
+    {
+      "endFrameExclusive": 4,
+      "pose": "rest",
+      "startFrame": 0
+    },
+    {
+      "endFrameExclusive": 6,
+      "pose": "small",
+      "startFrame": 4
+    },
+    {
+      "endFrameExclusive": 13,
+      "pose": "wide",
+      "startFrame": 6
+    },
+    {
+      "endFrameExclusive": 29,
+      "pose": "rest",
+      "startFrame": 13
+    },
+    {
+      "endFrameExclusive": 47,
+      "pose": "teeth",
+      "startFrame": 29
+    },
+    {
+      "endFrameExclusive": 102,
+      "pose": "rest",
+      "startFrame": 47
+    },
+    {
+      "endFrameExclusive": 277,
+      "pose": "wide",
+      "startFrame": 102
+    },
+    {
+      "endFrameExclusive": 300,
+      "pose": "rest",
+      "startFrame": 277
+    }
+  ],
+  "runsSHA256": "68c9902deeb3f1088414146cf03a9aefc11f284d8d4e3ae3b3d10990687c73a8",
+  "schemaVersion": 1,
+  "summary": {
+    "poseFrameCounts": {
+      "rest": 98,
+      "round": 0,
+      "small": 2,
+      "teeth": 18,
+      "wide": 182
+    },
+    "runCount": 8,
+    "silenceFrameCount": 98,
+    "speechFrameCount": 202,
+    "unknownPhoneCount": 0,
+    "warnings": []
+  },
+  "timeline": {
+    "durationSeconds": 5.0,
+    "frameCount": 300,
+    "framesPerSecond": 60,
+    "sampleCount": 240000,
+    "sampleRate": 48000,
+    "samplesPerNominalFrame": 800
+  },
+  "trackID": "spouse.damage_hits.spouse-damaged-04.visemes"
+}

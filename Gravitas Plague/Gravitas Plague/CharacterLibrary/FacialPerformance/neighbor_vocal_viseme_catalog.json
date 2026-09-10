@@ -1,0 +1,71 @@
+{
+  "catalogID": "neighbor.infected.vocalVisemes.v1",
+  "characterID": "neighbor",
+  "compilerVersion": "character-vocal-allphone-visemes/1.0.0",
+  "entries": [
+    {
+      "audioFile": "dad_breathing.wav",
+      "audioSHA256": "db27f0d2131e9776cc9858b7e7a4489c55058f23233ac33efcf27a5c09acf6bb",
+      "looping": true,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/NeighborVisemes/neighbor-dad_breathing.visemes.json",
+      "role": "presence_loop"
+    },
+    {
+      "audioFile": "neighbor-damaged-01.wav",
+      "audioSHA256": "5c67c59fb6dd1ae05b96709d2cd0daa19643b2a06694a169cd89b326f3146123",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/NeighborVisemes/neighbor-damaged-01.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "neighbor-damaged-02.wav",
+      "audioSHA256": "ac099f4cfe1e0c983a5ce74c93f581bd0082b4eef490d087839824158951aeba",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/NeighborVisemes/neighbor-damaged-02.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "neighbor-damaged-03.wav",
+      "audioSHA256": "fbfc40ae796dffc22b1d54075bf2598a290cc46ed4e35951a08c55fbac821c24",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/NeighborVisemes/neighbor-damaged-03.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "neighbor-damaged-04.wav",
+      "audioSHA256": "4e59bd71ed5a2fa157e7b39637d6db0393e5c5484ab05790243e5426aadd40ba",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/NeighborVisemes/neighbor-damaged-04.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "neighbor-death-01.wav",
+      "audioSHA256": "b3eade454d325b15ebadd815934b1a596a53498ab283ed0b57862f6e331d55fc",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/NeighborVisemes/neighbor-death-01.visemes.json",
+      "role": "death"
+    },
+    {
+      "audioFile": "neighbor-death-02.wav",
+      "audioSHA256": "53d79558e5a850eb993e77323d6ff7eb0d21afc656ba9a8b1837cd01779d4b82",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/NeighborVisemes/neighbor-death-02.visemes.json",
+      "role": "death"
+    },
+    {
+      "audioFile": "neighbor-death-03.wav",
+      "audioSHA256": "655853705fe89f83a5e6bae6a16ef2b94293f7f2b26b5f13fc4cb3659ef686b2",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/NeighborVisemes/neighbor-death-03.visemes.json",
+      "role": "death"
+    },
+    {
+      "audioFile": "neighbor-death-04.wav",
+      "audioSHA256": "e463fb5772a85adb14c29a4c9941efff0be6f017ac105cc7bccf99db3357eea2",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/NeighborVisemes/neighbor-death-04.visemes.json",
+      "role": "death"
+    }
+  ],
+  "schemaVersion": 1
+}

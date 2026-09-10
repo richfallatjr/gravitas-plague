@@ -27,6 +27,8 @@ final class Chapter01DadWindowCoordinator {
     private let heavyRuntimeRegistry: StoryHeavyRuntimeRegistry
     private let chapterMusic: Chapter01MusicController
     private let dadPrerecording: Chapter01DadWindowPrerecordingController
+    private let onDadRuntimePrepared: (UUID, JockRetargetTestController) -> Void
+    private let onDadRuntimeReleased: (UUID, String) -> Void
     private let pathFollower = ScriptedAnchorPathFollower()
 
     private(set) var state: Chapter01DadWindowState = .unloaded
@@ -41,6 +43,7 @@ final class Chapter01DadWindowCoordinator {
     private var activeWalkPhase: String?
     private var activeWalkDiagnosticWarningLogged = false
     private var contextAcquired = false
+    private var attachedAudioSourceID: UUID?
     private var generation: UInt64 = 0
 
     var hasActiveRuntime: Bool {
@@ -49,12 +52,18 @@ final class Chapter01DadWindowCoordinator {
 
     init(
         windowBundle: TuringStoryWindowBundleController,
+        onDadRuntimePrepared: @escaping (UUID, JockRetargetTestController) -> Void = {
+            _, _ in
+        },
+        onDadRuntimeReleased: @escaping (UUID, String) -> Void = { _, _ in },
         heavyRuntimeRegistry: StoryHeavyRuntimeRegistry = .shared,
         chapterMusic: Chapter01MusicController = .shared,
         dadPrerecording: Chapter01DadWindowPrerecordingController =
             Chapter01DadWindowPrerecordingController()
     ) {
         self.windowBundle = windowBundle
+        self.onDadRuntimePrepared = onDadRuntimePrepared
+        self.onDadRuntimeReleased = onDadRuntimeReleased
         self.heavyRuntimeRegistry = heavyRuntimeRegistry
         self.chapterMusic = chapterMusic
         self.dadPrerecording = dadPrerecording
@@ -96,6 +105,14 @@ final class Chapter01DadWindowCoordinator {
             )
             self.request = request
             runtime = prepared
+            guard let controller = prepared.controller else {
+                throw Chapter01Error.openingResourceUnavailable(
+                    "Dad controller released during window preparation."
+                )
+            }
+            let sourceID = controller.hordeBenchmarkID
+            attachedAudioSourceID = sourceID
+            onDadRuntimePrepared(sourceID, controller)
             generation &+= 1
             let currentGeneration = generation
             activeTask = Task { @MainActor [weak self] in
@@ -164,7 +181,8 @@ final class Chapter01DadWindowCoordinator {
     }
 
     func cancel(reason: String) async {
-        guard request != nil || runtime != nil || contextAcquired else {
+        guard request != nil || runtime != nil || contextAcquired ||
+                attachedAudioSourceID != nil else {
             state = .cancelled
             return
         }
@@ -347,6 +365,7 @@ final class Chapter01DadWindowCoordinator {
         try await prerecordingPlayback
 
         state = .releasing
+        detachDadAudioSource(reason: "dadReachedWindowExit")
         let report = try await runtime.lease.release(
             reason: "dadReachedWindowExit"
         )
@@ -676,6 +695,7 @@ final class Chapter01DadWindowCoordinator {
         finishPath(.failure(CancellationError()))
         runtime?.controller?.cancelScriptedClipCompletion()
         finishTurn(.failure(CancellationError()))
+        detachDadAudioSource(reason: reason)
         if let runtime {
             _ = try? await runtime.lease.release(reason: reason)
         }
@@ -683,6 +703,12 @@ final class Chapter01DadWindowCoordinator {
         await releaseWindowContext(reason: reason)
         request = nil
         activeTask = nil
+    }
+
+    private func detachDadAudioSource(reason: String) {
+        guard let sourceID = attachedAudioSourceID else { return }
+        attachedAudioSourceID = nil
+        onDadRuntimeReleased(sourceID, reason)
     }
 
     private func releaseWindowContext(reason: String) async {

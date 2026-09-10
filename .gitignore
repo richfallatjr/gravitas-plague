@@ -1,5 +1,9 @@
 *.usdz
 !/dad_biped.usdz
+!/grandma_biped.usdz
+!/spouse_biped.usdz
+!/biker_biped.usdz
+!/neighbor_biped.usdz
 *.wav
 !/dad_breathing.wav
 !/*-county-*.wav

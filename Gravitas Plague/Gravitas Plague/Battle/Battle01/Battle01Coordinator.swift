@@ -27,7 +27,11 @@ struct Battle01MusicStartGate: Equatable {
 
 @MainActor
 final class Battle01Coordinator {
-    typealias EnemyPreparedHook = @MainActor (UUID, JockRetargetTestController) -> Void
+    typealias EnemyPreparedHook = @MainActor (
+        UUID,
+        JockRetargetTestController,
+        Entity?
+    ) -> Void
     typealias EnemyRemovedHook = @MainActor (UUID) -> Void
     typealias EnemyMemoryPresenceHook = @MainActor (Bool, String) -> Void
     typealias PostBattleHoldHook = @MainActor (BattleRuntimeReleasedEvent) async -> Void

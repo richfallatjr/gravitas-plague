@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import json
 import os
 from pathlib import Path
@@ -17,7 +17,7 @@ from mind_eye_lipsync.hashing import deterministic_tree_sha256, sha256_bytes, sh
 from mind_eye_lipsync.mfa_json import PhoneInterval, normalize_arpa_phone
 from mind_eye_lipsync.phones import load_phone_pose_map, map_phone_intervals
 from mind_eye_lipsync.timeline import parse_pcm_wav
-from mind_eye_lipsync.vad import analyze_vad
+from mind_eye_lipsync.vad import SpeechSpan, analyze_vad
 
 from . import COMPILER_VERSION
 
@@ -39,6 +39,22 @@ CINEMATIC_ID = "chapter03.cinematic.angel.lightTunnel.001"
 DESCRIPTOR_RESOURCE_PATH = "Turing/Cinematics/Chapter03/pr_angel_01.json"
 POSE_MULTIPLIERS = {"rest": 1.0, "small": 1.33, "wide": 2.0, "round": 1.5, "teeth": 1.75}
 SPECIAL_SILENCE = frozenset({"SIL", "<SIL>", "<EPS>", "+SPN+", "+NSN+", "+BR+"})
+
+
+@dataclass(frozen=True, slots=True)
+class AllPhoneVisemeCompilation:
+    """Shared deterministic result used by Angel and fixed character authoring."""
+
+    timeline: Any
+    frames: tuple[FrameDecision, ...]
+    quality: dict[str, Any]
+    phone_count: int
+    unknown_phone_count: int
+    warnings: tuple[str, ...]
+    runs: list[dict[str, Any]]
+    pose_frame_counts: dict[str, int]
+    toolchain_lock: dict[str, Any]
+    speech_boundary_policy: str
 
 
 def _resolve(path: Path) -> Path:
@@ -138,7 +154,13 @@ def _compact_runs_hash(runs: list[dict[str, Any]]) -> str:
     return sha256_bytes(encoded)
 
 
-def _quality(frames: Sequence[FrameDecision], unknown_count: int, phone_count: int) -> dict[str, Any]:
+def _quality(
+    frames: Sequence[FrameDecision],
+    unknown_count: int,
+    phone_count: int,
+    *,
+    enforce_angel_quality: bool = True,
+) -> dict[str, Any]:
     speech = [frame for frame in frames if frame.speech_active]
     nonrest_speech = [frame for frame in speech if frame.pose is not MouthPose.REST]
     nonspeech_nonrest = [frame for frame in frames if not frame.speech_active and frame.pose is not MouthPose.REST]
@@ -155,7 +177,7 @@ def _quality(frames: Sequence[FrameDecision], unknown_count: int, phone_count: i
     if MouthPose.WIDE not in speech_poses: failures.append("wide never appears during speech")
     if not any(frame.pose is MouthPose.REST for frame in frames): failures.append("rest never appears")
     if transition_rate > 15: failures.append("transition rate exceeds 15 per second")
-    if failures:
+    if failures and enforce_angel_quality:
         raise ValueError("; ".join(failures))
     return {
         "speechFrameCount": len(speech),
@@ -196,6 +218,110 @@ def _write_review_svg(path: Path, frames: Sequence[FrameDecision]) -> None:
     path.write_text(svg, encoding="utf-8")
 
 
+def compile_allphone_viseme_track(
+    audio_path: Path,
+    workspace: Path,
+    *,
+    speech_boundary_policy: str = "silero",
+    enforce_angel_quality: bool = True,
+) -> AllPhoneVisemeCompilation:
+    """Run the exact production Angel all-phone/VAD/pose pipeline.
+
+    This is intentionally the single implementation used by both the locked
+    Angel golden and fixed-character authoring. Runtime playback never imports
+    or executes this host-only module.
+    """
+
+    audio_path = audio_path.resolve()
+    workspace = workspace.resolve()
+    if not audio_path.is_file():
+        raise FileNotFoundError(audio_path)
+    if workspace.exists():
+        shutil.rmtree(workspace)
+    workspace.mkdir(parents=True)
+    timeline_wav = workspace / "timeline-48000.wav"
+    analysis_wav = workspace / "analysis-16000.wav"
+    allphone_json = workspace / "allphone.json"
+    ffmpeg = Path(shutil.which("ffmpeg") or "")
+    if not ffmpeg.is_file():
+        raise RuntimeError("ffmpeg is unavailable")
+    decode_wav(ffmpeg, audio_path, timeline_wav, sample_rate=48_000)
+    timeline = parse_pcm_wav(timeline_wav)
+    decode_wav(ffmpeg, timeline_wav, analysis_wav, sample_rate=16_000)
+    allphone = _run_allphone(analysis_wav, allphone_json)
+
+    lock = json.loads(TOOLCHAIN_LOCK.read_text(encoding="utf-8"))
+    config = load_compiler_configuration()
+    # The pinned environment currently contains two OpenMP-linked authoring
+    # packages. This is authoring-only and forces the exact single-thread
+    # Silero execution used to produce the checked-in Angel golden.
+    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    phones = _phone_intervals(allphone, timeline.sample_count)
+    mapping_config = load_phone_pose_map(PHONE_MAP)
+    if speech_boundary_policy == "silero":
+        vad = analyze_vad(
+            analysis_wav,
+            timeline_sample_count=timeline.sample_count,
+            config=config.section("vad"),
+            model_sha256=str(lock["sileroModelSHA256"]),
+            package_version=str(lock["sileroVADVersion"]),
+        )
+        speech_spans = vad.speech_spans
+    elif speech_boundary_policy == "pocketsphinxNonSilencePhoneIntervals":
+        # These fixed Dad recordings are nonverbal groans and breathing. Silero
+        # correctly rejects most of them as linguistic speech, but PocketSphinx
+        # still supplies the semantic phone sequence. Treat only recognized
+        # non-silence phone intervals as active boundaries. Pose identity still
+        # comes exclusively from the phone map; signal magnitude is never used.
+        speech_spans = tuple(
+            SpeechSpan(phone.start_sample, phone.end_sample)
+            for phone in phones
+            if phone.raw_phone.strip().lower() not in mapping_config.silence_labels
+        )
+    else:
+        raise ValueError(f"Unsupported speech boundary policy: {speech_boundary_policy}")
+    mapping = map_phone_intervals(phones, speech_spans, mapping_config)
+    frames = expand_frames(
+        timeline,
+        mapping.spans,
+        speech_spans,
+        speech_overlap_threshold=float(
+            config.section("adjudication")["frameSpeechOverlapThreshold"]
+        ),
+    )
+    frames = apply_coarticulation(
+        frames,
+        mapping_config,
+        silence_barrier_frames=int(
+            config.section("coarticulation")["silenceBarrierFrames"]
+        ),
+    )
+    frames = _force_nonspeech_to_rest(frames)
+    quality = _quality(
+        frames,
+        len(mapping.fallback_phones),
+        len(phones),
+        enforce_angel_quality=enforce_angel_quality,
+    )
+    runs = _runs(frames)
+    counts = {pose.value: 0 for pose in REQUIRED_POSES}
+    for run in runs:
+        counts[run["pose"]] += run["endFrameExclusive"] - run["startFrame"]
+    return AllPhoneVisemeCompilation(
+        timeline=timeline,
+        frames=tuple(frames),
+        quality=quality,
+        phone_count=len(phones),
+        unknown_phone_count=len(mapping.fallback_phones),
+        warnings=tuple(mapping.warnings),
+        runs=runs,
+        pose_frame_counts=counts,
+        toolchain_lock=lock,
+        speech_boundary_policy=speech_boundary_policy,
+    )
+
+
 def build(
     descriptor_path: Path,
     output_path: Path,
@@ -217,52 +343,11 @@ def build(
     audio_path = RESOURCE_ROOT / audio_resource_path
     if not audio_path.is_file(): raise FileNotFoundError(audio_path)
 
-    workspace = BUILD_ROOT / "work"
-    if workspace.exists(): shutil.rmtree(workspace)
-    workspace.mkdir(parents=True)
-    timeline_wav = workspace / "timeline-48000.wav"
-    analysis_wav = workspace / "analysis-16000.wav"
-    allphone_json = workspace / "allphone.json"
-    ffmpeg = Path(shutil.which("ffmpeg") or "")
-    if not ffmpeg.is_file(): raise RuntimeError("ffmpeg is unavailable")
-    decode_wav(ffmpeg, audio_path, timeline_wav, sample_rate=48_000)
-    timeline = parse_pcm_wav(timeline_wav)
-    decode_wav(ffmpeg, timeline_wav, analysis_wav, sample_rate=16_000)
-    allphone = _run_allphone(analysis_wav, allphone_json)
-
-    lock = json.loads(TOOLCHAIN_LOCK.read_text(encoding="utf-8"))
-    config = load_compiler_configuration()
-    # The pinned environment currently contains two OpenMP-linked authoring packages.
-    # This is authoring-only and forces the same single-thread Silero execution used by the existing compiler.
-    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-    os.environ.setdefault("OMP_NUM_THREADS", "1")
-    vad = analyze_vad(
-        analysis_wav,
-        timeline_sample_count=timeline.sample_count,
-        config=config.section("vad"),
-        model_sha256=str(lock["sileroModelSHA256"]),
-        package_version=str(lock["sileroVADVersion"]),
-    )
-    phones = _phone_intervals(allphone, timeline.sample_count)
-    mapping_config = load_phone_pose_map(PHONE_MAP)
-    mapping = map_phone_intervals(phones, vad.speech_spans, mapping_config)
-    frames = expand_frames(
-        timeline,
-        mapping.spans,
-        vad.speech_spans,
-        speech_overlap_threshold=float(config.section("adjudication")["frameSpeechOverlapThreshold"]),
-    )
-    frames = apply_coarticulation(
-        frames,
-        mapping_config,
-        silence_barrier_frames=int(config.section("coarticulation")["silenceBarrierFrames"]),
-    )
-    frames = _force_nonspeech_to_rest(frames)
-    quality = _quality(frames, len(mapping.fallback_phones), len(phones))
-    runs = _runs(frames)
-    counts = {pose.value: 0 for pose in REQUIRED_POSES}
-    for run in runs:
-        counts[run["pose"]] += run["endFrameExclusive"] - run["startFrame"]
+    compilation = compile_allphone_viseme_track(audio_path, BUILD_ROOT / "work")
+    timeline = compilation.timeline
+    runs = compilation.runs
+    counts = compilation.pose_frame_counts
+    lock = compilation.toolchain_lock
 
     manifest = {
         "schemaVersion": 1,
@@ -299,15 +384,20 @@ def build(
             "poseFrameCounts": counts,
             "speechFrameCount": timeline.frame_count - counts["rest"],
             "silenceFrameCount": counts["rest"],
-            "unknownPhoneCount": len(mapping.fallback_phones),
+            "unknownPhoneCount": compilation.unknown_phone_count,
             "runCount": len(runs),
-            "warnings": list(mapping.warnings),
+            "warnings": list(compilation.warnings),
         },
     }
     write_atomic_json(output_path, manifest)
-    review = {"schemaVersion": 1, "quality": quality, "phoneCount": len(phones), "runs": runs}
+    review = {
+        "schemaVersion": 1,
+        "quality": compilation.quality,
+        "phoneCount": compilation.phone_count,
+        "runs": runs,
+    }
     if review_json: write_atomic_json(_resolve(review_json), review)
-    if review_svg: _write_review_svg(_resolve(review_svg), frames)
+    if review_svg: _write_review_svg(_resolve(review_svg), compilation.frames)
     return manifest
 
 

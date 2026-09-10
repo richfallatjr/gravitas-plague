@@ -1,0 +1,71 @@
+{
+  "catalogID": "dad.infected.vocalVisemes.v1",
+  "characterID": "dad",
+  "compilerVersion": "character-vocal-allphone-visemes/1.0.0",
+  "entries": [
+    {
+      "audioFile": "dad_breathing.wav",
+      "audioSHA256": "db27f0d2131e9776cc9858b7e7a4489c55058f23233ac33efcf27a5c09acf6bb",
+      "looping": true,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/DadVisemes/dad_breathing.visemes.json",
+      "role": "presence_loop"
+    },
+    {
+      "audioFile": "dad-damaged-01.wav",
+      "audioSHA256": "fd079a1794c72cd18b565a7398bbb3d601c18fce8be68c85578d0d10f67bf7a5",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/DadVisemes/dad-damaged-01.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "dad-damaged-02.wav",
+      "audioSHA256": "024cc7fc72276ac2501c729faa97aa5ef855f2739af4d1eba408a6304eca3e71",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/DadVisemes/dad-damaged-02.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "dad-damaged-03.wav",
+      "audioSHA256": "e28f6eba93636333ead99be7b9059bd9742136375b4aaf87fa1ab1e4e6581da1",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/DadVisemes/dad-damaged-03.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "dad-damaged-04.wav",
+      "audioSHA256": "4f5fd5842e046ab7a0fc3fb51d4fe38eb5ad4d2f923b3bacf53cb9fa262a2cbf",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/DadVisemes/dad-damaged-04.visemes.json",
+      "role": "damage_hits"
+    },
+    {
+      "audioFile": "dad-death-01.wav",
+      "audioSHA256": "670ff38fd3eb5e8f95d1b5848ec346b9a9e7b2f1b610b61a4c6f93e97d40b2f4",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/DadVisemes/dad-death-01.visemes.json",
+      "role": "death"
+    },
+    {
+      "audioFile": "dad-death-02.wav",
+      "audioSHA256": "bedad39a231b62e7acb4fc7462680d62d84367e5b3e341ccfe4761774853fcff",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/DadVisemes/dad-death-02.visemes.json",
+      "role": "death"
+    },
+    {
+      "audioFile": "dad-death-03.wav",
+      "audioSHA256": "a06c5cf435c3597d7bbd6e98023dc170250e9a95c8bd807fda2ecb67746ff0dc",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/DadVisemes/dad-death-03.visemes.json",
+      "role": "death"
+    },
+    {
+      "audioFile": "dad-death-04.wav",
+      "audioSHA256": "48d97a9a5558870a4ba4ee238f805ca4dd86465ffe3bace1898036f66b9dd205",
+      "looping": false,
+      "manifestResourcePath": "CharacterLibrary/FacialPerformance/DadVisemes/dad-death-04.visemes.json",
+      "role": "death"
+    }
+  ],
+  "schemaVersion": 1
+}

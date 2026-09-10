@@ -19,6 +19,8 @@ final class Chapter02WindowWomanCoordinator {
     private let stagingRoot = Entity()
     private let pathFollower = ScriptedAnchorPathFollower()
     private let richPR = Chapter02PrerecordingPlayer()
+    private let onWomanRuntimePrepared: (UUID, JockRetargetTestController) -> Void
+    private let onWomanRuntimeReleased: (UUID, String) -> Void
 
     private(set) var state: Chapter02WindowWomanState = .unloaded
     private(set) var runtime: Chapter02WindowWomanRuntime?
@@ -31,13 +33,21 @@ final class Chapter02WindowWomanCoordinator {
     private var activeClipToken: UUID?
     private var generation: UInt64 = 0
     private var contextAcquired = false
+    private var attachedAudioSourceID: UUID?
 
     init(
         windowBundle: TuringStoryWindowBundleController,
-        sceneRoot: Entity
+        sceneRoot: Entity,
+        onWomanRuntimePrepared: @escaping (
+            UUID,
+            JockRetargetTestController
+        ) -> Void = { _, _ in },
+        onWomanRuntimeReleased: @escaping (UUID, String) -> Void = { _, _ in }
     ) {
         self.windowBundle = windowBundle
         self.sceneRoot = sceneRoot
+        self.onWomanRuntimePrepared = onWomanRuntimePrepared
+        self.onWomanRuntimeReleased = onWomanRuntimeReleased
         stagingRoot.name = "Chapter02WomanNeutralStagingRoot"
         stagingRoot.isEnabled = false
         sceneRoot.addChild(stagingRoot)
@@ -61,6 +71,11 @@ final class Chapter02WindowWomanCoordinator {
                 context: context,
                 sceneRoot: sceneRoot
             )
+            if let controller = runtime?.controller {
+                let sourceID = controller.hordeBenchmarkID
+                attachedAudioSourceID = sourceID
+                onWomanRuntimePrepared(sourceID, controller)
+            }
             self.chapterRunID = chapterRunID
             self.completionSink = completionSink
             generation &+= 1
@@ -133,6 +148,7 @@ final class Chapter02WindowWomanCoordinator {
                 "woman has not reached the neutral staging root"
             )
         }
+        detachAudioSource(reason: "chapter02WomanTransferredToPortalIntro")
         self.runtime = nil
         state = .transferredToPortalIntro
         return runtime
@@ -174,6 +190,7 @@ final class Chapter02WindowWomanCoordinator {
         runtime?.controller?.cancelScriptedClipCompletion()
         finishClip(.failure(CancellationError()))
         await richPR.cancel(reason: reason)
+        detachAudioSource(reason: reason)
         if let lease = runtime?.lease {
             _ = try? await lease.release(reason: .storyReset)
         }
@@ -187,6 +204,12 @@ final class Chapter02WindowWomanCoordinator {
             contextAcquired = false
         }
         state = .cancelled
+    }
+
+    private func detachAudioSource(reason: String) {
+        guard let sourceID = attachedAudioSourceID else { return }
+        attachedAudioSourceID = nil
+        onWomanRuntimeReleased(sourceID, reason)
     }
 
     private func runPresentation(
