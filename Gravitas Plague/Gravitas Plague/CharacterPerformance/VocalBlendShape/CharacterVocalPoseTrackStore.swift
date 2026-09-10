@@ -29,8 +29,12 @@ nonisolated enum DadVocalAudioInventory {
         let sha256: String
     }
 
+    // The continuous breathing loop remains audible, but it is deliberately
+    // excluded from pose analysis. Its persistent broadband energy otherwise
+    // holds the inverse mouth target near the authored wide-open base pose.
+    static let animatedRoles: [CharacterVocalRole] = [.damageHit, .death]
+
     static let ordered: [Entry] = [
-        .init(role: .presenceLoop, fileName: "dad_breathing.wav", sha256: "db27f0d2131e9776cc9858b7e7a4489c55058f23233ac33efcf27a5c09acf6bb"),
         .init(role: .damageHit, fileName: "dad-damaged-01.wav", sha256: "fd079a1794c72cd18b565a7398bbb3d601c18fce8be68c85578d0d10f67bf7a5"),
         .init(role: .damageHit, fileName: "dad-damaged-02.wav", sha256: "024cc7fc72276ac2501c729faa97aa5ef855f2739af4d1eba408a6304eca3e71"),
         .init(role: .damageHit, fileName: "dad-damaged-03.wav", sha256: "e28f6eba93636333ead99be7b9059bd9742136375b4aaf87fa1ab1e4e6581da1"),
@@ -40,6 +44,13 @@ nonisolated enum DadVocalAudioInventory {
         .init(role: .death, fileName: "dad-death-03.wav", sha256: "a06c5cf435c3597d7bbd6e98023dc170250e9a95c8bd807fda2ecb67746ff0dc"),
         .init(role: .death, fileName: "dad-death-04.wav", sha256: "48d97a9a5558870a4ba4ee238f805ca4dd86465ffe3bace1898036f66b9dd205")
     ]
+
+    static func drivesAnimation(
+        role: CharacterVocalRole,
+        isLooping: Bool
+    ) -> Bool {
+        !isLooping && animatedRoles.contains(role)
+    }
 
     static func entry(role: CharacterVocalRole, fileName: String) -> Entry? {
         ordered.first { $0.role == role && $0.fileName == fileName }
@@ -71,6 +82,10 @@ nonisolated enum DadVocalAudioInventory {
     ) -> CharacterVocalAudioAsset? {
         guard start.identity.characterID == "dad",
               start.identity.archetype == .dad,
+              drivesAnimation(
+                  role: start.identity.role,
+                  isLooping: start.identity.isLooping
+              ),
               let entry = entry(
                 role: start.identity.role,
                 fileName: start.identity.fileName

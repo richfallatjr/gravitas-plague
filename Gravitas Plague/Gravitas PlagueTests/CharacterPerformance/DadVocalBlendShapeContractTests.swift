@@ -23,7 +23,7 @@ final class DadVocalBlendShapeContractTests: XCTestCase {
         XCTAssertEqual(descriptor.allowedWeightRange, [0, 1])
         XCTAssertEqual(
             descriptor.audioRoles,
-            [.presenceLoop, .damageHit, .death]
+            [.damageHit, .death]
         )
         XCTAssertEqual(
             descriptor.response,
@@ -65,15 +65,24 @@ final class DadVocalBlendShapeContractTests: XCTestCase {
                 .invalidDescriptor("response")
             )
         }
+
+        let breathingReintroduced = try mutatedProductionDescriptor { object in
+            object["audioRoles"] = [
+                "presence_loop",
+                "damage_hits",
+                "death"
+            ]
+        }
+        XCTAssertThrowsError(try breathingReintroduced.validate()) { error in
+            XCTAssertEqual(
+                error as? CharacterVocalBlendShapeError,
+                .invalidDescriptor("audioRoles")
+            )
+        }
     }
 
-    func testDadInventoryHasExactlyNineLockedFilesRolesAndHashes() throws {
+    func testDadInventoryExcludesBreathingAndLocksEightVocalFiles() throws {
         let expected: [DadVocalAudioInventory.Entry] = [
-            .init(
-                role: .presenceLoop,
-                fileName: "dad_breathing.wav",
-                sha256: "db27f0d2131e9776cc9858b7e7a4489c55058f23233ac33efcf27a5c09acf6bb"
-            ),
             .init(
                 role: .damageHit,
                 fileName: "dad-damaged-01.wav",
@@ -117,10 +126,11 @@ final class DadVocalBlendShapeContractTests: XCTestCase {
         ]
 
         XCTAssertEqual(DadVocalAudioInventory.ordered, expected)
-        XCTAssertEqual(DadVocalAudioInventory.ordered.count, 9)
+        XCTAssertEqual(DadVocalAudioInventory.animatedRoles, [.damageHit, .death])
+        XCTAssertEqual(DadVocalAudioInventory.ordered.count, 8)
         XCTAssertEqual(
             DadVocalAudioInventory.ordered.filter { $0.role == .presenceLoop }.count,
-            1
+            0
         )
         XCTAssertEqual(
             DadVocalAudioInventory.ordered.filter { $0.role == .damageHit }.count,
@@ -132,7 +142,37 @@ final class DadVocalBlendShapeContractTests: XCTestCase {
         )
         XCTAssertEqual(
             Set(DadVocalAudioInventory.ordered.map(\.role)),
-            Set(CharacterVocalRole.allCases)
+            Set(DadVocalAudioInventory.animatedRoles)
+        )
+        XCTAssertFalse(
+            DadVocalAudioInventory.drivesAnimation(
+                role: .presenceLoop,
+                isLooping: true
+            )
+        )
+        XCTAssertFalse(
+            DadVocalAudioInventory.drivesAnimation(
+                role: .presenceLoop,
+                isLooping: false
+            )
+        )
+        XCTAssertTrue(
+            DadVocalAudioInventory.drivesAnimation(
+                role: .damageHit,
+                isLooping: false
+            )
+        )
+        XCTAssertTrue(
+            DadVocalAudioInventory.drivesAnimation(
+                role: .death,
+                isLooping: false
+            )
+        )
+        XCTAssertFalse(
+            DadVocalAudioInventory.drivesAnimation(
+                role: .damageHit,
+                isLooping: true
+            )
         )
         XCTAssertTrue(DadVocalAudioInventory.ordered.allSatisfy {
             $0.sha256.count == 64 && $0.sha256.allSatisfy(\.isHexDigit)
@@ -149,8 +189,30 @@ final class DadVocalBlendShapeContractTests: XCTestCase {
 
         XCTAssertEqual(
             DadVocalAudioInventory.ordered.map(\.fileName),
-            [presence] + damage + death
+            damage + death
         )
+        XCTAssertEqual(presence, "dad_breathing.wav")
+        XCTAssertFalse(DadVocalAudioInventory.ordered.map(\.fileName).contains(presence))
+        XCTAssertNil(
+            DadVocalAudioInventory.entry(
+                role: .presenceLoop,
+                fileName: presence
+            )
+        )
+        let breathingStart = CharacterVocalPlaybackStart(
+            identity: .init(
+                playbackID: UUID(),
+                sourceID: UUID(),
+                characterID: "dad",
+                archetype: .dad,
+                role: .presenceLoop,
+                fileName: presence,
+                isLooping: true
+            ),
+            clockOrigin: .now,
+            expectedDurationSeconds: nil
+        )
+        XCTAssertNil(DadVocalAudioInventory.asset(for: breathingStart))
         XCTAssertTrue(
             Set(DadVocalAudioInventory.ordered.map(\.fileName))
                 .isDisjoint(with: faceHits)
@@ -176,9 +238,7 @@ final class DadVocalBlendShapeContractTests: XCTestCase {
         )
 
         for entry in DadVocalAudioInventory.ordered {
-            let relativePath = entry.role == .presenceLoop
-                ? entry.fileName
-                : "Gravitas Plague/Gravitas Plague/Audio/\(entry.fileName)"
+            let relativePath = "Gravitas Plague/Gravitas Plague/Audio/\(entry.fileName)"
             let url = root.appendingPathComponent(relativePath)
             XCTAssertTrue(
                 FileManager.default.fileExists(atPath: url.path),
@@ -190,6 +250,13 @@ final class DadVocalBlendShapeContractTests: XCTestCase {
                 "Authored Dad audio changed: \(entry.fileName)"
             )
         }
+
+        let breathingURL = root.appendingPathComponent("dad_breathing.wav")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: breathingURL.path))
+        XCTAssertEqual(
+            try sha256(breathingURL),
+            "db27f0d2131e9776cc9858b7e7a4489c55058f23233ac33efcf27a5c09acf6bb"
+        )
 
         try assertBundledDadResourcesWhenAvailable(descriptor: descriptor)
     }
@@ -209,7 +276,11 @@ final class DadVocalBlendShapeContractTests: XCTestCase {
         let mesh = try XCTUnwrap(payload.meshes.first)
         XCTAssertEqual(mesh.sourcePrimPath, "/root/Armature/char1/char1")
         XCTAssertEqual(mesh.sourcePointCount, 144_525)
-        XCTAssertEqual(mesh.records.count, 2_004)
+        XCTAssertEqual(
+            mesh.records.count,
+            try XCTUnwrap(descriptor.offsetPayloadRecordCount)
+        )
+        XCTAssertFalse(mesh.records.isEmpty)
         XCTAssertEqual(
             mesh.records.map(\.pointIndex),
             mesh.records.map(\.pointIndex).sorted()
@@ -527,6 +598,7 @@ final class DadVocalBlendShapeContractTests: XCTestCase {
         let source = try audioControllerSource()
         let presence = try functionBody(named: "startCharacterLoopAudio", in: source)
         XCTAssertTrue(presence.contains("role: .presenceLoop"))
+        XCTAssertTrue(presence.contains("playAudio(loopResource)"))
         XCTAssertTrue(
             presence.contains("characterVocalPlaybackEventHub.publish(.started")
         )
@@ -541,6 +613,20 @@ final class DadVocalBlendShapeContractTests: XCTestCase {
         )
         XCTAssertTrue(replacing.contains(".cancelled(previous.identity"))
         XCTAssertTrue(replacing.contains(".publish(.started"))
+    }
+
+    func testDadRuntimeFiltersBreathingAtLiveAndPrewarmAnalysisBoundaries() throws {
+        let source = try dadRuntimeSource()
+        let controllerReceive = try functionBody(named: "receive", in: source)
+        XCTAssertTrue(controllerReceive.contains("drivesAnimation("))
+        XCTAssertFalse(source.contains("private var presenceLoop"))
+
+        let requestTrack = try functionBody(named: "requestTrack", in: source)
+        XCTAssertTrue(requestTrack.contains("drivesAnimation("))
+
+        let prewarm = try functionBody(named: "startPrewarmIfNeeded", in: source)
+        XCTAssertTrue(prewarm.contains("DadVocalAudioInventory.assets()"))
+        XCTAssertEqual(DadVocalAudioInventory.ordered.count, 8)
     }
 
     private enum Direction {
@@ -682,11 +768,29 @@ final class DadVocalBlendShapeContractTests: XCTestCase {
                 XCTAssertEqual(try sha256(asset.url), asset.expectedSHA256)
             }
         }
+
+        if let breathingURL = bundle.url(
+            forResource: "dad_breathing",
+            withExtension: "wav"
+        ) {
+            XCTAssertEqual(
+                try sha256(breathingURL),
+                "db27f0d2131e9776cc9858b7e7a4489c55058f23233ac33efcf27a5c09acf6bb"
+            )
+        }
     }
 
     private func audioControllerSource() throws -> String {
         let url = try repositoryRoot().appendingPathComponent(
             "Gravitas Plague/Gravitas Plague/GravitasDemoAudioController.swift"
+        )
+        return try String(contentsOf: url, encoding: .utf8)
+    }
+
+    private func dadRuntimeSource() throws -> String {
+        let url = try repositoryRoot().appendingPathComponent(
+            "Gravitas Plague/Gravitas Plague/CharacterPerformance/" +
+                "VocalBlendShape/DadVocalBlendShapeRuntime.swift"
         )
         return try String(contentsOf: url, encoding: .utf8)
     }

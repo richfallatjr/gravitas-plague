@@ -97,15 +97,15 @@ Changed for integration:
 ## 3. Canonical asset and target proof
 
 - Canonical production USDZ: repository root `dad_biped.usdz`
-- SHA-256: `8549be0963c2e20c10f7b942e3db35e2bfca0416876b12110546b5aedd6439e6`
-- Size: 55,331,751 bytes
+- SHA-256: `a08f6f72f563c6e4e29610e7f591832ab45a2f3861ea3226555fc1de80db5aeb`
+- Size: 55,419,246 bytes
 - Xcode status: copied into the built `Gravitas Plague.app`; the built copy has the same SHA-256.
 - Target name: `dadVocalClose`
 - Target prim: `/root/Armature/char1/char1_dadVocalClose`
 - Driven mesh: `/root/Armature/char1/char1`
 - Direction: weight `0.0` is the production default wide/open mouth; `0.5` is small/round; `1.0` is the owner-authored closed/tense mouth.
-- Sparse target records: 2,004 of 144,525 source points.
-- Displacement: mean 0.001606 m, RMS 0.002701 m, maximum 0.012514 m.
+- Sparse target records: 3,707 of 144,525 source points, derived from the current owner-authored donor rather than fixed in the tool.
+- Displacement: mean 0.007244 m, RMS 0.009295 m, maximum 0.024946 m.
 - Donor asset: `dad_biped_mouth_closed.usdz` remains authoring-only, ignored, and absent from the app bundle.
 - Donor-only `/root/Cube`, `/root/Camera`, and `/root/Light` are absent from production.
 - `usdchecker`: PASS.
@@ -113,15 +113,17 @@ Changed for integration:
 RealityKit's public `blendShapeOffsets(named:)` accessor reports an all-zero compatibility buffer for Dad. The importer separately preserves the real target in its native `dadVocalClose|blendTargetPosDeltas` render buffer. A sparse payload is retained to validate that native buffer exactly; it is not written back into the mesh:
 
 - Payload: `dad_infected_vocal_blendshape_offsets.bin`
-- SHA-256: `c77649e5218dfd095da4fda580e45a1f325a33ab6b6406b97a8c6de0a40be67e`
-- Size: 56,170 bytes
-- Contract: one mesh, 2,004 sorted records, exact render-to-source index and delta validation.
+- SHA-256: `ed02b06b87f8d5d456a15a38543a9b5d409a277283ab1ec9b990658b8b9b530d`
+- Size: 103,854 bytes
+- Contract: one mesh, 3,707 sorted records, exact render-to-source index and delta validation.
+
+The authoring tool no longer hard-codes a changed-point count or displacement ceiling. It imports every meaningful owner-authored point delta and reports the resulting coverage and displacement. When Blender exports `dadVocalClose` as a bound shape key, the tool evaluates that target over the donor Basis before comparing it with production; this prevents an updated shape key from being silently discarded. The current donor supplies 144,525 indexed shape-key records with 3,622 nonzero offsets; evaluation against the production Basis produces 3,707 sparse target records. A donor without that named target retains the destructive-sculpt `Mesh.points` fallback. Donor-side Blender armature names and skin-weight serialization are ignored because none of that data is copied; production topology, skeleton, materials, animation, textures, and bind state remain authoritative.
 
 ### Horde device correction
 
 The first Horde device run proved that all nine audio tracks prepared successfully, but visual registration stopped at the mesh-repair gate. The gate incorrectly inherited Angel's assumption that RealityKit would add no more than 64 render vertices.
 
-Dad's locked asset imports as:
+The previous 2,004-point target used during the initial device diagnosis imported as:
 
 ```text
 USD control points:                 144,525
@@ -132,17 +134,19 @@ Render vertices requiring offsets:    2,479
 Affected seam duplicates:               475
 ```
 
-The original 144,525 imported positions and all 2,004 sparse anchors match the locked USD positions exactly. RealityKit's native `originalPartVertexIndex` map expands them to exactly 2,479 affected render vertices, including 475 seam duplicates.
+Those original 144,525 imported positions and all 2,004 historical sparse anchors matched the prior USD positions exactly. RealityKit's native `originalPartVertexIndex` map expanded them to 2,479 affected render vertices, including 475 seam duplicates. These figures document the earlier device diagnosis, not the current evaluated donor target.
 
 The next Horde device run exposed why the initial runtime-repair approach was unsafe: even a no-op `mesh.replace(with: mesh.contents)` on this imported skinned asset drops its skeleton collection and changes its private coordinate basis. Jock then animates an invalid mesh and the character stretches apart. The runtime no longer calls `mesh.replace` or regenerates Dad's mesh. It validates RealityKit's already-correct native delta buffer against every payload record, uploads those immutable render-vertex deltas once, and applies them with a visionOS 27 GPU `MeshDeformer` before RealityKit's blend-shape and skinning deformers. Only the small scalar mouth weight changes at runtime. A missing or mismatched native buffer disables only the visual pilot rather than mutating Dad's mesh.
 
 RealityKit does not preserve a custom mesh deformer when this imported model is cloned. The physical Dad and every portal mirror therefore receive separately installed bindings while sharing the same authored pose clock. Teardown removes/restores a deformer component only while the component is still owned by that exact binding.
 
+The custom GPU deformer remains on-demand: the scalar changes only during mouth transitions, and RealityKit caches its pre-skinning output. A host probe installed weight `1.0` once, changed Dad's joint transforms for 60 renders, observed no redundant custom callbacks, and produced a final image byte-identical to the original closed render. Idle and silence request `.rest` at weight `1.0`.
+
 An equivalent CPU custom deformer was rejected after measurement: although geometrically correct, it added roughly 19 ms on changing host frames. The Metal path preserved Dad's body and a posed Jock arm in the render probe. Two quiet host runs measured approximately 0.23–0.38 ms incremental GPU-completion wall time; a loaded host run measured 2.17 ms, so on-device performance remains part of the required acceptance pass.
 
 The next Horde device log did not exercise that GPU path. It reached `mesh ready` and then disabled the visual with `Character vocal blendshape binding is stale` before controller registration, track joining, weight assignment, or a RealityKit callback. Two invalid identity assumptions caused that rejection: the ownership guard compared RealityKit's normalized imported deformation stack before first installation, and the resolver treated the transient Swift `MeshResource` wrapper's `ObjectIdentifier` as persistent across an async suspension. RealityKit can recreate and coalesce those wrappers even while the same entity, native mesh, target, and vertex contract remain intact. First installation now intentionally replaces the captured imported stack; subsequent ownership checks apply only to the binding's installed stack; and binding validity uses the stable entity/target/group contract rather than wrapper identity. Device logs now distinguish `binding installed`, `registered`, `track joined`, and subsequent pose/target-weight transitions so setup can no longer be mistaken for live deformation.
 
-The exact production resolver/controller probe subsequently passed five fresh runs: source and recursive mirror each resolved one binding, both first installations reached weight `1.0`, both were driven to exact `0.0`, their renders matched, and the visual difference remained confined to the same 21 × 22 pixel mouth region. Shutdown restored both original imported empty deformer components.
+The current source target contains 3,707 exact sparse offsets, which RealityKit maps to 4,589 moved render vertices including 882 seam duplicates. It renders visibly closed/tense at weight `1.0`, while weight `0.0` retains the wide/open source mouth. Clean import inspection confirms that the large displacement is now carried by the jaw and chin while the upper lip remains comparatively stable. The production Basis is unchanged, and the prior target is replaced rather than stacked. On-demand output remained stable through alternating joint transforms. Source/mirror parity and performance still require the device acceptance pass below.
 
 The authoring shell also now treats `--check-only` as read-only; it no longer rebuilds the production USDZ during validation.
 
@@ -175,7 +179,7 @@ All files are PCM signed 16-bit little-endian, 48 kHz, stereo WAVs.
 
 | Role | File/path | Duration | SHA-256 |
 |---|---|---:|---|
-| presence loop | `dad_breathing.wav` | 30.000 s | `db27f0d2131e9776cc9858b7e7a4489c55058f23233ac33efcf27a5c09acf6bb` |
+| audible presence loop; excluded from mouth analysis | `dad_breathing.wav` | 30.000 s | `db27f0d2131e9776cc9858b7e7a4489c55058f23233ac33efcf27a5c09acf6bb` |
 | damage | `Gravitas Plague/Gravitas Plague/Audio/dad-damaged-01.wav` | 4.500 s | `fd079a1794c72cd18b565a7398bbb3d601c18fce8be68c85578d0d10f67bf7a5` |
 | damage | `Gravitas Plague/Gravitas Plague/Audio/dad-damaged-02.wav` | 5.000 s | `024cc7fc72276ac2501c729faa97aa5ef855f2739af4d1eba408a6304eca3e71` |
 | damage | `Gravitas Plague/Gravitas Plague/Audio/dad-damaged-03.wav` | 5.000 s | `e28f6eba93636333ead99be7b9059bd9742136375b4aaf87fa1ab1e4e6581da1` |
@@ -185,13 +189,13 @@ All files are PCM signed 16-bit little-endian, 48 kHz, stereo WAVs.
 | death | `Gravitas Plague/Gravitas Plague/Audio/dad-death-03.wav` | 5.000 s | `a06c5cf435c3597d7bbd6e98023dc170250e9a95c8bd807fda2ecb67746ff0dc` |
 | death | `Gravitas Plague/Gravitas Plague/Audio/dad-death-04.wav` | 5.000 s | `48d97a9a5558870a4ba4ee238f805ca4dd86465ffe3bace1898036f66b9dd205` |
 
-`dad_breathing.wav` now has the narrow root exception `!/dad_breathing.wav`. It is unignored and appears in `git status` as an untracked production input awaiting the owner’s eventual commit. Existing narrow exceptions cover the damage/death banks. Face-hit and attack sounds are excluded from the vocal driver.
+`dad_breathing.wav` remains the audible spatial presence loop, but it is excluded from the vocal-animation inventory and never decoded or analyzed for mouth poses. Existing narrow exceptions cover the damage/death banks. Face-hit and attack sounds are also excluded from the vocal driver.
 
 ## 6. Analysis, cache, and playback ownership
 
 - The existing deterministic `TuringGeneratedSpeechAnalyzer(configuration: .production)` produces the canonical 60-fps pose tracks.
 - No Qwen, Foundation Models, PocketSphinx, transcription, forced alignment, or network work is used.
-- The nine files prewarm sequentially on one dedicated serial utility queue.
+- The eight damage/death files prewarm sequentially on one dedicated serial utility queue. The breathing loop stays on the audio path only.
 - Hashing, WAV decoding, PCM conversion, and pose analysis occur only in `CharacterVocalPoseTrackStore.swift`.
 - Only compact `TuringGeneratedSpeechFrameTrack` results are cached; decoded PCM and envelopes are released.
 - Concurrent requests for the same asset coalesce on one preparation task.
@@ -199,7 +203,7 @@ All files are PCM signed 16-bit little-endian, 48 kHz, stereo WAVs.
 
 Exact playback ownership is published only after RealityKit returns the controller that actually started. Every identity contains playback ID, source ID, character, archetype, role, exact selected filename, and looping status, with a `ContinuousClock.Instant` origin. Replacement cancels the old exact identity. Natural completion removes only an exact identity match, so stale completion cannot clear a newer vocal. Watchdog expiry publishes cancellation, never natural completion.
 
-Damage and death replace the current per-source one-shot visually and audibly. Presence keeps its original clock while hidden and resumes at its current modulo frame. Death is terminal and settles to the closed/rest weight after its vocal completes. Face-hit impact and Rich speech publish no Dad vocal event.
+Damage and death replace the current per-source one-shot visually and audibly. The presence loop remains audible but owns no visual track or pose clock, so idle Dad stays at the closed/rest weight. Death is terminal and settles to the closed/rest weight after its vocal completes. Face-hit impact and Rich speech publish no Dad vocal event.
 
 ## 7. Physical Dad and portal integration
 
@@ -225,7 +229,7 @@ PASS:
 - Generic visionOS Debug app build, signing disabled: `** BUILD SUCCEEDED **`.
 - Dad GPU render probe: exact 172,668-vertex `.float3`/12-byte-stride callback; weight 0/1 deformation remained confined to the face; Jock arm skinning remained intact; 190 alternating updates were byte-stable with no accumulation.
 - Built app `default.metallib` contains `characterVocalApplyDenseOffsets`.
-- Built app contains the production Dad USDZ, descriptor, validation payload, and all nine exact WAV hashes.
+- Built app contains the production Dad USDZ, descriptor, validation payload, the audible breathing loop, and all eight exact animation-driving WAVs.
 - Built app contains no mouth-closed donor USDZ.
 - Static rejection audits find no prohibited ML/transcription dependency and no face-hit asset in the pilot folder.
 
@@ -240,12 +244,12 @@ The build emitted no Dad pilot test diagnostics. These unrelated test failures w
 
 The code is ready for a Vision Pro acceptance run, but the pilot is not declared complete until that evidence exists. Exercise:
 
-1. The Chapter 1 final Dad presence loop.
+1. The Chapter 1 final Dad presence loop remains audible while the mouth stays at authored closed/rest unless a damage or death vocal is active.
 2. All four damage recordings, including rapid replacement and a face-hit-only comparison.
 3. All four death recordings and the terminal closed/rest settle.
 4. Source/mirror visual parity while crossing the portal.
 5. Cancel/retry/Continue, then a second full run.
 6. Geometry, skinning, materials, teeth/cavity, audio gain/selection/spatial position, combat, Jock reactions, and story progression against baseline.
-7. Confirm no decode/analysis is logged during a hit and capture prewarm timings from `[DadVocalTrack]` logs.
+7. Confirm no decode/analysis is logged during a hit, no `prepared file=dad_breathing.wav` line ever appears, and prewarm reports exactly eight tracks.
 
 Until those observations are recorded, final qualification remains **BLOCKED**, not failed.

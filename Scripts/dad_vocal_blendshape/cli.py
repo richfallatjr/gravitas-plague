@@ -37,7 +37,7 @@ LOCKED_POSE_WEIGHTS = {
     "round": 0.5,
     "teeth": 1.0,
 }
-LOCKED_AUDIO_ROLES = ["presence_loop", "damage_hits", "death"]
+LOCKED_AUDIO_ROLES = ["damage_hits", "death"]
 LOCKED_RESPONSE = {
     "increasingWeightHalfLifeSeconds": 0.05,
     "decreasingWeightHalfLifeSeconds": 0.03,
@@ -103,7 +103,7 @@ def validate_runtime_descriptor(
         "offsetPayloadResourcePath": RUNTIME_PAYLOAD_RESOURCE_PATH,
         "offsetPayloadSHA256": payload["SHA256"],
         "offsetPayloadMeshCount": 1,
-        "offsetPayloadRecordCount": 2004,
+        "offsetPayloadRecordCount": payload["recordCount"],
     }
     if value != identity:
         changed = sorted(

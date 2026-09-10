@@ -5,6 +5,8 @@ import unittest
 import zipfile
 from pathlib import Path
 
+from Scripts.dad_vocal_blendshape.validation import apply_blend_shape_offsets
+
 
 class DadVocalBlendShapeRuntimeContractTests(unittest.TestCase):
     @classmethod
@@ -18,6 +20,10 @@ class DadVocalBlendShapeRuntimeContractTests(unittest.TestCase):
         )
         cls.payload_path = (
             cls.performance / "dad_infected_vocal_blendshape_offsets.bin"
+        )
+        cls.validation_report_path = cls.root / (
+            "Authoring/DadVocalBlendShape/Reports/"
+            "dad_vocal_close.validation.json"
         )
         cls.asset_path = cls.root / "dad_biped.usdz"
 
@@ -42,7 +48,7 @@ class DadVocalBlendShapeRuntimeContractTests(unittest.TestCase):
         self.assertEqual(descriptor["allowedWeightRange"], [0.0, 1.0])
         self.assertEqual(
             descriptor["audioRoles"],
-            ["presence_loop", "damage_hits", "death"],
+            ["damage_hits", "death"],
         )
         self.assertEqual(
             hashlib.sha256(self.asset_path.read_bytes()).hexdigest(),
@@ -57,7 +63,16 @@ class DadVocalBlendShapeRuntimeContractTests(unittest.TestCase):
         self.assertEqual(schema, 1)
         self.assertEqual(mesh_count, 1)
         self.assertEqual(mesh_count, descriptor["offsetPayloadMeshCount"])
-        self.assertEqual(descriptor["offsetPayloadRecordCount"], 2004)
+        path_length, point_count, record_count, reserved = struct.unpack_from(
+            "<IIII",
+            data,
+            16,
+        )
+        self.assertGreater(path_length, 0)
+        self.assertEqual(point_count, 144525)
+        self.assertGreater(record_count, 0)
+        self.assertEqual(reserved, 0)
+        self.assertEqual(descriptor["offsetPayloadRecordCount"], record_count)
         self.assertEqual(
             hashlib.sha256(data).hexdigest(),
             descriptor["offsetPayloadSHA256"],
@@ -67,6 +82,46 @@ class DadVocalBlendShapeRuntimeContractTests(unittest.TestCase):
         with zipfile.ZipFile(self.asset_path) as archive:
             names = archive.namelist()
         self.assertFalse(any("mouth_closed" in name for name in names))
+
+    def test_donor_dense_shape_key_resolves_full_target_points(self):
+        base = [(0, 0, 0), (1, 1, 1), (2, 2, 2)]
+        offsets = [(0, 1, 0), (0, 0, -0.5), (2, 0, 0)]
+        expected = ((0, 1, 0), (1, 1, 0.5), (4, 2, 2))
+        self.assertEqual(apply_blend_shape_offsets(base, offsets, None), expected)
+        self.assertEqual(
+            apply_blend_shape_offsets(base, offsets, [0, 1, 2]),
+            expected,
+        )
+
+    def test_donor_sparse_shape_key_preserves_unaffected_points(self):
+        base = [(0, 0, 0), (1, 1, 1), (2, 2, 2)]
+        self.assertEqual(
+            apply_blend_shape_offsets(base, [(0, -1, 0)], [1]),
+            ((0, 0, 0), (1, 0, 1), (2, 2, 2)),
+        )
+        with self.assertRaisesRegex(ValueError, "duplicated"):
+            apply_blend_shape_offsets(base, [(1, 0, 0), (0, 1, 0)], [1, 1])
+        with self.assertRaisesRegex(ValueError, "out of range"):
+            apply_blend_shape_offsets(base, [(1, 0, 0)], [3])
+
+    def test_current_donor_uses_the_authored_close_shape_key(self):
+        report = json.loads(
+            self.validation_report_path.read_text(encoding="utf-8")
+        )
+        mesh = report["validation"]["meshes"][0]
+        self.assertEqual(mesh["donorTargetSource"], "boundBlendShape")
+        self.assertEqual(
+            mesh["donorBlendShapePrimPath"],
+            "/root/Armature/char1/char1/dadVocalClose",
+        )
+        self.assertEqual(mesh["donorBlendShapeOffsetRecordCount"], 144525)
+        self.assertGreater(mesh["donorBlendShapeNonzeroOffsetRecordCount"], 0)
+        descriptor = json.loads(self.descriptor_path.read_text(encoding="utf-8"))
+        self.assertGreater(mesh["changedPointCount"], 0)
+        self.assertEqual(
+            mesh["changedPointCount"],
+            descriptor["offsetPayloadRecordCount"],
+        )
 
 
 if __name__ == "__main__":

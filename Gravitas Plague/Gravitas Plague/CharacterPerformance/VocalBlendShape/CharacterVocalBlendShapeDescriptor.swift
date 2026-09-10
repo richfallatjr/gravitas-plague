@@ -112,8 +112,7 @@ nonisolated struct CharacterVocalBlendShapeDescriptor: Codable, Sendable, Equata
               allowedWeightRange == [0, 1] else {
             throw CharacterVocalBlendShapeError.invalidDescriptor("lockedPoseMapping")
         }
-        guard Set(audioRoles) == Set(CharacterVocalRole.allCases),
-              audioRoles.count == CharacterVocalRole.allCases.count else {
+        guard audioRoles == DadVocalAudioInventory.animatedRoles else {
             throw CharacterVocalBlendShapeError.invalidDescriptor("audioRoles")
         }
         let timing = [

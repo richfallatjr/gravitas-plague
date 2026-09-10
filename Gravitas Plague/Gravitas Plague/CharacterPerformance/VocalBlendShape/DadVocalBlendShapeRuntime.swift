@@ -14,7 +14,6 @@ final class DadVocalBlendShapeController {
     private let descriptor: CharacterVocalBlendShapeDescriptor
     private let response: CharacterVocalBlendShapeResponse
     private var bindings: [CharacterVocalBlendShapeBinding]
-    private var presenceLoop: CharacterVocalActivePosePlayback?
     private var oneShot: CharacterVocalActivePosePlayback?
     private var deathIsTerminal = false
     private var lastAssignedWeight: Float
@@ -49,20 +48,20 @@ final class DadVocalBlendShapeController {
         switch event {
         case .started(let start):
             guard start.identity.characterID == characterID,
-                  start.identity.archetype == .dad else { return }
-            if start.identity.role == .presenceLoop, start.identity.isLooping {
-                presenceLoop = .init(start: start, track: nil)
-            } else if start.identity.role != .presenceLoop, !start.identity.isLooping {
-                if start.identity.role == .damageHit, deathIsTerminal { return }
-                oneShot = .init(start: start, track: nil)
-                if start.identity.role == .death { deathIsTerminal = true }
-            }
+                  start.identity.archetype == .dad,
+                  descriptor.audioRoles.contains(start.identity.role),
+                  DadVocalAudioInventory.drivesAnimation(
+                      role: start.identity.role,
+                      isLooping: start.identity.isLooping
+                  ) else { return }
+            if start.identity.role == .damageHit, deathIsTerminal { return }
+            oneShot = .init(start: start, track: nil)
+            if start.identity.role == .death { deathIsTerminal = true }
 
         case .completed(let identity):
             if oneShot?.start.identity == identity { oneShot = nil }
 
         case .cancelled(let identity, _):
-            if presenceLoop?.start.identity == identity { presenceLoop = nil }
             if oneShot?.start.identity == identity { oneShot = nil }
 
         case .sourceRemoved:
@@ -75,10 +74,6 @@ final class DadVocalBlendShapeController {
         track: TuringGeneratedSpeechFrameTrack
     ) {
         var didJoin = false
-        if presenceLoop?.start.identity == identity {
-            presenceLoop?.track = track
-            didJoin = true
-        }
         if oneShot?.start.identity == identity {
             oneShot?.track = track
             didJoin = true
@@ -123,7 +118,6 @@ final class DadVocalBlendShapeController {
     }
 
     func reset(immediately: Bool, reason: String) {
-        presenceLoop = nil
         oneShot = nil
         deathIsTerminal = false
         currentPose = .rest
@@ -149,9 +143,6 @@ final class DadVocalBlendShapeController {
             return sample(oneShot, now: now, loops: false) ?? .rest
         }
         if deathIsTerminal { return .rest }
-        if let presenceLoop {
-            return sample(presenceLoop, now: now, loops: true) ?? .rest
-        }
         return .rest
     }
 
@@ -384,6 +375,12 @@ final class DadVocalBlendShapeRuntimeRegistry {
     }
 
     private func requestTrack(for start: CharacterVocalPlaybackStart) {
+        guard DadVocalAudioInventory.drivesAnimation(
+            role: start.identity.role,
+            isLooping: start.identity.isLooping
+        ) else {
+            return
+        }
         guard let asset = DadVocalAudioInventory.asset(for: start) else {
             print(
                 "[DadVocalTrack] exact file unavailable file=\(start.identity.fileName) " +

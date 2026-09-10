@@ -436,7 +436,7 @@ final class CharacterVocalBlendShapeBinding {
             print(
                 "[DadVocalBlendShape] binding installed " +
                 "entityPath=\(entityPath) initialWeight=\(value) " +
-                "vertexCount=\(vertexCount) deformer=gpuBeforeSkinning"
+                "vertexCount=\(vertexCount) deformer=gpuOnDemandBeforeSkinning"
             )
         }
     }

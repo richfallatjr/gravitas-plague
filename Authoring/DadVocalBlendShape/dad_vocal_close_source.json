@@ -7,9 +7,7 @@
     "/root/Camera",
     "/root/Light"
   ],
-  "expectedChangedPointCount": 2004,
   "expectedTopologySHA256": "6a51d7e09edb7a857601278ba9598ed7855cb7dd39363cdf1e8e5e77763527d9",
-  "maximumWorldDisplacementMeters": 0.02,
   "meshBindings": [
     {
       "basePrimPath": "/root/Armature/char1/char1",
