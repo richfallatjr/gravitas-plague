@@ -45,6 +45,7 @@ nonisolated protocol MindEyeAssetMemoryManaging:
 {
     func prewarm(
         characterID: TuringConversationCharacterID,
+        preferredVignetteID: String?,
         reason: String
     ) async -> MindEyeAssetAcquisition
 
@@ -54,6 +55,19 @@ nonisolated protocol MindEyeAssetMemoryManaging:
     func release(_ lease: MindEyeAssetLease, reason: String) async
     func forceEvictAll(reason: String) async
     func snapshot() async -> MindEyeAssetMemorySnapshot
+}
+
+nonisolated extension MindEyeAssetMemoryManaging {
+    func prewarm(
+        characterID: TuringConversationCharacterID,
+        reason: String
+    ) async -> MindEyeAssetAcquisition {
+        await prewarm(
+            characterID: characterID,
+            preferredVignetteID: nil,
+            reason: reason
+        )
+    }
 }
 
 actor MindEyeAssetMemoryManager: MindEyeAssetMemoryManaging {
@@ -134,16 +148,22 @@ actor MindEyeAssetMemoryManager: MindEyeAssetMemoryManaging {
 
     func prewarm(
         characterID: TuringConversationCharacterID,
+        preferredVignetteID: String?,
         reason: String
     ) async -> MindEyeAssetAcquisition {
-        guard let vignette = await catalog.defaultVignette(for: characterID) else {
+        guard let vignette = await catalog.vignette(
+            for: characterID,
+            preferredVignetteID: preferredVignetteID
+        ) else {
             return await unavailable(
                 MindEyeFailure(
                     code: .speakerNotMapped,
                     characterID: characterID,
-                    vignetteID: nil,
+                    vignetteID: preferredVignetteID,
                     resourcePath: nil,
-                    message: "No Mind's Eye vignette is mapped for the audible speaker."
+                    message: preferredVignetteID.map {
+                        "No Mind's Eye vignette named \($0) is mapped for the audible speaker."
+                    } ?? "No Mind's Eye vignette is mapped for the audible speaker."
                 ),
                 reason: reason
             )
@@ -574,8 +594,9 @@ actor MindEyeAssetMemoryManager: MindEyeAssetMemoryManaging {
 }
 
 nonisolated struct MindEyeUnavailableCatalog: MindEyeCatalogResolving {
-    func defaultVignette(
-        for characterID: TuringConversationCharacterID
+    func vignette(
+        for characterID: TuringConversationCharacterID,
+        preferredVignetteID: String?
     ) async -> MindEyeResolvedVignette? {
         nil
     }

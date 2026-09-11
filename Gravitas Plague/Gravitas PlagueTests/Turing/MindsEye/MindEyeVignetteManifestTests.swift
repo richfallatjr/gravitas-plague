@@ -33,6 +33,13 @@ final class MindEyeVignetteManifestTests: XCTestCase {
             expectedTeethCount: Int
         )] = [
             (
+                "big_mike_damaged",
+                "big_mike_damaged",
+                .bigMike,
+                2,
+                1
+            ),
+            (
                 "rich_current_room",
                 "rich_current_room",
                 .rich,
@@ -85,6 +92,7 @@ final class MindEyeVignetteManifestTests: XCTestCase {
     func testEveryShippedVignetteUsesTheSingleSharedFeatherMask() throws {
         let vignetteIDs = [
             "big_mike_current_room",
+            "big_mike_damaged",
             "cateye81_bunker",
             "rich_current_room",
             "dad_workshop",
@@ -113,6 +121,7 @@ final class MindEyeVignetteManifestTests: XCTestCase {
     func testEveryShippedVignetteUsesTheEnlargedCardSize() throws {
         let vignetteIDs = [
             "big_mike_current_room",
+            "big_mike_damaged",
             "cateye81_bunker",
             "rich_current_room",
             "dad_workshop",

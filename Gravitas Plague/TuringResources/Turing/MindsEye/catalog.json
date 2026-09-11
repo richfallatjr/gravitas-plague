@@ -8,6 +8,10 @@
         {
           "vignetteID": "big_mike_current_room",
           "manifestResourcePath": "Turing/MindsEye/Vignettes/big_mike_current_room/manifest.json"
+        },
+        {
+          "vignetteID": "big_mike_damaged",
+          "manifestResourcePath": "Turing/MindsEye/Vignettes/big_mike_damaged/manifest.json"
         }
       ]
     },

@@ -93,6 +93,24 @@ final class MindEyeAssetMemoryManagerTests: XCTestCase {
         XCTAssertEqual(snapshot.uniqueResidentPackageCount, 1)
     }
 
+    func testPreferredVignetteLoadsNamedVariantWithoutChangingDefault() async throws {
+        let manager = makeManager(loader: MindEyeTestPackageLoader())
+        let defaultLease = try readyLease(
+            await manager.prewarm(characterID: .bigMike, reason: "default")
+        )
+        XCTAssertEqual(defaultLease.vignetteID, "big_mike_current_room")
+        await manager.release(defaultLease, reason: "replaceWithDamaged")
+
+        let damagedLease = try readyLease(
+            await manager.prewarm(
+                characterID: .bigMike,
+                preferredVignetteID: "big_mike_damaged",
+                reason: "chapter03"
+            )
+        )
+        XCTAssertEqual(damagedLease.vignetteID, "big_mike_damaged")
+    }
+
     func testDifferentInFlightRequestRejectsStaleCompletion() async throws {
         let loader = MindEyeTestPackageLoader(delayNanoseconds: 100_000_000)
         let manager = makeManager(loader: loader, includeRich: true)
@@ -180,6 +198,14 @@ final class MindEyeAssetMemoryManagerTests: XCTestCase {
         var values: [TuringConversationCharacterID: MindEyeResolvedVignette] = [
             .bigMike: mindEyeMikeVignette()
         ]
+        let namedValues = [
+            "big_mike_damaged": MindEyeResolvedVignette(
+                characterID: .bigMike,
+                vignetteID: "big_mike_damaged",
+                manifestResourcePath:
+                    "Turing/MindsEye/Vignettes/big_mike_damaged/manifest.json"
+            )
+        ]
         if includeRich {
             values[.rich] = MindEyeResolvedVignette(
                 characterID: .rich,
@@ -188,7 +214,10 @@ final class MindEyeAssetMemoryManagerTests: XCTestCase {
             )
         }
         return MindEyeAssetMemoryManager(
-            catalog: MindEyeTestCatalog(values: values),
+            catalog: MindEyeTestCatalog(
+                values: values,
+                namedValues: namedValues
+            ),
             loader: loader,
             memoryProbe: MindEyeTestMemoryProbe()
         )
@@ -212,11 +241,18 @@ final class MindEyeAssetMemoryManagerTests: XCTestCase {
 
 nonisolated struct MindEyeTestCatalog: MindEyeCatalogResolving {
     let values: [TuringConversationCharacterID: MindEyeResolvedVignette]
+    let namedValues: [String: MindEyeResolvedVignette]
 
-    func defaultVignette(
-        for characterID: TuringConversationCharacterID
+    func vignette(
+        for characterID: TuringConversationCharacterID,
+        preferredVignetteID: String?
     ) async -> MindEyeResolvedVignette? {
-        values[characterID]
+        if let preferredVignetteID {
+            guard let value = namedValues[preferredVignetteID],
+                  value.characterID == characterID else { return nil }
+            return value
+        }
+        return values[characterID]
     }
 }
 

@@ -5,6 +5,7 @@ import Metal
 final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
     private struct PreparedVisual {
         let generation: UInt64
+        let selection: MindEyeVignetteSelection
         let characterID: TuringConversationCharacterID
         let vignetteID: String
         let lease: MindEyeAssetLease
@@ -15,6 +16,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         var identity: MindEyePresentationIdentity
         var source: TuringSpokenPresentationSource
         var responseKey: MindEyeResponsePresentationKey?
+        let vignetteSelection: MindEyeVignetteSelection
         let lease: MindEyeAssetLease
         let visual: any MindEyePresentationVisual
         let providerID: String
@@ -58,7 +60,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
     private var authoredTrackTask: Task<Void, Never>?
     private var preparationTask: Task<Void, Never>?
     private var physicalPresenceTask: Task<Void, Never>?
-    private var preparingCharacterID: TuringConversationCharacterID?
+    private var preparingSelection: MindEyeVignetteSelection?
     private var buildGeneration: UInt64 = 0
     private var desiredContext: TuringSpokenPresentationContext?
     private var desiredPlaybackClock: TuringPauseAwarePlaybackClock?
@@ -192,9 +194,10 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
            active.identity.speakerCharacterID != characterID {
             return
         }
-        if prepared?.characterID == characterID { return }
+        let selection = MindEyeVignetteSelection(characterID: characterID)
+        if prepared?.selection == selection { return }
         let task = schedulePreparation(
-            characterID: characterID,
+            selection: selection,
             reason: "arm.\(reason)"
         )
         await task?.value
@@ -241,7 +244,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         )
         preparationTask?.cancel()
         preparationTask = nil
-        preparingCharacterID = nil
+        preparingSelection = nil
         authoredTrackTask?.cancel()
         authoredTrackTask = nil
         fillerTrackPreparationTask?.cancel()
@@ -284,7 +287,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         authoredTrackGeneration &+= 1
         preparationTask?.cancel()
         preparationTask = nil
-        preparingCharacterID = nil
+        preparingSelection = nil
         authoredTrackTask?.cancel()
         authoredTrackTask = nil
         fillerTrackPreparationTask?.cancel()
@@ -316,7 +319,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         pendingGeneratedContinuity = nil
         preparationTask?.cancel()
         preparationTask = nil
-        preparingCharacterID = nil
+        preparingSelection = nil
         authoredTrackTask?.cancel()
         authoredTrackTask = nil
         fillerTrackPreparationTask?.cancel()
@@ -366,7 +369,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         authoredTrackGeneration &+= 1
         preparationTask?.cancel()
         preparationTask = nil
-        preparingCharacterID = nil
+        preparingSelection = nil
         authoredTrackTask?.cancel()
         authoredTrackTask = nil
         await releasePreparedAuthoredTrack(reason: "qwenPreflight.\(runID)")
@@ -810,9 +813,14 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
     ) -> Bool {
         guard let requested = context.responsePresentationKey,
               let active else { return false }
+        let selection = MindEyeVignetteSelection(
+            characterID: context.speakerCharacterID,
+            run: context.run
+        )
         return active.responseKey == requested &&
             active.identity.speakerCharacterID == context.speakerCharacterID &&
-            active.identity.interactionSurface == context.interactionSurface
+            active.identity.interactionSurface == context.interactionSurface &&
+            active.vignetteSelection == selection
     }
 
     private func canPromoteGeneratedContinuity(
@@ -831,7 +839,11 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             continuity.interactionSurface == context.interactionSurface &&
             active.identity.speakerCharacterID ==
                 context.speakerCharacterID &&
-            active.identity.interactionSurface == context.interactionSurface
+            active.identity.interactionSurface == context.interactionSurface &&
+            active.vignetteSelection == MindEyeVignetteSelection(
+                characterID: context.speakerCharacterID,
+                run: context.run
+            )
     }
 
     private func promoteGeneratedContinuity(
@@ -870,7 +882,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         guard let request = pendingRevealRequest,
               request.key == Self.revealKey(for: context),
               let active else { return false }
-        return portraitMatches(active.identity, request: request)
+        return portraitMatches(active, request: request)
     }
 
     private func promotePreAudioReveal(
@@ -879,7 +891,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         guard var active,
               let request = pendingRevealRequest,
               request.key == Self.revealKey(for: context),
-              portraitMatches(active.identity, request: request) else {
+              portraitMatches(active, request: request) else {
             return
         }
         let identity = MindEyePresentationIdentity(context: context)
@@ -1391,7 +1403,10 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         }
         let canReuseCurrentPortrait =
             active.identity.speakerCharacterID == continuity.speakerCharacterID &&
-            active.identity.interactionSurface == continuity.interactionSurface
+            active.identity.interactionSurface == continuity.interactionSurface &&
+            active.vignetteSelection == MindEyeVignetteSelection(
+                continuity: continuity
+            )
         (active.visual as? any MindEyeAuthoredMouthControlling)?
             .stopAuthoredMouthPlayback(
                 reason: "awaitGeneratedContinuity.\(reason)",
@@ -1464,7 +1479,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         desiredIsPaused = false
         desiredIsAudible = false
         _ = schedulePreparation(
-            characterID: continuity.speakerCharacterID,
+            selection: MindEyeVignetteSelection(continuity: continuity),
             reason: "upcomingGeneratedIdle.\(reason)"
         )
         print(
@@ -1573,6 +1588,10 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
               !physicalSuppressionActive else { return }
         guard let context = desiredContext else { return }
         let identity = MindEyePresentationIdentity(context: context)
+        let selection = MindEyeVignetteSelection(
+            characterID: identity.speakerCharacterID,
+            run: context.run
+        )
         guard active?.identity.key != identity.key else { return }
 
         if context.responsePresentationKey != nil {
@@ -1580,16 +1599,16 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             case .allowLoad:
                 break
             case .reuseExistingOnly:
-                guard prepared?.characterID == identity.speakerCharacterID else { return }
+                guard prepared?.selection == selection else { return }
             case .deny:
                 return
             }
         }
 
         guard let prepared,
-              prepared.characterID == identity.speakerCharacterID else {
+              prepared.selection == selection else {
             _ = schedulePreparation(
-                characterID: identity.speakerCharacterID,
+                selection: selection,
                 reason: "desired.\(identity.mediaIdentity).\(reason)"
             )
             return
@@ -1630,7 +1649,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         ) else {
             await discardPrepared(reason: "activationRejected")
             _ = schedulePreparation(
-                characterID: identity.speakerCharacterID,
+                selection: selection,
                 reason: "activationRejected.\(reason)"
             )
             return
@@ -1678,6 +1697,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
                 identity: identity,
                 source: context.source,
                 responseKey: context.responsePresentationKey,
+                vignetteSelection: prepared.selection,
                 lease: prepared.lease,
                 visual: prepared.visual,
                 providerID: currentTarget.providerID,
@@ -1761,13 +1781,13 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
 
     @discardableResult
     private func schedulePreparation(
-        characterID: TuringConversationCharacterID,
+        selection: MindEyeVignetteSelection,
         reason: String
     ) -> Task<Void, Never>? {
         guard lifecycleAllowsPresentation,
               applicationState == .active,
               !physicalSuppressionActive else { return nil }
-        if prepared?.characterID == characterID {
+        if prepared?.selection == selection {
             Task { @MainActor [weak self] in
                 await self?.attemptPresentDesiredContext(
                     reason: "preparedAlreadyAvailable"
@@ -1775,7 +1795,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
             }
             return nil
         }
-        if preparingCharacterID == characterID,
+        if preparingSelection == selection,
            let preparationTask {
             return preparationTask
         }
@@ -1783,11 +1803,11 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         preparationTask?.cancel()
         buildGeneration &+= 1
         let token = buildGeneration
-        preparingCharacterID = characterID
+        preparingSelection = selection
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             await self.prepareVisual(
-                characterID: characterID,
+                selection: selection,
                 token: token,
                 reason: reason
             )
@@ -1797,22 +1817,23 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
     }
 
     private func prepareVisual(
-        characterID: TuringConversationCharacterID,
+        selection: MindEyeVignetteSelection,
         token: UInt64,
         reason: String
     ) async {
+        let characterID = selection.characterID
         defer {
             if buildGeneration == token {
                 preparationTask = nil
-                preparingCharacterID = nil
+                preparingSelection = nil
             }
         }
-        if prepared?.characterID == characterID {
+        if prepared?.selection == selection {
             await attemptPresentDesiredContext(reason: "preparationAlreadyComplete")
             return
         }
         if let active,
-           active.identity.speakerCharacterID != characterID {
+           active.vignetteSelection != selection {
             return
         }
         if prepared != nil, active == nil {
@@ -1829,6 +1850,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         #endif
         let acquisition = await assetMemory.prewarm(
             characterID: characterID,
+            preferredVignetteID: selection.preferredVignetteID,
             reason: "phase4.\(reason)"
         )
         guard !Task.isCancelled, buildGeneration == token else {
@@ -1884,6 +1906,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         case .success(let visual):
             prepared = PreparedVisual(
                 generation: token,
+                selection: selection,
                 characterID: characterID,
                 vignetteID: visual.descriptor.vignetteID,
                 lease: lease,
@@ -1924,7 +1947,10 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
               applicationState == .active,
               !physicalSuppressionActive else { return }
         let visualTask = schedulePreparation(
-            characterID: hint.speakerCharacterID,
+            selection: MindEyeVignetteSelection(
+                characterID: hint.speakerCharacterID,
+                run: hint.run
+            ),
             reason: "authoredHint.\(hint.key)"
         )
         let result = await authoredFrameStore.prewarm(
@@ -1950,6 +1976,10 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         }
 
         let previewContext = request.previewContext()
+        let selection = MindEyeVignetteSelection(
+            characterID: request.speakerCharacterID,
+            run: request.run
+        )
         guard case .eligible = eligibility.decision(for: previewContext) else {
             await resolveReveal(request, outcome: .audioOnly)
             return
@@ -1983,7 +2013,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         }
 
         if let active,
-           portraitMatches(active.identity, request: request) {
+           portraitMatches(active, request: request) {
             pendingRevealRequest = request
             await scheduleFillerTrackPrewarm(for: request)
             await resolveReveal(request, outcome: .alreadyVisible)
@@ -1994,7 +2024,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         case .allowLoad:
             break
         case .reuseExistingOnly:
-            guard prepared?.characterID == request.speakerCharacterID else {
+            guard prepared?.selection == selection else {
                 await resolveReveal(request, outcome: .audioOnly)
                 return
             }
@@ -2019,7 +2049,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         desiredIsPaused = false
         desiredIsAudible = false
         let preparation = schedulePreparation(
-            characterID: request.speakerCharacterID,
+            selection: selection,
             reason: "preAudioReveal.\(request.key)"
         )
         await scheduleFillerTrackPrewarm(for: request)
@@ -2032,7 +2062,7 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
         }
         await attemptPresentDesiredContext(reason: "preAudioReveal")
         guard let active,
-              portraitMatches(active.identity, request: request) else {
+              portraitMatches(active, request: request) else {
             pendingRevealRequest = nil
             desiredContext = nil
             desiredPlaybackClock = nil
@@ -2078,13 +2108,17 @@ final class MindEyePresentationCoordinator: MindEyePlacementAvailabilitySink {
     }
 
     private func portraitMatches(
-        _ identity: MindEyePresentationIdentity,
+        _ active: ActivePresentation,
         request: TuringSpokenPresentationRevealRequest
     ) -> Bool {
-        identity.key.playbackRunID == request.run.playbackRunID &&
-            identity.flowInstanceID == request.run.flowInstanceID &&
-            identity.speakerCharacterID == request.speakerCharacterID &&
-            identity.interactionSurface == request.interactionSurface
+        active.identity.key.playbackRunID == request.run.playbackRunID &&
+            active.identity.flowInstanceID == request.run.flowInstanceID &&
+            active.identity.speakerCharacterID == request.speakerCharacterID &&
+            active.identity.interactionSurface == request.interactionSurface &&
+            active.vignetteSelection == MindEyeVignetteSelection(
+                characterID: request.speakerCharacterID,
+                run: request.run
+            )
     }
 
     private static func revealKey(

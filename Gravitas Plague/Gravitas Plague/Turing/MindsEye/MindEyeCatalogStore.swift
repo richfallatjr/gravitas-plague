@@ -30,10 +30,26 @@ nonisolated struct MindEyeResolvedVignette:
     let manifestResourcePath: String
 }
 
+private nonisolated struct MindEyeResolvedCatalog: Sendable {
+    let defaults: [TuringConversationCharacterID: MindEyeResolvedVignette]
+    let vignettes: [
+        TuringConversationCharacterID: [String: MindEyeResolvedVignette]
+    ]
+}
+
 nonisolated protocol MindEyeCatalogResolving: Sendable {
+    func vignette(
+        for characterID: TuringConversationCharacterID,
+        preferredVignetteID: String?
+    ) async -> MindEyeResolvedVignette?
+}
+
+nonisolated extension MindEyeCatalogResolving {
     func defaultVignette(
         for characterID: TuringConversationCharacterID
-    ) async -> MindEyeResolvedVignette?
+    ) async -> MindEyeResolvedVignette? {
+        await vignette(for: characterID, preferredVignetteID: nil)
+    }
 }
 
 actor MindEyeCatalogStore: MindEyeCatalogResolving {
@@ -41,8 +57,8 @@ actor MindEyeCatalogStore: MindEyeCatalogResolving {
 
     private let locator: MindEyeResourceLocator
     private let worker: any MindEyeAssetWorking
-    private var cached: [TuringConversationCharacterID: MindEyeResolvedVignette]?
-    private var loadTask: Task<[TuringConversationCharacterID: MindEyeResolvedVignette]?, Never>?
+    private var cached: MindEyeResolvedCatalog?
+    private var loadTask: Task<MindEyeResolvedCatalog?, Never>?
     private var didLogFailure = false
 
     init(
@@ -53,19 +69,28 @@ actor MindEyeCatalogStore: MindEyeCatalogResolving {
         self.worker = worker
     }
 
-    func defaultVignette(
-        for characterID: TuringConversationCharacterID
+    func vignette(
+        for characterID: TuringConversationCharacterID,
+        preferredVignetteID: String?
     ) async -> MindEyeResolvedVignette? {
+        guard let catalog = await resolvedCatalog() else { return nil }
+        if let preferredVignetteID {
+            return catalog.vignettes[characterID]?[preferredVignetteID]
+        }
+        return catalog.defaults[characterID]
+    }
+
+    private func resolvedCatalog() async -> MindEyeResolvedCatalog? {
         if let cached {
-            return cached[characterID]
+            return cached
         }
         if let loadTask {
-            return await loadTask.value?[characterID]
+            return await loadTask.value
         }
 
         let locator = locator
         let worker = worker
-        let task = Task<[TuringConversationCharacterID: MindEyeResolvedVignette]?, Never> {
+        let task = Task<MindEyeResolvedCatalog?, Never> {
             do {
                 let url = try locator.resolve(
                     resourcePath: Self.defaultCatalogResourcePath
@@ -88,17 +113,20 @@ actor MindEyeCatalogStore: MindEyeCatalogResolving {
             didLogFailure = true
             print("[MindEye] catalog invalid or unavailable")
         }
-        return result?[characterID]
+        return result
     }
 
     private nonisolated static func validate(
         _ descriptor: MindEyeCatalogDescriptor
-    ) throws -> [TuringConversationCharacterID: MindEyeResolvedVignette] {
+    ) throws -> MindEyeResolvedCatalog {
         guard descriptor.schemaVersion == MindEyeDescriptorConstants.catalogSchemaVersion else {
             throw catalogFailure("Unsupported catalog schema version.")
         }
 
-        var entries = [TuringConversationCharacterID: MindEyeResolvedVignette]()
+        var defaults = [TuringConversationCharacterID: MindEyeResolvedVignette]()
+        var entries = [
+            TuringConversationCharacterID: [String: MindEyeResolvedVignette]
+        ]()
         var vignetteIDs = Set<String>()
         var manifestPaths = Set<String>()
         for entry in descriptor.entries {
@@ -107,6 +135,7 @@ actor MindEyeCatalogStore: MindEyeCatalogResolving {
                 throw catalogFailure("Duplicate character or empty vignette list.")
             }
             var resolvedDefault: MindEyeResolvedVignette?
+            var resolvedVignettes = [String: MindEyeResolvedVignette]()
             for vignette in entry.vignettes {
                 guard MindEyeVignetteManifestValidator.validID(vignette.vignetteID),
                       MindEyeSafeRelativePath.validates(
@@ -117,20 +146,23 @@ actor MindEyeCatalogStore: MindEyeCatalogResolving {
                       manifestPaths.insert(vignette.manifestResourcePath).inserted else {
                     throw catalogFailure("Catalog has an invalid or duplicate vignette.")
                 }
+                let resolved = MindEyeResolvedVignette(
+                    characterID: entry.characterID,
+                    vignetteID: vignette.vignetteID,
+                    manifestResourcePath: vignette.manifestResourcePath
+                )
+                resolvedVignettes[vignette.vignetteID] = resolved
                 if vignette.vignetteID == entry.defaultVignetteID {
-                    resolvedDefault = MindEyeResolvedVignette(
-                        characterID: entry.characterID,
-                        vignetteID: vignette.vignetteID,
-                        manifestResourcePath: vignette.manifestResourcePath
-                    )
+                    resolvedDefault = resolved
                 }
             }
             guard let resolvedDefault else {
                 throw catalogFailure("Catalog default vignette is not declared.")
             }
-            entries[entry.characterID] = resolvedDefault
+            defaults[entry.characterID] = resolvedDefault
+            entries[entry.characterID] = resolvedVignettes
         }
-        return entries
+        return MindEyeResolvedCatalog(defaults: defaults, vignettes: entries)
     }
 
     private nonisolated static func catalogFailure(_ message: String) -> MindEyeFailure {
