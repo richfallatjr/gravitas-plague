@@ -39,6 +39,31 @@ nonisolated struct CharacterVocalBlendShapeResponse: Sendable, Equatable {
     }
 }
 
+/// Adds a model-space safety margin around animated character geometry.
+///
+/// `BoundingBoxCalculator` still supplies the current post-skinning bounds. The
+/// margin keeps a rapidly changing bound from becoming an exact culling/depth
+/// reprojection edge for a frame on visionOS. Using a fraction of the imported
+/// mesh extent is important because these character meshes are authored in
+/// centimeter-scale local coordinates and scaled by their entity hierarchy.
+nonisolated enum CharacterVocalRenderBoundsPolicy {
+    static let meshExtentFraction: Float = 0.20
+    static let restorationEpsilon: Float = 0.000_1
+
+    static func resolvedMargin(
+        preserving existingMargin: Float,
+        meshBounds: BoundingBox
+    ) -> Float {
+        let existing = existingMargin.isFinite ? max(0, existingMargin) : 0
+        let extents = meshBounds.extents
+        let maximumExtent = max(extents.x, max(extents.y, extents.z))
+        guard maximumExtent.isFinite, maximumExtent > 0 else {
+            return existing
+        }
+        return max(existing, maximumExtent * meshExtentFraction)
+    }
+}
+
 /// Immutable GPU resources retained by one installed character deformation binding.
 /// Keeping them outside the Codable deformer value avoids copying a multi-MB
 /// delta buffer every time the scalar mouth weight changes.
@@ -352,6 +377,8 @@ final class CharacterVocalBlendShapeBinding {
     private let originalDeformerComponent: MeshDeformerComponent?
     private var appliedWeight: Float
     private var installedDeformations: [MeshDeformationStack]?
+    private var originalBoundsMargin: Float?
+    private var installedBoundsMargin: Float?
     private var isInvalidated = false
 
     init(
@@ -383,6 +410,8 @@ final class CharacterVocalBlendShapeBinding {
         self.originalDeformerComponent = entity.components[MeshDeformerComponent.self]
         self.appliedWeight = 0
         self.installedDeformations = nil
+        self.originalBoundsMargin = nil
+        self.installedBoundsMargin = nil
     }
 
     func setWeight(_ requested: Float) throws {
@@ -434,6 +463,9 @@ final class CharacterVocalBlendShapeBinding {
             targets: [.all]
         )
         let component = try MeshDeformerComponent(from: [stack])
+        if isFirstInstallation {
+            try installConservativeRenderBounds(on: entity)
+        }
         entity.components.set(component)
         installedDeformations = component.deformations
         appliedWeight = value
@@ -442,7 +474,8 @@ final class CharacterVocalBlendShapeBinding {
                 "[CharacterVocalBlendShape] binding installed " +
                 "entityPath=\(entityPath) initialWeight=\(value) " +
                 "vertexCount=\(vertexCount) " +
-                "deformer=gpuOnDemandBeforeSkinning bounds=postSkinning"
+                "deformer=gpuOnDemandBeforeSkinning bounds=postSkinning " +
+                "boundsMargin=\(installedBoundsMargin ?? 0)"
             )
         }
     }
@@ -474,7 +507,45 @@ final class CharacterVocalBlendShapeBinding {
                 entity.components.remove(MeshDeformerComponent.self)
             }
         }
+        restoreOriginalRenderBoundsIfOwned()
         CharacterVocalGPUDeformerRegistry.shared.retire(deformerStateID)
+    }
+
+    private func installConservativeRenderBounds(
+        on entity: ModelEntity
+    ) throws {
+        guard originalBoundsMargin == nil,
+              installedBoundsMargin == nil,
+              var model = entity.model else {
+            if originalBoundsMargin != nil, installedBoundsMargin != nil {
+                return
+            }
+            throw CharacterVocalBlendShapeError.staleBinding
+        }
+        let original = model.boundsMargin
+        let installed = CharacterVocalRenderBoundsPolicy.resolvedMargin(
+            preserving: original,
+            meshBounds: model.mesh.bounds
+        )
+        model.boundsMargin = installed
+        entity.components.set(model)
+        originalBoundsMargin = original
+        installedBoundsMargin = installed
+    }
+
+    private func restoreOriginalRenderBoundsIfOwned() {
+        guard let entity,
+              let originalBoundsMargin,
+              let installedBoundsMargin,
+              var model = entity.model,
+              abs(model.boundsMargin - installedBoundsMargin) <=
+                CharacterVocalRenderBoundsPolicy.restorationEpsilon else {
+            return
+        }
+        // Restore only the field this binding owns. Materials and mesh identity
+        // may legitimately have changed elsewhere and must remain untouched.
+        model.boundsMargin = originalBoundsMargin
+        entity.components.set(model)
     }
 
     private static func hasTargetContract(

@@ -989,6 +989,30 @@ final class DadVocalBlendShapeContractTests: XCTestCase {
         XCTAssertTrue(metal.contains("position + delta"))
     }
 
+    func testRenderBoundsPolicyAddsConservativeModelSpaceMargin() {
+        let bounds = BoundingBox(
+            min: SIMD3<Float>(-50, -100, -25),
+            max: SIMD3<Float>(50, 100, 25)
+        )
+
+        XCTAssertEqual(
+            CharacterVocalRenderBoundsPolicy.resolvedMargin(
+                preserving: 0,
+                meshBounds: bounds
+            ),
+            40,
+            accuracy: 0.000_001
+        )
+        XCTAssertEqual(
+            CharacterVocalRenderBoundsPolicy.resolvedMargin(
+                preserving: 30,
+                meshBounds: bounds
+            ),
+            30,
+            accuracy: 0.000_001
+        )
+    }
+
     func testResponseUsesDirectionalAndCrossingHalfLives() throws {
         let response = CharacterVocalBlendShapeResponse(
             try productionDescriptor().response
