@@ -35,7 +35,9 @@ struct TuringQwenNativeWeightResolver: @unchecked Sendable {
                     scales: scales,
                     biases: biases,
                     groupSize: groupSize,
-                    bits: bits
+                    bits: bits,
+                    conversionCache: store.conversionCache.flatMap { $0.contains(key) ? $0 : nil },
+                    sourceWeightKey: key
                 )
             )
         }
@@ -70,6 +72,12 @@ enum TuringQwenNativeLinearWeight: @unchecked Sendable {
         case .dense(let weight):
             return matmul(input, weight.T)
         case .quantized(let weight):
+            let companions = weight.conversionCache?.pair(
+                for: weight.sourceWeightKey,
+                inputDType: input.dtype,
+                groupSize: weight.groupSize,
+                bits: weight.bits
+            )
             return TuringQwenNativeQuantizedLinear(
                 tensorPrefix: "resolved",
                 backend: .mlx4bit,
@@ -79,8 +87,8 @@ enum TuringQwenNativeLinearWeight: @unchecked Sendable {
             .apply(
                 input,
                 weight: weight.weight,
-                scales: weight.scales,
-                biases: weight.biases
+                scales: companions?.scales ?? weight.scales,
+                biases: companions?.biases ?? weight.biases
             )
         }
     }
@@ -92,4 +100,6 @@ struct TuringQwenNativeQuantizedLinearWeight: @unchecked Sendable {
     let biases: MLXArray?
     let groupSize: Int
     let bits: Int
+    let conversionCache: TuringQwenNativeConversionCache?
+    let sourceWeightKey: String
 }

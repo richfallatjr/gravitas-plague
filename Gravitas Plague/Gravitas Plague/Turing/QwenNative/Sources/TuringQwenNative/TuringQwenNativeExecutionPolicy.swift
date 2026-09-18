@@ -34,7 +34,8 @@ public struct TuringQwenNativeExecutionPolicy: Codable, Hashable, Sendable {
     @TaskLocal public static var current = production
 
     public func validateImplemented() throws {
-        guard policyVersion == 1, arithmetic == .legacy, prefill == .legacyDense,
+        guard policyVersion == 1,
+              (arithmetic == .legacy || arithmetic == .legacyWithConversionCache), prefill == .legacyDense,
               predictor == .legacy, workspace == .legacy,
               (decoderIO == .legacy || decoderIO == .positionalReaderCandidate),
               kernelSet == "existing", decoderState == "legacy" else {

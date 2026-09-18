@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "big_mike-c1-overlap-scout-4x8",
+  "origin": "Bounded C1 correctness scout with four segments to exercise queue refill during serial decode. Diagnostic row cap, not sustained performance or voice-quality acceptance.",
+  "characterID": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "language": "English",
+  "segments": [
+    "The radio is working.",
+    "I can hear you now.",
+    "The signal is clear.",
+    "Keep the receiver nearby."
+  ],
+  "samplingSeed": 172026,
+  "maximumRowsPerSegment": 8,
+  "wallCapSeconds": 120,
+  "footprintCapMiB": 6000
+}

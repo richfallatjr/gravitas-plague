@@ -55,11 +55,81 @@ public struct TuringQwenBoundedBenchmarkReport: Codable, Sendable {
     public let observedOwnershipAfterLoad: TuringQwenNativeResidencyOwnershipReport?
     public let commandBuffers: TuringQwenNativeCommandBufferRunMetrics
     public let decoderIOCounters: TuringQwenNativeSafetensorsIOCounters?
+    public let phaseDiagnostics: TuringQwenNativePhaseDiagnostics.Report?
+    public let segmentTimings: [TuringQwenPerformanceSegmentTiming]?
+    public let conversionCachesAfterLoad: [TuringQwenNativeConversionCacheSnapshot]?
+    public let conversionCachesAfterRender: [TuringQwenNativeConversionCacheSnapshot]?
     public let sampledPeakFootprintMiB: Double
     public let residualFootprintMiB: Double
     public let residualMLXActiveBytes: Int
     public let residualMLXCacheBytes: Int
     public let unavailable: [String: String]
+}
+
+/// Existing completed-segment timers, not an additive CPU/GPU cost breakdown.
+/// Generation on the two lanes may overlap decode, and lazy predictor work can
+/// execute at a later talker materialization. Keep those limitations in the data.
+public struct TuringQwenPerformanceSegmentTiming: Codable, Sendable {
+    public let segmentIndex: Int
+    public let instanceID: String
+    public let generationElapsedSeconds: Double
+    public let decodeElapsedSeconds: Double
+    public let initialPromptAndWeightsScopeSeconds: Double
+    public let initialTalkerScopeSeconds: Double
+    public let talkerStepScopeSeconds: Double
+    public let predictorEnqueueScopeSeconds: Double
+    public let semantics: String
+    public let generatedRowCount: Int?
+    public let conditioningReferenceRowCount: Int?
+    public let decodeReferenceRowCount: Int?
+    public let reachedEOS: Bool?
+
+    init(_ decoded: TuringQwenDecodedSegment) {
+        segmentIndex = decoded.segmentIndex
+        instanceID = decoded.instanceID.rawValue
+        generationElapsedSeconds = decoded.renderMetrics.elapsedSeconds
+        decodeElapsedSeconds = decoded.decodeSeconds
+        initialPromptAndWeightsScopeSeconds = decoded.renderMetrics.initialPromptSeconds
+        initialTalkerScopeSeconds = decoded.renderMetrics.initialTalkerForwardSeconds
+        talkerStepScopeSeconds = decoded.renderMetrics.talkerOneStepTotalSeconds
+        predictorEnqueueScopeSeconds = decoded.renderMetrics.codePredictorTotalSeconds
+        generatedRowCount = decoded.generatedRowCount
+        conditioningReferenceRowCount = decoded.conditioningReferenceRowCount
+        decodeReferenceRowCount = decoded.decodeReferenceRowCount
+        reachedEOS = decoded.reachedEOS
+        semantics = "Existing Date-based elapsed scopes; lanes/decoder overlap, nested/lazy work is not additive, not CPU time or completed GPU ownership"
+    }
+}
+
+enum TuringQwenConversionCacheQualification {
+    static func validLoad(_ caches: [TuringQwenNativeConversionCacheSnapshot]) -> Bool {
+        caches.count == 2 && Set(caches.map(\.weightStoreID)).count == 2
+            && caches.allSatisfy {
+                $0.status == "materialized" && $0.reason == nil
+                    && $0.materializedTensorCount == 102
+                    && $0.retainedBytes > 0 && $0.retainedBytes <= $0.byteBudget
+                    && $0.byteBudget <= TuringQwenNativeConversionCache.maximumBytes
+            }
+    }
+
+    static func validRender(load: [TuringQwenNativeConversionCacheSnapshot],
+                            end: [TuringQwenNativeConversionCacheSnapshot]) -> Bool {
+        guard validLoad(load), validLoad(end),
+              Set(load.map(\.weightStoreID)) == Set(end.map(\.weightStoreID)) else { return false }
+        return end.allSatisfy { after in
+            guard let before = load.first(where: { $0.weightStoreID == after.weightStoreID }) else { return false }
+            return before.modelRevision == after.modelRevision
+                && before.recoveryGeneration == after.recoveryGeneration
+                && before.executionContext == after.executionContext
+                && before.hotsetID == after.hotsetID && before.inventory == after.inventory
+                && before.retainedBytes == after.retainedBytes && before.byteBudget == after.byteBudget
+                // Warm-load hits are not evidence that timed synthesis used C1.
+                && after.cacheHits > before.cacheHits
+                && after.eligibilityChecks >= before.eligibilityChecks
+                && after.dtypeMisses >= before.dtypeMisses
+                && after.contextMisses == 0 && after.staleGenerationMisses == 0 && after.unavailableMisses == 0
+        }
+    }
 }
 
 public enum TuringQwenBoundedBenchmark {
@@ -104,6 +174,9 @@ public enum TuringQwenBoundedBenchmark {
     public static func run(options: Options) async throws -> TuringQwenBoundedBenchmarkReport {
         try options.workload.validate(decoderOnly: options.mode == .decoderFixedCodes)
         try options.policy.validateImplemented()
+        guard options.mode != .decoderFixedCodes || options.policy.arithmetic == .legacy else {
+            throw TuringQwenNativeError.invalidConfig("A predictor conversion-cache candidate requires the Fresh2 workload, not decoder-only replay")
+        }
         try configureCommandBuffers(options.commandBufferProfile)
         let configURL = options.bundleRoot.appendingPathComponent("Turing/Config/character-runtimes.json")
         let catalog = try JSONDecoder().decode(RuntimeCatalog.self, from: Data(contentsOf: configURL))
@@ -112,6 +185,7 @@ public enum TuringQwenBoundedBenchmark {
         }), options.workload.maximumRowsPerSegment <= runtime.qwen.maxNewRows else {
             throw TuringQwenNativeError.invalidConfig("Workload does not match an actual production voice/row policy")
         }
+        try options.workload.validateProductionMaximumRows(runtime.qwen.maxNewRows)
         try runtime.qwen.decoding.validate()
         guard TuringQwenNativeReferenceWindowStrategy(rawValue: runtime.qwen.referenceWindowStrategy) != nil,
               runtime.qwen.useExactReferenceRowCount else {
@@ -145,10 +219,14 @@ public enum TuringQwenBoundedBenchmark {
             .map { try JSONDecoder().decode([String: TuringQwenJSONValue].self, from: Data(contentsOf: $0)) }
         let budget = try TuringQwenPerformanceBudget(wallSeconds: options.workload.wallCapSeconds,
                                                    maximumFootprintMiB: options.workload.footprintCapMiB)
+        let phaseRecording = TuringQwenNativePhaseDiagnostics.isEnabled
+            ? TuringQwenNativePhaseDiagnostics.RecordingSession() : nil
         return try await TuringQwenNativeExecutionPolicy.$current.withValue(options.policy) {
             try await TuringQwenPerformanceBudget.$current.withValue(budget) {
+              try await TuringQwenNativePhaseDiagnostics.$recordingSession.withValue(phaseRecording) {
                 try await execute(options: options, runtime: runtime, profile: profile,
                                   identity: identity, installedPayload: installedPayload, manifest: manifest)
+              }
             }
         }
     }
@@ -170,6 +248,8 @@ public enum TuringQwenBoundedBenchmark {
         var loadSeconds = 0.0
         var failure: String?
         var decoderIOCounters: TuringQwenNativeSafetensorsIOCounters?
+        var conversionCachesAfterLoad: [TuringQwenNativeConversionCacheSnapshot]?
+        var conversionCachesAfterRender: [TuringQwenNativeConversionCacheSnapshot]?
         let sampler = Task {
             while !Task.isCancelled {
                 await collector.sampleMemory()
@@ -196,6 +276,13 @@ public enum TuringQwenBoundedBenchmark {
                 try await owner.warmLoadExactlyRequestedInstances(modelRoot: options.modelRoot,
                     cloneProfile: profile, variantID: profile.defaultVariantID, performanceMode: .performance)
                 observedOwnership = try await owner.residencyOwnershipReport()
+                if options.policy.arithmetic == .legacyWithConversionCache {
+                    conversionCachesAfterLoad = await owner.conversionCacheSnapshots()
+                    guard let caches = conversionCachesAfterLoad,
+                          TuringQwenConversionCacheQualification.validLoad(caches) else {
+                        throw TuringQwenNativeError.invalidConfig("C1 qualification requires two independently owned, fully materialized predictor caches within budget; see conversionCachesAfterLoad")
+                    }
+                }
                 try TuringQwenPerformanceBudget.check()
                 loadSeconds = seconds(start.duration(to: .now))
                 renderStart = .now
@@ -216,18 +303,39 @@ public enum TuringQwenBoundedBenchmark {
                     skipSegmentFailures: false, onSegmentStarted: { _,_ in },
                     onSegmentDecoded: { decoded in
                         try await collector.record(index: decoded.segmentIndex,
-                            seconds: seconds(fixedStart.duration(to: .now)), audio: decoded.audio)
+                            seconds: seconds(fixedStart.duration(to: .now)), audio: decoded.audio,
+                            timing: .init(decoded))
+                        try options.workload.validateCompletion(
+                            reachedEOS: decoded.reachedEOS, generatedRows: decoded.generatedRowCount)
                     })
             }
             try TuringQwenPerformanceBudget.check()
         } catch { failure = String(describing: error) }
         let renderEnd = ContinuousClock.now
+        if let pool, options.policy.arithmetic == .legacyWithConversionCache {
+            conversionCachesAfterRender = await pool.conversionCacheSnapshots()
+            if failure == nil, !TuringQwenConversionCacheQualification.validRender(
+                load: conversionCachesAfterLoad ?? [], end: conversionCachesAfterRender ?? []) {
+                failure = "C1 candidate did not execute both caches without stale/context/unavailable fallback; see conversionCachesAfterRender"
+            }
+        }
         // Native owner teardown is authoritative; never clear shared state behind it.
         if let pool { await pool.unloadAll(reason: "boundedQualificationFinished") }
         await collector.sampleMemory()
         sampler.cancel()
         await sampler.value
         let snapshot = await collector.snapshot()
+        if failure == nil {
+            do {
+                // The production scheduler may skip EOS-before-audio. That is
+                // not a completed benchmark segment, even if the run returns.
+                try options.workload.validateCompletedSegments(
+                    pcmIndices: snapshot.records.map(\.segmentIndex),
+                    completions: snapshot.timings.map {
+                        ($0.segmentIndex, $0.reachedEOS, $0.generatedRowCount)
+                    })
+            } catch { failure = String(describing: error) }
+        }
         let count = options.mode == .decoderFixedCodes ? 1 : options.workload.segments.count
         let ordered = try TuringQwenPerformanceReadiness.ordered(snapshot.records, count: count)
         let renderWall = seconds(renderStart.duration(to: renderEnd))
@@ -260,6 +368,7 @@ public enum TuringQwenBoundedBenchmark {
             observation: ["runID": .string(id), "clockBasis": .string("ContinuousClock"),
                 "osBuild": .string(ProcessInfo.processInfo.operatingSystemVersionString),
                 "deviceModel": .string(deviceModel()), "profilerState": .string(options.profilerState),
+                "phaseDiagnosticsEnabled": .bool(TuringQwenNativePhaseDiagnostics.isEnabled),
                 "sceneCondition": .string(options.sceneCondition), "coldWarmDefinition": .string("fresh engine; filesystem/driver warmth uncontrolled"),
                 "initialThermalState": .number(Double(thermalAtStart)),
                 "finalThermalState": .number(Double(ProcessInfo.processInfo.thermalState.rawValue)),
@@ -271,29 +380,38 @@ public enum TuringQwenBoundedBenchmark {
             pcm: snapshot.records, orderedPCMReady: ordered, firstNeededPCMSeconds: ordered.first ?? nil,
             scheduler: schedulerReport, observedOwnershipAfterLoad: observedOwnership,
             commandBuffers: commandBuffers, decoderIOCounters: decoderIOCounters,
+            phaseDiagnostics: TuringQwenNativePhaseDiagnostics.recordingSession?.snapshot(),
+            segmentTimings: snapshot.timings,
+            conversionCachesAfterLoad: conversionCachesAfterLoad,
+            conversionCachesAfterRender: conversionCachesAfterRender,
             sampledPeakFootprintMiB: snapshot.peakFootprint, residualFootprintMiB: TuringQwenNativeProcessMemoryProbe.snapshot().physFootprintMB,
             residualMLXActiveBytes: memory.activeMemory, residualMLXCacheBytes: memory.cacheMemory,
             unavailable: ["promotion": "A bounded scout is not five-voice/device qualification; external provenance and quality gates required",
                 "fixedWork": "Prompt replay has a fixed maximum row budget, not forced identical output tokens; compare row/sample work before claiming arithmetic speedup",
                 "sceneFrameTiming": "No scene timing source attached to this runner", "audibleStart": "PCM-only observer; no player is replaced",
                 "GPUAttribution": "Command-buffer interval sums are not kernel ownership or GPU utilization", "energy": "Not measured",
-                "quality": "Short row-capped scout is not a voice/content acceptance test"])
+                "quality": "Performance replay is not a voice/content listening acceptance test"])
     }
 
     private actor Collector {
         var records: [TuringQwenPerformancePCMRecord] = []
+        var timings: [TuringQwenPerformanceSegmentTiming] = []
         var peakFootprint: Double = 0
         func sampleMemory() { peakFootprint = max(peakFootprint, TuringQwenNativeProcessMemoryProbe.snapshot().physFootprintMB) }
-        func record(index: Int, seconds: Double, audio: TuringQwenNativeAudio) throws {
+        func record(index: Int, seconds: Double, audio: TuringQwenNativeAudio,
+                    timing: TuringQwenPerformanceSegmentTiming? = nil) throws {
             guard !audio.samples.isEmpty, audio.samples.allSatisfy(\.isFinite), audio.sampleRate > 0 else {
                 throw TuringQwenNativeError.invalidConfig("Invalid/nonfinite qualification PCM")
             }
             let digest = audio.samples.withUnsafeBytes { SHA256.hash(data: Data($0)).map { String(format: "%02x", $0) }.joined() }
             records.append(.init(segmentIndex: index, readySeconds: seconds, sampleCount: audio.samples.count,
                                  sampleRate: audio.sampleRate, pcmSHA256: digest))
+            if let timing { timings.append(timing) }
             sampleMemory()
         }
-        func snapshot() -> (records: [TuringQwenPerformancePCMRecord], peakFootprint: Double) { (records, peakFootprint) }
+        func snapshot() -> (records: [TuringQwenPerformancePCMRecord], timings: [TuringQwenPerformanceSegmentTiming], peakFootprint: Double) {
+            (records, timings.sorted { $0.segmentIndex < $1.segmentIndex }, peakFootprint)
+        }
     }
 
     private static func hashFile(_ url: URL) throws -> String {

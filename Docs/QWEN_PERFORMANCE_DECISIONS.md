@@ -222,8 +222,176 @@ voice changes, unload, cancellation and recovery-generation invalidation.
 
 ## Next decision
 
-Obtain source/binary-matched hardening control/candidate data and the new phase
-profile before choosing C1 versus D/E. The September 17 CPU trace motivates B;
-it does not quantify the residual bottleneck after B. No C/D/E production
-candidate is enabled and no additional arithmetic patch is implied by this
-document.
+The source/binary-matched Debug hardening scouts are recorded in
+`QWEN_PERFORMANCE_RESULTS.md`. The subsequent owner gameplay log shows improved
+behavior but does not supply matched Release A/B provenance. A new optimized
+device phase profile remains necessary to rank residual work; the September 17
+CPU trace does not quantify the bottleneck after hardening.
+
+C1 is now implemented as the handoff's first **opt-in host experiment**, not
+selected as a proven dominant hotspot or promoted to production. Its fixed
+predictor-only cache materializes BF16 companions on CPU once, retaining exact
+FP32 widenings without changing the original BF16 arrays or packed weights.
+Each store owns its cache, stream, model-file revision and recovery generation;
+failure-epoch/context/layout/dtype checks prevent inappropriate reuse. Invalid
+caches preserve original arithmetic, but candidate qualification rejects
+unavailable/stale/context fallback and requires new render hits in both stores.
+The normal gameplay policy is still `.legacy` with independent Fresh2 intact.
+
+The first six Release host control/candidate pairs produced identical PCM and
+approximately 4% lower median short-scout render time. Exact retained cache
+payload is 26.75 MiB across both stores; sampled host peak footprint increased
+about 40 MiB at the median. Immediate post-unload process footprint is variable
+even with zero MLX active/cache bytes. This is insufficient evidence to enable
+the candidate on a memory-constrained headset. Reports lack an embedded build
+manifest and the row-capped workload is not a sustained voice-quality test.
+
+Next gate: matched optimized Vision Pro baseline/profile and C1 A/B/BA runs,
+with actual conversion-kernel counts, first-needed PCM, cold/warm cost, peak
+and repeated-run residual memory, then five-voice quality/recovery/full-scene
+qualification. Keep all attempts and do not combine the initial cold outlier
+with steady-state claims. Use that profile to choose D/E or another remaining
+candidate; do not silently mix C2 numerical changes or decoder changes into C1.
+
+### September 18 device decision
+
+Five strict-provenance Vision Pro Big Mike pairs are now recorded in the results
+document. The paired render ratio median is 0.988592, with a 95% bootstrap
+interval [0.962132, 1.093156]: no reliable speed win and below the proposed 3%
+screen. PCM is identical, Fresh2 is intact, caches are used, and no GPU failure
+occurred. C1 remains opt-in and **not promoted**; the working production path
+was restored. This result must not be described as another 4% headset gain.
+
+The separate CPU profile completed app synthesis but `xctrace` again failed
+saving its trace, alongside transient host disk exhaustion. A valid new
+post-hardening hotspot profile is still missing. Resolve that tooling/storage
+issue before asking for another extended headset session. Do not infer the
+largest remaining bottleneck from command-buffer totals or tiny-workload RTF.
+
+### September 18 owner priority: largest end-to-end opportunities first
+
+The owner explicitly supersedes the convenience/order-based candidate queue:
+prioritize expected end-to-end impact, supported by measurements, rather than
+the easiest implementation. Do not extend C1 after its inconclusive device
+result merely because more companion tensors can be cached.
+
+The referenced roughly "54% slowdown" must not become a promised remaining
+speedup. The preserved original evidence is **52.02% of Qwen/MLX CPU self
+samples** in DEBUG libc++ tree verification (12.893 / 24.786 sampled CPU seconds),
+not 54% of synthesis wall time. The current measured Release control fingerprints
+FAST hardening, optimized=true, internalAssertionsEnabled=false. That build
+configuration already avoids the identified DEBUG-only check. The former
+hardening-only Debug scout's 28.35% median improvement remains a different result.
+
+The strongest current *investigation lead* is the decoder's repeated work:
+five Release control scouts leave roughly 1.18–1.34 seconds between the longer
+generation lane's elapsed time and total request wall (2.84–3.17 seconds).
+This is a serialized-tail signal on tiny workloads, not isolated decoder time
+or an attribution of representative full-scene latency. Decoder tensor reads,
+materializations and repeated reference-prefix processing need to be separated
+before selecting a fix. Whole-tensor reads preserve source dtype; only selected
+quantizer rows are CPU-expanded to Float. Do not claim all decoder tensors are
+repeatedly widened to FP32.
+
+Provisional investigation order, not an asserted speedup ranking:
+
+1. Decoder repeated work: complete decoder/first-needed-PCM timing, stage and I/O
+   sampling, then a measured bounded residency or kernel/state candidate. Up to
+   24 reference rows are decoded and discarded per segment. Removing that work
+   requires proof of causal state/continuity, not shortening conditioning.
+2. BF16 activation containment: broad repeated activation/traffic cost, separate
+   numerical candidate; confirm dtype boundaries and calibrate quality gates.
+3. Persistent lane-owned predictor plans: only if graph construction/dispatch
+   remains substantial. Preserve the fifteen dependent residual heads.
+4. Fused prefill: move higher if measured prefill dominates first-needed PCM.
+
+The next measurement uses a four-segment, maximum-32-row fixture with unchanged
+production reference conditioning, Fresh2, one decoder and command-buffer
+limits. New opt-in JSON phase recording exports the existing elapsed scopes and
+shape/dtype metadata even if Instruments fails to save. It does not add tensor
+evaluation, GPU waits, alter scheduling, or run in normal gameplay. Inner scopes
+are capped samples (32 per phase per context), with explicit drops; do not treat
+their sum as complete phase time. Complete outer decoder scopes and existing
+per-segment completed timers are retained. Nested/concurrent/lazy scopes are
+not additive CPU/GPU costs. Instrumented versus uninstrumented measurements
+are now explicitly rejected by the comparison tool.
+
+#### Updated priority after the longer host measurement
+
+The first `big_mike-phase-attribution-4x32` run changed the provisional ordering:
+**C2 BF16 generation containment is the next larger candidate to qualify**,
+then bounded decoder compute/prefix-state work, then fused prefill, then
+persistent predictor plans. This is host-supported prioritization, not a
+measured headset speedup or authority to promote reduced-precision arithmetic.
+
+The full decoder elapsed union was 4.568005 s, but 3.109863 s overlapped recorded
+render scopes. Decoder intervals without generation at the endpoints were
+0.592682/0.520099 s; the middle intervals overlapping subsequent generation were
+1.696713/1.758512 s with identical 56-row shapes. Shared-queue waits and lazy
+work prevent attributing that entire duration to decoder arithmetic. Do not
+disable Fresh2 or serialize the pipeline to remove the overlap.
+
+More directly, recorded step Q/K projections begin in BF16 and become FP32
+after RoPE; attention output and subsequent projections remain FP32. Prompt,
+prefill, predictor inputs and sampled K/V caches are also FP32. That mechanism
+affects repeated generation math/storage, giving C2 broader scope than C1's
+small conversion cache. The recorded generation-row interval union is 4.304948 s,
+prefill union 1.299386 s. Residual graph enqueue totals only 0.264160 s across
+128 rows (overlapping/inclusive), weakening the case for another small CPU
+graph-construction project first.
+
+C2 still needs the supplied handoff's explicit dtype ownership, high-precision
+RoPE construction and appropriate reduction accumulation, calibrated numerical
+gates, token-divergence evidence and five-voice listening/quality checks. Decoder
+precision stays separate; do not blanket-cast weights or logits. Confirm actual
+M2 kernels and end-to-end improvement before enabling it. Production arithmetic
+remains `.legacy`; C1 remains off. A focused optimized-device phase pass should
+confirm the target before committing a broad arithmetic rewrite.
+
+### September 18 owner requirement: benchmark complete production segments
+
+The owner rejected one-word output and small generated-row scouts as a basis
+for performance decisions. Supersede the proposed four-by-32-row device pass
+with `big_mike-production-response-full.json`: all five exact accepted segments
+from completed gameplay response ED9F0AF5-7303-42F2-AE7E-B4922FE26E84. That
+response previously produced 24.24 seconds of raw speech. Historical timings
+are context only, not a matched performance control.
+
+`requireCompleteSegments: true` requires the unchanged selected production
+voice's row ceiling (currently 160), positive generated rows and observed
+natural EOS for every segment. Missing completion evidence or a row-cap stop
+fails qualification. Reports export generated, conditioning-reference and
+decoder-reference row counts separately. Complete reports cannot qualify via
+decoder-only replay. The comparator checks completion evidence independently.
+
+Retain full production clone conditioning, independentFresh2, two generation
+lanes/two stores, one decoder, currentOverlap, sampling and quality settings.
+The fixture fixes a new seed plus segment index; it does not claim to replay
+the original run's seeds. Wall and memory watchdogs still stop unsafe runs;
+such stops are failures, not shortened successful speech. Legacy microfixtures
+remain for narrow diagnostics, never as evidence of full-segment speedup.
+
+#### Actual-device full-response baseline and next decision boundary
+
+Two full Big Mike responses completed on Vision Pro in 19.076/18.981 seconds
+for 24.24 seconds of raw speech, with identical PCM, natural EOS, nominal
+thermal state, intact Fresh2 and zero GPU failures. This is an isolated native
+engine baseline, not a new optimization. First-needed PCM still takes about
+6.8–6.9 seconds from render start. The immersive game, upstream generation,
+playback and production publication work are absent; pre-timing provenance
+hashing also reads model files. No matched-code full-scene comparison exists.
+
+The M2 metadata confirms BF16-to-FP32 promotion in repeated generation, so C2
+remains the next low-level numerical candidate to investigate under explicit
+quality gates. It is not yet proven to be the largest end-to-end bottleneck or
+a speedup: do not infer kernel speed from dtype alone. Preserve production
+arithmetic until matched full-length candidate/control tests demonstrate an
+acceptable gain, token/voice quality, memory and recovery behavior. Confirm
+the actual selected M2 kernel path, not only tensor labels.
+
+The historical gameplay-versus-isolated gap cannot be assigned to a scene or
+feature. A matched same-build full-scene measurement, with Fresh2 and visuals
+left on, is required before claiming the isolated throughput as gameplay
+performance or attributing the gap. Do not use this finding to disable
+concurrency, Mind's Eye or PR buffering. Do not select another small cache
+change based solely on convenience.

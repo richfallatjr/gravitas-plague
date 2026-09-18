@@ -44,6 +44,18 @@ public actor TuringQwenNativeFreshInstance {
         self.recoveryGeneration = recoveryGeneration
     }
 
+    /// Bounded qualification observation only; does not retain MLX tensors.
+    func conversionCacheSnapshot() -> TuringQwenNativeConversionCacheSnapshot? {
+        switch binding {
+        case .independent(let resources):
+            return resources.weightsStore.conversionCacheSnapshot
+        case .shared(let lease):
+            return lease.snapshot.modelResources.weightsStore.conversionCacheSnapshot
+        case nil:
+            return nil
+        }
+    }
+
     @available(
         *,
         deprecated,

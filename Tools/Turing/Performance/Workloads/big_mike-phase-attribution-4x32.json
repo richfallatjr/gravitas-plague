@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "big_mike-phase-attribution-4x32",
+  "origin": "Bounded phase-attribution scout with four segments and up to 2.56 seconds generated audio each. Uses the unchanged production reference prefix, Fresh2 and decoder. Row capped; not complete-dialogue quality or device promotion evidence.",
+  "characterID": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "language": "English",
+  "segments": [
+    "The radio is working. Stay close to the receiver and listen carefully.",
+    "I can hear you now. Keep the door closed until the signal is clear.",
+    "There is still time to get the supplies ready before we leave.",
+    "Keep the receiver nearby. I will call again when the road is safe."
+  ],
+  "samplingSeed": 172026,
+  "maximumRowsPerSegment": 32,
+  "wallCapSeconds": 120,
+  "footprintCapMiB": 6000
+}

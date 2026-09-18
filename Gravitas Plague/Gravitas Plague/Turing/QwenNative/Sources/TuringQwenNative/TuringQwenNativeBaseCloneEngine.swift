@@ -445,7 +445,9 @@ public actor TuringQwenNativeBaseCloneEngine {
             segmentIndex: request.segmentIndex
         )
         return try TuringQwenNativePhaseDiagnostics.$current.withValue(phaseContext) {
-        try autoreleasepool {
+        let generationSpan = TuringQwenNativePhaseDiagnostics.begin("GenerationSegmentCPU")
+        defer { TuringQwenNativePhaseDiagnostics.end(generationSpan) }
+        return try autoreleasepool {
         let prompt = makePrompt(from: request)
         TuringQwenNativeMemoryControl.configureForBaseClone(
             performanceMode: prompt.performanceMode

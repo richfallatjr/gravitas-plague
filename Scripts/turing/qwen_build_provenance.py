@@ -42,9 +42,12 @@ def workload_identity(path):
     value = json.loads(Path(path).read_text())
     required = {"schemaVersion", "id", "origin", "characterID", "voiceID", "language",
                 "segments", "samplingSeed", "maximumRowsPerSegment", "wallCapSeconds", "footprintCapMiB"}
-    optional = {"decoderCodes", "decoderReferenceRows"}
+    optional = {"decoderCodes", "decoderReferenceRows", "requireCompleteSegments"}
     if not isinstance(value, dict) or not required.issubset(value) or set(value) - required - optional:
         raise ValueError("Workload identity requires the exact bounded Swift Codable schema")
+    complete = value.get("requireCompleteSegments")
+    if complete is not None and type(complete) is not bool:
+        raise ValueError("requireCompleteSegments must be a boolean or null")
     value = {key: item for key, item in value.items() if key not in optional or item is not None}
     for key in ["wallCapSeconds", "footprintCapMiB"]:
         number = value[key]

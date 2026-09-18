@@ -14,6 +14,7 @@ nonisolated enum TuringQwenPerformanceQualificationLaunch {
         let workload: TuringQwenPerformanceWorkload
         let mode: String
         let policy: TuringQwenNativeExecutionPolicy?
+        let commandBufferProfile: TuringQwenNativeCommandBufferProfile?
         let profilerState: String
         let phaseMarkers: Bool
         let outputFilename: String
@@ -38,7 +39,7 @@ nonisolated enum TuringQwenPerformanceQualificationLaunch {
         let report = try await TuringQwenNativePhaseDiagnostics.$enabled.withValue(request.phaseMarkers) {
             try await TuringQwenBoundedBenchmark.run(options: .init(
                 modelRoot: model, bundleRoot: resources, workload: request.workload, mode: mode,
-                commandBufferProfile: .operations40Megabytes32, profilerState: request.profilerState,
+                commandBufferProfile: request.commandBufferProfile ?? .operations40Megabytes32, profilerState: request.profilerState,
                 sceneCondition: "isolated-device-qualification-no-immersive-scene", policy: request.policy ?? .production))
         }
         let encoder = JSONEncoder()

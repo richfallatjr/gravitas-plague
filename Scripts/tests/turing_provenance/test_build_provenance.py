@@ -91,6 +91,37 @@ class ProvenanceTests(unittest.TestCase):
             b.pop(key)
             self.assertEqual(p.verify_manifest(a, b)["qualification"], "unqualified", key)
 
+    def test_complete_segment_requirement_is_hash_significant_and_preserves_legacy_identity(self):
+        value = dict(schemaVersion=1, id="test", origin="captured", characterID="dad", voiceID="dad",
+                     language="en", segments=["Hello / world — test"], samplingSeed=42, maximumRowsPerSegment=8,
+                     wallCapSeconds=30, footprintCapMiB=2048)
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / "workload.json"
+            target.write_text(json.dumps(value))
+            legacy_identity = p.workload_identity(target)
+            self.assertEqual(legacy_identity, p.digest(p.canonical(value)))
+            target.write_text(json.dumps(dict(value, requireCompleteSegments=None)))
+            self.assertEqual(p.workload_identity(target), legacy_identity)
+            identities = {legacy_identity}
+            for complete in (False, True):
+                extended = dict(value, requireCompleteSegments=complete)
+                target.write_text(json.dumps(extended))
+                identity = p.workload_identity(target)
+                self.assertEqual(identity, p.digest(p.canonical(extended)))
+                self.assertNotIn(identity, identities)
+                identities.add(identity)
+
+    def test_workload_identity_rejects_invalid_complete_segment_flag_types(self):
+        value = dict(schemaVersion=1, id="test", origin="captured", characterID="dad", voiceID="dad",
+                     language="en", segments=["Hello"], samplingSeed=42, maximumRowsPerSegment=8,
+                     wallCapSeconds=30, footprintCapMiB=2048)
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / "workload.json"
+            for complete in (0, 1, 1.0, "true", "false", [], {}):
+                target.write_text(json.dumps(dict(value, requireCompleteSegments=complete)))
+                with self.subTest(complete=complete), self.assertRaises(ValueError):
+                    p.workload_identity(target)
+
     def test_missing_allocator_command_fails_even_with_app_optimization(self):
         a, b = fixture()
         a["compile"]["allocatorCommands"] = []

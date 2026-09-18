@@ -1,0 +1,10 @@
+{
+  "policyVersion": 1,
+  "arithmetic": "legacyWithConversionCache",
+  "prefill": "legacyDense",
+  "predictor": "legacy",
+  "workspace": "legacy",
+  "decoderIO": "legacy",
+  "kernelSet": "existing",
+  "decoderState": "legacy"
+}

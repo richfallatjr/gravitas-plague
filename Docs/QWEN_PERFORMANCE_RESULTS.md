@@ -289,3 +289,465 @@ source byte for byte. About 7.1 GiB remained free with the completed Release
 app retained. This is build validation only, not installed-device performance
 qualification. No new gameplay or Qwen execution-path edits were needed for
 the disk-space recovery.
+
+## Subsequent in-game observation and C1 checkpoint
+
+Owner feedback: approximately 15–33% faster, with the PR compute-ahead buffer
+working well. This is a useful subjective observation, **not** a matched A/B
+measurement or a claim of realtime/Crunch readiness. The current source was
+clean at `2db19ce4d363687617c1988c9cada21b16273631` before C1 work began.
+
+Evidence: owner log
+`/Users/richardfallat/.codex/attachments/1c9c249d-d8bb-421d-920e-a2f50066a136/pasted-text.txt`.
+
+| Complete run prefix | Segments | Render wall s | Raw audio s | RTF |
+| --- | ---: | ---: | ---: | ---: |
+| ED9F | 5 | 47.995 | 24.240 | 1.980 |
+| EC19 | 6 | 45.224 | 20.400 | 2.217 |
+| EE9F | 6 | 47.716 | 23.520 | 2.029 |
+| 8773 | 6 | 40.774 | 16.160 | 2.523 |
+
+The four summaries cover 23 segments, 181.709 seconds of wall time and 84.320
+seconds of raw generated audio (pooled RTF approximately 2.155). They report
+161,126 submitted/completed command buffers, zero buffer failures, no fallback,
+two independent stores/two rendering lanes/one decoder, and `currentOverlap`.
+The fifth run is truncated at EOF: neither completion nor failure is inferred.
+The selected profile is `deviceDefault`, resolved to 40 operations / 40 MB;
+this differs from the earlier 40 operations / 32 MB Debug experiment.
+The text log has no installed build/source fingerprint, so configuration alone
+cannot prove Release provenance or attribute the observed improvement to one
+change. No matched pre-change text/workload is present.
+
+Generation and decoding both remain substantial. Per-run sums of segment decode
+time are about 28–32 seconds, but overlap with generation and cannot be divided
+by run wall time to claim independent phase percentages. Lazy work can also be
+charged to later materialization boundaries. A fresh optimized CPU/GPU profile
+is still required to rank the residual bottleneck. A three-second local
+Time Profiler save smoke test completed successfully; it only verifies that
+host trace saving worked for that attempt, not device profiling or hotspot
+removal.
+
+C1 preparation follows the handoff's first proposed arithmetic-preserving
+candidate, not a newly measured claim that conversions are the largest cost.
+The default production policy remains legacy. The experimental fixed hotset
+contains only 102 predictor BF16 scale/bias tensors widened to FP32 once at
+owner load, capped at 16 MiB per independent store; packed weights and original
+BF16 companions remain unchanged. Full Fresh2 reports now retain each owner's
+load/end cache evidence and reject absent/unmaterialized/unused/stale fallback
+as a successful candidate scout. These counters describe selections, not
+observed GPU conversion-kernel elimination.
+
+### C1 implementation and host verification
+
+Status: **HOST_VALIDATED for the bounded C1 mechanism;
+DEVICE_QUALIFICATION_PENDING; NOT PROMOTED.** Normal gameplay still selects
+legacy arithmetic. No Fresh2, scheduling, recovery, voice, audio, PR-buffer,
+or scene behavior was changed. All artifacts below are under
+`/private/tmp/qwen-performance-20260917/`.
+
+- Focused Debug native tests: 11 conversion-cache XCTest cases plus nine Swift
+  Testing cases (four cache-qualification, five workload/readiness) passed.
+  Coverage includes exact CPU/GPU quantized matmul output, BF16 widening edge
+  bits, immutable packed/original data, dtype eligibility, budgets, missing
+  tensors/layouts, independent ownership, stale/context rejection, cancellation,
+  and lazy-output validity after owner teardown. Log:
+  `c1-native-cache-tests-debug-01.log`.
+- Python performance tests: 23 passed; build-provenance tests: 12 passed.
+  Logs: `c1-python-performance-tests.log`, `c1-python-provenance-tests.log`.
+- Optimized native benchmark product built successfully:
+  `c1-host-release-benchmark-build-01.log`.
+- Normal visionOS Release app built successfully:
+  `c1-visionos-release-build-01.log`. Strict deep codesign verification passed.
+  This was a host build, not a new installation/device test or candidate enable.
+- Earlier build attempts are retained: `c1-native-cache-tests-01.log` exposed
+  ambiguous Foundation/MLX `Stream` references in new code, corrected to
+  `MLX.Stream`. `c1-native-cache-tests-02.log` then compiled the Release native
+  library but failed in pre-existing tests that reference Debug-only stream and
+  recovery hooks. Those hooks and tests were not changed or hidden. Debug is
+  the correctness-test configuration; Release is the benchmark configuration.
+
+The Apple M4 Mac ran six serial pairs with the same Release executable UUID
+`A8499920-7DA8-398C-B3A5-946C4F9725B6`, optimized FAST allocator fingerprint,
+`deviceDefault` 40/40 profile, model/voice/payload identities, workload and seed.
+Order was AB, BA, AB, BA, AB, BA. The two-segment/four-row Big Mike workload
+produces only 0.64 seconds of raw audio. This is **not** sustained RTF or voice
+quality qualification. Reports omit the embedded `buildManifest`, so complete
+source/compile provenance qualification is also pending.
+
+| Pair | Control render s | C1 render s | Paired wall-time reduction |
+| --- | ---: | ---: | ---: |
+| 01 | 3.874952 | 1.825216 | 52.90% — initial outlier, not a speed claim |
+| 02 | 1.886035 | 1.815093 | 3.76% |
+| 03 | 1.881569 | 1.796148 | 4.54% |
+| 04 | 1.885915 | 1.838793 | 2.50% |
+| 05 | 1.837334 | 1.766096 | 3.88% |
+| 06 | 1.838190 | 1.800153 | 2.07% |
+
+All-six render medians: 1.883742 → 1.807623 seconds (4.04% lower).
+Subsequent-five medians: 1.881569 → 1.800153 seconds (4.33% lower);
+median paired reduction across those five is 3.76%. Median load-inclusive
+reduction is only 2.68% across all six, 2.64% for subsequent five. Median load
+time increased about 10 ms. Every report says filesystem/driver warmth is
+uncontrolled: the first-pair effect is retained, not treated as a controlled
+cold measurement, and subsequent runs are not proven warm runs.
+
+All 12 reports match PCM bit-for-bit **by segment index**, not completion order:
+
+- Segment 0, 7,680 samples/24 kHz:
+  `adb9cf282a5e50100ed6afa812f65d8c0843b636cf803984354c4f12c73e90ab`.
+- Segment 1, 7,680 samples/24 kHz:
+  `36fe8acf4669ed6a49b7127a29e09914d270cff9a246b6414381e78ee56a6013`.
+
+Every C1 store materialized all 102 companions (14,024,704 bytes / 13.375 MiB)
+in 3.536–3.965 ms. Each gained 1,996 render hits, 224 dtype misses and 2,220
+eligibility checks after load. Dtype misses deliberately use the original
+BF16 path; no context, stale-generation or unavailable misses occurred. Both
+independent owners retained their revision/generation/context/inventory through
+render. All buffers completed, with zero failures or pending buffers.
+
+Peak render/decode concurrency was 2/1, with two stores and no fallback.
+The recorded cross-segment overlap counter was zero: **these scouts do not
+qualify production generation/decoder overlap.** The counter observes render
+state at decoder acquisition rather than measuring GPU execution overlap.
+
+Memory is a promotion gate, not dismissed as negligible:
+
+- All-six sampled process-peak median: 3,766.83 → 3,806.92 MiB (+40.09 MiB).
+- Scheduler MLX-active peak: 3,101.56 → 3,128.28 MiB (+26.72 MiB).
+- Immediate post-unload MLX active/cache bytes: zero in all runs.
+- Process residual: control 516.97–1,527.82 MiB; C1 1,339.64–1,726.08 MiB.
+  This variability neither proves a leak nor proves complete reclamation;
+  repeated-run device physical footprint and allocator/driver attribution remain
+  required. The zero MLX count is not a substitute for those measurements.
+
+### Extended bounded correctness attempts
+
+`c1-host-{broadcaster,cateye81}-{control,candidate}-01.json` completed with
+identical per-segment PCM and no Metal failures. These are one-pair checks, not
+speed or listening-quality acceptance.
+
+`c1-host-{dad,rich}-{control,candidate}-01.json` all ended
+`FAILED_OR_BUDGET_STOPPED`: the existing four-row fixture limit was reached
+without EOS, and each voice's existing quality policy rejected the segment
+before decode. Both policies behaved the same, with zero GPU failures. No PCM
+parity or five-voice completion is claimed for those voices. Do not remove the
+EOS policy to make a microbenchmark green; use appropriately bounded complete
+utterances for their next qualification runs.
+
+The additional four-segment/eight-row queue-refill fixture is checked in as
+`Tools/Turing/Performance/Workloads/big_mike-overlap-4x8.json`.
+`c1-host-overlap-{control,candidate}-01.json` completed with all four PCM hashes
+identical, 15,360 samples per segment, 2.56 seconds total audio, zero failures,
+and 7,984 C1 hits per store. Render time was 7.257729 → 6.402813 seconds in this
+single pair; it is not a repeated/cold-matched speed estimate. Concurrency
+remained 2/1 but the overlap counter still read zero. The fixture's intended
+overlap stress is therefore **not proven**; instrument actual phase intervals
+in the next device run rather than relabeling this as an overlap pass.
+
+Next work is controlled optimized Vision Pro profiling/qualification, including
+actual conversion-kernel reduction, complete five-voice utterances, sustained
+compute/decoder overlap, cold/warm and repeated-run memory, quality, recovery,
+and full-scene frame timing. This implementation does not establish realtime,
+RTF ≤1, or Crunch readiness. The owner's working gameplay policy remains intact.
+
+## September 18 — controlled Vision Pro C1 scout
+
+Decision: **C1 NOT PROMOTED.** Five matched device pairs establish correctness
+for this bounded workload, but do not demonstrate a reliable speed improvement.
+The existing production legacy policy, independent Fresh2 and PR buffer remain
+unchanged. This is not a claim that every longer workload would behave the same.
+
+The owner supplied a ready, wired Vision Pro (RealityDevice14,1, visionOS 27.0
+24M5361a). A fresh Release qualification build used the additive
+`GR_QWEN_PERFORMANCE_QUALIFICATION` flag with the normal
+`GR_TURING_METAL_STREAM_RECOVERY` backend and optimized FAST allocator. No Debug
+build or alternate hardening mode was substituted. Source snapshot, successful
+build log and all four required compiler-command categories were captured.
+Both policies used executable UUID `C78384C5-9AE4-371C-82C6-F2C880596B8A`.
+The same executable was re-stamped/re-signed per policy because strict existing
+provenance requires the embedded runtime contract to equal the selected policy.
+No source/runtime changes occurred between those stamps.
+
+All artifacts remain in `/private/tmp/qwen-performance-20260917/`:
+
+- `c1-device-release-01.source.json` and `c1-device-release-01.build.log`.
+- `c1-device-{control,candidate}.manifest.json` and command sidecars.
+- `report-big-mike-c1-{control,candidate}-device-{01..05}.json`, plus launch,
+  transfer, driver and strict provenance results for each attempt.
+- `c1-device-experiment.json`: observed run IDs and verified AB/BA order.
+- `c1-device-comparison-01.json`: initial strict comparator output, retained.
+- `c1-device-comparison-02.json`: corrected hardware-identity screen, with the
+  same reports, experiment and numerical results. The exporter previously
+  searched for the word "vision" and rejected the real `RealityDevice14,1`
+  identifier. After all device work, the host-only comparer was narrowly fixed
+  to accept exact physical-family identifiers and reject Mac/simulator labels;
+  26 performance tests pass. This changes no measured/runtime behavior and
+  grants no qualification waiver. Both outputs remain comparable, with full
+  qualification pending and insufficient repetitions across all five voices.
+
+The workload was the same two-segment/four-row Big Mike fixture used on the Mac:
+0.64 seconds of raw audio, not a sustained complete-dialogue acceptance test.
+Runs were fresh processes, profiler unattached, phase markers off, isolated
+from the immersive scene, with deviceDefault resolving to 40 operations / 40 MB.
+Every run started and ended at thermal state Fair. Filesystem/driver warmth
+and clocks within that thermal category remain uncontrolled.
+
+| Pair / order | Control render s | C1 render s | C1 / control |
+| --- | ---: | ---: | ---: |
+| 1 / AB | 2.838173 | 3.102566 | 1.093156 |
+| 2 / BA | 3.024118 | 2.989618 | 0.988592 |
+| 3 / AB | 3.120735 | 3.066271 | 0.982548 |
+| 4 / BA | 3.169972 | 3.049932 | 0.962132 |
+| 5 / AB | 2.926788 | 2.939271 | 1.004265 |
+
+Median **paired** render ratio is 0.988592 (1.14% lower time), with the defined
+95% bootstrap interval [0.962132, 1.093156]. This crosses no improvement and
+does not meet the proposed 3% screening threshold. Independently calculated
+side medians are 3.024118 seconds control and 3.049932 seconds C1; the median
+of paired ratios is not the ratio of those two medians. First-needed PCM side
+medians are 3.013972 / 3.043935 seconds. Cold-load medians are 0.537313 /
+0.552846 seconds; load-inclusive medians are 3.563598 / 3.620291 seconds.
+Neither the first slower pair nor any other attempt was discarded.
+
+Every installed export passed strict build provenance. Source, binary,
+compiler, model, voice, workload and sampling identities match between policies.
+All ten PCM payloads are identical by segment index: 7,680 samples each at
+24 kHz, with device hashes
+`b5da4226c4d5f90dc8467c9d7baddc5a61e464aeef51de984b99e6162c22e95e`
+and `4078caaaac5350414e3aa44e492272255159104102c296821023c3523a42ee22`.
+Cross-platform Mac/device bit identity is not claimed or required by this pair.
+
+All runs retained two lanes, two independent weight stores and one decoder,
+with no fallback or remaining leases. Every C1 store materialized 102
+companions / 14,024,704 bytes, gained 1,996 render hits and 224 intentional
+dtype misses, and had zero stale/context/unavailable misses. Owner, model
+revision, generation and inventory were stable. There were zero GPU failures
+or pending buffers. Total submitted/completed buffers were 14,120 control and
+12,701 C1; fewer buffers is not proof of attributed GPU speed or eliminated
+conversion-kernel counts.
+
+Sampled process-peak medians were 3,803.44 / 3,824.25 MiB. Immediate residual
+process footprint varied: control 344.91–425.64 MiB, C1 338.45–419.16 MiB;
+MLX active/cache residual bytes were zero throughout. Full-scene memory headroom,
+same-launch repeated-run behavior, five-voice quality, recovery stress and
+sustained generation/decoder overlap remain unqualified.
+
+### Profiling failure, preserved evidence and restoration
+
+After the ten unprofiled runs, a separate 15-second Time Profiler launch used
+the C1 request with phase markers enabled. The app completed successfully with
+the same PCM, zero GPU failures, and 3.314875 seconds render wall time. That
+instrumented timing is **excluded** from the comparison.
+
+The Mac `xctrace` process then aborted while saving with `NSGenericException`:
+`Attempt to lock .../Instruments/Packages/lock failed unexpectedly` (exit 134).
+The immediate attempt to copy the device report also failed with ENOSPC. Host
+free space briefly dropped to about 101 MiB, then recovered automatically after
+the profiler exited; no user files or unrelated Instruments captures were
+deleted. The observations do not isolate the package-lock exception's cause.
+No valid saved Time Profiler trace survived, so no new CPU/GPU hotspot finding
+is claimed.
+
+The successful app report was recovered afterward as
+`report-big-mike-c1-candidate-profile-01-recovered.json` and passed strict
+provenance. Raw failure details are in
+`c1-device-candidate-profile-01.driver.log`. The control profiling request was
+not launched. Further captures were stopped rather than repeated blindly.
+
+The verified, signed normal pre-test Release app was restored from the local
+APFS clone. The install command timed out, but a fresh installed-app query
+confirmed a new container containing `c1-production-restore.app` under the
+correct bundle ID, version 4.3 build 33; no reinstall was blindly repeated.
+Automatic normal launch also timed out and no Plague process was observed.
+The follow-up lock-state query reported `passcodeRequired: true`; the user can
+unlock and open the normal app manually. Installation is confirmed; a restored
+running main-menu session is not claimed. Saves/resources were not removed.
+
+Next checkpoint: resolve the Instruments save/temporary-space problem before
+another wearing session, obtain a usable optimized device phase trace, then
+rank the remaining handoff candidates. Do not promote C1 from the Mac result or
+these statistically inconclusive microbenchmarks.
+
+## September 18 — largest-cost attribution, not another promoted optimization
+
+The owner requested largest expected end-to-end gains first. The preserved
+original large hotspot was 52.02% of sampled Qwen/MLX CPU time in DEBUG tree
+verification, not a remaining 54% wall-time slowdown. Current Release control
+fingerprints FAST/optimized/internalAssertionsEnabled=false. See the decisions
+document for the superseding investigation order and measured-versus-inferred
+boundary.
+
+Implemented opt-in in-memory recording of the existing diagnostic scopes,
+stage labels, shape/dtype metadata and explicit cap/drop accounting. Report
+serialization stays after the measured work. No new tensor evaluation, waits,
+scheduling or production arithmetic changes. Completed per-segment generation
+and decode timers are now exported rather than discarded by the bounded
+report. Comparisons reject differing phase-instrumentation states.
+
+Validation: native Release executable build succeeded; 17 focused Swift tests,
+31 performance Python tests and the source audit passed. Normal gameplay has no
+recording session and retains the legacy arithmetic/Fresh2/currentOverlap path.
+No device build/install or source-asset changes occurred in this turn.
+
+### Larger isolated M4 workload
+
+Fixture `big_mike-phase-attribution-4x32.json`: four segments, each capped at 32
+generated rows, production reference prefix unchanged. All four decodes recorded
+56 input rows: 24 reference plus 32 generated. Total raw output 10.24 s.
+
+| Condition | Render s | First-needed PCM s | Sampled peak MiB |
+| --- | ---: | ---: | ---: |
+| Phase recording on, profiler unattached | 7.734984 | 3.752959 | 4012.28 |
+| Phase recording off, profiler unattached | 7.556536 | 3.992704 | 3879.11 |
+| Phase recording on, Time Profiler attached | 8.011315 | 4.328059 | 4018.49 |
+
+These are three differently instrumented individual runs, **not an optimization
+A/B or a reliable instrumentation-overhead estimate**. Their PCM hashes match
+by segment, all have zero GPU failures and preserve two generation lanes/two
+stores/one decoder. Host performance is not a headset forecast.
+
+The first report contains 1,092 completed scopes, 140 metadata records and 12
+events; 892 scopes and 31,568 metadata inspections were capped. No scope was
+pending or had invalid timestamps. Recorded inner-stage/I/O durations are
+samples, not complete cost partitions. Outer generation/decoder elapsed
+intervals overlap and cannot be added into a percentage of request wall time.
+
+The trace confirms the FP32 promotion mechanism in the sampled generation path:
+BF16 step Q/K projections widen to FP32 after RoPE; sampled subsequent attention,
+projections, predictor inputs and caches are FP32. Decoder intervals overlap
+generation substantially. See the decisions document for the interval unions
+and why C2 now takes priority over small conversion caches or predictor-graph
+construction tweaks.
+
+Evidence under `/private/tmp/qwen-performance-20260917/`:
+
+- `phase-attribution-host-4x32-01.json` and `...-off-01.json`, their logs and
+  attempt reports.
+- `phase-attribution-release-build-02.log`, `phase-attribution-tests-02.log`,
+  `phase-attribution-python-tests-01.log`.
+
+### Host profiling save recovered; device save remains unproven
+
+A minimal 3-second host smoke saved/exported an 8.3 MiB trace, albeit recording
+exit 54 after killing its sleep target at the limit. Evidence is in
+`/private/tmp/qwen-host-trace-save-20260918.FTV6wo/RESULT.md`.
+
+A subsequent actual native Release workload saved successfully and recording
+exited **0**. The app completed synthesis before the 20-second cap. Saved trace,
+report, CPU export and analysis are in
+`/private/tmp/qwen-host-cpu-20260918.E2pT48/`. This demonstrates host profiling now
+works; it does not establish that device capture save/disk failures are fixed.
+No shared Instruments state or unrelated trace was deleted.
+
+The full-process CPU export has 7.797 sampled CPU seconds and no
+`__tree_sub_invariant` samples. Its leading all-process SHA256 cost is benchmark
+provenance hashing before the timed render, not a production TTS optimization
+target. Native/MLX stacks cover 4.219 sampled CPU seconds. Do not turn nested
+diagnostic wrapper stacks or GPU waits into independent CPU cost percentages.
+
+The narrower CPU analysis records 2.332 sampled CPU seconds in dynamic
+generation, 0.454 in decoder stacks, and 0.168 in the native safetensors reader.
+These inclusive groups overlap. Ordinary allocation/free work remains spread
+across symbols; no new removable 50%-scale bottleneck was established. The
+trace retains one `Data stream: Time Mapping` issue. Use `cpu-refined.json` and
+`RESULT.md` in that directory, not the old generic analyzer's broad diagnostic
+wrapper or allocator-template pattern totals, to interpret this capture.
+
+### September 18 — full production-segment benchmark preflight
+
+Owner requirement supersedes row-truncated scouts for performance decisions.
+New fixture `big_mike-production-response-full.json` contains all five exact
+accepted texts from real response ED9F0AF5-7303-42F2-AE7E-B4922FE26E84.
+The production ceiling stays 160 rows, with natural EOS required per segment.
+Final native report validation also rejects skipped EOS-before-audio segments;
+the gameplay scheduler itself was not changed. Python comparison independently
+checks complete PCM/timing coverage, EOS and row counts. Legacy fixture hashes
+remain unchanged.
+
+Local Release preflight completed all five segments naturally: 48, 68, 52, 60
+and 75 generated rows; 24.24 seconds raw audio, 19.110919 seconds render wall,
+6.471183 seconds first-needed PCM. This single M4 run validates the harness,
+not a headset speedup or optimization A/B. Fresh2/two stores/one decoder and
+currentOverlap remain intact; each segment retained 159 conditioning reference
+rows and the separate 24-row decoder prefix. No production arithmetic change.
+All 53,429 command buffers completed with zero failures or pending buffers.
+Sampled peak physical footprint was 4,756.43 MiB.
+
+Validation: 20 focused Swift tests, 46 performance Python tests and 14 provenance
+tests passed. Evidence under `/private/tmp/qwen-device-phase-20260918.CYleSb/`
+includes `full-segment-host-01.json`, its log and attempt record, and test/build
+logs. A missing explicit return in the first local compile was repaired; the
+failed compile log is preserved. Vision Pro full-segment measurement remains
+pending; do not infer device results from this preflight.
+
+### September 18 — two complete Vision Pro replays, normal app restored
+
+The owner wore/unlocked the M2 Vision Pro for two fresh-process full-response
+replays. The exact Release build and installed export passed provenance checks;
+both reports also passed independent completion/telemetry validation. Neither
+run enabled a new arithmetic optimization: `.legacy`, independentFresh2,
+two lanes/two stores/one decoder, currentOverlap, production performance mode,
+greedy sampling, full 159-row conditioning and the 24-row decoder prefix remain
+unchanged. The current deviceDefault resolves to 40 operations / 40 MB.
+
+| Metric | Run 01 | Run 02 |
+| --- | ---: | ---: |
+| Full segments / natural EOS | 5 / 5 | 5 / 5 |
+| Raw speech duration, s | 24.240 | 24.240 |
+| Render wall, s | 19.075721 | 18.980802 |
+| Raw-audio RTF | 0.786952 | 0.783036 |
+| First-needed PCM from render start, s | 6.918619 | 6.810206 |
+| Engine setup before render, s | 0.519664 | 0.515007 |
+| Setup plus render, s | 19.595386 | 19.495809 |
+| Sampled peak physical footprint, MiB | 5347.71 | 5062.74 |
+| Residual physical footprint, MiB | 344.52 | 335.83 |
+| Completed / submitted command buffers | 71227 / 71227 | 71227 / 71227 |
+| Failed / pending command buffers | 0 / 0 | 0 / 0 |
+
+Both produced rows 48/68/52/60/75, and all five PCM hashes/sample counts match
+exactly between runs. Thermal state stayed nominal. Residual MLX active/cache
+bytes are zero after owner teardown. Fresh2 peak render concurrency is two,
+decode concurrency one, with actual cross-segment render/decode overlap and
+no residency fallback. This establishes approximately 1.27x raw-audio realtime
+for this isolated Big Mike workload, not an optimization gain or live-game RTF.
+
+These runs exclude the immersive scene, Foundation Models, real playback,
+live-input work and gameplay publication callbacks. Their pre-timing identity
+hashing reads model files; fresh engine does not mean disk/driver-cold. The
+historical roughly 48-second game run is NOT a matched baseline: build/source,
+callback work, observation and cache conditions differ, and its reported
+command-buffer count is different. Do not infer that rendering, one visual
+feature, or a model change caused the gap.
+
+Complete outer phase interval unions (seconds): generation 17.291/17.263,
+decode 11.271/11.398, their overlap 9.504/9.699, prefill 2.812/2.766. Generation
+or decode covers 19.058/18.962 seconds. These overlapping, inclusive elapsed
+scopes cannot be summed as independent CPU/GPU costs. Both runs retain five
+generation and five decode outer scopes, with zero pending/invalid timestamps.
+Inner sampling caps dropped 1697 scopes and 77644 metadata inspections per
+run; only 160 row scopes cover a 303-row workload. Approximately 42% of command
+buffers lack a phase context. GPU timestamps are not mapped to scope clocks.
+The tiny admission-wait scope also excludes waiting to enter the decoder actor.
+
+Metadata on both actual-device runs confirms initial BF16 step projections
+widen to FP32 after RoPE, followed by FP32 cache/attention and later projections.
+C2 therefore remains a concrete generation-side investigation, not a measured
+win. No BF16 implementation/promotion, Fresh2 serialization, visual shutdown,
+quality-gate relaxation, sampling change or gameplay optimization was performed.
+
+Artifacts: `/private/tmp/qwen-device-phase-20260918.CYleSb/` contains
+`report-full-segments-01.json`, `report-full-segments-02.json`, both launch and
+validation/provenance records, requests, the build log/source snapshot/manifest,
+and the signed app UUID `736D433B-685D-3D2B-8D89-7D8685DE562E` in the manifest.
+The native generic qualification-pending label is not a five-voice/release pass;
+these are completed full-workload observations with verified build provenance.
+
+After testing, the first normal-app install command reached its 60-second
+host timeout. The owner correctly noted the headset was still loading; a host
+command timeout alone is not proof that device installation failed. The next
+attempt completed, and a fresh installed-app query confirmed the ordinary
+signed Release app, version 4.3/build 33, at container
+`651BED4F-94E5-47EC-9B52-06FC24B8A863/c1-production-restore.app`. No further
+install was issued after the owner's loading report. Saves were not removed.
+Normal app installation is verified; main-menu launch was not performed or
+claimed. No further headset testing was requested this turn.

@@ -19,6 +19,7 @@ import json
 import math
 from pathlib import Path
 import random
+import re
 import statistics
 
 
@@ -30,6 +31,9 @@ HASH_KEYS = ("model", "modelConfig", "tokenizer", "decoder", "decoderConfig",
 SOURCE_KEYS = ("commit", "trackedDiffSHA256", "relevantSourcesSHA256", "nativeSourcesSHA256", "vendorSourcesSHA256")
 OBSERVATION_KEYS = ("deviceModel", "osBuild", "profilerState", "sceneCondition", "coldWarmDefinition", "clockBasis",
                     "initialThermalState", "finalThermalState")
+# Older exports did not record phase instrumentation. Two historical unknowns
+# remain comparable, but an unknown is never treated as explicitly disabled.
+OBSERVATION_CONTROL_KEYS = OBSERVATION_KEYS + ("phaseDiagnosticsEnabled",)
 CONTRACT = {"residencyMode": "independentFresh2", "laneCount": 2, "weightStoreCount": 2,
             "decoderCount": 1, "admissionPolicy": "currentOverlap"}
 
@@ -56,6 +60,14 @@ def finite(value, positive=False):
 
 def hash_value(value):
     return isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value.lower())
+
+
+def is_physical_vision_pro(value):
+    if not isinstance(value, str):
+        return False
+    # Keep the descriptive fixture labels, but never accept a simulator/host
+    # merely because its label contains "vision" or a hardware identifier.
+    return value in {"Vision Pro", "Apple Vision Pro", "Vision Pro M2"} or re.fullmatch(r"RealityDevice[0-9]+,[0-9]+", value) is not None
 
 
 def flatten(value, prefix=""):
@@ -124,6 +136,28 @@ def _validate_run(report):
     pcm = report.get("pcm") or []
     indices = [x.get("segmentIndex") for x in pcm]
     require(expected_count > 0 and len(pcm) == expected_count and all(isinstance(x, int) for x in indices) and sorted(indices) == list(range(expected_count)), "missing/duplicate/out-of-range PCM segments")
+    complete = workload.get("requireCompleteSegments")
+    require(complete is None or type(complete) is bool, "workload.requireCompleteSegments must be a boolean or null")
+    if complete is True:
+        maximum_rows = workload.get("maximumRowsPerSegment")
+        valid_maximum = type(maximum_rows) is int and 1 <= maximum_rows <= 160
+        require(valid_maximum, "complete segments require an integer maximumRowsPerSegment in 1...160")
+        timings = report.get("segmentTimings")
+        valid_timings = isinstance(timings, list) and all(isinstance(record, dict) for record in timings)
+        require(valid_timings, "complete segments require a segmentTimings array of completion records")
+        if valid_timings:
+            timing_indices = [record.get("segmentIndex") for record in timings]
+            valid_indices = all(type(index) is int for index in indices + timing_indices)
+            require(valid_indices and len(timing_indices) == len(indices)
+                    and len(set(timing_indices)) == len(timing_indices)
+                    and sorted(timing_indices) == sorted(indices),
+                    "complete segmentTimings must match every PCM segment index exactly once")
+            for record in timings:
+                require(record.get("reachedEOS") is True,
+                        "complete segment requires reachedEOS=true (natural completion)")
+                rows = record.get("generatedRowCount")
+                require(valid_maximum and type(rows) is int and 1 <= rows <= maximum_rows,
+                        "complete segment requires positive integer generatedRowCount within maximumRowsPerSegment")
     audio_seconds = 0.0
     times = {}
     for record in pcm:
@@ -179,6 +213,13 @@ def _validate_run(report):
     observation = report.get("observation") or {}
     for key in OBSERVATION_KEYS:
         require(known(observation.get(key)), f"missing observation {key}")
+    if "phaseDiagnosticsEnabled" in observation:
+        phase_enabled = observation["phaseDiagnosticsEnabled"]
+        require(isinstance(phase_enabled, bool), "observation.phaseDiagnosticsEnabled must be a boolean when present")
+        if phase_enabled is True:
+            require(isinstance(report.get("phaseDiagnostics"), dict), "enabled phase diagnostics require a phaseDiagnostics report object")
+        elif phase_enabled is False:
+            require(report.get("phaseDiagnostics") is None, "disabled phase diagnostics require an absent or null phaseDiagnostics report")
     require(observation.get("initialThermalState") == observation.get("finalThermalState"), "thermal transition: retain attempt, rerun matched stable or separate stress population")
     metrics = report.get("commandBuffers") or {}
     accounting = metrics.get("fullRunAccounting") or {}
@@ -212,7 +253,7 @@ def controls(report):
             "workload": report.get("workload"), "workloadSHA256": report.get("workloadSHA256"),
             "policy": report.get("policy"), "policySHA256": report.get("policySHA256"),
             "runtimeContract": report.get("runtimeContract"),
-            "observation": {key: (report.get("observation") or {}).get(key) for key in OBSERVATION_KEYS}}
+            "observation": {key: (report.get("observation") or {}).get(key) for key in OBSERVATION_CONTROL_KEYS}}
 
 
 def allowed_path(path):
@@ -354,7 +395,7 @@ def compare(baseline, candidate, gates, experiment=None, evidence=None, evidence
             pending.append(f"Independent {key} evidence missing/unverified")
         if entry["claimedStatus"] == "FAIL":
             errors.append(f"Independent {key} qualification failed")
-    if not baseline or any("vision" not in str((x.get("observation") or {}).get("deviceModel", "")).lower() for x in baseline + candidate):
+    if not baseline or any(not is_physical_vision_pro((x.get("observation") or {}).get("deviceModel")) for x in baseline + candidate):
         pending.append("Host/device identity is not verified Vision Pro; host result cannot qualify headset performance")
     if any((x.get("runtimeContract") or {}).get("residencyMode") != "independentFresh2" for x in baseline + candidate):
         pending.append("Isolated decoder is not the concurrent Fresh2 production workload")

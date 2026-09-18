@@ -194,6 +194,17 @@ public actor TuringQwenNativeFreshInstancePool {
         runMetrics
     }
 
+    /// Invoked at qualification boundaries, never by the production row loop.
+    func conversionCacheSnapshots() async -> [TuringQwenNativeConversionCacheSnapshot] {
+        var snapshots: [TuringQwenNativeConversionCacheSnapshot] = []
+        for instance in instances {
+            if let snapshot = await instance.conversionCacheSnapshot() {
+                snapshots.append(snapshot)
+            }
+        }
+        return snapshots
+    }
+
     public func recordResidencyMemoryBoundary(_ label: String) {
         if label.contains("first"), residencySamples.contains(where: { $0.label == label }) {
             return

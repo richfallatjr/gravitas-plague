@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "big_mike-production-response-ED9F-full",
+  "origin": "All five exact accepted production segments, in order, from completed Big Mike run ED9F0AF5-7303-42F2-AE7E-B4922FE26E84 in owner log attachment 1c9c249d-d8bb-421d-920e-a2f50066a136, text lines 7972-7992. Fixed benchmark seed plus index, not an old-run timing comparison. Require natural EOS and use the unchanged production row ceiling and full clone conditioning.",
+  "characterID": "big_mike",
+  "voiceID": "big_mike_base_clone_v1",
+  "language": "English",
+  "segments": [
+    "Rich, I'm not here to hear your whining. I'm here to keep you alive.",
+    "First thing: you're inside. Second: the house is locked. Third: I don't know if you're hurt.",
+    "That's two missed check-ins. I've seen people push luck when they think they're safe.",
+    "You think this is a joke? I've been through hell for you, and I'll stay here until you're gone.",
+    "Don't mess with me, or I'll find you outside. I'm not asking you to be smart, I'm asking you to stay alive."
+  ],
+  "samplingSeed": 172026,
+  "maximumRowsPerSegment": 160,
+  "wallCapSeconds": 180,
+  "footprintCapMiB": 6000,
+  "requireCompleteSegments": true
+}

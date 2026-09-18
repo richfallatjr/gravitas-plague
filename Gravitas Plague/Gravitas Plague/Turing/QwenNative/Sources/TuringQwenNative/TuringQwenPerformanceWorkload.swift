@@ -16,16 +16,22 @@ public struct TuringQwenPerformanceWorkload: Codable, Sendable, Equatable {
     public let footprintCapMiB: Double
     public let decoderCodes: [[Int]]?
     public let decoderReferenceRows: Int?
+    /// Complete production-segment replay, not a truncated diagnostic scout.
+    /// Nil/false preserves old fixture behavior and its smaller safety ceiling.
+    public let requireCompleteSegments: Bool?
 
     public func validate(decoderOnly: Bool = false) throws {
         guard schemaVersion == 1, !id.isEmpty, !origin.isEmpty, !voiceID.isEmpty,
               !characterID.isEmpty, !language.isEmpty,
-              (1...32).contains(maximumRowsPerSegment),
+              (1...(requireCompleteSegments == true ? 160 : 32)).contains(maximumRowsPerSegment),
               wallCapSeconds.isFinite, (1...180).contains(wallCapSeconds),
               footprintCapMiB.isFinite, (256...6_500).contains(footprintCapMiB) else {
             throw TuringQwenNativeError.invalidConfig("Invalid bounded workload schema or limits")
         }
         if decoderOnly {
+            guard requireCompleteSegments != true else {
+                throw TuringQwenNativeError.invalidConfig("Complete segments require generation and natural EOS, not decoder-only replay")
+            }
             guard let codes = decoderCodes, let prefix = decoderReferenceRows,
                   (0...24).contains(prefix), codes.count > prefix,
                   codes.count <= maximumRowsPerSegment + prefix,
@@ -39,6 +45,37 @@ public struct TuringQwenPerformanceWorkload: Codable, Sendable, Equatable {
                   segments.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.utf8.count <= 1_024 }) else {
                 throw TuringQwenNativeError.invalidConfig("Bounded workload requires 1–6 short segments")
             }
+        }
+    }
+
+    func validateProductionMaximumRows(_ productionMaximum: Int) throws {
+        guard maximumRowsPerSegment <= productionMaximum,
+              requireCompleteSegments != true || maximumRowsPerSegment == productionMaximum else {
+            throw TuringQwenNativeError.invalidConfig("Complete-segment replay must use the current production row ceiling without truncating it")
+        }
+    }
+
+    func validateCompletion(reachedEOS: Bool?, generatedRows: Int?) throws {
+        guard requireCompleteSegments == true else { return }
+        guard reachedEOS == true, let generatedRows, generatedRows > 0,
+              generatedRows <= maximumRowsPerSegment else {
+            throw TuringQwenNativeError.invalidConfig("Full-length benchmark segment did not finish naturally; missing EOS/row evidence or row-cap termination cannot qualify")
+        }
+    }
+
+    func validateCompletedSegments(
+        pcmIndices: [Int],
+        completions: [(segmentIndex: Int, reachedEOS: Bool?, generatedRows: Int?)]
+    ) throws {
+        guard requireCompleteSegments == true else { return }
+        let expected = Array(segments.indices)
+        guard pcmIndices.sorted() == expected,
+              completions.map(\.segmentIndex).sorted() == expected else {
+            throw TuringQwenNativeError.invalidConfig("Full-length benchmark must complete every requested segment exactly once; skipped or missing speech cannot qualify")
+        }
+        for completion in completions {
+            try validateCompletion(reachedEOS: completion.reachedEOS,
+                                   generatedRows: completion.generatedRows)
         }
     }
 

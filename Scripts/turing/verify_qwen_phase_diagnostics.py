@@ -37,7 +37,11 @@ def verify(root: Path) -> list[str]:
     required = (
         '@TaskLocal public static var enabled: Bool? = nil',
         'environment["TURING_QWEN_PHASE_DIAGNOSTICS"] == "1"',
-        'guard enabled ?? startupEnabled else { return nil }',
+        'public static var isEnabled: Bool { enabled ?? startupEnabled }',
+        'guard isEnabled else { return nil }',
+        '@TaskLocal public static var recordingSession: RecordingSession?',
+        'ContinuousClock.now', 'droppedScopeCount', 'pendingScopeCount',
+        'maximumScopes: Int = 8_192', 'maximumDetailCharacters = 512',
         'CPU scope (not GPU completion)',
         'OSSignpostID(log: log)', 'os_signpost(.begin', 'os_signpost(.end',
         'os_signpost(.event', 'maximumIntervals: Int = 512',

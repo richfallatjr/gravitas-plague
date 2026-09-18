@@ -218,7 +218,11 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
                 audio: audio,
                 renderMetrics: rendered.renderMetrics,
                 decodeSeconds: Date().timeIntervalSince(startedAt),
-                recoveryGeneration: rendered.recoveryGeneration
+                recoveryGeneration: rendered.recoveryGeneration,
+                generatedRowCount: rendered.generatedRowCount,
+                conditioningReferenceRowCount: rendered.referenceRowCount,
+                decodeReferenceRowCount: rendered.decodeReferenceRowCount,
+                reachedEOS: rendered.reachedEOS
             )
             print("""
             [TuringSegmentPipeline] decode completed
