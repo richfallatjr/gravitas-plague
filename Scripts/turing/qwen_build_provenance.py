@@ -21,6 +21,13 @@ import time
 SCHEMA = 1
 CONTRACT = {"residencyMode": "independentFresh2", "laneCount": 2,
             "weightStoreCount": 2, "decoderCount": 1, "admissionPolicy": "currentOverlap"}
+POLICY_FIELDS = ("policyVersion", "arithmetic", "prefill", "predictor", "workspace",
+                 "decoderIO", "kernelSet", "decoderState")
+LEGACY_POLICY = dict(zip(POLICY_FIELDS, (1, "legacy", "legacyDense", "legacy", "legacy",
+                                       "legacy", "existing", "legacy")))
+RUNTIME_CONTRACT_FIELDS = set(CONTRACT) | {
+    "requestedCommandBufferProfile", "resolvedCommandBufferProfile", "executionPolicy",
+    "policySHA256", "seedPolicy", "recoveryDefines", "playbackRateApplied"}
 SOURCE_SUFFIXES = {".swift", ".cpp", ".c", ".h", ".hpp", ".metal", ".json", ".sh", ".py", ".pbxproj", ".xcconfig"}
 
 
@@ -30,6 +37,59 @@ def digest(value):
 
 def canonical(value):
     return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
+
+
+def policy_fingerprint(policy):
+    """Match the native policy's explicit field ordering, not its JSON encoding."""
+    if not isinstance(policy, dict) or set(policy) != set(POLICY_FIELDS):
+        raise ValueError("Alternate runtime policies require the complete native policy schema")
+    if type(policy["policyVersion"]) is not int or policy["policyVersion"] != 1:
+        raise ValueError("Unsupported alternate runtime policy version")
+    if policy["arithmetic"] not in ("legacy", "bf16Candidate"):
+        raise ValueError("Alternate runtime policies support only legacy and bf16Candidate arithmetic")
+    for key in POLICY_FIELDS:
+        if key not in ("policyVersion", "arithmetic") and policy[key] != LEGACY_POLICY[key]:
+            raise ValueError(f"Alternate runtime policy changes unsupported field: {key}")
+    return digest("|".join(str(policy[key]) for key in POLICY_FIELDS).encode())
+
+
+def validate_runtime_contract_alternatives(baseline, alternatives):
+    """Permit one exact C2 contract alongside an unchanged complete legacy contract.
+
+    This optional schema is deliberately narrower than historical single-contract
+    manifests. It grants no wildcard policy or waiver of any other runtime field.
+    """
+    if not isinstance(alternatives, list) or len(alternatives) != 1:
+        raise ValueError("alternateRuntimeContracts must contain exactly one explicit C2 contract")
+    contracts = [baseline, *alternatives]
+    for contract in contracts:
+        if not isinstance(contract, dict) or set(contract) != RUNTIME_CONTRACT_FIELDS:
+            raise ValueError("Alternate runtime contracts require the complete native runtime schema")
+        for key, value in CONTRACT.items():
+            if type(contract[key]) is not type(value) or contract[key] != value:
+                raise ValueError(f"Alternate runtime contract changes production field: {key}")
+        if not isinstance(contract["requestedCommandBufferProfile"], str) or not known(contract["requestedCommandBufferProfile"]):
+            raise ValueError("Alternate runtime contract requires a requested command-buffer profile")
+        profile = contract["resolvedCommandBufferProfile"]
+        if (not isinstance(profile, dict) or set(profile) != {"maximumOperations", "maximumMegabytes"}
+                or any(type(value) is not int or value <= 0 for value in profile.values())):
+            raise ValueError("Alternate runtime contract requires a complete resolved command-buffer profile")
+        if contract["seedPolicy"] != "fixture seed + segment index" or contract["playbackRateApplied"] is not False:
+            raise ValueError("Alternate runtime contract changes seed or native playback policy")
+        recovery = contract["recoveryDefines"]
+        if (not isinstance(recovery, list) or not recovery
+                or any(not isinstance(value, str) or not value.startswith("GR_TURING_METAL_") for value in recovery)
+                or len(set(recovery)) != len(recovery)):
+            raise ValueError("Alternate runtime contract requires explicit native recovery defines")
+        if contract["policySHA256"] != policy_fingerprint(contract["executionPolicy"]):
+            raise ValueError("Alternate runtime contract policy fingerprint mismatch")
+    if baseline["executionPolicy"]["arithmetic"] != "legacy" or alternatives[0]["executionPolicy"]["arithmetic"] != "bf16Candidate":
+        raise ValueError("Alternate runtime contract must declare bf16Candidate alongside a legacy baseline")
+    invariant = lambda contract: {key: value for key, value in contract.items()
+                                  if key not in ("executionPolicy", "policySHA256")}
+    if canonical(invariant(baseline)) != canonical(invariant(alternatives[0])):
+        raise ValueError("Alternate runtime contract differs outside executionPolicy and policySHA256")
+    return contracts
 
 
 def workload_identity(path):
@@ -235,6 +295,13 @@ def snapshot(args):
 
 
 def capture(args):
+    runtime_contract = json.loads(Path(args.runtime_contract).read_text()) if args.runtime_contract else None
+    alternate_paths = getattr(args, "alternate_runtime_contract", [])
+    if len(alternate_paths) > 1:
+        raise ValueError("Only one explicit alternate runtime contract is supported (C2 bf16Candidate)")
+    alternatives = [json.loads(Path(path).read_text()) for path in alternate_paths]
+    if alternatives:
+        validate_runtime_contract_alternatives(runtime_contract, alternatives)
     repo = Path(args.repo).resolve()
     records = command_records(args.compile_commands or args.build_log, repo)
     binaries = [Path(p) for p in args.binary]
@@ -264,10 +331,12 @@ def capture(args):
         "binaryUUIDs": identities,
         "models": payload_identity(args.model_root), "voices": payload_identity(args.voices_root),
         "workloadSHA256": workload_identity(args.workload) if args.workload else None,
-        "runtimeContract": json.loads(Path(args.runtime_contract).read_text()) if args.runtime_contract else None,
+        "runtimeContract": runtime_contract,
         "buildConfiguration": args.configuration,
         "experimentID": args.experiment,
         "evidenceNote": "Captured build evidence; device identity and runtime values require installed export verification."}
+    if alternatives:
+        manifest["alternateRuntimeContracts"] = alternatives
     manifest["manifestSHA256"] = digest(canonical(manifest))
     target = Path(args.output)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -343,8 +412,21 @@ def verify_manifest(expected, installed):
     recovery = sorted({d for d in native_defines if d.startswith("GR_TURING_METAL_")})
     require(bool(recovery), "Unknown actual native recovery defines")
     contract = installed.get("runtimeContract") or {}
-    require(contract == expected.get("runtimeContract"), "Installed runtime contract differs from manifest")
-    require(recovery == sorted(contract.get("recoveryDefines") or []), "Actual compile recovery defines differ from runtime contract")
+    if not isinstance(contract, dict):
+        require(False, "Installed runtime contract is not an object")
+        contract = {}
+    if "alternateRuntimeContracts" in expected:
+        try:
+            contracts = validate_runtime_contract_alternatives(expected.get("runtimeContract"), expected["alternateRuntimeContracts"])
+            require(any(canonical(contract) == canonical(option) for option in contracts),
+                    "Installed runtime contract differs from every explicit manifest contract")
+        except ValueError as error:
+            require(False, f"Invalid alternate runtime contracts: {error}")
+    else:
+        require(contract == expected.get("runtimeContract"), "Installed runtime contract differs from manifest")
+    installed_recovery = contract.get("recoveryDefines")
+    require(isinstance(installed_recovery, list) and all(isinstance(value, str) for value in installed_recovery)
+            and recovery == sorted(installed_recovery), "Actual compile recovery defines differ from runtime contract")
     for key, value in CONTRACT.items():
         require(contract.get(key) == value, f"Critical production contract mismatch/unknown: {key}")
     for key in ["requestedCommandBufferProfile", "resolvedCommandBufferProfile", "executionPolicy", "seedPolicy"]:
@@ -378,7 +460,7 @@ def embed(args):
 def compare_hardening(control, candidate):
     """Require all captured conditions unchanged except named hardening selection."""
     differences = []
-    for key in ["source", "models", "voices", "workloadSHA256", "runtimeContract", "buildConfiguration", "toolchain"]:
+    for key in ["source", "models", "voices", "workloadSHA256", "runtimeContract", "alternateRuntimeContracts", "buildConfiguration", "toolchain"]:
         if control.get(key) != candidate.get(key):
             differences.append(key)
     def commands(manifest):
@@ -420,6 +502,8 @@ def main():
     c.add_argument("--voices-root")
     c.add_argument("--workload")
     c.add_argument("--runtime-contract")
+    c.add_argument("--alternate-runtime-contract", action="append", default=[],
+                   help="Additional exact runtime contract JSON; currently at most one C2 bf16Candidate alternative to a complete legacy baseline")
     c.add_argument("--source-snapshot", help="JSON written by snapshot before the qualification build")
     c.add_argument("--build-success-log", help="Success log if compile commands are supplied separately")
     c.add_argument("--app-bundle")

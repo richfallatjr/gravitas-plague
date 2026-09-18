@@ -41,6 +41,8 @@ private struct TuringQwenNativeTalkerLayerForwardResult {
 }
 
 enum TuringQwenNativeTalkerForwardRunner {
+    private typealias Arithmetic = TuringQwenNativeGenerationArithmetic
+
     static func runLayer0(
         promptInputs: TuringQwenNativeTalkerPromptInputs,
         config: TuringQwenNativeConfig,
@@ -108,8 +110,8 @@ enum TuringQwenNativeTalkerForwardRunner {
             config: config,
             weightsStore: weightsStore
         )
-        var hidden = inputsEmbeds
-        TuringQwenNativePhaseDiagnostics.tensor("talker.prompt.input", inputsEmbeds)
+        var hidden = Arithmetic.activation(inputsEmbeds)
+        TuringQwenNativePhaseDiagnostics.tensor("talker.prompt.input", hidden)
         var cacheLayers: [TuringQwenNativeKVCache.Layer] = []
         cacheLayers.reserveCapacity(config.talkerConfig.numHiddenLayers)
         let forwardStart = Date()
@@ -244,7 +246,7 @@ enum TuringQwenNativeTalkerForwardRunner {
         performanceMode: TuringQwenNativePerformanceMode = .diagnostic
     ) -> MLXArray {
         let start = Date()
-        let logits = linear(finalLastHiddenState, weight: codecHeadWeight)
+        let logits = linear(Arithmetic.logitInput(finalLastHiddenState), weight: codecHeadWeight)
         if performanceMode.shouldForceEveryEval {
             eval(logits)
         }
@@ -328,7 +330,7 @@ enum TuringQwenNativeTalkerForwardRunner {
             config: config,
             weightsStore: weightsStore
         )
-        var hidden = inputEmbedding
+        var hidden = Arithmetic.activation(inputEmbedding)
         var nextCacheLayers: [TuringQwenNativeKVCache.Layer] = []
         nextCacheLayers.reserveCapacity(config.talkerConfig.numHiddenLayers)
         let oneStepRope = segmentCache?.talkerRope(position: previousState.position) ??
@@ -461,9 +463,9 @@ enum TuringQwenNativeTalkerForwardRunner {
         maxNewRows: Int,
         performanceMode: TuringQwenNativePerformanceMode
     ) throws -> TuringQwenNativeTalkerLayerForwardResult {
-        let residual = hiddenStates
+        let residual = Arithmetic.activation(hiddenStates)
         let normalized = rmsNorm(
-            hiddenStates,
+            residual,
             weight: weights.inputLayerNormWeight,
             eps: Float(config.rmsNormEps),
             performanceMode: performanceMode
@@ -478,7 +480,7 @@ enum TuringQwenNativeTalkerForwardRunner {
             maxNewRows: maxNewRows,
             performanceMode: performanceMode
         )
-        let afterAttention = residual + attentionResult.hiddenStates
+        let afterAttention = Arithmetic.activation(residual + attentionResult.hiddenStates)
 
         let mlpResidual = afterAttention
         let mlpInput = rmsNorm(
@@ -490,7 +492,7 @@ enum TuringQwenNativeTalkerForwardRunner {
         let mlpOutput = mlp(mlpInput, weights: weights)
 
         return TuringQwenNativeTalkerLayerForwardResult(
-            hiddenStates: mlpResidual + mlpOutput,
+            hiddenStates: Arithmetic.activation(mlpResidual + mlpOutput),
             cacheLayer: attentionResult.cacheLayer
         )
     }
@@ -505,9 +507,9 @@ enum TuringQwenNativeTalkerForwardRunner {
         rope: (cos: MLXArray, sin: MLXArray),
         performanceMode: TuringQwenNativePerformanceMode
     ) throws -> TuringQwenNativeTalkerLayerForwardResult {
-        let residual = hiddenStates
+        let residual = Arithmetic.activation(hiddenStates)
         let normalized = rmsNorm(
-            hiddenStates,
+            residual,
             weight: weights.inputLayerNormWeight,
             eps: Float(config.rmsNormEps),
             performanceMode: performanceMode
@@ -523,7 +525,7 @@ enum TuringQwenNativeTalkerForwardRunner {
             rope: rope,
             performanceMode: performanceMode
         )
-        let afterAttention = residual + attentionResult.hiddenStates
+        let afterAttention = Arithmetic.activation(residual + attentionResult.hiddenStates)
 
         let mlpResidual = afterAttention
         let mlpInput = rmsNorm(
@@ -535,7 +537,7 @@ enum TuringQwenNativeTalkerForwardRunner {
         let mlpOutput = mlp(mlpInput, weights: weights)
 
         return TuringQwenNativeTalkerLayerForwardResult(
-            hiddenStates: mlpResidual + mlpOutput,
+            hiddenStates: Arithmetic.activation(mlpResidual + mlpOutput),
             cacheLayer: attentionResult.cacheLayer
         )
     }
@@ -554,11 +556,11 @@ enum TuringQwenNativeTalkerForwardRunner {
         let attentionHeads = config.numAttentionHeads
         let keyValueHeads = config.numKeyValueHeads
 
-        let query = linear(hiddenStates, weight: weights.qProjWeight)
+        let query = Arithmetic.activation(linear(hiddenStates, weight: weights.qProjWeight))
             .reshaped([1, sequenceLength, attentionHeads, headDim])
-        let key = linear(hiddenStates, weight: weights.kProjWeight)
+        let key = Arithmetic.activation(linear(hiddenStates, weight: weights.kProjWeight))
             .reshaped([1, sequenceLength, keyValueHeads, headDim])
-        let value = linear(hiddenStates, weight: weights.vProjWeight)
+        let value = Arithmetic.activation(linear(hiddenStates, weight: weights.vProjWeight))
             .reshaped([1, sequenceLength, keyValueHeads, headDim])
         TuringQwenNativePhaseDiagnostics.tensor("talker.prefill.qProjection", query)
         TuringQwenNativePhaseDiagnostics.tensor("talker.prefill.kProjection", key)
@@ -613,19 +615,18 @@ enum TuringQwenNativeTalkerForwardRunner {
 
         let scale = Float(1.0 / sqrt(Double(headDim)))
         let attentionMask = causalMask(sequenceLength: sequenceLength)
-        let scores = matmul(queryStates, keyStates.transposed(0, 1, 3, 2)) * scale + attentionMask
-        let probabilities = softmax(
+        let scores = attentionScores(query: queryStates, key: keyStates, scale: scale) + attentionMask
+        let probabilities = Arithmetic.attentionProbabilities(
             scores,
-            axis: -1,
-            precise: performanceMode.shouldUsePreciseAttentionSoftmax
+            legacyPrecise: performanceMode.shouldUsePreciseAttentionSoftmax
         )
-        let attended = matmul(probabilities, valueStates)
+        let attended = Arithmetic.activation(matmul(probabilities, valueStates))
             .transposed(0, 2, 1, 3)
             .reshaped([1, sequenceLength, hiddenSize])
         TuringQwenNativePhaseDiagnostics.tensor("talker.prefill.attentionOutput", attended)
 
         return TuringQwenNativeTalkerLayerForwardResult(
-            hiddenStates: linear(attended, weight: weights.oProjWeight),
+            hiddenStates: Arithmetic.activation(linear(attended, weight: weights.oProjWeight)),
             cacheLayer: cacheLayer
         )
     }
@@ -645,11 +646,11 @@ enum TuringQwenNativeTalkerForwardRunner {
         let attentionHeads = config.numAttentionHeads
         let keyValueHeads = config.numKeyValueHeads
 
-        let query = linear(hiddenStates, weight: weights.qProjWeight)
+        let query = Arithmetic.activation(linear(hiddenStates, weight: weights.qProjWeight))
             .reshaped([1, 1, attentionHeads, headDim])
-        let key = linear(hiddenStates, weight: weights.kProjWeight)
+        let key = Arithmetic.activation(linear(hiddenStates, weight: weights.kProjWeight))
             .reshaped([1, 1, keyValueHeads, headDim])
-        let value = linear(hiddenStates, weight: weights.vProjWeight)
+        let value = Arithmetic.activation(linear(hiddenStates, weight: weights.vProjWeight))
             .reshaped([1, 1, keyValueHeads, headDim])
         TuringQwenNativePhaseDiagnostics.tensor("talker.step.qProjection", query)
         TuringQwenNativePhaseDiagnostics.tensor("talker.step.kProjection", key)
@@ -707,22 +708,21 @@ enum TuringQwenNativeTalkerForwardRunner {
                 keyValueHeads: keyValueHeads,
                 attentionHeads: attentionHeads
             )
-            let scores = matmul(queryStates, repeatedKeyStates.transposed(0, 1, 3, 2)) * scale
-            let probabilities = softmax(
+            let scores = attentionScores(query: queryStates, key: repeatedKeyStates, scale: scale)
+            let probabilities = Arithmetic.attentionProbabilities(
                 scores,
-                axis: -1,
-                precise: performanceMode.shouldUsePreciseAttentionSoftmax
+                legacyPrecise: performanceMode.shouldUsePreciseAttentionSoftmax
             )
             attendedHeads = matmul(probabilities, repeatedValueStates)
         }
 
-        let attended = attendedHeads
+        let attended = Arithmetic.activation(attendedHeads)
             .transposed(0, 2, 1, 3)
             .reshaped([1, 1, hiddenSize])
         TuringQwenNativePhaseDiagnostics.tensor("talker.step.attentionOutput", attended)
 
         return TuringQwenNativeTalkerLayerForwardResult(
-            hiddenStates: linear(attended, weight: weights.oProjWeight),
+            hiddenStates: Arithmetic.activation(linear(attended, weight: weights.oProjWeight)),
             cacheLayer: updatedCacheLayer
         )
     }
@@ -731,10 +731,10 @@ enum TuringQwenNativeTalkerForwardRunner {
         _ hiddenStates: MLXArray,
         weights: TuringQwenNativeTalkerLayerWeights
     ) -> MLXArray {
-        let gate = linear(hiddenStates, weight: weights.gateProjWeight)
-        let up = linear(hiddenStates, weight: weights.upProjWeight)
-        let activated = gate * sigmoid(gate)
-        return linear(activated * up, weight: weights.downProjWeight)
+        let gate = Arithmetic.activation(linear(hiddenStates, weight: weights.gateProjWeight))
+        let up = Arithmetic.activation(linear(hiddenStates, weight: weights.upProjWeight))
+        let activated = Arithmetic.activation(gate * sigmoid(gate))
+        return Arithmetic.activation(linear(Arithmetic.activation(activated * up), weight: weights.downProjWeight))
     }
 
     private static func rmsNorm(
@@ -743,12 +743,24 @@ enum TuringQwenNativeTalkerForwardRunner {
         eps: Float,
         performanceMode: TuringQwenNativePerformanceMode
     ) -> MLXArray {
-        if performanceMode == .performance {
-            return MLXFast.rmsNorm(value, weight: weight, eps: eps)
-        }
+        Arithmetic.rmsNorm(
+            value,
+            weight: weight,
+            epsilon: eps,
+            forceManual: performanceMode != .performance
+        )
+    }
 
-        let variance = (value * value).mean(axis: -1, keepDims: true)
-        return value / sqrt(variance + eps) * weight
+    private static func attentionScores(
+        query: MLXArray,
+        key: MLXArray,
+        scale: Float
+    ) -> MLXArray {
+        // Keep score construction/reductions in FP32 for the BF16 storage
+        // experiment; the legacy path retains its original operand dtypes.
+        let scoreQuery = Arithmetic.isBF16 ? query.asType(.float32) : query
+        let scoreKey = Arithmetic.isBF16 ? key.asType(.float32) : key
+        return matmul(scoreQuery, scoreKey.transposed(0, 1, 3, 2)) * scale
     }
 
     private static func linear(
@@ -819,8 +831,8 @@ enum TuringQwenNativeTalkerForwardRunner {
         }
 
         return (
-            MLXArray(cosValues, [1, 1, positions.count, headDim]),
-            MLXArray(sinValues, [1, 1, positions.count, headDim])
+            Arithmetic.activation(MLXArray(cosValues, [1, 1, positions.count, headDim])),
+            Arithmetic.activation(MLXArray(sinValues, [1, 1, positions.count, headDim]))
         )
     }
 
@@ -829,7 +841,9 @@ enum TuringQwenNativeTalkerForwardRunner {
         cos: MLXArray,
         sin: MLXArray
     ) -> MLXArray {
-        value * cos + rotateHalf(value) * sin
+        Arithmetic.activation(
+            value * Arithmetic.activation(cos) + rotateHalf(value) * Arithmetic.activation(sin)
+        )
     }
 
     private static func rotateHalf(

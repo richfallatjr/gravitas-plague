@@ -91,7 +91,7 @@ struct TuringQwenPerformanceWorkloadTests {
         #expect(throws: (any Error).self) { try TuringQwenPerformanceReadiness.ordered([record(0, 1), record(0, 2)], count: 1) }
     }
     @Test func unsupportedPolicyDoesNotSilentlyFallBack() {
-        let candidate = TuringQwenNativeExecutionPolicy(arithmetic: .bf16Candidate)
+        let candidate = TuringQwenNativeExecutionPolicy(prefill: .fusedCausalCandidate)
         #expect(throws: (any Error).self) { try candidate.validateImplemented() }
     }
 }

@@ -18,6 +18,8 @@ nonisolated enum TuringQwenPerformanceQualificationLaunch {
         let profilerState: String
         let phaseMarkers: Bool
         let outputFilename: String
+        // Separate listening runs only; absent in undisturbed timing requests.
+        let evidenceDirectoryName: String?
     }
 
     static func run() async throws -> String {
@@ -35,12 +37,21 @@ nonisolated enum TuringQwenPerformanceQualificationLaunch {
               let resources = Bundle.main.resourceURL else { throw CocoaError(.coderReadCorrupt) }
         let output = directory.appendingPathComponent(request.outputFilename)
         guard !FileManager.default.fileExists(atPath: output.path) else { throw CocoaError(.fileWriteFileExists) }
+        let evidenceDirectory: URL?
+        if let name = request.evidenceDirectoryName {
+            guard name.hasSuffix(".evidence"), name.count <= 100,
+                  name.range(of: "^[A-Za-z0-9][A-Za-z0-9._-]*$", options: .regularExpression) != nil else {
+                throw CocoaError(.fileReadInvalidFileName)
+            }
+            evidenceDirectory = directory.appendingPathComponent(name, isDirectory: true)
+        } else { evidenceDirectory = nil }
         let model = resources.appendingPathComponent("Turing/Models/Qwen3TTS/Qwen3-TTS-12Hz-1.7B-Base-4bit")
         let report = try await TuringQwenNativePhaseDiagnostics.$enabled.withValue(request.phaseMarkers) {
             try await TuringQwenBoundedBenchmark.run(options: .init(
                 modelRoot: model, bundleRoot: resources, workload: request.workload, mode: mode,
                 commandBufferProfile: request.commandBufferProfile ?? .operations40Megabytes32, profilerState: request.profilerState,
-                sceneCondition: "isolated-device-qualification-no-immersive-scene", policy: request.policy ?? .production))
+                sceneCondition: "isolated-device-qualification-no-immersive-scene", policy: request.policy ?? .production,
+                evidenceDirectory: evidenceDirectory))
         }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]

@@ -39,7 +39,7 @@ final class TuringQwenNativePositionalSafetensorsTests: XCTestCase {
 
     func testTensorBytesDtypesDuplicateRowsAndEmptySelectionsMatchLegacy() throws {
         let index = try TuringQwenNativeSafetensorsIndex.load(from: fixture())
-        let legacy = TuringQwenNativeSafetensorsReader(index: index)
+        let legacy = try TuringQwenNativeSafetensorsReader(index: index, decoderIO: .legacy)
         let candidate = try TuringQwenNativeSafetensorsReader(index: index, decoderIO: .positionalReaderCandidate)
         for name in ["f32", "bf16"] {
             XCTAssertEqual(try candidate.loadTensorFloat32(name: name), try legacy.loadTensorFloat32(name: name))
@@ -158,7 +158,7 @@ final class TuringQwenNativePositionalSafetensorsTests: XCTestCase {
         XCTAssertEqual(failure, EBADF)
     }
 
-    func testCancelledReadThrowsAndProductionPolicyRemainsLegacy() async throws {
+    func testCancelledReadThrowsAndProductionDecoderIORemainsLegacy() async throws {
         let index = try TuringQwenNativeSafetensorsIndex.load(from: fixture())
         let reader = try TuringQwenNativeSafetensorsReader(index: index, decoderIO: .positionalReaderCandidate)
         let task = Task {

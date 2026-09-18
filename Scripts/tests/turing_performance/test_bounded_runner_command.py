@@ -31,6 +31,14 @@ class BoundedRunnerCommandTests(unittest.TestCase):
     def test_baseline_does_not_inject_candidate_policy(self):
         self.assertNotIn("--policy", MODULE.native_command(self.args("deviceDefault")))
 
+    def test_evidence_capture_is_only_forwarded_when_explicit(self):
+        args = self.args("deviceDefault")
+        self.assertNotIn("--evidence-directory", MODULE.native_command(args))
+        args.evidence_directory = Path("new-evidence")
+        command = MODULE.native_command(args)
+        self.assertEqual(command[command.index("--evidence-directory") + 1],
+                         str(args.evidence_directory.resolve()))
+
 
 class BoundedRunnerBudgetTests(unittest.TestCase):
     def fixture(self, **changes):

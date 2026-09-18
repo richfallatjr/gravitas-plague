@@ -1,12 +1,16 @@
-# Qwen performance decisions — 2026-09-17
+# Qwen performance decisions — updated 2026-09-18
 
 ## Evidence boundary
 
-This is the decision record for the new performance package. It is not a claim
-that candidate arithmetic or production speedups have passed on Vision Pro.
+Current decision: the owner approved the presented Mike audio and explicitly
+selected **BF16 generation as the normal shipping source default**, with no
+separate scheme/toggle. This is not a claim that all engineering qualification
+gates or a gameplay speedup have passed on Vision Pro.
 The existing independent Fresh2 topology, two weight stores, one decoder,
 currentOverlap admission, sampling, recovery and audio/story authority remain
-the control. Phase C/D/E work below is **source-reviewed, not implemented**.
+the control. Original C/D/E design notes and earlier opt-in/pending decisions
+below are historical. C1 remains opt-in; C2's latest owner-directed shipping
+decision and incomplete qualification boundary are recorded at the end.
 Execution-policy options reject unimplemented candidates instead of silently
 running legacy code under a candidate label.
 
@@ -395,3 +399,112 @@ left on, is required before claiming the isolated throughput as gameplay
 performance or attributing the gap. Do not use this finding to disable
 concurrency, Mind's Eye or PR buffering. Do not select another small cache
 change based solely on convenience.
+
+#### C2 implemented after owner backup; remain opt-in
+
+`ae65c8b` is the owner's pre-experiment backup. Generation-only BF16 containment
+is implemented under `Policies/generation-bf16.json`, not selected by production.
+Preserve FP32 normalization/affine math, manual attention scores/softmax and
+vocabulary-head inputs; preserve Double RoPE construction before cache casting.
+CPU and GPU arithmetic tests and real-model prefill dtype/finite checks pass.
+Two legacy prefill passes are bit-exact; candidate errors remain observational,
+without inventing post-hoc numerical acceptance thresholds.
+
+All six full five-segment host responses completed with intact Fresh2 and no
+GPU failures. C2 changes residual token choices and total speech length, so
+listening and generated-step numerical review are mandatory. Host timing drift
+under fair thermals prevents a reliable speedup claim. Next measure the exact
+candidate/control on M2 Vision Pro; do not skip to another optimization or enable
+C2 in normal gameplay on the strength of this host cohort. Do not change PR,
+concurrency, voices, model weights, sampling, decoder precision or visuals.
+
+The opt-in WAV/code evidence export is a quality aid, never a timed promotion
+run; the comparator explicitly blocks promotion when that retention is active.
+Complete five-voice, device, full-scene and recovery qualification is still open.
+
+#### C2 M2 first screen: historical opt-in decision and changed-output review
+
+This checkpoint preceded the later owner-approved shipping-default directive.
+
+The same signed Release binary now completed A/B/B/A full-response timing on
+M2 Vision Pro. UUID `55B34289-D6CF-32F6-983B-3585A14CBDCF`, manifest
+`40b3d745dcc6a89f23eb1be2564c4cf1f04627abbfba998a0a020faafca7b555` and the exact
+reports/receipts are retained under `/private/tmp/qwen-c2-device-20260918.3dMy6t/`.
+The first resource-copy build failed for disk space and remains retained;
+unchanged-source retry passed. The manifest allows only the complete legacy and
+explicit C2 contracts, not a wildcard. Source/build/compile/UUID/payload gates
+were not relaxed. Fresh2, full 159-row reference conditioning, separate 24-row
+decoder prefix, production sampling/quality settings and topology are unchanged.
+
+The four timing runs are in the results document. Mean wall was
+25.204868354→24.333604854 s (−3.456727%); first PCM
+9.194107854→8.801592688 s (−4.269203%); sampled peak
+5306.527763→4934.941563 MiB (−7.002436%). Wall pair ratios were 0.9903704212 and
+0.9403886783, median 0.9653795497. This is only two pairs for Big Mike. Do not
+relax the five-pairs/all-five-voice gate or interpret the small bootstrap interval
+as robust uncertainty. Warmth is uncontrolled, and B01 first PCM slightly worsened.
+
+Legacy generated 48/68/52/60/75 rows, C2 47/65/53/62/85: **303→312 rows and
+24.24→24.96 seconds** (+2.970297%). C2 did not shorten the requested work, but
+different tokens/rows/duration prevent an identical-work speedup claim. The
+unmodified comparator correctly returns **COMPARABLE / OUTPUT_LENGTH_REVIEW /
+DEVICE_QUALIFICATION_PENDING**, with no control errors and no automatic promotion.
+Separate audio evidence passes integrity/matching checks only:
+**EVIDENCE_COMPARABLE / NOT_A_QUALITY_PASS**. Listening approval is pending. All five
+outputs differ; segment 0 first diverges at row 0, residual codebook column 2.
+Numerical/content/voice acceptance is not inferred from hashes or natural EOS.
+
+All seven renders completed full segments with zero failed/pending Metal buffers
+and qualified build provenance. Six timing/audio runs remained thermal 0→0.
+The separate phase-enabled dtype run transitioned 0→1 and **failed validation**;
+retain it as diagnostic-only, excluded from timing, without rerunning or masking
+the failure. Sampled M2 metadata confirms intended BF16 generation boundaries
+with FP32 logits/decoder; substantial metadata/scope drops prohibit a complete
+coverage claim. Tensor metadata is not kernel-performance or numerical-quality proof.
+
+Decision: C2 stays opt-in and production stays `.legacy`. Fixed-work/quality
+review, predeclared numerical tolerances, all-voice listening, additional matched
+repetitions, recovery and sustained full-scene qualification remain open. Do not
+mix audio-retention or dtype-marker runs into the timing population, claim a
+gameplay gain, or attribute the older gameplay/isolated gap to BF16 or visuals.
+The native full-response A/B audio previews were presented to the owner without
+normalization/resampling. A satisfactory listening review can support an
+explicitly approved bounded in-game pilot, not global enablement or production
+promotion. This benchmark round is complete. Normal-app restoration is verified
+by successful `restore.json` and `restored-app.json`: same bundle version 4.3/33,
+`FEBFE3DE-0074-4A51-935F-A7922378C0DF/c1-production-restore.app`. The in-place
+update did not uninstall the app or delete saves/container data; a normal gameplay
+launch is not inferred from the installation receipts. No further device action
+or production enablement follows from this document's result alone.
+
+#### Latest owner directive: ship BF16 normally, without a separate switch
+
+The owner listened to the retained Mike comparison, approved that sample, then
+explicitly superseded the proposed opt-in/in-game-test scheme: make BF16 the
+ordinary **shipping default**, with no separate scheme or toggle. Implement the
+requested selection as `TuringQwenNativeExecutionPolicy.production =
+Self(arithmetic: .bf16Candidate)`; all other policy fields remain unchanged.
+Scheduler logs include arithmetic and policy fingerprint. The canonical shipping
+fingerprint remains `f7188d490a7d756b1ebc8c65b754bcd8c2e20ec3e45a6ddd70068f465cf665f3`.
+Reference tests and baseline benchmarks must select legacy explicitly.
+
+This is the owner's release decision despite incomplete broader qualification,
+not a fabricated engineering PASS. The approximately 3.5% lower mean wall time
+is still a two-pair, one-voice first screen with changed rows/duration. Sample
+listening approval is limited to Mike; five-voice/content/numerical, additional
+matched repetitions, full-scene and recovery/device gates remain open. Preserve
+the recorded `OUTPUT_LENGTH_REVIEW`, diagnostic thermal failure and
+`NOT_A_QUALITY_PASS`; do not retrospectively rewrite evidence or lower gates.
+
+The actual policy source passed the external no-model `ShippingPolicyCheck.swift`
+compile/run for the unchanged tuple, fixed fingerprints, explicit legacy override,
+structured inheritance, detached BF16 default and restoration. The four edited
+native test files preserve legacy golden/probe baselines and assert the new
+default, but the full native suite has not been rerun. The normal Release build
+passed (exit 0), log
+`/private/tmp/qwen-c2-device-20260918.3dMy6t/c2-shipping-default.build.log`.
+Its signature passed deep/strict verification; actual optimized app/native
+commands exclude the benchmark-launch flag and retain stream recovery.
+All 58 performance/evidence and 25 provenance Python tests passed. Installation
+of this new build and its in-game playthrough remain next; use the ordinary
+Xcode build/run, with no scheme, environment, or settings change required.

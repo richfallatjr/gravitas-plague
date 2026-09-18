@@ -79,6 +79,13 @@ class PerformanceComparisonTests(unittest.TestCase):
         self.assertAlmostEqual(value["pooledPairedWallRatio"]["median"], .9)
         self.assertTrue(any("quality" in x for x in value["pendingQualification"]))
 
+    def test_audio_capture_cannot_qualify_performance(self):
+        a, b = run_fixture("a"), run_fixture("b", wall=9)
+        b["qualityEvidence"] = {"performancePromotionEligible": False}
+        value = self.compare([a], [b])
+        self.assertFalse(value["readyForManualQualificationReview"])
+        self.assertTrue(any("retains PCM/code" in x for x in value["pendingQualification"]))
+
     def test_complete_segments_require_natural_completion_for_every_pcm_index(self):
         a, b = complete_run_fixture("a"), complete_run_fixture("b", wall=9)
         b["segmentTimings"].reverse()

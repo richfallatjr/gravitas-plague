@@ -312,8 +312,9 @@ enum TuringQwenNativeCodePredictor {
         }
 
         let prefillCodeHiddens = concatenated([
-            talkerLastHiddenState,
-            try resolved.talkerCodecEmbedding(tokenID: firstCodecToken)
+            TuringQwenNativeGenerationArithmetic.activation(talkerLastHiddenState),
+            TuringQwenNativeGenerationArithmetic.activation(
+                try resolved.talkerCodecEmbedding(tokenID: firstCodecToken))
         ], axis: 1)
         let prefillInput = TuringQwenNativeCodePredictorForwardRunner.projectedInput(
             codeHidden: prefillCodeHiddens,

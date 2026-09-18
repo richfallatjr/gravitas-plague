@@ -254,7 +254,7 @@ final class TuringQwenNativeConversionCacheTests: XCTestCase {
         }
     }
 
-    func testCancellationDoesNotPublishPartialCacheAndProductionRemainsLegacy() async throws {
+    func testCancellationDoesNotPublishPartialCacheAndProductionDoesNotEnableC1() async throws {
         let task = Task {
             withUnsafeCurrentTask { $0?.cancel() }
             return try MLX.Stream.withDefaultStream(.cpu) {
@@ -270,8 +270,9 @@ final class TuringQwenNativeConversionCacheTests: XCTestCase {
             XCTFail("Cancelled conversion construction must not publish a partial cache")
         } catch is CancellationError {
         }
-        XCTAssertEqual(TuringQwenNativeExecutionPolicy.production.arithmetic, .legacy)
+        XCTAssertEqual(TuringQwenNativeExecutionPolicy.production.arithmetic, .bf16Candidate)
         XCTAssertNoThrow(try TuringQwenNativeExecutionPolicy(arithmetic: .legacyWithConversionCache).validateImplemented())
-        XCTAssertThrowsError(try TuringQwenNativeExecutionPolicy(arithmetic: .bf16Candidate).validateImplemented())
+        XCTAssertNoThrow(try TuringQwenNativeExecutionPolicy(arithmetic: .bf16Candidate).validateImplemented())
+        XCTAssertThrowsError(try TuringQwenNativeExecutionPolicy(prefill: .fusedCausalCandidate).validateImplemented())
     }
 }

@@ -29,6 +29,8 @@ def native_command(args):
                "--command-buffer-profile", args.command_buffer_profile, "--profiler-state", args.profiler_state]
     if args.policy:
         command += ["--policy", str(args.policy.resolve())]
+    if getattr(args, "evidence_directory", None):
+        command += ["--evidence-directory", str(args.evidence_directory.resolve())]
     return command
 
 
@@ -67,6 +69,8 @@ def main():
     parser.add_argument("--workload", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--policy", type=Path)
+    parser.add_argument("--evidence-directory", type=Path,
+                        help="New directory for optional audio/code evidence; not a promotion timing run")
     parser.add_argument("--mode", choices=["bounded-replay", "decoder-fixed-codes"], default="bounded-replay")
     parser.add_argument("--profiler-state", default="unattached")
     parser.add_argument("--command-buffer-profile", choices=COMMAND_BUFFER_PROFILES,

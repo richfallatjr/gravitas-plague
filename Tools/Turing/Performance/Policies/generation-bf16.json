@@ -1,0 +1,10 @@
+{
+  "policyVersion": 1,
+  "arithmetic": "bf16Candidate",
+  "prefill": "legacyDense",
+  "predictor": "legacy",
+  "workspace": "legacy",
+  "decoderIO": "legacy",
+  "kernelSet": "existing",
+  "decoderState": "legacy"
+}

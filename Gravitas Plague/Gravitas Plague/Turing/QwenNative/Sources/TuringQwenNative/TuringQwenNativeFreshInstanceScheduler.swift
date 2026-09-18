@@ -174,6 +174,8 @@ public actor TuringQwenNativeFreshInstanceScheduler {
         print("""
         [TuringQwenFresh2] run started
           runID: \(runID)
+          generationArithmetic: \(TuringQwenNativeExecutionPolicy.current.arithmetic.rawValue)
+          executionPolicySHA256: \(TuringQwenNativeExecutionPolicy.current.fingerprint)
           requestedInstanceCount: \(requested)
           actualInstanceCount: \(actual)
           skipSegmentFailures: \(skipSegmentFailures)

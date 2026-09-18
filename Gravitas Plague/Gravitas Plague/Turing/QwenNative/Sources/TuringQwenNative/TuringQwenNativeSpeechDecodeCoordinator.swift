@@ -104,6 +104,15 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
         }
         try await releaseLedger.requireReleased(rendered.releaseToken)
 
+        // Qualification-only retention of CPU codebooks already materialized by
+        // generation. The default nil TaskLocal performs no capture or I/O.
+        try TuringQwenPerformanceEvidence.current?.recordCodes(.init(
+            runID: rendered.runID, voiceID: rendered.voiceID, segmentIndex: rendered.segmentIndex,
+            codebookCount: rendered.codebookCount, conditioningReferenceRowCount: rendered.referenceRowCount,
+            decodeReferenceRowCount: rendered.decodeReferenceRowCount, generatedRowCount: rendered.generatedRowCount,
+            reachedEOS: rendered.reachedEOS, referenceCodes: rendered.referenceCodes,
+            generatedCodes: rendered.generatedCodes))
+
         let decodeID = nextDecodeID
         nextDecodeID += 1
         let phaseContext = TuringQwenNativePhaseDiagnostics.makeContext(

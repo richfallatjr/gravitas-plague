@@ -14,9 +14,6 @@ final class TuringQwenNativeWeightsStore: @unchecked Sendable {
     init(modelRoot: URL,
          arithmetic: TuringQwenNativeExecutionPolicy.Arithmetic = TuringQwenNativeExecutionPolicy.current.arithmetic) throws {
         let candidate = arithmetic == .legacyWithConversionCache
-        guard arithmetic != .bf16Candidate else {
-            throw TuringQwenNativeError.invalidConfig("BF16 arithmetic is not implemented.")
-        }
         let modelURL = modelRoot.appendingPathComponent("model.safetensors")
         let sourceHandle = candidate ? try FileHandle(forReadingFrom: modelURL) : nil
         defer { try? sourceHandle?.close() }
@@ -86,9 +83,6 @@ final class TuringQwenNativeWeightsStore: @unchecked Sendable {
         failureEpoch: UInt64 = TuringMetalDiagnostics.failureEpoch,
         byteBudget: Int = TuringQwenNativeConversionCache.maximumBytes
     ) throws {
-        guard arithmetic != .bf16Candidate else {
-            throw TuringQwenNativeError.invalidConfig("BF16 arithmetic is not implemented.")
-        }
         arraysByKey = arrays
         tensorCount = arrays.count
         conversionCache = arithmetic == .legacyWithConversionCache

@@ -59,6 +59,7 @@ public struct TuringQwenBoundedBenchmarkReport: Codable, Sendable {
     public let segmentTimings: [TuringQwenPerformanceSegmentTiming]?
     public let conversionCachesAfterLoad: [TuringQwenNativeConversionCacheSnapshot]?
     public let conversionCachesAfterRender: [TuringQwenNativeConversionCacheSnapshot]?
+    public let qualityEvidence: TuringQwenPerformanceEvidenceReport?
     public let sampledPeakFootprintMiB: Double
     public let residualFootprintMiB: Double
     public let residualMLXActiveBytes: Int
@@ -143,14 +144,17 @@ public enum TuringQwenBoundedBenchmark {
         public let profilerState: String
         public let sceneCondition: String
         public let policy: TuringQwenNativeExecutionPolicy
+        public let evidenceDirectory: URL?
         public init(modelRoot: URL, bundleRoot: URL, workload: TuringQwenPerformanceWorkload,
                     mode: Mode = .boundedReplay,
                     commandBufferProfile: TuringQwenNativeCommandBufferProfile = .deviceDefault,
                     profilerState: String = "unknown", sceneCondition: String = "isolated-host-no-scene",
-                    policy: TuringQwenNativeExecutionPolicy = .production) {
+                    policy: TuringQwenNativeExecutionPolicy = .production,
+                    evidenceDirectory: URL? = nil) {
             self.modelRoot = modelRoot; self.bundleRoot = bundleRoot; self.workload = workload
             self.mode = mode; self.commandBufferProfile = commandBufferProfile
             self.profilerState = profilerState; self.sceneCondition = sceneCondition; self.policy = policy
+            self.evidenceDirectory = evidenceDirectory
         }
     }
 
@@ -174,6 +178,15 @@ public enum TuringQwenBoundedBenchmark {
     public static func run(options: Options) async throws -> TuringQwenBoundedBenchmarkReport {
         try options.workload.validate(decoderOnly: options.mode == .decoderFixedCodes)
         try options.policy.validateImplemented()
+        let evidenceCapture: TuringQwenPerformanceEvidence.Capture?
+        if let directory = options.evidenceDirectory {
+            guard options.mode == .boundedReplay, options.workload.requireCompleteSegments == true else {
+                throw TuringQwenNativeError.invalidConfig("Quality evidence export requires full-segment bounded replay")
+            }
+            try TuringQwenPerformanceEvidence.validateDestination(directory)
+            evidenceCapture = try .init(segmentCount: options.workload.segments.count,
+                                        maximumRows: options.workload.maximumRowsPerSegment)
+        } else { evidenceCapture = nil }
         guard options.mode != .decoderFixedCodes || options.policy.arithmetic == .legacy else {
             throw TuringQwenNativeError.invalidConfig("A predictor conversion-cache candidate requires the Fresh2 workload, not decoder-only replay")
         }
@@ -224,8 +237,10 @@ public enum TuringQwenBoundedBenchmark {
         return try await TuringQwenNativeExecutionPolicy.$current.withValue(options.policy) {
             try await TuringQwenPerformanceBudget.$current.withValue(budget) {
               try await TuringQwenNativePhaseDiagnostics.$recordingSession.withValue(phaseRecording) {
+                try await TuringQwenPerformanceEvidence.$current.withValue(evidenceCapture) {
                 try await execute(options: options, runtime: runtime, profile: profile,
                                   identity: identity, installedPayload: installedPayload, manifest: manifest)
+                }
               }
             }
         }
@@ -302,6 +317,9 @@ public enum TuringQwenBoundedBenchmark {
                 schedulerReport = try await scheduler.runSegments(requests, runID: id, modelRoot: options.modelRoot,
                     skipSegmentFailures: false, onSegmentStarted: { _,_ in },
                     onSegmentDecoded: { decoded in
+                        try TuringQwenPerformanceEvidence.current?.recordPCM(.init(
+                            runID: decoded.runID, voiceID: decoded.voiceID, segmentIndex: decoded.segmentIndex,
+                            sampleRate: decoded.audio.sampleRate, samples: decoded.audio.samples))
                         try await collector.record(index: decoded.segmentIndex,
                             seconds: seconds(fixedStart.duration(to: .now)), audio: decoded.audio,
                             timing: .init(decoded))
@@ -342,6 +360,34 @@ public enum TuringQwenBoundedBenchmark {
         let rawAudio = snapshot.records.reduce(0) { $0 + Double($1.sampleCount) / Double($1.sampleRate) }
         let memory = Memory.snapshot()
         let commandBuffers = capture.finish(profile: options.commandBufferProfile, admissionMode: .currentOverlap)
+        var qualityEvidence: TuringQwenPerformanceEvidenceReport?
+        if let directory = options.evidenceDirectory, let evidenceCapture = TuringQwenPerformanceEvidence.current {
+            // Timed rendering, native teardown, memory sampling, and command-
+            // buffer capture are finished before any evidence serialization.
+            do {
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+                qualityEvidence = try TuringQwenPerformanceEvidence.export(capture: evidenceCapture,
+                    context: .init(runID: id, characterID: options.workload.characterID,
+                        voiceID: options.workload.voiceID, texts: options.workload.segments,
+                        samplingSeed: options.workload.samplingSeed,
+                        maximumRowsPerSegment: options.workload.maximumRowsPerSegment,
+                        workloadSHA256: try options.workload.fingerprint, policySHA256: options.policy.fingerprint,
+                        workloadJSON: try encoder.encode(options.workload), policyJSON: try encoder.encode(options.policy),
+                        identitySHA256: identity, outcome: failure == nil ? "SCOUT_COMPLETED" : "FAILED_OR_BUDGET_STOPPED",
+                        failure: failure), directory: directory)
+                if qualityEvidence?.status == "PARTIAL_EVIDENCE_UNASSESSED", failure == nil {
+                    failure = "Quality evidence is incomplete; consult unavailable fields in evidence.json"
+                }
+            } catch {
+                let message = "Quality evidence export failed: \(error.localizedDescription)"
+                qualityEvidence = .init(status: "EXPORT_FAILED", directory: directory.path,
+                    manifestFilename: nil, manifestSHA256: nil,
+                    retainedPayloadBytes: evidenceCapture.snapshot().retainedPayloadBytes,
+                    performancePromotionEligible: false, exportError: message)
+                if failure == nil { failure = message }
+            }
+        }
         let resolved = try TuringMetalDiagnostics.configuration()
         let policyJSON = try JSONDecoder().decode(TuringQwenJSONValue.self, from: JSONEncoder().encode(options.policy))
         #if GR_TURING_METAL_RECOVERY_QUALIFICATION
@@ -384,6 +430,7 @@ public enum TuringQwenBoundedBenchmark {
             segmentTimings: snapshot.timings,
             conversionCachesAfterLoad: conversionCachesAfterLoad,
             conversionCachesAfterRender: conversionCachesAfterRender,
+            qualityEvidence: qualityEvidence,
             sampledPeakFootprintMiB: snapshot.peakFootprint, residualFootprintMiB: TuringQwenNativeProcessMemoryProbe.snapshot().physFootprintMB,
             residualMLXActiveBytes: memory.activeMemory, residualMLXCacheBytes: memory.cacheMemory,
             unavailable: ["promotion": "A bounded scout is not five-voice/device qualification; external provenance and quality gates required",

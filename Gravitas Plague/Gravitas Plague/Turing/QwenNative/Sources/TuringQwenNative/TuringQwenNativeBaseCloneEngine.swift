@@ -1094,6 +1094,8 @@ public actor TuringQwenNativeBaseCloneEngine {
     }
 
     private struct StaticPromptContextKey: Hashable {
+        // Speaker/role projections have policy-dependent storage precision.
+        let arithmetic: TuringQwenNativeExecutionPolicy.Arithmetic
         let voiceID: String
         let variantID: String
         let language: String
@@ -1142,6 +1144,7 @@ public actor TuringQwenNativeBaseCloneEngine {
         resident: TuringQwenNativeResidentResources
     ) throws -> TuringQwenNativeBaseCloneStaticPromptContext {
         let key = StaticPromptContextKey(
+            arithmetic: TuringQwenNativeExecutionPolicy.current.arithmetic,
             voiceID: prompt.cloneProfile.voiceID,
             variantID: prompt.cloneProfile.defaultVariantID,
             language: prompt.language.lowercased(),
@@ -1457,7 +1460,8 @@ public actor TuringQwenNativeBaseCloneEngine {
         let trailingHidden = segmentCache.talkerTrailingTextEmbed(generationStep: generationStep) ??
             promptInputs.ttsPadEmbed
 
-        let input = codeEmbedding + trailingHidden
+        let input = TuringQwenNativeGenerationArithmetic.activation(codeEmbedding)
+            + TuringQwenNativeGenerationArithmetic.activation(trailingHidden)
         if performanceMode.shouldForceEveryEval {
             eval(input)
         }

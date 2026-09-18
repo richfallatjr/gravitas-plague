@@ -30,12 +30,16 @@ public struct TuringQwenNativeExecutionPolicy: Codable, Hashable, Sendable {
         decoderState = "legacy"
     }
 
-    public static let production = Self()
+    // Standard gameplay default. Only generation activation/cache arithmetic
+    // changes; Fresh2, conditioning, sampling, decoder and recovery stay intact.
+    // Baseline benchmarks must request `Self(arithmetic: .legacy)` explicitly.
+    public static let production = Self(arithmetic: .bf16Candidate)
     @TaskLocal public static var current = production
 
     public func validateImplemented() throws {
         guard policyVersion == 1,
-              (arithmetic == .legacy || arithmetic == .legacyWithConversionCache), prefill == .legacyDense,
+              (arithmetic == .legacy || arithmetic == .legacyWithConversionCache || arithmetic == .bf16Candidate),
+              prefill == .legacyDense,
               predictor == .legacy, workspace == .legacy,
               (decoderIO == .legacy || decoderIO == .positionalReaderCandidate),
               kernelSet == "existing", decoderState == "legacy" else {

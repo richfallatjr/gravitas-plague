@@ -219,6 +219,8 @@ private struct TuringQwenNativeCodePredictorLayerForwardResult {
 }
 
 enum TuringQwenNativeCodePredictorForwardRunner {
+    private typealias Arithmetic = TuringQwenNativeGenerationArithmetic
+
     static func prefill(
         inputEmbeddings: MLXArray,
         attentionMask: MLXArray?,
@@ -234,7 +236,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         )
         let resolvedConfig = resolved.config
         let sequenceLength = inputEmbeddings.dim(1)
-        var hidden = inputEmbeddings
+        var hidden = Arithmetic.activation(inputEmbeddings)
         var cacheLayers: [TuringQwenNativeCodePredictorKVCache.Layer] = []
         cacheLayers.reserveCapacity(resolvedConfig.numHiddenLayers)
 
@@ -262,7 +264,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
             performanceMode: performanceMode
         )
         let lastHidden = normalized[(sequenceLength - 1)..<sequenceLength, axis: 1]
-        let logits = linear(lastHidden, weight: resolved.lmHeadWeights[0])
+        let logits = linear(Arithmetic.logitInput(lastHidden), weight: resolved.lmHeadWeights[0])
         if performanceMode.shouldForceEveryEval {
             eval(logits)
         }
@@ -304,7 +306,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
             )
         }
 
-        var hidden = inputEmbedding
+        var hidden = Arithmetic.activation(inputEmbedding)
         var nextCacheLayers: [TuringQwenNativeCodePredictorKVCache.Layer] = []
         nextCacheLayers.reserveCapacity(resolvedConfig.numHiddenLayers)
         let oneStepRope = segmentCache?.codePredictorRope(position: previousState.position) ??
@@ -339,7 +341,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
             performanceMode: performanceMode
         )
         let lmHeadIndex = previousState.generatedResidualTokenCount
-        let logits = linear(lastHidden, weight: resolved.lmHeadWeights[lmHeadIndex])
+        let logits = linear(Arithmetic.logitInput(lastHidden), weight: resolved.lmHeadWeights[lmHeadIndex])
         if performanceMode.shouldForceEveryEval {
             eval(logits)
         }
@@ -367,9 +369,9 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         segmentCache: TuringQwenNativeSegmentRuntimeCache?,
         performanceMode: TuringQwenNativePerformanceMode
     ) throws -> TuringQwenNativeCodePredictorLayerForwardResult {
-        let residual = hiddenStates
+        let residual = Arithmetic.activation(hiddenStates)
         let normalized = rmsNorm(
-            hiddenStates,
+            residual,
             weight: weights.inputLayerNormWeight,
             eps: Float(config.rmsNormEps),
             performanceMode: performanceMode
@@ -383,7 +385,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
             segmentCache: segmentCache,
             performanceMode: performanceMode
         )
-        let afterAttention = residual + attentionResult.hiddenStates
+        let afterAttention = Arithmetic.activation(residual + attentionResult.hiddenStates)
         let mlpResidual = afterAttention
         let mlpInput = rmsNorm(
             afterAttention,
@@ -394,7 +396,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         let mlpOutput = mlp(mlpInput, weights: weights)
 
         return TuringQwenNativeCodePredictorLayerForwardResult(
-            hiddenStates: mlpResidual + mlpOutput,
+            hiddenStates: Arithmetic.activation(mlpResidual + mlpOutput),
             cacheLayer: attentionResult.cacheLayer
         )
     }
@@ -409,9 +411,9 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         rope: (cos: MLXArray, sin: MLXArray),
         performanceMode: TuringQwenNativePerformanceMode
     ) throws -> TuringQwenNativeCodePredictorLayerForwardResult {
-        let residual = hiddenStates
+        let residual = Arithmetic.activation(hiddenStates)
         let normalized = rmsNorm(
-            hiddenStates,
+            residual,
             weight: weights.inputLayerNormWeight,
             eps: Float(config.rmsNormEps),
             performanceMode: performanceMode
@@ -426,7 +428,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
             rope: rope,
             performanceMode: performanceMode
         )
-        let afterAttention = residual + attentionResult.hiddenStates
+        let afterAttention = Arithmetic.activation(residual + attentionResult.hiddenStates)
         let mlpResidual = afterAttention
         let mlpInput = rmsNorm(
             afterAttention,
@@ -437,7 +439,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         let mlpOutput = mlp(mlpInput, weights: weights)
 
         return TuringQwenNativeCodePredictorLayerForwardResult(
-            hiddenStates: mlpResidual + mlpOutput,
+            hiddenStates: Arithmetic.activation(mlpResidual + mlpOutput),
             cacheLayer: attentionResult.cacheLayer
         )
     }
@@ -451,12 +453,17 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         segmentCache: TuringQwenNativeSegmentRuntimeCache?,
         performanceMode: TuringQwenNativePerformanceMode
     ) throws -> TuringQwenNativeCodePredictorLayerForwardResult {
-        let query = linear(hiddenStates, weight: weights.qProjWeight)
+        let query = Arithmetic.activation(linear(hiddenStates, weight: weights.qProjWeight))
             .reshaped([1, sequenceLength, config.numAttentionHeads, config.headDim])
-        let key = linear(hiddenStates, weight: weights.kProjWeight)
+        let key = Arithmetic.activation(linear(hiddenStates, weight: weights.kProjWeight))
             .reshaped([1, sequenceLength, config.numKeyValueHeads, config.headDim])
-        let value = linear(hiddenStates, weight: weights.vProjWeight)
+        let value = Arithmetic.activation(linear(hiddenStates, weight: weights.vProjWeight))
             .reshaped([1, sequenceLength, config.numKeyValueHeads, config.headDim])
+        if layerIndex == 0 {
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.prefill.qProjection", query)
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.prefill.kProjection", key)
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.prefill.vProjection", value)
+        }
         var queryStates = rmsNorm(
             query,
             weight: weights.qNormWeight,
@@ -473,6 +480,7 @@ enum TuringQwenNativeCodePredictorForwardRunner {
 
         let rope: (cos: MLXArray, sin: MLXArray)
         if sequenceLength == 2,
+           segmentCache?.matchesCurrentArithmetic == true,
            let cached = segmentCache?.codePredictorPrefillRope {
             rope = (cached.cos, cached.sin)
         } else {
@@ -484,6 +492,11 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         }
         queryStates = applyRotary(queryStates, cos: rope.cos, sin: rope.sin)
         keyStates = applyRotary(keyStates, cos: rope.cos, sin: rope.sin)
+
+        if layerIndex == 0 {
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.prefill.postRopeQ", queryStates)
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.prefill.postRopeK", keyStates)
+        }
 
         let cacheLayer = try TuringQwenNativeCodePredictorKVCacheStore.prefillLayer(
             keyStates: keyStates,
@@ -503,21 +516,23 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         )
 
         let scale = Float(1.0 / sqrt(Double(config.headDim)))
-        let attentionMask = sequenceLength == 2
+        let attentionMask = sequenceLength == 2 && segmentCache?.matchesCurrentArithmetic == true
             ? (segmentCache?.codePredictorPrefillMask ?? causalMask(sequenceLength: sequenceLength))
             : causalMask(sequenceLength: sequenceLength)
-        let scores = matmul(queryStates, keyStates.transposed(0, 1, 3, 2)) * scale + attentionMask
-        let probabilities = softmax(
+        let scores = attentionScores(query: queryStates, key: keyStates, scale: scale) + attentionMask
+        let probabilities = Arithmetic.attentionProbabilities(
             scores,
-            axis: -1,
-            precise: performanceMode.shouldUsePreciseAttentionSoftmax
+            legacyPrecise: performanceMode.shouldUsePreciseAttentionSoftmax
         )
-        let attended = matmul(probabilities, valueStates)
+        let attended = Arithmetic.activation(matmul(probabilities, valueStates))
             .transposed(0, 2, 1, 3)
             .reshaped([1, sequenceLength, config.attentionOutputSize])
+        if layerIndex == 0 {
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.prefill.attentionOutput", attended)
+        }
 
         return TuringQwenNativeCodePredictorLayerForwardResult(
-            hiddenStates: linear(attended, weight: weights.oProjWeight),
+            hiddenStates: Arithmetic.activation(linear(attended, weight: weights.oProjWeight)),
             cacheLayer: cacheLayer
         )
     }
@@ -532,12 +547,17 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         rope: (cos: MLXArray, sin: MLXArray),
         performanceMode: TuringQwenNativePerformanceMode
     ) throws -> TuringQwenNativeCodePredictorLayerForwardResult {
-        let query = linear(hiddenStates, weight: weights.qProjWeight)
+        let query = Arithmetic.activation(linear(hiddenStates, weight: weights.qProjWeight))
             .reshaped([1, 1, config.numAttentionHeads, config.headDim])
-        let key = linear(hiddenStates, weight: weights.kProjWeight)
+        let key = Arithmetic.activation(linear(hiddenStates, weight: weights.kProjWeight))
             .reshaped([1, 1, config.numKeyValueHeads, config.headDim])
-        let value = linear(hiddenStates, weight: weights.vProjWeight)
+        let value = Arithmetic.activation(linear(hiddenStates, weight: weights.vProjWeight))
             .reshaped([1, 1, config.numKeyValueHeads, config.headDim])
+        if layerIndex == 0 {
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.step.qProjection", query)
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.step.kProjection", key)
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.step.vProjection", value)
+        }
         var queryStates = rmsNorm(
             query,
             weight: weights.qNormWeight,
@@ -554,6 +574,11 @@ enum TuringQwenNativeCodePredictorForwardRunner {
 
         queryStates = applyRotary(queryStates, cos: rope.cos, sin: rope.sin)
         keyStates = applyRotary(keyStates, cos: rope.cos, sin: rope.sin)
+
+        if layerIndex == 0 {
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.step.postRopeQ", queryStates)
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.step.postRopeK", keyStates)
+        }
 
         let updatedCacheLayer = try TuringQwenNativeCodePredictorKVCacheStore.appendOneStep(
             layer: previousCacheLayer,
@@ -584,21 +609,25 @@ enum TuringQwenNativeCodePredictorForwardRunner {
                 keyValueHeads: config.numKeyValueHeads,
                 attentionHeads: config.numAttentionHeads
             )
-            let scores = matmul(queryStates, repeatedKeyStates.transposed(0, 1, 3, 2)) * scale
-            let probabilities = softmax(
+            let scores = attentionScores(query: queryStates, key: repeatedKeyStates, scale: scale)
+            let probabilities = Arithmetic.attentionProbabilities(
                 scores,
-                axis: -1,
-                precise: performanceMode.shouldUsePreciseAttentionSoftmax
+                legacyPrecise: performanceMode.shouldUsePreciseAttentionSoftmax
             )
             attendedHeads = matmul(probabilities, repeatedValueStates)
         }
 
-        let attended = attendedHeads
+        let attended = Arithmetic.activation(attendedHeads)
             .transposed(0, 2, 1, 3)
             .reshaped([1, 1, config.attentionOutputSize])
+        if layerIndex == 0 {
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.step.attentionOutput", attended)
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.step.cacheK", updatedCacheLayer.key)
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.step.cacheV", updatedCacheLayer.value)
+        }
 
         return TuringQwenNativeCodePredictorLayerForwardResult(
-            hiddenStates: linear(attended, weight: weights.oProjWeight),
+            hiddenStates: Arithmetic.activation(linear(attended, weight: weights.oProjWeight)),
             cacheLayer: updatedCacheLayer
         )
     }
@@ -607,11 +636,11 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         codeHidden: MLXArray,
         projectionWeights: TuringQwenNativeCodePredictorProjectionWeights
     ) -> MLXArray {
-        linear(
-            codeHidden,
+        Arithmetic.activation(linear(
+            Arithmetic.activation(codeHidden),
             weight: projectionWeights.smallToMTPProjectionWeight,
-            bias: projectionWeights.smallToMTPProjectionBias
-        )
+            bias: Arithmetic.activation(projectionWeights.smallToMTPProjectionBias)
+        ))
     }
 
     static func logits(
@@ -621,17 +650,17 @@ enum TuringQwenNativeCodePredictorForwardRunner {
     ) throws -> MLXArray {
         let resolver = TuringQwenNativeWeightResolver(store: weights)
         let lmHeadWeight = try resolver.linear("talker.code_predictor.lm_head.\(lmHeadIndex).weight")
-        return linear(lastHidden, weight: lmHeadWeight)
+        return linear(Arithmetic.logitInput(lastHidden), weight: lmHeadWeight)
     }
 
     private static func mlp(
         _ hiddenStates: MLXArray,
         weights: TuringQwenNativeCodePredictorLayerWeights
     ) -> MLXArray {
-        let gate = linear(hiddenStates, weight: weights.gateProjWeight)
-        let up = linear(hiddenStates, weight: weights.upProjWeight)
-        let activated = gate * sigmoid(gate)
-        return linear(activated * up, weight: weights.downProjWeight)
+        let gate = Arithmetic.activation(linear(hiddenStates, weight: weights.gateProjWeight))
+        let up = Arithmetic.activation(linear(hiddenStates, weight: weights.upProjWeight))
+        let activated = Arithmetic.activation(gate * sigmoid(gate))
+        return Arithmetic.activation(linear(Arithmetic.activation(activated * up), weight: weights.downProjWeight))
     }
 
     private static func rmsNorm(
@@ -640,12 +669,23 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         eps: Float,
         performanceMode: TuringQwenNativePerformanceMode
     ) -> MLXArray {
-        if performanceMode == .performance {
-            return MLXFast.rmsNorm(value, weight: weight, eps: eps)
-        }
+        Arithmetic.rmsNorm(
+            value,
+            weight: weight,
+            epsilon: eps,
+            forceManual: performanceMode != .performance
+        )
+    }
 
-        let variance = (value * value).mean(axis: -1, keepDims: true)
-        return value / sqrt(variance + eps) * weight
+    private static func attentionScores(
+        query: MLXArray,
+        key: MLXArray,
+        scale: Float
+    ) -> MLXArray {
+        // BF16 cache/activation storage does not lower score arithmetic.
+        let scoreQuery = Arithmetic.isBF16 ? query.asType(.float32) : query
+        let scoreKey = Arithmetic.isBF16 ? key.asType(.float32) : key
+        return matmul(scoreQuery, scoreKey.transposed(0, 1, 3, 2)) * scale
     }
 
     private static func linear(
@@ -724,8 +764,8 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         }
 
         return (
-            MLXArray(cosValues, [1, 1, positions.count, headDim]),
-            MLXArray(sinValues, [1, 1, positions.count, headDim])
+            Arithmetic.activation(MLXArray(cosValues, [1, 1, positions.count, headDim])),
+            Arithmetic.activation(MLXArray(sinValues, [1, 1, positions.count, headDim]))
         )
     }
 
@@ -734,7 +774,9 @@ enum TuringQwenNativeCodePredictorForwardRunner {
         cos: MLXArray,
         sin: MLXArray
     ) -> MLXArray {
-        value * cos + rotateHalf(value) * sin
+        Arithmetic.activation(
+            value * Arithmetic.activation(cos) + rotateHalf(value) * Arithmetic.activation(sin)
+        )
     }
 
     private static func rotateHalf(

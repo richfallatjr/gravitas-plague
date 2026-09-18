@@ -26,7 +26,8 @@ private enum TuringQwenBenchmarkCLI {
                 let report = try await TuringQwenBoundedBenchmark.run(options: .init(
                     modelRoot: arguments.modelRoot, bundleRoot: arguments.bundleRoot, workload: workload,
                     mode: mode, commandBufferProfile: arguments.commandBufferProfile,
-                    profilerState: arguments.profilerState, policy: policy))
+                    profilerState: arguments.profilerState, policy: policy,
+                    evidenceDirectory: arguments.evidenceDirectory))
                 try writeJSON(report, to: arguments.outputURL)
                 print("Bounded scout: \(report.outcome); report: \(arguments.outputURL.path)")
                 if report.failure != nil { Foundation.exit(EXIT_FAILURE) }
@@ -157,6 +158,7 @@ private struct Arguments {
     let policyURL: URL?
     let commandBufferProfile: TuringQwenNativeCommandBufferProfile
     let profilerState: String
+    let evidenceDirectory: URL?
 
     static let usage = """
     Usage:
@@ -170,7 +172,8 @@ private struct Arguments {
         [--label LABEL] \\
         [--git-revision SHA] \\
         [--workload FIXTURE.json] [--policy POLICY.json] \\
-        [--command-buffer-profile operations40Megabytes32] [--profiler-state unattached]
+        [--command-buffer-profile operations40Megabytes32] [--profiler-state unattached] \\
+        [--evidence-directory NEW_DIRECTORY]
 
     `quick` runs one representative short, medium, and long case. `full` runs
     the locked 10 short, 10 medium, 10 long, and three multi-minute scripts.
@@ -182,6 +185,9 @@ private struct Arguments {
     Bounded modes require a validated fixture containing row, wall and footprint
     caps, use the real character catalog, and never promote themselves. Do not
     substitute the historical quick/full suites for bounded scouting.
+    --evidence-directory requires requireCompleteSegments=true bounded replay.
+    It retains native PCM/code rows and writes WAV/JSON after render timing.
+    Evidence runs require listening/token review and cannot promote performance.
     """
 
     static func parse(_ raw: [String]) throws -> Self {
@@ -197,7 +203,7 @@ private struct Arguments {
                 label: "help",
                 gitRevision: nil,
                 help: true, workloadURL: nil, policyURL: nil,
-                commandBufferProfile: .operations40Megabytes32, profilerState: "unknown"
+                commandBufferProfile: .operations40Megabytes32, profilerState: "unknown", evidenceDirectory: nil
             )
         }
 
@@ -226,7 +232,7 @@ private struct Arguments {
             "--suite",
             "--baseline",
             "--label",
-            "--git-revision", "--workload", "--policy", "--command-buffer-profile", "--profiler-state"
+            "--git-revision", "--workload", "--policy", "--command-buffer-profile", "--profiler-state", "--evidence-directory"
         ])
         if let unknown = values.keys.first(where: { !allowed.contains($0) }) {
             throw CLIError("Unknown argument: \(unknown)")
@@ -248,8 +254,11 @@ private struct Arguments {
         guard !isBounded || (values["--workload"] != nil && values["--baseline"] == nil && values["--suite"] == nil) else {
             throw CLIError("Bounded modes require --workload and do not accept --baseline/--suite")
         }
-        guard isBounded || (values["--workload"] == nil && values["--policy"] == nil && values["--command-buffer-profile"] == nil && values["--profiler-state"] == nil) else {
+        guard isBounded || (values["--workload"] == nil && values["--policy"] == nil && values["--command-buffer-profile"] == nil && values["--profiler-state"] == nil && values["--evidence-directory"] == nil) else {
             throw CLIError("Workload/policy/profile/profiler options apply only to bounded modes")
+        }
+        guard values["--evidence-directory"] == nil || mode == .boundedReplay else {
+            throw CLIError("--evidence-directory applies only to full-segment bounded replay")
         }
         guard let commandBufferProfile = TuringQwenNativeCommandBufferProfile(rawValue: values["--command-buffer-profile"] ?? "operations40Megabytes32") else {
             throw CLIError("Invalid command-buffer profile")
@@ -285,7 +294,8 @@ private struct Arguments {
             gitRevision: values["--git-revision"],
             help: false,
             workloadURL: values["--workload"].map(fileURL), policyURL: values["--policy"].map(fileURL),
-            commandBufferProfile: commandBufferProfile, profilerState: values["--profiler-state"] ?? "unknown"
+            commandBufferProfile: commandBufferProfile, profilerState: values["--profiler-state"] ?? "unknown",
+            evidenceDirectory: values["--evidence-directory"].map(fileURL)
         )
     }
 

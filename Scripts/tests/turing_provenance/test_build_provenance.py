@@ -3,7 +3,9 @@ import importlib.util
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest import mock
 
 SCRIPT = Path(__file__).resolve().parents[2] / "turing" / "qwen_build_provenance.py"
 spec = importlib.util.spec_from_file_location("provenance", SCRIPT)
@@ -45,6 +47,32 @@ def fixture():
     return manifest, installed
 
 
+def refresh_manifest(manifest, installed):
+    manifest.pop("manifestSHA256", None)
+    manifest["manifestSHA256"] = p.digest(p.canonical(manifest))
+    installed["buildManifest"] = copy.deepcopy(manifest)
+
+
+def alternate_fixture():
+    manifest, installed = fixture()
+    baseline = dict(p.CONTRACT, requestedCommandBufferProfile="deviceDefault",
+                    resolvedCommandBufferProfile={"maximumOperations": 40, "maximumMegabytes": 40},
+                    executionPolicy=dict(policyVersion=1, arithmetic="legacy", prefill="legacyDense",
+                                         predictor="legacy", workspace="legacy", decoderIO="legacy",
+                                         kernelSet="existing", decoderState="legacy"),
+                    policySHA256=p.digest(b"1|legacy|legacyDense|legacy|legacy|legacy|existing|legacy"),
+                    seedPolicy="fixture seed + segment index",
+                    recoveryDefines=["GR_TURING_METAL_STREAM_RECOVERY"], playbackRateApplied=False)
+    candidate = copy.deepcopy(baseline)
+    candidate["executionPolicy"]["arithmetic"] = "bf16Candidate"
+    candidate["policySHA256"] = p.digest(b"1|bf16Candidate|legacyDense|legacy|legacy|legacy|existing|legacy")
+    manifest["runtimeContract"] = baseline
+    manifest["alternateRuntimeContracts"] = [candidate]
+    installed["runtimeContract"] = copy.deepcopy(candidate)
+    refresh_manifest(manifest, installed)
+    return manifest, installed
+
+
 class ProvenanceTests(unittest.TestCase):
     def test_dyld_install_names_are_not_response_files(self):
         args = ["clang", "-install_name", "@rpath/Gravitas Plague.debug.dylib", "@loader_path/lib.dylib", "@executable_path/lib.dylib",
@@ -56,6 +84,166 @@ class ProvenanceTests(unittest.TestCase):
     def test_valid_capture_and_actual_installed_identity_can_qualify_provenance(self):
         a, b = fixture()
         self.assertEqual(p.verify_manifest(a, b)["qualification"], "qualified")
+
+    def test_one_binary_can_qualify_only_its_exact_explicit_legacy_and_c2_contracts(self):
+        a, b = alternate_fixture()
+        self.assertEqual(p.verify_manifest(a, b)["qualification"], "qualified")
+        b["runtimeContract"] = copy.deepcopy(a["runtimeContract"])
+        self.assertEqual(p.verify_manifest(a, b)["qualification"], "qualified")
+        for contract in [a["runtimeContract"], *a["alternateRuntimeContracts"]]:
+            self.assertEqual(p.policy_fingerprint(contract["executionPolicy"]), contract["policySHA256"])
+
+    def test_c2_is_rejected_if_not_explicitly_declared(self):
+        a, b = alternate_fixture()
+        a.pop("alternateRuntimeContracts")
+        refresh_manifest(a, b)
+        self.assertIn("Installed runtime contract differs from manifest", p.verify_manifest(a, b)["errors"])
+        b["runtimeContract"] = copy.deepcopy(a["runtimeContract"])
+        self.assertEqual(p.verify_manifest(a, b)["qualification"], "qualified")
+
+    def test_both_declared_policy_fingerprints_are_checked_even_for_a_baseline_run(self):
+        for target in ("baseline", "candidate"):
+            a, b = alternate_fixture()
+            contract = a["runtimeContract"] if target == "baseline" else a["alternateRuntimeContracts"][0]
+            contract["policySHA256"] = "0" * 64
+            b["runtimeContract"] = copy.deepcopy(a["runtimeContract"])
+            refresh_manifest(a, b)
+            with self.subTest(target=target):
+                result = p.verify_manifest(a, b)
+                self.assertEqual(result["qualification"], "unqualified")
+                self.assertTrue(any("policy fingerprint mismatch" in error for error in result["errors"]))
+
+    def test_alternate_contract_cannot_change_any_non_policy_setting(self):
+        changes = {"residencyMode": "shared", "laneCount": 1, "weightStoreCount": 1, "decoderCount": 2,
+                   "admissionPolicy": "serial", "requestedCommandBufferProfile": "operations16",
+                   "resolvedCommandBufferProfile": {"maximumOperations": 16, "maximumMegabytes": 40},
+                   "seedPolicy": "different seed", "recoveryDefines": ["GR_TURING_METAL_DEFAULT_STREAM_RECOVERY"],
+                   "playbackRateApplied": True}
+        for key, value in changes.items():
+            a, b = alternate_fixture()
+            a["alternateRuntimeContracts"][0][key] = value
+            b["runtimeContract"] = copy.deepcopy(a["alternateRuntimeContracts"][0])
+            refresh_manifest(a, b)
+            with self.subTest(key=key):
+                result = p.verify_manifest(a, b)
+                self.assertEqual(result["qualification"], "unqualified")
+                self.assertTrue(any("Invalid alternate runtime contracts" in error for error in result["errors"]))
+
+    def test_only_c2_generation_arithmetic_is_supported_not_other_policy_candidates(self):
+        changes = {"arithmetic": "legacyWithConversionCache", "prefill": "fusedCausalCandidate",
+                   "predictor": "cachedStepPlanCandidate", "workspace": "boundedLaneLocalCandidate",
+                   "decoderIO": "positionalReaderCandidate", "kernelSet": "custom", "decoderState": "shared",
+                   "policyVersion": True}
+        for key, value in changes.items():
+            a, b = alternate_fixture()
+            candidate = a["alternateRuntimeContracts"][0]
+            candidate["executionPolicy"][key] = value
+            candidate["policySHA256"] = p.digest("|".join(str(candidate["executionPolicy"][field])
+                                                          for field in p.POLICY_FIELDS).encode())
+            b["runtimeContract"] = copy.deepcopy(candidate)
+            refresh_manifest(a, b)
+            with self.subTest(key=key):
+                self.assertEqual(p.verify_manifest(a, b)["qualification"], "unqualified")
+
+    def test_malformed_alternatives_and_incomplete_contracts_fail_closed(self):
+        a, _ = alternate_fixture()
+        candidate = a["alternateRuntimeContracts"][0]
+        malformed = [None, {}, [], [None], [[]], [candidate, candidate], [a["runtimeContract"]],
+                     [dict(candidate, undeclaredField="ignored?")],
+                     [{key: value for key, value in candidate.items() if key != "policySHA256"}],
+                     [dict(candidate, executionPolicy={"arithmetic": "bf16Candidate"})],
+                     [dict(candidate, resolvedCommandBufferProfile={"maximumOperations": True, "maximumMegabytes": 40})],
+                     [dict(candidate, recoveryDefines=[{}])], [dict(candidate, playbackRateApplied=0)]]
+        for index, alternatives in enumerate(malformed):
+            a, b = alternate_fixture()
+            a["alternateRuntimeContracts"] = copy.deepcopy(alternatives)
+            refresh_manifest(a, b)
+            with self.subTest(index=index):
+                self.assertEqual(p.verify_manifest(a, b)["qualification"], "unqualified")
+        a, b = alternate_fixture()
+        a["runtimeContract"].pop("seedPolicy")
+        refresh_manifest(a, b)
+        self.assertEqual(p.verify_manifest(a, b)["qualification"], "unqualified")
+
+    def test_installed_contract_requires_exact_types_and_cannot_add_or_omit_fields(self):
+        changes = {"policySHA256": "0" * 64, "playbackRateApplied": 0, "laneCount": 2.0,
+                   "executionPolicy": {"arithmetic": "bf16Candidate"}, "unexpected": True}
+        for key, value in changes.items():
+            a, b = alternate_fixture()
+            b["runtimeContract"][key] = value
+            with self.subTest(key=key):
+                self.assertEqual(p.verify_manifest(a, b)["qualification"], "unqualified")
+        a, b = alternate_fixture()
+        b["runtimeContract"].pop("policySHA256")
+        self.assertEqual(p.verify_manifest(a, b)["qualification"], "unqualified")
+        for recovery in (None, 1, True, "GR_TURING_METAL_STREAM_RECOVERY", {}, [1, {}]):
+            a, b = alternate_fixture()
+            b["runtimeContract"]["recoveryDefines"] = recovery
+            with self.subTest(recovery=recovery):
+                self.assertEqual(p.verify_manifest(a, b)["qualification"], "unqualified")
+
+    def test_explicit_alternatives_do_not_waive_embedded_binary_payload_or_build_gates(self):
+        mutations = [lambda a, b: b["buildManifest"].pop("alternateRuntimeContracts"),
+                     lambda a, b: b.update(binaryUUIDs=["different"]),
+                     lambda a, b: b["installedPayloadSHA256"].update(models="different"),
+                     lambda a, b: b["installedPayloadSHA256"].update(voices="different"),
+                     lambda a, b: b.update(workloadSHA256="different"),
+                     lambda a, b: b["compiledFingerprint"].update(hardeningMode="debug"),
+                     lambda a, b: b["compiledFingerprint"].update(experimentID="different")]
+        for index, mutate in enumerate(mutations):
+            a, b = alternate_fixture()
+            mutate(a, b)
+            with self.subTest(index=index):
+                self.assertEqual(p.verify_manifest(a, b)["qualification"], "unqualified")
+        for key in ("succeeded", "sourceUnchangedDuringBuild", "binariesBuiltAfterSourceSnapshot"):
+            a, b = alternate_fixture()
+            a["buildEvidence"][key] = False
+            refresh_manifest(a, b)
+            self.assertEqual(p.verify_manifest(a, b)["qualification"], "unqualified", key)
+        a, b = alternate_fixture()
+        a["compile"]["nativeSwiftCommands"][0]["defines"] = {"GR_TURING_METAL_DEFAULT_STREAM_RECOVERY": "1"}
+        refresh_manifest(a, b)
+        self.assertIn("Actual compile recovery defines differ from runtime contract", p.verify_manifest(a, b)["errors"])
+
+    def test_capture_embeds_explicit_contracts_in_hash_and_keeps_legacy_manifest_shape(self):
+        manifest, _ = alternate_fixture()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            baseline, candidate, output = [root / name for name in ("legacy.json", "c2.json", "manifest.json")]
+            baseline.write_text(json.dumps(manifest["runtimeContract"]))
+            candidate.write_text(json.dumps(manifest["alternateRuntimeContracts"][0]))
+            args = SimpleNamespace(runtime_contract=str(baseline), alternate_runtime_contract=[str(candidate)],
+                                   repo=temp, compile_commands=None, build_log=None, binary=[], app_bundle=None,
+                                   source_snapshot=None, build_success_log=None, sdk="xros", model_root=None,
+                                   voices_root=None, workload=None, configuration="Release", experiment="shipping-default",
+                                   output=str(output))
+            with mock.patch.object(p, "source_identity", return_value={}), mock.patch.object(p, "run", return_value=None), mock.patch("builtins.print"):
+                p.capture(args)
+                actual = json.loads(output.read_text())
+                self.assertEqual(actual["runtimeContract"], manifest["runtimeContract"])
+                self.assertEqual(actual["alternateRuntimeContracts"], manifest["alternateRuntimeContracts"])
+                self.assertEqual(actual["manifestSHA256"], p.digest(p.canonical({key: value for key, value in actual.items()
+                                                                             if key != "manifestSHA256"})))
+                args.alternate_runtime_contract = []
+                p.capture(args)
+                legacy = json.loads(output.read_text())
+                self.assertNotIn("alternateRuntimeContracts", legacy)
+                self.assertNotEqual(actual["manifestSHA256"], legacy["manifestSHA256"])
+                args.alternate_runtime_contract = [str(candidate), str(candidate)]
+                with self.assertRaises(ValueError):
+                    p.capture(args)
+                args.alternate_runtime_contract = [str(candidate)]
+                args.runtime_contract = None
+                with self.assertRaises(ValueError):
+                    p.capture(args)
+
+    def test_capture_cli_accepts_repeatable_explicit_contract_arguments(self):
+        argv = [str(SCRIPT), "capture", "--configuration", "Release", "--output", "unused.json",
+                "--runtime-contract", "legacy.json", "--alternate-runtime-contract", "c2.json",
+                "--alternate-runtime-contract", "extra.json"]
+        with mock.patch.object(p.sys, "argv", argv), mock.patch.object(p, "capture") as capture:
+            self.assertEqual(p.main(), 0)
+            self.assertEqual(capture.call_args.args[0].alternate_runtime_contract, ["c2.json", "extra.json"])
 
     def test_same_git_commit_does_not_establish_installed_parity(self):
         a, b = fixture()
@@ -185,6 +373,12 @@ class ProvenanceTests(unittest.TestCase):
         b["experimentID"] = "hardening-fast-only"
         b["compile"]["nativeSwiftCommands"][0]["defines"]["GR_TURING_METAL_STREAM_RECOVERY"] = "0"
         self.assertFalse(p.compare_hardening(a, b)["comparable"])
+
+    def test_hardening_comparison_cannot_ignore_alternate_contracts(self):
+        a, _ = alternate_fixture()
+        b = copy.deepcopy(a)
+        b.pop("alternateRuntimeContracts")
+        self.assertIn("alternateRuntimeContracts", p.compare_hardening(a, b)["differences"])
 
 
 if __name__ == "__main__":

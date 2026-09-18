@@ -7,6 +7,10 @@ struct TuringQwenNativeRotaryCachePair: @unchecked Sendable {
 }
 
 struct TuringQwenNativeSegmentRuntimeCache: @unchecked Sendable {
+    let arithmetic: TuringQwenNativeExecutionPolicy.Arithmetic
+    var matchesCurrentArithmetic: Bool {
+        arithmetic == TuringQwenNativeExecutionPolicy.current.arithmetic
+    }
     let talkerOneStepRopes: [Int: TuringQwenNativeRotaryCachePair]
     let codePredictorPrefillRope: TuringQwenNativeRotaryCachePair
     let codePredictorPrefillMask: MLXArray
@@ -20,6 +24,7 @@ struct TuringQwenNativeSegmentRuntimeCache: @unchecked Sendable {
         trailingTextHidden: MLXArray,
         ttsPadEmbed: MLXArray
     ) {
+        self.arithmetic = TuringQwenNativeExecutionPolicy.current.arithmetic
         let rowBudget = max(maxNewRows, 1)
         let talkerPositions = Array(promptSequenceLength..<(promptSequenceLength + rowBudget))
         self.talkerOneStepRopes = Dictionary(
@@ -36,12 +41,12 @@ struct TuringQwenNativeSegmentRuntimeCache: @unchecked Sendable {
         )
         self.talkerTrailingTextEmbeds = (0..<rowBudget).map { generationStep in
             if generationStep < trailingTextHidden.dim(1) {
-                return trailingTextHidden[
+                return TuringQwenNativeGenerationArithmetic.activation(trailingTextHidden[
                     generationStep..<(generationStep + 1),
                     axis: 1
-                ]
+                ])
             }
-            return ttsPadEmbed
+            return TuringQwenNativeGenerationArithmetic.activation(ttsPadEmbed)
         }
 
         let codePredictorConfig = config.talkerConfig.codePredictorConfig
@@ -70,21 +75,21 @@ struct TuringQwenNativeSegmentRuntimeCache: @unchecked Sendable {
     }
 
     func talkerRope(position: Int) -> (cos: MLXArray, sin: MLXArray)? {
-        guard let pair = talkerOneStepRopes[position] else {
+        guard matchesCurrentArithmetic, let pair = talkerOneStepRopes[position] else {
             return nil
         }
         return (pair.cos, pair.sin)
     }
 
     func codePredictorRope(position: Int) -> (cos: MLXArray, sin: MLXArray)? {
-        guard let pair = codePredictorOneStepRopes[position] else {
+        guard matchesCurrentArithmetic, let pair = codePredictorOneStepRopes[position] else {
             return nil
         }
         return (pair.cos, pair.sin)
     }
 
     func talkerTrailingTextEmbed(generationStep: Int) -> MLXArray? {
-        guard talkerTrailingTextEmbeds.indices.contains(generationStep) else {
+        guard matchesCurrentArithmetic, talkerTrailingTextEmbeds.indices.contains(generationStep) else {
             return nil
         }
         return talkerTrailingTextEmbeds[generationStep]
@@ -122,8 +127,10 @@ struct TuringQwenNativeSegmentRuntimeCache: @unchecked Sendable {
         }
 
         return TuringQwenNativeRotaryCachePair(
-            cos: MLXArray(cosValues, [1, 1, positions.count, headDim]),
-            sin: MLXArray(sinValues, [1, 1, positions.count, headDim])
+            cos: TuringQwenNativeGenerationArithmetic.activation(
+                MLXArray(cosValues, [1, 1, positions.count, headDim])),
+            sin: TuringQwenNativeGenerationArithmetic.activation(
+                MLXArray(sinValues, [1, 1, positions.count, headDim]))
         )
     }
 

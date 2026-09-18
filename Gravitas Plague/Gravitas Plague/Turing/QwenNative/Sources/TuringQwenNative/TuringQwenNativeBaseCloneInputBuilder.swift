@@ -27,6 +27,7 @@ struct TuringQwenNativePreparedBaseClonePrompt: Sendable {
 }
 
 struct TuringQwenNativeBaseCloneStaticPromptContext {
+    let arithmetic: TuringQwenNativeExecutionPolicy.Arithmetic
     let roleEmbed: MLXArray
     let tagAndSpeaker: MLXArray
     let refTextEmbed: MLXArray
@@ -223,7 +224,7 @@ enum TuringQwenNativeBaseClonePromptInputBuilder {
             config.talkerConfig.codecPadID,
             config.talkerConfig.codecBosID
         ])
-        let speakerEmbed = prepared.speakerEmbeddingArray.reshaped([
+        let speakerEmbed = TuringQwenNativeGenerationArithmetic.activation(prepared.speakerEmbeddingArray).reshaped([
             1,
             1,
             config.talkerConfig.hiddenSize
@@ -244,11 +245,11 @@ enum TuringQwenNativeBaseClonePromptInputBuilder {
         let refTextEmbed = try weights.projectTextEmbedding(ids: refBodyIDs)
 
         let referenceCodeEmbeds = try prepared.referenceCodes.map { row -> MLXArray in
-            try TuringQwenNativeCodePredictor.talkerInputEmbedding(
+            TuringQwenNativeGenerationArithmetic.activation(try TuringQwenNativeCodePredictor.talkerInputEmbedding(
                 forCodeGroup: row.map(Int.init),
                 config: config,
                 resolvedWeights: codePredictorWeights
-            )
+            ))
         }
         let referenceCodecEmbed = concatenated(
             [
@@ -267,6 +268,7 @@ enum TuringQwenNativeBaseClonePromptInputBuilder {
         )
 
         return TuringQwenNativeBaseCloneStaticPromptContext(
+            arithmetic: TuringQwenNativeExecutionPolicy.current.arithmetic,
             roleEmbed: roleEmbed,
             tagAndSpeaker: tagAndSpeaker,
             refTextEmbed: refTextEmbed,
@@ -284,6 +286,9 @@ enum TuringQwenNativeBaseClonePromptInputBuilder {
         weightsStore: TuringQwenNativeWeightsStore,
         staticContext: TuringQwenNativeBaseCloneStaticPromptContext
     ) throws -> TuringQwenNativeTalkerPromptInputs {
+        guard staticContext.arithmetic == TuringQwenNativeExecutionPolicy.current.arithmetic else {
+            throw TuringQwenNativeError.invalidConfig("Static prompt arithmetic does not match the request policy.")
+        }
         let weights = try BaseClonePromptWeights(
             config: config,
             weightsStore: weightsStore
@@ -425,14 +430,17 @@ private struct BaseClonePromptWeights {
             )
         }
 
-        return rows.reshaped([1, ids.count, hiddenSize])
+        return TuringQwenNativeGenerationArithmetic.activation(rows).reshaped([1, ids.count, hiddenSize])
     }
 
     private func projectTextHidden(
         _ hidden: MLXArray
     ) -> MLXArray {
-        let fc1 = fc1Weight.apply(hidden) + fc1Bias
+        let fc1 = TuringQwenNativeGenerationArithmetic.activation(
+            fc1Weight.apply(TuringQwenNativeGenerationArithmetic.activation(hidden)))
+            + TuringQwenNativeGenerationArithmetic.activation(fc1Bias)
         let activated = fc1 * sigmoid(fc1)
-        return fc2Weight.apply(activated) + fc2Bias
+        return TuringQwenNativeGenerationArithmetic.activation(fc2Weight.apply(activated))
+            + TuringQwenNativeGenerationArithmetic.activation(fc2Bias)
     }
 }

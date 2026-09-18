@@ -401,6 +401,8 @@ def compare(baseline, candidate, gates, experiment=None, evidence=None, evidence
         pending.append("Isolated decoder is not the concurrent Fresh2 production workload")
     if any("isolated" in str((x.get("observation") or {}).get("sceneCondition", "")).lower() for x in baseline + candidate):
         pending.append("Isolated workload is not sustained full-scene qualification")
+    if any(x.get("qualityEvidence") is not None for x in baseline + candidate):
+        pending.append("Quality evidence capture retains PCM/code arrays; repeat without capture for performance promotion")
     clear_win = aggregate and aggregate["median"] <= 1 - gates["screening"]["minimum_median_improvement_percent"] / 100 and aggregate["medianUncertaintyInterval"][1] < 1
     changed_work = valid and any(not p["rawOutputIdenticalLength"] for p in pairs)
     screen = "INVALID" if errors else "REGRESSION_REVIEW" if review else "OUTPUT_LENGTH_REVIEW" if changed_work else "INSUFFICIENT_REPETITIONS" if missing_repetitions or not interleaved else "PERFORMANCE_SCREEN_PASSED" if clear_win else "NO_CLEAR_IMPROVEMENT"
