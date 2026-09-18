@@ -4,8 +4,15 @@
 
 Current decision: the owner approved the presented Mike audio and explicitly
 selected **BF16 generation as the normal shipping source default**, with no
-separate scheme/toggle. This is not a claim that all engineering qualification
-gates or a gameplay speedup have passed on Vision Pro.
+separate scheme/toggle. They subsequently reported **100% Turing playtest success**:
+near-all pauses gone during a conversation-heavy playthrough to the Angel with
+the debugger attached, without the historical crashes. Retain this accepted
+configuration. The Angel failure still blocks the full game release; owner UX
+acceptance does not claim completion of every formal engineering gate or a
+controlled percentage gameplay speedup.
+The latest Angel failure was subsequently confirmed in its own log and its
+Release-only gameplay veto corrected; verification of the fixed ending on device
+is still pending. This repair does not change the accepted Turing configuration.
 The existing independent Fresh2 topology, two weight stores, one decoder,
 currentOverlap admission, sampling, recovery and audio/story authority remain
 the control. Original C/D/E design notes and earlier opt-in/pending decisions
@@ -508,3 +515,51 @@ commands exclude the benchmark-launch flag and retain stream recovery.
 All 58 performance/evidence and 25 provenance Python tests passed. Installation
 of this new build and its in-game playthrough remain next; use the ordinary
 Xcode build/run, with no scheme, environment, or settings change required.
+
+#### Latest gameplay acceptance: keep Turing stable; fix the separate release blocker
+
+The owner now reports that this build successfully handled their conversation-
+heavy playthrough through to the Angel, with almost all pauses gone and the
+debugger attached. They explicitly consider the Turing experiment a 100% success.
+This supersedes the preceding checkpoint's statement that gameplay had not yet
+been tried. It is meaningful sustained gameplay evidence, not just a sample
+listening or isolated benchmark result.
+
+The supplied capture independently confirms 13 completed BF16 TTS runs and all
+75 segments at natural EOS, with no reported Metal command-buffer failures.
+Its observed character set is Big Mike, Broadcaster, CatEye81 and Rich. The log
+ends in Chapter 1, so the reported later Angel failure and complete coverage
+remain owner observations rather than events confirmed by that attachment.
+See the latest section of `Docs/QWEN_PERFORMANCE_RESULTS.md` for the timing totals
+and evidence boundaries.
+
+Decision: retain BF16, Fresh2 and the accepted pipeline unchanged; do not start
+optional optimization or roll back the successful work in response to the Angel
+failure. Source inspection verifies a pre-existing Release-only material-
+qualification rejection that can suppress both Angel projection and blendshape
+animation; the exact reported failure was not captured. **The full release stays
+blocked on the Angel**, not on repeating microbenchmarks. Correct/verify that path
+and complete a normal Release/TestFlight-equivalent ending run without the
+debugger before recommending distribution. No runtime changes or device actions
+were made while recording this decision. Formal numerical, matched-repeat and
+induced recovery gates remain unperformed where previously recorded; do not
+rewrite their status to PASS or discount the owner's successful gameplay report.
+
+#### Angel log-confirmed repair: authoring evidence cannot disable accepted gameplay
+
+The follow-up capture ending `29e81623-ac4b-4095-a8f5-92f0ea3e8e52/pasted-text.txt`
+confirms material parity rejection at line 2531 after successful blendshape load.
+The owner explicitly requests a working, shippable Angel. The earlier Debug-only
+bypass is replaced by one production gameplay policy for every build; it reports
+pending parity and continues the otherwise validated projection. Explicit
+authoring qualification stays strict, with its failed resource unmodified.
+The decision is not to falsify qualification or revert BF16, but to stop using an
+offline material comparison as a Release-only gameplay switch. All actual runtime
+resource validation, material installation and visual-error fallback remain.
+
+Fifteen targeted host/asset checks passed. The full normal Release build passed,
+as did deep/strict signature verification and built Angel resource equality;
+executable UUID is `17A35B18-6ABE-3D8D-B0E8-826F3F5AF13A`. The owner will test
+after the build. Final device rendering and ending transition acceptance remain
+required before claiming the full release passed. No installation or device run
+was performed by the agent in this repair.

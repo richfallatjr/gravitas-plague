@@ -97,7 +97,7 @@ final class MindEyeAngelProjectionController:
         ).load(
             locator: locator,
             profileResourcePath: profileResourcePath,
-            qualificationPolicy: runtimeQualificationPolicy
+            qualificationPolicy: .production
         )
         try preparationToken.requireCurrent()
         let rawReceiverMask = try await MindEyeProjectionReceiverMaskLoader(
@@ -165,23 +165,6 @@ final class MindEyeAngelProjectionController:
                 "outputTextureCount=2 materialCount=\(materialController.appliedMaterialCount)"
         )
         return controller
-    }
-
-    /// Development builds intentionally expose the unqualified replacement
-    /// material so it can be judged on Vision Pro. Release/TestFlight builds
-    /// remain fail-closed until the captured material-parity resource passes.
-    private static var runtimeQualificationPolicy:
-        MindEyeProjectionPlatePackageLoader.QualificationPolicy
-    {
-        #if DEBUG
-        print(
-            "[MindEyeProjection] DEBUG TEST OVERRIDE: " +
-                "material parity qualification is not enforced"
-        )
-        return .allowUnqualifiedAuthoringRun
-        #else
-        return .requirePassingResource
-        #endif
     }
 
     func setAngelMouthPose(_ pose: MindEyeMouthPose) {

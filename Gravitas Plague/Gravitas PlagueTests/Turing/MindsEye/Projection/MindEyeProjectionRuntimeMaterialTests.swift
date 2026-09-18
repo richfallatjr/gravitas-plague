@@ -64,7 +64,7 @@ final class MindEyeProjectionRuntimeMaterialTests: XCTestCase {
         XCTAssertEqual(contract.normal.UVSetName, "primvars:st")
     }
 
-    func testCheckedInParityQualificationRemainsClosedUntilThresholdsPass() throws {
+    func testExplicitParityQualificationStillRequiresPassingThresholds() throws {
         let qualification = try mindEyeProjectionParityFixture()
         XCTAssertFalse(qualification.passed)
         XCTAssertThrowsError(
@@ -76,5 +76,27 @@ final class MindEyeProjectionRuntimeMaterialTests: XCTestCase {
                 importedPBRContractSHA256: qualification.importedPBRContractSHA256
             ))
         )
+    }
+
+    func testProductionPlaybackDoesNotRequireAuthoringParityPass() throws {
+        let qualification = try mindEyeProjectionParityFixture()
+        let identities = MindEyeProjectionQualificationIdentities(
+            subjectAssetSHA256: qualification.subjectAssetSHA256,
+            profileSHA256: qualification.profileSHA256,
+            cameraSHA256: qualification.cameraSHA256,
+            targetSHA256: qualification.targetSHA256,
+            importedPBRContractSHA256: qualification.importedPBRContractSHA256
+        )
+        XCTAssertEqual(MindEyeProjectionQualificationPolicy.production, .runtimePlayback)
+        XCTAssertFalse(try MindEyeProjectionQualificationPolicy.production.evaluate(
+            qualification, identities: identities
+        ))
+        XCTAssertThrowsError(try MindEyeProjectionQualificationPolicy.requirePassingResource.evaluate(
+            qualification, identities: identities
+        )) { error in
+            XCTAssertEqual(error as? MindEyeProjectionError, .materialParityUnqualified)
+        }
+        // Playback permission does not mutate or certify the failed report.
+        XCTAssertFalse(qualification.passed)
     }
 }

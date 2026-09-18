@@ -1,5 +1,33 @@
 import Foundation
 
+/// Material parity is authoring evidence, not a gameplay enable switch. The
+/// runtime still validates the asset, camera, target, textures and PBR contract.
+/// Explicit qualification jobs retain their strict pass/fail requirement.
+nonisolated enum MindEyeProjectionQualificationPolicy: Sendable, Equatable {
+    case requirePassingResource
+    case allowUnqualifiedAuthoringRun
+    case runtimePlayback
+
+    // Identical in Debug and Release: the accepted Angel must not disappear
+    // when the owner changes the build configuration for distribution.
+    static let production: Self = .runtimePlayback
+
+    func evaluate(
+        _ qualification: MindEyeProjectionMaterialParityQualification,
+        identities: MindEyeProjectionQualificationIdentities
+    ) throws -> Bool {
+        do {
+            try qualification.validate(identities: identities)
+            return true
+        } catch {
+            if self == .requirePassingResource {
+                throw error
+            }
+            return false
+        }
+    }
+}
+
 nonisolated struct MindEyeProjectionQualificationIdentities: Sendable, Equatable {
     let subjectAssetSHA256: String
     let profileSHA256: String

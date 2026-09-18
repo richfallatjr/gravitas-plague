@@ -1,11 +1,16 @@
 # Qwen performance results — updated 2026-09-18
 
 Current source default: **BF16 generation, explicitly approved by the owner**
-for normal shipping, without a separate scheme or toggle. Engineering status
-remains **DEVICE_QUALIFICATION_PENDING**: the two-pair M2 first screen is
-`OUTPUT_LENGTH_REVIEW`, not completed all-voice/full-scene/quality qualification.
-The latest shipping-default decision is recorded at the end; earlier opt-in and
-pending statements below describe their historical checkpoints.
+for normal shipping, without a separate scheme or toggle. Latest gameplay status:
+**OWNER-ACCEPTED TURING SUCCESS**. The owner reports a conversation-heavy
+playthrough through to the Angel, with near-all pauses gone and the debugger
+attached, without the historical Turing crashes. The Angel's Release-only
+qualification veto is now corrected in source; the ending still needs device
+verification of the fixed Release build. Formal benchmark status remains
+**DEVICE_QUALIFICATION_PENDING**; this successful gameplay observation does not
+rewrite the two-pair first screen's `OUTPUT_LENGTH_REVIEW` or unperformed gates.
+The latest gameplay evidence and release decision are recorded at the end;
+earlier opt-in and pending statements describe their historical checkpoints.
 
 ## Implemented and verified locally
 
@@ -18,13 +23,14 @@ pending statements below describe their historical checkpoints.
 | Scoped hardening A/B selector | MATCHED_DEVICE_SCOUT_COMPLETE | Six same-source Big Mike scouts, exact PCM parity, 28.35% lower median Debug render time; no claimed shipping speedup |
 | F1 persistent positional decoder reader | HOST_VALIDATED, opt-in only | Small-file tests plus identical real decoder and Fresh2 PCM |
 | Device qualification launch | Build passed | Explicit compiler flag + launch request required; no shipping button |
-| C2 generation BF16 containment | OWNER-APPROVED SHIPPING SOURCE DEFAULT; DEVICE_QUALIFICATION_PENDING | Mike sample listening approved; two-pair M2 first screen, changed output length, broader numerical/voice/full-scene/recovery gates remain open |
+| C2 generation BF16 containment | OWNER-ACCEPTED GAMEPLAY SUCCESS; SHIPPING SOURCE DEFAULT; FORMAL DEVICE_QUALIFICATION_PENDING | Owner reports near-all pauses gone under conversation-heavy gameplay with debugger attached; supplied capture confirms 13 completed BF16 runs / 75 segments; Angel failure separately blocks the complete release |
 | D/E/G/H fused attention, predictor plans/workspace, kernels/state reuse | NOT IMPLEMENTED | Require measured target selection; decision record distinguishes proposals from code |
 
 The foundation still lacks actual player-start/ordered-needed app signposts and
 a recovered six-segment `device-fixed-request` fixture. Native publication
-markers do not pretend to be audible playback. Typical/long/all-five-voice,
-full-scene, quality and device recovery qualification remain outstanding.
+markers do not pretend to be audible playback. Formal typical/long/all-five-voice,
+quality and induced device-recovery qualification remain outstanding. The latest
+owner-reported full-scene gameplay success is recorded below, not treated as absent.
 
 ## Tests
 
@@ -971,3 +977,104 @@ are optimized, omit `GR_QWEN_PERFORMANCE_QUALIFICATION`, and retain native
 Python tests also passed after the default change. This new build has not been
 installed or played: the headset retains the verified restored legacy app until
 the next ordinary Xcode build/run installs the BF16-default app.
+
+### 2026-09-18 owner reports successful sustained gameplay with debugger attached
+
+The owner explicitly rates the Turing result as **100% success for this playtest**:
+near-all pauses were gone while exercising every available ConversationVoice,
+and the game progressed through to the Angel sequence with the debugger attached.
+They had not previously achieved that conversation-heavy run and report that the
+historical crashes did not recur. The Angel facial animation failed at the end;
+do not describe the complete game/ending as having passed.
+
+This is owner-reported full-scene UX/stability acceptance, not merely the earlier
+isolated approximately 3.5% arithmetic timing improvement. It supports retaining
+the current production configuration and stopping optional optimization churn for
+this release. A single successful run is not proof that crashes are impossible.
+
+The supplied capture is
+`/Users/richardfallat/.codex/attachments/94492337-0d71-4d06-a258-309b783ab175/pasted-text.txt`.
+Its observed Turing portion independently confirms:
+
+- 13 starts and 13 completed runs; 75/75 segments reached natural EOS, without
+  missing/skipped segments or a failed/cancelled TTS render among those starts.
+- All 13 starts use `generationArithmetic: bf16Candidate`, policy fingerprint
+  `f7188d490a7d756b1ebc8c65b754bcd8c2e20ec3e45a6ddd70068f465cf665f3`.
+  The `.legacy` stage suffix is not the arithmetic selection.
+- 554,930 submitted and completed Metal command buffers; zero reported failures.
+- Mean render wall 42.631 seconds for 25.120 seconds raw audio per run; pooled
+  raw-audio RTF 1.697 (554.199 seconds total wall / 326.560 seconds raw audio).
+- Logged character coverage: Big Mike 7 runs / 39 segments; Broadcaster 1 / 6;
+  CatEye81 3 / 18; Rich 2 / 12. The owner's broader coverage report is not
+  substituted for additional per-character evidence absent from this capture.
+
+Render wall excludes upstream response generation, prior model-owner loading,
+and playback completion. Raw audio precedes playback-rate adjustment. First-PCM
+latency cannot be reconstructed reliably from this log. These varied gameplay
+responses are not matched controls for the earlier isolated A/B measurements.
+
+The capture ends during Chapter 1 and does not contain the reported Angel event.
+Read-only source inspection nevertheless verifies a Release-specific blocker:
+`MindEyeAngelProjectionController.runtimeQualificationPolicy` bypasses material
+qualification in Debug but requires a passing resource in Release; the shipped
+`angel_head_v1.material-parity.json` has `passed: false` and `SDKBuild: UNQUALIFIED`.
+The loader rejects it, the presenter retains the imported static material, and
+`Chapter03AngelBlendShapeController` uses its fallback weight when projection is
+unavailable. This is a verified source path, not a log-confirmed diagnosis of the
+reported Angel occurrence. It predates the latest BF16 commit; no direct Angel
+code or asset changes were made in that commit.
+
+Release recommendation: **keep the accepted Turing/BF16 configuration**. The full
+game is **not yet release-ready** while the Angel regression remains. Correct and
+verify the Angel path, then perform a normal Release/TestFlight-equivalent run
+without the debugger through the Angel and final title/menu transition. Do not
+change production code, bypass qualification, fabricate passing evidence, or
+start another optimization merely to record this acceptance.
+
+### 2026-09-18 Angel Release failure confirmed and gameplay policy corrected
+
+The new capture
+`/Users/richardfallat/.codex/attachments/29e81623-ac4b-4095-a8f5-92f0ea3e8e52/pasted-text.txt`
+now confirms the exact failure, rather than the earlier source-only inference:
+
+- Lines 2508–2509: the Angel blendshape mesh and sparse offsets loaded.
+- Line 2531: `Angel unavailable; imported material retained` with error
+  `The Angel replacement material has not passed parity qualification.`
+- Lines 2533–2548: the Heaven portal itself instantiated and started. The
+  unavailable feature was the animated projection, not a failed Turing render.
+
+The correction makes the normal controller explicitly use a build-independent
+`MindEyeProjectionQualificationPolicy.production` (`runtimePlayback`). The
+package loader reports unqualified material-parity evidence without using it to
+disable gameplay. It does not change `passed: false`, generate fake measurements,
+or relax the separate runtime asset/camera/target/PBR/PNG validation. Explicit
+qualification jobs still throw on failed parity; the generic loader's default
+remains strict. No shaders, photographic orientation, masks, art, jaw weights,
+Turing, BF16, Fresh2, MLX or story timing were changed.
+
+Verification:
+
+- Six new host regression tests PASS: compile the actual Foundation-only Swift
+  policy in Debug and optimized Release, exercise the actual shipped unqualified
+  resource, valid synthetic evidence and stale identities, and audit controller/
+  loader wiring. Playback permission never rewrites qualification evidence.
+- Six existing USD/blendshape tests PASS using the installed USD environment:
+  sparse offsets, USDZ binding, required jaw weights and asset identity chain.
+- Three existing strict authoring-validator tests PASS; unqualified parity,
+  absent teeth and stale resource identities remain rejected by that tool.
+- The separate legacy runtime-resource audit still asserts a removed horizontal
+  sample flip and fails that assertion. The already owner-approved orientation
+  was not changed to satisfy a stale audit. This failure is not represented as a
+  passing visual check.
+- Full normal Release app build PASS (exit 0); no benchmark qualification flag.
+  Deep/strict code-signature verification PASS. Executable UUID:
+  `17A35B18-6ABE-3D8D-B0E8-826F3F5AF13A` (arm64). The built executable contains
+  the new runtime-playback diagnostic and no old Debug-test-override message.
+- Built Angel projection resources, jaw descriptor/offsets, posed USDZ and viseme
+  cue are byte-identical to current repository resources (Finder `.DS_Store`
+  files excluded). No media or model payload was added or changed.
+
+Build/test evidence directory:
+`/private/tmp/angel-release-fix-20260918.J8lDSD`.
+The owner chose to replay Heaven after the build. No device install, visual
+acceptance or final title/menu success is inferred from host tests.

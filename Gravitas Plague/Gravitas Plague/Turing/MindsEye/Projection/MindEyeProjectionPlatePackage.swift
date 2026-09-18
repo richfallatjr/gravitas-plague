@@ -170,10 +170,7 @@ nonisolated final class MindEyeProjectionPlatePackage: @unchecked Sendable {
 }
 
 nonisolated final class MindEyeProjectionPlatePackageLoader: @unchecked Sendable {
-    enum QualificationPolicy: Sendable, Equatable {
-        case requirePassingResource
-        case allowUnqualifiedAuthoringRun
-    }
+    typealias QualificationPolicy = MindEyeProjectionQualificationPolicy
     private struct PNGHeader {
         let width: Int
         let height: Int
@@ -306,14 +303,23 @@ nonisolated final class MindEyeProjectionPlatePackageLoader: @unchecked Sendable
             MindEyeProjectionMaterialParityQualification.self,
             from: qualificationData
         )
-        if qualificationPolicy == .requirePassingResource {
-            try qualification.validate(identities: .init(
+        let parityQualified = try qualificationPolicy.evaluate(
+            qualification,
+            identities: .init(
                 subjectAssetSHA256: subjectHash,
                 profileSHA256: profileHash,
                 cameraSHA256: cameraHash,
                 targetSHA256: targetHash,
                 importedPBRContractSHA256: contractHash
-            ))
+            )
+        )
+        if qualificationPolicy == .runtimePlayback, !parityQualified {
+            print(
+                "[MindEyeProjection] material parity pending; " +
+                    "continuing validated runtime playback " +
+                    "qualificationID=\(qualification.qualificationID) " +
+                    "assetValidation=enforced"
+            )
         }
 
         let packageDirectory = manifestURL.deletingLastPathComponent()
