@@ -9,6 +9,9 @@
 #include <unistd.h>
 #include <cstdlib>
 
+// This reports the macros of this exact allocation-cache translation unit.
+#include "mlx/backend/metal/turing_build_fingerprint_impl.h"
+
 namespace mlx::core {
 
 constexpr size_t resource_options =

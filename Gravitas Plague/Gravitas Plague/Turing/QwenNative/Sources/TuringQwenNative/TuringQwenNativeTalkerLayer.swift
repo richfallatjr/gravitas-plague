@@ -109,6 +109,7 @@ enum TuringQwenNativeTalkerForwardRunner {
             weightsStore: weightsStore
         )
         var hidden = inputsEmbeds
+        TuringQwenNativePhaseDiagnostics.tensor("talker.prompt.input", inputsEmbeds)
         var cacheLayers: [TuringQwenNativeKVCache.Layer] = []
         cacheLayers.reserveCapacity(config.talkerConfig.numHiddenLayers)
         let forwardStart = Date()
@@ -138,7 +139,12 @@ enum TuringQwenNativeTalkerForwardRunner {
         }
 
         for layerIndex in 0..<config.talkerConfig.numHiddenLayers {
+            try TuringQwenPerformanceBudget.check()
             let layerStart = Date()
+            let layerSpan = TuringQwenNativePhaseDiagnostics.begin(
+                "PrefillLayerCPU", detail: "layer=\(layerIndex)"
+            )
+            defer { TuringQwenNativePhaseDiagnostics.end(layerSpan) }
 
             let layerResult = try runDecoderLayer(
                 hiddenStates: hidden,
@@ -153,11 +159,13 @@ enum TuringQwenNativeTalkerForwardRunner {
             cacheLayers.append(layerResult.cacheLayer)
             // Bound the initial prompt forward to one materialized layer per
             // command buffer. Generated one-step execution remains unchanged.
+            TuringQwenNativePhaseDiagnostics.measure("PrefillExistingEvalCPU", detail: "layer=\(layerIndex)") {
             eval(
                 hidden,
                 layerResult.cacheLayer.keys,
                 layerResult.cacheLayer.values
             )
+            }
             if performanceMode.shouldClearMLXCacheEveryRow {
                 TuringQwenNativeMemoryControl.clearCache(label: "talker.\(logLabel).layer.\(layerIndex)")
             }
@@ -367,13 +375,16 @@ enum TuringQwenNativeTalkerForwardRunner {
             codecHeadWeight: resolved.codecHeadWeight,
             performanceMode: performanceMode
         )
-        let firstCodecToken = try TuringQwenNativeCodecSampler.selectFirstCodecToken(
+        TuringQwenNativePhaseDiagnostics.tensor("talker.selection.logits", logits)
+        let firstCodecToken = try TuringQwenNativePhaseDiagnostics.measure("TalkerSelectionCPU") {
+        try TuringQwenNativeCodecSampler.selectFirstCodecToken(
             logits: logits,
             sequenceLength: 1,
             vocabSize: config.talkerConfig.vocabSize,
             samplingConfiguration: samplingPolicy.talker,
             samplingContext: &samplingContext
         ).tokenID
+        }
         let codePredictorStart = Date()
         if let codePredictorContext {
             TuringMetalDiagnostics.pushContext(codePredictorContext)
@@ -549,6 +560,9 @@ enum TuringQwenNativeTalkerForwardRunner {
             .reshaped([1, sequenceLength, keyValueHeads, headDim])
         let value = linear(hiddenStates, weight: weights.vProjWeight)
             .reshaped([1, sequenceLength, keyValueHeads, headDim])
+        TuringQwenNativePhaseDiagnostics.tensor("talker.prefill.qProjection", query)
+        TuringQwenNativePhaseDiagnostics.tensor("talker.prefill.kProjection", key)
+        TuringQwenNativePhaseDiagnostics.tensor("talker.prefill.vProjection", value)
 
         var queryStates = rmsNorm(
             query,
@@ -572,6 +586,10 @@ enum TuringQwenNativeTalkerForwardRunner {
         queryStates = applyRotary(queryStates, cos: rope.cos, sin: rope.sin)
         keyStates = applyRotary(keyStates, cos: rope.cos, sin: rope.sin)
 
+        TuringQwenNativePhaseDiagnostics.tensor("talker.prefill.postRopeQ", queryStates)
+        TuringQwenNativePhaseDiagnostics.tensor("talker.prefill.postRopeK", keyStates)
+        TuringQwenNativePhaseDiagnostics.tensor("talker.prefill.v", valueStates)
+
         let cacheLayer = try TuringQwenNativeKVCacheStore.promptLayer(
             keyStates: keyStates,
             valueStates: valueStates,
@@ -579,6 +597,8 @@ enum TuringQwenNativeTalkerForwardRunner {
             layerIndex: layerIndex,
             performanceMode: performanceMode
         )
+        TuringQwenNativePhaseDiagnostics.tensor("talker.prefill.cacheK", cacheLayer.keys)
+        TuringQwenNativePhaseDiagnostics.tensor("talker.prefill.cacheV", cacheLayer.values)
 
         keyStates = repeatKeyValueHeads(
             keyStates,
@@ -602,6 +622,7 @@ enum TuringQwenNativeTalkerForwardRunner {
         let attended = matmul(probabilities, valueStates)
             .transposed(0, 2, 1, 3)
             .reshaped([1, sequenceLength, hiddenSize])
+        TuringQwenNativePhaseDiagnostics.tensor("talker.prefill.attentionOutput", attended)
 
         return TuringQwenNativeTalkerLayerForwardResult(
             hiddenStates: linear(attended, weight: weights.oProjWeight),
@@ -630,6 +651,9 @@ enum TuringQwenNativeTalkerForwardRunner {
             .reshaped([1, 1, keyValueHeads, headDim])
         let value = linear(hiddenStates, weight: weights.vProjWeight)
             .reshaped([1, 1, keyValueHeads, headDim])
+        TuringQwenNativePhaseDiagnostics.tensor("talker.step.qProjection", query)
+        TuringQwenNativePhaseDiagnostics.tensor("talker.step.kProjection", key)
+        TuringQwenNativePhaseDiagnostics.tensor("talker.step.vProjection", value)
 
         var queryStates = rmsNorm(
             query,
@@ -648,6 +672,10 @@ enum TuringQwenNativeTalkerForwardRunner {
         queryStates = applyRotary(queryStates, cos: rope.cos, sin: rope.sin)
         keyStates = applyRotary(keyStates, cos: rope.cos, sin: rope.sin)
 
+        TuringQwenNativePhaseDiagnostics.tensor("talker.step.postRopeQ", queryStates)
+        TuringQwenNativePhaseDiagnostics.tensor("talker.step.postRopeK", keyStates)
+        TuringQwenNativePhaseDiagnostics.tensor("talker.step.v", valueStates)
+
         let updatedCacheLayer = try TuringQwenNativeKVCacheStore.appendOneStep(
             layer: previousCacheLayer,
             newKeys: keyStates,
@@ -655,6 +683,8 @@ enum TuringQwenNativeTalkerForwardRunner {
             layerIndex: layerIndex,
             performanceMode: performanceMode
         )
+        TuringQwenNativePhaseDiagnostics.tensor("talker.step.cacheK", updatedCacheLayer.keys)
+        TuringQwenNativePhaseDiagnostics.tensor("talker.step.cacheV", updatedCacheLayer.values)
 
         let scale = Float(1.0 / sqrt(Double(headDim)))
         let attendedHeads: MLXArray
@@ -689,6 +719,7 @@ enum TuringQwenNativeTalkerForwardRunner {
         let attended = attendedHeads
             .transposed(0, 2, 1, 3)
             .reshaped([1, 1, hiddenSize])
+        TuringQwenNativePhaseDiagnostics.tensor("talker.step.attentionOutput", attended)
 
         return TuringQwenNativeTalkerLayerForwardResult(
             hiddenStates: linear(attended, weight: weights.oProjWeight),

@@ -106,6 +106,11 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
 
         let decodeID = nextDecodeID
         nextDecodeID += 1
+        let phaseContext = TuringQwenNativePhaseDiagnostics.makeContext(
+            runID: rendered.runID, lane: "decoder.\(decodeID)", segmentIndex: rendered.segmentIndex
+        )
+        var admissionSpan = TuringQwenNativePhaseDiagnostics.begin("DecoderAdmissionWaitCPU", context: phaseContext)
+        defer { TuringQwenNativePhaseDiagnostics.end(admissionSpan) }
         let decodeLease = try await gpuAdmission.acquireDecode(
             work: TuringQwenNativeGPUWorkIdentity(
                 runID: rendered.runID,
@@ -115,6 +120,8 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
                 decodeID: decodeID
             )
         )
+        TuringQwenNativePhaseDiagnostics.end(admissionSpan)
+        admissionSpan = nil
         let overlap = await renderPhaseState.decodeAcquired(
             runID: rendered.runID,
             segmentIndex: rendered.segmentIndex
@@ -168,7 +175,8 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
 
         do {
             let residency = residencySnapshotsByInstanceID[rendered.instanceID.rawValue]
-            let fullAudio = try activeRun.session.decode(
+            let fullAudio = try TuringQwenNativePhaseDiagnostics.$current.withValue(phaseContext) {
+            try activeRun.session.decode(
                 rows: rowsForDecode,
                 performanceMode: rendered.performanceMode,
                 diagnosticContext: TuringQwenNativeSpeechDecoderDiagnosticContext(
@@ -181,6 +189,7 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
                     laneMutableStateID: residency?.laneMutableStateIdentity.mutableStateID.uuidString
                 )
             )
+            }
             let trimmed = try TuringQwenNativeBaseCloneDecodeTrimmer
                 .trimReferencePrefix(
                     from: fullAudio.samples,
@@ -191,10 +200,15 @@ public actor TuringQwenNativeSpeechDecodeCoordinator {
                 samples: trimmed,
                 sampleRate: fullAudio.sampleRate
             )
+            TuringQwenNativePhaseDiagnostics.event(
+                "PCMReady", context: phaseContext, detail: "samples=\(audio.samples.count) sampleRate=\(audio.sampleRate)"
+            )
+            let releaseSpan = TuringQwenNativePhaseDiagnostics.begin("DecoderTeardownCPU", context: phaseContext)
             TuringQwenNativeMemoryControl.clearCache(
                 label: "speechDecoder.segmentCompleted.\(rendered.runID).\(rendered.segmentIndex)",
                 shouldLogSnapshot: true
             )
+            TuringQwenNativePhaseDiagnostics.end(releaseSpan)
             let completed = TuringQwenNativeProcessMemoryProbe.snapshot()
             let result = TuringQwenDecodedSegment(
                 runID: rendered.runID,

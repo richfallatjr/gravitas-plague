@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <fcntl.h>
@@ -137,6 +138,20 @@ void add_duration_bucket(
   }
 }
 
+// Metal's zero timestamp pair means no interval was supplied. Never fold it
+// into the fastest histogram bucket. Clock conversion to signpost uptime is
+// deliberately not performed here.
+enum class TimestampValidity { missing, valid, invalid };
+TimestampValidity timestamp_validity(double start, double end) noexcept {
+  if (start == 0.0 && end == 0.0) {
+    return TimestampValidity::missing;
+  }
+  if (!std::isfinite(start) || !std::isfinite(end) || start <= 0.0 || end < start) {
+    return TimestampValidity::invalid;
+  }
+  return TimestampValidity::valid;
+}
+
 } // namespace
 
 const mlx_turing_metal_context& current_context() noexcept {
@@ -203,6 +218,8 @@ void CommandBufferDiagnostics::record_primitive(
     return;
   }
   const auto& context = current_context();
+  state->has_unattributed_context |=
+      context.run_id[0] == '\0' || context.phase[0] == '\0';
   if (!state->has_context) {
     state->first_context = context;
     state->last_context = context;
@@ -264,6 +281,14 @@ void CommandBufferDiagnostics::prepare_submission(
       record.mlx_peak_bytes_at_submit);
   std::lock_guard lock(ring_mutex_);
   ++aggregate_.submitted_count;
+  for (size_t index = 0; index < captures_.size(); ++index) {
+    auto& capture = captures_[index].value;
+    if (capture.capture_id != 0) {
+      state->capture_ids[index] = capture.capture_id;
+      ++capture.aggregate.submitted_count;
+      ++capture.pending_count;
+    }
+  }
 }
 
 void CommandBufferDiagnostics::complete_noexcept(
@@ -331,19 +356,20 @@ void CommandBufferDiagnostics::complete_noexcept(
         record.mlx_peak_bytes_at_completion);
 
     if (record.is_failure) {
-      publish_failure_noexcept(record);
+      publish_failure_noexcept(record, state.get());
     } else {
-      append_record_noexcept(record);
+      append_record_noexcept(record, state.get());
     }
   } catch (...) {
-    publish_minimal_internal_failure_noexcept(state->command_buffer_id);
+    publish_minimal_internal_failure_noexcept(state->command_buffer_id, state.get());
   }
   in_flight_count_.fetch_sub(1, std::memory_order_acq_rel);
   RecoveryController::shared().command_buffer_completed();
 }
 
 void CommandBufferDiagnostics::append_record_noexcept(
-    mlx_turing_command_buffer_record record) noexcept {
+    mlx_turing_command_buffer_record record,
+    const CommandBufferBuildState* state) noexcept {
   try {
     record.sequence = next_sequence_.fetch_add(1, std::memory_order_relaxed);
     std::lock_guard lock(ring_mutex_);
@@ -365,12 +391,16 @@ void CommandBufferDiagnostics::append_record_noexcept(
         aggregate_.maximum_kernel_duration_seconds,
         record.kernel_duration_seconds);
     add_duration_bucket(aggregate_, record.gpu_duration_seconds);
+    if (state) {
+      record_capture_completion_locked(record, *state);
+    }
   } catch (...) {
   }
 }
 
 void CommandBufferDiagnostics::publish_failure_noexcept(
-    mlx_turing_command_buffer_record record) noexcept {
+    mlx_turing_command_buffer_record record,
+    const CommandBufferBuildState* state) noexcept {
   try {
     record.failure_epoch =
         failure_epoch_.fetch_add(1, std::memory_order_acq_rel) + 1;
@@ -381,7 +411,7 @@ void CommandBufferDiagnostics::publish_failure_noexcept(
       poisoned_.store(true, std::memory_order_release);
     }
     persist_failure_noexcept(record);
-    append_record_noexcept(record);
+    append_record_noexcept(record, state);
   } catch (...) {
     poisoned_.store(true, std::memory_order_release);
   }
@@ -473,7 +503,8 @@ void CommandBufferDiagnostics::persist_failure_noexcept(
 }
 
 void CommandBufferDiagnostics::publish_minimal_internal_failure_noexcept(
-    uint64_t buffer_id) noexcept {
+    uint64_t buffer_id,
+    const CommandBufferBuildState* state) noexcept {
   mlx_turing_command_buffer_record record{};
   record.command_buffer_id = buffer_id;
   record.is_failure = 1;
@@ -482,7 +513,137 @@ void CommandBufferDiagnostics::publish_minimal_internal_failure_noexcept(
   copy_utf8(
       record.error_description,
       "Command-buffer completion diagnostics failed internally");
-  publish_failure_noexcept(record);
+  publish_failure_noexcept(record, state);
+}
+
+void CommandBufferDiagnostics::record_capture_completion_locked(
+    const mlx_turing_command_buffer_record& record,
+    const CommandBufferBuildState& state) noexcept {
+  for (size_t index = 0; index < captures_.size(); ++index) {
+    auto& slot = captures_[index];
+    auto& value = slot.value;
+    if (state.capture_ids[index] == 0 ||
+        state.capture_ids[index] != value.capture_id) {
+      continue;
+    }
+    auto& aggregate = value.aggregate;
+    ++aggregate.completed_count;
+    aggregate.failed_count += record.is_failure ? 1 : 0;
+    if (value.pending_count > 0) {
+      --value.pending_count;
+    }
+    update_maximum(aggregate.maximum_encoded_operation_count,
+                   static_cast<uint64_t>(record.encoded_operation_count));
+    update_maximum(aggregate.maximum_referenced_input_bytes_estimate,
+                   record.referenced_input_bytes_estimate);
+    // Categories may overlap: a mixed buffer can also contain missing context.
+    const bool unattributed = !state.has_context || state.has_unattributed_context;
+    value.mixed_context_count += record.mixed_context ? 1 : 0;
+    value.unattributed_context_count += unattributed ? 1 : 0;
+    value.single_observed_context_count +=
+        !record.mixed_context && !unattributed ? 1 : 0;
+
+    const auto gpu = timestamp_validity(record.gpu_start_seconds, record.gpu_end_seconds);
+    const auto kernel = timestamp_validity(record.kernel_start_seconds, record.kernel_end_seconds);
+    if (gpu == TimestampValidity::valid) {
+      const auto duration = record.gpu_end_seconds - record.gpu_start_seconds;
+      ++value.gpu_timestamp_sample_count;
+      value.total_recorded_gpu_seconds += duration;
+      update_maximum(aggregate.maximum_gpu_duration_seconds, duration);
+      add_duration_bucket(aggregate, duration);
+      value.single_primitive_over_50ms_count +=
+          record.primitive_count <= 2 && record.encoded_operation_count <= 2 &&
+              duration >= 0.050 ? 1 : 0;
+    } else if (gpu == TimestampValidity::missing) {
+      ++value.missing_gpu_timestamp_count;
+    } else {
+      ++value.invalid_gpu_timestamp_count;
+    }
+    if (kernel == TimestampValidity::valid) {
+      const auto duration = record.kernel_end_seconds - record.kernel_start_seconds;
+      ++value.kernel_timestamp_sample_count;
+      value.total_recorded_kernel_seconds += duration;
+      update_maximum(aggregate.maximum_kernel_duration_seconds, duration);
+    } else if (kernel == TimestampValidity::missing) {
+      ++value.missing_kernel_timestamp_count;
+    } else {
+      ++value.invalid_kernel_timestamp_count;
+    }
+    // Keep the slowest records across the entire capture. Failure records also
+    // compete here by duration; last_failure_ independently retains the latest.
+    // Fixed insertion avoids allocation/sorting on Metal completion callbacks.
+    const size_t count = value.slowest_record_count;
+    size_t insertion = 0;
+    while (insertion < count &&
+           slot.slowest[insertion].gpu_duration_seconds >= record.gpu_duration_seconds) {
+      ++insertion;
+    }
+    if (insertion < slot.slowest.size()) {
+      const size_t last = std::min(count, slot.slowest.size() - 1);
+      for (size_t cursor = last; cursor > insertion; --cursor) {
+        slot.slowest[cursor] = slot.slowest[cursor - 1];
+      }
+      slot.slowest[insertion] = record;
+      value.slowest_record_count = static_cast<uint32_t>(
+          std::min(count + 1, slot.slowest.size()));
+    }
+  }
+}
+
+int CommandBufferDiagnostics::begin_capture(uint64_t& capture_id) noexcept {
+  std::lock_guard lock(ring_mutex_);
+  for (auto& slot : captures_) {
+    if (slot.value.capture_id == 0) {
+      slot.value = {};
+      slot.value.capture_id = next_capture_id_++;
+      slot.value.begin_uptime_nanoseconds = uptime_nanoseconds();
+      capture_id = slot.value.capture_id;
+      return 0;
+    }
+  }
+  capture_id = 0;
+  return 2;
+}
+
+int CommandBufferDiagnostics::copy_capture(
+    uint64_t capture_id,
+    bool finish,
+    mlx_turing_command_buffer_capture& output,
+    mlx_turing_command_buffer_record* slowest_records,
+    size_t slowest_capacity) noexcept {
+  if (capture_id == 0 || (!slowest_records && slowest_capacity != 0)) {
+    return 1;
+  }
+  std::lock_guard lock(ring_mutex_);
+  for (auto& slot : captures_) {
+    if (slot.value.capture_id != capture_id) {
+      continue;
+    }
+    output = slot.value;
+    output.end_uptime_nanoseconds = uptime_nanoseconds();
+    const size_t count = std::min(
+        slowest_capacity, static_cast<size_t>(slot.value.slowest_record_count));
+    for (size_t index = 0; index < count; ++index) {
+      slowest_records[index] = slot.slowest[index];
+    }
+    output.slowest_record_count = static_cast<uint32_t>(count);
+    if (finish) {
+      slot.value.capture_id = 0;
+    }
+    return 0;
+  }
+  return 1;
+}
+
+int CommandBufferDiagnostics::cancel_capture(uint64_t capture_id) noexcept {
+  std::lock_guard lock(ring_mutex_);
+  for (auto& slot : captures_) {
+    if (capture_id != 0 && slot.value.capture_id == capture_id) {
+      slot.value.capture_id = 0;
+      return 0;
+    }
+  }
+  return 1;
 }
 
 void CommandBufferDiagnostics::mark_device_initializing() noexcept {
@@ -618,6 +779,9 @@ void CommandBufferDiagnostics::test_reset() noexcept {
     ring_count_ = 0;
     ring_next_index_ = 0;
     aggregate_ = {};
+    captures_ = {};
+    synthetic_pending_ = {};
+    // Keep capture IDs monotonic even across test resets to reject late handles.
   }
   {
     std::lock_guard lock(failure_mutex_);
@@ -639,6 +803,67 @@ void CommandBufferDiagnostics::test_record_synthetic_completion() noexcept {
     complete_noexcept(state, nullptr);
   } catch (...) {
   }
+}
+
+uint64_t CommandBufferDiagnostics::test_submit_synthetic(bool mixed_context) noexcept {
+  try {
+    auto state = make_build_state(0, nullptr, 0, 0);
+    record_primitive(state, "TuringSyntheticPrimitive");
+    state->mixed_context |= mixed_context;
+    // Test ownership is bounded independently from the production capture slots.
+    size_t slot_index = synthetic_pending_.size();
+    {
+      std::lock_guard lock(ring_mutex_);
+      for (size_t index = 0; index < synthetic_pending_.size(); ++index) {
+        if (!synthetic_pending_[index]) {
+          synthetic_pending_[index] = state;
+          slot_index = index;
+          break;
+        }
+      }
+    }
+    if (slot_index == synthetic_pending_.size()) {
+      return 0;
+    }
+    prepare_submission(state, nullptr, 1, 0);
+    return state->command_buffer_id;
+  } catch (...) {
+    return 0;
+  }
+}
+
+int CommandBufferDiagnostics::test_complete_synthetic(
+    uint64_t command_buffer_id,
+    double gpu_start,
+    double gpu_end,
+    double kernel_start,
+    double kernel_end) noexcept {
+  std::shared_ptr<CommandBufferBuildState> state;
+  {
+    std::lock_guard lock(ring_mutex_);
+    for (auto& candidate : synthetic_pending_) {
+      if (candidate && candidate->command_buffer_id == command_buffer_id) {
+        state = std::move(candidate);
+        break;
+      }
+    }
+  }
+  if (!state) {
+    return 1;
+  }
+  auto& record = state->submitted_record;
+  record.gpu_start_seconds = gpu_start;
+  record.gpu_end_seconds = gpu_end;
+  record.gpu_duration_seconds =
+      timestamp_validity(gpu_start, gpu_end) == TimestampValidity::valid
+      ? gpu_end - gpu_start : 0.0;
+  record.kernel_start_seconds = kernel_start;
+  record.kernel_end_seconds = kernel_end;
+  record.kernel_duration_seconds =
+      timestamp_validity(kernel_start, kernel_end) == TimestampValidity::valid
+      ? kernel_end - kernel_start : 0.0;
+  complete_noexcept(state, nullptr);
+  return 0;
 }
 #endif
 

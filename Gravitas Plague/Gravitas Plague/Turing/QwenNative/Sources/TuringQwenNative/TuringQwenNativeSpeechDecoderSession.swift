@@ -15,7 +15,12 @@ final class TuringQwenNativeSpeechDecoderSession {
                 .appendingPathComponent("speech_tokenizer", isDirectory: true)
                 .appendingPathComponent("model.safetensors")
         )
-        self.reader = TuringQwenNativeSafetensorsReader(index: index)
+        self.reader = try TuringQwenNativeSafetensorsReader(
+            index: index, decoderIO: TuringQwenNativeExecutionPolicy.current.decoderIO)
+    }
+
+    func ioCounters() -> TuringQwenNativeSafetensorsIOCounters? {
+        reader.ioCounters()
     }
 
     func decode(

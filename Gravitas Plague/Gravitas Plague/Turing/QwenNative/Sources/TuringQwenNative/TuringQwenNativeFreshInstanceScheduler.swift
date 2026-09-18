@@ -477,7 +477,12 @@ public actor TuringQwenNativeFreshInstanceScheduler {
                 }
                 // Publication returns after the file-backed clip is queued.
                 // It does not wait for playback completion.
+                let publicationContext = TuringQwenNativePhaseDiagnostics.makeContext(
+                    runID: runID, lane: "render.\(laneIndex)", segmentIndex: decoded.segmentIndex
+                )
+                TuringQwenNativePhaseDiagnostics.event("PCMDeliveryReady", context: publicationContext)
                 try await onSegmentDecoded(decoded)
+                TuringQwenNativePhaseDiagnostics.event("PCMDeliveryQueued", context: publicationContext)
                 await metricsCollector.record(
                     TuringQwenNativeFreshInstanceSegmentMetrics(
                         instanceID: decoded.instanceID,

@@ -3,6 +3,35 @@
 // Copyright © 2024 Apple Inc.
 
 import PackageDescription
+import Foundation
+
+// An explicitly named, Cmlx-only hardening experiment. It never changes Swift/
+// C++ optimization, recovery defines, lane topology, or ordinary Debug builds.
+// Xcode injects DEBUG hardening before package flags; undefine just this mode
+// before selecting its replacement so there is one effective definition.
+let turingHardeningExperiment = ProcessInfo.processInfo.environment[
+    "QWEN_CMLX_HARDENING_EXPERIMENT"
+] ?? "shipping-default"
+let turingHardeningSettings: [CXXSetting]
+switch turingHardeningExperiment {
+case "shipping-default":
+    turingHardeningSettings = [
+        .unsafeFlags([
+            "-U_LIBCPP_HARDENING_MODE",
+            "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST",
+        ], .when(configuration: .release)),
+        .define("MLX_TURING_HARDENING_EXPERIMENT", to: "\"shipping-default\""),
+    ]
+case "hardening-debug-control", "hardening-fast-only":
+    let mode = turingHardeningExperiment == "hardening-debug-control"
+        ? "_LIBCPP_HARDENING_MODE_DEBUG" : "_LIBCPP_HARDENING_MODE_FAST"
+    turingHardeningSettings = [
+        .unsafeFlags(["-U_LIBCPP_HARDENING_MODE", "-D_LIBCPP_HARDENING_MODE=\(mode)"]),
+        .define("MLX_TURING_HARDENING_EXPERIMENT", to: "\"\(turingHardeningExperiment)\""),
+    ]
+default:
+    fatalError("Unknown QWEN_CMLX_HARDENING_EXPERIMENT: \(turingHardeningExperiment)")
+}
 
 #if os(Linux)
     let platformExcludes: [String] = [
@@ -76,6 +105,7 @@ import PackageDescription
         "MLXFastKernel.swift",
         "TuringMetalDiagnostics.swift",
         "TuringMetalRecovery.swift",
+        "TuringMLXBuildFingerprint.swift",
     ]
 #else
     let platformExcludes: [String] = [
@@ -210,7 +240,7 @@ let cmlx = Target.target(
         .headerSearchPath("mlx"),
         .headerSearchPath("mlx-c"),
     ],
-    cxxSettings: cxxSettings + [
+    cxxSettings: cxxSettings + turingHardeningSettings + [
         .headerSearchPath("mlx"),
         .headerSearchPath("mlx-c"),
         .headerSearchPath("json/single_include/nlohmann"),

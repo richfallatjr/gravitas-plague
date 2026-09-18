@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "dad-new-baseline-short-2x4",
+  "origin": "New fixed baseline; original profiled Big Mike request/seed not recovered. Diagnostic row cap, not voice-quality acceptance.",
+  "characterID": "dad",
+  "voiceID": "dad_base_clone_v1",
+  "language": "English",
+  "segments": [
+    "The radio is working.",
+    "I can hear you now."
+  ],
+  "samplingSeed": 172026,
+  "maximumRowsPerSegment": 4,
+  "wallCapSeconds": 120,
+  "footprintCapMiB": 6000
+}
+

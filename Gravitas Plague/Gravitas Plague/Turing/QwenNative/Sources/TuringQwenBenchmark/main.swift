@@ -17,6 +17,22 @@ private enum TuringQwenBenchmarkCLI {
                 return
             }
 
+            if let mode = TuringQwenBoundedBenchmark.Mode(rawValue: arguments.mode.rawValue) {
+                guard let workloadURL = arguments.workloadURL else { throw CLIError("Bounded modes require --workload") }
+                let workload = try JSONDecoder().decode(TuringQwenPerformanceWorkload.self, from: Data(contentsOf: workloadURL))
+                let policy = try arguments.policyURL.map {
+                    try JSONDecoder().decode(TuringQwenNativeExecutionPolicy.self, from: Data(contentsOf: $0))
+                } ?? .production
+                let report = try await TuringQwenBoundedBenchmark.run(options: .init(
+                    modelRoot: arguments.modelRoot, bundleRoot: arguments.bundleRoot, workload: workload,
+                    mode: mode, commandBufferProfile: arguments.commandBufferProfile,
+                    profilerState: arguments.profilerState, policy: policy))
+                try writeJSON(report, to: arguments.outputURL)
+                print("Bounded scout: \(report.outcome); report: \(arguments.outputURL.path)")
+                if report.failure != nil { Foundation.exit(EXIT_FAILURE) }
+                return
+            }
+
             if arguments.mode == .phase5Matrix {
                 let report = await TuringQwenNativePhase5BenchmarkMatrixRunner
                     .run(
@@ -137,6 +153,10 @@ private struct Arguments {
     let label: String
     let gitRevision: String?
     let help: Bool
+    let workloadURL: URL?
+    let policyURL: URL?
+    let commandBufferProfile: TuringQwenNativeCommandBufferProfile
+    let profilerState: String
 
     static let usage = """
     Usage:
@@ -144,11 +164,13 @@ private struct Arguments {
         --model-root PATH \\
         --bundle-root PATH \\
         --output PATH \\
-        [--mode standard|phase5-matrix] \\
+        [--mode standard|phase5-matrix|bounded-replay|decoder-fixed-codes] \\
         [--suite quick|full] \\
         [--baseline PREVIOUS_REPORT.json] \\
         [--label LABEL] \\
-        [--git-revision SHA]
+        [--git-revision SHA] \\
+        [--workload FIXTURE.json] [--policy POLICY.json] \\
+        [--command-buffer-profile operations40Megabytes32] [--profiler-state unattached]
 
     `quick` runs one representative short, medium, and long case. `full` runs
     the locked 10 short, 10 medium, 10 long, and three multi-minute scripts.
@@ -156,6 +178,10 @@ private struct Arguments {
 
     `phase5-matrix` runs the isolated lane/stream qualification matrix once,
     records microbatch2 as unsupported, and never changes shipping topology.
+
+    Bounded modes require a validated fixture containing row, wall and footprint
+    caps, use the real character catalog, and never promote themselves. Do not
+    substitute the historical quick/full suites for bounded scouting.
     """
 
     static func parse(_ raw: [String]) throws -> Self {
@@ -170,7 +196,8 @@ private struct Arguments {
                 baselineURL: nil,
                 label: "help",
                 gitRevision: nil,
-                help: true
+                help: true, workloadURL: nil, policyURL: nil,
+                commandBufferProfile: .operations40Megabytes32, profilerState: "unknown"
             )
         }
 
@@ -199,7 +226,7 @@ private struct Arguments {
             "--suite",
             "--baseline",
             "--label",
-            "--git-revision"
+            "--git-revision", "--workload", "--policy", "--command-buffer-profile", "--profiler-state"
         ])
         if let unknown = values.keys.first(where: { !allowed.contains($0) }) {
             throw CLIError("Unknown argument: \(unknown)")
@@ -215,7 +242,17 @@ private struct Arguments {
         }
         let modeText = values["--mode"] ?? BenchmarkRunMode.standard.rawValue
         guard let mode = BenchmarkRunMode(rawValue: modeText) else {
-            throw CLIError("--mode must be standard or phase5-matrix")
+            throw CLIError("Invalid --mode (see usage)")
+        }
+        let isBounded = TuringQwenBoundedBenchmark.Mode(rawValue: mode.rawValue) != nil
+        guard !isBounded || (values["--workload"] != nil && values["--baseline"] == nil && values["--suite"] == nil) else {
+            throw CLIError("Bounded modes require --workload and do not accept --baseline/--suite")
+        }
+        guard isBounded || (values["--workload"] == nil && values["--policy"] == nil && values["--command-buffer-profile"] == nil && values["--profiler-state"] == nil) else {
+            throw CLIError("Workload/policy/profile/profiler options apply only to bounded modes")
+        }
+        guard let commandBufferProfile = TuringQwenNativeCommandBufferProfile(rawValue: values["--command-buffer-profile"] ?? "operations40Megabytes32") else {
+            throw CLIError("Invalid command-buffer profile")
         }
         if mode == .phase5Matrix, values["--baseline"] != nil {
             throw CLIError(
@@ -246,7 +283,9 @@ private struct Arguments {
             baselineURL: values["--baseline"].map(fileURL),
             label: values["--label"] ?? "current",
             gitRevision: values["--git-revision"],
-            help: false
+            help: false,
+            workloadURL: values["--workload"].map(fileURL), policyURL: values["--policy"].map(fileURL),
+            commandBufferProfile: commandBufferProfile, profilerState: values["--profiler-state"] ?? "unknown"
         )
     }
 
@@ -259,6 +298,8 @@ private struct Arguments {
 private enum BenchmarkRunMode: String {
     case standard
     case phase5Matrix = "phase5-matrix"
+    case boundedReplay = "bounded-replay"
+    case decoderFixedCodes = "decoder-fixed-codes"
 }
 
 private struct CLIError: LocalizedError {

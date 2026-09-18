@@ -17,6 +17,11 @@ public struct TuringQwenNativeCommandBufferRunMetrics:
     public let slowestRecords: [TuringMetalCommandBufferRecord]
     public let mixedContextCount: Int
     public let singlePrimitiveOver50msCount: Int
+    /// Nil for historical reports. Consumers must require this and no
+    /// captureError for complete-run qualification; legacy zero fields alone
+    /// cannot certify a capture that failed to allocate a bounded slot.
+    public let fullRunAccounting: TuringMetalCommandBufferCaptureSummary?
+    public let captureError: String?
 
     func recordBoundedDiagnostics(runID: String) {
         for record in slowestRecords where record.GPUSeconds >= 0.050 || record.isFailure {
@@ -50,65 +55,60 @@ public struct TuringQwenNativeCommandBufferRunMetrics:
                 "failureCount": String(failureCount),
                 "maximumGPUSeconds": String(format: "%.9f", maximumGPUSeconds),
                 "maximumKernelSeconds": String(format: "%.9f", maximumKernelSeconds),
-                "mixedContextCount": String(mixedContextCount)
+                "mixedContextCount": String(mixedContextCount),
+                "pendingCount": fullRunAccounting.map { String($0.pendingCount) } ?? "unavailable",
+                "totalRecordedGPUSeconds": fullRunAccounting.map {
+                    String(format: "%.9f", $0.totalRecordedGPUSeconds)
+                } ?? "unavailable",
+                "captureError": captureError ?? "none"
             ]
         )
     }
 }
 
 public struct TuringQwenNativeCommandBufferRunCapture: Sendable {
-    private let aggregateAtBegin: TuringMetalCommandBufferAggregate
-    private let lastSequenceAtBegin: UInt64
+    private let capture: TuringMetalCommandBufferCapture?
+    private let captureError: String?
 
     public init() {
-        aggregateAtBegin = TuringMetalDiagnostics.aggregate()
-        lastSequenceAtBegin = TuringMetalDiagnostics.recentRecords()
-            .map(\.sequence)
-            .max() ?? 0
+        do {
+            capture = try TuringMetalCommandBufferCapture()
+            captureError = nil
+        } catch {
+            capture = nil
+            captureError = String(describing: error)
+        }
     }
 
     public func finish(
         profile: TuringQwenNativeCommandBufferProfile,
         admissionMode: TuringQwenNativeGPUAdmissionMode
     ) -> TuringQwenNativeCommandBufferRunMetrics {
-        let end = TuringMetalDiagnostics.aggregate()
-        let records = TuringMetalDiagnostics.recentRecords()
-            .filter { $0.sequence > lastSequenceAtBegin }
-        let slowest = records
-            .sorted { $0.GPUSeconds > $1.GPUSeconds }
-            .prefix(16)
+        let accounting: TuringMetalCommandBufferCaptureSummary?
+        let errorDescription: String?
+        do {
+            accounting = try capture?.finish()
+            errorDescription = captureError
+        } catch {
+            accounting = nil
+            errorDescription = String(describing: error)
+        }
+        let aggregate = accounting?.aggregate
 
         return TuringQwenNativeCommandBufferRunMetrics(
             profile: profile,
             admissionMode: admissionMode,
-            submittedCount: delta(end.submittedCount, aggregateAtBegin.submittedCount),
-            completedCount: delta(end.completedCount, aggregateAtBegin.completedCount),
-            failureCount: delta(end.failureCount, aggregateAtBegin.failureCount),
-            maximumGPUSeconds: records.map(\.GPUSeconds).max() ?? 0,
-            maximumKernelSeconds: records.map(\.kernelSeconds).max() ?? 0,
-            durationHistogram: histogramDelta(end, aggregateAtBegin),
-            slowestRecords: Array(slowest),
-            mixedContextCount: records.lazy.filter(\.mixedContext).count,
-            singlePrimitiveOver50msCount: records.lazy.filter {
-                $0.primitiveCount <= 2 &&
-                $0.encodedOperationCount <= 2 &&
-                $0.GPUSeconds >= 0.050
-            }.count
+            submittedCount: Int(clamping: aggregate?.submittedCount ?? 0),
+            completedCount: Int(clamping: aggregate?.completedCount ?? 0),
+            failureCount: Int(clamping: aggregate?.failureCount ?? 0),
+            maximumGPUSeconds: aggregate?.maximumGPUSeconds ?? 0,
+            maximumKernelSeconds: aggregate?.maximumKernelSeconds ?? 0,
+            durationHistogram: aggregate?.durationHistogram.mapValues { Int(clamping: $0) } ?? [:],
+            slowestRecords: accounting?.slowestRecords ?? [],
+            mixedContextCount: Int(clamping: accounting?.mixedContextCount ?? 0),
+            singlePrimitiveOver50msCount: Int(clamping: accounting?.singlePrimitiveOver50msCount ?? 0),
+            fullRunAccounting: accounting,
+            captureError: errorDescription
         )
-    }
-
-    private func delta(_ end: UInt64, _ begin: UInt64) -> Int {
-        Int(end >= begin ? end - begin : 0)
-    }
-
-    private func histogramDelta(
-        _ end: TuringMetalCommandBufferAggregate,
-        _ begin: TuringMetalCommandBufferAggregate
-    ) -> [String: Int] {
-        var result: [String: Int] = [:]
-        for (key, endValue) in end.durationHistogram {
-            result[key] = delta(endValue, begin.durationHistogram[key] ?? 0)
-        }
-        return result
     }
 }

@@ -18,6 +18,8 @@ extern "C" {
 #define MLX_TURING_ERROR_DESCRIPTION_CAPACITY 384
 #define MLX_TURING_COMMAND_BUFFER_LABEL_CAPACITY 192
 #define MLX_TURING_ARCHITECTURE_CAPACITY 64
+#define MLX_TURING_CAPTURE_CAPACITY 8
+#define MLX_TURING_CAPTURE_SLOWEST_CAPACITY 16
 
 typedef enum mlx_turing_metal_phase {
   MLX_TURING_METAL_PHASE_UNSPECIFIED = 0,
@@ -126,6 +128,30 @@ typedef struct mlx_turing_command_buffer_aggregate {
   uint64_t duration_bucket_gte_150ms;
 } mlx_turing_command_buffer_aggregate;
 
+/* A submission-window measurement, not a claim of lazy-node ownership or GPU
+ * busy-time interval union. Missing/invalid timestamps never become a 0ms
+ * sample. Captures are independent of the recent-record ring. */
+typedef struct mlx_turing_command_buffer_capture {
+  uint64_t capture_id;
+  uint64_t begin_uptime_nanoseconds;
+  uint64_t end_uptime_nanoseconds;
+  mlx_turing_command_buffer_aggregate aggregate;
+  uint64_t pending_count;
+  uint64_t mixed_context_count;
+  uint64_t unattributed_context_count;
+  uint64_t single_observed_context_count;
+  uint64_t single_primitive_over_50ms_count;
+  uint64_t gpu_timestamp_sample_count;
+  uint64_t kernel_timestamp_sample_count;
+  uint64_t missing_gpu_timestamp_count;
+  uint64_t missing_kernel_timestamp_count;
+  uint64_t invalid_gpu_timestamp_count;
+  uint64_t invalid_kernel_timestamp_count;
+  double total_recorded_gpu_seconds;
+  double total_recorded_kernel_seconds;
+  uint32_t slowest_record_count;
+} mlx_turing_command_buffer_capture;
+
 int mlx_turing_metal_set_context(const mlx_turing_metal_context* context);
 void mlx_turing_metal_clear_context(void);
 int mlx_turing_metal_copy_configuration(mlx_turing_metal_configuration* output);
@@ -137,6 +163,17 @@ size_t mlx_turing_metal_copy_recent_records(
     mlx_turing_command_buffer_record* output,
     size_t output_capacity);
 int mlx_turing_metal_copy_aggregate(mlx_turing_command_buffer_aggregate* output);
+/* 0 succeeds, 1 is invalid input/handle, 2 means all bounded slots are in use.
+ * finish releases the slot immediately, retaining pending_count in the export;
+ * late completions cannot enter a later capture that reuses that slot. */
+int mlx_turing_metal_begin_capture(uint64_t* capture_id);
+int mlx_turing_metal_copy_capture(
+    uint64_t capture_id,
+    int32_t finish,
+    mlx_turing_command_buffer_capture* output,
+    mlx_turing_command_buffer_record* slowest_records,
+    size_t slowest_capacity);
+int mlx_turing_metal_cancel_capture(uint64_t capture_id);
 int mlx_turing_metal_set_failure_file_path(const char* utf8_path);
 void mlx_turing_metal_set_external_in_flight_counts(
     uint32_t app_metal_count,
@@ -151,6 +188,13 @@ void mlx_turing_metal_test_reset(void);
 void mlx_turing_metal_test_inject_failure_on_next_completion(
     int32_t metal_error_code);
 void mlx_turing_metal_test_record_synthetic_completion(void);
+uint64_t mlx_turing_metal_test_submit_synthetic(int32_t mixed_context);
+int mlx_turing_metal_test_complete_synthetic(
+    uint64_t command_buffer_id,
+    double gpu_start_seconds,
+    double gpu_end_seconds,
+    double kernel_start_seconds,
+    double kernel_end_seconds);
 
 #ifdef __cplusplus
 }

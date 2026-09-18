@@ -108,7 +108,8 @@ enum TuringQwenNativeSpeechDecoder {
                 .appendingPathComponent("speech_tokenizer")
                 .appendingPathComponent("model.safetensors")
         )
-        let reader = TuringQwenNativeSafetensorsReader(index: tensorIndex)
+        let reader = try TuringQwenNativeSafetensorsReader(
+            index: tensorIndex, decoderIO: TuringQwenNativeExecutionPolicy.current.decoderIO)
 
         return try decodeRows(
             codebookRows,
@@ -125,13 +126,26 @@ enum TuringQwenNativeSpeechDecoder {
         performanceMode: TuringQwenNativePerformanceMode = .diagnostic,
         diagnosticContext: TuringQwenNativeSpeechDecoderDiagnosticContext? = nil
     ) throws -> TuringQwenNativeAudio {
-
+        let phaseContext = TuringQwenNativePhaseDiagnostics.current ??
+            TuringQwenNativePhaseDiagnostics.makeContext(
+                runID: diagnosticContext?.runID ?? "standaloneDecoder",
+                lane: "decoder.\(diagnosticContext?.decodeID ?? -1)",
+                segmentIndex: diagnosticContext?.segmentIndex ?? -1
+            )
+        return try TuringQwenNativePhaseDiagnostics.$current.withValue(phaseContext) {
+        let phaseSpan = TuringQwenNativePhaseDiagnostics.begin("SpeechDecodeCPU")
+        defer { TuringQwenNativePhaseDiagnostics.end(phaseSpan) }
         guard codebookRows.isEmpty == false else {
             throw TuringQwenNativeError.emptyAudio
         }
         guard codebookRows.allSatisfy({ $0.count == config.decoderConfig.numQuantizers }) else {
             throw TuringQwenNativeError.invalidConfig(
                 "Speech decoder expected [T, \(config.decoderConfig.numQuantizers)] codebook rows, got \(codebookRows.map { $0.count })."
+            )
+        }
+        if phaseContext != nil {
+            TuringQwenNativePhaseDiagnostics.metadata(
+                role: "decoder.rows.cpu", shape: [codebookRows.count, config.decoderConfig.numQuantizers], dtype: "Swift.Int"
             )
         }
 
@@ -245,11 +259,14 @@ enum TuringQwenNativeSpeechDecoder {
             reader: reader
         )
         let clipped = clip(hidden, min: -1.0, max: 1.0)
+        TuringQwenNativePhaseDiagnostics.tensor("decoder.pcm", clipped)
+        try TuringQwenNativePhaseDiagnostics.measure("DecoderExistingOutputEvalCPU") {
         try runDecoderMLXOperation(
             label: "speechDecoder.output",
             diagnosticContext: diagnosticContext
         ) {
             eval(clipped)
+        }
         }
         TuringQwenNativeMemoryControl.clearCache(
             label: "speechDecoder.output",
@@ -257,10 +274,12 @@ enum TuringQwenNativeSpeechDecoder {
         )
 
         let expectedSampleCount = codebookRows.count * config.decodeUpsampleRate
-        let samples = Array(
+        let samples = TuringQwenNativePhaseDiagnostics.measure("DecoderExistingPCMReadbackCPU") {
+        Array(
             clipped.reshaped([clipped.size]).asArray(Float.self)
                 .prefix(expectedSampleCount)
         )
+        }
 
         print("""
         [TuringQwenNative] speech decoder completed
@@ -279,6 +298,7 @@ enum TuringQwenNativeSpeechDecoder {
             samples: samples,
             sampleRate: config.outputSampleRate
         )
+        }
     }
 
     private static func quantizerDecode(
@@ -406,6 +426,10 @@ enum TuringQwenNativeSpeechDecoder {
         performanceMode: TuringQwenNativePerformanceMode,
         diagnosticContext: TuringQwenNativeSpeechDecoderDiagnosticContext?
     ) throws {
+        try TuringQwenPerformanceBudget.check()
+        let phaseSpan = TuringQwenNativePhaseDiagnostics.begin("DecoderStageExistingEvalCPU", detail: label)
+        defer { TuringQwenNativePhaseDiagnostics.end(phaseSpan) }
+        TuringQwenNativePhaseDiagnostics.tensor("decoder.stage", value)
         // Decoder weights are loaded as Float32 for each stage. Leaving these
         // operations lazy retains the complete decoder graph until output eval,
         // which can cross the visionOS high-water mark beside a Fresh render.

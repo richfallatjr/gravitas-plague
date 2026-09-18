@@ -1,0 +1,7 @@
+// Explicit opt-in xcodebuild configuration for the named hardening-only A/B.
+// Xcode's package resolver does not reliably forward arbitrary process env.
+// Only the Cmlx target expands a nonempty target-suffixed override; app/other
+// targets retain their existing flags. Ordinary builds never load this file.
+// Use one of the two explicit named configs below, not custom command-line
+// variables (which Xcode package build plans may fail to forward/refresh).
+OTHER_CPLUSPLUSFLAGS = $(inherited) $(QWEN_HARDENING_FLAGS_$(PRODUCT_MODULE_NAME))

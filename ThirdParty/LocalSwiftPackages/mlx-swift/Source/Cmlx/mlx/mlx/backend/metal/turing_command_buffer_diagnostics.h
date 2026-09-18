@@ -25,6 +25,8 @@ struct CommandBufferBuildState {
   mlx_turing_metal_context last_context{};
   bool has_context{false};
   bool mixed_context{false};
+  bool has_unattributed_context{false};
+  std::array<uint64_t, MLX_TURING_CAPTURE_CAPACITY> capture_ids{};
   uint32_t primitive_count{0};
   uint64_t primitive_name_hash{kFNVOffsetBasis};
   char first_primitive[MLX_TURING_PRIMITIVE_NAME_CAPACITY]{};
@@ -77,6 +79,14 @@ class CommandBufferDiagnostics {
       mlx_turing_command_buffer_record* output,
       size_t output_capacity) const noexcept;
   void copy_aggregate(mlx_turing_command_buffer_aggregate& output) const noexcept;
+  int begin_capture(uint64_t& capture_id) noexcept;
+  int copy_capture(
+      uint64_t capture_id,
+      bool finish,
+      mlx_turing_command_buffer_capture& output,
+      mlx_turing_command_buffer_record* slowest_records,
+      size_t slowest_capacity) noexcept;
+  int cancel_capture(uint64_t capture_id) noexcept;
   bool set_failure_path(const char* utf8_path) noexcept;
   void set_external_in_flight_counts(
       uint32_t app_metal_count,
@@ -89,6 +99,13 @@ class CommandBufferDiagnostics {
   void test_reset() noexcept;
   void test_inject_failure_on_next_completion(int32_t error_code) noexcept;
   void test_record_synthetic_completion() noexcept;
+  uint64_t test_submit_synthetic(bool mixed_context) noexcept;
+  int test_complete_synthetic(
+      uint64_t command_buffer_id,
+      double gpu_start,
+      double gpu_end,
+      double kernel_start,
+      double kernel_end) noexcept;
 #endif
 
  private:
@@ -97,11 +114,26 @@ class CommandBufferDiagnostics {
 
   uint64_t acknowledge_failure_for_recovery() noexcept;
 
-  void append_record_noexcept(mlx_turing_command_buffer_record record) noexcept;
-  void publish_failure_noexcept(mlx_turing_command_buffer_record record) noexcept;
+  void append_record_noexcept(
+      mlx_turing_command_buffer_record record,
+      const CommandBufferBuildState* state = nullptr) noexcept;
+  void publish_failure_noexcept(
+      mlx_turing_command_buffer_record record,
+      const CommandBufferBuildState* state = nullptr) noexcept;
   void persist_failure_noexcept(
       const mlx_turing_command_buffer_record& record) noexcept;
-  void publish_minimal_internal_failure_noexcept(uint64_t buffer_id) noexcept;
+  void publish_minimal_internal_failure_noexcept(
+      uint64_t buffer_id,
+      const CommandBufferBuildState* state = nullptr) noexcept;
+
+  struct CaptureSlot {
+    mlx_turing_command_buffer_capture value{};
+    std::array<mlx_turing_command_buffer_record,
+               MLX_TURING_CAPTURE_SLOWEST_CAPACITY> slowest{};
+  };
+  void record_capture_completion_locked(
+      const mlx_turing_command_buffer_record& record,
+      const CommandBufferBuildState& state) noexcept;
 
   std::atomic<uint64_t> next_buffer_id_{1};
   std::atomic<uint64_t> next_sequence_{1};
@@ -120,6 +152,11 @@ class CommandBufferDiagnostics {
   size_t ring_count_{0};
   size_t ring_next_index_{0};
   mlx_turing_command_buffer_aggregate aggregate_{};
+  uint64_t next_capture_id_{1};
+  std::array<CaptureSlot, MLX_TURING_CAPTURE_CAPACITY> captures_{};
+#ifdef MLX_TURING_TESTING
+  std::array<std::shared_ptr<CommandBufferBuildState>, 32> synthetic_pending_{};
+#endif
 
   mutable std::mutex failure_mutex_;
   mlx_turing_command_buffer_record last_failure_{};

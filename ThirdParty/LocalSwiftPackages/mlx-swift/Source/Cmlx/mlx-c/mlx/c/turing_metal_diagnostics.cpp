@@ -56,6 +56,24 @@ extern "C" int mlx_turing_metal_copy_aggregate(
   return 0;
 }
 
+extern "C" int mlx_turing_metal_begin_capture(uint64_t* capture_id) {
+  return capture_id ? diagnostics().begin_capture(*capture_id) : 1;
+}
+
+extern "C" int mlx_turing_metal_copy_capture(
+    uint64_t capture_id,
+    int32_t finish,
+    mlx_turing_command_buffer_capture* output,
+    mlx_turing_command_buffer_record* slowest_records,
+    size_t slowest_capacity) {
+  return output ? diagnostics().copy_capture(
+      capture_id, finish != 0, *output, slowest_records, slowest_capacity) : 1;
+}
+
+extern "C" int mlx_turing_metal_cancel_capture(uint64_t capture_id) {
+  return diagnostics().cancel_capture(capture_id);
+}
+
 extern "C" int mlx_turing_metal_set_failure_file_path(
     const char* utf8_path) {
   return diagnostics().set_failure_path(utf8_path) ? 0 : 1;
@@ -92,5 +110,20 @@ extern "C" void mlx_turing_metal_test_inject_failure_on_next_completion(
 
 extern "C" void mlx_turing_metal_test_record_synthetic_completion(void) {
   diagnostics().test_record_synthetic_completion();
+}
+
+extern "C" uint64_t mlx_turing_metal_test_submit_synthetic(int32_t mixed_context) {
+  return diagnostics().test_submit_synthetic(mixed_context != 0);
+}
+
+extern "C" int mlx_turing_metal_test_complete_synthetic(
+    uint64_t command_buffer_id,
+    double gpu_start_seconds,
+    double gpu_end_seconds,
+    double kernel_start_seconds,
+    double kernel_end_seconds) {
+  return diagnostics().test_complete_synthetic(
+      command_buffer_id, gpu_start_seconds, gpu_end_seconds,
+      kernel_start_seconds, kernel_end_seconds);
 }
 #endif

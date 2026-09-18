@@ -5,6 +5,15 @@ struct TuringQwenNativeSafetensorsIndex: Sendable {
     let fileURL: URL
     let dataStartOffset: UInt64
     let tensors: [String: TensorMetadata]
+    let fileIdentity: TuringQwenNativeSafetensorsFileIdentity?
+
+    init(fileURL: URL, dataStartOffset: UInt64, tensors: [String: TensorMetadata],
+         fileIdentity: TuringQwenNativeSafetensorsFileIdentity? = nil) {
+        self.fileURL = fileURL
+        self.dataStartOffset = dataStartOffset
+        self.tensors = tensors
+        self.fileIdentity = fileIdentity
+    }
 
     struct TensorMetadata: Decodable, Sendable {
         let dtype: String
@@ -19,10 +28,13 @@ struct TuringQwenNativeSafetensorsIndex: Sendable {
     }
 
     static func load(from url: URL) throws -> TuringQwenNativeSafetensorsIndex {
+        let phaseSpan = TuringQwenNativePhaseDiagnostics.begin("SafetensorsIndexIOCPU")
+        defer { TuringQwenNativePhaseDiagnostics.end(phaseSpan) }
         let handle = try FileHandle(forReadingFrom: url)
         defer {
             try? handle.close()
         }
+        let identity = try TuringQwenNativeSafetensorsFileIdentity.capture(descriptor: handle.fileDescriptor)
 
         let prefix = try handle.read(upToCount: 8) ?? Data()
         guard prefix.count == 8 else {
@@ -30,10 +42,11 @@ struct TuringQwenNativeSafetensorsIndex: Sendable {
         }
 
         let headerLength = prefix.withUnsafeBytes {
-            $0.loadUnaligned(as: UInt64.self)
+            UInt64(littleEndian: $0.loadUnaligned(as: UInt64.self))
         }
         guard headerLength > 0,
-              headerLength < UInt64(Int.max) else {
+              headerLength < UInt64(Int.max), identity.byteCount >= 8,
+              headerLength <= UInt64(identity.byteCount - 8) else {
             throw TuringQwenNativeError.invalidSafetensors("Invalid safetensors header length \(headerLength).")
         }
 
@@ -62,10 +75,14 @@ struct TuringQwenNativeSafetensorsIndex: Sendable {
             )
         }
 
+        guard try TuringQwenNativeSafetensorsFileIdentity.capture(descriptor: handle.fileDescriptor) == identity else {
+            throw TuringQwenNativeError.invalidSafetensors("Safetensors file changed while reading the index.")
+        }
         return TuringQwenNativeSafetensorsIndex(
             fileURL: url,
             dataStartOffset: 8 + headerLength,
-            tensors: tensors
+            tensors: tensors,
+            fileIdentity: identity
         )
     }
 
@@ -92,7 +109,7 @@ struct TuringQwenNativeSafetensorsIndex: Sendable {
     }
 }
 
-struct TuringQwenNativeFloatTensor: Sendable {
+struct TuringQwenNativeFloatTensor: Sendable, Equatable {
     let name: String
     let shape: [Int]
     private let storage: Storage
@@ -118,7 +135,7 @@ struct TuringQwenNativeFloatTensor: Sendable {
         self.storage = .rawData(rawData, dtype: dtype)
     }
 
-    enum RawDType: Sendable {
+    enum RawDType: Sendable, Equatable {
         case bfloat16
         case float32
 
@@ -132,7 +149,7 @@ struct TuringQwenNativeFloatTensor: Sendable {
         }
     }
 
-    private enum Storage: Sendable {
+    private enum Storage: Sendable, Equatable {
         case float32Values([Float])
         case rawData(Data, dtype: RawDType)
     }
@@ -140,30 +157,67 @@ struct TuringQwenNativeFloatTensor: Sendable {
 
 struct TuringQwenNativeSafetensorsReader: Sendable {
     private let index: TuringQwenNativeSafetensorsIndex
+    private let positionalFile: TuringQwenNativePositionalSafetensorsFile?
 
     init(index: TuringQwenNativeSafetensorsIndex) {
         self.index = index
+        positionalFile = nil
+    }
+
+    init(index: TuringQwenNativeSafetensorsIndex,
+         decoderIO: TuringQwenNativeExecutionPolicy.DecoderIO) throws {
+        self.index = index
+        switch decoderIO {
+        case .legacy:
+            positionalFile = nil
+        case .positionalReaderCandidate:
+            guard let identity = index.fileIdentity else {
+                throw TuringQwenNativeError.invalidSafetensors("Positional reader requires a file-validated index.")
+            }
+            positionalFile = try TuringQwenNativePositionalSafetensorsFile(
+                url: index.fileURL, expectedIdentity: identity)
+            // Validate ranges before allocating any tensor, including unused
+            // entries. No weights are loaded or retained by this preflight.
+            for (name, metadata) in index.tensors {
+                let count = try expectedByteCount(for: metadata, name: name)
+                let start = try absoluteOffset(for: metadata.dataOffsets[0])
+                guard start <= UInt64(identity.byteCount),
+                      UInt64(count) <= UInt64(identity.byteCount) - start else {
+                    throw TuringQwenNativeError.invalidSafetensors("Tensor \(name) exceeds the safetensors file.")
+                }
+            }
+        case .budgetedHotSetCandidate:
+            throw TuringQwenNativeError.invalidConfig("Budgeted decoder tensor cache is not implemented.")
+        }
+    }
+
+    func ioCounters() -> TuringQwenNativeSafetensorsIOCounters? {
+        positionalFile?.snapshot()
     }
 
     func loadTensorFloat32(
         name: String
     ) throws -> TuringQwenNativeFloatTensor {
+        let phaseSpan = TuringQwenNativePhaseDiagnostics.begin("SafetensorsTensorIOCPU", detail: name)
+        defer { TuringQwenNativePhaseDiagnostics.end(phaseSpan) }
         let metadata = try metadata(for: name)
         let byteCount = try expectedByteCount(for: metadata, name: name)
         let start = try absoluteOffset(for: metadata.dataOffsets[0])
 
-        let handle = try FileHandle(forReadingFrom: index.fileURL)
+        try positionalFile?.validateIdentity()
+        positionalFile?.recordRequest(name: name, rows: false)
+        let handle = positionalFile == nil ? try FileHandle(forReadingFrom: index.fileURL) : nil
         defer {
-            try? handle.close()
+            try? handle?.close()
         }
 
-        try handle.seek(toOffset: start)
-        let data = try handle.read(upToCount: byteCount) ?? Data()
+        let data = try readBytes(at: start, count: byteCount, legacyHandle: handle)
         guard data.count == byteCount else {
             throw TuringQwenNativeError.invalidSafetensors(
                 "Could not read full tensor \(name). Expected \(byteCount) bytes, got \(data.count)."
             )
         }
+        try positionalFile?.validateIdentity()
 
         return TuringQwenNativeFloatTensor(
             name: name,
@@ -177,6 +231,8 @@ struct TuringQwenNativeSafetensorsReader: Sendable {
         name: String,
         rows: [Int]
     ) throws -> TuringQwenNativeFloatTensor {
+        let phaseSpan = TuringQwenNativePhaseDiagnostics.begin("SafetensorsRowsIOCPU", detail: name)
+        defer { TuringQwenNativePhaseDiagnostics.end(phaseSpan) }
         let metadata = try metadata(for: name)
         guard metadata.shape.count == 2 else {
             throw TuringQwenNativeError.invalidSafetensors(
@@ -186,16 +242,24 @@ struct TuringQwenNativeSafetensorsReader: Sendable {
 
         let rowCount = metadata.shape[0]
         let columnCount = metadata.shape[1]
+        _ = try expectedByteCount(for: metadata, name: name)
         let bytesPerElement = try bytesPerElement(dtype: metadata.dtype, name: name)
-        let rowByteCount = columnCount * bytesPerElement
-
-        let handle = try FileHandle(forReadingFrom: index.fileURL)
+        let (rowByteCount, rowByteOverflow) = columnCount.multipliedReportingOverflow(by: bytesPerElement)
+        guard !rowByteOverflow, rows.allSatisfy({ $0 >= 0 && $0 < rowCount }) else {
+            throw TuringQwenNativeError.invalidSafetensors("Invalid row selection or row size for \(name).")
+        }
+        let (resultElementCount, resultOverflow) = rows.count.multipliedReportingOverflow(by: columnCount)
+        guard !resultOverflow else {
+            throw TuringQwenNativeError.invalidSafetensors("Row selection size overflows for \(name).")
+        }
+        try positionalFile?.validateIdentity()
+        let handle = positionalFile == nil ? try FileHandle(forReadingFrom: index.fileURL) : nil
         defer {
-            try? handle.close()
+            try? handle?.close()
         }
 
         var values: [Float] = []
-        values.reserveCapacity(rows.count * columnCount)
+        values.reserveCapacity(resultElementCount)
 
         for row in rows {
             guard row >= 0,
@@ -205,12 +269,14 @@ struct TuringQwenNativeSafetensorsReader: Sendable {
                 )
             }
 
-            let relative = metadata.dataOffsets[0] +
-                Int64(row) * Int64(rowByteCount)
+            let (relativeRow, rowOverflow) = Int64(row).multipliedReportingOverflow(by: Int64(rowByteCount))
+            let (relative, offsetOverflow) = metadata.dataOffsets[0].addingReportingOverflow(relativeRow)
+            guard !rowOverflow, !offsetOverflow else {
+                throw TuringQwenNativeError.invalidSafetensors("Row offset overflows for \(name).")
+            }
             let start = try absoluteOffset(for: relative)
 
-            try handle.seek(toOffset: start)
-            let data = try handle.read(upToCount: rowByteCount) ?? Data()
+            let data = try readBytes(at: start, count: rowByteCount, legacyHandle: handle)
             guard data.count == rowByteCount else {
                 throw TuringQwenNativeError.invalidSafetensors(
                     "Could not read row \(row) from \(name). Expected \(rowByteCount) bytes, got \(data.count)."
@@ -221,12 +287,25 @@ struct TuringQwenNativeSafetensorsReader: Sendable {
                 contentsOf: try decodeFloat32(data, dtype: metadata.dtype, name: name)
             )
         }
+        try positionalFile?.validateIdentity()
+        positionalFile?.recordRequest(name: name, rows: true, convertedElements: values.count)
 
         return TuringQwenNativeFloatTensor(
             name: name,
             shape: [rows.count, columnCount],
             values: values
         )
+    }
+
+    private func readBytes(at offset: UInt64, count: Int, legacyHandle: FileHandle?) throws -> Data {
+        if let positionalFile {
+            return try positionalFile.readExactly(offset: offset, count: count)
+        }
+        guard let legacyHandle else {
+            throw TuringQwenNativeError.invalidSafetensors("Missing safetensors read owner.")
+        }
+        try legacyHandle.seek(toOffset: offset)
+        return try legacyHandle.read(upToCount: count) ?? Data()
     }
 
     private func metadata(
@@ -248,13 +327,21 @@ struct TuringQwenNativeSafetensorsReader: Sendable {
             )
         }
 
-        return index.dataStartOffset + UInt64(relativeOffset)
+        let (offset, overflow) = index.dataStartOffset.addingReportingOverflow(UInt64(relativeOffset))
+        guard !overflow, offset <= UInt64(Int64.max) else {
+            throw TuringQwenNativeError.invalidSafetensors("Safetensors absolute offset overflows.")
+        }
+        return offset
     }
 
     private func expectedByteCount(
         for metadata: TuringQwenNativeSafetensorsIndex.TensorMetadata,
         name: String
     ) throws -> Int {
+        guard metadata.dataOffsets.count == 2, metadata.dataOffsets[0] >= 0,
+              metadata.dataOffsets[1] >= metadata.dataOffsets[0] else {
+            throw TuringQwenNativeError.invalidSafetensors("Invalid offsets for \(name).")
+        }
         let elementCount = try metadata.shape.reduce(1) { partial, next in
             guard next >= 0,
                   partial <= Int.max / max(next, 1) else {
@@ -266,7 +353,11 @@ struct TuringQwenNativeSafetensorsReader: Sendable {
             return partial * next
         }
 
-        let expected = elementCount * (try bytesPerElement(dtype: metadata.dtype, name: name))
+        let elementBytes = try bytesPerElement(dtype: metadata.dtype, name: name)
+        let (expected, overflow) = elementCount.multipliedReportingOverflow(by: elementBytes)
+        guard !overflow, metadata.dataOffsets[0].isMultiple(of: Int64(elementBytes)) else {
+            throw TuringQwenNativeError.invalidSafetensors("Tensor \(name) has overflowing shape or misaligned offsets.")
+        }
         let actual = metadata.dataOffsets[1] - metadata.dataOffsets[0]
         guard actual == Int64(expected) else {
             throw TuringQwenNativeError.invalidSafetensors(

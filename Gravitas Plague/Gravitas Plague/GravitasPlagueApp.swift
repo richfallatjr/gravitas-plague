@@ -35,6 +35,9 @@ struct GravitasPlagueApp: App {
             return
         }
 #endif
+#if GR_QWEN_PERFORMANCE_QUALIFICATION
+        if TuringQwenPerformanceQualificationLaunch.requested { return }
+#endif
         do {
             try TuringMLXCommandBufferStartup.configure()
         } catch {
@@ -49,26 +52,14 @@ struct GravitasPlagueApp: App {
 
     var body: some Scene {
         WindowGroup(id: PlagueWindowID.control) {
-#if DEBUG || GR_MIND_EYE_PROJECTION_AUTHORING
-            if isUnitTestLaunch {
-                Color.clear
-            } else if let projectionAuthoringConfiguration {
-                MindEyeProjectionAuthoringRootView(
-                    configuration: projectionAuthoringConfiguration
-                )
+#if GR_QWEN_PERFORMANCE_QUALIFICATION
+            if TuringQwenPerformanceQualificationLaunch.requested {
+                TuringQwenPerformanceQualificationView()
             } else {
-                PlagueDemoView(session: demoSession)
-                    .frame(
-                        width: OperationModePosterLayout.swiftUIWindowWidth,
-                        height: OperationModePosterLayout.swiftUIWindowHeight
-                    )
+                regularControlContent
             }
 #else
-            PlagueDemoView(session: demoSession)
-                .frame(
-                    width: OperationModePosterLayout.swiftUIWindowWidth,
-                    height: OperationModePosterLayout.swiftUIWindowHeight
-                )
+            regularControlContent
 #endif
         }
         .defaultSize(
@@ -108,5 +99,29 @@ struct GravitasPlagueApp: App {
             PlagueImmersiveView(session: demoSession)
         }
         .immersionStyle(selection: $immersionStyle, in: .mixed)
+    }
+
+    @ViewBuilder private var regularControlContent: some View {
+#if DEBUG || GR_MIND_EYE_PROJECTION_AUTHORING
+            if isUnitTestLaunch {
+                Color.clear
+            } else if let projectionAuthoringConfiguration {
+                MindEyeProjectionAuthoringRootView(
+                    configuration: projectionAuthoringConfiguration
+                )
+            } else {
+                PlagueDemoView(session: demoSession)
+                    .frame(
+                        width: OperationModePosterLayout.swiftUIWindowWidth,
+                        height: OperationModePosterLayout.swiftUIWindowHeight
+                    )
+            }
+#else
+            PlagueDemoView(session: demoSession)
+                .frame(
+                    width: OperationModePosterLayout.swiftUIWindowWidth,
+                    height: OperationModePosterLayout.swiftUIWindowHeight
+                )
+#endif
     }
 }

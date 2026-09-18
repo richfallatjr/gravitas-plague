@@ -439,6 +439,12 @@ public actor TuringQwenNativeBaseCloneEngine {
         incrementalCodebookEventSink:
             TuringQwenNativeIncrementalCodebookEventSink?
     ) throws -> TuringQwenRenderedCodebookMaterialization {
+        let phaseContext = TuringQwenNativePhaseDiagnostics.makeContext(
+            runID: runID,
+            lane: "render.\(laneIndex.map(String.init) ?? instanceID.rawValue)",
+            segmentIndex: request.segmentIndex
+        )
+        return try TuringQwenNativePhaseDiagnostics.$current.withValue(phaseContext) {
         try autoreleasepool {
         let prompt = makePrompt(from: request)
         TuringQwenNativeMemoryControl.configureForBaseClone(
@@ -605,6 +611,7 @@ public actor TuringQwenNativeBaseCloneEngine {
             throw error
         }
         }
+        }
     }
 
     public func releaseRequestWorkingSet(
@@ -612,6 +619,11 @@ public actor TuringQwenNativeBaseCloneEngine {
         segmentIndex: Int,
         reason: String
     ) {
+        let phaseContext = TuringQwenNativePhaseDiagnostics.makeContext(
+            runID: runID, lane: "render.release", segmentIndex: segmentIndex
+        )
+        let phaseSpan = TuringQwenNativePhaseDiagnostics.begin("RenderTeardownCPU", context: phaseContext)
+        defer { TuringQwenNativePhaseDiagnostics.end(phaseSpan) }
         TuringQwenNativeMemoryControl.clearCache(
             label: "baseClone.requestReleased.\(runID).\(segmentIndex).\(reason)",
             shouldLogSnapshot: true
@@ -687,7 +699,9 @@ public actor TuringQwenNativeBaseCloneEngine {
         var samplingContext = TuringQwenNativeSamplingContext(
             seed: prompt.samplingSeed
         )
-        let prepared = try prepareBaseClonePrompt(prompt)
+        let prepared = try TuringQwenNativePhaseDiagnostics.measure("PromptConstructionCPU") {
+            try prepareBaseClonePrompt(prompt)
+        }
         let referenceRows = prepared.prompt.referenceCodes.map { row in
             row.map(Int.init)
         }
@@ -717,18 +731,22 @@ public actor TuringQwenNativeBaseCloneEngine {
             }
             incrementalWindowEmitter = nil
         }
-        let resident = try loadResidentWeights()
+        let resident = try TuringQwenNativePhaseDiagnostics.measure("ResidentWeightsCPU") {
+            try loadResidentWeights()
+        }
         let staticPromptContext = try cachedStaticPromptContext(
             prompt: prompt,
             prepared: prepared.prompt,
             resident: resident
         )
-        let promptInputs = try TuringQwenNativeBaseClonePromptInputBuilder.build(
+        let promptInputs = try TuringQwenNativePhaseDiagnostics.measure("PromptEmbeddingsCPUEnqueue") {
+        try TuringQwenNativeBaseClonePromptInputBuilder.build(
             prepared: prepared.prompt,
             config: config,
             weightsStore: resident.weightsStore,
             staticContext: staticPromptContext
         )
+        }
         let initialPromptSeconds = Date().timeIntervalSince(promptStart)
         TuringQwenNativeDiagnostics.recordBreadcrumb(
             "baseClone.promptAndWeights.completed",
@@ -805,7 +823,8 @@ public actor TuringQwenNativeBaseCloneEngine {
         )
         let talkerOutput: TuringQwenNativeTalkerForwardOutput
         do {
-            talkerOutput = try TuringQwenNativeTalkerForwardRunner.runFullForward(
+            talkerOutput = try TuringQwenNativePhaseDiagnostics.measure("TalkerPrefillCPU") {
+            try TuringQwenNativeTalkerForwardRunner.runFullForward(
                 promptInputs: promptInputs,
                 config: config,
                 weightsStore: resident.weightsStore,
@@ -813,6 +832,7 @@ public actor TuringQwenNativeBaseCloneEngine {
                 resolvedWeights: resident.talkerWeights,
                 performanceMode: prompt.performanceMode
             )
+            }
         } catch {
             TuringMetalDiagnostics.popContext()
             throw error
@@ -839,13 +859,15 @@ public actor TuringQwenNativeBaseCloneEngine {
                 eval(logits)
             }
         }
-        let firstCodecToken = try TuringQwenNativeCodecSampler.selectFirstCodecToken(
+        let firstCodecToken = try TuringQwenNativePhaseDiagnostics.measure("TalkerSelectionCPU") {
+        try TuringQwenNativeCodecSampler.selectFirstCodecToken(
             logits: logits,
             sequenceLength: talkerOutput.sequenceLength,
             vocabSize: config.talkerConfig.vocabSize,
             samplingConfiguration: prompt.samplingPolicy.talker,
             samplingContext: &samplingContext
         )
+        }
 
         print("""
         [TuringQwenNativeBaseClone] first codec token selected
@@ -1203,6 +1225,7 @@ public actor TuringQwenNativeBaseCloneEngine {
           talkerInputEmbeddingAssembly: directSumNoConcat
         """)
 
+        try TuringQwenPerformanceBudget.check()
         let firstCodeGroupStart = Date()
         installMLXContext(
             diagnosticContext: diagnosticContext,
@@ -1271,6 +1294,11 @@ public actor TuringQwenNativeBaseCloneEngine {
             // another row so the failed run can unwind to app-level playback
             // recovery instead of continuing generation behind endless filler.
             try Task.checkCancellation()
+            try TuringQwenPerformanceBudget.check()
+            let rowSpan = TuringQwenNativePhaseDiagnostics.begin(
+                "GenerationRowCPU", detail: "row=\(generatedRows.count)"
+            )
+            defer { TuringQwenNativePhaseDiagnostics.end(rowSpan) }
             let rowIndex = generatedRows.count
             if rowIndex % performanceMode.rowCheckpointStride == 0 {
                 TuringQwenNativeDiagnostics.recordBreadcrumb(

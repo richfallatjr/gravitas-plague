@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "status": "PROPOSED_ENGINEERING_POLICY_NOT_MEASURED",
+  "purpose": "Qualification screens for bounded benchmark reports; never a runtime configuration or automatic promotion.",
+  "reviewed_git_revision": "7d71aeaf93b8bf5f4d8b789b3914defdec75ee5f",
+  "production_contract": {
+    "model_family": "Qwen3-TTS 1.7B Base",
+    "quantization_bits": 4,
+    "residency": "independentFresh2",
+    "generation_lanes": 2,
+    "weight_stores": 2,
+    "decoders": 1,
+    "admission": "currentOverlap",
+    "unchanged": ["voice_profiles", "reference_audio_and_codes", "sampling_policy", "segment_policy", "production_row_limits", "prepared_inputs", "compute_ahead", "PR_authority", "playback_order", "playback_rate", "cancellation", "recovery", "unload", "scene"]
+  },
+  "goals_not_predictions": {"raw_audio_rtf": 1.0, "stretch_raw_audio_rtf": 0.8},
+  "screening": {
+    "minimum_valid_paired_repetitions": 5,
+    "minimum_median_improvement_percent": 3.0,
+    "uncertainty_interval_must_exclude_no_improvement": true,
+    "more_repetitions_required_for_marginal_or_tail_claims": true,
+    "latency_median_regression_review_percent": 5.0,
+    "peak_footprint_growth_review_percent": 5.0,
+    "absolute_memory_limit": "Use existing qualified limits; nominal device RAM and historical peaks are not limits.",
+    "quality_tolerances": "Must be calibrated and committed before candidate assessment; missing evidence blocks promotion.",
+    "failure_policy": "No new failures in matched qualification. Preserve invalid attempts and warnings; finite testing does not prove zero risk.",
+    "legacy_universal_10_percent_gate": false
+  },
+  "comparison": {
+    "input_schema": "TuringQwenBoundedBenchmarkReport:1",
+    "required_character_ids": ["big_mike", "cateye81", "dad", "rich", "broadcaster"],
+    "pairing": "Baseline/candidate arrays paired by position; explicit AB/BA order manifest required for promotion screen.",
+    "bootstrap_repetitions": 10000,
+    "bootstrap_seed": 20260917,
+    "confidence_level": 0.95,
+    "uncertainty_method": "Deterministic percentile bootstrap of paired wall-time ratios, resampling pairs within each voice; median, linear-interpolated quantiles. Small-n intervals are screening evidence, not a tail guarantee.",
+    "invalid_attempt_policy": "Any invalid attempt invalidates this comparison; never silently drop slow, hot, failed, pending, or nonfinite runs.",
+    "automatic_promotion": false
+  },
+  "measurement_controls": ["source_and_dirty_diff", "embedded_Cmlx_build_fingerprint", "model_config_voice_reference_hashes", "hardware_OS_SDK", "effective_optimization_and_hardening", "recovery_macros", "resolved_command_buffer_policy", "execution_policy_hash", "workload_and_sampling_seed_policy", "scene", "cold_warm_definition", "profiler_state", "thermal_conditions"],
+  "mandatory_metrics": ["first_needed_PCM_seconds", "ordered_PCM_ready_by_segment", "raw_sample_count", "raw_sample_rate", "render_wall_seconds", "raw_audio_RTF", "fixed_work_replay_cost", "cold_load_and_compile_cost", "process_peak_and_residual", "MLX_active_cache_peak_and_residual", "failed_and_completed_buffer_counts", "recovery_outcomes", "quality_and_content_verdict", "scene_frame_timing"],
+  "additional_metrics_when_supported": ["CPU_time_per_audio_second", "attributed_GPU_time_per_audio_second", "recorded_GPU_interval_coverage", "energy_per_audio_second", "allocation_copy_cast_traffic", "decoder_read_bytes_and_calls", "graph_specialization_count", "ordered_backlog_and_underruns"],
+  "prohibited_inference": ["CPU_sample_fraction_equals_wall_speedup", "active_interval_coverage_equals_ALU_utilization", "last_64_records_equal_complete_run", "isolated_Mac_result_predicts_Vision_Pro", "first_packet_latency_equals_sustained_RTF", "smaller_or_slower_audio_output_equals_same_work_speedup"],
+  "statuses": ["IMPLEMENTED_NOT_RUN", "HOST_VALIDATED", "DEVICE_QUALIFICATION_PENDING", "DEVICE_QUALIFIED", "REJECTED", "BLOCKED"]
+}

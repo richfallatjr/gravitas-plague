@@ -77,6 +77,44 @@ public struct TuringMetalCommandBufferContext: Sendable, Equatable, Codable {
     public let mindEyeCompositorInFlightCount: Int
 }
 
+/// Diagnostic timestamps retain their original value in memory. JSON has no
+/// NaN/Infinity literals, so an invalid value is an explicit tagged object,
+/// never a fabricated zero-duration sample. Finite historical JSON stays valid.
+@propertyWrapper
+public struct TuringMetalDiagnosticNumber: Sendable, Equatable, Codable {
+    public let wrappedValue: Double
+
+    public init(wrappedValue: Double) { self.wrappedValue = wrappedValue }
+
+    private enum Keys: String, CodingKey { case invalidNumericValue }
+    private enum Invalid: String, Codable { case nan = "NaN", positiveInfinity, negativeInfinity }
+
+    public func encode(to encoder: Encoder) throws {
+        if wrappedValue.isFinite {
+            var container = encoder.singleValueContainer()
+            try container.encode(wrappedValue)
+        } else {
+            var container = encoder.container(keyedBy: Keys.self)
+            let invalid: Invalid = wrappedValue.isNaN ? .nan
+                : (wrappedValue.sign == .minus ? .negativeInfinity : .positiveInfinity)
+            try container.encode(invalid, forKey: .invalidNumericValue)
+        }
+    }
+
+    public init(from decoder: Decoder) throws {
+        if let value = try? decoder.singleValueContainer().decode(Double.self) {
+            wrappedValue = value
+        } else {
+            let container = try decoder.container(keyedBy: Keys.self)
+            switch try container.decode(Invalid.self, forKey: .invalidNumericValue) {
+            case .nan: wrappedValue = .nan
+            case .positiveInfinity: wrappedValue = .infinity
+            case .negativeInfinity: wrappedValue = -.infinity
+            }
+        }
+    }
+}
+
 public struct TuringMetalCommandBufferRecord: Sendable, Equatable, Codable {
     public let sequence: UInt64
     public let commandBufferID: UInt64
@@ -97,12 +135,12 @@ public struct TuringMetalCommandBufferRecord: Sendable, Equatable, Codable {
     public let mixedContext: Bool
     public let submitUptimeNanoseconds: UInt64
     public let completionUptimeNanoseconds: UInt64
-    public let GPUStartSeconds: Double
-    public let GPUEndSeconds: Double
-    public let GPUSeconds: Double
-    public let kernelStartSeconds: Double
-    public let kernelEndSeconds: Double
-    public let kernelSeconds: Double
+    @TuringMetalDiagnosticNumber public var GPUStartSeconds: Double
+    @TuringMetalDiagnosticNumber public var GPUEndSeconds: Double
+    @TuringMetalDiagnosticNumber public var GPUSeconds: Double
+    @TuringMetalDiagnosticNumber public var kernelStartSeconds: Double
+    @TuringMetalDiagnosticNumber public var kernelEndSeconds: Double
+    @TuringMetalDiagnosticNumber public var kernelSeconds: Double
     public let completionStatus: Int
     public let errorCode: Int
     public let errorDomain: String
@@ -230,6 +268,78 @@ public struct TuringMetalCommandBufferAggregate: Sendable, Equatable, Codable {
     public let durationHistogram: [String: UInt64]
 }
 
+/// Complete counters for buffers submitted while a capture is open. Overlapping
+/// captures intentionally observe the same submissions; they are not additive.
+/// Context labels describe observed encoding context, not ownership of every
+/// lazy node. Mixed and unattributed counts may overlap.
+public struct TuringMetalCommandBufferCaptureSummary: Sendable, Equatable, Codable {
+    public let schemaVersion: Int
+    public let captureID: UInt64
+    public let beginUptimeNanoseconds: UInt64
+    public let endUptimeNanoseconds: UInt64
+    public let aggregate: TuringMetalCommandBufferAggregate
+    public let pendingCount: UInt64
+    public let mixedContextCount: UInt64
+    public let unattributedContextCount: UInt64
+    public let singleObservedContextCount: UInt64
+    public let singlePrimitiveOver50msCount: UInt64
+    public let gpuTimestampSampleCount: UInt64
+    public let kernelTimestampSampleCount: UInt64
+    public let missingGPUTimestampCount: UInt64
+    public let missingKernelTimestampCount: UInt64
+    public let invalidGPUTimestampCount: UInt64
+    public let invalidKernelTimestampCount: UInt64
+    public let totalRecordedGPUSeconds: Double
+    /// Sum of Metal command-buffer kernelEndTime - kernelStartTime, not a
+    /// per-compute-kernel execution breakdown.
+    public let totalRecordedKernelSeconds: Double
+    public let slowestRecords: [TuringMetalCommandBufferRecord]
+    public let scope: String
+    public let durationSemantics: String
+    public let clockMappingStatus: String
+    public let gpuIntervalUnionSeconds: Double?
+}
+
+/// Owns one of eight bounded in-memory capture slots. Finishing does not wait
+/// for GPU work; its immutable result preserves unresolved submissions. The
+/// slot is released at finish/deinit and cannot absorb old completions on reuse.
+public final class TuringMetalCommandBufferCapture: @unchecked Sendable {
+    private let id: UInt64
+    private let lock = NSLock()
+    private var finished: TuringMetalCommandBufferCaptureSummary?
+
+    public init() throws {
+        var captureID: UInt64 = 0
+        let status = mlx_turing_metal_begin_capture(&captureID)
+        guard status == 0 else {
+            throw MLXError.caught(status == 2
+                ? "MLX Metal capture capacity exhausted (maximum 8 concurrent captures)."
+                : "MLX Metal capture could not begin.")
+        }
+        id = captureID
+    }
+
+    public func snapshot() throws -> TuringMetalCommandBufferCaptureSummary {
+        lock.lock()
+        defer { lock.unlock() }
+        if let finished { return finished }
+        return try TuringMetalDiagnostics.copyCapture(id: id, finish: false)
+    }
+
+    public func finish() throws -> TuringMetalCommandBufferCaptureSummary {
+        lock.lock()
+        defer { lock.unlock() }
+        if let finished { return finished }
+        let result = try TuringMetalDiagnostics.copyCapture(id: id, finish: true)
+        finished = result
+        return result
+    }
+
+    deinit {
+        if finished == nil { _ = mlx_turing_metal_cancel_capture(id) }
+    }
+}
+
 public enum TuringMetalDiagnostics {
     public struct ExternalInFlightCounts: Sendable, Equatable {
         public let appMetal: Int
@@ -284,6 +394,12 @@ public enum TuringMetalDiagnostics {
     public static func aggregate() -> TuringMetalCommandBufferAggregate {
         var value = mlx_turing_command_buffer_aggregate()
         _ = mlx_turing_metal_copy_aggregate(&value)
+        return aggregate(from: value)
+    }
+
+    private static func aggregate(
+        from value: mlx_turing_command_buffer_aggregate
+    ) -> TuringMetalCommandBufferAggregate {
         return .init(
             submittedCount: value.submitted_count,
             completedCount: value.completed_count,
@@ -305,6 +421,46 @@ public enum TuringMetalDiagnostics {
                 "100to150ms": value.duration_bucket_100_150ms,
                 "gte150ms": value.duration_bucket_gte_150ms,
             ]
+        )
+    }
+
+    fileprivate static func copyCapture(
+        id: UInt64,
+        finish: Bool
+    ) throws -> TuringMetalCommandBufferCaptureSummary {
+        var value = mlx_turing_command_buffer_capture()
+        var records = Array(repeating: mlx_turing_command_buffer_record(), count: 16)
+        let status = records.withUnsafeMutableBufferPointer { buffer in
+            mlx_turing_metal_copy_capture(
+                id, finish ? 1 : 0, &value, buffer.baseAddress, buffer.count)
+        }
+        guard status == 0 else {
+            throw MLXError.caught("MLX Metal capture handle is unavailable or already released.")
+        }
+        return .init(
+            schemaVersion: 1,
+            captureID: value.capture_id,
+            beginUptimeNanoseconds: value.begin_uptime_nanoseconds,
+            endUptimeNanoseconds: value.end_uptime_nanoseconds,
+            aggregate: aggregate(from: value.aggregate),
+            pendingCount: value.pending_count,
+            mixedContextCount: value.mixed_context_count,
+            unattributedContextCount: value.unattributed_context_count,
+            singleObservedContextCount: value.single_observed_context_count,
+            singlePrimitiveOver50msCount: value.single_primitive_over_50ms_count,
+            gpuTimestampSampleCount: value.gpu_timestamp_sample_count,
+            kernelTimestampSampleCount: value.kernel_timestamp_sample_count,
+            missingGPUTimestampCount: value.missing_gpu_timestamp_count,
+            missingKernelTimestampCount: value.missing_kernel_timestamp_count,
+            invalidGPUTimestampCount: value.invalid_gpu_timestamp_count,
+            invalidKernelTimestampCount: value.invalid_kernel_timestamp_count,
+            totalRecordedGPUSeconds: value.total_recorded_gpu_seconds,
+            totalRecordedKernelSeconds: value.total_recorded_kernel_seconds,
+            slowestRecords: records.prefix(Int(value.slowest_record_count)).map(record(from:)),
+            scope: "command buffers submitted during capture; overlapping captures are not additive",
+            durationSemantics: "recorded buffer-duration sums; not GPU busy time, interval union, or wall time",
+            clockMappingStatus: "not performed; Metal timestamps are not mapped to signpost uptime",
+            gpuIntervalUnionSeconds: nil
         )
     }
 
@@ -350,6 +506,25 @@ public enum TuringMetalDiagnostics {
 
     public static func recordSyntheticCompletionForTesting() {
         mlx_turing_metal_test_record_synthetic_completion()
+    }
+
+    public static func submitSyntheticForTesting(mixedContext: Bool = false) throws -> UInt64 {
+        let id = mlx_turing_metal_test_submit_synthetic(mixedContext ? 1 : 0)
+        guard id != 0 else { throw MLXError.caught("Synthetic submission capacity exhausted.") }
+        return id
+    }
+
+    public static func completeSyntheticForTesting(
+        _ id: UInt64,
+        gpuStart: Double = 1,
+        gpuEnd: Double = 1.001,
+        kernelStart: Double = 1,
+        kernelEnd: Double = 1.001
+    ) throws {
+        guard mlx_turing_metal_test_complete_synthetic(
+            id, gpuStart, gpuEnd, kernelStart, kernelEnd) == 0 else {
+            throw MLXError.caught("Unknown or already completed synthetic submission.")
+        }
     }
     #endif
 

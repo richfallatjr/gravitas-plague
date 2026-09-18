@@ -7,7 +7,10 @@ struct TuringQwenNativeFirstCodeGroup: @unchecked Sendable {
     let expectedFixtureTokenIDs: [Int]
 
     var tokenIDs: [Int] {
-        materializedTokenIDs ?? tokenArray.asArray(Int.self)
+        if let materializedTokenIDs { return materializedTokenIDs }
+        return TuringQwenNativePhaseDiagnostics.measure("ResidualExistingReadbackCPU") {
+            tokenArray.asArray(Int.self)
+        }
     }
 
     var matchesFixture: Bool {
@@ -277,6 +280,9 @@ enum TuringQwenNativeCodePredictor {
             config: config,
             weightsStore: weightsStore
         )
+        let phaseSpan = TuringQwenNativePhaseDiagnostics.begin("ResidualGraphCPUEnqueue")
+        defer { TuringQwenNativePhaseDiagnostics.end(phaseSpan) }
+        TuringQwenNativePhaseDiagnostics.tensor("predictor.talkerInput", talkerLastHiddenState)
         let codePredictorConfig = resolved.config
         let start = Date()
         let expectedFixtureTokens: [Int]
@@ -313,6 +319,7 @@ enum TuringQwenNativeCodePredictor {
             codeHidden: prefillCodeHiddens,
             projectionWeights: resolved.projectionWeights
         )
+        TuringQwenNativePhaseDiagnostics.tensor("predictor.projectedInput", prefillInput)
         let prefill = try TuringQwenNativeCodePredictorForwardRunner.prefill(
             inputEmbeddings: prefillInput,
             attentionMask: nil,
@@ -326,6 +333,11 @@ enum TuringQwenNativeCodePredictor {
         var tokenArrays = [MLXArray([firstCodecToken])]
         var state = prefill.state
         var logits = prefill.logits
+        TuringQwenNativePhaseDiagnostics.tensor("predictor.logits", logits)
+        if let layer = state.kvCache.layers.first {
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.cacheK", layer.key)
+            TuringQwenNativePhaseDiagnostics.tensor("predictor.cacheV", layer.value)
+        }
 
         for residualIndex in 1..<codePredictorConfig.numCodeGroups {
             let headIndex = residualIndex - 1
